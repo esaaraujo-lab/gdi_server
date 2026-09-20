@@ -29,15 +29,21 @@
 
 const MAX_PAGES = 50;
 
-self.onmessage = async (ev) => {
+// ★★★ Task 8: processar múltiplas mensagens em paralelo (era 1 por vez) ★★★
+// Antes: 16 gdiListAllFiles do M14 ficavam enfileiradas, cada uma com até 50 páginas
+// de fetch → 24s+ de bloqueio. Agora: até 4 simultâneas via fire-and-forget.
+self.onmessage = (ev) => {
   const msg = ev.data;
-  try {
-    if (msg.type === 'list')     return handleList(msg);
-    if (msg.type === 'scan')     return handleScan(msg);
-    if (msg.type === 'progress') return handleProgress(msg);
-  } catch (err) {
-    self.postMessage({ type: 'error', id: msg.id, message: String(err && err.message || err) });
-  }
+  // Fire-and-forget: cada mensagem roda independentemente, sem bloquear a próxima
+  (async () => {
+    try {
+      if (msg.type === 'list')     return await handleList(msg);
+      if (msg.type === 'scan')     return await handleScan(msg);
+      if (msg.type === 'progress') return await handleProgress(msg);
+    } catch (err) {
+      self.postMessage({ type: 'error', id: msg.id, message: String(err && err.message || err) });
+    }
+  })();
 };
 
 /* ---------------- list: paginação de uma única pasta ---------------- */

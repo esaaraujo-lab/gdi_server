@@ -875,12 +875,22 @@ body.gdi-fv .gdi-player-wrap iframe{
   // a própria line() inseria #gdi-progress-line como sibling, criando um
   // loop de re-render. O flag corta o disparo durante a mutação.
   let __m14Mutating=false;
+  // ★FIX (Task 8): busy guard — impede modProgress de rodar concorrentemente.
+  // Antes: se schedule() disparasse runAll() 2× seguidas (DOMContentLoaded +
+  // page:change), modProgress iniciava 2 conjuntos de workers em paralelo,
+  // cada um re-escaneando as mesmas subpastas (o filtro !a.querySelector('.gdi-modprog')
+  // não pegava porque o 1º conjunto ainda não tinha inserido os badges).
+  // Resultado: 2× fetches + 2× loops síncronos sobre os mesmos arquivos.
+  // Agora: o 2º disparo retorna imediatamente se o 1º ainda está em andamento.
+  let _mpBusy=false;
   function modProgress(){
     if(!GDIUser.loaded())return;
+    if(_mpBusy)return;  // ★ busy guard — não acumular workers concorrentes
     const rows=[...document.querySelectorAll('#list a.gdi-row')]
       .filter(a=>a.querySelector('.gdi-row-icon i.bi-folder-fill')&&!a.querySelector('.gdi-modprog'))
-      .slice(0,30);  // ★U.3: cap em 30 subpastas (não fazer DOS no servidor)
+      .slice(0,8);  // ★ Task 8: cap em 8 (era 30) — reduz freeze do M14 (não fazer DOS no servidor)
     if(!rows.length)return;
+    _mpBusy=true;  // ★ marca como em andamento
     // ★U.3: Promise.all com concorrência 6 (antes: sequencial + sleep 40ms).
     // Mesmo número de fetches, mas em paralelo — tempo total cai ~6x.
     const CONC=6;
@@ -895,7 +905,12 @@ body.gdi-fv .gdi-player-wrap iframe{
         try{files=await gdiListAllFiles(href,gdiGetPw(href));}catch(_){continue;}
         if(!document.body.contains(row))continue;
         let total=0,done=0;
-        for(const f of files){
+        // ★FIX (Task 8): cap síncrono em 800 iterações para evitar jank em
+        // pastas gigantes. Se passar de 800, o progresso é uma aproximação
+        // (suficiente para mostrar X/Y sem travar a thread).
+        const MAX_ITER=800;
+        for(let _i=0,_n=Math.min(files.length,MAX_ITER);_i<_n;_i++){
+          const f=files[_i];
           if(f.mimeType==='application/vnd.google-apps.folder')continue;
           if(!FILE_TYPES.video.includes((f.fileExtension||'').toLowerCase()))continue;
           if(/\.part-/i.test(f.name))continue;
@@ -916,7 +931,7 @@ body.gdi-fv .gdi-player-wrap iframe{
     }
     const ws=[];
     for(let i=0;i<Math.min(CONC,rows.length);i++)ws.push(worker());
-    Promise.all(ws).catch(()=>{});
+    Promise.all(ws).catch(()=>{}).finally(()=>{_mpBusy=false;});  // ★ libera o busy guard
   }
   function line(){
     // ★U.6: flag ativo durante a mutação — o MutationObserver ignora disparos

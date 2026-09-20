@@ -24,7 +24,11 @@
 (function(){
   'use strict';
 
-  const WORKER_BASE = '/modular/';  // servido pelo Cloudflare Worker
+  // ★★★ Web Workers vindos do mesmo repo público via jsdelivr CDN ★★★
+  // Mesmo BASE_URL do gdi-extras-loader.js — consistência + cache CDN.
+  // TROQUE PUBLIC_REPO pelo mesmo valor do loader:
+  const PUBLIC_REPO = 'esaaraujo-lab/gdi_server';  // ← TROQUE AQUI (igual ao loader)
+  const WORKER_BASE = 'https://cdn.jsdelivr.net/gh/' + PUBLIC_REPO + '@main/modular/';
   const LIST_WORKER_URL  = WORKER_BASE + 'gdi-list-worker.js';
   const PDF_WORKER_URL   = WORKER_BASE + 'meggy-pdf-worker.js';
 
@@ -138,18 +142,30 @@
       if (onPage) try { onPage(cached.slice(), undefined, undefined); } catch(_){}
       return Promise.resolve(cached);
     }
-    // 2) worker?
+    // 2) worker com timeout + fallback direto
     const w = getListWorker();
     if (w) {
       const id = ++_listId;
-      return new Promise((resolve, reject) => {
+      const workerPromise = new Promise((resolve, reject) => {
         _listPending.set(id, { resolve, reject, onPage });
         w.postMessage({ type: 'list', id, path, pw: pw || '' });
-      }).then(files => { cacheSet(cacheKey, files); return files; })
+      }).then(files => { cacheSet(cacheKey, files); return files; });
+
+      // ★ Task 8: timeout 5s — se worker não responder, faz fetch direto
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('worker timeout')), 5000)
+      );
+
+      return Promise.race([workerPromise, timeoutPromise])
         .catch(err => {
-          // fallback para a versão original
-          console.warn('[gdi-worker-bridge] list fallback', err);
-          return _origListAllFiles ? _origListAllFiles(path, pw, onPage) : [];
+          // limpa pending se ainda estiver
+          _listPending.delete(id);
+          // fallback para fetch direto na thread principal (não trava, é async)
+          console.warn('[gdi-worker-bridge] worker lento, fallback direto:', path.slice(-30));
+          return _origListAllFiles ? _origListAllFiles(path, pw, onPage).then(files => {
+            cacheSet(cacheKey, files);
+            return files;
+          }) : [];
         });
     }
     // 3) fallback original
