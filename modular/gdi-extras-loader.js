@@ -29,7 +29,7 @@
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  const CACHE_VERSION = '4';
+  const CACHE_VERSION = '5';
 
   const MODULES = [
     'gdi-core.js',
