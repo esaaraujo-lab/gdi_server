@@ -1,0 +1,89 @@
+# ═══════════════════════════════════════════════════════════════
+# wrangler.toml — student-gdi
+#
+# ⚠ REPO PRIVADO — chaves hardcoded neste arquivo.
+# ⚠ NUNCA commite este arquivo em repo público!
+# ⚠ Para fork público, mova as chaves para `wrangler secret put`.
+# ═══════════════════════════════════════════════════════════════
+name = "educa-eu-org"
+main = "worker.js"
+compatibility_date = "2024-09-23"
+
+#name = "student-gdi"
+#main = "worker.js"
+#compatibility_date = "2024-09-23"
+workers_dev = true
+
+# ═══ ROUTES & CUSTOM DOMAINS ═══
+# A cada deploy, o wrangler garante que estas rotas existam.
+# Para adicionar novo domínio: copie a linha e troque o pattern.
+#routes = [
+#  { pattern = "educa.eu.org/*", custom_domain = true }
+#]
+
+# ═══ VARIÁVEIS DE AMBIENTE (incluindo chaves de API) ═══
+# ⚠ Como o repo é PRIVADO, as chaves podem ficar aqui.
+# ⚠ Mas o Cloudflare Dashboard mostra vars como Text (não criptografadas).
+# ⚠ Para máxima segurança, mover para `wrangler secret put NVIDIA_API_KEY`
+[vars]
+environment = "production"
+
+# ★ Fork-aware: owner/repo do seu repo privado
+MODULAR_REPO = "esaaraujo-lab/student_gdi"
+
+# Versão do upstream GDI
+CDN_VERSION = "2.5.9"
+
+# Nome do site (aparece no título e footer)
+SITE_NAME = "Meggy"
+
+# ═══════════════════════════════════════════════════════════════
+# CHAVES DE API (repo privado)
+# ═══════════════════════════════════════════════════════════════
+
+# Crypto AES-CBC para sessões (32 chars hex — gere com: openssl rand -hex 16)
+CRYPTO_BASE_KEY = "e864febecc3a3d5661c0b5a51170ed6a"
+
+# HMAC-SHA256 para integridade (64 chars hex — gere com: openssl rand -hex 32)
+HMAC_BASE_KEY = "395a72ba1a9db75d68b22c75db6e41963c78b3326f5900e6e754e6ad7ea4178937a873044696148769bb85c2b98a9a11b2625bc59ab6c8682880577fb44e62ac"
+
+# NVIDIA NIM API (3 chaves para racing paralelo entre modelos)
+NVIDIA_API_KEY = "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"
+NVIDIA_API_KEY_2 = "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"
+NVIDIA_API_KEY_3 = "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"
+
+# OpenRouter API (15 modelos grátis para racing)
+OPENROUTER_API_KEY = "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"
+
+# (opcional) GitHub PAT para buscar módulos de repo privado
+# GH_TOKEN = "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# ═══ KV NAMESPACE — sessões + cache + URL curta + progresso ═══
+# ★ IMPORTANTE: o ID real é injetado em runtime pelo scripts/setup-kv.js
+# Se você criou o KV manualmente, troque REPLACE_WITH_YOUR_KV_ID pelo ID real
+[[kv_namespaces]]
+binding = "ENV"
+id = "REPLACE_WITH_YOUR_KV_ID"
+preview_id = "REPLACE_WITH_YOUR_KV_PREVIEW_ID"
+
+# ═══ D1 DATABASE (opcional — só V2/V3) ═══
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "student-gdi-db"
+# database_id = "REPLACE_WITH_D1_ID"
+
+# ═══ OBSERVABILITY ═══
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+# ═══ NOTA SOBRE SECRETS ═══
+# As chaves acima ficam como "Environment Variables (Text)" no Dashboard.
+# Para máxima segurança, use Secrets (criptografadas):
+#   1. Remova as chaves de [vars] acima
+#   2. Para cada chave, rode: npx wrangler secret put NOME_DA_CHAVE
+#   3. Digite o valor quando solicitado
+# Secrets não são sobrescritos pelo deploy.
+#
+# Mas se seu repo é privado e você prefere versionar tudo no wrangler.toml,
+# manter em [vars] funciona (como configurado acima).

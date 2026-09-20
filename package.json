@@ -1,0 +1,35 @@
+{
+  "name": "student-gdi",
+  "version": "1.0.0",
+  "description": "Fork do GDI (Google Drive Index) com Meggy AI — versão profissional com auto-deploy",
+  "main": "worker.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "node scripts/setup-kv.js && wrangler deploy",
+    "tail": "wrangler tail",
+    "kv:setup": "node scripts/setup-kv.js",
+    "kv:create": "wrangler kv:namespace create ENV",
+    "d1:create": "wrangler d1 create student-gdi-db",
+    "secret:crypto": "wrangler secret put CRYPTO_BASE_KEY",
+    "secret:hmac": "wrangler secret put HMAC_BASE_KEY",
+    "setup": "npm run kv:create && npm run secret:crypto && npm run secret:hmac",
+    "check": "node --check worker.js && node --check modular/gdi-extras-loader.js && node --check modular/storage.js && node --check modular/gdi-core.js && node --check modular/gdi-ui.js && node --check modular/gdi-study.js && node --check modular/gdi-meggy.js && node --check modular/gdi-pdf.js"
+  },
+  "keywords": [
+    "cloudflare-workers",
+    "google-drive",
+    "gdi",
+    "meggy",
+    "education",
+    "ai",
+    "openrouter"
+  ],
+  "author": "esaaraujo-lab",
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^4.135.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

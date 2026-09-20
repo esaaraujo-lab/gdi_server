@@ -1,0 +1,153 @@
+# ═══════════════════════════════════════════════════════════════
+# deploy.yml — GitHub Action que faz deploy automático no push
+#
+# Características:
+#   • Auto-cria KV namespace se não existir
+#   • Injeta o ID do KV no wrangler.toml antes do deploy
+#   • Funciona para forks sem configuração manual
+#   • Detecta node/bun automaticamente
+#
+# SETUP (uma vez só):
+#   1. Adicise os secrets no GitHub:
+#      - CLOUDFLARE_API_TOKEN  → token do Cloudflare com permissão Workers
+#      - CLOUDFLARE_ACCOUNT_ID → seu Account ID
+#   2. (opcional) Configure também:
+#      - CRYPTO_BASE_KEY (32 chars hex)
+#      - HMAC_BASE_KEY (64 chars hex)
+#   3. Faça push na main → Action roda automaticamente
+# ═══════════════════════════════════════════════════════════════
+
+name: Deploy to Cloudflare Workers
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Sintaxe check
+        run: |
+          node --check worker.js
+          for f in modular/*.js; do
+            echo "check: $f"
+            node --check "$f"
+          done
+
+      - name: Configure Wrangler
+        run: |
+          # Instala wrangler globalmente para uso nos próximos passos
+          npm install -g wrangler@4
+          wrangler --version
+          # Configura com o token da conta
+          export CLOUDFLARE_API_TOKEN=${{ secrets.CLOUDFLARE_API_TOKEN }}
+          export CLOUDFLARE_ACCOUNT_ID=${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Criar ou recuperar KV namespace
+        id: kv
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -e
+          # Lista namespaces existentes
+          echo "Buscando KV namespace 'student-gdi-ENV'..."
+          KV_LIST=$(wrangler kv namespace list 2>/dev/null || echo "[]")
+          KV_ID=$(echo "$KV_LIST" | jq -r '.[] | select(.title | endswith("-ENV")) | .id' | head -n 1)
+
+          if [ -z "$KV_ID" ]; then
+            echo "KV namespace não encontrado — criando novo..."
+            CREATE_OUTPUT=$(wrangler kv namespace create ENV 2>&1)
+            echo "$CREATE_OUTPUT"
+            # wrangler retorna algo como: { "id": "abc123..." }
+            KV_ID=$(echo "$CREATE_OUTPUT" | grep -oE '"id":\s*"[^"]+"' | head -n 1 | sed -E 's/.*"id":\s*"([^"]+)".*/\1/')
+            if [ -z "$KV_ID" ]; then
+              # tenta formato alternativo
+              KV_ID=$(echo "$CREATE_OUTPUT" | grep -oE 'id: [a-f0-9]+' | head -n 1 | awk '{print $2}')
+            fi
+          fi
+
+          if [ -z "$KV_ID" ]; then
+            echo "❌ Não foi possível criar/encontrar o KV namespace"
+            exit 1
+          fi
+
+          echo "✓ KV namespace ID: $KV_ID"
+          echo "kv_id=$KV_ID" >> $GITHUB_OUTPUT
+
+          # Substitui o placeholder no wrangler.toml
+          sed -i "s/REPLACE_WITH_YOUR_KV_ID/$KV_ID/g" wrangler.toml
+          sed -i "s/REPLACE_WITH_YOUR_KV_PREVIEW_ID/$KV_ID/g" wrangler.toml
+
+          echo "=== wrangler.toml atualizado ==="
+          cat wrangler.toml
+
+      - name: Validar wrangler.toml
+        run: |
+          echo "=== Validando deploy (dry-run) ==="
+          CLOUDFLARE_API_TOKEN=${{ secrets.CLOUDFLARE_API_TOKEN }} \
+          CLOUDFLARE_ACCOUNT_ID=${{ secrets.CLOUDFLARE_ACCOUNT_ID }} \
+          npx wrangler deploy --dry-run || true
+
+      - name: Deploy para Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4.135.0'
+          preCommands: |
+            echo "✓ wrangler.toml pronto (KV ID injetado)"
+          postCommands: |
+            echo "✓ Deploy completo: student-gdi"
+            # Lista bindings pra confirmar
+            npx wrangler deployments list 2>/dev/null | head -5 || true
+
+      - name: Configurar secrets se não existirem
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # Tenta criar secrets (falha silenciosamente se já existirem)
+          if [ -n "${{ secrets.CRYPTO_BASE_KEY }}" ]; then
+            echo "${{ secrets.CRYPTO_BASE_KEY }}" | npx wrangler secret put CRYPTO_BASE_KEY 2>/dev/null || true
+          fi
+          if [ -n "${{ secrets.HMAC_BASE_KEY }}" ]; then
+            echo "${{ secrets.HMAC_BASE_KEY }}" | npx wrangler secret put HMAC_BASE_KEY 2>/dev/null || true
+          fi
+
+      - name: Notificar sucesso
+        if: success()
+        run: |
+          echo "### ✅ Deploy concluído!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Worker:** student-gdi" >> $GITHUB_STEP_SUMMARY
+          echo "**Repo:** ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**KV ID:** ${{ steps.kv.outputs.kv_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "URL: https://student-gdi.${{ github.repository_owner }}.workers.dev" >> $GITHUB_STEP_SUMMARY
+
+      - name: Notificar falha
+        if: failure()
+        run: |
+          echo "### ❌ Deploy falhou!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Verifique os logs acima. Possíveis causas:" >> $GITHUB_STEP_SUMMARY
+          echo "- Secret \`CLOUDFLARE_API_TOKEN\` ausente ou sem permissão" >> $GITHUB_STEP_SUMMARY
+          echo "- Secret \`CLOUDFLARE_ACCOUNT_ID\` ausente" >> $GITHUB_STEP_SUMMARY
+          echo "- Rate limit do Cloudflare API atingido" >> $GITHUB_STEP_SUMMARY
