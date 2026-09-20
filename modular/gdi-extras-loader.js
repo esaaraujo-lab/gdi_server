@@ -29,7 +29,7 @@
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  const CACHE_VERSION = '5';
+  const CACHE_VERSION = '6';
 
   const MODULES = [
     'gdi-core.js',
@@ -112,13 +112,15 @@
       console.log('[GDI Loader] iniciando carga modular — BASE_URL:', BASE_URL);
 
       // ★★★ WAIT FOR Bus: os módulos (gdi-core, gdi-ui, etc.) dependem de
-      // window.Bus, que é definido no app.min.js. Se o loader disparar antes
-      // do app.min.js avaliar, os módulos quebram com "Bus is not defined".
-      // Esperamos até o Bus estar disponível (timeout 10s).
+      // Bus, que é definido no app.min.js com `const Bus = ...`.
+      // IMPORTANTE: `const` cria binding global mas NÃO propriedade de window,
+      // então checamos `typeof Bus` direto (não window.Bus).
+      // Se o loader disparar antes do app.min.js avaliar, os módulos quebram
+      // com "Bus is not defined". Esperamos até o Bus estar disponível (timeout 10s).
       const _busWaitT0 = Date.now();
-      while (typeof window.Bus === 'undefined') {
+      while (typeof Bus === 'undefined') {
         if (Date.now() - _busWaitT0 > 10000) {
-          console.error('[GDI Loader] TIMEOUT esperando window.Bus — app.min.js não carregou?');
+          console.error('[GDI Loader] TIMEOUT esperando Bus — app.min.js não carregou?');
           return;
         }
         await new Promise(r => setTimeout(r, 20));
