@@ -4,18 +4,28 @@
 // Substitui o gdi-extras.js monolítico por arquivos menores carregados em
 // paralelo. Mantém 100% de compatibilidade.
 //
-// ⚠️ CORREÇÃO CRÍTICA: o cache-buster era `Date.now()`, o que INVALIDAVA
+// ⚠️ CORREÇÃO CRÍTICA #1: o cache-buster era `Date.now()`, o que INVALIDAVA
 // o cache HTTP/CDN para ~5MB de JS em CADA page-load. Trocado por versão
 // fixa — bump só quando publicar código novo.
 //
-// ⚠️ ROTA RELATIVA: os módulos são servidos pela rota /modular/ do
-// próprio Cloudflare Worker (ver student_gdi/worker.js), não por CDN.
+// ⚠️ CORREÇÃO CRÍTICA #2: guard anti-duplicate-bootstrap. O loader estava
+// rodando 4× por page-load, acumulando listeners/observers/timers
+// exponencialmente → freeze permanente. Agora só roda 1×.
+//
+// ⚠️ ARQUITETURA: módulos servidos pelo jsdelivr CDN direto do repo
+// PÚBLICO (sem secrets). Mais rápido que rota do worker, cache 1 ano,
+// dispensa GH_TOKEN. O worker.js mantém /modular/ como fallback.
 // ═══════════════════════════════════════════════════════════════
 
 (function(){
   'use strict';
 
-  const BASE_URL = '/modular/';  // servido pelo Cloudflare Worker
+  // ★★★ TROQUE PELO SEU REPO PÚBLICO ★★★
+  // Formato: <usuario>/<repo> (sem https://github.com/)
+  const PUBLIC_REPO = 'esaaraujo-lab/gdi_server';  // ← TROQUE AQUI
+
+  // jsdelivr CDN: cache mundial, immutable, dispensa GH_TOKEN (repo público)
+  const BASE_URL = 'https://cdn.jsdelivr.net/gh/' + PUBLIC_REPO + '@main/modular/';
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
@@ -100,6 +110,20 @@
     _bootstrapPromise = (async () => {
       const t0 = performance.now();
       console.log('[GDI Loader] iniciando carga modular — BASE_URL:', BASE_URL);
+
+      // ★★★ WAIT FOR Bus: os módulos (gdi-core, gdi-ui, etc.) dependem de
+      // window.Bus, que é definido no app.min.js. Se o loader disparar antes
+      // do app.min.js avaliar, os módulos quebram com "Bus is not defined".
+      // Esperamos até o Bus estar disponível (timeout 10s).
+      const _busWaitT0 = Date.now();
+      while (typeof window.Bus === 'undefined') {
+        if (Date.now() - _busWaitT0 > 10000) {
+          console.error('[GDI Loader] TIMEOUT esperando window.Bus — app.min.js não carregou?');
+          return;
+        }
+        await new Promise(r => setTimeout(r, 20));
+      }
+      console.log('[GDI Loader] Bus disponível, prosseguindo carga modular');
 
       try{
         await loadScript(moduleUrl('gdi-core.js'), false);
