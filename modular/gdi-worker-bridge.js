@@ -180,7 +180,13 @@
         }
         return new Promise((resolve, reject) => {
           _listPending.set(id, { resolve, reject, onPage });
-          w.postMessage({ type: 'list', id, path, pw: pw || '' });
+          // ★ FIX (Task 20b): Worker precisa de URL ABSOLUTA — paths relativos (/1:/...)
+          // não funcionam dentro do Worker (não há window.location).
+          let absPath = path;
+          if (path && path.charAt(0) === '/' && !path.startsWith('//')) {
+            absPath = self.location.origin + path;
+          }
+          w.postMessage({ type: 'list', id, path: absPath, pw: pw || '' });
         }).then(files => { cacheSet(cacheKey, files); return files; })
           .catch(err => {
             _listPending.delete(id);
@@ -226,7 +232,12 @@
           try { pwResolved[fp] = pwGetter(fp); } catch(_){ pwResolved[fp] = ''; }
         }
       }
-      w.postMessage({ type: 'scan', id, parentPath, subFolders, pw: pwResolved, initialItems: 60 });
+      // ★ FIX (Task 20b): URL absoluta pro Worker
+          let absParent = parentPath;
+          if (parentPath && parentPath.charAt(0) === '/' && !parentPath.startsWith('//')) {
+            absParent = self.location.origin + parentPath;
+          }
+          w.postMessage({ type: 'scan', id, parentPath: absParent, subFolders, pw: pwResolved, initialItems: 60 });
     });
   };
 
