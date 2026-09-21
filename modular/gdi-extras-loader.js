@@ -29,7 +29,7 @@
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  const CACHE_VERSION = '10';  // ★ Task 16: auto-scan pending courses + manual "Escanear agora" button + orphan course cleanup
+  const CACHE_VERSION = '11';  // ★ Task 16: auto-scan pending courses + manual "Escanear agora" button + orphan course cleanup
 
   const MODULES = [
     'gdi-core.js',

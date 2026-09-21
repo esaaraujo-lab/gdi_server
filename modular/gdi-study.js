@@ -3355,9 +3355,52 @@
     else if(e.key==='1'||e.key==='2'||e.key==='3'){FC.grade&&FC.grade(+e.key);}
   });
 
-  log('Área do Aluno ativa (v3.0 — sidebar split + tabs removidas + patches A-H)');
+  log('Área do Aluno ativa (v3.1 — URL ?central=1 abre direto + atalho tecla C)');
 
-  // (bootstrap removido — Área do Aluno abre via botão da navbar)
+  // ★ Task 17: acesso direto por URL — ?central=1 abre o painel automaticamente
+  // Funciona em qualquer página (home, pasta, vídeo). Espera os slots estarem prontos.
+  // Suporta também ?central=questoes, ?central=resumos, etc. (abre direto numa aba)
+  (function(){
+    function tryOpenFromURL(){
+      try{
+        const params = new URLSearchParams(window.location.search);
+        const central = params.get('central');
+        if(central){
+          // Espera GDIUser estar pronto (state carregado) antes de abrir
+          const openNow = function(){
+            const tab = (central === '1' || central === 'true') ? 'home' : central;
+            openPanel(tab);
+            // Limpa o parâmetro da URL (não fica reabrindo a cada navegação)
+            try{
+              const url = new URL(window.location.href);
+              url.searchParams.delete('central');
+              window.history.replaceState({}, '', url.toString());
+            }catch(_){}
+          };
+          if(window.GDIUser && typeof window.GDIUser.ready === 'function'){
+            window.GDIUser.ready().then(openNow).catch(openNow);
+            // fallback: abre depois de 2s mesmo se ready() não resolver
+            setTimeout(openNow, 2000);
+          }else{
+            setTimeout(openNow, 1500);
+          }
+          return true;
+        }
+      }catch(_){}
+      return false;
+    }
+    // Tenta abrir imediatamente (se já logado) e também após page:change
+    setTimeout(tryOpenFromURL, 1000);
+    if(window.Bus){
+      Bus.onGlobal('page:change', function(){
+        setTimeout(tryOpenFromURL, 500);
+      });
+      Bus.onGlobal('user:ready', function(){
+        setTimeout(tryOpenFromURL, 300);
+      });
+    }
+  })();
+
 })();
 
 // ═══════════════════════════════════════════════════════════════
