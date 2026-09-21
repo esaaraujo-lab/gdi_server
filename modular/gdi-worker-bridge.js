@@ -208,9 +208,14 @@
   // Recomenda-se trocar o chamador interno do app.min.js para usar esta versão
   // (ver app.min.js.patch.md).
 
-  window.gdiScanCrossFolder = function(parentPath, subFolders, pwGetter, onProgress){
-    const w = getListWorker();
-    if (!w) return Promise.resolve([]);
+  window.gdiScanCrossFolder = async function(parentPath, subFolders, pwGetter, onProgress){
+    // ★ FIX 7 (Task 21): getListWorker() now returns a Promise (since Task 20's Blob URL
+    // refactor — the worker is created asynchronously via fetch+Blob+new Worker). The old
+    // code called `w.postMessage(...)` synchronously on the Promise, which threw TypeError
+    // ("postMessage is not a function"). Now we await the Promise first. If the worker
+    // failed to instantiate, fall back to empty result (no original to call).
+    const w = await getListWorker();
+    if (!w) return [];
     const id = ++_listId;
     return new Promise((resolve, reject) => {
       _listPending.set(id, {
@@ -233,11 +238,11 @@
         }
       }
       // ★ FIX (Task 20b): URL absoluta pro Worker
-          let absParent = parentPath;
-          if (parentPath && parentPath.charAt(0) === '/' && !parentPath.startsWith('//')) {
-            absParent = self.location.origin + parentPath;
-          }
-          w.postMessage({ type: 'scan', id, parentPath: absParent, subFolders, pw: pwResolved, initialItems: 60 });
+      let absParent = parentPath;
+      if (parentPath && parentPath.charAt(0) === '/' && !parentPath.startsWith('//')) {
+        absParent = self.location.origin + parentPath;
+      }
+      w.postMessage({ type: 'scan', id, parentPath: absParent, subFolders, pw: pwResolved, initialItems: 60 });
     });
   };
 
@@ -293,8 +298,13 @@
   }, 500);
 
   // ───────────────────────── Hook em page:change para limpar PDF ─────────────────────────
-  if (window.Bus && typeof window.Bus.onGlobal === 'function') {
-    window.Bus.onGlobal('page:change', () => {
+  // ★ FIX 8 (Task 21): was `if (window.Bus && ...)` — but Bus is declared with `const` in
+  // app.min.js, so `window.Bus` is undefined (const declarations don't create window
+  // properties). The check always failed, so the page:change listener was never registered
+  // and PDFs leaked across page navigations. Use `typeof Bus !== 'undefined'` instead
+  // (matches the pattern in gdi-extras-loader.js line 121 and gdi-study.js line 4614).
+  if (typeof Bus !== 'undefined' && typeof Bus.onGlobal === 'function') {
+    Bus.onGlobal('page:change', () => {
       // destroi o PDF atual ao navegar (evita leak de PDFDocumentProxy)
       if (typeof window.gdiPdfCleanup === 'function') {
         try { window.gdiPdfCleanup(); } catch(_){}
@@ -310,9 +320,21 @@
     listCacheInvalidate: (path) => _listCache.delete(path + '|' + ''),
     pendingListJobs: () => _listPending.size,
     pendingPdfJobs:  () => _pdfPending.size,
-    terminateAll: () => {
-      if (_listWorker) { try { _listWorker.terminate(); } catch(_){} _listWorker = null; }
-      if (_pdfWorker)  { try { _pdfWorker.terminate(); } catch(_){} _pdfWorker = null; }
+    terminateAll: async () => {
+      // ★ FIX 9 (Task 21): _listWorker and _pdfWorker are now Promises (since Task 20's
+      // Blob URL refactor). The old code called `.terminate()` directly on the Promise,
+      // which threw TypeError and silently leaked the worker (try/catch swallowed it).
+      // Now we await the Promise first; if the worker exists, terminate it properly.
+      try {
+        const listW = _listWorker ? await _listWorker : null;
+        if (listW) { try { listW.terminate(); } catch(_){} }
+      } catch(_){}
+      _listWorker = null;
+      try {
+        const pdfW = _pdfWorker ? await _pdfWorker : null;
+        if (pdfW) { try { pdfW.terminate(); } catch(_){} }
+      } catch(_){}
+      _pdfWorker = null;
     }
   };
 

@@ -29,7 +29,7 @@
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  const CACHE_VERSION = '13';  // ★ Task 19: Meggy memory folder structure + course sharing between students (materials saved to .meggy.ai/<kind>/, general_courses.json moved to .meggy.ai/courses/, scan results saved to .meggy.ai/courses/<hash>/lessons.json, per-user progress saved to .meggy.ai/courses/<hash>/user-<username>.json)
+  const CACHE_VERSION = '16';  // ★ Task 21: comprehensive code review — fixed gdiSaveMaterialToSubfolder silent failure (was using multipart/related body to /drive/v3/files without /upload/ prefix, switched to JSON body matching gdiSharedMeggyFolderId), same fix in handleCourseSharedProgressSave (.meggy.ai + progress folder creation), added 'lessons'+'cards' to JSON kinds in handleMaterialsSave, content-type based on kind in gdiSaveMaterialToSubfolder, exported downloadAsPdf from gdiIsaPdf, fixed window.Bus checks in 3 modules (Bus is const-declared, doesn't expose window.Bus — was preventing slots:ready listener, page:change PDF cleanup, tryOpenFromURL re-run), fixed gdiScanCrossFolder Promise handling, fixed terminateAll Promise handling
 
   const MODULES = [
     'gdi-core.js',

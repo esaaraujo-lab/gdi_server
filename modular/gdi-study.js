@@ -3431,7 +3431,11 @@
     }
     // Tenta abrir imediatamente (se já logado) e também após page:change
     setTimeout(tryOpenFromURL, 1000);
-    if(window.Bus){
+    // ★ FIX 10 (Task 21): was `if(window.Bus)` — but Bus is declared with `const` in
+    // app.min.js, so `window.Bus` is undefined. The check always failed, so tryOpenFromURL
+    // was never re-run on page:change or user:ready. Use `typeof Bus !== 'undefined'`
+    // (matches gdi-extras-loader.js line 121 pattern).
+    if(typeof Bus !== 'undefined' && typeof Bus.onGlobal === 'function'){
       Bus.onGlobal('page:change', function(){
         setTimeout(tryOpenFromURL, 500);
       });

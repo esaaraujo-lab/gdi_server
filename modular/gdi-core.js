@@ -841,7 +841,12 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       await new Promise(resolve=>{
         let done=false;
         const onReady=()=>{if(!done){done=true;resolve();}};
-        if(window.Bus&&typeof Bus.onGlobal==='function'){
+        // ★ FIX 11 (Task 21): was `if(window.Bus&&typeof Bus.onGlobal==='function')` —
+        // but Bus is declared with `const` in app.min.js, so `window.Bus` is undefined.
+        // The check always failed, so the slots:ready listener was never registered and
+        // the materials panel waited the full 5s fallback timeout before showing.
+        // Use `typeof Bus !== 'undefined'` (matches gdi-extras-loader.js line 121).
+        if(typeof Bus !== 'undefined' && typeof Bus.onGlobal === 'function'){
           Bus.onGlobal('slots:ready',onReady);
         }
         setTimeout(()=>{if(!done){done=true;resolve();}},5000);
