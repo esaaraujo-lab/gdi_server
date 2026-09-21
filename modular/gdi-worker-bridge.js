@@ -63,34 +63,59 @@
 
   function getListWorker(){
     if (_listWorker) return _listWorker;
-    try {
-      _listWorker = new Worker(LIST_WORKER_URL);
-      _listWorker.onmessage = onListMessage;
-      _listWorker.onerror = (e) => {
-        console.warn('[gdi-worker-bridge] list worker error', e);
-        // rejeita todos os pendentes
-        for (const [id, p] of _listPending) { try { p.reject(new Error('worker error')); } catch(_){} }
-        _listPending.clear();
-        _listWorker = null;
-      };
-    } catch(e) {
-      console.warn('[gdi-worker-bridge] Não foi possível criar list worker, usando fallback', e);
-      _listWorker = null;
-    }
+    // ★ FIX (Task 20): Web Workers não podem ser cross-origin.
+    // Buscamos o script do CDN via fetch, criamos um Blob URL (same-origin), e instanciamos o Worker.
+    _listWorker = (async () => {
+      try {
+        const resp = await fetch(LIST_WORKER_URL);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const text = await resp.text();
+        const blob = new Blob([text], {type: 'application/javascript'});
+        const blobUrl = URL.createObjectURL(blob);
+        const w = new Worker(blobUrl);
+        w.onmessage = onListMessage;
+        w.onerror = (e) => {
+          console.warn('[gdi-worker-bridge] list worker error', e);
+          for (const [id, p] of _listPending) { try { p.reject(new Error('worker error')); } catch(_){} }
+          _listPending.clear();
+          _listWorker = null;
+          URL.revokeObjectURL(blobUrl);
+        };
+        return w;
+      } catch(e) {
+        console.warn('[gdi-worker-bridge] Não foi possível criar list worker (blob), usando fallback', e.message);
+        return null;
+      }
+    })();
     return _listWorker;
   }
 
   function getPdfWorker(){
     if (_pdfWorker) return _pdfWorker;
     try {
-      _pdfWorker = new Worker(PDF_WORKER_URL);
-      _pdfWorker.onmessage = onPdfMessage;
-      _pdfWorker.onerror = (e) => {
-        console.warn('[gdi-worker-bridge] pdf worker error', e);
-        for (const [id, p] of _pdfPending) { try { p.reject(new Error('worker error')); } catch(_){} }
-        _pdfPending.clear();
-        _pdfWorker = null;
-      };
+      // ★ FIX (Task 20): Blob URL technique (same as getListWorker)
+      _pdfWorker = (async () => {
+        try {
+          const resp = await fetch(PDF_WORKER_URL);
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          const text = await resp.text();
+          const blob = new Blob([text], {type: 'application/javascript'});
+          const blobUrl = URL.createObjectURL(blob);
+          const w = new Worker(blobUrl);
+          w.onmessage = onPdfMessage;
+          w.onerror = (e) => {
+            console.warn('[gdi-worker-bridge] pdf worker error', e);
+            for (const [id, p] of _pdfPending) { try { p.reject(new Error('worker error')); } catch(_){} }
+            _pdfPending.clear();
+            _pdfWorker = null;
+            URL.revokeObjectURL(blobUrl);
+          };
+          return w;
+        } catch(e) {
+          console.warn('[gdi-worker-bridge] Não foi possível criar pdf worker (blob), usando fallback', e.message);
+          return null;
+        }
+      })();
     } catch(e) {
       console.warn('[gdi-worker-bridge] Não foi possível criar pdf worker, usando fallback', e);
       _pdfWorker = null;
@@ -143,32 +168,28 @@
       return Promise.resolve(cached);
     }
     // 2) worker com timeout + fallback direto
-    const w = getListWorker();
-    if (w) {
+    // ★ Task 20: getListWorker() agora retorna uma Promise (Blob URL async)
+    const wPromise = getListWorker();
+    if (wPromise && typeof wPromise.then === 'function') {
+      // É uma Promise — espera o worker ficar pronto, depois posta mensagem
       const id = ++_listId;
-      const workerPromise = new Promise((resolve, reject) => {
-        _listPending.set(id, { resolve, reject, onPage });
-        w.postMessage({ type: 'list', id, path, pw: pw || '' });
-      }).then(files => { cacheSet(cacheKey, files); return files; });
-
-      // ★ Task 8: timeout 5s — se worker não responder, faz fetch direto
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('worker timeout')), 5000)
-      );
-
-      return Promise.race([workerPromise, timeoutPromise])
-        .catch(err => {
-          // limpa pending se ainda estiver
-          _listPending.delete(id);
-          // fallback para fetch direto na thread principal (não trava, é async)
-          console.warn('[gdi-worker-bridge] worker lento, fallback direto:', path.slice(-30));
-          return _origListAllFiles ? _origListAllFiles(path, pw, onPage).then(files => {
-            cacheSet(cacheKey, files);
-            return files;
-          }) : [];
-        });
+      return wPromise.then(w => {
+        if (!w) {
+          // Worker falhou — fallback pra thread principal
+          return _origListAllFiles ? _origListAllFiles(path, pw, onPage).then(files => { cacheSet(cacheKey, files); return files; }) : Promise.resolve([]);
+        }
+        return new Promise((resolve, reject) => {
+          _listPending.set(id, { resolve, reject, onPage });
+          w.postMessage({ type: 'list', id, path, pw: pw || '' });
+        }).then(files => { cacheSet(cacheKey, files); return files; })
+          .catch(err => {
+            _listPending.delete(id);
+            console.warn('[gdi-worker-bridge] list fallback', err);
+            return _origListAllFiles ? _origListAllFiles(path, pw, onPage).then(files => { cacheSet(cacheKey, files); return files; }) : [];
+          });
+      });
     }
-    // 3) fallback original
+    // Fallback: worker não disponível (null ou não-Promise)
     return _origListAllFiles ? _origListAllFiles(path, pw, onPage).then(files => { cacheSet(cacheKey, files); return files; }) : Promise.resolve([]);
   };
 
