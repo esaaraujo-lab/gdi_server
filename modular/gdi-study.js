@@ -794,31 +794,48 @@
 
       if(!alreadyExists){
         // ★ 1) SALVA no localStorage — aparece imediatamente na lista do aluno
+        // ★ FIX 4 (Task 14): agora também persiste pdfCount, para que colectCourses()
+        //    possa exibir totalLessons real (não mais c.lessons.size = paths visitados).
         const courseId='mc-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
         manual.push({
           id:courseId,name:courseName,icon:'📁',color:'#5ddeda',
           goal:60,notes:'',createdAt:Date.now(),
-          manual:true,path:coursePath,courseKey:coursePath
+          manual:true,path:coursePath,courseKey:coursePath,
+          pdfCount:pdfCount||0  // ★ FIX 4: total real de aulas (Drive scan)
         });
         lsSet(LS_MANUAL,manual);
       }
 
       // ★ 2) POST /api/courses/add — salva em general_courses.json no Drive (compartilhado)
       // Não-bloqueante: se falhar, mostra warning mas continua o fluxo
+      // ★ FIX 4 (Task 14): usa window.GDIStorage.saveCourse() para também invalidar
+      //    cache de courses (cross-device). Mantém POST direto como fallback.
       try{
-        const r=await fetch('/api/courses/add',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({
-            coursePath,courseName,
-            pdfCount:pdfCount||0,
-            addedAt:Date.now()
-          })
-        });
-        if(r.ok){
-          await r.json().catch(()=>({}));
+        if(window.GDIStorage && typeof window.GDIStorage.saveCourse==='function'){
+          // caminho preferido — invalida cache + POST
+          window.GDIStorage.saveCourse(coursePath,courseName,pdfCount||0).catch(e=>{
+            console.warn('[AddCourse] GDIStorage.saveCourse falhou, tentando POST direto:',e.message);
+            // fallback direto
+            fetch('/api/courses/add',{method:'POST',headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({coursePath,courseName,pdfCount:pdfCount||0,addedAt:Date.now()})
+            }).catch(()=>{});
+          });
         }else{
-          console.warn('[AddCourse] /api/courses/add HTTP',r.status,'— continuando mesmo assim');
+          // storage.js indisponível — POST direto
+          const r=await fetch('/api/courses/add',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({
+              coursePath,courseName,
+              pdfCount:pdfCount||0,
+              addedAt:Date.now()
+            })
+          });
+          if(r.ok){
+            await r.json().catch(()=>({}));
+          }else{
+            console.warn('[AddCourse] /api/courses/add HTTP',r.status,'— continuando mesmo assim');
+          }
         }
       }catch(e){
         console.warn('[AddCourse] falha ao salvar no Drive (continuando):',e.message);
@@ -905,40 +922,55 @@
     // ★ cursos ocultos pelo usuário (não aparecem na lista de cursos)
     const hidden=lsGet(LS_HIDDEN,[]);
     const isHidden=ck=>hidden.some(h=>low(h)===low(ck));
-    const map=new Map();
-    const add=(p,at,wd)=>{
-      const ck=courseKeyOf(p);if(!ck)return;
-      if(isHidden(ck))return; // ★ pula cursos ocultos
-      let c=map.get(ck);
-      if(!c){c={key:ck,lastAt:0,lessons:new Set(),watched:0};map.set(ck,c);}
-      c.lessons.add(low(p));
-      if(wd)c.watched++;
-      const a=Number(at)||0;if(a>c.lastAt)c.lastAt=a;
-    };
-    const w=(d&&d.watched)||{},r=(d&&d.resume)||{};
-    for(const k in w)add(k,w[k]&&w[k].at,true);
-    for(const k in r)add(k,r[k]&&r[k].at,false);
-    (Array.isArray(d.history)?d.history:[]).forEach(h=>{if(h&&h.path)add(h.path,h.at,false)});
 
-    // ★ FIX: inclui cursos manuais adicionados via "Adicionar curso" (modal de navegação do Drive)
+    // ★ FIX 2 (Task 14): return ONLY manually-added courses (no more auto-tiles).
+    // Auto-tiles (de watched/resume/history) mostravam dados errados, ex.: "3 aulas"
+    // quando o curso tem 50, porque c.lessons.size contava apenas paths visitados —
+    // não o total real de aulas. Cursos manuais são adicionados explicitamente pelo
+    // aluno via aba "Adicionar matéria" e carregam totalLessons (pdfCount do Drive scan).
     const LS_MANUAL='gdi-manual-courses-v1';
     const manual=lsGet(LS_MANUAL,[]);
+    const map=new Map();
+
+    // Pré-computa prefixo lower de cada curso manual para casar paths assistidos.
+    // (Watched é armazenado por path completo; precisamos contar quantos paths
+    //  assistidos caem dentro de cada curso manual.)
+    const w=(d&&d.watched)||{};
+
     for(const m of manual){
       if(!m||!m.path)continue;
       const ck=m.path;  // usa o path do drive como courseKey
       if(isHidden(ck))continue;
+      // Conta aulas assistidas (paths em d.watched cujo prefixo = course path)
+      const pre=low(ck);
+      let watchedCount=0;
+      for(const k in w){
+        const lk=low(k);
+        if(lk===pre||lk.indexOf(pre+'/')===0)watchedCount++;
+      }
       let c=map.get(ck);
       if(!c){
-        c={key:ck,lastAt:m.createdAt||Date.now(),lessons:new Set(),watched:0,manual:true,manualCourse:m};
+        c={
+          key:ck,
+          lastAt:m.createdAt||Date.now(),
+          lessons:new Set(),  // mantido p/ compat (detail view itera d.watched direto)
+          watched:watchedCount,
+          manual:true,
+          manualCourse:m,
+          totalLessons:m.pdfCount||m.lessonCount||0  // ★ total real (Drive scan)
+        };
         map.set(ck,c);
+      }else{
+        // curso já existia (raro em modo manual-only) — atualiza stats
+        c.watched=watchedCount;
+        c.totalLessons=m.pdfCount||m.lessonCount||0;
       }
-      // marca como curso manual para o card mostrar differently
       c.manual=true;
       c.manualCourse=m;
       if(!c.lastAt)c.lastAt=m.createdAt||Date.now();
     }
 
-    return [...map.values()].filter(c=>c.lessons.size||c.manual).sort((a,b)=>b.lastAt-a.lastAt);
+    return [...map.values()].sort((a,b)=>b.lastAt-a.lastAt);
   }
   // ★ helpers para ocultar/restaurar cursos
   function hideCourse(ck){
@@ -1153,7 +1185,7 @@
       {id:'simulado',icon:'bi-stopwatch',label:'Simulado'}
     ]},
     {label:'Materiais',tabs:[
-      {id:'addmateria',icon:'bi-folder-plus',label:'Adicionar matéria'},
+      {id:'addmateria',icon:'bi-folder-plus',label:'Adicionar matéria'},  // ★ FIX 1a (Task 14): RE-ADICIONADO — user pediu para voltar
       {id:'resumos',icon:'bi-clipboard',label:'Resumos'},
       {id:'provas',icon:'bi-file-earmark-text',label:'Provas'},
       {id:'redacao',icon:'bi-pencil-square',label:'Redação'}
@@ -1237,6 +1269,7 @@
     if(!body)return;
     // limpa timer do simulado anterior se houver
     if(body.__simTimer){clearInterval(body.__simTimer);body.__simTimer=null;}
+    // ★ FIX 1b (Task 14): RE-ADICIONADO handler da aba 'addmateria' (Task 13 havia removido por engano)
     if(currentTab==='addmateria'){showAddCourseModal(body);return;}
     if(currentTab==='home')renderHome(body);
     else if(currentTab==='questoes')renderQuestoes(body);
@@ -1371,22 +1404,30 @@
       <div>
         <b style="color:var(--ferreto-text,#f0f6fc);font-size:14px;display:block;margin-bottom:10px;">Continue de onde parou</b>
         <div class="gdi-courses">
-          ${courses.slice(0,3).map(c=>{
+          ${courses.slice(0,6).map(c=>{
             const name=cleanCourseName(c.key);
             const drive=driveNameOf(c.key);
-            const progress=c.lessons.size>0?Math.round(c.watched/c.lessons.size*100):0;
+            // ★ FIX 3 (Task 14): usa totalLessons (real) ao invés de c.lessons.size (visited paths)
+            const total=c.totalLessons||c.lessons.size||0;
+            const watched=c.watched||0;
+            const remaining=Math.max(0,total-watched);  // ★ nunca negativo
+            const progress=total>0?Math.min(100,Math.round(watched/total*100)):(watched>0?100:0);
             const progressColor=progress>=80?'#3fb950':progress>=40?'#ffd43b':'var(--ferreto-primary,#ff8b9f)';
+            const coursePath=c.key;  // e.g. /4:/CANTE COM EXCELENCIA 2.0 + COMUNIDADE/
             return `<div class="gdi-course" data-course-key="${escHtml(c.key)}" style="cursor:pointer;">
               <b title="${escHtml(courseName(c.key))}">${escHtml(name)}</b>
               ${drive?`<small><i class="bi bi-hdd"></i> ${escHtml(drive)}</small>`:'<small>&nbsp;</small>'}
               <div class="gdi-course-stats">
-                <div class="gdi-course-stat"><span class="gdi-course-stat-num">${c.lessons.size}</span><span class="gdi-course-stat-label">Aulas</span></div>
-                <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:#3fb950;">${c.watched}</span><span class="gdi-course-stat-label">Feitas</span></div>
-                <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:#ffd43b;">${c.lessons.size-c.watched}</span><span class="gdi-course-stat-label">Restam</span></div>
-                <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:${progressColor};">${progress}%</span><span class="gdi-course-stat-label">Concl.</span></div>
+                <div class="gdi-course-stat"><span class="gdi-course-stat-num">${total}</span><span class="gdi-course-stat-label">Aulas</span></div>
+                <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:#3fb950;">${watched}</span><span class="gdi-course-stat-label">Assistidas</span></div>
+                <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:#ffd43b;">${remaining}</span><span class="gdi-course-stat-label">Restantes</span></div>
+                <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:${progressColor};">${progress}%</span><span class="gdi-course-stat-label">Concluído</span></div>
               </div>
               <div class="gdi-progress-bar"><div class="gdi-progress-fill" style="width:${progress}%;background:${progressColor};"></div></div>
-              <button class="gdi-btn-continue" disabled><i class="bi bi-hourglass-split"></i> Verificando…</button>
+              <div style="display:flex;gap:6px;margin-top:8px;">
+                <button class="gdi-btn-continue" data-course-key="${escHtml(c.key)}" style="flex:1;" disabled><i class="bi bi-hourglass-split"></i> Verificando…</button>
+                <a href="${escHtml(coursePath)}" class="gdi-btn-continue" style="flex:1;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:6px;" title="Abrir pasta no Drive"><i class="bi bi-folder2-open"></i> Ir para o Drive</a>
+              </div>
             </div>`;
           }).join('')}
         </div>
@@ -1403,22 +1444,30 @@
       };
     });
     // bind course cards (continue) — clicar leva a openCourseDetail
+    // ★ FIX 3 (Task 14): <a> "Ir para o Drive" também tem classe .gdi-btn-continue;
+    //   usar selector específico p/ só pegar o <button> Continuar, e ignorar clicks em <a>.
     box.querySelectorAll('[data-course-key]').forEach(cardEl=>{
       const ck=cardEl.dataset.courseKey;
-      const contBtn=cardEl.querySelector('.gdi-btn-continue');
+      const contBtn=cardEl.querySelector('button.gdi-btn-continue');
       bestIn(ck).then(target=>{
         if(target){
-          contBtn.disabled=false;
-          contBtn.innerHTML=`<i class="bi bi-play-fill"></i> Continuar: ${escHtml(realName(target).slice(0,30))}`;
-          contBtn.onclick=(e)=>{e.stopPropagation();location.href=target+(target.includes('?')?'&':'?')+'a=view';};
+          if(contBtn){
+            contBtn.disabled=false;
+            contBtn.innerHTML=`<i class="bi bi-play-fill"></i> Continuar: ${escHtml(realName(target).slice(0,30))}`;
+            contBtn.onclick=(e)=>{e.stopPropagation();location.href=target+(target.includes('?')?'&':'?')+'a=view';};
+          }
         }else{
-          contBtn.disabled=true;
-          contBtn.className='gdi-btn-continue gdi-btn-done';
-          contBtn.innerHTML='<i class="bi bi-check2-all"></i> Tudo em dia!';
+          if(contBtn){
+            contBtn.disabled=true;
+            contBtn.className='gdi-btn-continue gdi-btn-done';
+            contBtn.innerHTML='<i class="bi bi-check2-all"></i> Tudo em dia!';
+          }
         }
       });
       cardEl.onclick=(e)=>{
+        // ★ ignora clicks em <button> OU <a> (Drive link navega sozinho)
         if(e.target.closest('button'))return;
+        if(e.target.closest('a'))return;
         // abre detalhe do curso (função preservada — tab cursos removida mas função fica)
         const c=courses.find(x=>x.key===ck);
         if(c)openCourseDetail(box,c);
@@ -1683,7 +1732,11 @@
   // ★ expõe renderCursos para outros módulos (gdiAddCourseFromDrive chama via window.renderCursos)
   window.renderCursos=renderCursos;
   window.gdiRefreshCentralPanel=function(){
-    if(panel&&panel.style.display==='flex'&&tab&&tab!=='home'){
+    // ★ FIX (Task 14): pula 'addmateria' — é um trigger de modal, não um body real.
+    //   Sem este guard, ao salvar um curso o gdiRefreshCentralPanel chamaria
+    //   renderBody('addmateria') → showAddCourseModal(body) → reabriria o modal
+    //   que acabamos de fechar.
+    if(panel&&panel.style.display==='flex'&&tab&&tab!=='home'&&tab!=='addmateria'){
       // só re-renderiza o body da aba atual
       renderBody(tab);
     }
@@ -2238,9 +2291,14 @@
   function openCourseDetail(box,c){
     const name=cleanCourseName(c.key);
     const drive=driveNameOf(c.key);
-    const progress=c.lessons.size>0?Math.round(c.watched/c.lessons.size*100):0;
+    // ★ FIX 3b (Task 14): usa totalLessons real (do manual course) ao invés de c.lessons.size
+    // (que era o nº de paths visitados — wrong).
+    const total=c.totalLessons||c.lessons.size||0;
+    const watched=c.watched||0;
+    const remaining=Math.max(0,total-watched);  // ★ nunca negativo
+    const progress=total>0?Math.min(100,Math.round(watched/total*100)):(watched>0?100:0);
     const progressColor=progress>=80?'#3fb950':progress>=40?'#ffd43b':'var(--ferreto-primary,#ff8b9f)';
-    const remaining=c.lessons.size-c.watched;
+    const coursePath=c.key;  // e.g. /4:/CANTE COM EXCELENCIA 2.0 + COMUNIDADE/
 
     // coleta aulas individuais do curso
     const d=stateD()||{};
@@ -2276,11 +2334,11 @@
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:18px;">
         <div style="background:var(--ferreto-surface-2,#161b22);border:1px solid var(--ferreto-border,#21262d);border-radius:10px;padding:12px;text-align:center;">
-          <div style="font-size:22px;font-weight:700;color:var(--ferreto-text,#f0f6fc);">${c.lessons.size}</div>
+          <div style="font-size:22px;font-weight:700;color:var(--ferreto-text,#f0f6fc);">${total}</div>
           <div style="font-size:10px;color:var(--ferreto-text-muted,#8b949e);text-transform:uppercase;letter-spacing:.05em;margin-top:2px;">Aulas</div>
         </div>
         <div style="background:var(--ferreto-surface-2,#161b22);border:1px solid var(--ferreto-border,#21262d);border-radius:10px;padding:12px;text-align:center;">
-          <div style="font-size:22px;font-weight:700;color:#3fb950;">${c.watched}</div>
+          <div style="font-size:22px;font-weight:700;color:#3fb950;">${watched}</div>
           <div style="font-size:10px;color:var(--ferreto-text-muted,#8b949e);text-transform:uppercase;letter-spacing:.05em;margin-top:2px;">Assistidas</div>
         </div>
         <div style="background:var(--ferreto-surface-2,#161b22);border:1px solid var(--ferreto-border,#21262d);border-radius:10px;padding:12px;text-align:center;">
@@ -2296,7 +2354,7 @@
       <div style="margin-bottom:18px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <b style="color:var(--ferreto-text,#f0f6fc);font-size:13px;">Progresso do curso</b>
-          <span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">${c.watched}/${c.lessons.size}</span>
+          <span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">${watched}/${total}</span>
         </div>
         <div style="height:8px;background:var(--ferreto-surface-3,rgba(255,255,255,.08));border-radius:4px;overflow:hidden;">
           <div style="height:8px;width:${progress}%;background:${progressColor};border-radius:4px;transition:width .3s;"></div>
@@ -2309,10 +2367,11 @@
 
       <div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;">
         <button id="gdi-detail-continue" class="gdi-btn gdi-btn-primary" style="font-size:12px;flex:1;justify-content:center;" disabled><i class="bi bi-hourglass-split"></i> Verificando próxima aula…</button>
+        <a href="${escHtml(coursePath)}" class="gdi-mode-btn" style="font-size:12px;flex:1;justify-content:center;text-decoration:none;display:inline-flex;align-items:center;gap:6px;" title="Abrir pasta no Drive"><i class="bi bi-folder2-open"></i> Ir para o Drive</a>
       </div>
 
       <div>
-        <b style="color:var(--ferreto-text,#f0f6fc);font-size:13px;display:block;margin-bottom:8px;"><i class="bi bi-list-ul"></i> Aulas do curso (${lessons.length})</b>
+        <b style="color:var(--ferreto-text,#f0f6fc);font-size:13px;display:block;margin-bottom:8px;"><i class="bi bi-list-ul"></i> Aulas do curso (${lessons.length}${total>0?'/'+total:''})</b>
         <div style="display:flex;flex-direction:column;gap:6px;">
           ${lessons.length?lessons.map(l=>`
             <div class="gdi-note" style="display:flex;align-items:center;gap:10px;cursor:pointer;" data-path="${escHtml(l.path)}">
@@ -2320,7 +2379,15 @@
               <span style="flex:1;min-width:0;color:var(--ferreto-text,#e6edf3);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(l.name)}</span>
               ${l.watched?'<span style="font-size:10px;color:#3fb950;flex:none;">✓</span>':'<span style="font-size:10px;color:var(--ferreto-text-muted,#8b949e);flex:none;">não vista</span>'}
             </div>
-          `).join(''):'<div class="gdi-notes-empty">Nenhuma aula registrada ainda.</div>'}
+          `).join(''):`<div class="gdi-notes-empty">
+            <i class="bi bi-info-circle" style="font-size:18px;color:var(--ferreto-text-muted,#8b949e);vertical-align:middle;"></i>
+            <span style="vertical-align:middle;">Nenhuma aula assistida ainda${total>0?' (curso tem '+total+' aulas no total)':''}.</span>
+            <div style="margin-top:8px;font-size:12px;">
+              <a href="${escHtml(coursePath)}" style="color:var(--ferreto-secondary,#5ddeda);text-decoration:underline;">
+                <i class="bi bi-folder2-open"></i> Abrir pasta no Drive para ver todas as aulas
+              </a>
+            </div>
+          </div>`}
         </div>
       </div>
     </div>`;
