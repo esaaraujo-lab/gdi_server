@@ -29,7 +29,7 @@
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  const CACHE_VERSION = '11';  // ★ Task 16: auto-scan pending courses + manual "Escanear agora" button + orphan course cleanup
+  const CACHE_VERSION = '13';  // ★ Task 19: Meggy memory folder structure + course sharing between students (materials saved to .meggy.ai/<kind>/, general_courses.json moved to .meggy.ai/courses/, scan results saved to .meggy.ai/courses/<hash>/lessons.json, per-user progress saved to .meggy.ai/courses/<hash>/user-<username>.json)
 
   const MODULES = [
     'gdi-core.js',
