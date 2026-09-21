@@ -1523,6 +1523,19 @@
                 <button class="gdi-btn-continue" data-course-key="${escHtml(c.key)}" style="flex:1;" disabled><i class="bi bi-hourglass-split"></i> Verificando…</button>
                 <a href="${escHtml(coursePath)}" class="gdi-btn-continue" style="flex:1;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:6px;" title="Abrir pasta no Drive"><i class="bi bi-folder2-open"></i> Ir para o Drive</a>
               </div>
+              ${/* ★ Task 16 / FIX 2: botão "Escanear agora" manual */ ''}
+              ${(!c.scanStatus || c.scanStatus === 'error') ? `
+              <div style="display:flex;gap:6px;margin-top:6px;">
+                <button class="gdi-btn-scan-now" data-course-key="${escHtml(c.key)}" style="flex:1;font-size:11px;padding:6px 10px;background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);color:var(--ferreto-secondary,#5ddeda);border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;" title="Escanear aulas do curso">
+                  <i class="bi bi-arrow-repeat"></i> Escanear agora
+                </button>
+              </div>` : ''}
+              ${c.scanStatus === 'scanning' ? `
+              <div style="display:flex;gap:6px;margin-top:6px;">
+                <button class="gdi-btn-scan-now" disabled style="flex:1;font-size:11px;padding:6px 10px;background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);color:var(--ferreto-text-muted,#8b949e);border-radius:8px;cursor:default;display:inline-flex;align-items:center;justify-content:center;gap:6px;opacity:.7;">
+                  <i class="bi bi-hourglass-split"></i> Escaneando ${c.scanPercent||0}%
+                </button>
+              </div>` : ''}
             </div>`;
           }).join('')}
         </div>
@@ -1567,6 +1580,50 @@
         const c=courses.find(x=>x.key===ck);
         if(c)openCourseDetail(box,c);
       };
+      // ★ Task 16 / FIX 2: botão "Escanear agora" — dispara scanner manualmente
+      const scanBtn = cardEl.querySelector('.gdi-btn-scan-now');
+      if(scanBtn && !scanBtn.disabled){
+        scanBtn.addEventListener('click', function(e){
+          e.stopPropagation();
+          const ckScan = this.dataset.courseKey;
+          if(ckScan && window.gdiCourseScanner){
+            // Limpa estado anterior (caso tenha sido 'error') e inicia novo scan
+            window.gdiCourseScanner.clearScanState(ckScan);
+            // Feedback imediato: troca texto do botão
+            try{
+              this.disabled = true;
+              this.style.opacity = '.7';
+              this.innerHTML = '<i class="bi bi-hourglass-split"></i> Iniciando…';
+            }catch(_){}
+            window.gdiCourseScanner.startScan(ckScan, function(state, lessonsData){
+              // Atualiza tile se ainda visível
+              try{
+                if(state.status === 'scanning'){
+                  const pct = (state.totalFolders > 0)
+                    ? Math.round((state.scannedFolders||0)/state.totalFolders*100)
+                    : 0;
+                  if(scanBtn && scanBtn.isConnected){
+                    scanBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Escaneando '+pct+'%';
+                  }
+                  // Atualiza barra de progresso + stats
+                  const bar = cardEl.querySelector('.gdi-scan-progress');
+                  if(bar) bar.style.width = pct + '%';
+                  const totalEl = cardEl.querySelector('[data-stat="total"]');
+                  if(totalEl && lessonsData && lessonsData.lessons){
+                    totalEl.textContent = lessonsData.lessons.length;
+                  }
+                }else if(state.status === 'done' || state.status === 'error'){
+                  // Re-renderiza home para atualizar tile com estado final
+                  const body = document.getElementById('gdi-central-body');
+                  if(body && window.__gdiCurrentTab === 'home' && typeof renderHome === 'function'){
+                    try{ renderHome(body); }catch(_){}
+                  }
+                }
+              }catch(_){}
+            });
+          }
+        });
+      }
     });
   }
 
@@ -2506,6 +2563,20 @@
         <a href="${escHtml(coursePath)}" class="gdi-mode-btn" style="font-size:12px;flex:1;justify-content:center;text-decoration:none;display:inline-flex;align-items:center;gap:6px;" title="Abrir pasta no Drive"><i class="bi bi-folder2-open"></i> Ir para o Drive</a>
       </div>
 
+      ${/* ★ Task 16 / FIX 2: botão "Escanear agora" na visão de detalhe */ ''}
+      ${(!scanStatus || scanStatus === 'error') ? `
+      <div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button id="gdi-detail-scan" class="gdi-mode-btn" data-course-key="${escHtml(c.key)}" style="font-size:12px;flex:1;justify-content:center;color:var(--ferreto-secondary,#5ddeda);border-color:rgba(93,222,218,.3);" title="Escanear aulas do curso">
+          <i class="bi bi-arrow-repeat"></i> Escanear agora
+        </button>
+      </div>` : ''}
+      ${scanStatus === 'scanning' ? `
+      <div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button id="gdi-detail-scan" class="gdi-mode-btn" disabled style="font-size:12px;flex:1;justify-content:center;opacity:.7;cursor:default;">
+          <i class="bi bi-hourglass-split"></i> Escaneando ${scannedCount} aulas… (${(function(){const sp=window.gdiCourseScanner&&window.gdiCourseScanner.getScanProgress(c.key);return sp?sp.percent:0})()}%)
+        </button>
+      </div>` : ''}
+
       <div>
         <b style="color:var(--ferreto-text,#f0f6fc);font-size:13px;display:block;margin-bottom:8px;"><i class="bi bi-list-ul"></i> Aulas do curso (${lessons.length}${total>0?'/'+total:''})</b>
         <div style="display:flex;flex-direction:column;gap:6px;">
@@ -2562,6 +2633,46 @@
         if(p)location.href=p+(p.includes('?')?'&':'?')+'a=view';
       };
     });
+
+    // ★ Task 16 / FIX 2: botão "Escanear agora" — dispara scanner manualmente no detalhe
+    const detailScanBtn = box.querySelector('#gdi-detail-scan');
+    if(detailScanBtn && !detailScanBtn.disabled){
+      detailScanBtn.addEventListener('click', function(e){
+        e.stopPropagation();
+        const ckScan = this.dataset.courseKey || c.key;
+        if(ckScan && window.gdiCourseScanner){
+          window.gdiCourseScanner.clearScanState(ckScan);
+          // Feedback imediato
+          try{
+            this.disabled = true;
+            this.style.opacity = '.7';
+            this.innerHTML = '<i class="bi bi-hourglass-split"></i> Iniciando…';
+          }catch(_){}
+          window.gdiCourseScanner.startScan(ckScan, function(state, lessonsData){
+            try{
+              if(state.status === 'scanning'){
+                const pct = (state.totalFolders > 0)
+                  ? Math.round((state.scannedFolders||0)/state.totalFolders*100)
+                  : 0;
+                if(detailScanBtn && detailScanBtn.isConnected){
+                  detailScanBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Escaneando '+pct+'%';
+                }
+              }else if(state.status === 'done' || state.status === 'error'){
+                // Re-renderiza o detalhe com dados frescos do scanner
+                try{
+                  const fresh = collectCourses();
+                  const fc = fresh.find(x => x.key === c.key);
+                  if(fc) openCourseDetail(box, fc);
+                }catch(_){
+                  // Fallback: re-render com o c original
+                  try{ openCourseDetail(box, c); }catch(__){}
+                }
+              }
+            }catch(_){}
+          });
+        }
+      });
+    }
   }
 
   async function renderStats(box){
@@ -4304,6 +4415,87 @@
     }catch(_){}
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // ★ Task 16 / FIX 1: Auto-scan courses that haven't been scanned yet.
+  // Courses added BEFORE the scanner (Task 15) was implemented have no scan
+  // state, so collectCourses() falls back to pdfCount||0 (which is 0 for old
+  // courses). This auto-scan picks the FIRST course without a 'done' state
+  // and starts a non-blocking scan. Limited to 1 concurrent scan.
+  // ─────────────────────────────────────────────────────────────
+  let _autoScanRunning = false;
+  function autoScanPending(){
+    if(_autoScanRunning) return;
+    _autoScanRunning = true;
+    try{
+      const manual = JSON.parse(localStorage.getItem('gdi-manual-courses-v1') || '[]');
+      if(!Array.isArray(manual) || !manual.length){ _autoScanRunning = false; return; }
+
+      // Find first course that needs scanning (no state OR not done/scanning)
+      for(const c of manual){
+        if(!c || !c.path) continue;
+        // Skip drive-root paths (they're not real courses — Task 16 / FIX 3)
+        if(/^\d+:\/$/.test(c.path)) continue;
+        const sp = getScanProgress(c.path);
+        if(!sp || (sp.status !== 'done' && sp.status !== 'scanning')){
+          console.log('[Scanner] auto-scan iniciando para:', c.name || c.path);
+          startScan(c.path, function(state, lessonsData){
+            // Re-render home if it's the active tab
+            if(state.status === 'done' || state.status === 'error'){
+              console.log('[Scanner] auto-scan concluído:', c.name, '-',
+                (lessonsData ? lessonsData.lessons.length : 0), 'aulas');
+              try{
+                const body = document.getElementById('gdi-central-body');
+                if(body && window.__gdiCurrentTab === 'home' && typeof renderHome === 'function'){
+                  renderHome(body);
+                }
+              }catch(_){}
+            }
+          });
+          break;  // only 1 at a time
+        }
+      }
+    }catch(_){}
+    _autoScanRunning = false;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // ★ Task 16 / FIX 3: Cleanup orphan courses from student's memory.
+  // Before Task 14, collectCourses() created auto-tiles from watched/resume/
+  // history, and some drive-root paths (e.g. /0:/, /4:/) ended up persisted
+  // in gdi-manual-courses-v1. This cleanup removes:
+  //   - Drive root paths (^\d+:/)
+  //   - Paths with <2 segments (e.g. /0:/)
+  //   - Entries with no name or empty name
+  // Returns the number of removed entries.
+  // ─────────────────────────────────────────────────────────────
+  function cleanupOrphanCourses(){
+    try{
+      const manual = JSON.parse(localStorage.getItem('gdi-manual-courses-v1') || '[]');
+      if(!Array.isArray(manual)) return 0;
+
+      const original = manual.length;
+      const cleaned = manual.filter(c => {
+        if(!c || !c.path) return false;
+        // Remove drive roots (e.g., /0:/, /4:/)
+        if(/^\d+:\/$/.test(c.path)) return false;
+        // Remove if path is just /<drive>:/ (no subfolder)
+        const segs = c.path.split('/').filter(Boolean);
+        if(segs.length < 2) return false;
+        // Remove if no name
+        if(!c.name || !c.name.trim()) return false;
+        return true;
+      });
+
+      if(cleaned.length !== original){
+        localStorage.setItem('gdi-manual-courses-v1', JSON.stringify(cleaned));
+        console.log('[Cleanup] removidos', original - cleaned.length,
+          'cursos órfãos. Restam:', cleaned.length);
+        return original - cleaned.length;
+      }
+      return 0;
+    }catch(_){ return 0; }
+  }
+
   // Export
   window.gdiCourseScanner = {
     startScan,
@@ -4313,19 +4505,49 @@
     countWatched,
     clearScanState,
     resumeInterruptedScans,
+    autoScanPending,
+    cleanupOrphanCourses,
     LS_SCAN_PREFIX,
     LS_LESSONS_PREFIX,
     SCAN_PAUSE_MS,
     SCAN_MAX_DEPTH,
-    version: '1.0'
+    version: '1.1'
   };
+
+  // ★ Task 16 / FIX 3: expose cleanup as a standalone global for console access
+  window.gdiCleanupOrphanCourses = cleanupOrphanCourses;
 
   // Auto-resume interrupted scans after a short delay (lets GDIUser + worker bridge init)
   setTimeout(function(){
     try{ resumeInterruptedScans(); }catch(_){}
   }, 3000);
 
-  console.log('[GDI Course Scanner] v1.0 — lightweight background scanner ativo (pause='+SCAN_PAUSE_MS+'ms, maxDepth='+SCAN_MAX_DEPTH+')');
+  // ★ Task 16 / FIX 3: run orphan cleanup on page load (2s — early, before auto-scan)
+  setTimeout(function(){
+    try{ cleanupOrphanCourses(); }catch(_){}
+  }, 2000);
+
+  // ★ Task 16 / FIX 1: auto-scan pending courses 5s after page load (after GDIUser ready)
+  if(typeof Bus !== 'undefined' && typeof Bus.onGlobal === 'function'){
+    Bus.onGlobal('user:ready', function(){
+      setTimeout(function(){
+        try{ autoScanPending(); }catch(_){}
+      }, 5000);
+    });
+    // Also try on page:change (in case user navigates and modules are ready)
+    Bus.onGlobal('page:change', function(){
+      setTimeout(function(){
+        try{ autoScanPending(); }catch(_){}
+      }, 3000);
+    });
+  }else{
+    // Fallback if Bus not available at IIFE init time
+    setTimeout(function(){
+      try{ autoScanPending(); }catch(_){}
+    }, 5000);
+  }
+
+  console.log('[GDI Course Scanner] v1.1 — lightweight background scanner ativo (pause='+SCAN_PAUSE_MS+'ms, maxDepth='+SCAN_MAX_DEPTH+') + auto-scan + orphan cleanup');
 })();
 
 // ═══════════════════════════════════════════════════════════════
