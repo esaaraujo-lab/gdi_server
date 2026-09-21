@@ -2578,24 +2578,63 @@
       </div>` : ''}
 
       <div>
-        <b style="color:var(--ferreto-text,#f0f6fc);font-size:13px;display:block;margin-bottom:8px;"><i class="bi bi-list-ul"></i> Aulas do curso (${lessons.length}${total>0?'/'+total:''})</b>
-        <div style="display:flex;flex-direction:column;gap:6px;">
-          ${lessons.length?lessons.map(l=>`
-            <div class="gdi-note" style="display:flex;align-items:center;gap:10px;cursor:pointer;" data-path="${escHtml(l.path)}">
-              <i class="bi ${l.watched?'bi-check-circle-fill':'bi-play-circle'}" style="color:${l.watched?'#3fb950':'var(--ferreto-primary,#ff8b9f)'};font-size:18px;flex:none;"></i>
-              <span style="flex:1;min-width:0;color:var(--ferreto-text,#e6edf3);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(l.name)}</span>
-              ${l.watched?'<span style="font-size:10px;color:#3fb950;flex:none;">✓</span>':'<span style="font-size:10px;color:var(--ferreto-text-muted,#8b949e);flex:none;">não vista</span>'}
-            </div>
-          `).join(''):`<div class="gdi-notes-empty">
-            <i class="bi bi-info-circle" style="font-size:18px;color:var(--ferreto-text-muted,#8b949e);vertical-align:middle;"></i>
-            <span style="vertical-align:middle;">Nenhuma aula assistida ainda${total>0?' (curso tem '+total+' aulas no total)':''}.</span>
-            <div style="margin-top:8px;font-size:12px;">
-              <a href="${escHtml(coursePath)}" style="color:var(--ferreto-secondary,#5ddeda);text-decoration:underline;">
-                <i class="bi bi-folder2-open"></i> Abrir pasta no Drive para ver todas as aulas
-              </a>
-            </div>
-          </div>`}
-        </div>
+        <b style="color:var(--ferreto-text,#f0f6fc);font-size:13px;display:block;margin-bottom:8px;"><i class="bi bi-collection"></i> Disciplinas do curso</b>
+        ${(function(){
+          // ★ Task 18: agrupa aulas por disciplina (pasta pai da aula)
+          // Em vez de listar 265 "001 - aula.mp4", mostra:
+          //   Direito Administrativo — 45 aulas · 12 assistidas · 33 restantes
+          //   Direito Constitucional — 38 aulas · 5 assistidas · 33 restantes
+          // etc.
+          if(!lessons.length && !total){
+            return '<div class="gdi-notes-empty"><i class="bi bi-info-circle" style="font-size:18px;color:var(--ferreto-text-muted,#8b949e);vertical-align:middle;"></i> <span style="vertical-align:middle;">Nenhuma aula encontrada ainda.</span><div style="margin-top:8px;font-size:12px;"><a href="'+escHtml(coursePath)+'" style="color:var(--ferreto-secondary,#5ddeda);text-decoration:underline;"><i class="bi bi-folder2-open"></i> Abrir pasta no Drive</a></div></div>';
+          }
+          // Agrupa por disciplina: a pasta imediatamente dentro do curso
+          // path típico: /9:/Curso/TRT/Direito Administrativo/Bloco I/001 - aula.mp4
+          // disciplina = "Direito Administrativo" (primeiro segmento após coursePath)
+          const groups = {};
+          for(const l of lessons){
+            // extrai disciplina do path (relativo ao coursePath)
+            let rel = l.path;
+            try{ rel = decodeURIComponent(l.path); }catch(_){ rel = l.path; }
+            // remove coursePath do início
+            let cp = coursePath;
+            try{ cp = decodeURIComponent(coursePath); }catch(_){ cp = coursePath; }
+            if(rel.indexOf(cp) === 0) rel = rel.slice(cp.length);
+            const segs = rel.split('/').filter(Boolean);
+            // disciplina = primeiro segmento após o curso (ou "Aulas" se estiver na raiz)
+            const disc = segs.length > 1 ? segs[0] : (segs.length === 1 ? 'Aulas' : 'Outros');
+            if(!groups[disc]) groups[disc] = { total: 0, watched: 0, path: cp + (cp.endsWith('/')?'':'/') + encodeURIComponent(disc) + '/' };
+            groups[disc].total++;
+            if(l.watched) groups[disc].watched++;
+          }
+          const arr = Object.keys(groups).sort((a,b) => a.localeCompare(b,'pt-BR'));
+          if(!arr.length){
+            return '<div class="gdi-notes-empty"><i class="bi bi-hourglass-split" style="color:var(--ferreto-secondary,#5ddeda);"></i> <span>Escaneando disciplinas...</span></div>';
+          }
+          return '<div style="display:flex;flex-direction:column;gap:8px;">' + arr.map(disc => {
+            const g = groups[disc];
+            const remaining = Math.max(0, g.total - g.watched);
+            const pct = g.total > 0 ? Math.round(g.watched / g.total * 100) : 0;
+            const color = pct >= 80 ? '#3fb950' : pct >= 40 ? '#ffd43b' : 'var(--ferreto-primary,#ff8b9f)';
+            return '<div class="gdi-note" style="display:flex;align-items:center;gap:12px;cursor:pointer;padding:10px 12px;" data-disc-path="'+escHtml(g.path)+'">'
+              + '<i class="bi bi-folder-fill" style="color:var(--ferreto-secondary,#5ddeda);font-size:18px;flex:none;"></i>'
+              + '<div style="flex:1;min-width:0;">'
+              + '<div style="color:var(--ferreto-text,#e6edf3);font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(disc)+'</div>'
+              + '<div style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);margin-top:2px;">'
+              + '<span style="color:#3fb950;">'+g.watched+' assistidas</span> · '
+              + '<span>'+g.total+' aulas</span> · '
+              + '<span style="color:#ffd43b;">'+remaining+' restantes</span>'
+              + '</div>'
+              + '</div>'
+              + '<div style="flex:none;text-align:right;">'
+              + '<div style="font-size:16px;font-weight:700;color:'+color+';">'+pct+'%</div>'
+              + '<div style="width:60px;height:4px;background:var(--ferreto-surface-3,rgba(255,255,255,.08));border-radius:2px;margin-top:3px;overflow:hidden;">'
+              + '<div style="height:4px;width:'+pct+'%;background:'+color+';border-radius:2px;"></div>'
+              + '</div>'
+              + '</div>'
+              + '</div>';
+          }).join('') + '</div>';
+        })()}
       </div>
     </div>`;
 
@@ -2627,10 +2666,11 @@
         contBtn.innerHTML='<i class="bi bi-check2-all" style="color:#3fb950;"></i> Tudo em dia!';
       }
     });
-    box.querySelectorAll('[data-path]').forEach(el=>{
+    // ★ Task 18: click em disciplina → abre pasta no Drive (não aula individual)
+    box.querySelectorAll('[data-disc-path]').forEach(el=>{
       el.onclick=()=>{
-        const p=el.dataset.path;
-        if(p)location.href=p+(p.includes('?')?'&':'?')+'a=view';
+        const p=el.dataset.discPath;
+        if(p)location.href=p;  // abre a pasta da disciplina
       };
     });
 
