@@ -873,6 +873,64 @@
         }
       }catch(e){console.warn('[Batalhão] falha:',e.message);}
 
+      // ★ 7) Task 15: dispara scanner LEVE em background — conta aulas reais do curso.
+      //    Não-bloqueante (usa worker bridge + 500ms pause entre pastas).
+      //    Atualiza a barra de progresso no tile da home, se visível.
+      //    Salva estrutura em localStorage (cache) e Drive (.meggy.ai/courses/<key>/lessons.json).
+      try{
+        if(window.gdiCourseScanner && typeof window.gdiCourseScanner.startScan === 'function'){
+          window.gdiCourseScanner.startScan(coursePath, function(state, lessonsData){
+            // Atualiza tile da home, se visível
+            try{
+              const tiles = document.querySelectorAll('[data-course-key]');
+              let tile = null;
+              for(let i=0; i<tiles.length; i++){
+                if(tiles[i].dataset.courseKey === coursePath){ tile = tiles[i]; break; }
+              }
+              if(tile){
+                const bar = tile.querySelector('.gdi-scan-progress');
+                if(bar){
+                  const pct = (state.totalFolders > 0)
+                    ? Math.round((state.scannedFolders||0)/state.totalFolders*100)
+                    : 0;
+                  bar.style.width = pct + '%';
+                  if(bar.parentElement){
+                    bar.parentElement.title = 'Escaneando: '+(state.scannedFolders||0)+'/'+(state.totalFolders||0)+
+                      ' pastas, '+((lessonsData && lessonsData.lessons && lessonsData.lessons.length)||0)+' aulas encontradas';
+                  }
+                }
+                // Atualiza contagem de aulas no tile em tempo real
+                const totalEl = tile.querySelector('[data-stat="total"]');
+                if(totalEl && lessonsData && lessonsData.lessons){
+                  totalEl.textContent = lessonsData.lessons.length;
+                }
+                // Atualiza texto de status
+                const statusEl = tile.querySelector('.gdi-scan-status');
+                if(statusEl && state.status === 'scanning'){
+                  const pct = (state.totalFolders > 0)
+                    ? Math.round((state.scannedFolders||0)/state.totalFolders*100)
+                    : 0;
+                  statusEl.innerHTML = '<i class="bi bi-arrow-repeat"></i> Escaneando aulas... '+pct+'%';
+                }else if(statusEl && state.status === 'done'){
+                  statusEl.innerHTML = '<i class="bi bi-check2" style="color:#3fb950;"></i> '+((lessonsData && lessonsData.lessons && lessonsData.lessons.length)||0)+' aulas encontradas';
+                  // Após 4s, esconde o status bar (mantém só contagem)
+                  setTimeout(function(){
+                    try{
+                      const wrap = tile.querySelector('.gdi-scan-bar-wrap');
+                      if(wrap){ wrap.style.transition='opacity .4s'; wrap.style.opacity='0'; }
+                      const s2 = tile.querySelector('.gdi-scan-status');
+                      if(s2){ s2.style.transition='opacity .4s'; s2.style.opacity='0'; }
+                    }catch(_){}
+                  }, 4000);
+                }else if(statusEl && state.status === 'error'){
+                  statusEl.innerHTML = '<i class="bi bi-exclamation-triangle" style="color:#ff8b8b;"></i> Erro ao escanear';
+                }
+              }
+            }catch(_){}
+          });
+        }
+      }catch(e){console.warn('[Scanner] não iniciado:',e.message);}
+
     }catch(e){
       console.error('[AddCourse] erro fatal em gdiAddCourseFromDrive:',e);
       if(window.showToast)showToast('Erro ao adicionar curso: '+e.message);
@@ -968,6 +1026,32 @@
       c.manual=true;
       c.manualCourse=m;
       if(!c.lastAt)c.lastAt=m.createdAt||Date.now();
+
+      // ★ Task 15: enriquece com dados do Course Scanner (background, leve).
+      //    - scanStatus: 'scanning' | 'done' | 'error' | null
+      //    - scanPercent: 0-100 (proporção de pastas escaneadas)
+      //    - totalLessons: sobrescrito se scanner já encontrou mais aulas que pdfCount
+      //    - watched: recontado via GDIUser.dump() (mais confiável que stateD)
+      if(window.gdiCourseScanner){
+        try{
+          const sp = window.gdiCourseScanner.getScanProgress(ck);
+          if(sp){
+            c.scanStatus = sp.status;
+            c.scanPercent = sp.percent;
+            c.scanLessonsFound = sp.lessonsFound;
+            // Usa contagem REAL do scanner se for maior que pdfCount do add-time
+            // (scanner conta vídeos recursivamente, pdfCount só contava PDFs do nível raiz)
+            if(sp.lessonsFound > 0 && sp.lessonsFound > c.totalLessons){
+              c.totalLessons = sp.lessonsFound;
+            }
+          }
+          // Reconta watched usando GDIUser direto (mais fresco que stateD() rescue cache)
+          const realWatched = window.gdiCourseScanner.countWatched(ck);
+          if(typeof realWatched === 'number' && realWatched >= 0){
+            c.watched = realWatched;
+          }
+        }catch(_){}
+      }
     }
 
     return [...map.values()].sort((a,b)=>b.lastAt-a.lastAt);
@@ -1418,12 +1502,23 @@
               <b title="${escHtml(courseName(c.key))}">${escHtml(name)}</b>
               ${drive?`<small><i class="bi bi-hdd"></i> ${escHtml(drive)}</small>`:'<small>&nbsp;</small>'}
               <div class="gdi-course-stats">
-                <div class="gdi-course-stat"><span class="gdi-course-stat-num">${total}</span><span class="gdi-course-stat-label">Aulas</span></div>
-                <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:#3fb950;">${watched}</span><span class="gdi-course-stat-label">Assistidas</span></div>
-                <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:#ffd43b;">${remaining}</span><span class="gdi-course-stat-label">Restantes</span></div>
-                <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:${progressColor};">${progress}%</span><span class="gdi-course-stat-label">Concluído</span></div>
+                <div class="gdi-course-stat"><span class="gdi-course-stat-num" data-stat="total">${total}</span><span class="gdi-course-stat-label">Aulas</span></div>
+                <div class="gdi-course-stat"><span class="gdi-course-stat-num" data-stat="watched" style="color:#3fb950;">${watched}</span><span class="gdi-course-stat-label">Assistidas</span></div>
+                <div class="gdi-course-stat"><span class="gdi-course-stat-num" data-stat="remaining" style="color:#ffd43b;">${remaining}</span><span class="gdi-course-stat-label">Restantes</span></div>
+                <div class="gdi-course-stat"><span class="gdi-course-stat-num" data-stat="progress" style="color:${progressColor};">${progress}%</span><span class="gdi-course-stat-label">Concluído</span></div>
               </div>
               <div class="gdi-progress-bar"><div class="gdi-progress-fill" style="width:${progress}%;background:${progressColor};"></div></div>
+              ${(c.scanStatus==='scanning'||c.scanStatus==='done'||c.scanStatus==='error')?`
+              <div class="gdi-scan-bar-wrap" style="margin-top:6px;height:3px;background:var(--ferreto-surface-2,rgba(255,255,255,.08));border-radius:2px;overflow:hidden;">
+                <div class="gdi-scan-progress" style="height:100%;width:${c.scanPercent||0}%;background:var(--ferreto-secondary,#5ddeda);transition:width .3s;" title="Escaneando: ${c.scanPercent||0}%"></div>
+              </div>
+              <small class="gdi-scan-status" style="color:var(--ferreto-text-muted,#8b949e);font-size:10px;display:block;margin-top:2px;">
+                ${c.scanStatus==='scanning'
+                  ? '<i class="bi bi-arrow-repeat"></i> Escaneando aulas... '+(c.scanPercent||0)+'%'
+                  : c.scanStatus==='done'
+                    ? '<i class="bi bi-check2" style="color:#3fb950;"></i> '+(c.scanLessonsFound||0)+' aulas encontradas'
+                    : '<i class="bi bi-exclamation-triangle" style="color:#ff8b8b;"></i> Erro ao escanear'}
+              </small>`:''}
               <div style="display:flex;gap:6px;margin-top:8px;">
                 <button class="gdi-btn-continue" data-course-key="${escHtml(c.key)}" style="flex:1;" disabled><i class="bi bi-hourglass-split"></i> Verificando…</button>
                 <a href="${escHtml(coursePath)}" class="gdi-btn-continue" style="flex:1;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:6px;" title="Abrir pasta no Drive"><i class="bi bi-folder2-open"></i> Ir para o Drive</a>
@@ -2317,6 +2412,40 @@
     for(const k in w)addLesson(k,true,r[k]);
     for(const k in r)if(!seen.has(low(k)))addLesson(k,false,r[k]);
     (Array.isArray(d.history)?d.history:[]).forEach(h=>{if(h&&h.path)addLesson(h.path,false,null);});
+
+    // ★ Task 15: merge com aulas escaneadas (scanner background).
+    //    Se o scanner já encontrou aulas (via gdiListAllFiles recursivo),
+    //    adicionamos as que ainda não estão na lista (não assistidas).
+    //    Cada aula escaneada recebe watched=true se seu path estiver em d.watched.
+    let scannedCount = 0;
+    let scanStatus = null;
+    if(window.gdiCourseScanner){
+      try{
+        const sp = window.gdiCourseScanner.getScanProgress(c.key);
+        if(sp){
+          scanStatus = sp.status;
+          scannedCount = sp.lessonsFound || 0;
+        }
+        const scanned = window.gdiCourseScanner.getCourseLessons(c.key);
+        if(scanned && Array.isArray(scanned.lessons) && scanned.lessons.length){
+          for(let i=0; i<scanned.lessons.length; i++){
+            const sl = scanned.lessons[i];
+            if(!sl || !sl.path) continue;
+            const lp = low(sl.path);
+            if(seen.has(lp)) continue;  // já está na lista (assistida)
+            seen.add(lp);
+            // Verifica se foi assistida por match exato de path no userstate.watched
+            const isWatched = !!(w && w[sl.path]);
+            lessons.push({
+              path: sl.path,
+              name: sl.name || realName(sl.path),
+              watched: isWatched,
+              resumed: false
+            });
+          }
+        }
+      }catch(_){}
+    }
     lessons.sort((a,b)=>a.name.localeCompare(b.name,'pt-BR',{numeric:true}));
 
     box.innerHTML=`<div style="max-width:760px;margin:0 auto;">
@@ -2363,6 +2492,13 @@
 
       ${c.lastAt?`<div style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ferreto-text-muted,#8b949e);">
         <i class="bi bi-clock-history"></i> Última atividade: <b style="color:var(--ferreto-text,#e6edf3);">${dateBr(c.lastAt)}</b>
+      </div>`:''}
+
+      ${(scanStatus==='scanning'||scanStatus==='error')?`
+      <div style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ferreto-text-muted,#8b949e);">
+        ${scanStatus==='scanning'
+          ? '<i class="bi bi-arrow-repeat" style="color:var(--ferreto-secondary,#5ddeda);"></i> Escaneando aulas em background... <b style="color:var(--ferreto-text,#e6edf3);">'+scannedCount+'</b> encontradas até agora (a lista abaixo cresce em tempo real).'
+          : '<i class="bi bi-exclamation-triangle" style="color:#ff8b8b;"></i> O scanner encontrou um erro. Algumas aulas podem estar ausentes da lista.'}
       </div>`:''}
 
       <div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;">
@@ -3035,6 +3171,12 @@
   .gdi-courses{grid-template-columns:1fr;}
   .gdi-course-stats{grid-template-columns:repeat(2,1fr);}
 }
+/* ★ Task 15: scan progress bar (lightweight background course scanner) */
+.gdi-scan-bar-wrap{margin-top:6px;height:3px;background:var(--ferreto-surface-2,rgba(255,255,255,.08));border-radius:2px;overflow:hidden;}
+.gdi-scan-progress{height:100%;background:var(--ferreto-secondary,#5ddeda);transition:width .3s;}
+.gdi-scan-status{color:var(--ferreto-text-muted,#8b949e);font-size:10px;display:block;margin-top:2px;}
+.gdi-scan-status .bi-arrow-repeat{animation:gdi-scan-spin 1s linear infinite;display:inline-block;}
+@keyframes gdi-scan-spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
 `;document.head.appendChild(s);
   }
 
@@ -3859,6 +4001,334 @@
 })();
 
 // ═══════════════════════════════════════════════════════════════
+// M-COURSE-SCANNER (Task 15)
+// Lightweight background scanner for manually-added courses.
+// ----------------------------------------------------------------------------
+// Principles:
+//   • Lightweight  — runs in background, doesn't block UI
+//   • Incremental  — scans 1 folder at a time, 500ms pause between
+//   • Persistent   — saves state to localStorage + lessons.json to Drive
+//   • Resumable    — if interrupted, continues from where it stopped
+//   • Visible      — progress bar on the course tile (via onProgress callback)
+//
+// Uses window.gdiListAllFiles (worker bridge — doesn't freeze main thread).
+// Max depth 3 levels — avoids scanning entire Drive subtrees.
+// ═══════════════════════════════════════════════════════════════
+(function(){
+  'use strict';
+  if(window.gdiCourseScanner)return;  // guard against duplicate bootstrap
+
+  const LS_SCAN_PREFIX    = 'gdi-course-scan-';     // scanner state per course
+  const LS_LESSONS_PREFIX = 'gdi-course-lessons-';  // lessons cache per course
+  const SCAN_PAUSE_MS     = 500;                    // pause between subfolders
+  const SCAN_BATCH        = 1;                      // 1 subfolder at a time (lightest)
+  const SCAN_MAX_DEPTH    = 3;                      // don't go deeper than 3 levels
+
+  // ── Scanner state (resumable) ──
+  function getScanState(courseKey){
+    try{const v=localStorage.getItem(LS_SCAN_PREFIX+courseKey);return v?JSON.parse(v):null}catch(_){return null}
+  }
+  function setScanState(courseKey, state){
+    try{localStorage.setItem(LS_SCAN_PREFIX+courseKey, JSON.stringify(state))}catch(_){}
+  }
+  function clearScanState(courseKey){
+    try{localStorage.removeItem(LS_SCAN_PREFIX+courseKey)}catch(_){}
+  }
+
+  // ── Lessons cache (per course) ──
+  function getLessons(courseKey){
+    try{
+      const v=localStorage.getItem(LS_LESSONS_PREFIX+courseKey);
+      return v?JSON.parse(v):{lessons:[],scanned:false,totalFolders:0,totalLessons:0};
+    }catch(_){return {lessons:[],scanned:false,totalFolders:0,totalLessons:0}}
+  }
+  function setLessons(courseKey, data){
+    try{localStorage.setItem(LS_LESSONS_PREFIX+courseKey, JSON.stringify(data))}catch(_){}
+  }
+
+  // Video extension matcher — same regex as app.min.js buildPlaylistFromFiles
+  const VIDEO_EXT = /\.(mp4|webm|mkv|mov|m4v|avi|mpg|mpeg|wmv|flv|3gp)(\?|$)/i;
+
+  // Scan ONE folder — returns {lessons:[], subfolders:[]}
+  // Uses window.gdiListAllFiles (worker bridge — non-blocking).
+  async function scanFolder(folderPath, depth){
+    if(depth > SCAN_MAX_DEPTH) return {lessons:[], subfolders:[]};
+    try{
+      const pw = (typeof window.gdiGetPw === 'function') ? (window.gdiGetPw(folderPath)||'') : '';
+      const files = (typeof window.gdiListAllFiles === 'function')
+        ? await window.gdiListAllFiles(folderPath, pw)
+        : [];
+      if(!Array.isArray(files)) return {lessons:[], subfolders:[]};
+      const lessons = [];
+      const subfolders = [];
+      for(let i=0; i<files.length; i++){
+        const f = files[i];
+        if(!f) continue;
+        const name = f.name || '';
+        const mime = f.mimeType || '';
+        if(mime === 'application/vnd.google-apps.folder'){
+          subfolders.push(f);
+        } else if(mime.indexOf('video/') === 0 || VIDEO_EXT.test(name)){
+          // It's a video lesson
+          if(/\.part-/i.test(name)) continue;  // skip partial files
+          const bytes = Number(f.size)||0;
+          if(bytes && bytes < 1024*1024) continue;  // skip < 1MB (probably not a real lesson)
+          lessons.push({
+            name: name,
+            path: folderPath + encodeURIComponent(name),
+            folder: folderPath,
+            size: bytes,
+            mimeType: mime,
+            depth: depth
+          });
+        }
+      }
+      return {lessons, subfolders};
+    }catch(e){
+      console.warn('[Scanner] erro escaneando', folderPath, e && e.message);
+      return {lessons:[], subfolders:[]};
+    }
+  }
+
+  // Compute folder depth relative to the course root path.
+  // Each '/' in the path beyond the root counts as one level.
+  function depthOf(folderPath, rootPath){
+    try{
+      const f = (folderPath||'').split('/').filter(Boolean).length;
+      const r = (rootPath||'').split('/').filter(Boolean).length;
+      return Math.max(0, f - r);
+    }catch(_){return 0}
+  }
+
+  // Main scan function — incremental, resumable.
+  // courseKey == coursePath (the Drive folder path, e.g. /4:/CANTE COM EXCELENCIA 2.0/)
+  // Calls onProgress(state, lessonsData) after each folder.
+  async function scanCourse(courseKey, onProgress){
+    if(!courseKey)return null;
+
+    // Load or create state
+    let state = getScanState(courseKey);
+    if(state && state.status === 'scanning'){
+      // Already scanning — don't start another instance (constraint).
+      // Wire onProgress to fire on the next state save by polling once.
+      try{ if(onProgress) onProgress(state, getLessons(courseKey)); }catch(_){}
+      return state;
+    }
+
+    state = state || {
+      courseKey: courseKey,
+      coursePath: courseKey,
+      status: 'scanning',  // 'scanning' | 'done' | 'error' | 'paused'
+      startedAt: Date.now(),
+      scannedFolders: 0,
+      totalFolders: 0,
+      queue: [courseKey],  // folders to scan (BFS) — starts with the course root
+      scanned: [],         // folders already scanned
+      depth: 0
+    };
+
+    // If already done, skip (caller can still read lessons via getCourseLessons)
+    if(state.status === 'done'){
+      try{ if(onProgress) onProgress(state, getLessons(courseKey)); }catch(_){}
+      return state;
+    }
+
+    state.status = 'scanning';
+    state.error = null;
+    setScanState(courseKey, state);
+
+    const lessonsData = getLessons(courseKey);
+    if(!Array.isArray(lessonsData.lessons)) lessonsData.lessons = [];
+
+    // Process queue incrementally — 1 folder per iteration (SCAN_BATCH=1)
+    let iter = 0;
+    while(state.queue.length > 0){
+      const folder = state.queue.shift();
+
+      // Skip if already scanned (dedupe safety)
+      if(state.scanned.indexOf(folder) >= 0) continue;
+      state.scanned.push(folder);
+      state.scannedFolders++;
+
+      const depth = depthOf(folder, courseKey);
+
+      // Scan this folder (via worker bridge — doesn't block UI)
+      const result = await scanFolder(folder, depth);
+
+      // Add lessons (dedupe by path)
+      if(result.lessons && result.lessons.length){
+        for(let i=0; i<result.lessons.length; i++){
+          const l = result.lessons[i];
+          let dup = false;
+          for(let j=0; j<lessonsData.lessons.length; j++){
+            if(lessonsData.lessons[j].path === l.path){ dup = true; break; }
+          }
+          if(!dup) lessonsData.lessons.push(l);
+        }
+      }
+
+      // Queue subfolders (BFS) — only if depth < MAX
+      if(depth < SCAN_MAX_DEPTH && result.subfolders && result.subfolders.length){
+        for(let i=0; i<result.subfolders.length; i++){
+          const sf = result.subfolders[i];
+          if(!sf || !sf.name) continue;
+          const subPath = folder + encodeURIComponent(sf.name) + '/';
+          if(state.scanned.indexOf(subPath) < 0 && state.queue.indexOf(subPath) < 0){
+            state.queue.push(subPath);
+          }
+        }
+      }
+
+      state.totalFolders = state.scannedFolders + state.queue.length;
+
+      // Save state + lessons (resumable)
+      setScanState(courseKey, state);
+      lessonsData.scanned = false;
+      lessonsData.totalFolders = state.totalFolders;
+      lessonsData.totalLessons = lessonsData.lessons.length;
+      setLessons(courseKey, lessonsData);
+
+      // Progress callback (live updates tile)
+      try{ if(onProgress) onProgress(state, lessonsData); }catch(_){}
+
+      iter++;
+      // ★ Pause between folders — don't block UI (constraint: 500ms)
+      await new Promise(r => setTimeout(r, SCAN_PAUSE_MS));
+    }
+
+    // Done!
+    state.status = 'done';
+    state.completedAt = Date.now();
+    setScanState(courseKey, state);
+
+    lessonsData.scanned = true;
+    lessonsData.totalFolders = state.scannedFolders;
+    lessonsData.totalLessons = lessonsData.lessons.length;
+    setLessons(courseKey, lessonsData);
+
+    // Save to Drive — non-blocking. Uses GDIStorage.saveMaterial which POSTs
+    // to /api/materials/save and stores under <userFolder>/lessons/<hash>.json
+    // The kind='lessons' is a new convention for course structure files.
+    try{
+      if(window.GDIStorage && typeof window.GDIStorage.saveMaterial === 'function'){
+        window.GDIStorage.saveMaterial(courseKey, courseKey, 'lessons', JSON.stringify(lessonsData)).catch(()=>{});
+      }
+    }catch(_){}
+
+    try{ if(onProgress) onProgress(state, lessonsData); }catch(_){}
+    return state;
+  }
+
+  // Get scan progress for a course (for tile display)
+  function getScanProgress(courseKey){
+    const state = getScanState(courseKey);
+    if(!state) return null;
+    const lessons = getLessons(courseKey);
+    const total = state.totalFolders || state.scannedFolders || 0;
+    return {
+      status: state.status,            // 'scanning' | 'done' | 'error' | 'paused'
+      scannedFolders: state.scannedFolders || 0,
+      totalFolders: total,
+      lessonsFound: (lessons.lessons||[]).length,
+      percent: total > 0 ? Math.round((state.scannedFolders||0) / total * 100) : 0,
+      error: state.error || null,
+      startedAt: state.startedAt || null,
+      completedAt: state.completedAt || null
+    };
+  }
+
+  // Get lessons for a course (from cache)
+  function getCourseLessons(courseKey){
+    return getLessons(courseKey);
+  }
+
+  // Count watched lessons for a course (from GDIUser userstate.watched)
+  // Matches by path prefix: any watched path that starts with courseKey
+  function countWatched(courseKey){
+    try{
+      if(!window.GDIUser || typeof window.GDIUser.dump !== 'function') return 0;
+      const dump = window.GDIUser.dump();
+      if(!dump || !dump.watched) return 0;
+      const watched = dump.watched;
+      const pre = String(courseKey||'').toLowerCase();
+      let count = 0;
+      for(const k in watched){
+        const lk = String(k).toLowerCase();
+        if(lk === pre || lk.indexOf(pre + '/') === 0) count++;
+      }
+      return count;
+    }catch(_){return 0}
+  }
+
+  // Start scan — non-blocking, runs in background.
+  // onProgress(state, lessonsData) is called after each folder.
+  function startScan(courseKey, onProgress){
+    if(!courseKey){
+      console.warn('[Scanner] startScan chamado sem courseKey');
+      return;
+    }
+    // Check if already scanning (constraint: no multiple instances per course)
+    const existing = getScanState(courseKey);
+    if(existing && existing.status === 'scanning'){
+      console.log('[Scanner] scan já em andamento para', courseKey, '— não iniciando duplicata');
+      try{ if(onProgress) onProgress(existing, getLessons(courseKey)); }catch(_){}
+      return;
+    }
+    // Fire-and-forget — errors captured and saved to state
+    scanCourse(courseKey, onProgress).catch(e=>{
+      console.error('[Scanner] erro fatal:', e && e.message);
+      const state = getScanState(courseKey);
+      if(state){
+        state.status = 'error';
+        state.error = e && e.message || String(e);
+        setScanState(courseKey, state);
+        try{ if(onProgress) onProgress(state, getLessons(courseKey)); }catch(_){}
+      }
+    });
+  }
+
+  // Resume any interrupted scans on page load (e.g., user reloaded mid-scan)
+  function resumeInterruptedScans(){
+    try{
+      const manual = JSON.parse(localStorage.getItem('gdi-manual-courses-v1') || '[]');
+      if(!Array.isArray(manual)) return;
+      for(const m of manual){
+        if(!m || !m.path) continue;
+        const state = getScanState(m.path);
+        if(state && state.status === 'scanning'){
+          // Status was 'scanning' when page unloaded — resume
+          console.log('[Scanner] resumindo scan interrompido:', m.path);
+          startScan(m.path, null);
+        }
+      }
+    }catch(_){}
+  }
+
+  // Export
+  window.gdiCourseScanner = {
+    startScan,
+    scanCourse,
+    getScanProgress,
+    getCourseLessons,
+    countWatched,
+    clearScanState,
+    resumeInterruptedScans,
+    LS_SCAN_PREFIX,
+    LS_LESSONS_PREFIX,
+    SCAN_PAUSE_MS,
+    SCAN_MAX_DEPTH,
+    version: '1.0'
+  };
+
+  // Auto-resume interrupted scans after a short delay (lets GDIUser + worker bridge init)
+  setTimeout(function(){
+    try{ resumeInterruptedScans(); }catch(_){}
+  }, 3000);
+
+  console.log('[GDI Course Scanner] v1.0 — lightweight background scanner ativo (pause='+SCAN_PAUSE_MS+'ms, maxDepth='+SCAN_MAX_DEPTH+')');
+})();
+
+// ═══════════════════════════════════════════════════════════════
 // FIM do gdi-study.js — Área do Aluno (refatorado v3.0)
 // Patches A-H aplicados · Tabs removidas · Paginação em Questões/Provas/Cronograma
 // APIs públicas preservadas: window.renderQuestoes/renderSimulado/
@@ -3866,4 +4336,5 @@
 // renderSubjects/renderTrails/renderProvas/renderRedacao/renderRadar/
 // gdiAddCourseFromButton/gdiAddCourseFromDrive/gdiRefreshCentralPanel/
 // __gdiOpenCentral/__gdiGradeQ + GDI_MODULES['central-nav'] + GDI_MODULES['player-guard']
+// Task 15: window.gdiCourseScanner (lightweight background course scanner)
 // ═══════════════════════════════════════════════════════════════

@@ -29,7 +29,7 @@
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  const CACHE_VERSION = '8';  // ★ Task 14: home shows only manual courses + addmateria tab re-added + Ir para o Drive button
+  const CACHE_VERSION = '9';  // ★ Task 15: lightweight background course scanner (window.gdiCourseScanner) — incremental folder scan with 500ms pauses, resumable, progress bar on course tile
 
   const MODULES = [
     'gdi-core.js',
