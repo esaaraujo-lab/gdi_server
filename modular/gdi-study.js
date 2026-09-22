@@ -432,7 +432,8 @@
     const qs=questions();
     const sims=simus().slice().reverse();
     // lista cursos do aluno para filtrar questões por curso
-    const courses=collectCourses();
+    // ★ Task 26: usa window.__gdiCollectCourses (collectCourses está em IIFE diferente)
+    const courses=(window.__gdiCollectCourses||function(){return []})();
     const courseNames=courses.map(c=>{
       const seg=c.key.split('/').filter(Boolean).slice(1).join('/');
       let n=seg||c.key;
@@ -1074,6 +1075,8 @@
 
     return [...map.values()].sort((a,b)=>b.lastAt-a.lastAt);
   }
+  // ★ Task 26: exporta collectCourses pra window (renderSimulado/renderRadar estão em IIFEs diferentes)
+  window.__gdiCollectCourses = collectCourses;
   // ★ helpers para ocultar/restaurar cursos
   function hideCourse(ck){
     const hidden=lsGet(LS_HIDDEN,[]);
@@ -1439,7 +1442,7 @@
     const t=todayMin(),g=goalMin(),pct=Math.min(100,Math.round(t/g*100));
     const cards=lsGet(LS_CARDS,[]);
     const dueCount=cards.filter(c=>(c.due||0)<=Date.now()).length;
-    const courses=collectCourses();
+    const courses=(window.__gdiCollectCourses||function(){return []})();
     // usa localStorage direto (M23 está em escopo diferente)
     const questionsCount=lsGet('gdi-questions-v1',[]).length;
     const simuladosCount=lsGet('gdi-simulados-v1',[]).length;
@@ -1695,7 +1698,7 @@
   // ★ REMOVIDO: tab cursos (user request) — função MANTIDA para preservar API pública
   // (window.renderCursos e window.gdiRefreshCentralPanel podem ser chamados por outros módulos)
   async function renderCursos(box){
-    const cs=collectCourses();
+    const cs=(window.__gdiCollectCourses||function(){return []})();
     const hidden=listHiddenCourses();
     if(!cs.length){
       box.innerHTML=`<div class="gdi-empty-state">
@@ -2729,7 +2732,7 @@
               }else if(state.status === 'done' || state.status === 'error'){
                 // Re-renderiza o detalhe com dados frescos do scanner
                 try{
-                  const fresh = collectCourses();
+                  const fresh = (window.__gdiCollectCourses||function(){return []})();
                   const fc = fresh.find(x => x.key === c.key);
                   if(fc) openCourseDetail(box, fc);
                 }catch(_){
@@ -3843,7 +3846,7 @@
       cron.plan.forEach(t=>{if(t&&t.name&&t.type==='study')aulasMenosEstudadas.push(t.name);});
     }
     const trails=window.gdiTrails?window.gdiTrails.get():[];
-    const courses=collectCourses();
+    const courses=(window.__gdiCollectCourses||function(){return []})();
     const subjects=Object.entries(bySubject).filter(([,v])=>v.total>=1).sort((a,b)=>b[1].total-a[1].total);
     if(!subjects.length){
       box.innerHTML=`<div class="gdi-notes-empty" style="padding:60px 20px;text-align:center;">
