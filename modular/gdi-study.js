@@ -2622,6 +2622,12 @@
       <div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;">
         <button id="gdi-detail-continue" class="gdi-btn gdi-btn-primary" style="font-size:12px;flex:1;justify-content:center;" disabled><i class="bi bi-hourglass-split"></i> Verificando próxima aula…</button>
         <a href="${escHtml(coursePath)}" class="gdi-mode-btn" style="font-size:12px;flex:1;justify-content:center;text-decoration:none;display:inline-flex;align-items:center;gap:6px;" title="Abrir pasta no Drive"><i class="bi bi-folder2-open"></i> Ir para o Drive</a>
+        <button id="gdi-detail-restart-scan" class="gdi-mode-btn" data-course-key="${escHtml(c.key)}" style="font-size:12px;flex:none;color:var(--ferreto-secondary,#5ddeda);border-color:rgba(93,222,218,.3);" title="Reiniciar scanner">
+          <i class="bi bi-arrow-repeat"></i> Reiniciar Scan
+        </button>
+        <button id="gdi-detail-remove" class="gdi-mode-btn" data-course-key="${escHtml(c.key)}" style="font-size:12px;flex:none;color:#ff8b8b;border-color:rgba(255,107,107,.3);" title="Remover curso da lista">
+          <i class="bi bi-trash3"></i> Remover
+        </button>
       </div>
 
       ${/* ★ Task 16 / FIX 2: botão "Escanear agora" na visão de detalhe */ ''}
@@ -2700,6 +2706,53 @@
     </div>`;
 
     box.querySelector('#gdi-detail-back').onclick=()=>renderCursos(box);
+    // ★ Task 30: botão "Reiniciar Scan" na página de detalhe
+    const restartBtn = box.querySelector('#gdi-detail-restart-scan');
+    if(restartBtn){
+      restartBtn.addEventListener('click', function(e){
+        e.preventDefault();
+        const ck = this.dataset.courseKey;
+        if(ck && window.gdiCourseScanner){
+          window.gdiCourseScanner.clearScanState(ck);
+          console.log('[Scanner] reiniciando scan (detalhe):', ck);
+          if(window.showToast) window.showToast('Reiniciando scanner...');
+          this.disabled = true;
+          this.innerHTML = '<i class="bi bi-hourglass-split"></i> Reiniciando...';
+          window.gdiCourseScanner.startScan(ck, function(state, lessonsData){
+            if(state.status === 'done' || state.status === 'error'){
+              if(typeof renderCursos === 'function') renderCursos(box);
+            }
+          });
+        }
+      });
+    }
+    // ★ Task 30: botão "Remover" na página de detalhe
+    const removeDetailBtn = box.querySelector('#gdi-detail-remove');
+    if(removeDetailBtn){
+      removeDetailBtn.addEventListener('click', async function(e){
+        e.preventDefault();
+        const ck = this.dataset.courseKey;
+        if(!ck)return;
+        if(window.gdiModal){
+          const ok = await window.gdiModal({
+            title:'Remover curso',
+            message:'Remover "'+name+'" da sua lista?\n\nO curso nao sera excluido do Drive.',
+            confirmText:'Remover',
+            cancelText:'Cancelar',
+            danger:true
+          });
+          if(!ok)return;
+        }
+        try{
+          const manual = JSON.parse(localStorage.getItem('gdi-manual-courses-v1')||'[]');
+          const filtered = manual.filter(c => c.path !== ck);
+          localStorage.setItem('gdi-manual-courses-v1', JSON.stringify(filtered));
+          if(window.gdiCourseScanner) window.gdiCourseScanner.clearScanState(ck);
+          if(window.showToast) window.showToast('Curso removido');
+          if(typeof renderCursos === 'function') renderCursos(box);
+        }catch(err){}
+      });
+    }
     box.querySelector('#gdi-detail-hide').onclick=async ()=>{
       const ok=await window.gdiModal({
         title:'Ocultar curso',
