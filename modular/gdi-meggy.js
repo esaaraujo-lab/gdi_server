@@ -452,9 +452,16 @@
         let ocrTxt='';
         for(let i=1;i<=ocrMaxPages;i++){
           if(progressCb)progressCb({phase:'ocr-page',page:i,total:ocrMaxPages,progress:0});
-          const pageTxt=await ocrPdfPage(pdfjs,doc,i,(pNum,pTotal,p)=>{
-            if(progressCb)progressCb({phase:'ocr-page',page:pNum,total:pTotal,progress:p});
-          });
+          // ★ Task 28: OCR com try/catch — não trava se Tesseract falhar
+          let pageTxt='';
+          try{
+            pageTxt=await ocrPdfPage(pdfjs,doc,i,(pNum,pTotal,p)=>{
+              if(progressCb)progressCb({phase:'ocr-page',page:pNum,total:pTotal,progress:p});
+            });
+          }catch(ocrErr){
+            console.warn('[Meggy] OCR falhou na página',i,'(não crítico):',ocrErr.message);
+            pageTxt='';
+          }
           ocrTxt+=pageTxt+'\n\n';
           if(ocrTxt.length>20000)break;
         }

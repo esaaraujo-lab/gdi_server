@@ -4552,8 +4552,14 @@
         if(!m || !m.path) continue;
         const state = getScanState(m.path);
         if(state && state.status === 'scanning'){
-          // Status was 'scanning' when page unloaded — resume
-          console.log('[Scanner] resumindo scan interrompido:', m.path);
+          // ★ Task 28: se travado há mais de 5min, LIMPA o estado e reinicia do zero
+          const ageMin = state.startedAt ? (Date.now() - state.startedAt) / 60000 : 999;
+          if(ageMin > 5){
+            console.log('[Scanner] scan travado há', Math.round(ageMin), 'min — limpando estado e reiniciando:', m.path);
+            clearScanState(m.path);
+          }
+          // resume (ou reinicia do zero se foi limpo)
+          console.log('[Scanner] resumindo scan:', m.path);
           startScan(m.path, null);
         }
       }
