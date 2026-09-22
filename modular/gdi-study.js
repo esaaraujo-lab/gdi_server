@@ -1543,6 +1543,7 @@
               <div style="display:flex;gap:6px;margin-top:8px;">
                 <button class="gdi-btn-continue" data-course-key="${escHtml(c.key)}" style="flex:1;" disabled><i class="bi bi-hourglass-split"></i> Verificando…</button>
                 <a href="${escHtml(coursePath)}" class="gdi-btn-continue" style="flex:1;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:6px;" title="Abrir pasta no Drive"><i class="bi bi-folder2-open"></i> Ir para o Drive</a>
+                <button class="gdi-btn-remove-course" data-course-key="${escHtml(c.key)}" style="flex:none;font-size:11px;padding:6px 10px;background:rgba(255,107,107,.08);border:1px solid rgba(255,107,107,.2);color:#ff8b8b;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:4px;" title="Remover curso"><i class="bi bi-trash3"></i></button>
               </div>
               ${/* ★ Task 16 / FIX 2: botão "Escanear agora" manual */ ''}
               ${(!c.scanStatus || c.scanStatus === 'error') ? `
@@ -1573,6 +1574,34 @@
       };
     });
     // bind course cards (continue) — clicar leva a openCourseDetail
+    // ★ Task 29: botão "Remover curso" — remove do localStorage
+    box.querySelectorAll('.gdi-btn-remove-course').forEach(btn=>{
+      btn.addEventListener('click', async function(e){
+        e.stopPropagation();
+        const ck = this.dataset.courseKey;
+        if(!ck)return;
+        const courseName = cleanCourseName(ck);
+        if(window.gdiModal){
+          const ok = await window.gdiModal({
+            title:'Remover curso',
+            message:'Remover "'+courseName+'" da sua lista?\n\nO curso nao sera excluido do Drive — apenas da sua lista pessoal.',
+            confirmText:'Remover',
+            cancelText:'Cancelar',
+            danger:true
+          });
+          if(!ok)return;
+        }
+        try{
+          const manual = JSON.parse(localStorage.getItem('gdi-manual-courses-v1')||'[]');
+          const filtered = manual.filter(c => c.path !== ck);
+          localStorage.setItem('gdi-manual-courses-v1', JSON.stringify(filtered));
+          if(window.gdiCourseScanner) window.gdiCourseScanner.clearScanState(ck);
+          if(window.showToast) window.showToast('Curso removido da sua lista');
+          const body = document.getElementById('gdi-central-body');
+          if(body && typeof renderHome === 'function') renderHome(body);
+        }catch(err){ console.warn('[RemoveCourse] erro:', err); }
+      });
+    });
     // ★ FIX 3 (Task 14): <a> "Ir para o Drive" também tem classe .gdi-btn-continue;
     //   usar selector específico p/ só pegar o <button> Continuar, e ignorar clicks em <a>.
     box.querySelectorAll('[data-course-key]').forEach(cardEl=>{
@@ -4552,14 +4581,9 @@
         if(!m || !m.path) continue;
         const state = getScanState(m.path);
         if(state && state.status === 'scanning'){
-          // ★ Task 28: se travado há mais de 5min, LIMPA o estado e reinicia do zero
-          const ageMin = state.startedAt ? (Date.now() - state.startedAt) / 60000 : 999;
-          if(ageMin > 5){
-            console.log('[Scanner] scan travado há', Math.round(ageMin), 'min — limpando estado e reiniciando:', m.path);
-            clearScanState(m.path);
-          }
-          // resume (ou reinicia do zero se foi limpo)
-          console.log('[Scanner] resumindo scan:', m.path);
+          // ★ Task 29: SEMPRE limpa estado preso e reinicia do zero
+          console.log('[Scanner] scan preso detectado — limpando e reiniciando:', m.path);
+          clearScanState(m.path);
           startScan(m.path, null);
         }
       }
