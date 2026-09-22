@@ -420,7 +420,7 @@
       }
 
       txt+=pageText+'\n\n';
-      if(txt.length>25000)break;
+      if(txt.length>50000)break;  // ★ Task 25: 25k→50k chars (resumos mais profundos)
     }
 
     // ★ fallback: tenta extrair de annotations/form fields
@@ -901,6 +901,17 @@
     return callIsa(prompt);
   }
 
+  // ★ Task 25: classifica tipo de material pelo nome
+  function classifyMaterial(name){
+    const n=(name||'').toLowerCase();
+    // Questões/exercícios/simulados → NÃO usar para resumo, só para questões/flashcards
+    if(/quest|exerc|simulad|prova|caderno|lista|test/.test(n))return 'questions';
+    // Resumos já prontos → pular
+    if(/resum|summary/.test(n))return 'skip';
+    // Material/apostila/aula/teoria → usar para resumo
+    return 'study';
+  }
+
   // Gera TODOS os materiais EM PARALELO TOTAL (não em cascata)
   // Cada tarefa usa uma chave NVIDIA diferente (se houver múltiplas)
   async function generateAll(items,lesson,trigger,progressCb){
@@ -968,17 +979,26 @@
         const txt=await extractPdfText(item.url,(p)=>{
           if(progressCb)progressCb(Object.assign({pdf:item.name},p));
         });
-        return {name:item.name,text:txt};
+        return {name:item.name,text:txt,type:classifyMaterial(item.name)};
       }catch(e){
         throw {name:item.name,error:e.message||String(e),url:item.url};
       }
     }));
+    // ★ Task 25: separa materiais de estudo (apostilas) de questões/simulados
+    const studyTexts=[];   // apostilas/teoria → para resumo
+    const questionTexts=[]; // questões/simulados → para gerar novas questões
     results.forEach(r=>{
       if(r.status==='fulfilled'){
-        const {name,text}=r.value;
+        const {name,text,type}=r.value;
         if(text&&text.trim().length>50){
+          if(type==='skip')return; // pula resumos já prontos
+          if(type==='questions'){
+            questionTexts.push({name,text});
+          }else{
+            studyTexts.push({name,text});
+          }
           allText+=(allText?'\n\n---\n\n':'')+text;
-          pdfTexts.push({name,text});
+          pdfTexts.push({name,text,type});
         }
       }else{
         const err=r.reason||{};
@@ -1018,7 +1038,7 @@
     if(!_chainCache[key].summary){
       allTasks.push({
         
-        fn:()=>callIsaKeyed('Leia este material de aula e faça um resumo COMPLETO e estruturado em Markdown. Cubra TODOS os tópicos. Organize em seções com ## títulos, use **negrito** para destaques e listas. Não omita nenhum tema:\n\n'+allText.slice(0,20000),0)
+        fn:()=>callIsaKeyed('Você é um professor especialista em concursos públicos. Leia TODO o material abaixo e crie um RESUMO PROFUNDO E DETALHADO em Markdown.\n\nREQUISITOS:\n- Mínimo 2000 caracteres (NÃO seja breve)\n- Estruture com ## títulos e ### subtítulos\n- Para CADA tópico: explique o conceito, dê EXEMPLOS práticos, e destaque pegadinhas de prova\n- Use **negrito** para palavras-chave e dispositivos legais\n- Use listas com marcadores para enumerações\n- Inclua uma seção ## Pegadinhas de Prova no final\n- Inclua uma seção ## Resumo Rápido com 5-10 bullets dos pontos mais importantes\n\nNÃO omita nenhum tema. Seja PROFUNDO, não conciso.\n\nMaterial:\n'+allText.slice(0,40000),0)
           .then(r=>{if(r&&r.trim()){_chainCache[key].summary=r;saveIsaSummary(lesson,r,_coursePath,_subject);}})
           .catch(e=>console.warn('[Meggy] resumo falhou',e.message))
       });
@@ -1051,7 +1071,13 @@
       pdfTexts.forEach((pdf)=>{
         allTasks.push({
           
-          fn:()=>callIsaKeyed('Você é um examinador de concurso público brasileiro experiente. Baseado neste material, gere 10 questões de concurso em JSON array. Misture:\n- 6 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"legalText":"...","explanation":"...","fundamentacao":"..."}\n- 4 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"legalText":"...","explanation":"...","fundamentacao":"..."}\n\nCAMPOS:\n- statement: enunciado claro, contexto completo\n- legalText: o dispositivo legal/dispositivo normativo aplicável (ex: "art. 5º, CF"; "Súmula Vinculante 14"; "Lei 8.906/94, art. 7º")\n- explanation: explicação técnica do acerto/erro (regra violada ou aplicada)\n- fundamentacao: fundamentação didática completa, explicando por que a alternativa correta está correta E por que as outras estão erradas\n\nSem comentários, só JSON.\n\n'+pdf.text.slice(0,15000),0)
+          fn:()=>{
+            // ★ Task 25: usa material de estudo + questões existentes como base
+            const studyForQ=studyTexts.map(s=>s.text).join('\n\n').slice(0,20000);
+            const existingQ=questionTexts.map(q=>q.text).join('\n\n').slice(0,10000);
+            const baseText=studyForQ||(pdf.text||'').slice(0,15000);
+            const extraContext=existingQ?('\n\n--- QUESTÕES EXISTENTES NO MATERIAL (use como inspiração):\n'+existingQ):'';
+            return callIsaKeyed('Você é um examinador de concurso público brasileiro experiente. Baseado neste material de estudo, gere 10 questões INÉDITAS de concurso em JSON array. Misture:\n- 6 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"legalText":"...","explanation":"...","fundamentacao":"..."}\n- 4 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"legalText":"...","explanation":"...","fundamentacao":"..."}\n\nCAMPOS:\n- statement: enunciado claro, contexto completo\n- legalText: o dispositivo legal/dispositivo normativo aplicável\n- explanation: explicação técnica do acerto/erro\n- fundamentacao: fundamentação didática completa\n\nSem comentários, só JSON array válido.\n\n'+baseText+extraContext,0)
             .then(resp=>{
               if(!resp)return;
               try{
@@ -1075,6 +1101,7 @@
               }catch(e){console.warn('[Meggy] parse questões falhou',e.message);}
             })
             .catch(e=>console.warn('[Meggy] questões falharam',e.message))
+          }
         });
       });
     }
