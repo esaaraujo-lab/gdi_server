@@ -91,6 +91,40 @@ body.gdi-fv .gdi-player-wrap iframe{
 .gdi-player-wrap:-webkit-full-screen video::-webkit-media-controls-overlay-enclosure { display:block!important; }
 .gdi-player-wrap:fullscreen .plyr--full-ui input[type=range],
 .gdi-player-wrap:-webkit-full-screen .plyr--full-ui input[type=range] { width:100%!important; }
+
+/* ═══ FIX: SPLIT MODE (desktop) — vídeo preenche a largura, sem barras pretas ═══ */
+/* Causa: em split mode (.gdi-study-grid 58fr/42fr), o player tem só 58% da largura.
+   Um vídeo 16:9 a 58% de largura é bem mais baixo que 78vh, mas o wrap mantinha
+   max-height:78vh (criado pelo app.min.js antigo), forçando o vídeo a ser letterboxed
+   dentro do wrap (background:#000) — barras pretas enormes em cima/embaixo.
+   Solução: o wrap tem aspect-ratio:16/9 (já definido no app.min.js) e o vídeo
+   preenche 100% do wrap com object-fit:contain. Estas regras garantem que os
+   wrappers de Plyr/video.js/DPlayer também preencham o wrap corretamente. */
+.gdi-study-grid .gdi-player-wrap video,
+.gdi-study-grid .gdi-player-wrap .plyr,
+.gdi-study-grid .gdi-player-wrap .plyr__video-wrapper,
+.gdi-study-grid .gdi-player-wrap .video-js,
+.gdi-study-grid .gdi-player-wrap .vjs-tech,
+.gdi-study-grid .gdi-player-wrap .dplayer,
+.gdi-study-grid .gdi-player-wrap .dplayer-video-wrap,
+.gdi-study-grid .gdi-player-wrap .dplayer-video,
+.gdi-study-grid .gdi-player-wrap .jwplayer,
+.gdi-study-grid .gdi-player-wrap .jw-video,
+.gdi-study-grid .gdi-player-wrap #player,
+.gdi-study-grid .gdi-player-wrap #vplayer,
+.gdi-study-grid .gdi-player-wrap #player-container,
+.gdi-study-grid .gdi-player-wrap iframe {
+  max-height:none!important;
+  height:100%!important;
+  width:100%!important;
+  object-fit:contain!important;
+  display:block!important;
+}
+.gdi-study-grid .gdi-player-wrap {
+  height:auto!important;
+  aspect-ratio:16/9!important;
+  max-height:none!important;
+}
 `;
     document.head.appendChild(s);
   }
@@ -720,9 +754,17 @@ body.gdi-fv .gdi-player-wrap iframe{
   const vCache=new Map();
   function verify(path){
     if(vCache.has(path))return Promise.resolve(vCache.get(path));
-    const pr=fetch(path,{method:'POST',credentials:'same-origin'})
-      .then(r=>{vCache.set(path,r.ok);return r.ok})
-      .catch(()=>{vCache.set(path,true);return true});
+    // ★ Task 17b: usa GET em vez de POST — POST em URL de arquivo (video.mp4)
+    // retorna 404 e polui o console. GET funciona pra pastas E arquivos.
+    // O cache 'no-store' evita cache de HEAD/GET de verificação.
+    const pr=fetch(path,{method:'GET',credentials:'same-origin',cache:'no-store'})
+      .then(r=>{
+        // 200-299 = existe; 3xx = redirect (também existe); 404 = não existe
+        const ok = r.ok || (r.status >= 300 && r.status < 400);
+        vCache.set(path,ok);
+        return ok;
+      })
+      .catch(()=>{vCache.set(path,true);return true});  // erro de rede = assume que existe
     vCache.set(path,pr);
     return pr;
   }
@@ -843,7 +885,15 @@ body.gdi-fv .gdi-player-wrap iframe{
       </div>`;
     }
     html+='</div>';
-    host.insertAdjacentHTML('afterbegin',html);
+    // ★ FIX 2 (Task 23): insert at the END of .gdi-wrap (beforeend), not the
+    // beginning (afterbegin). The .gdi-wrap structure is:
+    //   #update (alerts) → #head_md (md header) → .gdi-breadcrumb-wrap (breadcrumb)
+    //   → .gdi-panel (folder list + toolbar + #list + #count) → #readme_md
+    // Inserting at afterbegin put the card ABOVE the breadcrumb — covering the
+    // folder list and pushing it down. Inserting at beforeend puts the card
+    // below the folder list panel (after #readme_md, which is display:none by
+    // default), so the user sees: breadcrumb → toolbar → folder list → card.
+    host.insertAdjacentHTML('beforeend',html);
     // ★FIX: listeners presos ao CARD (antes pegava todos [data-gdi-go] do wrapper)
     const card=document.getElementById('gdi-home-card');
     if(card){

@@ -433,7 +433,12 @@
     const sims=simus().slice().reverse();
     // lista cursos do aluno para filtrar questões por curso
     const courses=collectCourses();
-    const courseNames=courses.map(c=>{const seg=c.key.split('/');return seg.length>1?seg.slice(1).join('/'):c.key;});
+    const courseNames=courses.map(c=>{
+      const seg=c.key.split('/').filter(Boolean).slice(1).join('/');
+      let n=seg||c.key;
+      try{n=decodeURIComponent(n);}catch(_){}
+      return n;
+    });
     box.innerHTML=`
       <div style="margin-bottom:18px;">
         <h4 style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 10px;">Montar simulado</h4>
@@ -782,6 +787,14 @@
 
   // ★ Função global self-contained: adiciona curso do Drive
   window.gdiAddCourseFromDrive=async function(coursePath, courseName, pdfCount){
+    // ★ FIX 1 (Task 23): decode URL-encoded courseName defensively.
+    // The Add Course modal decodes the folder name before passing it here,
+    // BUT legacy localStorage entries (saved before Task 22) may have %20 in
+    // the name field. Also, if the modal is bypassed (e.g. by an external
+    // caller passing a raw path), courseName may still be URL-encoded.
+    // Decoding here is idempotent (decodeURIComponent of an already-decoded
+    // string with no %XX sequences is a no-op).
+    try{if(courseName&&String(courseName).indexOf('%')>=0)courseName=decodeURIComponent(courseName);}catch(_){}
     const overlay=document.querySelector('.gdi-modal-overlay');
     const box=document.getElementById('gdi-central-body');
     const LS_MANUAL='gdi-manual-courses-v1';
@@ -970,7 +983,12 @@
     if(seg.length<=2)return seg[0];
     return [seg[0],...seg.slice(1,-1).slice(0,2)].join('/');
   }
-  const courseName=ck=>ck.split('/').filter(Boolean).slice(1).join(' / ')||ck;
+  const courseName=ck=>{
+    // ★ Task 22: decodifica %20 e outros caracteres URL-encoded
+    let name=ck.split('/').filter(Boolean).slice(1).join(' / ')||ck;
+    try{name=decodeURIComponent(name);}catch(_){}
+    return name;
+  };
   function driveNameOf(ck){
     const m=/^\/(\d+):/.exec(ck||'');
     return(window.drive_names&&m&&window.drive_names[+m[1]])||'';
@@ -1665,6 +1683,8 @@
     let name=courseName(ck);
     // se veio vazio, usa o drive name
     if(!name||name==='—')name=driveNameOf(ck)||'Curso';
+    // ★ Task 22: decodifica %20 se ainda não foi decodificado
+    try{if(name.indexOf('%')>=0)name=decodeURIComponent(name);}catch(_){}
     // remove underscores → espaços, multiple slashes, trim
     name=name.replace(/_/g,' ').replace(/\/\s*\//g,' / ').replace(/\s+/g,' ').trim();
     // se muito longo, trunca
@@ -1771,7 +1791,14 @@
     function renderCourseCard(grid,c,box,target){
       // ★ FIX: cursos manuais usam dados do manualCourse (nome, ícone, cor)
       const mc=c.manualCourse||{};
-      const name=mc.name||cleanCourseName(c.key);
+      // ★ FIX 1 (Task 23): decode URL-encoded mc.name defensively.
+      // Legacy localStorage entries (saved before Task 22) may have %20 in
+      // the name field (e.g. "TJ%20SP%20-%20Black%20Edition"). Decode here so
+      // the tile shows "TJ SP - Black Edition" regardless of when it was saved.
+      // Idempotent: decodeURIComponent of an already-decoded string is a no-op.
+      let _mcName=mc.name||'';
+      try{if(_mcName&&String(_mcName).indexOf('%')>=0)_mcName=decodeURIComponent(_mcName);}catch(_){}
+      const name=_mcName||cleanCourseName(c.key);
       const drive=driveNameOf(c.key);
       const icon=mc.icon||'📁';
       const color=mc.color||'var(--ferreto-primary,#ff8b9f)';
@@ -1785,7 +1812,7 @@
       if(isManual)el.style.borderLeft='4px solid '+color;
       el.innerHTML=`
         <div class="gdi-course-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-          <b title="${escHtml(mc.name||courseName(c.key))}" style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;">
+          <b title="${escHtml(_mcName||courseName(c.key))}" style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;">
             ${isManual?`<span style="font-size:18px;flex:none;">${icon}</span>`:''}
             <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(name)}</span>
           </b>
@@ -2195,6 +2222,8 @@
 
     // ── Adiciona curso a partir de pasta selecionada no Drive ──
     async function doAddCourseFromDrive(coursePath, courseName, pdfCount){
+      // ★ FIX 1 (Task 23): decode URL-encoded courseName defensively (same reason as gdiAddCourseFromDrive).
+      try{if(courseName&&String(courseName).indexOf('%')>=0)courseName=decodeURIComponent(courseName);}catch(_){}
       try{
         const LS_MANUAL='gdi-manual-courses-v1';
         const manual=lsGet(LS_MANUAL,[]);
@@ -3328,6 +3357,25 @@
 .gdi-scan-status{color:var(--ferreto-text-muted,#8b949e);font-size:10px;display:block;margin-top:2px;}
 .gdi-scan-status .bi-arrow-repeat{animation:gdi-scan-spin 1s linear infinite;display:inline-block;}
 @keyframes gdi-scan-spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+/* ★ FIX 3 (Task 23): tiles deformados no Android — reduz padding/fontes/stats
+   grid em telas < 480px. Antes o tile tinha 4 stats lado-a-lado + 2 botões
+   lado-a-lado + barra de scan, ocupando ~340px de altura em telas de 360px.
+   Agora stats viram 2x2, botões ficam menores e padding reduz. */
+@media(max-width:480px){
+  .gdi-course{padding:8px!important;}
+  .gdi-course b{font-size:12px!important;}
+  .gdi-course small{font-size:10px!important;margin:4px 0 8px!important;}
+  .gdi-course-stats{grid-template-columns:repeat(2,1fr)!important;gap:4px!important;margin:8px 0!important;}
+  .gdi-course-stat{padding:6px 4px!important;}
+  .gdi-course-stat-num{font-size:16px!important;}
+  .gdi-course-stat-label{font-size:8px!important;}
+  .gdi-progress-bar{height:4px!important;margin:6px 0!important;}
+  .gdi-btn-continue{font-size:11px!important;padding:6px 8px!important;border-radius:8px!important;}
+  .gdi-scan-bar-wrap{margin-top:4px!important;}
+  .gdi-scan-status{font-size:9px!important;}
+  /* botão "Escanear agora" manual + botão scanning — reduz padding/font em mobile */
+  .gdi-btn-scan-now{font-size:10px!important;padding:5px 8px!important;}
+}
 `;document.head.appendChild(s);
   }
 

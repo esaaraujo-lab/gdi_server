@@ -586,6 +586,9 @@
   // ── Summaries storage ──
   // ★ FIX: agora salva também o path do curso e a matéria — para o botão
   // "Resumo" no painel de materiais (M9) agrupar corretamente.
+  // ★ FIX 3 (Task 13): também persiste no Drive via storage.js saveMaterial(),
+  //    na subpasta 'resumos' da pasta do usuário. Assim o resumo sobrevive a
+  //    limpeza do localStorage e fica acessível de outros dispositivos.
   function saveIsaSummary(lesson, summary, coursePath, subject){
     const arr=lsGet(LS_SUM,[]);
     // extrai course e subject do path se não vierem explícitos
@@ -611,6 +614,15 @@
       date:Date.now()
     });
     lsSet(LS_SUM,arr.slice(0,200));
+
+    // ★ FIX 3 (Task 13): também salva no Drive (pasta do usuário / resumos / <hash>.md)
+    // via storage.js. O servidor cria a subpasta 'resumos' on-demand.
+    // Não-await — não bloqueia a UI; falha silenciosa (já temos o localStorage).
+    try{
+      if(window.GDIStorage && typeof window.GDIStorage.saveMaterial==='function' && derivedCourse && summary){
+        window.GDIStorage.saveMaterial(derivedCourse, String(lesson||'Aula').slice(0,200), 'resumos', String(summary)).catch(()=>{});
+      }
+    }catch(_){}
   }
   function listIsaSummaries(){return lsGet(LS_SUM,[]);}
   function delIsaSummary(id){lsSet(LS_SUM,lsGet(LS_SUM,[]).filter(x=>x.id!==id));}
@@ -893,6 +905,19 @@
   // Cada tarefa usa uma chave NVIDIA diferente (se houver múltiplas)
   async function generateAll(items,lesson,trigger,progressCb){
     const key=lessonKey();
+    // ★ FIX 3 (Task 13): deriva coursePath e subject da URL atual para passar
+    //    explicitamente ao saveIsaSummary (que agora também persiste no Drive).
+    //    Antes, saveIsaSummary derivava sozinho — mas sempre que generateAll
+    //    era chamado a partir de uma página de aula, a URL já tinha o formato
+    //    /<drive>:/<curso>/<materia>/<aula>, então derivar 1× aqui é mais eficiente
+    //    e garante consistência entre os 2 call-sites (cache hit e geração nova).
+    const _p=window.location.pathname||'';
+    const _seg=_p.split('/').filter(Boolean);
+    let _coursePath='',_subject='';
+    if(_seg.length>=2){
+      _coursePath='/'+_seg.slice(0,2).join('/')+'/';
+      if(_seg.length>=3)_subject=decodeURIComponent(_seg[2]);
+    }
     // se já tem tudo no cache em memória, pula
     if(_chainCache[key]&&_chainCache[key].summary&&_chainCache[key].mindmap&&_chainCache[key].questionsGenerated){
       return _chainCache[key];
@@ -927,7 +952,7 @@
       addQBatch(_batch);
       // flashcards do cache
       if(cached.questions.length)autoCreateFlashcards(cached.questions,lesson,lessonKey());
-      saveIsaSummary(lesson,_chainCache[key].summary);
+      saveIsaSummary(lesson,_chainCache[key].summary,_coursePath,_subject);
             return _chainCache[key];
     }
 
@@ -994,7 +1019,7 @@
       allTasks.push({
         
         fn:()=>callIsaKeyed('Leia este material de aula e faça um resumo COMPLETO e estruturado em Markdown. Cubra TODOS os tópicos. Organize em seções com ## títulos, use **negrito** para destaques e listas. Não omita nenhum tema:\n\n'+allText.slice(0,20000),0)
-          .then(r=>{if(r&&r.trim()){_chainCache[key].summary=r;saveIsaSummary(lesson,r);}})
+          .then(r=>{if(r&&r.trim()){_chainCache[key].summary=r;saveIsaSummary(lesson,r,_coursePath,_subject);}})
           .catch(e=>console.warn('[Meggy] resumo falhou',e.message))
       });
     }
@@ -2021,15 +2046,242 @@
     }catch(_){return [];}
   }
 
-  // ── Public API ── (E — todos os 15 métodos preservados)
-  window.gdiIsaPdf={summary,questions,mindmap,flashcards,regenerate,extractPdfText,saveIsaSummary,listIsaSummaries,delIsaSummary,fetchSharedQuestions,fetchSharedSummaries,saveSharedSummary,saveEssayMD,startBattalion,getBattalionStatus};
+  // ── Public API ── (E — todos os 16 métodos preservados)
+  // ★ FIX 6 (Task 21): added downloadAsPdf to exports. It was defined as a local
+  // function but never exported, yet renderResumos references window.gdiIsaPdf.downloadAsPdf
+  // (line 2137). The check `if (... && window.gdiIsaPdf.downloadAsPdf)` silently failed,
+  // so the "PDF" button on saved resumos did nothing. Now exported.
+  window.gdiIsaPdf={summary,questions,mindmap,flashcards,regenerate,extractPdfText,saveIsaSummary,listIsaSummaries,delIsaSummary,downloadAsPdf,fetchSharedQuestions,fetchSharedSummaries,saveSharedSummary,saveEssayMD,startBattalion,getBattalionStatus};
 
-  // ═══ REMOVIDO: aba Resumos (user request) — mantém stub para compat. ═══
-  // As funções listIsaSummaries/saveIsaSummary/delIsaSummary continuam disponíveis
-  // via window.gdiIsaPdf (usadas pelo botão "Resumo Meggy" no painel de materiais M9).
-  // A aba "Resumos" da Central de Estudos foi removida pelo usuário; este stub
-  // evita crashes caso algum caller ainda referencie window.renderResumos.
-  window.renderResumos=function(){};
+  // ═══ REATIVADO: aba "Resumos" na Central de Estudos (Task 13 — FIX 2) ═══
+  // Antes era um stub no-op (window.renderResumos=function(){};). Agora é uma
+  // implementação real que lista os resumos salvos em localStorage (via
+  // gdiIsaPdf.listIsaSummaries()), agrupados por matéria, com botões
+  // Ver / Baixar PDF / Deletar. Conecta o orphan function: o botão "Resumo"
+  // no painel de materiais M9 chama saveIsaSummary() → a aba "Resumos"
+  // lista o que foi salvo. Antes estavam desconectados.
+  function _summaryModal(lesson, markdownText){
+    // modal próprio (não depende de gdiModal que escapa o conteúdo)
+    document.querySelectorAll('.gdi-resumo-modal').forEach(m=>m.remove());
+    const overlay=document.createElement('div');
+    overlay.className='gdi-resumo-modal';
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(4px);z-index:100002;display:flex;align-items:center;justify-content:center;padding:20px;animation:gdi-modal-fade .2s ease;';
+    const html=renderMd(markdownText);
+    overlay.innerHTML=`<div style="background:var(--ferreto-bg-2,#0d1119);border:1px solid var(--ferreto-border,#21262d);border-radius:14px;max-width:780px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.6);">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--ferreto-border,#21262d);gap:10px;">
+        <b style="color:var(--ferreto-text,#f0f6fc);font-size:15px;font-family:var(--ferreto-font-display,'Poppins',sans-serif);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">${esc(lesson)}</b>
+        <button class="gdi-resumo-x" style="background:transparent;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:18px;padding:4px 8px;border-radius:6px;flex:none;">✕</button>
+      </div>
+      <div class="gdi-resumo-content" style="padding:20px;overflow-y:auto;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.65;">${html}</div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;padding:10px 18px;border-top:1px solid var(--ferreto-border,#21262d);flex-wrap:wrap;">
+        <button class="gdi-resumo-pdf gdi-mode-btn" style="font-size:13px;"><i class="bi bi-download"></i> Baixar PDF</button>
+        <button class="gdi-resumo-close gdi-mode-btn" style="font-size:13px;">Fechar</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    if(!document.getElementById('gdi-resumo-modal-style')){
+      const st=document.createElement('style');st.id='gdi-resumo-modal-style';
+      st.textContent='.gdi-resumo-modal .gdi-resumo-content h1,.gdi-resumo-modal .gdi-resumo-content h2,.gdi-resumo-modal .gdi-resumo-content h3{color:var(--ferreto-text,#f0f6fc);margin-top:18px;}.gdi-resumo-modal .gdi-resumo-content h1{font-size:20px;}.gdi-resumo-modal .gdi-resumo-content h2{font-size:17px;border-left:3px solid #ff8b9f;padding-left:10px;}.gdi-resumo-modal .gdi-resumo-content h3{font-size:14px;}.gdi-resumo-modal .gdi-resumo-content code{background:rgba(255,255,255,.08);padding:2px 6px;border-radius:3px;font-family:Courier New,monospace;font-size:12px;}.gdi-resumo-modal .gdi-resumo-content pre{background:rgba(255,255,255,.06);padding:12px;border-radius:6px;overflow-x:auto;}.gdi-resumo-modal .gdi-resumo-content blockquote{border-left:3px solid #ff8b9f;margin:10px 0;padding:4px 14px;color:var(--ferreto-text-muted,#9aa4b8);font-style:italic;}.gdi-resumo-modal .gdi-resumo-content a{color:#5ddeda;}';
+      document.head.appendChild(st);
+    }
+    const close=()=>overlay.remove();
+    overlay.querySelector('.gdi-resumo-x').onclick=close;
+    overlay.querySelector('.gdi-resumo-close').onclick=close;
+    overlay.querySelector('.gdi-resumo-pdf').onclick=()=>downloadAsPdf(lesson,markdownText);
+    overlay.onclick=(e)=>{if(e.target===overlay)close();};
+    const escHandler=(e)=>{if(e.key==='Escape'){close();document.removeEventListener('keydown',escHandler);}};
+    document.addEventListener('keydown',escHandler);
+  }
+
+  // ★ FIX 4 (Task 23): renderResumos agora é ASYNC e lê resumos de DUAS fontes:
+  //   1) localStorage (listIsaSummaries) — rápido, offline-first
+  //   2) Google Drive (.meggy.ai/resumos/) via GDIStorage.listMaterials
+  // Antes só lia localStorage — então resumos gerados pelo batalhão em outro
+  // dispositivo (ou após limpar localStorage) não apareciam. Agora mergeia os
+  // dois, dedup por lesson+date, e mostra um badge "Drive" nos itens que só
+  // existem no Drive. O conteúdo dos itens do Drive é lazy-loaded (fetch do
+  // downloadUrl) apenas quando o aluno clica em "Ver" ou "PDF" — não baixa
+  // todos os resumos de uma vez (seria pesado).
+  window.renderResumos = async function(bodyEl){
+    if(!bodyEl)return;
+    // Loading state imediato (a chamada ao Drive pode levar 1-2s)
+    bodyEl.innerHTML='<div class="gdi-empty-state" style="padding:40px 20px;"><div class="gdi-spinner" style="margin:0 auto 12px;width:32px;height:32px;border:3px solid var(--ferreto-surface-3,rgba(255,255,255,.08));border-top-color:var(--ferreto-primary,#ff8b9f);border-radius:50%;animation:gdi-scan-spin 1s linear infinite;"></div><p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin:0;">Carregando resumos…</p></div>';
+
+    // 1) localStorage resumos (rápido, síncrono)
+    const localSummaries = window.gdiIsaPdf ? window.gdiIsaPdf.listIsaSummaries() : [];
+
+    // 2) Drive resumos (.meggy.ai/resumos/) — best-effort, não bloqueia
+    let driveSummaries = [];
+    try{
+      if(window.GDIStorage && typeof window.GDIStorage.listMaterials==='function'){
+        const items = await window.GDIStorage.listMaterials('resumos', '');
+        if(Array.isArray(items)){
+          driveSummaries = items
+            .filter(it => it && it.id && it.name)
+            .map(it => {
+              // Nome do arquivo no Drive: <safeLesson>_<safePdf>_<timestamp>.md
+              // safeLesson/safePdf substituíram [^a-zA-Z0-9_-] por _. Reconstrói
+              // um nome legível trocando _ por espaço e removendo .md.
+              let displayName = String(it.name||'').replace(/\.md$/i,'').replace(/\.json$/i,'');
+              // Heurística: remove o sufixo de timestamp (digits no final)
+              displayName = displayName.replace(/_\d{10,}$/, '').replace(/_/g, ' ').trim();
+              if(displayName.length>200)displayName=displayName.slice(0,200);
+              return {
+                id: 'drive-'+it.id,
+                lesson: displayName || 'Resumo do Drive',
+                summary: '',  // lazy-loaded on click
+                path: '',
+                subject: 'Drive',
+                date: it.modified ? new Date(it.modified).getTime() : (it.id?0:Date.now()),
+                _drive: true,
+                _downloadUrl: it.downloadUrl,
+                _fileId: it.id
+              };
+            });
+        }
+      }
+    }catch(_){ /* Drive indisponível — segue só com localStorage */ }
+
+    // 3) Merge: localStorage primeiro (tem prioridade — conteúdo já carregado),
+    //    depois Drive (dedup por lesson name case-insensitive)
+    const seenLesson = new Set();
+    const all = [];
+    for(const r of localSummaries){
+      if(!r)continue;
+      const k = String(r.lesson||'').toLowerCase();
+      if(!seenLesson.has(k)){
+        seenLesson.add(k);
+        all.push(r);
+      }
+    }
+    for(const r of driveSummaries){
+      if(!r)continue;
+      const k = String(r.lesson||'').toLowerCase();
+      if(!seenLesson.has(k)){
+        seenLesson.add(k);
+        all.push(r);
+      }
+    }
+
+    // 4) Sort por data decrescente
+    all.sort((a,b)=>(b.date||0)-(a.date||0));
+
+    if(!all.length){
+      bodyEl.innerHTML='<div class="gdi-empty-state"><span class="gdi-empty-state-icon">📋</span><h3>Nenhum resumo ainda</h3><p>Gere resumos assistindo às aulas e clicando no botão "Resumo" no painel de materiais.</p></div>';
+      return;
+    }
+
+    // 5) Agrupa por matéria (subject)
+    const bySubject = {};
+    all.forEach(r=>{
+      const s = r.subject || 'Geral';
+      if(!bySubject[s])bySubject[s]=[];
+      bySubject[s].push(r);
+    });
+    let html='<div class="gdi-resumos-list" style="display:flex;flex-direction:column;gap:18px;">';
+    for(const subject in bySubject){
+      html+=`<div class="gdi-resumos-group"><h3 style="color:var(--ferreto-text,#f0f6fc);font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-size:14px;font-weight:600;margin:0 0 8px;display:flex;align-items:center;gap:6px;"><i class="bi bi-folder2-open" style="color:#5ddeda;"></i> ${esc(subject)}${subject==='Drive'?'<span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;font-weight:400;">(salvos no Google Drive)</span>':''}</h3>`;
+      html+='<div style="display:flex;flex-direction:column;gap:8px;">';
+      bySubject[subject].forEach(r=>{
+        const preview = String(r.summary||'').slice(0,150).replace(/[#*`]/g,'').replace(/\n/g,' ');
+        const date = r.date ? new Date(r.date).toLocaleDateString('pt-BR') : '';
+        const driveBadge = r._drive ? '<span style="color:#5ddeda;font-size:10px;margin-left:6px;flex:none;"><i class="bi bi-cloud-fill"></i> Drive</span>' : '';
+        const previewHtml = r._drive
+          ? '<i style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;font-style:italic;">Resumo salvo no Drive — clique em "Ver" para carregar o conteúdo.</i>'
+          : esc(preview)+(r.summary && r.summary.length>150?'…':'');
+        html+=`<div class="gdi-resumo-card" data-id="${esc(r.id)}" style="background:var(--ferreto-surface-2,rgba(255,255,255,.05));border:1px solid var(--ferreto-border,#21262d);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <span style="color:var(--ferreto-text,#f0f6fc);font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">${esc(r.lesson||'Aula')}${driveBadge}</span>
+            <span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;flex:none;">${date}</span>
+          </div>
+          <div style="color:var(--ferreto-text-muted,#8b949e);font-size:12.5px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${previewHtml}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="gdi-btn gdi-btn-ghost gdi-resumo-view" data-id="${esc(r.id)}" style="font-size:12px;padding:5px 10px;"><i class="bi bi-eye"></i> Ver</button>
+            <button class="gdi-btn gdi-btn-ghost gdi-resumo-pdf" data-id="${esc(r.id)}" style="font-size:12px;padding:5px 10px;"><i class="bi bi-download"></i> PDF</button>
+            ${!r._drive?`<button class="gdi-btn gdi-btn-ghost gdi-resumo-del" data-id="${esc(r.id)}" style="font-size:12px;padding:5px 10px;color:#ff6b6b;" title="Deletar"><i class="bi bi-trash"></i></button>`:''}
+          </div>
+        </div>`;
+      });
+      html+='</div></div>';
+    }
+    html+='</div>';
+    bodyEl.innerHTML=html;
+
+    // 6) Helper: lazy-load conteúdo do Drive
+    const loadDriveContent = async (r) => {
+      if(!r || !r._drive)return r ? r.summary : '';
+      if(r.summary)return r.summary;  // já carregado (cacheado nesta sessão)
+      try{
+        const resp = await fetch(r._downloadUrl);
+        if(!resp.ok)throw new Error('HTTP '+resp.status);
+        const text = await resp.text();
+        r.summary = text;  // cacheia no objeto
+        return text;
+      }catch(e){
+        throw new Error('Não foi possível carregar do Drive: '+e.message);
+      }
+    };
+
+    // 7) Wiring dos botões
+    bodyEl.querySelectorAll('.gdi-resumo-view').forEach(b=>b.onclick=async (ev)=>{
+      const r=all.find(x=>x.id===b.dataset.id);
+      if(!r)return;
+      // Feedback visual no botão enquanto carrega do Drive
+      const orig = b.innerHTML;
+      if(r._drive){
+        b.disabled=true;
+        b.innerHTML='<i class="bi bi-hourglass-split"></i> Carregando…';
+      }
+      try{
+        const content = r._drive ? await loadDriveContent(r) : r.summary;
+        if(content){
+          _summaryModal(r.lesson, content);
+        }else{
+          showToast('Resumo vazio');
+        }
+      }catch(e){
+        showToast(e.message||'Erro ao carregar resumo');
+      }finally{
+        if(r._drive){b.disabled=false;b.innerHTML=orig;}
+      }
+    });
+    bodyEl.querySelectorAll('.gdi-resumo-pdf').forEach(b=>b.onclick=async (ev)=>{
+      const r=all.find(x=>x.id===b.dataset.id);
+      if(!r)return;
+      const orig = b.innerHTML;
+      if(r._drive){
+        b.disabled=true;
+        b.innerHTML='<i class="bi bi-hourglass-split"></i> Carregando…';
+      }
+      try{
+        const content = r._drive ? await loadDriveContent(r) : r.summary;
+        if(content && window.gdiIsaPdf && window.gdiIsaPdf.downloadAsPdf){
+          window.gdiIsaPdf.downloadAsPdf(r.lesson, content);
+        }else if(!content){
+          showToast('Resumo vazio');
+        }else{
+          showToast('downloadAsPdf indisponível');
+        }
+      }catch(e){
+        showToast(e.message||'Erro ao carregar resumo');
+      }finally{
+        if(r._drive){b.disabled=false;b.innerHTML=orig;}
+      }
+    });
+    bodyEl.querySelectorAll('.gdi-resumo-del').forEach(b=>b.onclick=async ()=>{
+      // Só localStorage resumos têm botão deletar (Drive items não têm .gdi-resumo-del)
+      if(!window.gdiModal){
+        if(!confirm('Deletar este resumo?'))return;
+      } else {
+        const ok=await window.gdiModal({title:'Deletar resumo',message:'Tem certeza que deseja deletar este resumo? Esta ação não pode ser desfeita.',confirmText:'Deletar',cancelText:'Cancelar',danger:true});
+        if(!ok)return;
+      }
+      if(window.gdiIsaPdf && window.gdiIsaPdf.delIsaSummary){
+        window.gdiIsaPdf.delIsaSummary(b.dataset.id);
+        window.renderResumos(bodyEl);
+      }
+    });
+  };
 
   console.log('[GDI Extras] M9-ISA (PDF extraction + ISA summaries/questions) ativo — refactored (Task 4-c)');
 })();
