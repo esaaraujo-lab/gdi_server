@@ -4517,11 +4517,18 @@
       return;
     }
     // Check if already scanning (constraint: no multiple instances per course)
+    // ★ Task 27: se o scan foi iniciado há mais de 10min, considera travado e reinicia
     const existing = getScanState(courseKey);
     if(existing && existing.status === 'scanning'){
-      console.log('[Scanner] scan já em andamento para', courseKey, '— não iniciando duplicata');
-      try{ if(onProgress) onProgress(existing, getLessons(courseKey)); }catch(_){}
-      return;
+      const ageMin = existing.startedAt ? (Date.now() - existing.startedAt) / 60000 : 0;
+      if(ageMin > 10){
+        console.log('[Scanner] scan travado há', Math.round(ageMin), 'min — reiniciando', courseKey);
+        // não retorna — continua pra reiniciar
+      }else{
+        console.log('[Scanner] scan já em andamento para', courseKey, '— não iniciando duplicata');
+        try{ if(onProgress) onProgress(existing, getLessons(courseKey)); }catch(_){}
+        return;
+      }
     }
     // Fire-and-forget — errors captured and saved to state
     scanCourse(courseKey, onProgress).catch(e=>{
