@@ -4349,120 +4349,70 @@
   // Main scan function — incremental, resumable.
   // courseKey == coursePath (the Drive folder path, e.g. /4:/CANTE COM EXCELENCIA 2.0/)
   // Calls onProgress(state, lessonsData) after each folder.
+  // ★ Task 32: scanner usa API server-side (POST /api/courses/scan-progress)
+  //    Antes: client-side fazia centenas de fetches individuais → travava em 19%
+  //    Agora: 1 único POST pro servidor, que escaneia tudo recursivamente
+  //    O servidor tem acesso direto ao Google Drive API (sem CORS, sem Worker bridge)
   async function scanCourse(courseKey, onProgress){
-    if(!courseKey)return null;
-
-    // Load or create state
-    let state = getScanState(courseKey);
-    if(state && state.status === 'scanning'){
-      // Already scanning — don't start another instance (constraint).
-      // Wire onProgress to fire on the next state save by polling once.
-      try{ if(onProgress) onProgress(state, getLessons(courseKey)); }catch(_){}
-      return state;
-    }
-
-    state = state || {
-      courseKey: courseKey,
+    let state = getScanState(courseKey) || {
+      courseId: courseKey,
       coursePath: courseKey,
-      status: 'scanning',  // 'scanning' | 'done' | 'error' | 'paused'
+      status: 'scanning',
       startedAt: Date.now(),
       scannedFolders: 0,
-      totalFolders: 0,
-      queue: [courseKey],  // folders to scan (BFS) — starts with the course root
-      scanned: [],         // folders already scanned
-      depth: 0
+      totalFolders: 1,
+      queue: [],
+      scanned: []
     };
-
-    // If already done, skip (caller can still read lessons via getCourseLessons)
-    if(state.status === 'done'){
-      try{ if(onProgress) onProgress(state, getLessons(courseKey)); }catch(_){}
+    state.status = 'scanning';
+    state.startedAt = Date.now();
+    setScanState(courseKey, state);
+    if(onProgress) try{ onProgress(state, getLessons(courseKey)); }catch(_){}
+    
+    try {
+      // ★ 1 POST request — servidor escaneia TODO o curso recursivamente
+      const r = await fetch('/api/courses/scan-progress', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({coursePath: courseKey})
+      });
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const d = await r.json();
+      if(!d || !d.ok) throw new Error(d && d.error || 'scan falhou');
+      
+      // Servidor retorna {lessons: [...], total: N, ...}
+      const lessons = d.lessons || [];
+      const lessonsData = {
+        lessons: lessons,
+        scanned: true,
+        totalFolders: d.totalFolders || 1,
+        totalLessons: lessons.length
+      };
+      setLessons(courseKey, lessonsData);
+      
+      // Atualiza estado
+      state.status = 'done';
+      state.completedAt = Date.now();
+      state.scannedFolders = state.totalFolders;
+      setScanState(courseKey, state);
+      
+      // Salva no Drive (não-bloqueante)
+      try {
+        if(window.GDIStorage && window.GDIStorage.saveMaterial) {
+          window.GDIStorage.saveMaterial(courseKey, courseKey, 'lessons', JSON.stringify(lessonsData)).catch(()=>{});
+        }
+      } catch(_){}
+      
+      if(onProgress) try{ onProgress(state, lessonsData); }catch(_){}
+      return state;
+    } catch(e) {
+      console.error('[Scanner] erro:', e.message);
+      state.status = 'error';
+      state.error = e.message;
+      setScanState(courseKey, state);
+      if(onProgress) try{ onProgress(state, getLessons(courseKey)); }catch(_){}
       return state;
     }
-
-    state.status = 'scanning';
-    state.error = null;
-    setScanState(courseKey, state);
-
-    const lessonsData = getLessons(courseKey);
-    if(!Array.isArray(lessonsData.lessons)) lessonsData.lessons = [];
-
-    // Process queue incrementally — 1 folder per iteration (SCAN_BATCH=1)
-    let iter = 0;
-    while(state.queue.length > 0){
-      const folder = state.queue.shift();
-
-      // Skip if already scanned (dedupe safety)
-      if(state.scanned.indexOf(folder) >= 0) continue;
-      state.scanned.push(folder);
-      state.scannedFolders++;
-
-      const depth = depthOf(folder, courseKey);
-
-      // Scan this folder (via worker bridge — doesn't block UI)
-      const result = await scanFolder(folder, depth);
-
-      // Add lessons (dedupe by path)
-      if(result.lessons && result.lessons.length){
-        for(let i=0; i<result.lessons.length; i++){
-          const l = result.lessons[i];
-          let dup = false;
-          for(let j=0; j<lessonsData.lessons.length; j++){
-            if(lessonsData.lessons[j].path === l.path){ dup = true; break; }
-          }
-          if(!dup) lessonsData.lessons.push(l);
-        }
-      }
-
-      // Queue subfolders (BFS) — only if depth < MAX
-      if(depth < SCAN_MAX_DEPTH && result.subfolders && result.subfolders.length){
-        for(let i=0; i<result.subfolders.length; i++){
-          const sf = result.subfolders[i];
-          if(!sf || !sf.name) continue;
-          const subPath = folder + encodeURIComponent(sf.name) + '/';
-          if(state.scanned.indexOf(subPath) < 0 && state.queue.indexOf(subPath) < 0){
-            state.queue.push(subPath);
-          }
-        }
-      }
-
-      state.totalFolders = state.scannedFolders + state.queue.length;
-
-      // Save state + lessons (resumable)
-      setScanState(courseKey, state);
-      lessonsData.scanned = false;
-      lessonsData.totalFolders = state.totalFolders;
-      lessonsData.totalLessons = lessonsData.lessons.length;
-      setLessons(courseKey, lessonsData);
-
-      // Progress callback (live updates tile)
-      try{ if(onProgress) onProgress(state, lessonsData); }catch(_){}
-
-      iter++;
-      // ★ Pause between folders — don't block UI (constraint: 500ms)
-      await new Promise(r => setTimeout(r, SCAN_PAUSE_MS));
-    }
-
-    // Done!
-    state.status = 'done';
-    state.completedAt = Date.now();
-    setScanState(courseKey, state);
-
-    lessonsData.scanned = true;
-    lessonsData.totalFolders = state.scannedFolders;
-    lessonsData.totalLessons = lessonsData.lessons.length;
-    setLessons(courseKey, lessonsData);
-
-    // Save to Drive — non-blocking. Uses GDIStorage.saveMaterial which POSTs
-    // to /api/materials/save and stores under <userFolder>/lessons/<hash>.json
-    // The kind='lessons' is a new convention for course structure files.
-    try{
-      if(window.GDIStorage && typeof window.GDIStorage.saveMaterial === 'function'){
-        window.GDIStorage.saveMaterial(courseKey, courseKey, 'lessons', JSON.stringify(lessonsData)).catch(()=>{});
-      }
-    }catch(_){}
-
-    try{ if(onProgress) onProgress(state, lessonsData); }catch(_){}
-    return state;
   }
 
   // Get scan progress for a course (for tile display)
