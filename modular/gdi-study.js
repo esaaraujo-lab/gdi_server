@@ -1287,7 +1287,7 @@
       {id:'simulado',icon:'bi-stopwatch',label:'Simulado'}
     ]},
     {label:'Materiais',tabs:[
-      {id:'addmateria',icon:'bi-folder-plus',label:'Adicionar matéria'},  // ★ FIX 1a (Task 14): RE-ADICIONADO — user pediu para voltar
+      {id:'addmateria',icon:'bi-folder-plus',label:'Adicionar Cursos'},  // ★ FIX MANUAL: renomeado de "Adicionar matéria" para "Adicionar Cursos" (user request)
       {id:'resumos',icon:'bi-clipboard',label:'Resumos'},
       {id:'provas',icon:'bi-file-earmark-text',label:'Provas'},
       {id:'redacao',icon:'bi-pencil-square',label:'Redação'}
