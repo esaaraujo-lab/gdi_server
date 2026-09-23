@@ -25,7 +25,6 @@
      desconectado ao trocar de página, M9 não reconstrói na mesma
      aula, M7 só toca no DOM quando muda, M22 limita cursos.
    ═══════════════════════════════════════════════════════════════ */
-console.log('[GDI Extras Modular] v2.7 carregado');
 const GDI_ROOT=()=>document.documentElement; // UI flutuante vive aqui (fora do body)
 
 window.GDI_MODULES = window.GDI_MODULES || [];
@@ -199,7 +198,7 @@ if(!window.DOMPurify && !window.__gdiPurifyLoading){
   const s=document.createElement('script');
   s.src='https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js';
   s.crossOrigin='anonymous';
-  s.onload=()=>console.log('[GDI] DOMPurify carregado');
+  s.onload=()=>{};
   s.onerror=()=>console.warn('[GDI] DOMPurify falhou — usando fallback básico');
   document.head.appendChild(s);
 }
@@ -414,7 +413,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       if(k&&k.indexOf('password')===0){const v=localStorage.getItem(k);if(v)gdiSetPw(k.slice(8),v);del.push(k);}}
     del.forEach(k=>localStorage.removeItem(k));
     localStorage.setItem('gdi_pw_migrated','1');
-    if(del.length)console.log('[módulo senhas]',del.length,'senhas migradas');
+    if(del.length)console.warn('[módulo senhas]',del.length,'senhas migradas');
   }catch(_){}
 })();
 
@@ -868,8 +867,8 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     tabsEl.innerHTML='<span class="gdi-mat-loading">Buscando PDFs da aula\u2026</span>';
     if(statusEl)statusEl.textContent='';
     bodyEl.innerHTML='';
-    // ★ Task FINAL: busca PDFs, TXTs (transcrições) e HTMLs (ebooks/resumos IA)
-    const isMaterial=x=>{const ext=(x.fileExtension||'').toLowerCase();const mt=(x.mimeType||'').toLowerCase();return ext==='pdf'||/pdf/.test(mt)||ext==='txt'||ext==='html'||ext==='htm';};
+    // ★ Task FINAL: busca PDFs, TXTs, MDs (transcrições/resumos) e HTMLs (ebooks/resumos IA)
+    const isMaterial=x=>{const ext=(x.fileExtension||'').toLowerCase();const mt=(x.mimeType||'').toLowerCase();return ext==='pdf'||/pdf/.test(mt)||ext==='txt'||ext==='md'||ext==='html'||ext==='htm';};
     const isPdf=x=>(x.fileExtension||'').toLowerCase()==='pdf'||/pdf/i.test(x.mimeType||'');
     try{
       let found=[];
@@ -1091,7 +1090,6 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       });
       show(0);
       lastKey=p;
-      console.log('[GDI Materiais] aula:',base||'(sem nome)','\u2192',items.length,'PDFs:',items.map(x=>x.tabLabel).join(' | '));
     }catch(err){
       if(myGen!==gen)return;
       if(statusEl)statusEl.textContent='sem PDF';

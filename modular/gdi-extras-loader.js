@@ -28,8 +28,8 @@
   const BASE_URL = 'https://cdn.jsdelivr.net/gh/' + PUBLIC_REPO + '@main/modular/';
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
-  // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  const CACHE_VERSION = '38';  // ★ Task MANUAL: tab rename "Adicionar matéria" → "Adicionar Cursos"; fix chat header avatar (use concatenation like FAB, not literal `' + MEGGY_AVATAR + '` text inside template literal). CACHE_VERSION 36→37 forces CDN reload of all modular files (gdi-study.js + gdi-meggy.js); worker.js APP_VERSION 1.0.38→1.0.39.
+  // Antes era Date.now() — causava re-download de ~5MB em toda navegação.
+  const CACHE_VERSION = '39';  // ★ Task CLEANUP: BUG1 fix summary() cache persistence (check cacheGet BEFORE generateAll); BUG2 add .md file support; BUG3 fix MEGGY_AVATAR in chat header (use ${} interpolation in template literal); BUG4 cleanup console.log; BUG5 worker.js copied to DEPLOY_FINAL. CACHE_VERSION 38→39 forces CDN reload of all modular files.
 
   const MODULES = [
     'gdi-core.js',
@@ -98,25 +98,17 @@
   async function bootstrap(){
     // Guard: já carregou? Retorna a promise existente.
     if (_bootstrapped) {
-      console.log('[GDI Loader] já carregado — pulando bootstrap duplicado');
       return _bootstrapPromise;
     }
     // Guard: está carregando agora? Retorna a promise em andamento (dedupe).
     if (_bootstrapPromise) {
-      console.log('[GDI Loader] bootstrap em andamento — dedupe');
       return _bootstrapPromise;
     }
 
     _bootstrapPromise = (async () => {
       const t0 = performance.now();
-      console.log('[GDI Loader] iniciando carga modular — BASE_URL:', BASE_URL);
 
-      // ★★★ WAIT FOR Bus: os módulos (gdi-core, gdi-ui, etc.) dependem de
-      // Bus, que é definido no app.min.js com `const Bus = ...`.
-      // IMPORTANTE: `const` cria binding global mas NÃO propriedade de window,
-      // então checamos `typeof Bus` direto (não window.Bus).
-      // Se o loader disparar antes do app.min.js avaliar, os módulos quebram
-      // com "Bus is not defined". Esperamos até o Bus estar disponível (timeout 10s).
+      // Wait for Bus (defined in app.min.js via `const Bus`)
       const _busWaitT0 = Date.now();
       while (typeof Bus === 'undefined') {
         if (Date.now() - _busWaitT0 > 10000) {
@@ -125,11 +117,9 @@
         }
         await new Promise(r => setTimeout(r, 20));
       }
-      console.log('[GDI Loader] Bus disponível, prosseguindo carga modular');
 
       try{
         await loadScript(moduleUrl('gdi-core.js'), false);
-        console.log('[GDI Loader] ✓ gdi-core.js carregado');
       }catch(e){
         console.error('[GDI Loader] FALHA CRÍTICA no core:', e.message);
         console.error('[GDI Loader] URL tentada:', moduleUrl('gdi-core.js'));
@@ -148,16 +138,16 @@
       let ok = 0, fail = 0;
       results.forEach((r, i) => {
         const name = others[i];
-        if(r.status === 'fulfilled'){ ok++; console.log('[GDI Loader] ✓', name); }
+        if(r.status === 'fulfilled'){ ok++; }
         else{ fail++; console.warn('[GDI Loader] ✗', name, '—', r.reason.message); }
       });
 
       prefetchWorkers();
 
       const t1 = performance.now();
-      console.log(`[GDI Loader] carga completa em ${Math.round(t1-t0)}ms — ${ok} OK, ${fail} falhas`);
+      if(fail > 0) console.warn(`[GDI Loader] carga parcial em ${Math.round(t1-t0)}ms — ${ok} OK, ${fail} falhas`);
 
-      _bootstrapped = true;  // ★ marca como carregado — qualquer chamada futura retorna imediatamente
+      _bootstrapped = true;  // marca como carregado — qualquer chamada futura retorna imediatamente
 
       try{ window.dispatchEvent(new CustomEvent('gdi-extras-ready')); }catch(_){}
     })();
