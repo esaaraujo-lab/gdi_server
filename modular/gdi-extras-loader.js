@@ -29,7 +29,7 @@
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  const CACHE_VERSION = '37';  // ★ Task MANUAL: tab rename "Adicionar matéria" → "Adicionar Cursos"; fix chat header avatar (use concatenation like FAB, not literal `' + MEGGY_AVATAR + '` text inside template literal). CACHE_VERSION 36→37 forces CDN reload of all modular files (gdi-study.js + gdi-meggy.js); worker.js APP_VERSION 1.0.38→1.0.39.
+  const CACHE_VERSION = '38';  // ★ Task MANUAL: tab rename "Adicionar matéria" → "Adicionar Cursos"; fix chat header avatar (use concatenation like FAB, not literal `' + MEGGY_AVATAR + '` text inside template literal). CACHE_VERSION 36→37 forces CDN reload of all modular files (gdi-study.js + gdi-meggy.js); worker.js APP_VERSION 1.0.38→1.0.39.
 
   const MODULES = [
     'gdi-core.js',

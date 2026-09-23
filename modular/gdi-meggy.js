@@ -2574,7 +2574,7 @@
   panel.id='gdi-ai-panel';
   panel.innerHTML=`
     <div id="gdi-ai-head">
-      <div class="gdi-ai-avatar">` + MEGGY_AVATAR + `</div>
+      <div class="gdi-ai-avatar">' + MEGGY_AVATAR + '</div>
       <div class="gdi-ai-info">
         <div class="gdi-ai-name">${MEGGY_NAME}<span class="gdi-ai-tag">${MEGGY_TAG}</span></div>
         <div class="gdi-ai-status"><span class="gdi-ai-dot"></span> verificando…</div>
