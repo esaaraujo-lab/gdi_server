@@ -4382,6 +4382,11 @@
       
       // Servidor retorna {lessons: [...], total: N, ...}
       const lessons = d.lessons || [];
+      if(d.cached){
+        console.log('[Scanner] cache hit! Curso já escaneado por outro aluno — sem re-scan');
+      }else{
+        console.log('[Scanner] scan completo:', lessons.length, 'aulas encontradas');
+      }
       const lessonsData = {
         lessons: lessons,
         scanned: true,
