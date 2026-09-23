@@ -45,8 +45,7 @@
   }
 
   window.file_pdf = function(i,e,t,n,a,c){
-    // ★ Task 27: defensive — Os pode não estar definido se app.min.js não carregou ainda
-    const isMobile = (typeof Os !== 'undefined' && Os.isMobile) || (window.Os && window.Os.isMobile) || false;
+    const isMobile = Os.isMobile;
     const controlsStyle = isMobile ? 'flex-wrap:wrap;gap:8px;padding:8px;justify-content:center;' : '';
     const l = `<div class="gdi-wrap">
   <div class="gdi-viewer">

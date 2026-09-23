@@ -420,7 +420,7 @@
       }
 
       txt+=pageText+'\n\n';
-      if(txt.length>50000)break;  // ★ Task 25: 25k→50k chars (resumos mais profundos)
+      if(txt.length>25000)break;
     }
 
     // ★ fallback: tenta extrair de annotations/form fields
@@ -452,16 +452,9 @@
         let ocrTxt='';
         for(let i=1;i<=ocrMaxPages;i++){
           if(progressCb)progressCb({phase:'ocr-page',page:i,total:ocrMaxPages,progress:0});
-          // ★ Task 28: OCR com try/catch — não trava se Tesseract falhar
-          let pageTxt='';
-          try{
-            pageTxt=await ocrPdfPage(pdfjs,doc,i,(pNum,pTotal,p)=>{
-              if(progressCb)progressCb({phase:'ocr-page',page:pNum,total:pTotal,progress:p});
-            });
-          }catch(ocrErr){
-            console.warn('[Meggy] OCR falhou na página',i,'(não crítico):',ocrErr.message);
-            pageTxt='';
-          }
+          const pageTxt=await ocrPdfPage(pdfjs,doc,i,(pNum,pTotal,p)=>{
+            if(progressCb)progressCb({phase:'ocr-page',page:pNum,total:pTotal,progress:p});
+          });
           ocrTxt+=pageTxt+'\n\n';
           if(ocrTxt.length>20000)break;
         }
@@ -908,17 +901,6 @@
     return callIsa(prompt);
   }
 
-  // ★ Task 25: classifica tipo de material pelo nome
-  function classifyMaterial(name){
-    const n=(name||'').toLowerCase();
-    // Questões/exercícios/simulados → NÃO usar para resumo, só para questões/flashcards
-    if(/quest|exerc|simulad|prova|caderno|lista|test/.test(n))return 'questions';
-    // Resumos já prontos → pular
-    if(/resum|summary/.test(n))return 'skip';
-    // Material/apostila/aula/teoria → usar para resumo
-    return 'study';
-  }
-
   // Gera TODOS os materiais EM PARALELO TOTAL (não em cascata)
   // Cada tarefa usa uma chave NVIDIA diferente (se houver múltiplas)
   async function generateAll(items,lesson,trigger,progressCb){
@@ -986,26 +968,17 @@
         const txt=await extractPdfText(item.url,(p)=>{
           if(progressCb)progressCb(Object.assign({pdf:item.name},p));
         });
-        return {name:item.name,text:txt,type:classifyMaterial(item.name)};
+        return {name:item.name,text:txt};
       }catch(e){
         throw {name:item.name,error:e.message||String(e),url:item.url};
       }
     }));
-    // ★ Task 25: separa materiais de estudo (apostilas) de questões/simulados
-    const studyTexts=[];   // apostilas/teoria → para resumo
-    const questionTexts=[]; // questões/simulados → para gerar novas questões
     results.forEach(r=>{
       if(r.status==='fulfilled'){
-        const {name,text,type}=r.value;
+        const {name,text}=r.value;
         if(text&&text.trim().length>50){
-          if(type==='skip')return; // pula resumos já prontos
-          if(type==='questions'){
-            questionTexts.push({name,text});
-          }else{
-            studyTexts.push({name,text});
-          }
           allText+=(allText?'\n\n---\n\n':'')+text;
-          pdfTexts.push({name,text,type});
+          pdfTexts.push({name,text});
         }
       }else{
         const err=r.reason||{};
@@ -1045,7 +1018,7 @@
     if(!_chainCache[key].summary){
       allTasks.push({
         
-        fn:()=>callIsaKeyed('Você é um professor especialista em concursos públicos. Leia TODO o material abaixo e crie um RESUMO PROFUNDO E DETALHADO em Markdown.\n\nREQUISITOS:\n- Mínimo 2000 caracteres (NÃO seja breve)\n- Estruture com ## títulos e ### subtítulos\n- Para CADA tópico: explique o conceito, dê EXEMPLOS práticos, e destaque pegadinhas de prova\n- Use **negrito** para palavras-chave e dispositivos legais\n- Use listas com marcadores para enumerações\n- Inclua uma seção ## Pegadinhas de Prova no final\n- Inclua uma seção ## Resumo Rápido com 5-10 bullets dos pontos mais importantes\n\nNÃO omita nenhum tema. Seja PROFUNDO, não conciso.\n\nMaterial:\n'+allText.slice(0,40000),0)
+        fn:()=>callIsaKeyed('Leia este material de aula e faça um resumo COMPLETO e estruturado em Markdown. Cubra TODOS os tópicos. Organize em seções com ## títulos, use **negrito** para destaques e listas. Não omita nenhum tema:\n\n'+allText.slice(0,20000),0)
           .then(r=>{if(r&&r.trim()){_chainCache[key].summary=r;saveIsaSummary(lesson,r,_coursePath,_subject);}})
           .catch(e=>console.warn('[Meggy] resumo falhou',e.message))
       });
@@ -1078,13 +1051,7 @@
       pdfTexts.forEach((pdf)=>{
         allTasks.push({
           
-          fn:()=>{
-            // ★ Task 25: usa material de estudo + questões existentes como base
-            const studyForQ=studyTexts.map(s=>s.text).join('\n\n').slice(0,20000);
-            const existingQ=questionTexts.map(q=>q.text).join('\n\n').slice(0,10000);
-            const baseText=studyForQ||(pdf.text||'').slice(0,15000);
-            const extraContext=existingQ?('\n\n--- QUESTÕES EXISTENTES NO MATERIAL (use como inspiração):\n'+existingQ):'';
-            return callIsaKeyed('Você é um examinador de concurso público brasileiro experiente. Baseado neste material de estudo, gere 10 questões INÉDITAS de concurso em JSON array. Misture:\n- 6 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"legalText":"...","explanation":"...","fundamentacao":"..."}\n- 4 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"legalText":"...","explanation":"...","fundamentacao":"..."}\n\nCAMPOS:\n- statement: enunciado claro, contexto completo\n- legalText: o dispositivo legal/dispositivo normativo aplicável\n- explanation: explicação técnica do acerto/erro\n- fundamentacao: fundamentação didática completa\n\nSem comentários, só JSON array válido.\n\n'+baseText+extraContext,0)
+          fn:()=>callIsaKeyed('Você é um examinador de concurso público brasileiro experiente. Baseado neste material, gere 10 questões de concurso em JSON array. Misture:\n- 6 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"legalText":"...","explanation":"...","fundamentacao":"..."}\n- 4 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"legalText":"...","explanation":"...","fundamentacao":"..."}\n\nCAMPOS:\n- statement: enunciado claro, contexto completo\n- legalText: o dispositivo legal/dispositivo normativo aplicável (ex: "art. 5º, CF"; "Súmula Vinculante 14"; "Lei 8.906/94, art. 7º")\n- explanation: explicação técnica do acerto/erro (regra violada ou aplicada)\n- fundamentacao: fundamentação didática completa, explicando por que a alternativa correta está correta E por que as outras estão erradas\n\nSem comentários, só JSON.\n\n'+pdf.text.slice(0,15000),0)
             .then(resp=>{
               if(!resp)return;
               try{
@@ -1108,7 +1075,6 @@
               }catch(e){console.warn('[Meggy] parse questões falhou',e.message);}
             })
             .catch(e=>console.warn('[Meggy] questões falharam',e.message))
-          }
         });
       });
     }
@@ -2333,7 +2299,7 @@
   if(window.__gdiAiWidget)return;window.__gdiAiWidget=true;
 
   const MEGGY_NAME='Meggy';
-  const MEGGY_AVATAR='🐩';
+  const MEGGY_AVATAR='<svg viewBox="0 0 100 100" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="bgGlow" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#FFF5F7"/><stop offset="70%" stop-color="#FFE4EC"/><stop offset="100%" stop-color="#FFD8E4"/></radialGradient><linearGradient id="furShade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#FFFFFF"/><stop offset="100%" stop-color="#EAEFEF"/></linearGradient><linearGradient id="earShade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#FFFFFF"/><stop offset="100%" stop-color="#E2E8E8"/></linearGradient></defs><circle cx="50" cy="50" r="47" fill="url(#bgGlow)" stroke="#F8C3D1" stroke-width="1.5"/><g><path d="M 28 36 C 12 34, 10 50, 12 62 C 14 74, 22 80, 29 76 C 34 72, 33 60, 31 52 C 30 46, 32 40, 28 36 Z" fill="url(#earShade)" stroke="#D6DFDF" stroke-width="0.8" stroke-linejoin="round"/><path d="M 18 48 C 14 56, 18 68, 25 72" fill="none" stroke="#CBD5D5" stroke-width="0.8" stroke-linecap="round"/><path d="M 22 42 C 18 52, 22 62, 27 65" fill="none" stroke="#CBD5D5" stroke-width="0.7" stroke-linecap="round"/><path d="M 72 36 C 88 34, 90 50, 88 62 C 86 74, 78 80, 71 76 C 66 72, 67 60, 69 52 C 70 46, 68 40, 72 36 Z" fill="url(#earShade)" stroke="#D6DFDF" stroke-width="0.8" stroke-linejoin="round"/><path d="M 82 48 C 86 56, 82 68, 75 72" fill="none" stroke="#CBD5D5" stroke-width="0.8" stroke-linecap="round"/><path d="M 78 42 C 82 52, 78 62, 73 65" fill="none" stroke="#CBD5D5" stroke-width="0.7" stroke-linecap="round"/><path d="M 30 42 C 24 52, 26 66, 38 71 C 44 73, 56 73, 62 71 C 74 66, 76 52, 70 42 C 65 35, 35 35, 30 42 Z" fill="url(#furShade)"/><path d="M 32 36 C 26 28, 30 18, 38 17 C 42 14, 58 14, 62 17 C 70 18, 74 28, 68 36 C 62 40, 38 40, 32 36 Z" fill="#FFFFFF" stroke="#D6DFDF" stroke-width="0.8"/><path d="M 36 28 C 40 22, 48 22, 50 26" fill="none" stroke="#D0D9D9" stroke-width="0.8" stroke-linecap="round"/><path d="M 50 22 C 54 20, 60 22, 63 27" fill="none" stroke="#D0D9D9" stroke-width="0.8" stroke-linecap="round"/><g><path d="M 48 24 C 42 19, 39 23, 44 27 C 46 28, 48 26, 48 24 Z" fill="#FF7B95"/><path d="M 52 24 C 58 19, 61 23, 56 27 C 54 28, 52 26, 52 24 Z" fill="#FF7B95"/><ellipse cx="50" cy="24.8" rx="2" ry="1.8" fill="#E64A68"/></g><path d="M 39 52 C 38 64, 62 64, 61 52 C 61 46, 39 46, 39 52 Z" fill="#FFFFFF"/><g><ellipse cx="40" cy="46" rx="3.2" ry="3.5" fill="#2A1B1E"/><circle cx="38.8" cy="44.8" r="1.1" fill="#FFFFFF"/><circle cx="41" cy="47.2" r="0.5" fill="#FFFFFF" opacity="0.8"/><path d="M 36.8 44 C 37.5 41.5, 41 41.5, 42.5 43" fill="none" stroke="#2A1B1E" stroke-width="0.9" stroke-linecap="round"/></g><g><ellipse cx="60" cy="46" rx="3.2" ry="3.5" fill="#2A1B1E"/><circle cx="58.8" cy="44.8" r="1.1" fill="#FFFFFF"/><circle cx="61" cy="47.2" r="0.5" fill="#FFFFFF" opacity="0.8"/><path d="M 57.5 43 C 59 41.5, 62.5 41.5, 63.2 44" fill="none" stroke="#2A1B1E" stroke-width="0.9" stroke-linecap="round"/></g><ellipse cx="34" cy="53" rx="3.8" ry="2.2" fill="#FF94A8" opacity="0.35"/><ellipse cx="66" cy="53" rx="3.8" ry="2.2" fill="#FF94A8" opacity="0.35"/><path d="M 50 51.5 C 48.5 49.5, 45 50, 45.5 52.5 C 46 55, 49 57, 50 58.5 C 51 57, 54 55, 54.5 52.5 C 55 50, 51.5 49.5, 50 51.5 Z" fill="#5E3238"/><ellipse cx="48.5" cy="51.8" rx="0.9" ry="0.5" fill="#FFFFFF" opacity="0.6" transform="rotate(-20 48.5 51.8)"/><path d="M 50 58.5 L 50 60" stroke="#5E3238" stroke-width="1" stroke-linecap="round"/><path d="M 44.5 60.5 C 47 62.5, 49.5 61, 50 60 C 50.5 61, 53 62.5, 55.5 60.5" fill="none" stroke="#5E3238" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></g></svg>';
   const MEGGY_TAG='— a poodle tutora';
   const ISA_SYS='Você é a Meggy — uma poodle tutora de estudos brasileira, ' +
     'amigável, calorosa e didática (mascote do projeto, sempre acompanhada do emoji 🐩). ' +
@@ -2351,7 +2317,7 @@
   box-shadow:0 8px 28px -6px rgba(255,139,159,.5),0 0 0 1px rgba(255,255,255,.12);
   transition:transform .18s,box-shadow .18s;}
 #gdi-ai-fab:hover{transform:scale(1.08) translateY(-2px);box-shadow:0 12px 36px -6px rgba(255,139,159,.6);}
-#gdi-ai-fab .gdi-ai-fab-ico{font-size:26px;line-height:1;}
+#gdi-ai-fab .gdi-ai-fab-ico{width:40px;height:40px;line-height:1;display:flex;align-items:center;justify-content:center;}#gdi-ai-fab .gdi-ai-fab-ico svg{width:100%;height:100%;border-radius:50%;}
 #gdi-ai-fab-badge{position:absolute;top:-2px;right:-2px;width:16px;height:16px;border-radius:50%;
   background:#5ddeda;border:2px solid var(--ferreto-bg,#070910);display:none;}
 #gdi-ai-fab-badge.show{display:block;animation:gdi-ai-pulse 1.6s ease infinite;}
@@ -2370,8 +2336,9 @@
   border-bottom:1px solid var(--ferreto-border,rgba(255,255,255,.09));}
 #gdi-ai-head .gdi-ai-avatar{width:38px;height:38px;border-radius:50%;flex:none;
   background:linear-gradient(135deg,#ff8b9f,#c026d3);display:flex;align-items:center;justify-content:center;
-  color:#fff;font-size:22px;line-height:1;
+  color:#fff;line-height:1;overflow:hidden;
   box-shadow:0 0 0 2px rgba(255,255,255,.1) inset;}
+#gdi-ai-head .gdi-ai-avatar svg{width:100%;height:100%;border-radius:50%;}
 #gdi-ai-head .gdi-ai-info{flex:1;min-width:0;}
 #gdi-ai-head .gdi-ai-name{font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-size:15px;font-weight:700;color:var(--ferreto-text,#f3f5fa);line-height:1.1;}
 #gdi-ai-head .gdi-ai-name .gdi-ai-tag{font-size:10px;font-weight:500;color:var(--ferreto-secondary,#5ddeda);margin-left:5px;letter-spacing:.02em;}
@@ -2491,7 +2458,7 @@
   const root=GDI_ROOT();
   const fab=document.createElement('button');
   fab.id='gdi-ai-fab';fab.title='Meggy 🐩 · sua poodle tutora de estudos';
-  fab.innerHTML='<span class="gdi-ai-fab-ico">🐩</span><span id="gdi-ai-fab-badge"></span>';
+  fab.innerHTML='<span class="gdi-ai-fab-ico">${MEGGY_AVATAR}</span><span id="gdi-ai-fab-badge"></span>';
   root.appendChild(fab);
 
   const panel=document.createElement('div');

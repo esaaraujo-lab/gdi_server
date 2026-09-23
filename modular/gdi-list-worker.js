@@ -53,7 +53,7 @@ async function handleList({ id, path, pw, probeOnly }) {
   let idx = 0;
   for (let guard = 0; guard < MAX_PAGES; guard++) {
     const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 60000)  // ★ Task 26: 30s→60s;
+    const to = setTimeout(() => ctrl.abort(), 30000);
     let r;
     try {
       r = await fetch(path, {
@@ -142,7 +142,7 @@ async function listAllFilesInternal(path, pw) {
   let token = '', idx = 0;
   for (let guard = 0; guard < MAX_PAGES; guard++) {
     const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 60000)  // ★ Task 26: 30s→60s;
+    const to = setTimeout(() => ctrl.abort(), 30000);
     let r;
     try {
       r = await fetch(path, {

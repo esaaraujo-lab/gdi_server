@@ -100,8 +100,6 @@ body.gdi-fv .gdi-player-wrap iframe{
    Solução: o wrap tem aspect-ratio:16/9 (já definido no app.min.js) e o vídeo
    preenche 100% do wrap com object-fit:contain. Estas regras garantem que os
    wrappers de Plyr/video.js/DPlayer também preencham o wrap corretamente. */
-/* ★ Task 25: split mode — player fills the 58% column without black bars */
-.gdi-study-grid .gdi-player-wrap{width:100%!important;height:auto!important;aspect-ratio:16/9!important;}
 .gdi-study-grid .gdi-player-wrap video,
 .gdi-study-grid .gdi-player-wrap .plyr,
 .gdi-study-grid .gdi-player-wrap .plyr__video-wrapper,
