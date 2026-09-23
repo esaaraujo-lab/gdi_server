@@ -868,6 +868,8 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     tabsEl.innerHTML='<span class="gdi-mat-loading">Buscando PDFs da aula\u2026</span>';
     if(statusEl)statusEl.textContent='';
     bodyEl.innerHTML='';
+    // ★ Task FINAL: busca PDFs, TXTs (transcrições) e HTMLs (ebooks/resumos IA)
+    const isMaterial=x=>{const ext=(x.fileExtension||'').toLowerCase();const mt=(x.mimeType||'').toLowerCase();return ext==='pdf'||/pdf/.test(mt)||ext==='txt'||ext==='html'||ext==='htm';};
     const isPdf=x=>(x.fileExtension||'').toLowerCase()==='pdf'||/pdf/i.test(x.mimeType||'');
     try{
       let found=[];
@@ -899,16 +901,16 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
             });
         }
       }
-      found=here.filter(isPdf);
+      found=here.filter(isMaterial);
       if(!found.length){
         const subs=here.filter(x=>x.mimeType==='application/vnd.google-apps.folder').slice(0,20);
         for(const sf of subs){
           const fp=fPath+encodeURIComponent(sf.name)+'/';
-          found=found.concat((await gdiListAllFiles(fp,gdiGetPw(fp))).filter(isPdf));
+          found=found.concat((await gdiListAllFiles(fp,gdiGetPw(fp))).filter(isMaterial));
           if(found.length)break;
         }
       }
-      if(!found.length)found=(await gdiListAllFiles(pPath,gdiGetPw(pPath))).filter(isPdf);
+      if(!found.length)found=(await gdiListAllFiles(pPath,gdiGetPw(pPath))).filter(isMaterial);
       const seen=new Set();const uniq=[];
       found.forEach(x=>{if(!seen.has(x.name)){seen.add(x.name);uniq.push(x)}});
       const pdfs=uniq.slice(0,12);

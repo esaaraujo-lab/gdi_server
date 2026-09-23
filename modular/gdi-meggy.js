@@ -918,6 +918,83 @@
     return 'study';
   }
 
+  // ★ Task FINAL: extract text from .txt files (transcriptions)
+  // Strips code blocks, script tags, and other noise
+  async function extractTextFile(url){
+    try{
+      const r=await fetch(url,{credentials:'same-origin'});
+      if(!r.ok)return '';
+      let txt=await r.text();
+      // Strip code blocks (```...```)
+      txt=txt.replace(/```[\s\S]*?```/g,'');
+      // Strip inline code (`...`)
+      txt=txt.replace(/`[^`]*`/g,'');
+      // Strip script/style content if present
+      txt=txt.replace(/<script[\s\S]*?<\/script>/gi,'');
+      txt=txt.replace(/<style[\s\S]*?<\/style>/gi,'');
+      // Normalize whitespace
+      txt=txt.replace(/\r\n/g,'\n').replace(/\t/g,'  ').replace(/\n{3,}/g,'\n\n').trim();
+      return txt;
+    }catch(e){
+      console.warn('[Meggy] extractTextFile falhou:',e.message);
+      return '';
+    }
+  }
+
+  // ★ Task FINAL: extract text from .html files (ebooks, AI summaries)
+  // Strips HTML tags, scripts, styles, and converts to plain text
+  async function extractHtmlText(url){
+    try{
+      const r=await fetch(url,{credentials:'same-origin'});
+      if(!r.ok)return '';
+      let html=await r.text();
+      // Strip script/style
+      html=html.replace(/<script[\s\S]*?<\/script>/gi,'');
+      html=html.replace(/<style[\s\S]*?<\/style>/gi,'');
+      html=html.replace(/<noscript[\s\S]*?<\/noscript>/gi,'');
+      // Convert common HTML to text
+      html=html.replace(/<br\s*\/?>/gi,'\n');
+      html=html.replace(/<\/p>/gi,'\n\n');
+      html=html.replace(/<\/div>/gi,'\n');
+      html=html.replace(/<\/li>/gi,'\n');
+      html=html.replace(/<li[^>]*>/gi,'- ');
+      html=html.replace(/<h[1-6][^>]*>/gi,'\n## ');
+      html=html.replace(/<\/h[1-6]>/gi,'\n\n');
+      // Strip all remaining HTML tags
+      html=html.replace(/<[^>]+>/g,'');
+      // Decode HTML entities
+      html=html.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&nbsp;/g,' ');
+      // Normalize whitespace
+      html=html.replace(/\r\n/g,'\n').replace(/\t/g,'  ').replace(/\n{3,}/g,'\n\n').trim();
+      return html;
+    }catch(e){
+      console.warn('[Meggy] extractHtmlText falhou:',e.message);
+      return '';
+    }
+  }
+
+  // ★ Task FINAL: classify file type by extension
+  function getFileType(name){
+    const n=(name||'').toLowerCase();
+    if(/\.txt$/i.test(n))return 'txt';
+    if(/\.html?$/.test(n))return 'html';
+    if(/\.pdf$/i.test(n))return 'pdf';
+    return 'other';
+  }
+
+  // ★ Task FINAL: priority order for material extraction
+  // 1. .txt (transcrição) — highest priority
+  // 2. .html (ebook/resumo IA) — second priority
+  // 3. .pdf (material da aula) — third priority
+  // 4. OCR (last resort — only if no other source)
+  function materialPriority(name){
+    const t=getFileType(name);
+    if(t==='txt')return 0;   // highest
+    if(t==='html')return 1;
+    if(t==='pdf')return 2;
+    return 3;
+  }
+
   // Gera TODOS os materiais EM PARALELO TOTAL (não em cascata)
   // Cada tarefa usa uma chave NVIDIA diferente (se houver múltiplas)
   async function generateAll(items,lesson,trigger,progressCb){
@@ -979,12 +1056,23 @@
     const pdfErrors=[]; // ★ coleta erros por PDF para diagnóstico
     // ★ Sprint 6: paraleliza extração (era sequencial, demorava 4x mais)
     if(progressCb)progressCb({phase:'extract-start',total:items.length});
-    const results=await Promise.allSettled(items.map(async item=>{
+    // ★ Task FINAL: extract from ALL file types (txt, html, pdf) — not just PDFs
+    // Priority: .txt > .html > .pdf > OCR
+    const sortedItems=items.slice().sort((a,b)=>materialPriority(a.name)-materialPriority(b.name));
+    const results=await Promise.allSettled(sortedItems.map(async item=>{
       try{
         if(progressCb)progressCb({phase:'extract',pdf:item.name});
-        const txt=await extractPdfText(item.url,(p)=>{
-          if(progressCb)progressCb(Object.assign({pdf:item.name},p));
-        });
+        const ftype=getFileType(item.name);
+        let txt='';
+        if(ftype==='txt'){
+          txt=await extractTextFile(item.url);
+        }else if(ftype==='html'){
+          txt=await extractHtmlText(item.url);
+        }else{
+          txt=await extractPdfText(item.url,(p)=>{
+            if(progressCb)progressCb(Object.assign({pdf:item.name},p));
+          });
+        }
         return {name:item.name,text:txt};
       }catch(e){
         throw {name:item.name,error:e.message||String(e),url:item.url};
