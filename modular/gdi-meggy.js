@@ -2457,8 +2457,8 @@
   // UI no <html> (fora do body) — sobrevive a trocas de página
   const root=GDI_ROOT();
   const fab=document.createElement('button');
-  fab.id='gdi-ai-fab';fab.title='Meggy 🐩 · sua poodle tutora de estudos';
-  fab.innerHTML='<span class="gdi-ai-fab-ico">${MEGGY_AVATAR}</span><span id="gdi-ai-fab-badge"></span>';
+  fab.id='gdi-ai-fab';fab.title='Meggy';
+  fab.innerHTML='<span class="gdi-ai-fab-ico">'+MEGGY_AVATAR+'</span><span id="gdi-ai-fab-badge"></span>';
   root.appendChild(fab);
 
   const panel=document.createElement('div');
