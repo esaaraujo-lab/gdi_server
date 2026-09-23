@@ -2544,7 +2544,11 @@
             ${drive?`<small style="color:var(--ferreto-secondary,#5ddeda);font-size:11px;"><i class="bi bi-hdd"></i> ${escHtml(drive)}</small>`:''}
           </div>
         </div>
-        <button id="gdi-detail-hide" class="gdi-mode-btn" style="font-size:11px;color:#ff8b8b;border-color:rgba(255,107,107,.3);" title="Ocultar curso"><i class="bi bi-eye-slash"></i> Ocultar</button>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+          <button id="gdi-detail-restart-scan" data-course-key="${escHtml(c.key)}" style="font-size:12px;color:var(--ferreto-secondary,#5ddeda);border:1px solid rgba(93,222,218,.3);border-radius:8px;cursor:pointer;padding:6px 10px;background:transparent;" title="Reiniciar scanner"><i class="bi bi-arrow-repeat"></i> Reiniciar Scan</button>
+          <button id="gdi-detail-remove" data-course-key="${escHtml(c.key)}" style="font-size:12px;color:#ff8b8b;border:1px solid rgba(255,107,107,.3);border-radius:8px;cursor:pointer;padding:6px 10px;background:transparent;" title="Remover curso"><i class="bi bi-trash3"></i> Remover</button>
+          <button id="gdi-detail-hide" class="gdi-mode-btn" style="font-size:11px;color:#ff8b8b;border-color:rgba(255,107,107,.3);" title="Ocultar curso"><i class="bi bi-eye-slash"></i> Ocultar</button>
+        </div>
       </div>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:18px;">
@@ -2680,6 +2684,60 @@
         hideCourse(c.key);
         showToast('Curso ocultado');
         renderCursos(box);
+      }
+    };
+    // ★ Task FINAL / Fix 2c: botão "Remover" — remove o curso permanentemente
+    //   do localStorage (não apenas oculta). Pede confirmação via modal.
+    box.querySelector('#gdi-detail-remove').onclick=async ()=>{
+      const ok=await window.gdiModal({
+        title:'Remover curso',
+        message:'Remover "'+name+'" definitivamente da sua lista? Esta ação não pode ser desfeita. (Ocultar é reversível; Remover apaga o registro local.)',
+        confirmText:'Remover',
+        cancelText:'Cancelar',
+        danger:true
+      });
+      if(!ok) return;
+      try{
+        const LS_MANUAL_RM='gdi-manual-courses-v1';
+        const manual=lsGet(LS_MANUAL_RM,[]);
+        const next=manual.filter(m=>!m || m.path!==c.key);
+        lsSet(LS_MANUAL_RM,next);
+        // limpa estado do scanner e cache de aulas
+        if(window.gdiCourseScanner){
+          try{window.gdiCourseScanner.clearScanState(c.key);}catch(_){}
+        }
+        // limpa também da lista de ocultos (se estava oculto)
+        try{unhideCourse(c.key);}catch(_){}
+        showToast('Curso removido');
+        renderCursos(box);
+      }catch(e){
+        showToast('Erro ao remover: '+(e&&e.message||e));
+      }
+    };
+    // ★ Task FINAL / Fix 2d: botão "Reiniciar Scan" — limpa o estado do
+    //   scanner e dispara um novo scan imediatamente.
+    box.querySelector('#gdi-detail-restart-scan').onclick=function(){
+      const restartBtn=box.querySelector('#gdi-detail-restart-scan');
+      const ck=(restartBtn && restartBtn.dataset && restartBtn.dataset.courseKey) || c.key;
+      try{
+        if(window.gdiCourseScanner){
+          window.gdiCourseScanner.clearScanState(ck);
+          window.gdiCourseScanner.startScan(ck, function(state, lessonsData){
+            try{
+              if(state.status==='done' || state.status==='error'){
+                const fresh=collectCourses();
+                const fc=fresh.find(x=>x.key===c.key);
+                if(fc) openCourseDetail(box, fc);
+                else try{ openCourseDetail(box, c); }catch(__){}
+              }
+            }catch(_){}
+          });
+          showToast('Scan reiniciado');
+        }else{
+          showToast('Scanner indisponível');
+        }
+      }catch(e){
+        showToast('Erro ao reiniciar scan: '+(e&&e.message||e));
       }
     };
     const contBtn=box.querySelector('#gdi-detail-continue');
@@ -4471,9 +4529,19 @@
     // Check if already scanning (constraint: no multiple instances per course)
     const existing = getScanState(courseKey);
     if(existing && existing.status === 'scanning'){
-      console.log('[Scanner] scan já em andamento para', courseKey, '— não iniciando duplicata');
-      try{ if(onProgress) onProgress(existing, getLessons(courseKey)); }catch(_){}
-      return;
+      // ★ Task FINAL / Fix 2b: se o scan está "preso" há mais de 5 minutos,
+      // provavelmente travou (página fechada no meio, erro não capturado, etc).
+      // Nesse caso, limpa o estado e reinicia. Antes, o scanner ficava preso
+      // para sempre mostrando "scan já em andamento".
+      const ageMin = existing.startedAt ? (Date.now() - existing.startedAt) / 60000 : 999;
+      if(ageMin > 5){
+        console.log('[Scanner] scan travado há', Math.round(ageMin), 'min — reiniciando', courseKey);
+        clearScanState(courseKey);
+      } else {
+        console.log('[Scanner] scan já em andamento para', courseKey, '— não iniciando duplicata');
+        try{ if(onProgress) onProgress(existing, getLessons(courseKey)); }catch(_){}
+        return;
+      }
     }
     // Fire-and-forget — errors captured and saved to state
     scanCourse(courseKey, onProgress).catch(e=>{
@@ -4489,6 +4557,11 @@
   }
 
   // Resume any interrupted scans on page load (e.g., user reloaded mid-scan)
+  // ★ Task FINAL / Fix 2a: SEMPRE limpa estado "scanning" preso e reinicia.
+  //   Antes, o status 'scanning' era mantido — mas se a página foi fechada no
+  //   meio do scan, o estado fica preso para sempre ("scan já em andamento").
+  //   Agora, qualquer 'scanning' residual ao recarregar a página é tratado
+  //   como travado: limpa e reinicia.
   function resumeInterruptedScans(){
     try{
       const manual = JSON.parse(localStorage.getItem('gdi-manual-courses-v1') || '[]');
@@ -4497,8 +4570,8 @@
         if(!m || !m.path) continue;
         const state = getScanState(m.path);
         if(state && state.status === 'scanning'){
-          // Status was 'scanning' when page unloaded — resume
-          console.log('[Scanner] resumindo scan interrompido:', m.path);
+          console.log('[Scanner] scan preso detectado — limpando e reiniciando:', m.path);
+          clearScanState(m.path);
           startScan(m.path, null);
         }
       }

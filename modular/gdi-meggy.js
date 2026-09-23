@@ -385,7 +385,7 @@
     }catch(e){
       throw new Error('pdf.js não conseguiu abrir o PDF: '+(e&&e.message||e));
     }
-    const n=Math.min(doc.numPages,60);
+    const n=Math.min(doc.numPages,100);
     let txt='';
 
     for(let i=1;i<=n;i++){
@@ -420,7 +420,7 @@
       }
 
       txt+=pageText+'\n\n';
-      if(txt.length>25000)break;
+      if(txt.length>50000)break;
     }
 
     // ★ fallback: tenta extrair de annotations/form fields
@@ -452,17 +452,23 @@
         let ocrTxt='';
         for(let i=1;i<=ocrMaxPages;i++){
           if(progressCb)progressCb({phase:'ocr-page',page:i,total:ocrMaxPages,progress:0});
-          const pageTxt=await ocrPdfPage(pdfjs,doc,i,(pNum,pTotal,p)=>{
-            if(progressCb)progressCb({phase:'ocr-page',page:pNum,total:pTotal,progress:p});
-          });
+          let pageTxt='';
+          try{
+            pageTxt=await ocrPdfPage(pdfjs,doc,i,(pNum,pTotal,p)=>{
+              if(progressCb)progressCb({phase:'ocr-page',page:pNum,total:pTotal,progress:p});
+            });
+          }catch(ocrErr){
+            console.warn('[Meggy] OCR falhou na página',i,'(não crítico):',ocrErr.message);
+            pageTxt='';
+          }
           ocrTxt+=pageTxt+'\n\n';
-          if(ocrTxt.length>20000)break;
+          if(ocrTxt.length>50000)break;
         }
         if(ocrTxt.trim().length>50){
           // sucesso! OCR extraiu texto
           try{doc.destroy();}catch(_){}
           if(progressCb)progressCb({phase:'ocr-done',chars:ocrTxt.length});
-          return ocrTxt.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim().slice(0,20000);
+          return ocrTxt.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim().slice(0,50000);
         }
       }catch(ocrErr){
         console.warn('[Meggy] OCR falhou:',ocrErr.message);
@@ -473,7 +479,7 @@
     try{doc.destroy();}catch(_){}
     // limpa texto: remove espaços excessivos, decodifica entidades
     txt=txt.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim();
-    const result=txt.slice(0,20000);
+    const result=txt.slice(0,50000);
     if(!result||result.length<50){
       // ★ Erro descritivo: PDF provavelmente é escaneado (só imagens)
       // e o OCR também falhou ou não retornou texto útil
@@ -901,6 +907,17 @@
     return callIsa(prompt);
   }
 
+  // ★ Classifica material pelo nome do arquivo (Task FINAL / Fix 1c)
+  //   - 'questions': arquivos de questões/exercícios/simulados/provas
+  //   - 'skip':      arquivos de resumo (já são resumo — não processar)
+  //   - 'study':     material de estudo padrão (PDFs de aula/apostila)
+  function classifyMaterial(name){
+    const n=(name||'').toLowerCase();
+    if(/quest|exerc|simulad|prova|caderno|lista|test/.test(n))return 'questions';
+    if(/resum|summary/.test(n))return 'skip';
+    return 'study';
+  }
+
   // Gera TODOS os materiais EM PARALELO TOTAL (não em cascata)
   // Cada tarefa usa uma chave NVIDIA diferente (se houver múltiplas)
   async function generateAll(items,lesson,trigger,progressCb){
@@ -1017,8 +1034,12 @@
     // tarefa 1: resumo
     if(!_chainCache[key].summary){
       allTasks.push({
-        
-        fn:()=>callIsaKeyed('Leia este material de aula e faça um resumo COMPLETO e estruturado em Markdown. Cubra TODOS os tópicos. Organize em seções com ## títulos, use **negrito** para destaques e listas. Não omita nenhum tema:\n\n'+allText.slice(0,20000),0)
+        // ★ Task FINAL / Fix 1d: prompt reformulado para resumo PROFUNDO e DETALHADO
+        //   - mínimo 2000 caracteres (era ~500)
+        //   - exige ## títulos + ### subtítulos + EXEMPLOS práticos + pegadinhas
+        //   - seções ## Pegadinhas de Prova e ## Resumo Rápido ao final
+        //   - usa até 40000 chars do material (era 20000)
+        fn:()=>callIsaKeyed('Você é um professor especialista em concursos públicos. Leia TODO o material abaixo e crie um RESUMO PROFUNDO E DETALHADO em Markdown.\n\nREQUISITOS:\n- Mínimo 2000 caracteres (NÃO seja breve)\n- Estruture com ## títulos e ### subtítulos\n- Para CADA tópico: explique o conceito, dê EXEMPLOS práticos, e destaque pegadinhas de prova\n- Use **negrito** para palavras-chave e dispositivos legais\n- Use listas com marcadores para enumerações\n- Inclua uma seção ## Pegadinhas de Prova no final\n- Inclua uma seção ## Resumo Rápido com 5-10 bullets dos pontos mais importantes\n\nNÃO omita nenhum tema. Seja PROFUNDO, não conciso.\n\nMaterial:\n'+allText.slice(0,40000),0)
           .then(r=>{if(r&&r.trim()){_chainCache[key].summary=r;saveIsaSummary(lesson,r,_coursePath,_subject);}})
           .catch(e=>console.warn('[Meggy] resumo falhou',e.message))
       });
