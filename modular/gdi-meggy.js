@@ -939,6 +939,12 @@
   //   - 'study':     material de estudo padrão (PDFs de aula/apostila)
   function classifyMaterial(name){
     const n=(name||'').toLowerCase();
+    // ★ FIX v53 (Task TRANSC): "transcri" NO NOME → 'transcription' (não é resumo, é material de estudo principal)
+    //   Antes, qualquer arquivo com "resum|summary" era 'skip' — mas isso impedia o Meggy de ler transcrições.
+    //   Agora: transcrição tem prioridade MÁXIMA (é o material principal da aula).
+    if(/transcri/.test(n))return 'transcription';  // ★ prioridade máxima — é o conteúdo da aula
+    // ★ v53: só pula se for .md COM "resumo/summary" no nome (já é um resumo, não precisa re-processar)
+    if(/\.md$/.test(n)&&/resum|summary/.test(n))return 'skip';
     if(/quest|exerc|simulad|prova|caderno|lista|test/.test(n))return 'questions';
     if(/resum|summary/.test(n))return 'skip';
     return 'study';
@@ -1003,9 +1009,21 @@
     let allText='';
     const pdfTexts=[];
     const pdfErrors=[]; // ★ coleta erros por PDF para diagnóstico
+    // ★ FIX v53 (Task TRANSC): ordena items para TRANSCRIÇÃO vir primeiro.
+    //   Antes, a ordem era a que veio do M9 (sort por match/ord/name) — o que
+    //   podia fazer o Meggy processar "002 - Ebook" antes de "001 - Transcrição".
+    //   Agora: transcrição sempre primeira (é o material principal da aula),
+    //   depois PDFs, depois outros. O allText começa com a transcrição → o
+    //   LLM tem o conteúdo real da aula como contexto principal.
+    const sortedItems=items.slice().sort((a,b)=>{
+      const aT=/transcri/i.test(a.name||'')?0:1;
+      const bT=/transcri/i.test(b.name||'')?0:1;
+      if(aT!==bT)return aT-bT;  // transcrição primeiro
+      return 0;  // mantém ordem original para o resto
+    });
     // ★ Sprint 6: paraleliza extração (era sequencial, demorava 4x mais)
-    if(progressCb)progressCb({phase:'extract-start',total:items.length});
-    const results=await Promise.allSettled(items.map(async item=>{
+    if(progressCb)progressCb({phase:'extract-start',total:sortedItems.length});
+    const results=await Promise.allSettled(sortedItems.map(async item=>{
       try{
         if(progressCb)progressCb({phase:'extract',pdf:item.name});
         // ★ FIX v51 (Task MD-EXTRACT): despacha por tipo de arquivo.

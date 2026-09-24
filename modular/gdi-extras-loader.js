@@ -29,7 +29,7 @@
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  const CACHE_VERSION = '46';  // ★ v1.0.51 (Task MD-EXTRACT): gdi-meggy.js — FIX "Invalid PDF structure" when Meggy tries to extract .md/.txt/.html files as PDFs. Added getFileType() + extractTextFile() functions. generateAll() now dispatches by type: PDF → extractPdfText (pdf.js + OCR), MD/TXT/HTML → extractTextFile (fetch direto, sem pdf.js). generateQuestions() also fixed. Bump 45→46 to force CDN reload.
+  const CACHE_VERSION = '48';  // ★ v1.0.53 (Task TRANSC): gdi-core.js classify() agora rotula abas por CONTEÚDO do nome: "Transcrição" se tem "transcri", "Resumo" se tem "resumo/summary", "Ebook" se tem "ebook", senão por extensão (Markdown/Texto/HTML/Material). Transcrição tem prioridade máxima (ord:0) para aparecer primeiro na aba. gdi-meggy.js classifyMaterial() agora retorna 'transcription' para arquivos com "transcri" no nome (antes eram 'skip' por cair no regex resum|summary). generateAll() ordena items com transcrição primeiro — o allText começa com a transcrição → LLM tem o conteúdo real da aula como contexto principal. Bump 47→48.
 
   const MODULES = [
     'gdi-core.js',

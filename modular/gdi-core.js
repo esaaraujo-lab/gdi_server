@@ -806,35 +806,60 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     return escLocal(txt).replace(/\n/g,'<br>');
   }
   // ★ FIX v49: classify now detects MD/TXT/HTML files and assigns appropriate icons.
+  // ★ FIX v53 (Task TRANSC): label por CONTEÚDO do nome, não só extensão.
+  //   - Arquivo com "transcri" no nome → "Transcrição" (prioriza conteúdo sobre extensão)
+  //   - Arquivo com "resumo"/"summary" no nome → "Resumo"
+  //   - Arquivo com "ebook" no nome → "Ebook"
+  //   - Depois checa extensão para ícone apropriado (md/txt/html/pdf)
   function classify(name){
     const n2=name.toLowerCase();
-    if(/\.md$/.test(n2))                       return{l:'Markdown',    i:'bi-markdown-fill',           ord:5};
-    if(/\.txt$/.test(n2))                      return{l:'Texto',       i:'bi-file-earmark-text-fill',  ord:6};
-    if(/\.html?$/.test(n2))                    return{l:'HTML',        i:'bi-file-earmark-code',       ord:7};
-    if(/mapa/.test(n2))                         return{l:'Mapa Mental', i:'bi-diagram-3',              ord:4};
-    if(/simulado/.test(n2))                     return{l:'Minissimulado',i:'bi-stopwatch',             ord:2};
-    if(/quest|exerc|prova/.test(n2))            return{l:'Exerc\u00edcios',  i:'bi-ui-checks',              ord:1};
-    if(/resumo|iara|\bia\b|intelig/.test(n2))   return{l:'Resumo IA',   i:'bi-stars',                  ord:3};
-    return                                      {l:'Material',    i:'bi-file-earmark-text-fill',ord:0};
+    // ★ v53: conteúdo primeiro (transcrição/resumo/ebook têm prioridade sobre extensão)
+    const isTranscri=/transcri/.test(n2);
+    const isResumo=/resum|summary/.test(n2);
+    const isEbook=/ebook/.test(n2);
+    const isMapa=/mapa/.test(n2);
+    const isSimulado=/simulado/.test(n2);
+    const isQuest=/quest|exerc|prova/.test(n2);
+    // ícone por extensão
+    const isMd=/\.md$/.test(n2);
+    const isTxt=/\.txt$/.test(n2);
+    const isHtml=/\.html?$/.test(n2);
+    const iconMd=isMd?'bi-markdown-fill':isHtml?'bi-file-earmark-code':'bi-file-earmark-text-fill';
+    // label por conteúdo (prioridade: transcrição > resumo > ebook > mapa > simulado > quest > extensão)
+    if(isTranscri)   return{l:'Transcrição',   i:iconMd,                       ord:0};  // ★ transcrição tem prioridade MÁXIMA
+    if(isResumo)     return{l:'Resumo',        i:isMd?'bi-markdown-fill':'bi-stars',ord:3};
+    if(isEbook)      return{l:'Ebook',         i:iconMd,                       ord:5};
+    if(isMapa)       return{l:'Mapa Mental',   i:'bi-diagram-3',               ord:4};
+    if(isSimulado)   return{l:'Minissimulado', i:'bi-stopwatch',               ord:2};
+    if(isQuest)      return{l:'Exerc\u00edcios',i:'bi-ui-checks',              ord:1};
+    if(isMd)         return{l:'Markdown',      i:'bi-markdown-fill',           ord:6};
+    if(isTxt)        return{l:'Texto',         i:'bi-file-earmark-text-fill',  ord:7};
+    if(isHtml)       return{l:'HTML',          i:'bi-file-earmark-code',       ord:8};
+    return                              {l:'Material',    i:'bi-file-earmark-text-fill',ord:0};
   }
   // ★ FIX v49: isMaterial — replaces isPdf. Now includes PDF + MD + TXT + HTML.
   function isMaterial(x){
     const ext=(x.fileExtension||'').toLowerCase();
     const mt=x.mimeType||'';
+    // ★ FIX v52: fallback to extracting extension from file name
+    const nameExt=((x.name||'').split('.').pop()||'').toLowerCase();
     if(ext==='pdf'||/pdf/i.test(mt))return true;
-    if(ext==='md'||mt==='text/markdown')return true;
-    if(ext==='txt'||mt==='text/plain')return true;
-    if(ext==='html'||ext==='htm'||mt==='text/html')return true;
+    if(ext==='md'||mt==='text/markdown'||nameExt==='md')return true;
+    if(ext==='txt'||mt==='text/plain'||nameExt==='txt')return true;
+    if(ext==='html'||ext==='htm'||mt==='text/html'||nameExt==='html'||nameExt==='htm')return true;
     return false;
   }
   // isMaterialType — returns the kind of material for rendering dispatch
   function materialType(x){
     const ext=(x.fileExtension||'').toLowerCase();
     const mt=x.mimeType||'';
+    // ★ FIX v52: fallback to extracting extension from file name
+    // (Drive API doesn't always populate fileExtension for all file types)
+    const nameExt=((x.name||'').split('.').pop()||'').toLowerCase();
     if(ext==='pdf'||/pdf/i.test(mt))return 'pdf';
-    if(ext==='md'||mt==='text/markdown')return 'md';
-    if(ext==='html'||ext==='htm'||mt==='text/html')return 'html';
-    if(ext==='txt'||mt==='text/plain')return 'txt';
+    if(ext==='md'||mt==='text/markdown'||nameExt==='md')return 'md';
+    if(ext==='html'||ext==='htm'||mt==='text/html'||nameExt==='html'||nameExt==='htm')return 'html';
+    if(ext==='txt'||mt==='text/plain'||nameExt==='txt')return 'txt';
     return 'pdf';
   }
   function courseBase(){
@@ -949,7 +974,8 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       if(!found.length)found=(await gdiListAllFiles(pPath,gdiGetPw(pPath))).filter(isMaterial);
       const seen=new Set();const uniq=[];
       found.forEach(x=>{if(!seen.has(x.name)){seen.add(x.name);uniq.push(x)}});
-      const pdfs=uniq.slice(0,12);
+      // ★ FIX v52: filter out files with no link (prevents broken tabs + crash in items.map)
+      const pdfs=uniq.filter(x=>x&&(typeof x.link==='string'&&x.link.length>0)).slice(0,12);
       if(myGen!==gen)return;
       if(!pdfs.length){
         if(tabsEl.isConnected){
@@ -963,11 +989,17 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       const base=courseBase();
       const items=pdfs.map(x=>{
         const cls=classify(x.name);
-        const b2=UI.second_domain_for_dl?UI.downloaddomain+x.link:window.location.origin+x.link;
-        const url=b2+(x.link.includes('?')?'&':'?')+'inline=true';
+        // ★ FIX v52 (Task M9-CRASH): guard against x.link being undefined/null.
+        // Some Drive file types (MD/TXT/HTML) may not have a 'link' property
+        // formatted the same way as PDFs. Without this guard, x.link.includes('?')
+        // crashes with "Cannot read property 'includes' of undefined", which
+        // kills the entire build() function — so NO tabs render, not even PDFs.
+        const rawLink=x.link||'';
+        const b2=UI.second_domain_for_dl?(UI.downloaddomain||'')+rawLink:window.location.origin+rawLink;
+        const url=b2+(rawLink.includes('?')?'&':'?')+'inline=true';
         const match=base&&x.name.toLowerCase().includes(base)?0:1;
         // ★ FIX v49: track material type for rendering dispatch (pdf/md/txt/html)
-        return{name:x.name,label:cls.l,icon:cls.i,ord:cls.ord,match,url,mtype:materialType(x),rawLink:x.link||''};
+        return{name:x.name,label:cls.l,icon:cls.i,ord:cls.ord,match,url,mtype:materialType(x),rawLink};
       });
       items.sort((x,y)=>x.match-y.match||x.ord-y.ord||x.name.localeCompare(y.name,undefined,{numeric:true}));
       // ★ salva items para o botão "Regerar" encontrar
