@@ -29,7 +29,7 @@
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  const CACHE_VERSION = '49';  // ★ v1.0.54 (Task TRANSC-FIRST): gdi-meggy.js generateAll() now uses TRANSCRIPTION-FIRST strategy: (1) extracts transcription files first (sequentially, fast — they're .md/.txt), (2) if transcription found with >50 chars, uses ONLY it (skips PDF extraction entirely — saves 30-60s), (3) if no transcription or extraction failed, falls back to extracting PDFs/materials in parallel. This fixes the bug where PDFs large/travando blocked resumo generation even when transcription was available. gdi-study.js: course detail page now shows actual scanErrorMsg (was generic "scanner encontrou um erro"). Bump 48→49.
+  const CACHE_VERSION = '50';  // ★ v1.0.55 (Task MATERIAL-PAGE): gdi-pdf.js REWRITE — removido canvas nativo do pdf.js (não tinha barra de rolagem). file_pdf e file_markdown agora usam file_material(): renderiza layout .gdi-study com data-material-page=1, painel M9 à direita auto-seleciona a aba do arquivo clicado (via window.__gdiAutoSelectMaterial). gdi-ui.js M10: para página de material, oculta botões "Dividido" e "Foco na aula" (só mostra "Foco no material"), sempre começa em modo fm. gdi-core.js M9 build(): auto-seleciona aba via __gdiAutoSelectMaterial. Bump 49→50.
 
   const MODULES = [
     'gdi-core.js',

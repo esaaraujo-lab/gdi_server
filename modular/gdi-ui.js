@@ -189,12 +189,23 @@ body.gdi-fv .gdi-player-wrap iframe{
     }
     if(slot.dataset.m10)return;
     slot.dataset.m10='1';
-    console.log('[GDI M10] v5 ativo \u2014 slot '+(created?'CRIADO pelo extras (o core n\u00e3o fornece)':'do core'));
-    slot.innerHTML=`
-      <button class="gdi-mode-btn" data-mode="split" title="Tela dividida (v\u00eddeo + material)"><i class="bi bi-layout-split"></i><span class="d-none d-md-inline">Dividido</span></button>
-      <button class="gdi-mode-btn" data-mode="fv" title="Foco na aula (v\u00eddeo em largura total)"><i class="bi bi-lightning-charge-fill"></i><span class="d-none d-md-inline">Foco na aula</span></button>
-      <button class="gdi-mode-btn" data-mode="fm" title="Foco no material (s\u00f3 PDF, zoom autom\u00e1tico)"><i class="bi bi-file-earmark-pdf-fill"></i><span class="d-none d-md-inline">Foco no material</span></button>
-      <button class="gdi-watched-btn" id="gdi-watched-btn" title="Marcar esta aula como assistida"><i class="bi bi-eye"></i><span>Assistido</span></button>`;
+    // ★ FIX v55 (Task MATERIAL-PAGE): se for página de material (data-material-page),
+    // oculta os botões "Dividido" e "Foco na aula" (são inúteis para materiais).
+    // Só mostra "Foco no material". Também oculta o botão "Assistido" (não faz sentido para material).
+    const isMaterialPage = study && study.dataset && study.dataset.materialPage === '1';
+    console.log('[GDI M10] v5 ativo \u2014 slot '+(created?'CRIADO pelo extras (o core n\u00e3o fornece)':'do core')+(isMaterialPage?' [PÁGINA DE MATERIAL — só foco no material]':''));
+    if(isMaterialPage){
+      // Página de material: só botão "Foco no material" (sem Dividido, Foco-na-aula, Assistido)
+      slot.innerHTML=`
+        <button class="gdi-mode-btn active" data-mode="fm" title="Foco no material"><i class="bi bi-file-earmark-pdf-fill"></i><span class="d-none d-md-inline">Foco no material</span></button>`;
+    }else{
+      // Página de vídeo: todos os botões (comportamento original)
+      slot.innerHTML=`
+        <button class="gdi-mode-btn" data-mode="split" title="Tela dividida (v\u00eddeo + material)"><i class="bi bi-layout-split"></i><span class="d-none d-md-inline">Dividido</span></button>
+        <button class="gdi-mode-btn" data-mode="fv" title="Foco na aula (v\u00eddeo em largura total)"><i class="bi bi-lightning-charge-fill"></i><span class="d-none d-md-inline">Foco na aula</span></button>
+        <button class="gdi-mode-btn" data-mode="fm" title="Foco no material (s\u00f3 PDF, zoom autom\u00e1tico)"><i class="bi bi-file-earmark-pdf-fill"></i><span class="d-none d-md-inline">Foco no material</span></button>
+        <button class="gdi-watched-btn" id="gdi-watched-btn" title="Marcar esta aula como assistida"><i class="bi bi-eye"></i><span>Assistido</span></button>`;
+    }
     function zoom(){
       const z=document.body.classList.contains('gdi-fm')?'150':'100';
       const ifr=document.querySelector('#gdi-mat-body iframe');
@@ -226,7 +237,14 @@ body.gdi-fv .gdi-player-wrap iframe{
     slot.querySelectorAll('.gdi-mode-btn[data-mode]').forEach(b=>{
       b.addEventListener('click',()=>setMode(b.dataset.mode));
     });
-    let saved='split';try{saved=localStorage.getItem('gdi-study-mode')||'split'}catch(_){}
+    // ★ FIX v55: para página de material, sempre começa em modo "fm" (foco no material).
+    // Para página de vídeo, usa o modo salvo no localStorage (comportamento original).
+    let saved='split';
+    if(isMaterialPage){
+      saved='fm';  // material page sempre abre em foco no material
+    }else{
+      try{saved=localStorage.getItem('gdi-study-mode')||'split'}catch(_){}
+    }
     setMode(['fv','fm','split'].includes(saved)?saved:'split');
     const wb=document.getElementById('gdi-watched-btn');
     if(wb&&!wb.dataset.b){

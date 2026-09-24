@@ -1192,9 +1192,21 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
           }
         });
       });
-      show(0);
+      // ★ FIX v55 (Task MATERIAL-PAGE): se window.__gdiAutoSelectMaterial está setado,
+      // encontra a aba do arquivo clicado e abre ela (em vez de sempre abrir a primeira).
+      // file_pdf/file_markdown setam essa variável antes de emitir slots:ready.
+      let autoIdx = 0;
+      try {
+        const autoSel = window.__gdiAutoSelectMaterial;
+        if (autoSel) {
+          const found = items.findIndex(it => it.name === autoSel);
+          if (found >= 0) autoIdx = found;
+          window.__gdiAutoSelectMaterial = null; // consome
+        }
+      } catch(_) {}
+      show(autoIdx);
       lastKey=p;
-      console.log('[GDI Materiais] aula:',base||'(sem nome)','\u2192',items.length,'materiais:',items.map(x=>x.tabLabel).join(' | '));
+      console.log('[GDI Materiais] aula:',base||'(sem nome)','\u2192',items.length,'materiais:',items.map(x=>x.tabLabel).join(' | '),'| auto-select:',autoIdx);
     }catch(err){
       if(myGen!==gen)return;
       if(statusEl)statusEl.textContent='sem material';
