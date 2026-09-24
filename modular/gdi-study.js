@@ -2505,12 +2505,14 @@
     //    Cada aula escaneada recebe watched=true se seu path estiver em d.watched.
     let scannedCount = 0;
     let scanStatus = null;
+    let scanErrorMsg = '';
     if(window.gdiCourseScanner){
       try{
         const sp = window.gdiCourseScanner.getScanProgress(c.key);
         if(sp){
           scanStatus = sp.status;
           scannedCount = sp.lessonsFound || 0;
+          scanErrorMsg = sp.error || '';  // ★ FIX v54: show actual error message
         }
         const scanned = window.gdiCourseScanner.getCourseLessons(c.key);
         if(scanned && Array.isArray(scanned.lessons) && scanned.lessons.length){
@@ -2588,7 +2590,7 @@
       <div style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ferreto-text-muted,#8b949e);">
         ${scanStatus==='scanning'
           ? '<i class="bi bi-arrow-repeat" style="color:var(--ferreto-secondary,#5ddeda);"></i> Escaneando aulas em background... <b style="color:var(--ferreto-text,#e6edf3);">'+scannedCount+'</b> encontradas até agora (a lista abaixo cresce em tempo real).'
-          : '<i class="bi bi-exclamation-triangle" style="color:#ff8b8b;"></i> O scanner encontrou um erro. Algumas aulas podem estar ausentes da lista.'}
+          : '<i class="bi bi-exclamation-triangle" style="color:#ff8b8b;"></i> O scanner encontrou um erro. Algumas aulas podem estar ausentes da lista.'+(scanErrorMsg?'<br><span style="color:#ff8b8b;font-size:11px;">Detalhe: '+escHtml(scanErrorMsg)+'</span>':'')}
       </div>`:''}
 
       <div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;">

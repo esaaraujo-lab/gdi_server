@@ -1009,57 +1009,75 @@
     let allText='';
     const pdfTexts=[];
     const pdfErrors=[]; // ★ coleta erros por PDF para diagnóstico
-    // ★ FIX v53 (Task TRANSC): ordena items para TRANSCRIÇÃO vir primeiro.
-    //   Antes, a ordem era a que veio do M9 (sort por match/ord/name) — o que
-    //   podia fazer o Meggy processar "002 - Ebook" antes de "001 - Transcrição".
-    //   Agora: transcrição sempre primeira (é o material principal da aula),
-    //   depois PDFs, depois outros. O allText começa com a transcrição → o
-    //   LLM tem o conteúdo real da aula como contexto principal.
-    const sortedItems=items.slice().sort((a,b)=>{
-      const aT=/transcri/i.test(a.name||'')?0:1;
-      const bT=/transcri/i.test(b.name||'')?0:1;
-      if(aT!==bT)return aT-bT;  // transcrição primeiro
-      return 0;  // mantém ordem original para o resto
-    });
-    // ★ Sprint 6: paraleliza extração (era sequencial, demorava 4x mais)
-    if(progressCb)progressCb({phase:'extract-start',total:sortedItems.length});
-    const results=await Promise.allSettled(sortedItems.map(async item=>{
+    // ★ FIX v54 (Task TRANSC-FIRST): ESTRATÉGIA TRANSCRIÇÃO-PRIMEIRO.
+    //   1. Busca arquivos com "transcri" no nome PRIMEIRO (são o conteúdo real da aula)
+    //   2. Se achar transcrição E extrai com sucesso (text > 50 chars), USA SÓ ELA —
+    //      não desperdiça tempo extraindo PDFs/ebooks (a transcrição é mais completa)
+    //   3. Se NÃO achar transcrição (ou falhar), aí sim extrai PDFs/materiais
+    //   Isto resolve o bug do v53 onde PDFs grandes travavam a extração e o resumo
+    //   nunca era gerado mesmo com a transcrição disponível.
+    const transcriptionItems = items.filter(it => /transcri/i.test(it.name||''));
+    const otherItems = items.filter(it => !/transcri/i.test(it.name||''));
+
+    if(progressCb)progressCb({phase:'extract-start',total:items.length});
+
+    // ★ PASSO 1: tenta extrair transcrições PRIMEIRO (sequencial, rápido — são .md/.txt)
+    let transcriptionText = '';
+    for(const item of transcriptionItems){
       try{
         if(progressCb)progressCb({phase:'extract',pdf:item.name});
-        // ★ FIX v51 (Task MD-EXTRACT): despacha por tipo de arquivo.
-        // PDF → extractPdfText (pdf.js + OCR fallback)
-        // MD/TXT/HTML → extractTextFile (fetch direto, sem pdf.js)
-        // Antes, TODOS os items passavam por extractPdfText → MD/TXT/HTML
-        // davam "Invalid PDF structure".
-        const ftype=getFileType(item.name);
-        let txt;
-        if(ftype==='pdf'){
-          txt=await extractPdfText(item.url,(p)=>{
-            if(progressCb)progressCb(Object.assign({pdf:item.name},p));
-          });
-        }else{
-          // md/txt/html — fetch direto do texto
-          txt=await extractTextFile(item.url);
-          if(progressCb)progressCb({pdf:item.name,page:'text',current:1,total:1});
+        const txt = await extractTextFile(item.url);
+        if(txt && txt.trim().length > 50){
+          transcriptionText += (transcriptionText ? '\n\n---\n\n' : '') + txt;
+          pdfTexts.push({name:item.name, text:txt});
         }
-        return {name:item.name,text:txt};
       }catch(e){
-        throw {name:item.name,error:e.message||String(e),url:item.url};
+        pdfErrors.push({name:item.name, error:e.message||String(e), url:item.url||''});
+        console.warn('[Meggy] transcrição falhou:', item.name, e.message);
       }
-    }));
-    results.forEach(r=>{
-      if(r.status==='fulfilled'){
-        const {name,text}=r.value;
-        if(text&&text.trim().length>50){
-          allText+=(allText?'\n\n---\n\n':'')+text;
-          pdfTexts.push({name,text});
+    }
+
+    if(transcriptionText && transcriptionText.trim().length >= 50){
+      // ★ PASSO 2A: transcrição encontrada! Usa SÓ ela — não extrai PDFs (economiza 30-60s)
+      allText = transcriptionText;
+      if(progressCb)progressCb({phase:'extract-done', source:'transcription', chars:allText.length});
+    }else{
+      // ★ PASSO 2B: sem transcrição (ou falhou) — extrai PDFs/materiais em paralelo
+      if(progressCb && transcriptionItems.length){
+        progressCb({phase:'extract-fallback', reason:'transcrição falhou, usando PDFs'});
+      }
+      const results=await Promise.allSettled(otherItems.map(async item=>{
+        try{
+          if(progressCb)progressCb({phase:'extract',pdf:item.name});
+          const ftype=getFileType(item.name);
+          let txt;
+          if(ftype==='pdf'){
+            txt=await extractPdfText(item.url,(p)=>{
+              if(progressCb)progressCb(Object.assign({pdf:item.name},p));
+            });
+          }else{
+            txt=await extractTextFile(item.url);
+            if(progressCb)progressCb({pdf:item.name,page:'text',current:1,total:1});
+          }
+          return {name:item.name,text:txt};
+        }catch(e){
+          throw {name:item.name,error:e.message||String(e),url:item.url};
         }
-      }else{
-        const err=r.reason||{};
-        pdfErrors.push({name:err.name||'PDF',error:err.error||'erro',url:err.url||''});
-        console.warn('[Meggy] PDF falhou:',err.name,err.error);
-      }
-    });
+      }));
+      results.forEach(r=>{
+        if(r.status==='fulfilled'){
+          const {name,text}=r.value;
+          if(text&&text.trim().length>50){
+            allText+=(allText?'\n\n---\n\n':'')+text;
+            pdfTexts.push({name,text});
+          }
+        }else{
+          const err=r.reason||{};
+          pdfErrors.push({name:err.name||'PDF',error:err.error||'erro',url:err.url||''});
+          console.warn('[Meggy] PDF falhou:',err.name,err.error);
+        }
+      });
+    }
     if(!allText||allText.trim().length<50){
       // ★ Mensagem detalhada com os erros de cada PDF
       let detail='Não foi possível extrair texto dos PDFs.';

@@ -29,7 +29,7 @@
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  const CACHE_VERSION = '48';  // ★ v1.0.53 (Task TRANSC): gdi-core.js classify() agora rotula abas por CONTEÚDO do nome: "Transcrição" se tem "transcri", "Resumo" se tem "resumo/summary", "Ebook" se tem "ebook", senão por extensão (Markdown/Texto/HTML/Material). Transcrição tem prioridade máxima (ord:0) para aparecer primeiro na aba. gdi-meggy.js classifyMaterial() agora retorna 'transcription' para arquivos com "transcri" no nome (antes eram 'skip' por cair no regex resum|summary). generateAll() ordena items com transcrição primeiro — o allText começa com a transcrição → LLM tem o conteúdo real da aula como contexto principal. Bump 47→48.
+  const CACHE_VERSION = '49';  // ★ v1.0.54 (Task TRANSC-FIRST): gdi-meggy.js generateAll() now uses TRANSCRIPTION-FIRST strategy: (1) extracts transcription files first (sequentially, fast — they're .md/.txt), (2) if transcription found with >50 chars, uses ONLY it (skips PDF extraction entirely — saves 30-60s), (3) if no transcription or extraction failed, falls back to extracting PDFs/materials in parallel. This fixes the bug where PDFs large/travando blocked resumo generation even when transcription was available. gdi-study.js: course detail page now shows actual scanErrorMsg (was generic "scanner encontrou um erro"). Bump 48→49.
 
   const MODULES = [
     'gdi-core.js',
