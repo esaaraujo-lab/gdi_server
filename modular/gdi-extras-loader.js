@@ -25,7 +25,7 @@
   const PUBLIC_REPO = 'esaaraujo-lab/gdi_server';  // ← TROQUE AQUI
 
   // jsdelivr CDN: cache mundial, immutable, dispensa GH_TOKEN (repo público)
-  const BASE_URL = 'https://raw.githubusercontent.com/' + PUBLIC_REPO + '/main/modular/';  // ★ raw.githubusercontent (no CDN cache issues)
+  const BASE_URL = 'https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/modular/';
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — causava re-download de ~5MB em toda navegação.
