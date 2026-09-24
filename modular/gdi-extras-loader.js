@@ -29,7 +29,7 @@
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  const CACHE_VERSION = '50';  // ★ v1.0.55 (Task MATERIAL-PAGE): gdi-pdf.js REWRITE — removido canvas nativo do pdf.js (não tinha barra de rolagem). file_pdf e file_markdown agora usam file_material(): renderiza layout .gdi-study com data-material-page=1, painel M9 à direita auto-seleciona a aba do arquivo clicado (via window.__gdiAutoSelectMaterial). gdi-ui.js M10: para página de material, oculta botões "Dividido" e "Foco na aula" (só mostra "Foco no material"), sempre começa em modo fm. gdi-core.js M9 build(): auto-seleciona aba via __gdiAutoSelectMaterial. Bump 49→50.
+  const CACHE_VERSION = '51';  // ★ v1.0.56 (Task SCAN-500+AVATAR): gdi-meggy.js — FIX MEGGY_AVATAR in chat header (was ' + MEGGY_AVATAR + ' literal text, now ${MEGGY_AVATAR} interpolation). worker.js — FIX scanner HTTP 500: try-catch around navigation + scan, URL-decode folder names. Bump 50→51.
 
   const MODULES = [
     'gdi-core.js',
