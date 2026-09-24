@@ -4445,35 +4445,80 @@
     if(onProgress) try{ onProgress(state, getLessons(courseKey)); }catch(_){}
     
     try {
-      // ★ 1 POST request — servidor escaneia TODO o curso recursivamente
-      const r = await fetch('/api/courses/scan-progress', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({coursePath: courseKey})
-      });
-      if(!r.ok) throw new Error('HTTP '+r.status);
-      const d = await r.json();
-      if(!d || !d.ok) throw new Error(d && d.error || 'scan falhou');
+      // ★ FIX v58 (Task SCAN-CURSOR): SCAN INCREMENTAL COM CURSOR
+      //   O servidor processa ~40 pastas por Worker invocation (limite CF=50 subrequests).
+      //   Retorna status=partial com pendingFolders > 0 quando há mais pastas.
+      //   Cliente chama /api/courses/scan-progress de novo para processar o próximo batch.
+      //   O cursor (lessons parciais + pendingFolders) é salvo no Drive pelo servidor.
+      let allLessons = [];
+      let maxBatches = 30; // safety: max 30 batches × 40 pastas = 1200 pastas
+      let batchNum = 0;
+      let isDone = false;
       
-      // Servidor retorna {lessons: [...], total: N, ...}
-      const lessons = d.lessons || [];
-      if(d.cached){
-        console.log('[Scanner] cache hit! Curso já escaneado por outro aluno — sem re-scan');
-      }else{
-        console.log('[Scanner] scan completo:', lessons.length, 'aulas encontradas');
+      while(!isDone && batchNum < maxBatches){
+        batchNum++;
+        const r = await fetch('/api/courses/scan-progress', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({coursePath: courseKey})
+        });
+        if(!r.ok) throw new Error('HTTP '+r.status);
+        const d = await r.json();
+        if(!d || !d.ok) throw new Error(d && d.error || 'scan falhou');
+        
+        const batchLessons = d.lessons || [];
+        allLessons = batchLessons; // servidor retorna TODAS as lessons acumuladas (do cursor)
+        isDone = d.status !== 'partial'; // done ou cached → termina
+        
+        // Atualiza estado parcial para o UI mostrar progresso
+        state.status = 'scanning';
+        state.scannedFolders = state.totalFolders;
+        state.lessonsFound = allLessons.length;
+        state.pendingFolders = d.pendingFolders || 0;
+        state.batchNum = batchNum;
+        setScanState(courseKey, state);
+        
+        // Salva lessons parciais no localStorage para o UI mostrar
+        const partialData = {
+          lessons: allLessons,
+          scanned: isDone,
+          totalLessons: allLessons.length
+        };
+        setLessons(courseKey, partialData);
+        
+        if(onProgress) try{ onProgress(state, partialData); }catch(_){}
+        
+        if(d.cached){
+          console.log('[Scanner] cache hit! Curso já escaneado por outro aluno — sem re-scan');
+          isDone = true;
+          break;
+        }
+        
+        if(!isDone){
+          console.log('[Scanner] batch', batchNum, 'completo:', allLessons.length, 'aulas,', d.pendingFolders, 'pastas pendentes. Continuando...');
+          // Pequeno delay entre batches para não sobrecarregar
+          await new Promise(r => setTimeout(r, 500));
+        }
       }
+      
+      if(!isDone && batchNum >= maxBatches){
+        console.warn('[Scanner] atingiu maxBatches (30) — scan parcial. Aulas encontradas:', allLessons.length);
+      }
+      
+      console.log('[Scanner] scan completo:', allLessons.length, 'aulas encontradas em', batchNum, 'batches');
       const lessonsData = {
-        lessons: lessons,
+        lessons: allLessons,
         scanned: true,
-        totalFolders: d.totalFolders || 1,
-        totalLessons: lessons.length
+        totalFolders: state.totalFolders || 1,
+        totalLessons: allLessons.length
       };
       setLessons(courseKey, lessonsData);
       
-      // Atualiza estado
+      // Atualiza estado final
       state.status = 'done';
       state.completedAt = Date.now();
       state.scannedFolders = state.totalFolders;
+      state.lessonsFound = allLessons.length;
       setScanState(courseKey, state);
       
       // Salva no Drive (não-bloqueante)
