@@ -29,7 +29,7 @@
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  const CACHE_VERSION = '45';  // ★ v1.0.50 (Task MD-PDF-FIX): bump 44→45 to force CDN reload. v44 had stale cache serving old gdi-pdf.js with "isMobile is not defined" bug in renderPdf(). Fixed: isMobile now declared at renderPdf scope (not just inside f()'s .then()). Also forces reload of all other modular files to ensure latest v49 code is served.
+  const CACHE_VERSION = '46';  // ★ v1.0.51 (Task MD-EXTRACT): gdi-meggy.js — FIX "Invalid PDF structure" when Meggy tries to extract .md/.txt/.html files as PDFs. Added getFileType() + extractTextFile() functions. generateAll() now dispatches by type: PDF → extractPdfText (pdf.js + OCR), MD/TXT/HTML → extractTextFile (fetch direto, sem pdf.js). generateQuestions() also fixed. Bump 45→46 to force CDN reload.
 
   const MODULES = [
     'gdi-core.js',

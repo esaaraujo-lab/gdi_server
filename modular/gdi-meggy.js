@@ -352,6 +352,32 @@
   //   - Suporta um callback de progresso (para mostrar "OCR: página 3/11…")
   //   - Limita a 8 páginas no OCR (tempo total ~2-4 min para PDF grande)
   //   - Idiomas: português + inglês
+  // ★ FIX v51 (Task MD-EXTRACT): getFileType + extractTextFile para .md/.txt/.html.
+  //   Antes, generateAll() chamava extractPdfText() para TODOS os items — mas
+  //   agora que o M9 (gdi-core.js v49) inclui MD/TXT/HTML, esses arquivos chegavam
+  //   ao Meggy e eram abertos como PDF → "Invalid PDF structure".
+  //   Agora generateAll() despacha por tipo: PDF → extractPdfText, texto → extractTextFile.
+  function getFileType(name){
+    const n=(name||'').toLowerCase();
+    if(/\.md$/.test(n))return 'md';
+    if(/\.txt$/.test(n))return 'txt';
+    if(/\.html?$/.test(n))return 'html';
+    return 'pdf';
+  }
+  async function extractTextFile(url){
+    // Fetch direto — sem pdf.js. Retorna o texto cru (md/txt) ou HTML saneado.
+    let resp;
+    const fetchOpts=[{credentials:'same-origin'},{credentials:'include'},{credentials:'omit'}];
+    for(const opts of fetchOpts){
+      try{resp=await fetch(url,opts);if(resp.ok)break;}catch(_){}
+    }
+    if(!resp||!resp.ok)throw new Error('HTTP '+(resp?resp.status:'fetch')+' ao baixar arquivo de texto');
+    const txt=await resp.text();
+    if(!txt||txt.trim().length<10)throw new Error('Arquivo de texto vazio');
+    // Para HTML: strip tags básico (mantém texto legível para o LLM)
+    // Para MD/TXT: retorna cru (o LLM entende markdown naturalmente)
+    return txt;
+  }
   async function extractPdfText(url, progressCb){
     const pdfjs=await ensurePdfjs();
 
@@ -982,9 +1008,22 @@
     const results=await Promise.allSettled(items.map(async item=>{
       try{
         if(progressCb)progressCb({phase:'extract',pdf:item.name});
-        const txt=await extractPdfText(item.url,(p)=>{
-          if(progressCb)progressCb(Object.assign({pdf:item.name},p));
-        });
+        // ★ FIX v51 (Task MD-EXTRACT): despacha por tipo de arquivo.
+        // PDF → extractPdfText (pdf.js + OCR fallback)
+        // MD/TXT/HTML → extractTextFile (fetch direto, sem pdf.js)
+        // Antes, TODOS os items passavam por extractPdfText → MD/TXT/HTML
+        // davam "Invalid PDF structure".
+        const ftype=getFileType(item.name);
+        let txt;
+        if(ftype==='pdf'){
+          txt=await extractPdfText(item.url,(p)=>{
+            if(progressCb)progressCb(Object.assign({pdf:item.name},p));
+          });
+        }else{
+          // md/txt/html — fetch direto do texto
+          txt=await extractTextFile(item.url);
+          if(progressCb)progressCb({pdf:item.name,page:'text',current:1,total:1});
+        }
         return {name:item.name,text:txt};
       }catch(e){
         throw {name:item.name,error:e.message||String(e),url:item.url};
@@ -1211,21 +1250,27 @@
     const pdfIdx=window.__gdiPdfCursor%items.length;
     window.__gdiPdfCursor++;
     const pdfItem=items[pdfIdx];
-    setLoading(bodyEl,'Extraindo texto do PDF: '+esc(pdfItem.name||'material')+'…');
+    setLoading(bodyEl,'Extraindo texto do material: '+esc(pdfItem.name||'material')+'…');
     let text;
+    // ★ FIX v51: helper local para extrair por tipo (PDF vs texto)
+    const extractByType=async(it)=>{
+      const ft=getFileType(it.name);
+      if(ft==='pdf')return await extractPdfText(it.url);
+      return await extractTextFile(it.url);
+    };
     try{
-      text=await extractPdfText(pdfItem.url);
+      text=await extractByType(pdfItem);
     }catch(e){
       for(let i=1;i<items.length;i++){
         const next=items[(pdfIdx+i)%items.length];
         try{
-          text=await extractPdfText(next.url);
+          text=await extractByType(next);
           if(text&&text.trim().length>=50)break;
         }catch(_){}
       }
       if(!text||text.trim().length<50){setError(bodyEl,'Falha ao extrair texto.');return false;}
     }
-    if(!text||text.trim().length<50){setError(bodyEl,'PDF sem texto extraível.');return false;}
+    if(!text||text.trim().length<50){setError(bodyEl,'Material sem texto extraível.');return false;}
     setLoading(bodyEl,'Meggy está criando questões…');
     let resp;
     try{
