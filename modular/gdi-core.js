@@ -25,6 +25,7 @@
      desconectado ao trocar de página, M9 não reconstrói na mesma
      aula, M7 só toca no DOM quando muda, M22 limita cursos.
    ═══════════════════════════════════════════════════════════════ */
+console.log('[GDI Extras Modular] v2.7 carregado');
 const GDI_ROOT=()=>document.documentElement; // UI flutuante vive aqui (fora do body)
 
 window.GDI_MODULES = window.GDI_MODULES || [];
@@ -198,7 +199,7 @@ if(!window.DOMPurify && !window.__gdiPurifyLoading){
   const s=document.createElement('script');
   s.src='https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js';
   s.crossOrigin='anonymous';
-  s.onload=()=>{};
+  s.onload=()=>console.log('[GDI] DOMPurify carregado');
   s.onerror=()=>console.warn('[GDI] DOMPurify falhou — usando fallback básico');
   document.head.appendChild(s);
 }
@@ -413,7 +414,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       if(k&&k.indexOf('password')===0){const v=localStorage.getItem(k);if(v)gdiSetPw(k.slice(8),v);del.push(k);}}
     del.forEach(k=>localStorage.removeItem(k));
     localStorage.setItem('gdi_pw_migrated','1');
-    if(del.length)console.warn('[módulo senhas]',del.length,'senhas migradas');
+    if(del.length)console.log('[módulo senhas]',del.length,'senhas migradas');
   }catch(_){}
 })();
 
@@ -790,13 +791,51 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 // ═══ M9: MATERIAIS (PDFs por aula) ═══
 (function(){
   const frames=new Map();let gen=0,lastKey='';
+  // ★ FIX v49 (Task MD-PDF): renderMd local — converts markdown text to sanitized HTML.
+  // Uses marked if available; falls back to escaped text with <br>.
+  // Same logic as gdi-meggy.js renderMd but self-contained (M9 panel is in gdi-core.js).
+  function escLocal(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');}
+  function renderMdLocal(txt){
+    if(window.marked){
+      try{
+        const html=marked.parse(txt);
+        if(window.gdiSanitize){try{return window.gdiSanitize(html);}catch(_){}}
+        return escLocal(txt).replace(/\n/g,'<br>');
+      }catch(_){}
+    }
+    return escLocal(txt).replace(/\n/g,'<br>');
+  }
+  // ★ FIX v49: classify now detects MD/TXT/HTML files and assigns appropriate icons.
   function classify(name){
     const n2=name.toLowerCase();
-    if(/mapa/.test(n2))                       return{l:'Mapa Mental', i:'bi-diagram-3',              ord:4};
-    if(/simulado/.test(n2))                   return{l:'Minissimulado',i:'bi-stopwatch',             ord:2};
-    if(/quest|exerc|prova/.test(n2))          return{l:'Exerc\u00edcios',  i:'bi-ui-checks',              ord:1};
-    if(/resumo|iara|\bia\b|intelig/.test(n2)) return{l:'Resumo IA',   i:'bi-stars',                  ord:3};
-    return                                    {l:'Material',    i:'bi-file-earmark-text-fill',ord:0};
+    if(/\.md$/.test(n2))                       return{l:'Markdown',    i:'bi-markdown-fill',           ord:5};
+    if(/\.txt$/.test(n2))                      return{l:'Texto',       i:'bi-file-earmark-text-fill',  ord:6};
+    if(/\.html?$/.test(n2))                    return{l:'HTML',        i:'bi-file-earmark-code',       ord:7};
+    if(/mapa/.test(n2))                         return{l:'Mapa Mental', i:'bi-diagram-3',              ord:4};
+    if(/simulado/.test(n2))                     return{l:'Minissimulado',i:'bi-stopwatch',             ord:2};
+    if(/quest|exerc|prova/.test(n2))            return{l:'Exerc\u00edcios',  i:'bi-ui-checks',              ord:1};
+    if(/resumo|iara|\bia\b|intelig/.test(n2))   return{l:'Resumo IA',   i:'bi-stars',                  ord:3};
+    return                                      {l:'Material',    i:'bi-file-earmark-text-fill',ord:0};
+  }
+  // ★ FIX v49: isMaterial — replaces isPdf. Now includes PDF + MD + TXT + HTML.
+  function isMaterial(x){
+    const ext=(x.fileExtension||'').toLowerCase();
+    const mt=x.mimeType||'';
+    if(ext==='pdf'||/pdf/i.test(mt))return true;
+    if(ext==='md'||mt==='text/markdown')return true;
+    if(ext==='txt'||mt==='text/plain')return true;
+    if(ext==='html'||ext==='htm'||mt==='text/html')return true;
+    return false;
+  }
+  // isMaterialType — returns the kind of material for rendering dispatch
+  function materialType(x){
+    const ext=(x.fileExtension||'').toLowerCase();
+    const mt=x.mimeType||'';
+    if(ext==='pdf'||/pdf/i.test(mt))return 'pdf';
+    if(ext==='md'||mt==='text/markdown')return 'md';
+    if(ext==='html'||ext==='htm'||mt==='text/html')return 'html';
+    if(ext==='txt'||mt==='text/plain')return 'txt';
+    return 'pdf';
   }
   function courseBase(){
     let nm='';
@@ -827,8 +866,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     if(p===lastKey){
       const tabs=document.getElementById('gdi-mat-tabs');
       const body=document.getElementById('gdi-mat-body');
-      // ★ Task CLEANUP-FIX: não pula se só tem .gdi-mat-empty (sem PDF) — busca de novo
-      if(tabs&&body&&tabs.querySelector('.gdi-mat-tab'))return;
+      if(tabs&&body&&(tabs.querySelector('.gdi-mat-tab')||body.querySelector('.gdi-mat-empty')))return;
     }
     let panel=null;
     panel=ensurePanel();
@@ -868,9 +906,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     tabsEl.innerHTML='<span class="gdi-mat-loading">Buscando PDFs da aula\u2026</span>';
     if(statusEl)statusEl.textContent='';
     bodyEl.innerHTML='';
-    // ★ Task FINAL: busca PDFs, TXTs, MDs (transcrições/resumos) e HTMLs (ebooks/resumos IA)
-    const isMaterial=x=>{const ext=(x.fileExtension||'').toLowerCase();const mt=(x.mimeType||'').toLowerCase();return ext==='pdf'||/pdf/.test(mt)||ext==='txt'||ext==='md'||ext==='html'||ext==='htm';};
-    const isPdf=x=>(x.fileExtension||'').toLowerCase()==='pdf'||/pdf/i.test(x.mimeType||'');
+    // ★ FIX v49: isMaterial (PDF+MD+TXT+HTML) replaces isPdf — see top of M9 IIFE
     try{
       let found=[];
       // ★C.2: se window.playlistVideos já tem itens de fPath, a chamada
@@ -918,8 +954,8 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       if(!pdfs.length){
         if(tabsEl.isConnected){
           tabsEl.innerHTML='';
-          if(statusEl)statusEl.textContent='sem PDF';
-          if(bodyEl)bodyEl.innerHTML=`<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material PDF encontrado para esta aula.</div></div>`;
+          if(statusEl)statusEl.textContent='sem material';
+          if(bodyEl)bodyEl.innerHTML=`<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material encontrado para esta aula (PDF, MD, TXT ou HTML).</div></div>`;
           lastKey=p;
         }
         return;
@@ -930,7 +966,8 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         const b2=UI.second_domain_for_dl?UI.downloaddomain+x.link:window.location.origin+x.link;
         const url=b2+(x.link.includes('?')?'&':'?')+'inline=true';
         const match=base&&x.name.toLowerCase().includes(base)?0:1;
-        return{name:x.name,label:cls.l,icon:cls.i,ord:cls.ord,match,url};
+        // ★ FIX v49: track material type for rendering dispatch (pdf/md/txt/html)
+        return{name:x.name,label:cls.l,icon:cls.i,ord:cls.ord,match,url,mtype:materialType(x),rawLink:x.link||''};
       });
       items.sort((x,y)=>x.match-y.match||x.ord-y.ord||x.name.localeCompare(y.name,undefined,{numeric:true}));
       // ★ salva items para o botão "Regerar" encontrar
@@ -958,11 +995,45 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         <div class="gdi-mat-tab gdi-mat-isa" data-mat="isa-flashcards" title="Flashcards desta aula">
           <i class="bi bi-card-text"></i><span>Flashcards</span>
         </div>`;
-      if(statusEl)statusEl.textContent=items.length+' PDF'+(items.length>1?'s':'');
+      if(statusEl)statusEl.textContent=items.length+' material'+(items.length>1?'is':'');
       const isMobile=Os.isMobile;
       function show(idx){
         if(!tabsEl.isConnected||!bodyEl.isConnected)return;
         tabsEl.querySelectorAll('.gdi-mat-tab').forEach(t=>t.classList.toggle('active',+t.dataset.mat===idx));
+        const it=items[idx];
+        // ★ FIX v49 (Task MD-PDF): render MD/TXT/HTML as formatted text (not iframe).
+        // PDFs use the mobile (pdf.js canvas) or desktop (iframe) path below.
+        // MD files use marked + .gdi-markdown CSS (readable dark theme, proper headings/lists/code).
+        // TXT files use <pre> with wrapping. HTML files are sanitized and rendered.
+        if(it && it.mtype && it.mtype!=='pdf'){
+          bodyEl.innerHTML='<div class="gdi-mat-isa-spin-wrap" style="height:100%;display:flex;align-items:center;justify-content:center;"><div class="gdi-mat-isa-spin"></div></div>';
+          (async()=>{
+            try{
+              const resp=await fetch(it.url,{credentials:'same-origin'});
+              if(!resp.ok)throw new Error('HTTP '+resp.status);
+              const txt=await resp.text();
+              let inner='';
+              if(it.mtype==='md'){
+                inner=renderMdLocal(txt);
+              }else if(it.mtype==='html'){
+                inner=window.gdiSanitize?window.gdiSanitize(txt):escLocal(txt);
+              }else{ // txt
+                inner='<pre style="white-space:pre-wrap;word-wrap:break-word;margin:0;font-family:inherit;">'+escLocal(txt)+'</pre>';
+              }
+              bodyEl.innerHTML='<div class="gdi-mat-text-viewer" style="height:100%;overflow-y:auto;padding:18px 22px;background:var(--ferreto-surface-1,#0d1117);color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.7;">'+
+                '<div class="gdi-markdown" style="max-width:760px;margin:0 auto;">'+inner+'</div>'+
+                '<div style="max-width:760px;margin:18px auto 0;padding-top:14px;border-top:1px solid var(--ferreto-border,#21262d);">'+
+                  '<a href="'+it.url+'" target="_blank" rel="noopener" class="gdi-mode-btn" style="text-decoration:none;font-size:11px;padding:5px 10px;display:inline-flex;align-items:center;gap:6px;">'+
+                  '<i class="bi bi-box-arrow-up-right"></i> Abrir original</a>'+
+                '</div>'+
+              '</div>';
+            }catch(err){
+              bodyEl.innerHTML='<div class="gdi-mat-empty"><i class="bi bi-exclamation-triangle" style="font-size:34px;color:#ff8b8b;"></i><div>Não foi possível carregar o material: '+escHtml(err.message)+'</div>'+
+                '<a href="'+it.url+'" target="_blank" rel="noopener" class="gdi-btn gdi-btn-primary" style="margin-top:14px;text-decoration:none;"><i class="bi bi-box-arrow-up-right"></i> Abrir em nova aba</a></div>';
+            }
+          })();
+          return;
+        }
         if(isMobile){
           // ★ Android/iOS: muitos navegadores móveis NÃO renderizam PDF em <iframe>
           // e abrem popup de download. Usamos pdf.js (viewer) embutido para
@@ -1091,9 +1162,10 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       });
       show(0);
       lastKey=p;
+      console.log('[GDI Materiais] aula:',base||'(sem nome)','\u2192',items.length,'materiais:',items.map(x=>x.tabLabel).join(' | '));
     }catch(err){
       if(myGen!==gen)return;
-      if(statusEl)statusEl.textContent='sem PDF';
+      if(statusEl)statusEl.textContent='sem material';
       if(bodyEl)bodyEl.innerHTML=`<div class="gdi-mat-empty"><i class="bi bi-wifi-off" style="font-size:34px;"></i><div>N\u00e3o foi poss\u00edvel carregar os materiais.</div></div>`;
     }
   }

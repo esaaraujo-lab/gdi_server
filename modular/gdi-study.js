@@ -1287,7 +1287,7 @@
       {id:'simulado',icon:'bi-stopwatch',label:'Simulado'}
     ]},
     {label:'Materiais',tabs:[
-      {id:'addmateria',icon:'bi-folder-plus',label:'Adicionar Cursos'},  // ★ FIX MANUAL: renomeado de "Adicionar matéria" para "Adicionar Cursos" (user request)
+      {id:'addmateria',icon:'bi-folder-plus',label:'Adicionar matéria'},  // ★ FIX 1a (Task 14): RE-ADICIONADO — user pediu para voltar
       {id:'resumos',icon:'bi-clipboard',label:'Resumos'},
       {id:'provas',icon:'bi-file-earmark-text',label:'Provas'},
       {id:'redacao',icon:'bi-pencil-square',label:'Redação'}
@@ -4422,6 +4422,21 @@
       queue: [],
       scanned: []
     };
+    // ★ FIX v49 (Task SCAN-400): guard against drive-root paths (e.g. /0:/, /0:).
+    // The server API returns HTTP 400 "coursePath must include a subfolder" for
+    // these because scanning an entire drive root is not a valid course scan.
+    // This happened because some courses were added with path=/0:/ (drive root)
+    // instead of /0:/COURSE_NAME. The guard prevents the 400 loop and gives a
+    // clear error message so the user knows to re-add the course correctly.
+    if(/^\/\d+:\/?$/.test(courseKey||'')){
+      state.status = 'error';
+      state.startedAt = Date.now();
+      state.error = 'Caminho inválido (raiz do drive). Remova este curso e adicione novamente navegando até a pasta do curso.';
+      setScanState(courseKey, state);
+      console.warn('[Scanner] courseKey é raiz do drive — abortando:', courseKey);
+      if(onProgress) try{ onProgress(state, getLessons(courseKey)); }catch(_){}
+      return state;
+    }
     state.status = 'scanning';
     state.startedAt = Date.now();
     setScanState(courseKey, state);
@@ -4597,7 +4612,9 @@
       for(const c of manual){
         if(!c || !c.path) continue;
         // Skip drive-root paths (they're not real courses — Task 16 / FIX 3)
-        if(/^\d+:\/$/.test(c.path)) continue;
+        // ★ FIX v49: regex was ^\d+:\/$ which did NOT match /0:/ (leading slash).
+        // Now ^\/\d+:\/?$ matches /0:/ and /0: (with or without trailing slash).
+        if(/^\/\d+:\/?$/.test(c.path)) continue;
         const sp = getScanProgress(c.path);
         if(!sp || (sp.status !== 'done' && sp.status !== 'scanning')){
           console.log('[Scanner] auto-scan iniciando para:', c.name || c.path);
@@ -4639,8 +4656,10 @@
       const original = manual.length;
       const cleaned = manual.filter(c => {
         if(!c || !c.path) return false;
-        // Remove drive roots (e.g., /0:/, /4:/)
-        if(/^\d+:\/$/.test(c.path)) return false;
+        // Remove drive roots (e.g., /0:/, /4:/, /0:)
+        // ★ FIX v49: regex was ^\d+:\/$ which did NOT match /0:/ (leading slash).
+        // Now ^\/\d+:\/?$ matches /0:/ and /0: (with or without trailing slash).
+        if(/^\/\d+:\/?$/.test(c.path)) return false;
         // Remove if path is just /<drive>:/ (no subfolder)
         const segs = c.path.split('/').filter(Boolean);
         if(segs.length < 2) return false;
