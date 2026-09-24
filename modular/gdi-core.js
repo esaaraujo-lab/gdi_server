@@ -827,7 +827,8 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     if(p===lastKey){
       const tabs=document.getElementById('gdi-mat-tabs');
       const body=document.getElementById('gdi-mat-body');
-      if(tabs&&body&&(tabs.querySelector('.gdi-mat-tab')||body.querySelector('.gdi-mat-empty')))return;
+      // ★ Task CLEANUP-FIX: não pula se só tem .gdi-mat-empty (sem PDF) — busca de novo
+      if(tabs&&body&&tabs.querySelector('.gdi-mat-tab'))return;
     }
     let panel=null;
     panel=ensurePanel();
