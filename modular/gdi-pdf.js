@@ -116,6 +116,12 @@
     const p = document.getElementById("pdf-canvas");
     if(!p)return; // defensive: se o canvas sumiu (navegação), aborta
     const g = p.getContext("2d");
+    // ★ FIX v50: declare isMobile at renderPdf scope (not just inside f()).
+    // Previous version had isMobile only inside f()'s .then() callback, which
+    // caused "isMobile is not defined" if the CDN served a stale cached version
+    // where the inner declaration was missing. Belt-and-suspenders: declare it
+    // here too so it's always in scope for f().
+    const isMobile = (typeof Os !== 'undefined') ? Os.isMobile : false;
 
     function prefetch(pageNum){
       if (d && pageNum > 0 && pageNum <= d.numPages) {
@@ -128,7 +134,7 @@
       let scale = s;
       return d.getPage(u).then(function(h){
         const testVp = h.getViewport({scale:1});
-        const isMobile = Os.isMobile;
+        // ★ FIX v50: isMobile now comes from renderPdf scope (declared above)
         if (isMobile && testVp.width > containerW) {
           scale = containerW / testVp.width * s;
         }

@@ -29,7 +29,7 @@
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  const CACHE_VERSION = '44';  // ★ v1.0.49 (Task MD-PDF): gdi-study.js FIX scanner 400 (guard drive-root paths + regex fix), gdi-core.js M9 panel now includes MD/TXT/HTML with markdown rendering, gdi-pdf.js file_pdf rewritten to use .gdi-study layout (PDF + M9 materials panel + focus modes), added file_markdown for .md/.txt/.html, app.min.js dispatchFileView routes .md/.txt/.html to file_markdown. CACHE_VERSION 35→44 forces CDN reload of all modular files.
+  const CACHE_VERSION = '45';  // ★ v1.0.50 (Task MD-PDF-FIX): bump 44→45 to force CDN reload. v44 had stale cache serving old gdi-pdf.js with "isMobile is not defined" bug in renderPdf(). Fixed: isMobile now declared at renderPdf scope (not just inside f()'s .then()). Also forces reload of all other modular files to ensure latest v49 code is served.
 
   const MODULES = [
     'gdi-core.js',
