@@ -25,11 +25,11 @@
   const PUBLIC_REPO = 'esaaraujo-lab/gdi_server';  // ← TROQUE AQUI
 
   // jsdelivr CDN: cache mundial, immutable, dispensa GH_TOKEN (repo público)
-  const BASE_URL = 'https://raw.githubusercontent.com/' + PUBLIC_REPO + '/main/modular/';  // ★ raw.githubusercontent (no CDN cache issues)
+  const BASE_URL = 'https://cdn.jsdelivr.net/gh/' + PUBLIC_REPO + '@main/modular/';  // ★ jsdelivr CDN (correct MIME type)
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — causava re-download de ~5MB em toda navegação.
-  const CACHE_VERSION = '41';  // ★ Task CLEANUP: BUG1 fix summary() cache persistence (check cacheGet BEFORE generateAll); BUG2 add .md file support; BUG3 fix MEGGY_AVATAR in chat header (use ${} interpolation in template literal); BUG4 cleanup console.log; BUG5 worker.js copied to DEPLOY_FINAL. CACHE_VERSION 38→39 forces CDN reload of all modular files.
+  const CACHE_VERSION = '42';  // ★ Task CLEANUP: BUG1 fix summary() cache persistence (check cacheGet BEFORE generateAll); BUG2 add .md file support; BUG3 fix MEGGY_AVATAR in chat header (use ${} interpolation in template literal); BUG4 cleanup console.log; BUG5 worker.js copied to DEPLOY_FINAL. CACHE_VERSION 38→39 forces CDN reload of all modular files.
 
   const MODULES = [
     'gdi-core.js',
