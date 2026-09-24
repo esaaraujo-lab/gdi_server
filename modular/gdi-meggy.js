@@ -909,91 +909,13 @@
 
   // ★ Classifica material pelo nome do arquivo (Task FINAL / Fix 1c)
   //   - 'questions': arquivos de questões/exercícios/simulados/provas
-  //   - 'skip':      .md cujo nome contém "resumo"/"summary" — já é resumo pronto
-  //   - 'study':     material de estudo padrão (PDFs, .txt, .html, .md comum)
+  //   - 'skip':      arquivos de resumo (já são resumo — não processar)
+  //   - 'study':     material de estudo padrão (PDFs de aula/apostila)
   function classifyMaterial(name){
     const n=(name||'').toLowerCase();
     if(/quest|exerc|simulad|prova|caderno|lista|test/.test(n))return 'questions';
-    if(/\.md$/.test(n)&&/resum|summary/.test(n))return 'skip';
+    if(/resum|summary/.test(n))return 'skip';
     return 'study';
-  }
-
-  // ★ Task FINAL: extract text from .txt files (transcriptions)
-  // Strips code blocks, script tags, and other noise
-  async function extractTextFile(url){
-    try{
-      const r=await fetch(url,{credentials:'same-origin'});
-      if(!r.ok)return '';
-      let txt=await r.text();
-      // Strip code blocks (```...```)
-      txt=txt.replace(/```[\s\S]*?```/g,'');
-      // Strip inline code (`...`)
-      txt=txt.replace(/`[^`]*`/g,'');
-      // Strip script/style content if present
-      txt=txt.replace(/<script[\s\S]*?<\/script>/gi,'');
-      txt=txt.replace(/<style[\s\S]*?<\/style>/gi,'');
-      // Normalize whitespace
-      txt=txt.replace(/\r\n/g,'\n').replace(/\t/g,'  ').replace(/\n{3,}/g,'\n\n').trim();
-      return txt;
-    }catch(e){
-      console.warn('[Meggy] extractTextFile falhou:',e.message);
-      return '';
-    }
-  }
-
-  // ★ Task FINAL: extract text from .html files (ebooks, AI summaries)
-  // Strips HTML tags, scripts, styles, and converts to plain text
-  async function extractHtmlText(url){
-    try{
-      const r=await fetch(url,{credentials:'same-origin'});
-      if(!r.ok)return '';
-      let html=await r.text();
-      // Strip script/style
-      html=html.replace(/<script[\s\S]*?<\/script>/gi,'');
-      html=html.replace(/<style[\s\S]*?<\/style>/gi,'');
-      html=html.replace(/<noscript[\s\S]*?<\/noscript>/gi,'');
-      // Convert common HTML to text
-      html=html.replace(/<br\s*\/?>/gi,'\n');
-      html=html.replace(/<\/p>/gi,'\n\n');
-      html=html.replace(/<\/div>/gi,'\n');
-      html=html.replace(/<\/li>/gi,'\n');
-      html=html.replace(/<li[^>]*>/gi,'- ');
-      html=html.replace(/<h[1-6][^>]*>/gi,'\n## ');
-      html=html.replace(/<\/h[1-6]>/gi,'\n\n');
-      // Strip all remaining HTML tags
-      html=html.replace(/<[^>]+>/g,'');
-      // Decode HTML entities
-      html=html.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&nbsp;/g,' ');
-      // Normalize whitespace
-      html=html.replace(/\r\n/g,'\n').replace(/\t/g,'  ').replace(/\n{3,}/g,'\n\n').trim();
-      return html;
-    }catch(e){
-      console.warn('[Meggy] extractHtmlText falhou:',e.message);
-      return '';
-    }
-  }
-
-  // ★ Task FINAL: classify file type by extension
-  function getFileType(name){
-    const n=(name||'').toLowerCase();
-    if(/\.txt$/i.test(n))return 'txt';
-    if(/\.md$/i.test(n))return 'md';
-    if(/\.html?$/.test(n))return 'html';
-    if(/\.pdf$/i.test(n))return 'pdf';
-    return 'other';
-  }
-
-  // ★ Task FINAL: priority order for material extraction
-  // 1. .txt/.md (transcrição/resumo) — highest priority
-  // 2. .html (ebook/resumo IA) — second priority
-  // 3. .pdf (material da aula) — third priority
-  // 4. OCR (last resort — only if no other source)
-  function materialPriority(name){
-    const t=getFileType(name);
-    if(t==='txt'||t==='md')return 0;   // highest
-    if(t==='html')return 1;
-    if(t==='pdf')return 2;
-    return 3;
   }
 
   // Gera TODOS os materiais EM PARALELO TOTAL (não em cascata)
@@ -1057,23 +979,12 @@
     const pdfErrors=[]; // ★ coleta erros por PDF para diagnóstico
     // ★ Sprint 6: paraleliza extração (era sequencial, demorava 4x mais)
     if(progressCb)progressCb({phase:'extract-start',total:items.length});
-    // ★ Task FINAL: extract from ALL file types (txt, md, html, pdf) — not just PDFs
-    // Priority: .txt/.md > .html > .pdf > OCR
-    const sortedItems=items.slice().sort((a,b)=>materialPriority(a.name)-materialPriority(b.name));
-    const results=await Promise.allSettled(sortedItems.map(async item=>{
+    const results=await Promise.allSettled(items.map(async item=>{
       try{
         if(progressCb)progressCb({phase:'extract',pdf:item.name});
-        const ftype=getFileType(item.name);
-        let txt='';
-        if(ftype==='txt'||ftype==='md'){
-          txt=await extractTextFile(item.url);
-        }else if(ftype==='html'){
-          txt=await extractHtmlText(item.url);
-        }else{
-          txt=await extractPdfText(item.url,(p)=>{
-            if(progressCb)progressCb(Object.assign({pdf:item.name},p));
-          });
-        }
+        const txt=await extractPdfText(item.url,(p)=>{
+          if(progressCb)progressCb(Object.assign({pdf:item.name},p));
+        });
         return {name:item.name,text:txt};
       }catch(e){
         throw {name:item.name,error:e.message||String(e),url:item.url};
@@ -1223,43 +1134,10 @@
   }
 
   // ── Summary flow (com cadeia) ──
-  // ★ Task CLEANUP / BUG 1: checks cacheGet() FIRST. If cache has a summary,
-  //   display it immediately (don't regenerate on every page reload). Only
-  //   call generateAll() if cache is empty. After generateAll(), the cache
-  //   is already saved (line ~1207 in generateAll).
   async function summary(items,bodyEl,lessonName){
     if(!items||!items.length){setError(bodyEl,'Nenhum PDF disponível.');return;}
     const lesson=realLessonName(lessonName||items[0].name);
     bodyEl.__items=items;bodyEl.__lesson=lesson;
-
-    // ★ BUG 1 FIX: check Drive cache FIRST. If summary exists, render & return.
-    try{
-      setLoading(bodyEl,'Procurando resumo salvo…');
-      const cached=await cacheGet();
-      if(cached&&cached.summary&&String(cached.summary).trim().length>20){
-        const key=lessonKey();
-        if(!_chainCache[key]){_chainCache[key]={};_chainCacheEvict();}
-        _chainCache[key].summary=cached.summary;
-        _chainCache[key].mindmap=cached.mindmap||null;
-        _chainCache[key].cachedQuestions=cached.questions||[];
-        renderSummaryCard(bodyEl,lesson,cached.summary,true);
-        const qCount=(cached.questions&&cached.questions.length)||0;
-        const badge=document.createElement('div');
-        badge.style.cssText='background:rgba(63,185,80,.1);border:1px solid rgba(63,185,80,.3);border-radius:10px;padding:8px 14px;margin-bottom:12px;display:flex;align-items:center;gap:8px;font-size:12px;color:#3fb950;flex-wrap:wrap;';
-        let badgeHtml='<i class="bi bi-cloud-check-fill"></i> <b>Do cache do Drive:</b> ';
-        const parts=[];
-        parts.push('✓ Resumo');
-        if(cached.mindmap)parts.push('✓ Pílulas');
-        if(qCount>0)parts.push('✓ '+qCount+' questões');
-        badgeHtml+=parts.join(' · ');
-        badge.innerHTML=badgeHtml;
-        bodyEl.querySelector('.gdi-mat-isa-result')?.insertBefore(badge,bodyEl.querySelector('.gdi-mat-isa-result').firstChild);
-        showToast('Resumo carregado do cache do Drive');
-        return;
-      }
-    }catch(_){/* cache miss — fall through to generate */}
-
-    // cache miss — generate fresh
     setLoading(bodyEl,'Meggy está lendo o material e criando resumo + questões + pílulas…');
     try{
       const result=await generateAll(items,lesson,'summary',(p)=>{
@@ -2426,7 +2304,7 @@
     });
   };
 
-  console.warn('[GDI Extras] M9-ISA ativo (Task 4-c/Task CLEANUP)');
+  console.log('[GDI Extras] M9-ISA (PDF extraction + ISA summaries/questions) ativo — refactored (Task 4-c)');
 })();
 
 // M-AI: WIDGET DA MEGGY 🐩 — poodle tutora de estudos
@@ -2608,7 +2486,7 @@
   panel.id='gdi-ai-panel';
   panel.innerHTML=`
     <div id="gdi-ai-head">
-      <div class="gdi-ai-avatar">${MEGGY_AVATAR}</div>
+      <div class="gdi-ai-avatar">' + MEGGY_AVATAR + '</div>
       <div class="gdi-ai-info">
         <div class="gdi-ai-name">${MEGGY_NAME}<span class="gdi-ai-tag">${MEGGY_TAG}</span></div>
         <div class="gdi-ai-status"><span class="gdi-ai-dot"></span> verificando…</div>
@@ -2868,5 +2746,5 @@
   }
   fab.addEventListener('click',()=>{sessionStorage.setItem('gdi-ai-seen','1');},{once:true});
 
-  console.warn('[GDI Extras] M-AI widget Meggy ativo (Task 4-c/Task CLEANUP)');
+  console.log('[GDI Extras] M-AI widget Meggy 🐩 — poodle tutora ativo — refactored (Task 4-c)');
 })();
