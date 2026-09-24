@@ -29,7 +29,7 @@
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  const CACHE_VERSION = '51';  // ★ v1.0.56 (Task SCAN-500+AVATAR): gdi-meggy.js — FIX MEGGY_AVATAR in chat header (was ' + MEGGY_AVATAR + ' literal text, now ${MEGGY_AVATAR} interpolation). worker.js — FIX scanner HTTP 500: try-catch around navigation + scan, URL-decode folder names. Bump 50→51.
+  const CACHE_VERSION = '52';  // ★ v1.0.57 (Task SCAN-SUBREQ): worker.js FIX "Too many subrequests" — contador global _scanSubreqCount para em 40 (limite CF=50), retorna partial results. Profundidade 15→8. Bump 51→52.
 
   const MODULES = [
     'gdi-core.js',
