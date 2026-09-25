@@ -29,7 +29,7 @@
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  const CACHE_VERSION = '64';  // ★ v1.0.62d: bump 59→60 — CDN edge tinha cache stale em ?v=59. Fix collectCourses scope.
+  const CACHE_VERSION = '65';  // ★ v1.0.62d: bump 59→60 — CDN edge tinha cache stale em ?v=59. Fix collectCourses scope.
 
   const MODULES = [
     'gdi-core.js',
