@@ -26,11 +26,13 @@
 
   // jsdelivr CDN: cache mundial, immutable, dispensa GH_TOKEN (repo público)
   // ★ v1.0.75: Use raw.githubusercontent.com instead of jsdelivr CDN to avoid stale cache issues
-  const BASE_URL = 'https://cdn.jsdelivr.net/gh/' + PUBLIC_REPO + '@main/modular/';
+  // ★ v1.0.77: Use /modular/ route (worker proxies from raw.githubusercontent.com)
+  // This avoids jsdelivr CDN cache issues — worker always gets latest from GitHub.
+  const BASE_URL = '/modular/';
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  const CACHE_VERSION = '81';  // ★ v1.0.74: re-apply critical fixes after sandbox reset
+  const CACHE_VERSION = '82';  // ★ v1.0.74: re-apply critical fixes after sandbox reset
 
   const MODULES = [
     'gdi-core.js',
