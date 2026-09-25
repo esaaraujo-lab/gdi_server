@@ -545,6 +545,11 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       }
     });
     el.addEventListener('loadedmetadata',()=>{
+      // ★ v1.0.84: reset auto-watch flag on each new video.
+      // The same <video> element is reused across switchVideo() (Shaka/Plyr/VideoJS/etc.),
+      // so __autoW would stay true after the first video reaches 90% and the auto-mark-watched
+      // logic would NEVER fire for subsequent videos. Reset here on each loadedmetadata.
+      el.__autoW=false;
       const el3=document.getElementById('gdi-note-time');
       if(el3)el3.textContent='00:00';
     });
