@@ -2434,6 +2434,14 @@
 #gdi-ai-rate-limit{padding:4px 12px 8px;font-size:10px;color:var(--ferreto-text-muted,#8b949e);text-align:center;}
 #gdi-ai-context{font-size:11px;color:var(--ferreto-text-muted,#8b949e);}
 @media(max-width:480px){.gdi-ai-quick{font-size:10px;padding:6px 4px;}}
+/* ★ MEGGY-HEADER-CONTEXTUAL: banner contextual sugestão */
+#gdi-meggy-suggest{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:10000;
+  max-width:420px;padding:10px 16px;border-radius:12px;
+  background:linear-gradient(135deg,rgba(255,139,159,.95),rgba(192,38,211,.95));
+  color:#fff;font-size:13px;box-shadow:0 8px 28px -6px rgba(255,139,159,.4);
+  display:none;align-items:center;gap:8px;cursor:pointer;animation:gdi-ai-in .3s ease;}
+#gdi-meggy-suggest.show{display:flex;}
+#gdi-meggy-suggest .gdi-suggest-close{margin-left:auto;font-size:16px;opacity:.7;}
 `;document.documentElement.appendChild(s);
   }
 
@@ -2837,6 +2845,74 @@
     setTimeout(()=>{if(fab.style.display!=='none'&&!panel.classList.contains('open'))badge.classList.add('show');},8000);
   }
   fab.addEventListener('click',()=>{sessionStorage.setItem('gdi-ai-seen','1');},{once:true});
+
+  // ═══ MEGGY-HEADER-CONTEXTUAL: banner contextual de sugestões ═══
+  // Banner pequeno e dismissível no rodapé da tela, disparado por contexto:
+  //  - troca de aula (video:switched): "Quer um resumo desta aula? 🐩"
+  //  - revisões vencidas (chamador externo): "Você tem N revisões vencidas. Bora? 🎯"
+  //  - resposta errada de quiz (chamador externo): "Errou? Quer que eu explique? 💡"
+  // A função é global (window.__gdiMeggySuggest) para que outros módulos possam
+  // invocá-la. CSS #gdi-meggy-suggest está no <style> no topo deste IIFE.
+  window.__gdiMeggySuggest = function(text, action){
+    // text: string a exibir
+    // action: função opcional executada no clique (default: abre o chat via FAB)
+    let banner = document.querySelector('#gdi-meggy-suggest');
+    if(!banner){
+      banner = document.createElement('div');
+      banner.id = 'gdi-meggy-suggest';
+      banner.innerHTML = '<span class="gdi-suggest-text"></span><span class="gdi-suggest-close">×</span>';
+      (typeof GDI_ROOT==='function' ? (GDI_ROOT()||document.body) : document.body).appendChild(banner);
+      // close button (×) — fecha sem disparar action
+      const closeBtn = banner.querySelector('.gdi-suggest-close');
+      if(closeBtn){
+        closeBtn.onclick = (e) => {
+          e.stopPropagation();
+          banner.classList.remove('show');
+        };
+      }
+    }
+    const txtEl = banner.querySelector('.gdi-suggest-text');
+    if(txtEl) txtEl.textContent = text;
+    // clique no corpo do banner → executa action (ou abre chat por padrão)
+    banner.onclick = () => {
+      banner.classList.remove('show');
+      if(typeof action === 'function') action();
+      else {
+        const fab = document.querySelector('#gdi-ai-fab');
+        if(fab) fab.click();
+      }
+    };
+    banner.classList.add('show');
+    // auto-dismiss após 8s
+    clearTimeout(banner.__timer);
+    banner.__timer = setTimeout(() => banner.classList.remove('show'), 8000);
+  };
+
+  // ═══ MEGGY-HEADER-CONTEXTUAL: trigger de banner ao trocar de aula ═══
+  // 3s após video:switched (espera playlistVideos/currentIndex estabilizar),
+  // se houver uma aula ativa, mostra "Quer um resumo desta aula? 🐩".
+  // Clique → abre chat + preenche "Gere um resumo desta aula" + dispara send().
+  if(typeof Bus !== 'undefined' && typeof Bus.onGlobal === 'function'){
+    Bus.onGlobal('video:switched', () => {
+      setTimeout(() => {
+        try {
+          const lesson = window.playlistVideos?.[window.currentIndex]?.origName;
+          if(lesson && window.__gdiMeggySuggest){
+            window.__gdiMeggySuggest('Quer um resumo desta aula? 🐩', () => {
+              const fab = document.querySelector('#gdi-ai-fab');
+              if(fab) fab.click();
+              setTimeout(() => {
+                const input = document.querySelector('#gdi-ai-input');
+                if(input){ input.value = 'Gere um resumo desta aula'; }
+                const sendBtn = document.querySelector('#gdi-ai-send');
+                if(sendBtn) sendBtn.click();
+              }, 300);
+            });
+          }
+        } catch(_) {}
+      }, 3000); // espera 3s após troca de vídeo
+    });
+  }
 
   console.log('[GDI Extras] M-AI widget Meggy 🐩 — poodle tutora ativo — refactored (Task 4-c)');
 })();
