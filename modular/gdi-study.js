@@ -1546,28 +1546,54 @@
     box.innerHTML = `
       <div style="margin-bottom:18px;">
         <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 4px;">☁️ Explorar Drives</h3>
-        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0;">Navegue pelos drives compartilhados para encontrar novos cursos. A Área do Aluno se retrai automaticamente.</p>
+        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0;">Navegue pelos drives compartilhados. Clique para explorar o conteúdo.</p>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;">
         ${drives.map((name, idx) => {
           const ident = courseIdentity('/'+idx+':/', name);
-          return `<a href="/${idx}:/" data-gdi-drive-link="${idx}" style="text-decoration:none;display:block;padding:16px;border-radius:12px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);border-top:3px solid ${ident.color};transition:all .15s;cursor:pointer;" onmouseover="this.style.background='var(--ferreto-surface-3,rgba(255,255,255,.08))';this.style.borderColor='${ident.color}';" onmouseout="this.style.background='var(--ferreto-surface-2,rgba(255,255,255,.04))';this.style.borderColor='var(--ferreto-border,#30363d)';">
+          return `<div data-gdi-drive-link="${idx}" style="padding:16px;border-radius:12px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);border-top:3px solid ${ident.color};transition:all .15s;cursor:pointer;" onmouseover="this.style.background='var(--ferreto-surface-3,rgba(255,255,255,.08))';this.style.borderColor='${ident.color}';" onmouseout="this.style.background='var(--ferreto-surface-2,rgba(255,255,255,.04))';this.style.borderColor='var(--ferreto-border,#30363d)';">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
               <span style="font-size:28px;flex:none;">${ident.icon}</span>
               <b style="color:var(--ferreto-text,#e6edf3);font-size:13px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(name)}</b>
             </div>
-            <div style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">Drive ${idx} · Clique para navegar →</div>
-          </a>`;
+            <div style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">Drive ${idx} · Clique para explorar →</div>
+          </div>`;
         }).join('')}
       </div>
+      <div id="gdi-drive-browser" style="margin-top:18px;display:none;"></div>
     `;
-    // ★ v1.0.70: auto-retrai a Área do Aluno ao clicar num drive
-    box.querySelectorAll('[data-gdi-drive-link]').forEach(a => {
-      a.addEventListener('click', (e) => {
-        // Deixa a navegação acontecer, mas retrai o painel
-        setTimeout(() => {
-          if(window.__gdiCollapseCentral) window.__gdiCollapseCentral();
-        }, 100);
+    // ★ v1.0.71: Drives integrados — carrega conteúdo DENTRO do painel
+    box.querySelectorAll('[data-gdi-drive-link]').forEach(card => {
+      card.addEventListener('click', async (e) => {
+        const driveIdx = card.dataset.gdiDriveLink;
+        const browser = box.querySelector('#gdi-drive-browser');
+        if(browser){
+          browser.style.display = 'block';
+          browser.innerHTML = '<div style="text-align:center;padding:20px;"><div class="gdi-mat-isa-spin"></div><p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin-top:10px;">Carregando drive...</p></div>';
+          try {
+            const pw = window.gdiGetPw ? window.gdiGetPw() : '';
+            const result = await window.gdiListAllFiles('/' + driveIdx + ':/', pw);
+            if(Array.isArray(result) && result.length){
+              const folders = result.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
+              browser.innerHTML = '<div style="margin-bottom:10px;"><button id="gdi-drive-back" class="gdi-mode-btn" style="font-size:11px;">← Voltar para drives</button></div>' +
+                '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;">' +
+                folders.slice(0, 30).map(f => {
+                  const fn = f.name || f.title || 'Pasta';
+                  const fp = f.path || (f.parentPath ? f.parentPath + '/' + encodeURIComponent(fn) : '/' + driveIdx + ':/' + encodeURIComponent(fn) + '/');
+                  return '<a href="' + escHtml(fp) + '" style="text-decoration:none;display:block;padding:12px;border-radius:8px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);cursor:pointer;" onmouseover="this.style.background=\'var(--ferreto-surface-3,rgba(255,255,255,.08))\'" onmouseout="this.style.background=\'var(--ferreto-surface-2,rgba(255,255,255,.04))\'">' +
+                    '<div style="display:flex;align-items:center;gap:6px;"><i class="bi bi-folder-fill" style="color:var(--ferreto-secondary,#5ddeda);font-size:16px;"></i>' +
+                    '<span style="color:var(--ferreto-text,#e6edf3);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(fn) + '</span></div></a>';
+                }).join('') + '</div>';
+              // Back button
+              const backBtn = browser.querySelector('#gdi-drive-back');
+              if(backBtn) backBtn.onclick = () => { browser.style.display = 'none'; renderDrives(box); };
+            } else {
+              browser.innerHTML = '<p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">Nenhum conteúdo encontrado.</p>';
+            }
+          } catch(err) {
+            browser.innerHTML = '<p style="color:#ff8b8b;font-size:12px;">Erro: ' + escHtml(err.message) + '</p>';
+          }
+        }
       });
     });
   }
