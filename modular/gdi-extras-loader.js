@@ -29,11 +29,12 @@
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  const CACHE_VERSION = '55';  // ★ v1.0.60 (Task SCAN-CURSOR-VALIDATE): worker.js FIX cursor antigo com paths errados — agora valida e descarta. Bump 54→55.
+  const CACHE_VERSION = '56';  // ★ v1.0.61 (Task STORAGE-FIX): storage.js estava faltando no array MODULES — GDIStorage nunca era carregado! Adicionado storage.js antes de gdi-pdf/gdi-ui/gdi-meggy/gdi-study (que dependem dele). Bump 55→56.
 
   const MODULES = [
     'gdi-core.js',
     'gdi-worker-bridge.js',   // NEW: bridge para Web Workers (depois do core, antes dos demais)
+    'storage.js',             // ★ FIX v61: storage.js estava faltando! GDIStorage é usado por gdi-meggy.js e gdi-study.js
     'gdi-pdf.js',
     'gdi-ui.js',
     'gdi-meggy.js',
