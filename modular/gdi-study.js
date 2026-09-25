@@ -3479,9 +3479,9 @@
   if(!document.getElementById('gdi-central-style')){
     const s=document.createElement('style');s.id='gdi-central-style';s.textContent=`
 /* ═══ ÁREA DO ALUNO v3 — design moderno (sidebar + dashboard) ═══ */
-#gdi-central{position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.6);color:var(--ferreto-text,#f3f5fa);font-family:var(--ferreto-font-body,'Rubik',sans-serif);display:none;overflow-y:auto;}
+#gdi-central{position:fixed;inset:0;z-index:10001;background:var(--ferreto-bg,#070910);color:var(--ferreto-text,#f3f5fa);font-family:var(--ferreto-font-body,'Rubik',sans-serif);display:none;overflow-y:auto;}
 @keyframes gdi-central-in{from{opacity:0;transform:scale(.98)}to{opacity:1;transform:none}}
-.gdi-central-box{width:min(1000px,100vw);height:100vh;min-height:100vh;margin:0 auto;padding:0;background:var(--ferreto-bg,#070910);border:0;border-radius:0;box-shadow:0 0 60px rgba(0,0,0,.5);}
+.gdi-central-box{width:100%;height:100%;min-height:100vh;margin:0;padding:0;background:var(--ferreto-bg,#070910);border:0;border-radius:0;}
 .gdi-central-head{display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--ferreto-border,#21262d);background:linear-gradient(135deg,rgba(255,139,159,.08),rgba(93,222,218,.05));flex-shrink:0;flex-wrap:nowrap;}
 .gdi-central-head-title{display:flex;align-items:center;gap:10px;flex-shrink:0;}
 .gdi-central-head-title b{color:var(--ferreto-text,#f0f6fc);font-size:16px;font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-weight:600;}
