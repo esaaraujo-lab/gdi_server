@@ -993,25 +993,7 @@
     const m=/^\/(\d+):/.exec(ck||'');
     return(window.drive_names&&m&&window.drive_names[+m[1]])||'';
   }
-  // ★ v1.0.75: courseIdentity — identifica disciplina por palavras-chave para ícone/cor
-  function courseIdentity(courseKey, courseName){
-    const n = ((courseName||'') + ' ' + (driveNameOf(courseKey)||'')).toLowerCase();
-    if(/direito|tribunal|tj|trt|trf|tre|oab|judici|constitucional|penal|civil|administrativo|processual|jurídic/.test(n))
-      return {icon:'⚖️', color:'#5ddeda'};
-    if(/polic|prf|pf\b|rodovi|federal|seguranç/.test(n))
-      return {icon:'🚔', color:'#3fb950'};
-    if(/saúde|medic|enferm|nutri|psiquia|medcurso|saude/.test(n))
-      return {icon:'🔬', color:'#ff8b9f'};
-    if(/músic|music|canto|voz|coral/.test(n))
-      return {icon:'🎵', color:'#c026d3'};
-    if(/fit|física|fisica|hipopress|exerc|treino|muscul/.test(n))
-      return {icon:'🏋️', color:'#ffd43b'};
-    if(/educa|magistér|pedagóg|professor|concurso sme|see |cursinho/.test(n))
-      return {icon:'📚', color:'#5ddeda'};
-    if(/enem|vestib|fuvest|unicamp|usp/.test(n))
-      return {icon:'🎓', color:'#ff8b9f'};
-    return {icon:'📁', color:'#5ddeda'};
-  }
+  // ★ v1.0.76: courseIdentity moved to gdi-core.js as window.gdiCourseIdentity (CDN cache fix)
   function collectCourses(){
     const d=stateD()||{};
     // ★ cursos ocultos pelo usuário (não aparecem na lista de cursos)
@@ -1465,7 +1447,7 @@
       </div>
       <div id="gdi-drive-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;">
         ${drives.map((name, idx) => {
-          const ident = courseIdentity('/'+idx+':/', name);
+          const ident = window.gdiCourseIdentity('/'+idx+':/', name);
           return `<div data-gdi-drive-link="${idx}" style="padding:16px;border-radius:12px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);border-top:3px solid ${ident.color};transition:all .15s;cursor:pointer;" onmouseover="this.style.background='var(--ferreto-surface-3,rgba(255,255,255,.08))';this.style.borderColor='${ident.color}';" onmouseout="this.style.background='var(--ferreto-surface-2,rgba(255,255,255,.04))';this.style.borderColor='var(--ferreto-border,#30363d)';">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
               <span style="font-size:28px;flex:none;">${ident.icon}</span>
@@ -1645,7 +1627,7 @@
           ${courses.slice(0,6).map(c=>{
             const name=cleanCourseName(c.key);
             const drive=driveNameOf(c.key);
-            const ident=courseIdentity(c.key, name);
+            const ident=window.gdiCourseIdentity(c.key, name);
             // ★ FIX 3 (Task 14): usa totalLessons (real) ao invés de c.lessons.size (visited paths)
             const total=c.totalLessons||c.lessons.size||0;
             const watched=c.watched||0;
