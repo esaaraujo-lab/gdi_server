@@ -3514,12 +3514,17 @@
   (function(){
     function tryOpenFromURL(){
       try{
+        // ★ v1.0.64: guard para não reabrir a cada page:change quando autoOpenCentral está setado
+        if(window.__gdiAutoOpenDone) return false;
         const params = new URLSearchParams(window.location.search);
         const central = params.get('central');
-        if(central){
+        // ★ v1.0.64: também verifica window.MODEL.autoOpenCentral (homepage serve SPA com este flag)
+        const autoOpen = central || (window.MODEL && window.MODEL.autoOpenCentral ? '1' : null);
+        if(autoOpen){
+          window.__gdiAutoOpenDone = true; // marca como aberto — não reabre em page:change subsequentes
           // Espera GDIUser estar pronto (state carregado) antes de abrir
           const openNow = function(){
-            const tab = (central === '1' || central === 'true') ? 'home' : central;
+            const tab = (autoOpen === '1' || autoOpen === 'true') ? 'home' : autoOpen;
             openPanel(tab);
             // Limpa o parâmetro da URL (não fica reabrindo a cada navegação)
             try{
