@@ -33,11 +33,10 @@
   if(window.__gdiM9Isa)return;window.__gdiM9Isa=true;
   const LS_SUM='gdi-isa-summaries-v1';
   const LQ='gdi-questions-v1';
-  // ★ P2-STANDARDIZE: esc/lsGet/lsSet/uid delegam para os helpers canônicos em window (definidos em gdi-core.js). Fallback local mantém comportamento se window ainda não estiver pronto.
-  const esc=window.escHtml||(s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;'));
-  const lsGet=window.gdiLsGet||((k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}});
-  const lsSet=window.gdiLsSet||((k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}});
-  const uid=window.gdiUid||(()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8));
+  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
+  const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
+  const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 
   // ── Robust JSON array parser ──
   // LLMs frequentemente retornam texto antes/depois do JSON, cercam o
@@ -353,32 +352,6 @@
   //   - Suporta um callback de progresso (para mostrar "OCR: página 3/11…")
   //   - Limita a 8 páginas no OCR (tempo total ~2-4 min para PDF grande)
   //   - Idiomas: português + inglês
-  // ★ FIX v51 (Task MD-EXTRACT): getFileType + extractTextFile para .md/.txt/.html.
-  //   Antes, generateAll() chamava extractPdfText() para TODOS os items — mas
-  //   agora que o M9 (gdi-core.js v49) inclui MD/TXT/HTML, esses arquivos chegavam
-  //   ao Meggy e eram abertos como PDF → "Invalid PDF structure".
-  //   Agora generateAll() despacha por tipo: PDF → extractPdfText, texto → extractTextFile.
-  function getFileType(name){
-    const n=(name||'').toLowerCase();
-    if(/\.md$/.test(n))return 'md';
-    if(/\.txt$/.test(n))return 'txt';
-    if(/\.html?$/.test(n))return 'html';
-    return 'pdf';
-  }
-  async function extractTextFile(url){
-    // Fetch direto — sem pdf.js. Retorna o texto cru (md/txt) ou HTML saneado.
-    let resp;
-    const fetchOpts=[{credentials:'same-origin'},{credentials:'include'},{credentials:'omit'}];
-    for(const opts of fetchOpts){
-      try{resp=await fetch(url,opts);if(resp.ok)break;}catch(_){}
-    }
-    if(!resp||!resp.ok)throw new Error('HTTP '+(resp?resp.status:'fetch')+' ao baixar arquivo de texto');
-    const txt=await resp.text();
-    if(!txt||txt.trim().length<10)throw new Error('Arquivo de texto vazio');
-    // Para HTML: strip tags básico (mantém texto legível para o LLM)
-    // Para MD/TXT: retorna cru (o LLM entende markdown naturalmente)
-    return txt;
-  }
   async function extractPdfText(url, progressCb){
     const pdfjs=await ensurePdfjs();
 
@@ -725,8 +698,34 @@
   }
 
   // ── Drive cache (GET/POST /api/ai/cache) ──
+  // ★ Sprint 4: agora tenta primeiro os endpoints granulares opcionais
+  //   /api/ai/summaries, /api/ai/flashcards, /api/ai/questions
+  //   Se falhar (worker antigo), cai para o cache unificado /api/ai/cache.
+  //   Isso permite migração gradual: worker novo = 4 arquivos; worker antigo = 1.
+  const GRANULAR_AVAILABLE = (function(){
+    // detecta uma vez se endpoints granulares existem (HEAD request)
+    let _checked=null;
+    return async function(){
+      if(_checked!==null)return _checked;
+      try{
+        const r=await fetch('/api/ai/summaries?probe=1',{method:'HEAD'});
+        _checked=r.ok;
+      }catch(_){_checked=false;}
+      return _checked;
+    };
+  })();
+
   async function cacheGet(){
     try{
+      // ★ tenta endpoint granular primeiro (summaries)
+      const granular=await GRANULAR_AVAILABLE();
+      if(granular){
+        const r=await fetch('/api/ai/summaries?key='+encodeURIComponent(lessonKey()),{cache:'no-store'});
+        const d=await r.json();
+        if(d&&d.ok&&d.cached)return d.cached;
+        return null;
+      }
+      // fallback: cache unificado antigo
       const r=await fetch('/api/ai/cache?key='+encodeURIComponent(lessonKey()),{cache:'no-store'});
       const d=await r.json();
       return (d&&d.ok&&d.cached)?d.cached:null;
@@ -741,7 +740,10 @@
         const existing=await cacheGet();
         mindmapToSave=(existing&&existing.mindmap)||null;
       }
-      await fetch('/api/ai/cache',{method:'POST',headers:{'Content-Type':'application/json'},
+      // ★ tenta endpoint granular primeiro; senão, cache unificado
+      const granular=await GRANULAR_AVAILABLE();
+      const endpoint=granular?'/api/ai/summaries':'/api/ai/cache';
+      await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({key:lessonKey(),summary,questions,mindmap:mindmapToSave,lessonName})});
     }catch(_){/* não bloqueia o fluxo se o cache falhar */}
   }
@@ -905,6 +907,17 @@
     return callIsa(prompt);
   }
 
+  // ★ Classifica material pelo nome do arquivo (Task FINAL / Fix 1c)
+  //   - 'questions': arquivos de questões/exercícios/simulados/provas
+  //   - 'skip':      arquivos de resumo (já são resumo — não processar)
+  //   - 'study':     material de estudo padrão (PDFs de aula/apostila)
+  function classifyMaterial(name){
+    const n=(name||'').toLowerCase();
+    if(/quest|exerc|simulad|prova|caderno|lista|test/.test(n))return 'questions';
+    if(/resum|summary/.test(n))return 'skip';
+    return 'study';
+  }
+
   // Gera TODOS os materiais EM PARALELO TOTAL (não em cascata)
   // Cada tarefa usa uma chave NVIDIA diferente (se houver múltiplas)
   async function generateAll(items,lesson,trigger,progressCb){
@@ -964,75 +977,32 @@
     let allText='';
     const pdfTexts=[];
     const pdfErrors=[]; // ★ coleta erros por PDF para diagnóstico
-    // ★ FIX v54 (Task TRANSC-FIRST): ESTRATÉGIA TRANSCRIÇÃO-PRIMEIRO.
-    //   1. Busca arquivos com "transcri" no nome PRIMEIRO (são o conteúdo real da aula)
-    //   2. Se achar transcrição E extrai com sucesso (text > 50 chars), USA SÓ ELA —
-    //      não desperdiça tempo extraindo PDFs/ebooks (a transcrição é mais completa)
-    //   3. Se NÃO achar transcrição (ou falhar), aí sim extrai PDFs/materiais
-    //   Isto resolve o bug do v53 onde PDFs grandes travavam a extração e o resumo
-    //   nunca era gerado mesmo com a transcrição disponível.
-    const transcriptionItems = items.filter(it => /transcri/i.test(it.name||''));
-    const otherItems = items.filter(it => !/transcri/i.test(it.name||''));
-
+    // ★ Sprint 6: paraleliza extração (era sequencial, demorava 4x mais)
     if(progressCb)progressCb({phase:'extract-start',total:items.length});
-
-    // ★ PASSO 1: tenta extrair transcrições PRIMEIRO (sequencial, rápido — são .md/.txt)
-    let transcriptionText = '';
-    for(const item of transcriptionItems){
+    const results=await Promise.allSettled(items.map(async item=>{
       try{
         if(progressCb)progressCb({phase:'extract',pdf:item.name});
-        const txt = await extractTextFile(item.url);
-        if(txt && txt.trim().length > 50){
-          transcriptionText += (transcriptionText ? '\n\n---\n\n' : '') + txt;
-          pdfTexts.push({name:item.name, text:txt});
-        }
+        const txt=await extractPdfText(item.url,(p)=>{
+          if(progressCb)progressCb(Object.assign({pdf:item.name},p));
+        });
+        return {name:item.name,text:txt};
       }catch(e){
-        pdfErrors.push({name:item.name, error:e.message||String(e), url:item.url||''});
-        console.warn('[Meggy] transcrição falhou:', item.name, e.message);
+        throw {name:item.name,error:e.message||String(e),url:item.url};
       }
-    }
-
-    if(transcriptionText && transcriptionText.trim().length >= 50){
-      // ★ PASSO 2A: transcrição encontrada! Usa SÓ ela — não extrai PDFs (economiza 30-60s)
-      allText = transcriptionText;
-      if(progressCb)progressCb({phase:'extract-done', source:'transcription', chars:allText.length});
-    }else{
-      // ★ PASSO 2B: sem transcrição (ou falhou) — extrai PDFs/materiais em paralelo
-      if(progressCb && transcriptionItems.length){
-        progressCb({phase:'extract-fallback', reason:'transcrição falhou, usando PDFs'});
+    }));
+    results.forEach(r=>{
+      if(r.status==='fulfilled'){
+        const {name,text}=r.value;
+        if(text&&text.trim().length>50){
+          allText+=(allText?'\n\n---\n\n':'')+text;
+          pdfTexts.push({name,text});
+        }
+      }else{
+        const err=r.reason||{};
+        pdfErrors.push({name:err.name||'PDF',error:err.error||'erro',url:err.url||''});
+        console.warn('[Meggy] PDF falhou:',err.name,err.error);
       }
-      const results=await Promise.allSettled(otherItems.map(async item=>{
-        try{
-          if(progressCb)progressCb({phase:'extract',pdf:item.name});
-          const ftype=getFileType(item.name);
-          let txt;
-          if(ftype==='pdf'){
-            txt=await extractPdfText(item.url,(p)=>{
-              if(progressCb)progressCb(Object.assign({pdf:item.name},p));
-            });
-          }else{
-            txt=await extractTextFile(item.url);
-            if(progressCb)progressCb({pdf:item.name,page:'text',current:1,total:1});
-          }
-          return {name:item.name,text:txt};
-        }catch(e){
-          throw {name:item.name,error:e.message||String(e),url:item.url};
-        }
-      }));
-      results.forEach(r=>{
-        if(r.status==='fulfilled'){
-          const {name,text}=r.value;
-          if(text&&text.trim().length>50){
-            allText+=(allText?'\n\n---\n\n':'')+text;
-            pdfTexts.push({name,text});
-          }
-        }else{
-          const err=r.reason||{};
-          pdfErrors.push({name:err.name||'PDF',error:err.error||'erro',url:err.url||''});
-          console.warn('[Meggy] PDF falhou:',err.name,err.error);
-        }
-      });
-    }
+    });
     if(!allText||allText.trim().length<50){
       // ★ Mensagem detalhada com os erros de cada PDF
       let detail='Não foi possível extrair texto dos PDFs.';
@@ -1241,27 +1211,21 @@
     const pdfIdx=window.__gdiPdfCursor%items.length;
     window.__gdiPdfCursor++;
     const pdfItem=items[pdfIdx];
-    setLoading(bodyEl,'Extraindo texto do material: '+esc(pdfItem.name||'material')+'…');
+    setLoading(bodyEl,'Extraindo texto do PDF: '+esc(pdfItem.name||'material')+'…');
     let text;
-    // ★ FIX v51: helper local para extrair por tipo (PDF vs texto)
-    const extractByType=async(it)=>{
-      const ft=getFileType(it.name);
-      if(ft==='pdf')return await extractPdfText(it.url);
-      return await extractTextFile(it.url);
-    };
     try{
-      text=await extractByType(pdfItem);
+      text=await extractPdfText(pdfItem.url);
     }catch(e){
       for(let i=1;i<items.length;i++){
         const next=items[(pdfIdx+i)%items.length];
         try{
-          text=await extractByType(next);
+          text=await extractPdfText(next.url);
           if(text&&text.trim().length>=50)break;
         }catch(_){}
       }
       if(!text||text.trim().length<50){setError(bodyEl,'Falha ao extrair texto.');return false;}
     }
-    if(!text||text.trim().length<50){setError(bodyEl,'Material sem texto extraível.');return false;}
+    if(!text||text.trim().length<50){setError(bodyEl,'PDF sem texto extraível.');return false;}
     setLoading(bodyEl,'Meggy está criando questões…');
     let resp;
     try{
@@ -2368,18 +2332,18 @@
   // CSS
   if(!document.getElementById('gdi-ai-style')){
     const s=document.createElement('style');s.id='gdi-ai-style';s.textContent=`
-#gdi-ai-fab{position:fixed;bottom:20px;right:20px;z-index:2147483646;width:56px;height:56px;border-radius:50%;
-  border:0;cursor:pointer;background:linear-gradient(135deg,rgba(255,139,159,.7) 0%,rgba(192,38,211,.7) 55%,rgba(93,222,218,.7) 130%);
+#gdi-ai-fab{position:fixed;bottom:20px;right:20px;z-index:10001;width:56px;height:56px;border-radius:50%;
+  border:0;cursor:pointer;background:linear-gradient(135deg,#ff8b9f 0%,#c026d3 55%,#5ddeda 130%);
   color:#fff;font-size:24px;display:flex;align-items:center;justify-content:center;
-  box-shadow:0 8px 28px -6px rgba(255,139,159,.4),0 0 0 1px rgba(255,255,255,.08);
-  transition:transform .18s,box-shadow .18s,opacity .18s;opacity:.65;}
-#gdi-ai-fab:hover{transform:scale(1.08) translateY(-2px);box-shadow:0 12px 36px -6px rgba(255,139,159,.6);opacity:1;}
+  box-shadow:0 8px 28px -6px rgba(255,139,159,.5),0 0 0 1px rgba(255,255,255,.12);
+  transition:transform .18s,box-shadow .18s;}
+#gdi-ai-fab:hover{transform:scale(1.08) translateY(-2px);box-shadow:0 12px 36px -6px rgba(255,139,159,.6);}
 #gdi-ai-fab .gdi-ai-fab-ico{width:40px;height:40px;line-height:1;display:flex;align-items:center;justify-content:center;}#gdi-ai-fab .gdi-ai-fab-ico svg{width:100%;height:100%;border-radius:50%;}
 #gdi-ai-fab-badge{position:absolute;top:-2px;right:-2px;width:16px;height:16px;border-radius:50%;
   background:#5ddeda;border:2px solid var(--ferreto-bg,#070910);display:none;}
 #gdi-ai-fab-badge.show{display:block;animation:gdi-ai-pulse 1.6s ease infinite;}
 @keyframes gdi-ai-pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.25);}}
-#gdi-ai-panel{position:fixed;bottom:88px;right:20px;z-index:2147483647;width:380px;max-width:calc(100vw - 32px);
+#gdi-ai-panel{position:fixed;bottom:88px;right:20px;z-index:10001;width:380px;max-width:calc(100vw - 32px);
   height:540px;max-height:calc(100vh - 120px);display:none;flex-direction:column;
   background:var(--ferreto-surface,rgba(22,27,38,.92));
   -webkit-backdrop-filter:blur(22px);backdrop-filter:blur(22px);
@@ -2431,20 +2395,7 @@
 .gdi-ai-err{font-size:12px;color:#ff8b8b;text-align:center;padding:8px;margin:0 4px;}
 .gdi-ai-provider{font-size:10px;color:var(--ferreto-text-faint,#6b7488);text-align:center;padding:2px 0 6px;letter-spacing:.02em;}
 .gdi-ai-provider b{color:var(--ferreto-secondary,#5ddeda);}
-.gdi-ai-quick-actions{display:flex;gap:6px;padding:8px 12px;border-top:1px solid var(--ferreto-border,rgba(255,255,255,.09));}
-.gdi-ai-quick{flex:1;padding:6px 8px;border:1px solid var(--ferreto-border,#30363d);border-radius:8px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));color:var(--ferreto-text,#e6edf3);font-size:11px;cursor:pointer;transition:all .15s;font-family:inherit;}
-.gdi-ai-quick:hover{background:var(--ferreto-surface-3,rgba(255,255,255,.08));border-color:var(--ferreto-primary,#ff8b9f);}
-#gdi-ai-rate-limit{padding:4px 12px 8px;font-size:10px;color:var(--ferreto-text-muted,#8b949e);text-align:center;}
-#gdi-ai-context{font-size:11px;color:var(--ferreto-text-muted,#8b949e);}
-@media(max-width:480px){.gdi-ai-quick{font-size:10px;padding:6px 4px;}}
-/* ★ MEGGY-HEADER-CONTEXTUAL: banner contextual sugestão */
-#gdi-meggy-suggest{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:10000;
-  max-width:420px;padding:10px 16px;border-radius:12px;
-  background:linear-gradient(135deg,rgba(255,139,159,.95),rgba(192,38,211,.95));
-  color:#fff;font-size:13px;box-shadow:0 8px 28px -6px rgba(255,139,159,.4);
-  display:none;align-items:center;gap:8px;cursor:pointer;animation:gdi-ai-in .3s ease;}
-#gdi-meggy-suggest.show{display:flex;}
-#gdi-meggy-suggest .gdi-suggest-close{margin-left:auto;font-size:16px;opacity:.7;}
+@media(max-width:480px){#gdi-ai-panel{right:8px;left:8px;width:auto;bottom:80px;height:calc(100vh - 160px);}}
 `;document.documentElement.appendChild(s);
   }
 
@@ -2465,10 +2416,7 @@
     }
     return txt.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
   }
-  // ★ P2-STANDARDIZE: esc agora delega para window.escHtml (escapa os 5 chars & < > " ')
-  // em vez de só 3 (& < >). Mantida como function declaration para preservar hoisting
-  // (renderMd/addMsg/renderHistory referenciam esc e são chamadas depois).
-  function esc(s){return (window.escHtml||function(x){return String(x||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');})(s);}
+  function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
   // ── Detecção da IA do navegador ──
   // Chrome 127+ com "Prompt API for Gemini Nano" habilitado expõe
@@ -2520,31 +2468,11 @@
     const dot=panel.querySelector('.gdi-ai-dot');
     const st=panel.querySelector('.gdi-ai-status');
     if(!dot||!st)return;
-    // ★ MEGGY-REDESIGN: cada string de status inclui <span id="gdi-ai-context"></span>
-    // para que o contexto da aula sobreviva às re-escritas de innerHTML.
-    if(_browserAIState==='ready'){dot.classList.add('local');st.innerHTML='<span class="gdi-ai-dot local"></span> Meggy · IA do navegador · 100% local <span id="gdi-ai-context"></span>';_providerLabel='IA do navegador <b>(Chrome/Gemini Nano — local)</b>';}
-    else if(_browserAIState==='download'){dot.classList.remove('local');st.innerHTML='<span class="gdi-ai-dot"></span> Meggy · baixando modelo local… <span id="gdi-ai-context"></span>';_providerLabel='baixando modelo do navegador…';}
-    else{dot.classList.remove('local');st.innerHTML='<span class="gdi-ai-dot"></span> Meggy · online <span id="gdi-ai-context"></span>';const sl=serverLabel();_providerLabel=sl.label;}
+    if(_browserAIState==='ready'){dot.classList.add('local');st.innerHTML='<span class="gdi-ai-dot local"></span> Meggy · IA do navegador · 100% local';_providerLabel='IA do navegador <b>(Chrome/Gemini Nano — local)</b>';}
+    else if(_browserAIState==='download'){dot.classList.remove('local');st.innerHTML='<span class="gdi-ai-dot"></span> Meggy · baixando modelo local…';_providerLabel='baixando modelo do navegador…';}
+    else{dot.classList.remove('local');st.innerHTML='<span class="gdi-ai-dot"></span> Meggy · online';const sl=serverLabel();_providerLabel=sl.label;}
     const pv=panel.querySelector('.gdi-ai-provider');
     if(pv)pv.innerHTML='via '+_providerLabel;
-    // ★ MEGGY-REDESIGN: re-popula contexto da aula após innerHTML reescrever o span
-    updateContext();
-  }
-
-  // ★ MEGGY-REDESIGN: atualiza o contexto da aula atual no header do chat.
-  // Mostra o nome da aula atual (truncado a 40 chars) ou string vazia se
-  // não houver aula ativa. Chamada por updateStatus, toggle e video:switched.
-  function updateContext(){
-    const ctx=panel.querySelector('#gdi-ai-context');
-    if(!ctx)return;
-    try{
-      const lesson=window.playlistVideos&&window.playlistVideos[window.currentIndex]&&window.playlistVideos[window.currentIndex].origName;
-      if(lesson){
-        ctx.textContent='· Aula: '+String(lesson).slice(0,40);
-      }else{
-        ctx.textContent='';
-      }
-    }catch(_){ctx.textContent='';}
   }
 
   // UI no <html> (fora do body) — sobrevive a trocas de página
@@ -2558,25 +2486,19 @@
   panel.id='gdi-ai-panel';
   panel.innerHTML=`
     <div id="gdi-ai-head">
-      <div class="gdi-ai-avatar">${MEGGY_AVATAR}</div>
+      <div class="gdi-ai-avatar">' + MEGGY_AVATAR + '</div>
       <div class="gdi-ai-info">
         <div class="gdi-ai-name">${MEGGY_NAME}<span class="gdi-ai-tag">${MEGGY_TAG}</span></div>
-        <div class="gdi-ai-status"><span class="gdi-ai-dot"></span> <span id="gdi-ai-context">verificando…</span></div>
+        <div class="gdi-ai-status"><span class="gdi-ai-dot"></span> verificando…</div>
       </div>
       <button id="gdi-ai-close" title="Fechar"><i class="bi bi-x-lg"></i></button>
     </div>
     <div id="gdi-ai-body"></div>
     <div class="gdi-ai-provider"></div>
-    <div class="gdi-ai-quick-actions">
-      <button class="gdi-ai-quick" data-action="resumir">💬 Resumir</button>
-      <button class="gdi-ai-quick" data-action="questoes">❓ Questões</button>
-      <button class="gdi-ai-quick" data-action="explicar">💡 Explicar</button>
-    </div>
     <div id="gdi-ai-input-wrap">
-      <input id="gdi-ai-input" type="text" placeholder="Pergunte à Meggy 🐩..." autocomplete="off">
+      <input id="gdi-ai-input" type="text" placeholder="Pergunte à Meggy 🐩 sobre a aula, peça um resumo..." autocomplete="off">
       <button id="gdi-ai-send" title="Enviar"><i class="bi bi-send-fill"></i></button>
-    </div>
-    <div id="gdi-ai-rate-limit"></div>`;
+    </div>`;
   root.appendChild(panel);
 
   const body=panel.querySelector('#gdi-ai-body');
@@ -2584,22 +2506,6 @@
   const sendBtn=panel.querySelector('#gdi-ai-send');
   // ★ FIX: badge estava buscando dentro do panel, mas o badge está no fab
   const badge=fab.querySelector('#gdi-ai-fab-badge');
-
-  // ★ MEGGY-REDESIGN: quick actions bar (Resumir, Questões, Explicar)
-  // Cada botão preenche o input com um prompt predefinido e dispara send().
-  panel.querySelectorAll('.gdi-ai-quick').forEach(btn=>{
-    btn.addEventListener('click',()=>{
-      const action=btn.dataset.action;
-      let prompt='';
-      if(action==='resumir')prompt='Gere um resumo desta aula';
-      else if(action==='questoes')prompt='Crie 5 questões sobre este tema';
-      else if(action==='explicar')prompt='Explique o conceito principal desta aula';
-      if(prompt){
-        input.value=prompt;
-        send();
-      }
-    });
-  });
 
   function addMsg(role,text){
     const m={role,text};
@@ -2653,9 +2559,8 @@
   // A Meggy mantém um perfil do aluno e aprende com as interações.
   // Persistido em localStorage + enviado como contexto nas conversas.
   const MEMORY_KEY='gdi-meggy-memory-v1';
-  // ★ P2-STANDARDIZE: _meggyLsGet/_meggyLsSet delegam para window.gdiLsGet/gdiLsSet.
-  const _meggyLsGet=window.gdiLsGet||((k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}});
-  const _meggyLsSet=window.gdiLsSet||((k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}});
+  const _meggyLsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
+  const _meggyLsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
   function loadMemory(){
     return _meggyLsGet(MEMORY_KEY,{interactions:0,topics:[],weaknesses:[],preferences:{},lastLessons:[]});
   }
@@ -2729,11 +2634,6 @@
         const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({message:txt,messages:hist})});
         const data=await r.json();
-        // ★ MEGGY-REDESIGN: atualiza barra de rate limit se a API retornou info
-        const rateEl=panel.querySelector('#gdi-ai-rate-limit');
-        if(rateEl&&typeof data.remaining!=='undefined'){
-          rateEl.textContent=data.remaining+'/30 mensagens restantes';
-        }
         hideTyping();
         if(data.ok&&data.response){response=data.response;}
         else{
@@ -2765,7 +2665,7 @@
   function toggle(){
     const open=panel.classList.toggle('open');
     try{sessionStorage.setItem('gdi-meggy-open',open?'1':'0');}catch(_){}
-    if(open){badge.classList.remove('show');renderHistory();updateContext();updateStatus();setTimeout(()=>input.focus(),100);}
+    if(open){badge.classList.remove('show');renderHistory();updateStatus();setTimeout(()=>input.focus(),100);}
   }
   fab.addEventListener('click',toggle);
   panel.querySelector('#gdi-ai-close').addEventListener('click',()=>{panel.classList.remove('open');try{sessionStorage.setItem('gdi-meggy-open','0');}catch(_){}});
@@ -2794,13 +2694,10 @@
       }
     },1500);
   });
-  // ★ MEGGY-REDESIGN: atualiza contexto da aula quando o aluno troca de vídeo
-  Bus.onGlobal('video:switched',()=>setTimeout(updateContext,200));
-
   // restaura estado aberto ao carregar
   try{
     if(sessionStorage.getItem('gdi-meggy-open')==='1'){
-      setTimeout(()=>{panel.classList.add('open');renderHistory();updateContext();updateStatus();},500);
+      setTimeout(()=>{panel.classList.add('open');renderHistory();updateStatus();},500);
     }
   }catch(_){}
 
@@ -2848,116 +2745,6 @@
     setTimeout(()=>{if(fab.style.display!=='none'&&!panel.classList.contains('open'))badge.classList.add('show');},8000);
   }
   fab.addEventListener('click',()=>{sessionStorage.setItem('gdi-ai-seen','1');},{once:true});
-
-  // ═══ MEGGY-HEADER-CONTEXTUAL: banner contextual de sugestões ═══
-  // Banner pequeno e dismissível no rodapé da tela, disparado por contexto:
-  //  - troca de aula (video:switched): "Quer um resumo desta aula? 🐩"
-  //  - revisões vencidas (chamador externo): "Você tem N revisões vencidas. Bora? 🎯"
-  //  - resposta errada de quiz (chamador externo): "Errou? Quer que eu explique? 💡"
-  // A função é global (window.__gdiMeggySuggest) para que outros módulos possam
-  // invocá-la. CSS #gdi-meggy-suggest está no <style> no topo deste IIFE.
-  window.__gdiMeggySuggest = function(text, action){
-    // text: string a exibir
-    // action: função opcional executada no clique (default: abre o chat via FAB)
-    let banner = document.querySelector('#gdi-meggy-suggest');
-    if(!banner){
-      banner = document.createElement('div');
-      banner.id = 'gdi-meggy-suggest';
-      banner.innerHTML = '<span class="gdi-suggest-text"></span><span class="gdi-suggest-close">×</span>';
-      (typeof GDI_ROOT==='function' ? (GDI_ROOT()||document.body) : document.body).appendChild(banner);
-      // close button (×) — fecha sem disparar action
-      const closeBtn = banner.querySelector('.gdi-suggest-close');
-      if(closeBtn){
-        closeBtn.onclick = (e) => {
-          e.stopPropagation();
-          banner.classList.remove('show');
-        };
-      }
-    }
-    const txtEl = banner.querySelector('.gdi-suggest-text');
-    if(txtEl) txtEl.textContent = text;
-    // clique no corpo do banner → executa action (ou abre chat por padrão)
-    banner.onclick = () => {
-      banner.classList.remove('show');
-      if(typeof action === 'function') action();
-      else {
-        const fab = document.querySelector('#gdi-ai-fab');
-        if(fab) fab.click();
-      }
-    };
-    banner.classList.add('show');
-    // auto-dismiss após 8s
-    clearTimeout(banner.__timer);
-    banner.__timer = setTimeout(() => banner.classList.remove('show'), 8000);
-  };
-
-  // ═══ MEGGY-HEADER-CONTEXTUAL: trigger de banner ao trocar de aula ═══
-  // ★ v1.0.72: Meggy proativa — captura título da aula e salva na memória automaticamente
-  //   Quando uma aula carrega, Meggy salva o título no cérebro (lastLessons)
-  //   e tenta capturar transcrições/PDFs da pasta para pré-carregar na memória
-  if(typeof Bus !== 'undefined' && typeof Bus.onGlobal === 'function'){
-    Bus.onGlobal('video:switched', () => {
-      setTimeout(() => {
-        try {
-          const lesson = window.playlistVideos?.[window.currentIndex]?.origName;
-          if(lesson){
-            // Salva na memória da Meggy
-            try{
-              const mem = JSON.parse(localStorage.getItem('gdi-meggy-memory-v1') || '{}');
-              if(!mem.lastLessons) mem.lastLessons = [];
-              if(!mem.lastLessons.includes(lesson)){
-                mem.lastLessons.unshift(lesson);
-                if(mem.lastLessons.length > 10) mem.lastLessons = mem.lastLessons.slice(0, 10);
-              }
-              mem.interactions = (mem.interactions || 0) + 1;
-              localStorage.setItem('gdi-meggy-memory-v1', JSON.stringify(mem));
-            }catch(_){}
-
-            // Sugestão proativa (banner flutuante)
-            if(window.__gdiMeggySuggest){
-              window.__gdiMeggySuggest('Quer um resumo desta aula? 🐩', () => {
-                const fab = document.querySelector('#gdi-ai-fab');
-                if(fab) fab.click();
-                setTimeout(() => {
-                  const input = document.querySelector('#gdi-ai-input');
-                  if(input){ input.value = 'Gere um resumo desta aula'; }
-                  const sendBtn = document.querySelector('#gdi-ai-send');
-                  if(sendBtn) sendBtn.click();
-                }, 300);
-              });
-            }
-
-            // ★ v1.0.72: Pré-captura de materiais da aula (transcrição/PDF)
-            //   Busca na pasta atual arquivos com "transcri" no nome e salva no cérebro
-            try{
-              const fPath = window.location.pathname.split('/').slice(0, -1).join('/') + '/';
-              if(window.gdiListAllFiles && fPath && fPath !== '/' && !fPath.endsWith(': /')){
-                window.gdiListAllFiles(fPath, '').then(files => {
-                  if(!Array.isArray(files)) return;
-                  // Procura transcrição (.md, .txt, .pdf com "transcri" no nome)
-                  const transc = files.find(f => {
-                    const n = (f.name || '').toLowerCase();
-                    return /transcri/.test(n) && /\.(md|txt|pdf)$/i.test(n);
-                  });
-                  if(transc){
-                    const mem = JSON.parse(localStorage.getItem('gdi-meggy-memory-v1') || '{}');
-                    if(!mem.topics) mem.topics = [];
-                    const topic = 'Transcrição: ' + (transc.name || 'aula');
-                    if(!mem.topics.includes(topic)){
-                      mem.topics.unshift(topic);
-                      if(mem.topics.length > 50) mem.topics = mem.topics.slice(0, 50);
-                    }
-                    localStorage.setItem('gdi-meggy-memory-v1', JSON.stringify(mem));
-                    console.log('[Meggy] Transcrição capturada:', transc.name);
-                  }
-                }).catch(()=>{});
-              }
-            }catch(_){}
-          }
-        } catch(_) {}
-      }, 3000); // espera 3s após troca de vídeo
-    });
-  }
 
   console.log('[GDI Extras] M-AI widget Meggy 🐩 — poodle tutora ativo — refactored (Task 4-c)');
 })();
