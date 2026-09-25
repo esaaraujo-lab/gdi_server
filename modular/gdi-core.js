@@ -30,6 +30,30 @@ const GDI_ROOT=()=>document.documentElement; // UI flutuante vive aqui (fora do 
 
 window.GDI_MODULES = window.GDI_MODULES || [];
 
+// ═══════════════════════════════════════════════════════════════
+// HELPER GLOBAIS CANÔNICOS (P2-STANDARDIZE)
+// Definidos aqui com `if(!window.X)` para serem idempotentes —
+// se app.min.js (carregado antes) já definiu algum, este bloco respeita.
+// Todos os módulos (gdi-meggy, gdi-study, etc.) DEVEM referenciar
+// estes helpers via `window.X` ou via fallback local apontando para `window.X`.
+// ═══════════════════════════════════════════════════════════════
+
+// ★ HTML ESCAPE (anti-XSS, canonical) — escapa os 5 chars críticos: & < > " '
+// Definido primeiro em core/app.min.js:17 (escHtml); fallback aqui garante
+// disponibilidade mesmo se app.min.js falhar ao carregar.
+if(!window.escHtml)window.escHtml=function(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');};
+
+// ★ UID generator — compartilhado entre gdi-meggy.js e gdi-study.js
+if(!window.gdiUid)window.gdiUid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+
+// ★ localStorage helpers — JSON-safe get/set com fallback silencioso
+if(!window.gdiLsGet)window.gdiLsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
+if(!window.gdiLsSet)window.gdiLsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
+
+// ★ SRS BOX INTERVALS (SM-2 simplificado) — dias por caixa: [1,3,7,21,60]
+// Compartilhado entre gdi-core.js (gdiGradeCard) e gdi-study.js (M22 gradeQ)
+if(!window.gdiSrsIntervals)window.gdiSrsIntervals=[1,3,7,21,60];
+
 // ═══ HELPER GLOBAL: SRS (Spaced Repetition) UNIFICADO ═══
 // Algoritmo SM-2 simplificado (mesmo do Anki). Usado por M9-ISA e M22
 // para evitar conflitos de intervalos diferentes.
@@ -43,7 +67,7 @@ window.GDI_MODULES = window.GDI_MODULES || [];
 // Intervalos por caixa: [1, 3, 7, 21, 60] dias (5 caixas, cap 4)
 window.gdiGradeCard = window.gdiGradeCard || function(card, quality){
   if(!card)card={box:0};
-  const BOX_INTERVALS=[1,3,7,21,60]; // dias
+  const BOX_INTERVALS=window.gdiSrsIntervals||[1,3,7,21,60]; // dias (P2-STANDARDIZE: delega para window.gdiSrsIntervals)
   const DAY=86400000;
   const box=Math.max(0,Math.min(4,card.box||0));
   let newBox=box, due;
@@ -63,7 +87,8 @@ window.gdiGradeCard = window.gdiGradeCard || function(card, quality){
   return {box:newBox, due:due, lastReview:Date.now()};
 };
 // expor intervalos para UI mostrar "próxima revisão em X dias"
-window.gdiSrsIntervals = [1,3,7,21,60];
+// (P2-STANDARDIZE: agora também definido idempotentemente no bloco canonical lá em cima)
+if(!window.gdiSrsIntervals)window.gdiSrsIntervals=[1,3,7,21,60];
 
 // ═══ HELPER GLOBAL: TRILHAS DE ESTUDO + CONQUISTAS + ONBOARDING ═══
 // Trilhas: agrupam cursos + matérias em uma meta (ex: "Auditor Fiscal")
@@ -173,7 +198,11 @@ window.gdiModal = window.gdiModal || function(opts){
     },50);
   });
 };
-function escModal(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+// ★ P2-STANDARDIZE: escModal agora delega para window.escHtml (canonical),
+// que escapa TODOS os 5 chars críticos (& < > " '). Antes escapava só 4
+// (faltava `'`), o que era risco XSS em atributos com aspas simples.
+// Mantida como function declaration para preservar hoisting (gdiModal a usa).
+function escModal(s){return (window.escHtml||function(x){return String(x||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');})(s);}
 
 // ═══ HELPER GLOBAL: SANITIZAÇÃO HTML (anti-XSS) ═══
 // Usado por todos os renderMd() dos módulos para evitar XSS via LLM
@@ -794,7 +823,9 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   // ★ FIX v49 (Task MD-PDF): renderMd local — converts markdown text to sanitized HTML.
   // Uses marked if available; falls back to escaped text with <br>.
   // Same logic as gdi-meggy.js renderMd but self-contained (M9 panel is in gdi-core.js).
-  function escLocal(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');}
+  // ★ P2-STANDARDIZE: escLocal já escapava os 5 chars (era canonical), mas
+  // agora delega para window.escHtml para garantir consistência total.
+  function escLocal(s){return (window.escHtml||function(x){return String(x||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');})(s);}
   function renderMdLocal(txt){
     if(window.marked){
       try{
