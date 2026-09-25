@@ -1074,6 +1074,7 @@
 
     return [...map.values()].sort((a,b)=>b.lastAt-a.lastAt);
   }
+  window.collectCourses = collectCourses;
   // ★ helpers para ocultar/restaurar cursos
   function hideCourse(ck){
     const hidden=lsGet(LS_HIDDEN,[]);
