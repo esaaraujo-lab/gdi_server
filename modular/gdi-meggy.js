@@ -2379,13 +2379,10 @@
   background:#5ddeda;border:2px solid var(--ferreto-bg,#070910);display:none;}
 #gdi-ai-fab-badge.show{display:block;animation:gdi-ai-pulse 1.6s ease infinite;}
 @keyframes gdi-ai-pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.25);}}
-#gdi-ai-panel{position:fixed;bottom:88px;right:20px;z-index:10001;width:380px;max-width:calc(100vw - 32px);
-  height:540px;max-height:calc(100vh - 120px);display:none;flex-direction:column;
-  background:var(--ferreto-surface,rgba(22,27,38,.92));
+#gdi-ai-panel{position:fixed;inset:0;z-index:10001;display:none;flex-direction:column;
+  background:var(--ferreto-surface,rgba(22,27,38,.98));
   -webkit-backdrop-filter:blur(22px);backdrop-filter:blur(22px);
-  border:1px solid var(--ferreto-border-strong,rgba(255,255,255,.16));
-  border-radius:18px;box-shadow:0 20px 60px -12px rgba(0,0,0,.6);
-  overflow:hidden;transform-origin:bottom right;animation:gdi-ai-in .22s ease;font-family:var(--ferreto-font-body,'Rubik',sans-serif);}
+  animation:gdi-ai-in .22s ease;font-family:var(--ferreto-font-body,'Rubik',sans-serif);}
 @keyframes gdi-ai-in{from{opacity:0;transform:scale(.92) translateY(12px);}to{opacity:1;transform:none;}}
 #gdi-ai-panel.open{display:flex;}
 #gdi-ai-head{display:flex;align-items:center;gap:10px;padding:14px 16px;
@@ -2431,7 +2428,12 @@
 .gdi-ai-err{font-size:12px;color:#ff8b8b;text-align:center;padding:8px;margin:0 4px;}
 .gdi-ai-provider{font-size:10px;color:var(--ferreto-text-faint,#6b7488);text-align:center;padding:2px 0 6px;letter-spacing:.02em;}
 .gdi-ai-provider b{color:var(--ferreto-secondary,#5ddeda);}
-@media(max-width:480px){#gdi-ai-panel{right:8px;left:8px;width:auto;bottom:80px;height:calc(100vh - 160px);}}
+.gdi-ai-quick-actions{display:flex;gap:6px;padding:8px 12px;border-top:1px solid var(--ferreto-border,rgba(255,255,255,.09));}
+.gdi-ai-quick{flex:1;padding:6px 8px;border:1px solid var(--ferreto-border,#30363d);border-radius:8px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));color:var(--ferreto-text,#e6edf3);font-size:11px;cursor:pointer;transition:all .15s;font-family:inherit;}
+.gdi-ai-quick:hover{background:var(--ferreto-surface-3,rgba(255,255,255,.08));border-color:var(--ferreto-primary,#ff8b9f);}
+#gdi-ai-rate-limit{padding:4px 12px 8px;font-size:10px;color:var(--ferreto-text-muted,#8b949e);text-align:center;}
+#gdi-ai-context{font-size:11px;color:var(--ferreto-text-muted,#8b949e);}
+@media(max-width:480px){.gdi-ai-quick{font-size:10px;padding:6px 4px;}}
 `;document.documentElement.appendChild(s);
   }
 
@@ -2507,11 +2509,31 @@
     const dot=panel.querySelector('.gdi-ai-dot');
     const st=panel.querySelector('.gdi-ai-status');
     if(!dot||!st)return;
-    if(_browserAIState==='ready'){dot.classList.add('local');st.innerHTML='<span class="gdi-ai-dot local"></span> Meggy · IA do navegador · 100% local';_providerLabel='IA do navegador <b>(Chrome/Gemini Nano — local)</b>';}
-    else if(_browserAIState==='download'){dot.classList.remove('local');st.innerHTML='<span class="gdi-ai-dot"></span> Meggy · baixando modelo local…';_providerLabel='baixando modelo do navegador…';}
-    else{dot.classList.remove('local');st.innerHTML='<span class="gdi-ai-dot"></span> Meggy · online';const sl=serverLabel();_providerLabel=sl.label;}
+    // ★ MEGGY-REDESIGN: cada string de status inclui <span id="gdi-ai-context"></span>
+    // para que o contexto da aula sobreviva às re-escritas de innerHTML.
+    if(_browserAIState==='ready'){dot.classList.add('local');st.innerHTML='<span class="gdi-ai-dot local"></span> Meggy · IA do navegador · 100% local <span id="gdi-ai-context"></span>';_providerLabel='IA do navegador <b>(Chrome/Gemini Nano — local)</b>';}
+    else if(_browserAIState==='download'){dot.classList.remove('local');st.innerHTML='<span class="gdi-ai-dot"></span> Meggy · baixando modelo local… <span id="gdi-ai-context"></span>';_providerLabel='baixando modelo do navegador…';}
+    else{dot.classList.remove('local');st.innerHTML='<span class="gdi-ai-dot"></span> Meggy · online <span id="gdi-ai-context"></span>';const sl=serverLabel();_providerLabel=sl.label;}
     const pv=panel.querySelector('.gdi-ai-provider');
     if(pv)pv.innerHTML='via '+_providerLabel;
+    // ★ MEGGY-REDESIGN: re-popula contexto da aula após innerHTML reescrever o span
+    updateContext();
+  }
+
+  // ★ MEGGY-REDESIGN: atualiza o contexto da aula atual no header do chat.
+  // Mostra o nome da aula atual (truncado a 40 chars) ou string vazia se
+  // não houver aula ativa. Chamada por updateStatus, toggle e video:switched.
+  function updateContext(){
+    const ctx=panel.querySelector('#gdi-ai-context');
+    if(!ctx)return;
+    try{
+      const lesson=window.playlistVideos&&window.playlistVideos[window.currentIndex]&&window.playlistVideos[window.currentIndex].origName;
+      if(lesson){
+        ctx.textContent='· Aula: '+String(lesson).slice(0,40);
+      }else{
+        ctx.textContent='';
+      }
+    }catch(_){ctx.textContent='';}
   }
 
   // UI no <html> (fora do body) — sobrevive a trocas de página
@@ -2528,16 +2550,22 @@
       <div class="gdi-ai-avatar">${MEGGY_AVATAR}</div>
       <div class="gdi-ai-info">
         <div class="gdi-ai-name">${MEGGY_NAME}<span class="gdi-ai-tag">${MEGGY_TAG}</span></div>
-        <div class="gdi-ai-status"><span class="gdi-ai-dot"></span> verificando…</div>
+        <div class="gdi-ai-status"><span class="gdi-ai-dot"></span> <span id="gdi-ai-context">verificando…</span></div>
       </div>
       <button id="gdi-ai-close" title="Fechar"><i class="bi bi-x-lg"></i></button>
     </div>
     <div id="gdi-ai-body"></div>
     <div class="gdi-ai-provider"></div>
+    <div class="gdi-ai-quick-actions">
+      <button class="gdi-ai-quick" data-action="resumir">💬 Resumir</button>
+      <button class="gdi-ai-quick" data-action="questoes">❓ Questões</button>
+      <button class="gdi-ai-quick" data-action="explicar">💡 Explicar</button>
+    </div>
     <div id="gdi-ai-input-wrap">
-      <input id="gdi-ai-input" type="text" placeholder="Pergunte à Meggy 🐩 sobre a aula, peça um resumo..." autocomplete="off">
+      <input id="gdi-ai-input" type="text" placeholder="Pergunte à Meggy 🐩..." autocomplete="off">
       <button id="gdi-ai-send" title="Enviar"><i class="bi bi-send-fill"></i></button>
-    </div>`;
+    </div>
+    <div id="gdi-ai-rate-limit"></div>`;
   root.appendChild(panel);
 
   const body=panel.querySelector('#gdi-ai-body');
@@ -2545,6 +2573,22 @@
   const sendBtn=panel.querySelector('#gdi-ai-send');
   // ★ FIX: badge estava buscando dentro do panel, mas o badge está no fab
   const badge=fab.querySelector('#gdi-ai-fab-badge');
+
+  // ★ MEGGY-REDESIGN: quick actions bar (Resumir, Questões, Explicar)
+  // Cada botão preenche o input com um prompt predefinido e dispara send().
+  panel.querySelectorAll('.gdi-ai-quick').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const action=btn.dataset.action;
+      let prompt='';
+      if(action==='resumir')prompt='Gere um resumo desta aula';
+      else if(action==='questoes')prompt='Crie 5 questões sobre este tema';
+      else if(action==='explicar')prompt='Explique o conceito principal desta aula';
+      if(prompt){
+        input.value=prompt;
+        send();
+      }
+    });
+  });
 
   function addMsg(role,text){
     const m={role,text};
@@ -2674,6 +2718,11 @@
         const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({message:txt,messages:hist})});
         const data=await r.json();
+        // ★ MEGGY-REDESIGN: atualiza barra de rate limit se a API retornou info
+        const rateEl=panel.querySelector('#gdi-ai-rate-limit');
+        if(rateEl&&typeof data.remaining!=='undefined'){
+          rateEl.textContent=data.remaining+'/30 mensagens restantes';
+        }
         hideTyping();
         if(data.ok&&data.response){response=data.response;}
         else{
@@ -2705,7 +2754,7 @@
   function toggle(){
     const open=panel.classList.toggle('open');
     try{sessionStorage.setItem('gdi-meggy-open',open?'1':'0');}catch(_){}
-    if(open){badge.classList.remove('show');renderHistory();updateStatus();setTimeout(()=>input.focus(),100);}
+    if(open){badge.classList.remove('show');renderHistory();updateContext();updateStatus();setTimeout(()=>input.focus(),100);}
   }
   fab.addEventListener('click',toggle);
   panel.querySelector('#gdi-ai-close').addEventListener('click',()=>{panel.classList.remove('open');try{sessionStorage.setItem('gdi-meggy-open','0');}catch(_){}});
@@ -2734,10 +2783,13 @@
       }
     },1500);
   });
+  // ★ MEGGY-REDESIGN: atualiza contexto da aula quando o aluno troca de vídeo
+  Bus.onGlobal('video:switched',()=>setTimeout(updateContext,200));
+
   // restaura estado aberto ao carregar
   try{
     if(sessionStorage.getItem('gdi-meggy-open')==='1'){
-      setTimeout(()=>{panel.classList.add('open');renderHistory();updateStatus();},500);
+      setTimeout(()=>{panel.classList.add('open');renderHistory();updateContext();updateStatus();},500);
     }
   }catch(_){}
 
