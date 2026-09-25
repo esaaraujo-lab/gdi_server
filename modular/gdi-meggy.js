@@ -2368,7 +2368,7 @@
   // CSS
   if(!document.getElementById('gdi-ai-style')){
     const s=document.createElement('style');s.id='gdi-ai-style';s.textContent=`
-#gdi-ai-fab{position:fixed;bottom:20px;right:20px;z-index:10001;width:56px;height:56px;border-radius:50%;
+#gdi-ai-fab{position:fixed;bottom:20px;right:20px;z-index:2147483646;width:56px;height:56px;border-radius:50%;
   border:0;cursor:pointer;background:linear-gradient(135deg,#ff8b9f 0%,#c026d3 55%,#5ddeda 130%);
   color:#fff;font-size:24px;display:flex;align-items:center;justify-content:center;
   box-shadow:0 8px 28px -6px rgba(255,139,159,.5),0 0 0 1px rgba(255,255,255,.12);
@@ -2379,7 +2379,7 @@
   background:#5ddeda;border:2px solid var(--ferreto-bg,#070910);display:none;}
 #gdi-ai-fab-badge.show{display:block;animation:gdi-ai-pulse 1.6s ease infinite;}
 @keyframes gdi-ai-pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.25);}}
-#gdi-ai-panel{position:fixed;inset:0;z-index:10001;display:none;flex-direction:column;
+#gdi-ai-panel{position:fixed;inset:0;z-index:2147483647;display:none;flex-direction:column;
   background:var(--ferreto-surface,rgba(22,27,38,.98));
   -webkit-backdrop-filter:blur(22px);backdrop-filter:blur(22px);
   animation:gdi-ai-in .22s ease;font-family:var(--ferreto-font-body,'Rubik',sans-serif);}
