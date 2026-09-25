@@ -40,7 +40,7 @@ O GDI Index transforma Google Drives compartilhados (cursos, apostilas, video-au
 
 ### 1. Login
 
-1. Acesse o site (educa.eu.org)
+1. Acesse o site (gdi-index.workers.dev)
 2. Digite seu usuário e senha
 3. Clique "Entrar"
 
@@ -363,7 +363,7 @@ GDI Index transforms shared Google Drives (courses, textbooks, video lessons) in
 
 ### 1. Login
 
-1. Access the site (educa.eu.org)
+1. Access the site (gdi-index.workers.dev)
 2. Enter your username and password
 3. Click "Entrar" (Login)
 
