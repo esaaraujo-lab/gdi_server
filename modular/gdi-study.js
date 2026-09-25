@@ -20,12 +20,12 @@
 // ═══════════════════════════════════════════════════════════════
 (function(){
   const LQ='gdi-questions-v1',LS_SRS='gdi-q-srs-v1',LS_SIM='gdi-simulados-v1',LS_CRON='gdi-cronograma-v1',LS_ERR='gdi-caderno-erros-v1';
-  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
-  const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
+  const esc=window.escHtml||(s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;'));
+  const lsGet=window.gdiLsGet||((k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}});
+  const lsSet=window.gdiLsSet||((k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}});
   const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
   const fmtDate=ds=>{try{return new Date(ds+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})}catch(_){return ds}};
-  const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+  const uid=window.gdiUid||(()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8));
   // ★ Fisher-Yates shuffle (substitui o biased Math.random()-.5 sort)
   function fisherYates(arr){const a=[...arr];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
 
@@ -39,7 +39,7 @@
   // ── SRS das questões ( Leitner 5 boxes ) ──
   const qSrs=()=>lsGet(LS_SRS,{});
   const saveQSrs=s=>lsSet(LS_SRS,s);
-  const BOX_INTERVALS=[1,3,7,21,60]; // dias
+  const BOX_INTERVALS=window.gdiSrsIntervals||[1,3,7,21,60]; // dias (P2-STANDARDIZE: delega para window.gdiSrsIntervals)
   function gradeQ(id,acertou){
     const s=qSrs();const cur=s[id]||{box:0,due:Date.now()+86400000,last:0};
     if(acertou){cur.box=Math.min(4,cur.box+1);}
@@ -738,10 +738,11 @@
   const norm=p=>dec(String(p||'').split('?')[0].replace(/\/+$/,''));
   const low=p=>norm(p).toLowerCase();
   const stripExt=s=>String(s||'').replace(/\.[a-z0-9]{1,5}$/i,'').trim();
-  const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
-  const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
-  // ★ FIX: esc local para o M22 (Área do Aluno) — usa escHtml global do app.min.js quando disponível
-  const esc=s=>{try{return window.escHtml?window.escHtml(s):String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');}catch(_){return String(s||'');}};
+  const lsGet=window.gdiLsGet||((k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}});
+  const lsSet=window.gdiLsSet||((k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}});
+  // ★ FIX/P2-STANDARDIZE: esc local para o M22 (Área do Aluno) — delega para
+  // window.escHtml (canonical, definido em gdi-core.js / app.min.js).
+  const esc=window.escHtml||(s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;'));
   const fmtMin=m=>{m=Math.round(m);return m>=60?Math.floor(m/60)+'h'+String(m%60).padStart(2,'0'):m+'min'};
   const dayKey=t=>{const d=new Date(t||Date.now());return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
   const dateBr=t=>new Date(t).toLocaleDateString('pt-BR');
@@ -798,8 +799,8 @@
     const overlay=document.querySelector('.gdi-modal-overlay');
     const box=document.getElementById('gdi-central-body');
     const LS_MANUAL='gdi-manual-courses-v1';
-    const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
-    const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
+    const lsGet=window.gdiLsGet||((k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}});
+    const lsSet=window.gdiLsSet||((k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}});
 
     try{
       const manual=lsGet(LS_MANUAL,[]);
@@ -3563,10 +3564,10 @@
 // Integra com /api/ai (Meggy) e extractPdfText (M9-ISA).
 // ═══════════════════════════════════════════════════════════════
 (function(){
-  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
-  const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
-  const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+  const esc=window.escHtml||(s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;'));
+  const lsGet=window.gdiLsGet||((k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}});
+  const lsSet=window.gdiLsSet||((k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}});
+  const uid=window.gdiUid||(()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8));
 
   async function callMeggy(prompt){
     const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
