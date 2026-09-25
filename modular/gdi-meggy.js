@@ -2399,11 +2399,12 @@
     const s=document.createElement('style');s.id='gdi-ai-style';s.textContent=`
 #gdi-ai-fab{position:fixed;bottom:20px;right:20px;z-index:2147483646;width:56px;height:56px;border-radius:50%;
   border:0;cursor:pointer;background:linear-gradient(135deg,rgba(255,139,159,.7) 0%,rgba(192,38,211,.7) 55%,rgba(93,222,218,.7) 130%);
-  color:#fff;font-size:24px;display:flex;align-items:center;justify-content:center;
+  display:flex;align-items:center;justify-content:center;overflow:hidden;
   box-shadow:0 8px 28px -6px rgba(255,139,159,.4),0 0 0 1px rgba(255,255,255,.08);
   transition:transform .18s,box-shadow .18s,opacity .18s;opacity:.65;}
 #gdi-ai-fab:hover{transform:scale(1.08) translateY(-2px);box-shadow:0 12px 36px -6px rgba(255,139,159,.6);opacity:1;}
-#gdi-ai-fab .gdi-ai-fab-ico{width:40px;height:40px;line-height:1;display:flex;align-items:center;justify-content:center;}#gdi-ai-fab .gdi-ai-fab-ico svg{width:100%;height:100%;border-radius:50%;}
+#gdi-ai-fab .gdi-ai-fab-ico{width:52px;height:52px;line-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:50%;}
+#gdi-ai-fab .gdi-ai-fab-ico svg,#gdi-ai-fab .gdi-ai-fab-ico img{width:100%;height:100%;border-radius:50%;display:block;object-fit:cover;}
 #gdi-ai-fab-badge{position:absolute;top:-2px;right:-2px;width:16px;height:16px;border-radius:50%;
   background:#5ddeda;border:2px solid var(--ferreto-bg,#070910);display:none;}
 #gdi-ai-fab-badge.show{display:block;animation:gdi-ai-pulse 1.6s ease infinite;}
@@ -2544,16 +2545,16 @@
   const root=GDI_ROOT();
   const fab=document.createElement('button');
   fab.id='gdi-ai-fab';fab.title='Meggy';
-  // ★ v1.0.83: FAB + chat header agora usam foto real da Meggy (PNG transparente).
-  // Background preto removido → dog head flutua sobre o FAB.
-  fab.innerHTML='<span class="gdi-ai-fab-ico"><img src="/modular/assets/meggy-fab.png?v='+(window.CACHE_VERSION||'89')+'" alt="Meggy" style="width:100%;height:100%;object-fit:contain;display:block;"></span><span id="gdi-ai-fab-badge"></span>';
+  // ★ v1.0.85: FAB usa foto real da Meggy (PNG transparente, flood-fill bg removal — olhos/nariz preservados).
+  // object-fit:cover preenche o círculo; alt vazio para não mostrar texto overlay.
+  fab.innerHTML='<span class="gdi-ai-fab-ico"><img src="/modular/assets/meggy-fab.png?v='+(window.CACHE_VERSION||'90')+'" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;"></span><span id="gdi-ai-fab-badge"></span>';
   root.appendChild(fab);
 
   const panel=document.createElement('div');
   panel.id='gdi-ai-panel';
   panel.innerHTML=`
     <div id="gdi-ai-head">
-      <div class="gdi-ai-avatar"><img src="/modular/assets/meggy-fab.png?v=${window.CACHE_VERSION||'89'}" alt="Meggy" style="width:100%;height:100%;object-fit:contain;display:block;"></div>
+      <div class="gdi-ai-avatar"><img src="/modular/assets/meggy-fab.png?v=${window.CACHE_VERSION||'90'}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;"></div>
       <div class="gdi-ai-info">
         <div class="gdi-ai-name">${MEGGY_NAME}<span class="gdi-ai-tag">${MEGGY_TAG}</span></div>
         <div class="gdi-ai-status"><span class="gdi-ai-dot"></span> verificando…</div>
