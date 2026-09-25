@@ -993,6 +993,25 @@
     const m=/^\/(\d+):/.exec(ck||'');
     return(window.drive_names&&m&&window.drive_names[+m[1]])||'';
   }
+  // ★ v1.0.75: courseIdentity — identifica disciplina por palavras-chave para ícone/cor
+  function courseIdentity(courseKey, courseName){
+    const n = ((courseName||'') + ' ' + (driveNameOf(courseKey)||'')).toLowerCase();
+    if(/direito|tribunal|tj|trt|trf|tre|oab|judici|constitucional|penal|civil|administrativo|processual|jurídic/.test(n))
+      return {icon:'⚖️', color:'#5ddeda'};
+    if(/polic|prf|pf\b|rodovi|federal|seguranç/.test(n))
+      return {icon:'🚔', color:'#3fb950'};
+    if(/saúde|medic|enferm|nutri|psiquia|medcurso|saude/.test(n))
+      return {icon:'🔬', color:'#ff8b9f'};
+    if(/músic|music|canto|voz|coral/.test(n))
+      return {icon:'🎵', color:'#c026d3'};
+    if(/fit|física|fisica|hipopress|exerc|treino|muscul/.test(n))
+      return {icon:'🏋️', color:'#ffd43b'};
+    if(/educa|magistér|pedagóg|professor|concurso sme|see |cursinho/.test(n))
+      return {icon:'📚', color:'#5ddeda'};
+    if(/enem|vestib|fuvest|unicamp|usp/.test(n))
+      return {icon:'🎓', color:'#ff8b9f'};
+    return {icon:'📁', color:'#5ddeda'};
+  }
   function collectCourses(){
     const d=stateD()||{};
     // ★ cursos ocultos pelo usuário (não aparecem na lista de cursos)
@@ -1626,6 +1645,7 @@
           ${courses.slice(0,6).map(c=>{
             const name=cleanCourseName(c.key);
             const drive=driveNameOf(c.key);
+            const ident=courseIdentity(c.key, name);
             // ★ FIX 3 (Task 14): usa totalLessons (real) ao invés de c.lessons.size (visited paths)
             const total=c.totalLessons||c.lessons.size||0;
             const watched=c.watched||0;
@@ -1633,8 +1653,11 @@
             const progress=total>0?Math.min(100,Math.round(watched/total*100)):(watched>0?100:0);
             const progressColor=progress>=80?'#3fb950':progress>=40?'#ffd43b':'var(--ferreto-primary,#ff8b9f)';
             const coursePath=c.key;  // e.g. /4:/CANTE COM EXCELENCIA 2.0 + COMUNIDADE/
-            return `<div class="gdi-course" data-course-key="${escHtml(c.key)}" style="cursor:pointer;">
-              <b title="${escHtml(courseName(c.key))}">${escHtml(name)}</b>
+            return `<div class="gdi-course" data-course-key="${escHtml(c.key)}" style="cursor:pointer;border-top:3px solid ${ident.color};">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                <span style="font-size:24px;flex:none;">${ident.icon}</span>
+                <b title="${escHtml(courseName(c.key))}" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(name)}</b>
+              </div>
               ${drive?`<small><i class="bi bi-hdd"></i> ${escHtml(drive)}</small>`:'<small>&nbsp;</small>'}
               <div class="gdi-course-stats">
                 <div class="gdi-course-stat"><span class="gdi-course-stat-num" data-stat="total">${total}</span><span class="gdi-course-stat-label">Aulas</span></div>
@@ -3626,12 +3649,16 @@
   (function(){
     function tryOpenFromURL(){
       try{
+        if(window.__gdiAutoOpenDone) return false;
         const params = new URLSearchParams(window.location.search);
         const central = params.get('central');
-        if(central){
+        // ★ v1.0.75: também verifica window.MODEL.autoOpenCentral (homepage serve SPA com este flag)
+        const autoOpen = central || (window.MODEL && window.MODEL.autoOpenCentral ? '1' : null);
+        if(autoOpen){
+          window.__gdiAutoOpenDone = true;
           // Espera GDIUser estar pronto (state carregado) antes de abrir
           const openNow = function(){
-            const tab = (central === '1' || central === 'true') ? 'home' : central;
+            const tab = (autoOpen === '1' || autoOpen === 'true') ? 'home' : autoOpen;
             openPanel(tab);
             // Limpa o parâmetro da URL (não fica reabrindo a cada navegação)
             try{
