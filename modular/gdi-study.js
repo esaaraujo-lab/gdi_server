@@ -1246,6 +1246,34 @@
   const dueCards=()=>cards().filter(c=>(c.due||0)<=Date.now());
   let FC={active:false,flip:null,grade:null};
   let panel=null,tab='home';
+
+  // ═══ showOnboarding: first-time-user welcome overlay ═══
+  // Shows ONCE per browser (gated by localStorage 'gdi-onboarding-done').
+  // 4-step guide: navigate drives / ask Meggy / practice / track progress.
+  function showOnboarding(){
+    try{
+      if(localStorage.getItem('gdi-onboarding-done')) return;
+      localStorage.setItem('gdi-onboarding-done', '1');
+    }catch(_){ return; }
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:20px;';
+    overlay.innerHTML = `<div style="background:var(--ferreto-bg-2,#0d1119);border-radius:16px;max-width:480px;padding:28px;text-align:center;border:1px solid var(--ferreto-border,#30363d);">
+      <div style="font-size:56px;margin-bottom:12px;">🐩</div>
+      <h2 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 8px;font-size:20px;">Au au! Eu sou a Meggy!</h2>
+      <p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;line-height:1.6;margin:0 0 18px;">Sua tutora de estudos. Aqui você pode:</p>
+      <div style="text-align:left;margin-bottom:20px;padding:0 8px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;color:var(--ferreto-text,#e6edf3);font-size:13px;"><span style="font-size:20px;">📂</span> Navegue pelos drives e adicione cursos</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;color:var(--ferreto-text,#e6edf3);font-size:13px;"><span style="font-size:20px;">🐩</span> Peça resumos e questões à Meggy</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;color:var(--ferreto-text,#e6edf3);font-size:13px;"><span style="font-size:20px;">❓</span> Pratique com questões e simulados</div>
+        <div style="display:flex;align-items:center;gap:10px;color:var(--ferreto-text,#e6edf3);font-size:13px;"><span style="font-size:20px;">📊</span> Acompanhe seu progresso</div>
+      </div>
+      <button id="gdi-onboarding-close" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);border:0;border-radius:10px;padding:10px 24px;color:#fff;font-size:14px;font-weight:600;cursor:pointer;width:100%;">Vamos começar! 🎉</button>
+    </div>`;
+    (document.querySelector('#gdi-study') || document.body).appendChild(overlay);
+    overlay.querySelector('#gdi-onboarding-close').onclick = () => overlay.remove();
+    overlay.onclick = (e) => { if(e.target === overlay) overlay.remove(); };
+  }
+
   // ★ PATCH D: openPanel faz UMA única renderização (depois do estado pronto)
   function openPanel(t){
     if(t)tab=t;
@@ -1259,6 +1287,7 @@
     ensureState().then(()=>{
       if(panel&&panel.style.display!=='none')renderPanel();
     }).catch(()=>renderPanel());
+    try{ showOnboarding(); }catch(_){}
   }
   function closePanel(){
     FC.active=false;
@@ -1343,6 +1372,7 @@
         </span>`:''}
       </div>
       <input id="gdi-goal-set" type="number" min="10" max="480" value="${g}" title="Meta diária (minutos)" style="width:56px;background:var(--ferreto-surface-2,rgba(255,255,255,.07));border:1px solid var(--ferreto-border,#30363d);border-radius:6px;color:var(--ferreto-text,#f0f6fc);text-align:center;padding:5px;font-size:12px;flex-shrink:0;">
+      <button id="gdi-central-meggy" title="Meggy" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);border:0;border-radius:10px;padding:6px 12px;cursor:pointer;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px;flex-shrink:0;"><span style="font-size:16px;">🐩</span> Meggy</button>
       <button id="gdi-central-x" title="Fechar (Esc)">✕</button>
     </div>`;
   }
@@ -1416,6 +1446,7 @@
       panel.dataset.sidebarRendered='1';
       // bind header
       panel.querySelector('#gdi-central-x').onclick=closePanel;
+      panel.querySelector('#gdi-central-meggy').onclick=()=>{ const fab=document.querySelector('#gdi-ai-fab'); if(fab) fab.click(); };
       panel.querySelector('#gdi-goal-set').addEventListener('change',e=>{
         const v=Math.max(10,Math.min(480,parseInt(e.target.value,10)||60));
         lsSet(LS_GOAL,v);
@@ -2309,7 +2340,7 @@
         // mostra info da pasta atual
         const totalPdfs=pdfs.length;
         const totalVideos=videos.length;
-        if(currentPath!=='/'){
+        const isDriveRoot = /^\/\d+:\/?$/.test(currentPath); if(currentPath!=='/' && !isDriveRoot){
           const segs=pathSegments(currentPath);
           const courseName=decodeURIComponent(getDriveName(segs[segs.length-1]));
           selectedPath=currentPath;
