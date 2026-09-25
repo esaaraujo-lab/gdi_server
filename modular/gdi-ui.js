@@ -206,6 +206,9 @@ body.gdi-fv .gdi-player-wrap iframe{
         <button class="gdi-mode-btn" data-mode="fm" title="Foco no material (s\u00f3 PDF, zoom autom\u00e1tico)"><i class="bi bi-file-earmark-pdf-fill"></i><span class="d-none d-md-inline">Foco no material</span></button>
         <button class="gdi-watched-btn" id="gdi-watched-btn" title="Marcar esta aula como assistida"><i class="bi bi-eye"></i><span>Assistido</span></button>`;
     }
+    // ★ MEGGY-HEADER-CONTEXTUAL: botão Meggy no header (slot #gdi-slot-modes).
+    // Adicional ao FAB (#gdi-ai-fab) — não substitui. Delega o clique ao FAB.
+    slot.innerHTML += `<button id="gdi-ai-header-btn" title="Meggy" style="margin-left:auto;background:linear-gradient(135deg,#ff8b9f,#c026d3);border:0;border-radius:10px;padding:6px 12px;cursor:pointer;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px;"><span style="font-size:16px;">🐩</span> Meggy</button>`;
     function zoom(){
       const z=document.body.classList.contains('gdi-fm')?'150':'100';
       const ifr=document.querySelector('#gdi-mat-body iframe');
@@ -237,6 +240,14 @@ body.gdi-fv .gdi-player-wrap iframe{
     slot.querySelectorAll('.gdi-mode-btn[data-mode]').forEach(b=>{
       b.addEventListener('click',()=>setMode(b.dataset.mode));
     });
+    // ★ MEGGY-HEADER-CONTEXTUAL: wire do botão Meggy no header — delega clique ao FAB.
+    const meggyHeaderBtn = slot.querySelector('#gdi-ai-header-btn');
+    if(meggyHeaderBtn){
+      meggyHeaderBtn.addEventListener('click', () => {
+        const fab = document.querySelector('#gdi-ai-fab');
+        if(fab) fab.click(); // delega ao handler existente do FAB
+      });
+    }
     // ★ FIX v55: para página de material, sempre começa em modo "fm" (foco no material).
     // Para página de vídeo, usa o modo salvo no localStorage (comportamento original).
     let saved='split';
