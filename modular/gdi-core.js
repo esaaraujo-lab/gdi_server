@@ -30,30 +30,6 @@ const GDI_ROOT=()=>document.documentElement; // UI flutuante vive aqui (fora do 
 
 window.GDI_MODULES = window.GDI_MODULES || [];
 
-// ═══════════════════════════════════════════════════════════════
-// HELPER GLOBAIS CANÔNICOS (P2-STANDARDIZE)
-// Definidos aqui com `if(!window.X)` para serem idempotentes —
-// se app.min.js (carregado antes) já definiu algum, este bloco respeita.
-// Todos os módulos (gdi-meggy, gdi-study, etc.) DEVEM referenciar
-// estes helpers via `window.X` ou via fallback local apontando para `window.X`.
-// ═══════════════════════════════════════════════════════════════
-
-// ★ HTML ESCAPE (anti-XSS, canonical) — escapa os 5 chars críticos: & < > " '
-// Definido primeiro em core/app.min.js:17 (escHtml); fallback aqui garante
-// disponibilidade mesmo se app.min.js falhar ao carregar.
-if(!window.escHtml)window.escHtml=function(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');};
-
-// ★ UID generator — compartilhado entre gdi-meggy.js e gdi-study.js
-if(!window.gdiUid)window.gdiUid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
-
-// ★ localStorage helpers — JSON-safe get/set com fallback silencioso
-if(!window.gdiLsGet)window.gdiLsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
-if(!window.gdiLsSet)window.gdiLsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
-
-// ★ SRS BOX INTERVALS (SM-2 simplificado) — dias por caixa: [1,3,7,21,60]
-// Compartilhado entre gdi-core.js (gdiGradeCard) e gdi-study.js (M22 gradeQ)
-if(!window.gdiSrsIntervals)window.gdiSrsIntervals=[1,3,7,21,60];
-
 // ═══ HELPER GLOBAL: SRS (Spaced Repetition) UNIFICADO ═══
 // Algoritmo SM-2 simplificado (mesmo do Anki). Usado por M9-ISA e M22
 // para evitar conflitos de intervalos diferentes.
@@ -67,7 +43,7 @@ if(!window.gdiSrsIntervals)window.gdiSrsIntervals=[1,3,7,21,60];
 // Intervalos por caixa: [1, 3, 7, 21, 60] dias (5 caixas, cap 4)
 window.gdiGradeCard = window.gdiGradeCard || function(card, quality){
   if(!card)card={box:0};
-  const BOX_INTERVALS=window.gdiSrsIntervals||[1,3,7,21,60]; // dias (P2-STANDARDIZE: delega para window.gdiSrsIntervals)
+  const BOX_INTERVALS=[1,3,7,21,60]; // dias
   const DAY=86400000;
   const box=Math.max(0,Math.min(4,card.box||0));
   let newBox=box, due;
@@ -87,8 +63,7 @@ window.gdiGradeCard = window.gdiGradeCard || function(card, quality){
   return {box:newBox, due:due, lastReview:Date.now()};
 };
 // expor intervalos para UI mostrar "próxima revisão em X dias"
-// (P2-STANDARDIZE: agora também definido idempotentemente no bloco canonical lá em cima)
-if(!window.gdiSrsIntervals)window.gdiSrsIntervals=[1,3,7,21,60];
+window.gdiSrsIntervals = [1,3,7,21,60];
 
 // ═══ HELPER GLOBAL: TRILHAS DE ESTUDO + CONQUISTAS + ONBOARDING ═══
 // Trilhas: agrupam cursos + matérias em uma meta (ex: "Auditor Fiscal")
@@ -198,11 +173,7 @@ window.gdiModal = window.gdiModal || function(opts){
     },50);
   });
 };
-// ★ P2-STANDARDIZE: escModal agora delega para window.escHtml (canonical),
-// que escapa TODOS os 5 chars críticos (& < > " '). Antes escapava só 4
-// (faltava `'`), o que era risco XSS em atributos com aspas simples.
-// Mantida como function declaration para preservar hoisting (gdiModal a usa).
-function escModal(s){return (window.escHtml||function(x){return String(x||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');})(s);}
+function escModal(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 // ═══ HELPER GLOBAL: SANITIZAÇÃO HTML (anti-XSS) ═══
 // Usado por todos os renderMd() dos módulos para evitar XSS via LLM
@@ -820,78 +791,13 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 // ═══ M9: MATERIAIS (PDFs por aula) ═══
 (function(){
   const frames=new Map();let gen=0,lastKey='';
-  // ★ FIX v49 (Task MD-PDF): renderMd local — converts markdown text to sanitized HTML.
-  // Uses marked if available; falls back to escaped text with <br>.
-  // Same logic as gdi-meggy.js renderMd but self-contained (M9 panel is in gdi-core.js).
-  // ★ P2-STANDARDIZE: escLocal já escapava os 5 chars (era canonical), mas
-  // agora delega para window.escHtml para garantir consistência total.
-  function escLocal(s){return (window.escHtml||function(x){return String(x||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');})(s);}
-  function renderMdLocal(txt){
-    if(window.marked){
-      try{
-        const html=marked.parse(txt);
-        if(window.gdiSanitize){try{return window.gdiSanitize(html);}catch(_){}}
-        return escLocal(txt).replace(/\n/g,'<br>');
-      }catch(_){}
-    }
-    return escLocal(txt).replace(/\n/g,'<br>');
-  }
-  // ★ FIX v49: classify now detects MD/TXT/HTML files and assigns appropriate icons.
-  // ★ FIX v53 (Task TRANSC): label por CONTEÚDO do nome, não só extensão.
-  //   - Arquivo com "transcri" no nome → "Transcrição" (prioriza conteúdo sobre extensão)
-  //   - Arquivo com "resumo"/"summary" no nome → "Resumo"
-  //   - Arquivo com "ebook" no nome → "Ebook"
-  //   - Depois checa extensão para ícone apropriado (md/txt/html/pdf)
   function classify(name){
     const n2=name.toLowerCase();
-    // ★ v53: conteúdo primeiro (transcrição/resumo/ebook têm prioridade sobre extensão)
-    const isTranscri=/transcri/.test(n2);
-    const isResumo=/resum|summary/.test(n2);
-    const isEbook=/ebook/.test(n2);
-    const isMapa=/mapa/.test(n2);
-    const isSimulado=/simulado/.test(n2);
-    const isQuest=/quest|exerc|prova/.test(n2);
-    // ícone por extensão
-    const isMd=/\.md$/.test(n2);
-    const isTxt=/\.txt$/.test(n2);
-    const isHtml=/\.html?$/.test(n2);
-    const iconMd=isMd?'bi-markdown-fill':isHtml?'bi-file-earmark-code':'bi-file-earmark-text-fill';
-    // label por conteúdo (prioridade: transcrição > resumo > ebook > mapa > simulado > quest > extensão)
-    if(isTranscri)   return{l:'Transcrição',   i:iconMd,                       ord:0};  // ★ transcrição tem prioridade MÁXIMA
-    if(isResumo)     return{l:'Resumo',        i:isMd?'bi-markdown-fill':'bi-stars',ord:3};
-    if(isEbook)      return{l:'Ebook',         i:iconMd,                       ord:5};
-    if(isMapa)       return{l:'Mapa Mental',   i:'bi-diagram-3',               ord:4};
-    if(isSimulado)   return{l:'Minissimulado', i:'bi-stopwatch',               ord:2};
-    if(isQuest)      return{l:'Exerc\u00edcios',i:'bi-ui-checks',              ord:1};
-    if(isMd)         return{l:'Markdown',      i:'bi-markdown-fill',           ord:6};
-    if(isTxt)        return{l:'Texto',         i:'bi-file-earmark-text-fill',  ord:7};
-    if(isHtml)       return{l:'HTML',          i:'bi-file-earmark-code',       ord:8};
-    return                              {l:'Material',    i:'bi-file-earmark-text-fill',ord:0};
-  }
-  // ★ FIX v49: isMaterial — replaces isPdf. Now includes PDF + MD + TXT + HTML.
-  function isMaterial(x){
-    const ext=(x.fileExtension||'').toLowerCase();
-    const mt=x.mimeType||'';
-    // ★ FIX v52: fallback to extracting extension from file name
-    const nameExt=((x.name||'').split('.').pop()||'').toLowerCase();
-    if(ext==='pdf'||/pdf/i.test(mt))return true;
-    if(ext==='md'||mt==='text/markdown'||nameExt==='md')return true;
-    if(ext==='txt'||mt==='text/plain'||nameExt==='txt')return true;
-    if(ext==='html'||ext==='htm'||mt==='text/html'||nameExt==='html'||nameExt==='htm')return true;
-    return false;
-  }
-  // isMaterialType — returns the kind of material for rendering dispatch
-  function materialType(x){
-    const ext=(x.fileExtension||'').toLowerCase();
-    const mt=x.mimeType||'';
-    // ★ FIX v52: fallback to extracting extension from file name
-    // (Drive API doesn't always populate fileExtension for all file types)
-    const nameExt=((x.name||'').split('.').pop()||'').toLowerCase();
-    if(ext==='pdf'||/pdf/i.test(mt))return 'pdf';
-    if(ext==='md'||mt==='text/markdown'||nameExt==='md')return 'md';
-    if(ext==='html'||ext==='htm'||mt==='text/html'||nameExt==='html'||nameExt==='htm')return 'html';
-    if(ext==='txt'||mt==='text/plain'||nameExt==='txt')return 'txt';
-    return 'pdf';
+    if(/mapa/.test(n2))                       return{l:'Mapa Mental', i:'bi-diagram-3',              ord:4};
+    if(/simulado/.test(n2))                   return{l:'Minissimulado',i:'bi-stopwatch',             ord:2};
+    if(/quest|exerc|prova/.test(n2))          return{l:'Exerc\u00edcios',  i:'bi-ui-checks',              ord:1};
+    if(/resumo|iara|\bia\b|intelig/.test(n2)) return{l:'Resumo IA',   i:'bi-stars',                  ord:3};
+    return                                    {l:'Material',    i:'bi-file-earmark-text-fill',ord:0};
   }
   function courseBase(){
     let nm='';
@@ -962,7 +868,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     tabsEl.innerHTML='<span class="gdi-mat-loading">Buscando PDFs da aula\u2026</span>';
     if(statusEl)statusEl.textContent='';
     bodyEl.innerHTML='';
-    // ★ FIX v49: isMaterial (PDF+MD+TXT+HTML) replaces isPdf — see top of M9 IIFE
+    const isPdf=x=>(x.fileExtension||'').toLowerCase()==='pdf'||/pdf/i.test(x.mimeType||'');
     try{
       let found=[];
       // ★C.2: se window.playlistVideos já tem itens de fPath, a chamada
@@ -993,26 +899,25 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
             });
         }
       }
-      found=here.filter(isMaterial);
+      found=here.filter(isPdf);
       if(!found.length){
         const subs=here.filter(x=>x.mimeType==='application/vnd.google-apps.folder').slice(0,20);
         for(const sf of subs){
           const fp=fPath+encodeURIComponent(sf.name)+'/';
-          found=found.concat((await gdiListAllFiles(fp,gdiGetPw(fp))).filter(isMaterial));
+          found=found.concat((await gdiListAllFiles(fp,gdiGetPw(fp))).filter(isPdf));
           if(found.length)break;
         }
       }
-      if(!found.length)found=(await gdiListAllFiles(pPath,gdiGetPw(pPath))).filter(isMaterial);
+      if(!found.length)found=(await gdiListAllFiles(pPath,gdiGetPw(pPath))).filter(isPdf);
       const seen=new Set();const uniq=[];
       found.forEach(x=>{if(!seen.has(x.name)){seen.add(x.name);uniq.push(x)}});
-      // ★ FIX v52: filter out files with no link (prevents broken tabs + crash in items.map)
-      const pdfs=uniq.filter(x=>x&&(typeof x.link==='string'&&x.link.length>0)).slice(0,12);
+      const pdfs=uniq.slice(0,12);
       if(myGen!==gen)return;
       if(!pdfs.length){
         if(tabsEl.isConnected){
           tabsEl.innerHTML='';
-          if(statusEl)statusEl.textContent='sem material';
-          if(bodyEl)bodyEl.innerHTML=`<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material encontrado para esta aula (PDF, MD, TXT ou HTML).</div></div>`;
+          if(statusEl)statusEl.textContent='sem PDF';
+          if(bodyEl)bodyEl.innerHTML=`<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material PDF encontrado para esta aula.</div></div>`;
           lastKey=p;
         }
         return;
@@ -1020,17 +925,10 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       const base=courseBase();
       const items=pdfs.map(x=>{
         const cls=classify(x.name);
-        // ★ FIX v52 (Task M9-CRASH): guard against x.link being undefined/null.
-        // Some Drive file types (MD/TXT/HTML) may not have a 'link' property
-        // formatted the same way as PDFs. Without this guard, x.link.includes('?')
-        // crashes with "Cannot read property 'includes' of undefined", which
-        // kills the entire build() function — so NO tabs render, not even PDFs.
-        const rawLink=x.link||'';
-        const b2=UI.second_domain_for_dl?(UI.downloaddomain||'')+rawLink:window.location.origin+rawLink;
-        const url=b2+(rawLink.includes('?')?'&':'?')+'inline=true';
+        const b2=UI.second_domain_for_dl?UI.downloaddomain+x.link:window.location.origin+x.link;
+        const url=b2+(x.link.includes('?')?'&':'?')+'inline=true';
         const match=base&&x.name.toLowerCase().includes(base)?0:1;
-        // ★ FIX v49: track material type for rendering dispatch (pdf/md/txt/html)
-        return{name:x.name,label:cls.l,icon:cls.i,ord:cls.ord,match,url,mtype:materialType(x),rawLink};
+        return{name:x.name,label:cls.l,icon:cls.i,ord:cls.ord,match,url};
       });
       items.sort((x,y)=>x.match-y.match||x.ord-y.ord||x.name.localeCompare(y.name,undefined,{numeric:true}));
       // ★ salva items para o botão "Regerar" encontrar
@@ -1058,45 +956,11 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         <div class="gdi-mat-tab gdi-mat-isa" data-mat="isa-flashcards" title="Flashcards desta aula">
           <i class="bi bi-card-text"></i><span>Flashcards</span>
         </div>`;
-      if(statusEl)statusEl.textContent=items.length+' material'+(items.length>1?'is':'');
+      if(statusEl)statusEl.textContent=items.length+' PDF'+(items.length>1?'s':'');
       const isMobile=Os.isMobile;
       function show(idx){
         if(!tabsEl.isConnected||!bodyEl.isConnected)return;
         tabsEl.querySelectorAll('.gdi-mat-tab').forEach(t=>t.classList.toggle('active',+t.dataset.mat===idx));
-        const it=items[idx];
-        // ★ FIX v49 (Task MD-PDF): render MD/TXT/HTML as formatted text (not iframe).
-        // PDFs use the mobile (pdf.js canvas) or desktop (iframe) path below.
-        // MD files use marked + .gdi-markdown CSS (readable dark theme, proper headings/lists/code).
-        // TXT files use <pre> with wrapping. HTML files are sanitized and rendered.
-        if(it && it.mtype && it.mtype!=='pdf'){
-          bodyEl.innerHTML='<div class="gdi-mat-isa-spin-wrap" style="height:100%;display:flex;align-items:center;justify-content:center;"><div class="gdi-mat-isa-spin"></div></div>';
-          (async()=>{
-            try{
-              const resp=await fetch(it.url,{credentials:'same-origin'});
-              if(!resp.ok)throw new Error('HTTP '+resp.status);
-              const txt=await resp.text();
-              let inner='';
-              if(it.mtype==='md'){
-                inner=renderMdLocal(txt);
-              }else if(it.mtype==='html'){
-                inner=window.gdiSanitize?window.gdiSanitize(txt):escLocal(txt);
-              }else{ // txt
-                inner='<pre style="white-space:pre-wrap;word-wrap:break-word;margin:0;font-family:inherit;">'+escLocal(txt)+'</pre>';
-              }
-              bodyEl.innerHTML='<div class="gdi-mat-text-viewer" style="height:100%;overflow-y:auto;padding:18px 22px;background:var(--ferreto-surface-1,#0d1117);color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.7;">'+
-                '<div class="gdi-markdown" style="max-width:760px;margin:0 auto;">'+inner+'</div>'+
-                '<div style="max-width:760px;margin:18px auto 0;padding-top:14px;border-top:1px solid var(--ferreto-border,#21262d);">'+
-                  '<a href="'+it.url+'" target="_blank" rel="noopener" class="gdi-mode-btn" style="text-decoration:none;font-size:11px;padding:5px 10px;display:inline-flex;align-items:center;gap:6px;">'+
-                  '<i class="bi bi-box-arrow-up-right"></i> Abrir original</a>'+
-                '</div>'+
-              '</div>';
-            }catch(err){
-              bodyEl.innerHTML='<div class="gdi-mat-empty"><i class="bi bi-exclamation-triangle" style="font-size:34px;color:#ff8b8b;"></i><div>Não foi possível carregar o material: '+escHtml(err.message)+'</div>'+
-                '<a href="'+it.url+'" target="_blank" rel="noopener" class="gdi-btn gdi-btn-primary" style="margin-top:14px;text-decoration:none;"><i class="bi bi-box-arrow-up-right"></i> Abrir em nova aba</a></div>';
-            }
-          })();
-          return;
-        }
         if(isMobile){
           // ★ Android/iOS: muitos navegadores móveis NÃO renderizam PDF em <iframe>
           // e abrem popup de download. Usamos pdf.js (viewer) embutido para
@@ -1223,24 +1087,12 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
           }
         });
       });
-      // ★ FIX v55 (Task MATERIAL-PAGE): se window.__gdiAutoSelectMaterial está setado,
-      // encontra a aba do arquivo clicado e abre ela (em vez de sempre abrir a primeira).
-      // file_pdf/file_markdown setam essa variável antes de emitir slots:ready.
-      let autoIdx = 0;
-      try {
-        const autoSel = window.__gdiAutoSelectMaterial;
-        if (autoSel) {
-          const found = items.findIndex(it => it.name === autoSel);
-          if (found >= 0) autoIdx = found;
-          window.__gdiAutoSelectMaterial = null; // consome
-        }
-      } catch(_) {}
-      show(autoIdx);
+      show(0);
       lastKey=p;
-      console.log('[GDI Materiais] aula:',base||'(sem nome)','\u2192',items.length,'materiais:',items.map(x=>x.tabLabel).join(' | '),'| auto-select:',autoIdx);
+      console.log('[GDI Materiais] aula:',base||'(sem nome)','\u2192',items.length,'PDFs:',items.map(x=>x.tabLabel).join(' | '));
     }catch(err){
       if(myGen!==gen)return;
-      if(statusEl)statusEl.textContent='sem material';
+      if(statusEl)statusEl.textContent='sem PDF';
       if(bodyEl)bodyEl.innerHTML=`<div class="gdi-mat-empty"><i class="bi bi-wifi-off" style="font-size:34px;"></i><div>N\u00e3o foi poss\u00edvel carregar os materiais.</div></div>`;
     }
   }
