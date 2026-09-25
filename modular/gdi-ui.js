@@ -584,10 +584,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     }catch(_){}
     return null;
   }
-  function authIn(){
-    try{if(window.GDIUser&&typeof GDIUser.auth==='function')return GDIUser.auth()!=='out';}catch(_){}
-    return true;
-  }
   function getResumeOf(d,key){
     try{
       if(window.GDIUser&&GDIUser.loaded()&&typeof GDIUser.getResume==='function'){
