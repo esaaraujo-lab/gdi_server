@@ -4548,33 +4548,61 @@
       queue: [],
       scanned: []
     };
+    // ★ v1.0.78: guard against drive-root paths
+    if(/^\/\d+:\/?$/.test(courseKey||'')){
+      state.status = 'error';
+      state.startedAt = Date.now();
+      state.error = 'Caminho inválido (raiz do drive). Remova este curso e adicione novamente.';
+      setScanState(courseKey, state);
+      if(onProgress) try{ onProgress(state, getLessons(courseKey)); }catch(_){}
+      return state;
+    }
     state.status = 'scanning';
     state.startedAt = Date.now();
     setScanState(courseKey, state);
     if(onProgress) try{ onProgress(state, getLessons(courseKey)); }catch(_){}
     
     try {
-      // ★ 1 POST request — servidor escaneia TODO o curso recursivamente
-      const r = await fetch('/api/courses/scan-progress', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({coursePath: courseKey})
-      });
-      if(!r.ok) throw new Error('HTTP '+r.status);
-      const d = await r.json();
-      if(!d || !d.ok) throw new Error(d && d.error || 'scan falhou');
+      // ★ v1.0.78: SCAN INCREMENTAL — loop de batches até status=done
+      let allLessons = [];
+      let maxBatches = 30;
+      let batchNum = 0;
+      let isDone = false;
       
-      // Servidor retorna {lessons: [...], total: N, ...}
-      const lessons = d.lessons || [];
-      if(d.cached){
-        console.log('[Scanner] cache hit! Curso já escaneado por outro aluno — sem re-scan');
-      }else{
-        console.log('[Scanner] scan completo:', lessons.length, 'aulas encontradas');
+      while(!isDone && batchNum < maxBatches){
+        batchNum++;
+        const r = await fetch('/api/courses/scan-progress', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({coursePath: courseKey})
+        });
+        if(!r.ok) throw new Error('HTTP '+r.status);
+        const d = await r.json();
+        if(!d || !d.ok) throw new Error(d && d.error || 'scan falhou');
+        
+        allLessons = d.lessons || [];
+        isDone = d.status !== 'partial';
+        
+        state.status = 'scanning';
+        state.scannedFolders = state.totalFolders;
+        state.lessonsFound = allLessons.length;
+        state.pendingFolders = d.pendingFolders || 0;
+        state.batchNum = batchNum;
+        setScanState(courseKey, state);
+        
+        const partialData = {lessons: allLessons, scanned: isDone, totalLessons: allLessons.length};
+        setLessons(courseKey, partialData);
+        if(onProgress) try{ onProgress(state, partialData); }catch(_){}
+        
+        if(d.cached){ isDone = true; break; }
+        if(!isDone) await new Promise(r => setTimeout(r, 500));
       }
+      
+      const lessons = allLessons;
       const lessonsData = {
         lessons: lessons,
         scanned: true,
-        totalFolders: d.totalFolders || 1,
+        totalFolders: d?.totalFolders || 1,
         totalLessons: lessons.length
       };
       setLessons(courseKey, lessonsData);
@@ -4712,6 +4740,37 @@
   // and starts a non-blocking scan. Limited to 1 concurrent scan.
   // ─────────────────────────────────────────────────────────────
   let _autoScanRunning = false;
+  
+  // ★ v1.0.78: syncCoursesFromDrive — busca cursos do Drive e merge com localStorage
+  async function syncCoursesFromDrive(){
+    try{
+      const r = await fetch('/api/courses/list');
+      if(!r.ok) return;
+      const d = await r.json();
+      if(!d || !d.ok || !Array.isArray(d.courses)) return;
+      const LS_MANUAL = 'gdi-manual-courses-v1';
+      const local = JSON.parse(localStorage.getItem(LS_MANUAL) || '[]');
+      const localPaths = new Set(local.map(c => c.path));
+      let added = 0;
+      for(const dc of d.courses){
+        if(!localPaths.has(dc.coursePath)){
+          local.push({
+            id:'mc-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),
+            name:dc.courseName||'Curso', icon:'📁', color:'#5ddeda', goal:60, notes:'',
+            createdAt:dc.addedAt||Date.now(), manual:true, path:dc.coursePath,
+            courseKey:dc.coursePath, pdfCount:dc.pdfCount||0
+          });
+          added++;
+        }
+      }
+      if(added > 0){
+        localStorage.setItem(LS_MANUAL, JSON.stringify(local));
+        console.log('[GDI M22] syncCoursesFromDrive: ' + added + ' cursos recuperados do Drive');
+      }
+    }catch(_){}
+  }
+  window.gdiSyncCoursesFromDrive = syncCoursesFromDrive;
+
   function autoScanPending(){
     if(_autoScanRunning) return;
     _autoScanRunning = true;
@@ -4723,7 +4782,8 @@
       for(const c of manual){
         if(!c || !c.path) continue;
         // Skip drive-root paths (they're not real courses — Task 16 / FIX 3)
-        if(/^\d+:\/$/.test(c.path)) continue;
+        // ★ v1.0.78: fixed regex to match /0:/ and /0:/ (with leading slash)
+        if(/^\/\d+:\/?$/.test(c.path)) continue;
         const sp = getScanProgress(c.path);
         if(!sp || (sp.status !== 'done' && sp.status !== 'scanning')){
           console.log('[Scanner] auto-scan iniciando para:', c.name || c.path);
