@@ -1385,6 +1385,7 @@
         </span>`:''}
       </div>
       <input id="gdi-goal-set" type="number" min="10" max="480" value="${g}" title="Meta diária (minutos)" style="width:56px;background:var(--ferreto-surface-2,rgba(255,255,255,.07));border:1px solid var(--ferreto-border,#30363d);border-radius:6px;color:var(--ferreto-text,#f0f6fc);text-align:center;padding:5px;font-size:12px;flex-shrink:0;">
+      <button id="gdi-central-meggy" title="Meggy (tutora de estudos)" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);border:0;border-radius:10px;padding:6px 12px;cursor:pointer;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px;flex-shrink:0;"><span style="font-size:16px;">🐩</span> Meggy</button>
       <button id="gdi-central-x" title="Fechar (Esc)">✕</button>
     </div>`;
   }
@@ -1458,6 +1459,14 @@
       panel.dataset.sidebarRendered='1';
       // bind header
       panel.querySelector('#gdi-central-x').onclick=closePanel;
+      // ★ FIX-PERSISTENCE-MEGGY-HEADER: wire Meggy header button (delegates to FAB #gdi-ai-fab)
+      const meggyBtn = panel.querySelector('#gdi-central-meggy');
+      if(meggyBtn){
+        meggyBtn.onclick = () => {
+          const fab = document.querySelector('#gdi-ai-fab');
+          if(fab) fab.click();
+        };
+      }
       panel.querySelector('#gdi-goal-set').addEventListener('change',e=>{
         const v=Math.max(10,Math.min(480,parseInt(e.target.value,10)||60));
         lsSet(LS_GOAL,v);
@@ -2291,7 +2300,9 @@
         // mostra info da pasta atual
         const totalPdfs=pdfs.length;
         const totalVideos=videos.length;
-        if(currentPath!=='/'){
+        // ★ FIX v1.0.67 (Bug B): não permite selecionar drive roots (ex: /0:/) como curso
+        const isDriveRoot = /^\/\d+:\/?$/.test(currentPath);
+        if(currentPath!=='/' && !isDriveRoot){
           const segs=pathSegments(currentPath);
           const courseName=decodeURIComponent(getDriveName(segs[segs.length-1]));
           selectedPath=currentPath;
@@ -2782,15 +2793,27 @@
         <b style="color:var(--ferreto-text,#f0f6fc);font-size:13px;display:block;margin-bottom:10px;">🛤️ Trilha do Curso</b>
         <div style="max-height:300px;overflow-y:auto;padding-right:6px;">
           ${(function(){
-            // ★ Agrupa aulas por disciplina (primeiro segmento após coursePath)
+            // ★ FIX v1.0.67 (Bug C): trilha path normalization + lesson dedupe
             const coursePathClean = String(c.key).replace(/\/$/, '');
             const groups = {};
+            const seenIds = new Set(); // dedupe by name+path
             lessons.forEach(l => {
+              // Dedupe: skip if already seen this lesson (by name)
+              const dedupKey = (l.name || '') + '|' + (l.path || '');
+              if(seenIds.has(dedupKey)) return;
+              seenIds.add(dedupKey);
               let relPath = l.path || '';
               try{ relPath = decodeURIComponent(relPath); }catch(_){ relPath = l.path || ''; }
               if(relPath.indexOf(coursePathClean) === 0) relPath = relPath.slice(coursePathClean.length);
+              relPath = relPath.replace(/^\/+/, ''); // strip leading slashes
               const segs = relPath.split('/').filter(Boolean);
-              const gname = segs.length > 1 ? segs[0] : 'Aulas';
+              // ★ FIX: gname deve ser o nome da pasta, não o drive ID
+              let gname = 'Aulas';
+              if(segs.length > 1){
+                gname = segs[0];
+                // Se o primeiro segmento for um drive ID (ex: "0:"), usa o segundo
+                if(/^\d+:$/.test(gname) && segs.length > 2) gname = segs[1];
+              }
               if(!groups[gname]) groups[gname] = [];
               groups[gname].push(l);
             });
@@ -4820,6 +4843,53 @@
     }catch(_){ return 0; }
   }
 
+  // ★ FIX-PERSISTENCE-MEGGY-HEADER: sync manual courses from Drive (source of truth).
+  // On page load, fetches /api/courses/list (courses saved in general_courses.json
+  // on the user's Drive folder) and merges with localStorage 'gdi-manual-courses-v1'
+  // (dedup by path). localStorage acts as cache; Drive is source of truth.
+  // Without this: courses added on browser A are lost on browser B / after clearing
+  // localStorage, even though they were POSTed to /api/courses/add at add-time.
+  // collectCourses() stays sync (reads localStorage) — this runs async in background.
+  async function syncCoursesFromDrive(){
+    try {
+      const r = await fetch('/api/courses/list');
+      if(!r.ok) return;
+      const d = await r.json();
+      if(!d || !d.ok || !Array.isArray(d.courses)) return;
+
+      const LS_MANUAL = 'gdi-manual-courses-v1';
+      const local = JSON.parse(localStorage.getItem(LS_MANUAL) || '[]');
+      if(!Array.isArray(local)) return;  // defensive — corrupted LS
+      const localPaths = new Set(local.map(c => c && c.path).filter(Boolean));
+
+      let added = 0;
+      for(const dc of d.courses) {
+        if(!dc || !dc.coursePath) continue;
+        if(localPaths.has(dc.coursePath)) continue;
+        local.push({
+          id: 'mc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+          name: dc.courseName || 'Curso',
+          icon: '📁',
+          color: '#5ddeda',
+          goal: 60,
+          notes: '',
+          createdAt: dc.addedAt || Date.now(),
+          manual: true,
+          path: dc.coursePath,
+          courseKey: dc.coursePath,
+          pdfCount: dc.pdfCount || 0
+        });
+        localPaths.add(dc.coursePath);
+        added++;
+      }
+
+      if(added > 0) {
+        localStorage.setItem(LS_MANUAL, JSON.stringify(local));
+        console.log('[GDI M22] syncCoursesFromDrive: ' + added + ' cursos recuperados do Drive');
+      }
+    }catch(_){ /* network/parse error — silent fail, localStorage stays as-is */ }
+  }
+
   // Export
   window.gdiCourseScanner = {
     startScan,
@@ -4831,6 +4901,7 @@
     resumeInterruptedScans,
     autoScanPending,
     cleanupOrphanCourses,
+    syncCoursesFromDrive,
     LS_SCAN_PREFIX,
     LS_LESSONS_PREFIX,
     SCAN_PAUSE_MS,
@@ -4840,6 +4911,18 @@
 
   // ★ Task 16 / FIX 3: expose cleanup as a standalone global for console access
   window.gdiCleanupOrphanCourses = cleanupOrphanCourses;
+  // ★ FIX-PERSISTENCE-MEGGY-HEADER: expose sync for console/debug
+  window.gdiSyncCoursesFromDrive = syncCoursesFromDrive;
+
+  // ★ FIX-PERSISTENCE-MEGGY-HEADER: on page load, sync courses from Drive FIRST
+  // (recovers courses added on other browsers/devices, or after clearing localStorage),
+  // THEN run orphan cleanup + auto-scan. Drive is source of truth; localStorage is cache.
+  // .catch safety: syncCoursesFromDrive() has internal try/catch (never rejects), but
+  // guard against any IIFE-init edge case to avoid crashing the page.
+  syncCoursesFromDrive().then(function(){
+    setTimeout(cleanupOrphanCourses, 2000);
+    setTimeout(autoScanPending, 3000);
+  }).catch(function(_){ /* silent — sync is best-effort */ });
 
   // Auto-resume interrupted scans after a short delay (lets GDIUser + worker bridge init)
   setTimeout(function(){
