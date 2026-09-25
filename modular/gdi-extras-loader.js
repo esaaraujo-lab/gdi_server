@@ -29,7 +29,7 @@
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  const CACHE_VERSION = '53';  // ★ v1.0.58 (Task SCAN-CURSOR): SCAN INCREMENTAL COM CURSOR. worker.js: gdiScanCourseLessonsIncremental (BFS com queue), salva cursor no Drive (scan-state.json), retorna status=partial. gdi-study.js scanCourse: loop de batches até status=done. Resolve limite 50 subrequests CF. Bump 52→53.
+  const CACHE_VERSION = '55';  // ★ v1.0.60 (Task SCAN-CURSOR-VALIDATE): worker.js FIX cursor antigo com paths errados — agora valida e descarta. Bump 54→55.
 
   const MODULES = [
     'gdi-core.js',
