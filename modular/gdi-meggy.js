@@ -724,34 +724,8 @@
   }
 
   // ── Drive cache (GET/POST /api/ai/cache) ──
-  // ★ Sprint 4: agora tenta primeiro os endpoints granulares opcionais
-  //   /api/ai/summaries, /api/ai/flashcards, /api/ai/questions
-  //   Se falhar (worker antigo), cai para o cache unificado /api/ai/cache.
-  //   Isso permite migração gradual: worker novo = 4 arquivos; worker antigo = 1.
-  const GRANULAR_AVAILABLE = (function(){
-    // detecta uma vez se endpoints granulares existem (HEAD request)
-    let _checked=null;
-    return async function(){
-      if(_checked!==null)return _checked;
-      try{
-        const r=await fetch('/api/ai/summaries?probe=1',{method:'HEAD'});
-        _checked=r.ok;
-      }catch(_){_checked=false;}
-      return _checked;
-    };
-  })();
-
   async function cacheGet(){
     try{
-      // ★ tenta endpoint granular primeiro (summaries)
-      const granular=await GRANULAR_AVAILABLE();
-      if(granular){
-        const r=await fetch('/api/ai/summaries?key='+encodeURIComponent(lessonKey()),{cache:'no-store'});
-        const d=await r.json();
-        if(d&&d.ok&&d.cached)return d.cached;
-        return null;
-      }
-      // fallback: cache unificado antigo
       const r=await fetch('/api/ai/cache?key='+encodeURIComponent(lessonKey()),{cache:'no-store'});
       const d=await r.json();
       return (d&&d.ok&&d.cached)?d.cached:null;
@@ -766,10 +740,7 @@
         const existing=await cacheGet();
         mindmapToSave=(existing&&existing.mindmap)||null;
       }
-      // ★ tenta endpoint granular primeiro; senão, cache unificado
-      const granular=await GRANULAR_AVAILABLE();
-      const endpoint=granular?'/api/ai/summaries':'/api/ai/cache';
-      await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},
+      await fetch('/api/ai/cache',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({key:lessonKey(),summary,questions,mindmap:mindmapToSave,lessonName})});
     }catch(_){/* não bloqueia o fluxo se o cache falhar */}
   }
@@ -931,23 +902,6 @@
   // Requisições paralelas naturalmente usam chaves diferentes.
   async function callIsaKeyed(prompt,keyHint){
     return callIsa(prompt);
-  }
-
-  // ★ Classifica material pelo nome do arquivo (Task FINAL / Fix 1c)
-  //   - 'questions': arquivos de questões/exercícios/simulados/provas
-  //   - 'skip':      arquivos de resumo (já são resumo — não processar)
-  //   - 'study':     material de estudo padrão (PDFs de aula/apostila)
-  function classifyMaterial(name){
-    const n=(name||'').toLowerCase();
-    // ★ FIX v53 (Task TRANSC): "transcri" NO NOME → 'transcription' (não é resumo, é material de estudo principal)
-    //   Antes, qualquer arquivo com "resum|summary" era 'skip' — mas isso impedia o Meggy de ler transcrições.
-    //   Agora: transcrição tem prioridade MÁXIMA (é o material principal da aula).
-    if(/transcri/.test(n))return 'transcription';  // ★ prioridade máxima — é o conteúdo da aula
-    // ★ v53: só pula se for .md COM "resumo/summary" no nome (já é um resumo, não precisa re-processar)
-    if(/\.md$/.test(n)&&/resum|summary/.test(n))return 'skip';
-    if(/quest|exerc|simulad|prova|caderno|lista|test/.test(n))return 'questions';
-    if(/resum|summary/.test(n))return 'skip';
-    return 'study';
   }
 
   // Gera TODOS os materiais EM PARALELO TOTAL (não em cascata)
