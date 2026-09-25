@@ -1074,6 +1074,8 @@
 
     return [...map.values()].sort((a,b)=>b.lastAt-a.lastAt);
   }
+  // ★ FIX v62: expõe collectCourses no window para que M23 (renderSimulado) e M24 (renderRadar) possam acessar
+  window.collectCourses = collectCourses;
   // ★ helpers para ocultar/restaurar cursos
   function hideCourse(ck){
     const hidden=lsGet(LS_HIDDEN,[]);
