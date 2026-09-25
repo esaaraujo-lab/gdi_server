@@ -30,6 +30,30 @@ const GDI_ROOT=()=>document.documentElement; // UI flutuante vive aqui (fora do 
 
 window.GDI_MODULES = window.GDI_MODULES || [];
 
+// ★ v1.0.76: courseIdentity — global function for course icon/color by discipline
+// Defined here (gdi-core.js) so it's available to all modules regardless of CDN cache state
+window.gdiCourseIdentity = function(courseKey, courseName){
+  const driveName = (window.drive_names || []);
+  const m = /^\/(\d+):/.exec(courseKey || '');
+  const dName = (m && driveName[+m[1]]) || '';
+  const n = ((courseName || '') + ' ' + dName).toLowerCase();
+  if(/direito|tribunal|tj|trt|trf|tre|oab|judici|constitucional|penal|civil|administrativo|processual|jurídic/.test(n))
+    return {icon:'⚖️', color:'#5ddeda'};
+  if(/polic|prf|pf\b|rodovi|federal|seguranç/.test(n))
+    return {icon:'🚔', color:'#3fb950'};
+  if(/saúde|medic|enferm|nutri|psiquia|medcurso|saude/.test(n))
+    return {icon:'🔬', color:'#ff8b9f'};
+  if(/músic|music|canto|voz|coral/.test(n))
+    return {icon:'🎵', color:'#c026d3'};
+  if(/fit|física|fisica|hipopress|exerc|treino|muscul/.test(n))
+    return {icon:'🏋️', color:'#ffd43b'};
+  if(/educa|magistér|pedagóg|professor|concurso sme|see |cursinho/.test(n))
+    return {icon:'📚', color:'#5ddeda'};
+  if(/enem|vestib|fuvest|unicamp|usp/.test(n))
+    return {icon:'🎓', color:'#ff8b9f'};
+  return {icon:'📁', color:'#5ddeda'};
+};
+
 // ═══ HELPER GLOBAL: SRS (Spaced Repetition) UNIFICADO ═══
 // Algoritmo SM-2 simplificado (mesmo do Anki). Usado por M9-ISA e M22
 // para evitar conflitos de intervalos diferentes.
