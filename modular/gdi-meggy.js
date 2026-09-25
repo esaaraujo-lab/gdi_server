@@ -342,6 +342,28 @@
     return result.data.text||'';
   }
 
+  // ── get file type by extension (md/txt/html/pdf) ──
+  // used by generateAll and friends to route text files (MD/TXT/HTML)
+  // directly to extractTextFile, skipping pdf.js entirely.
+  function getFileType(name){
+    const n=(name||'').toLowerCase();
+    if(/\.md$/.test(n))return 'md';
+    if(/\.txt$/.test(n))return 'txt';
+    if(/\.html?$/.test(n))return 'html';
+    return 'pdf';
+  }
+  async function extractTextFile(url){
+    let resp;
+    const fetchOpts=[{credentials:'same-origin'},{credentials:'include'},{credentials:'omit'}];
+    for(const opts of fetchOpts){
+      try{resp=await fetch(url,opts);if(resp.ok)break;}catch(_){}
+    }
+    if(!resp||!resp.ok)throw new Error('HTTP '+(resp?resp.status:'fetch')+' ao baixar arquivo de texto');
+    const txt=await resp.text();
+    if(!txt||txt.trim().length<10)throw new Error('Arquivo de texto vazio');
+    return txt;
+  }
+
   // ── Extract text from PDF (up to 30 pages, ~8000 chars) ──
   // FIX: alguns PDFs têm texto selecionável mas getTextContent() básico
   // retorna vazio (fontes com encoding custom, text runs fragmentados).
@@ -905,17 +927,6 @@
   // Requisições paralelas naturalmente usam chaves diferentes.
   async function callIsaKeyed(prompt,keyHint){
     return callIsa(prompt);
-  }
-
-  // ★ Classifica material pelo nome do arquivo (Task FINAL / Fix 1c)
-  //   - 'questions': arquivos de questões/exercícios/simulados/provas
-  //   - 'skip':      arquivos de resumo (já são resumo — não processar)
-  //   - 'study':     material de estudo padrão (PDFs de aula/apostila)
-  function classifyMaterial(name){
-    const n=(name||'').toLowerCase();
-    if(/quest|exerc|simulad|prova|caderno|lista|test/.test(n))return 'questions';
-    if(/resum|summary/.test(n))return 'skip';
-    return 'study';
   }
 
   // Gera TODOS os materiais EM PARALELO TOTAL (não em cascata)
@@ -2495,6 +2506,11 @@
     </div>
     <div id="gdi-ai-body"></div>
     <div class="gdi-ai-provider"></div>
+    <div class="gdi-ai-quick-actions" style="display:flex;gap:6px;padding:8px 12px;border-top:1px solid var(--ferreto-border,rgba(255,255,255,.09));">
+      <button class="gdi-ai-quick" data-action="resumir" style="flex:1;padding:6px 8px;border:1px solid var(--ferreto-border,#30363d);border-radius:8px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));color:var(--ferreto-text,#e6edf3);font-size:11px;cursor:pointer;">💬 Resumir</button>
+      <button class="gdi-ai-quick" data-action="questoes" style="flex:1;padding:6px 8px;border:1px solid var(--ferreto-border,#30363d);border-radius:8px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));color:var(--ferreto-text,#e6edf3);font-size:11px;cursor:pointer;">❓ Questões</button>
+      <button class="gdi-ai-quick" data-action="explicar" style="flex:1;padding:6px 8px;border:1px solid var(--ferreto-border,#30363d);border-radius:8px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));color:var(--ferreto-text,#e6edf3);font-size:11px;cursor:pointer;">💡 Explicar</button>
+    </div>
     <div id="gdi-ai-input-wrap">
       <input id="gdi-ai-input" type="text" placeholder="Pergunte à Meggy 🐩 sobre a aula, peça um resumo..." autocomplete="off">
       <button id="gdi-ai-send" title="Enviar"><i class="bi bi-send-fill"></i></button>
@@ -2506,6 +2522,19 @@
   const sendBtn=panel.querySelector('#gdi-ai-send');
   // ★ FIX: badge estava buscando dentro do panel, mas o badge está no fab
   const badge=fab.querySelector('#gdi-ai-fab-badge');
+
+  // ═══ Quick action buttons (Resumir / Questões / Explicar) ═══
+  // Fills the input with a canned prompt and triggers send().
+  panel.querySelectorAll('.gdi-ai-quick').forEach(btn => {
+    btn.onclick = () => {
+      const action = btn.dataset.action;
+      let prompt = '';
+      if(action === 'resumir') prompt = 'Gere um resumo desta aula';
+      else if(action === 'questoes') prompt = 'Crie 5 questões sobre este tema';
+      else if(action === 'explicar') prompt = 'Explique o conceito principal desta aula';
+      if(prompt){ input.value = prompt; send(); }
+    };
+  });
 
   function addMsg(role,text){
     const m={role,text};
@@ -2747,4 +2776,28 @@
   fab.addEventListener('click',()=>{sessionStorage.setItem('gdi-ai-seen','1');},{once:true});
 
   console.log('[GDI Extras] M-AI widget Meggy 🐩 — poodle tutora ativo — refactored (Task 4-c)');
+
+  // ═══ __gdiMeggySuggest: floating suggestion banner (used by study modules) ═══
+  // Shows a dismissible bottom banner that can either call an `action` callback
+  // or default to opening the Meggy FAB. Auto-hides after 8s.
+  window.__gdiMeggySuggest = function(text, action){
+    let banner = document.querySelector('#gdi-meggy-suggest');
+    if(!banner){
+      banner = document.createElement('div');
+      banner.id = 'gdi-meggy-suggest';
+      banner.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:2147483645;max-width:420px;padding:10px 16px;border-radius:12px;background:linear-gradient(135deg,rgba(255,139,159,.95),rgba(192,38,211,.95));color:#fff;font-size:13px;box-shadow:0 8px 28px -6px rgba(255,139,159,.4);display:none;align-items:center;gap:8px;cursor:pointer;animation:gdi-ai-in .3s ease;';
+      banner.innerHTML = '<span class="gdi-suggest-text"></span><span class="gdi-suggest-close" style="margin-left:auto;font-size:16px;opacity:.7;">×</span>';
+      (GDI_ROOT()||document.body).appendChild(banner);
+      banner.querySelector('.gdi-suggest-close').onclick = (e) => { e.stopPropagation(); banner.classList.remove('show'); banner.style.display='none'; };
+    }
+    banner.querySelector('.gdi-suggest-text').textContent = text;
+    banner.onclick = () => {
+      banner.style.display='none';
+      if(typeof action === 'function') action();
+      else { const fab = document.querySelector('#gdi-ai-fab'); if(fab) fab.click(); }
+    };
+    banner.style.display = 'flex';
+    clearTimeout(banner.__timer);
+    banner.__timer = setTimeout(() => { banner.style.display='none'; }, 8000);
+  };
 })();
