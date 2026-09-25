@@ -2739,8 +2739,9 @@
             return '<div class="gdi-notes-empty"><i class="bi bi-info-circle" style="font-size:18px;color:var(--ferreto-text-muted,#8b949e);vertical-align:middle;"></i> <span style="vertical-align:middle;">Nenhuma aula encontrada ainda.</span><div style="margin-top:8px;font-size:12px;"><a href="'+escHtml(coursePath)+'" style="color:var(--ferreto-secondary,#5ddeda);text-decoration:underline;"><i class="bi bi-folder2-open"></i> Abrir pasta no Drive</a></div></div>';
           }
           // Agrupa por disciplina: a pasta imediatamente dentro do curso
-          // path típico: /9:/Curso/TRT/Direito Administrativo/Bloco I/001 - aula.mp4
-          // disciplina = "Direito Administrativo" (primeiro segmento após coursePath)
+          // path típico: /10:/Sou + Carreiras Policiais 5.0/7 - Disciplinas.../exercicios.pdf
+          // disciplina = "7 - Disciplinas..." (primeiro segmento após coursePath)
+          // ★ FIX v1.0.69: pula drive IDs (ex: "10:") ao extrair disciplina
           const groups = {};
           for(const l of lessons){
             // extrai disciplina do path (relativo ao coursePath)
@@ -2750,9 +2751,12 @@
             let cp = coursePath;
             try{ cp = decodeURIComponent(coursePath); }catch(_){ cp = coursePath; }
             if(rel.indexOf(cp) === 0) rel = rel.slice(cp.length);
+            rel = rel.replace(/^\/+/, ''); // strip leading slashes
             const segs = rel.split('/').filter(Boolean);
-            // disciplina = primeiro segmento após o curso (ou "Aulas" se estiver na raiz)
-            const disc = segs.length > 1 ? segs[0] : (segs.length === 1 ? 'Aulas' : 'Outros');
+            // ★ FIX: pula drive IDs no primeiro segmento
+            let discIdx = 0;
+            while(discIdx < segs.length && /^\d+:$/.test(segs[discIdx])) discIdx++;
+            const disc = segs.length > discIdx + 1 ? segs[discIdx] : (segs.length > 0 ? 'Aulas' : 'Outros');
             if(!groups[disc]) groups[disc] = { total: 0, watched: 0, path: cp + (cp.endsWith('/')?'':'/') + encodeURIComponent(disc) + '/' };
             groups[disc].total++;
             if(l.watched) groups[disc].watched++;
@@ -2790,48 +2794,82 @@
       ${/* ★ TRILHA-ONBOARDING: trilha visual do curso (timeline vertical com ✓/▶/◻) */ ''}
       ${lessons.length > 0 ? `
       <div style="margin-top:18px;border-top:1px solid var(--ferreto-border,#21262d);padding-top:14px;">
-        <b style="color:var(--ferreto-text,#f0f6fc);font-size:13px;display:block;margin-bottom:10px;">🛤️ Trilha do Curso</b>
-        <div style="max-height:300px;overflow-y:auto;padding-right:6px;">
+        <b style="color:var(--ferreto-text,#f0f6fc);font-size:13px;display:block;margin-bottom:10px;">📚 Materiais por Disciplina</b>
+        <div style="max-height:400px;overflow-y:auto;padding-right:6px;">
           ${(function(){
-            // ★ FIX v1.0.67 (Bug C): trilha path normalization + lesson dedupe
+            // ★ v1.0.69: Trilha redesenhada como sanfona retrátil por disciplina
+            // - Agrupa por disciplina (pulando drive IDs)
+            // - Separa vídeos/áudios de PDFs/materiais
+            // - Sanfona: clica na disciplina para expandir/recolher
+            // - Cada item é clicável (abre no player/visualizador)
             const coursePathClean = String(c.key).replace(/\/$/, '');
             const groups = {};
-            const seenIds = new Set(); // dedupe by name+path
+            const seenIds = new Set();
             lessons.forEach(l => {
-              // Dedupe: skip if already seen this lesson (by name)
               const dedupKey = (l.name || '') + '|' + (l.path || '');
               if(seenIds.has(dedupKey)) return;
               seenIds.add(dedupKey);
               let relPath = l.path || '';
               try{ relPath = decodeURIComponent(relPath); }catch(_){ relPath = l.path || ''; }
               if(relPath.indexOf(coursePathClean) === 0) relPath = relPath.slice(coursePathClean.length);
-              relPath = relPath.replace(/^\/+/, ''); // strip leading slashes
+              relPath = relPath.replace(/^\/+/, '');
               const segs = relPath.split('/').filter(Boolean);
-              // ★ FIX: gname deve ser o nome da pasta, não o drive ID
+              // Pula drive IDs
+              let discIdx = 0;
+              while(discIdx < segs.length && /^\d+:$/.test(segs[discIdx])) discIdx++;
               let gname = 'Aulas';
-              if(segs.length > 1){
-                gname = segs[0];
-                // Se o primeiro segmento for um drive ID (ex: "0:"), usa o segundo
-                if(/^\d+:$/.test(gname) && segs.length > 2) gname = segs[1];
-              }
-              if(!groups[gname]) groups[gname] = [];
-              groups[gname].push(l);
+              if(segs.length > discIdx + 1) gname = segs[discIdx];
+              else if(segs.length > 0) gname = 'Aulas';
+              if(!groups[gname]) groups[gname] = { videos: [], pdfs: [], others: [] };
+              if(l.type === 'video' || l.type === 'audio') groups[gname].videos.push(l);
+              else if(l.type === 'pdf') groups[gname].pdfs.push(l);
+              else groups[gname].others.push(l);
             });
-            return Object.keys(groups).sort((a,b) => a.localeCompare(b,'pt-BR')).map(gname => {
-              const items = groups[gname];
-              return '<div style="margin-bottom:14px;">'
-                + '<div style="color:var(--ferreto-secondary,#5ddeda);font-size:12px;font-weight:600;margin-bottom:6px;">' + escHtml(gname) + ' · ' + items.length + '</div>'
-                + items.slice(0,20).map(l => {
-                    const isWatched = !!l.watched;
-                    const isCurrent = !!l.resumed && !isWatched;
-                    const icon = isWatched ? '✓' : (isCurrent ? '▶' : '◻');
-                    const color = isWatched ? '#3fb950' : (isCurrent ? 'var(--ferreto-primary,#ff8b9f)' : 'var(--ferreto-text-faint,#6b7488)');
-                    return '<div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:11px;">'
-                      + '<span style="color:' + color + ';font-size:13px;flex:none;width:16px;">' + icon + '</span>'
-                      + '<span style="color:var(--ferreto-text-muted,#8b949e);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">' + escHtml(l.name || '') + '</span>'
-                      + '</div>';
-                  }).join('')
-                + (items.length > 20 ? '<div style="color:var(--ferreto-text-faint,#6b7488);font-size:10px;padding:3px 0 3px 24px;">+ ' + (items.length-20) + ' mais</div>' : '')
+            const accordionId = 'gdi-trilha-' + Date.now();
+            return Object.keys(groups).sort((a,b) => a.localeCompare(b,'pt-BR')).map((gname, idx) => {
+              const g = groups[gname];
+              const total = g.videos.length + g.pdfs.length + g.others.length;
+              const headerId = accordionId + '-h-' + idx;
+              const bodyId = accordionId + '-b-' + idx;
+              // Constrói lista de itens (vídeos primeiro, depois PDFs)
+              const items = [];
+              g.videos.forEach(l => {
+                const isWatched = !!l.watched;
+                const icon = isWatched ? '✓' : '▶';
+                const color = isWatched ? '#3fb950' : 'var(--ferreto-primary,#ff8b9f)';
+                items.push('<a href="' + escHtml(l.path) + (l.path.includes('?')?'&':'?') + 'a=view" style="text-decoration:none;display:flex;align-items:center;gap:8px;padding:4px 0;font-size:11px;" title="' + escHtml(l.name||'') + '">'
+                  + '<span style="color:' + color + ';font-size:13px;flex:none;width:16px;">' + icon + '</span>'
+                  + '<i class="bi bi-camera-video" style="color:var(--ferreto-secondary,#5ddeda);font-size:12px;flex:none;"></i>'
+                  + '<span style="color:var(--ferreto-text-muted,#8b949e);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">' + escHtml(l.name || '') + '</span>'
+                  + '</a>');
+              });
+              g.pdfs.forEach(l => {
+                items.push('<a href="' + escHtml(l.path) + (l.path.includes('?')?'&':'?') + 'a=view" style="text-decoration:none;display:flex;align-items:center;gap:8px;padding:4px 0;font-size:11px;" title="' + escHtml(l.name||'') + '">'
+                  + '<span style="color:var(--ferreto-text-faint,#6b7488);font-size:13px;flex:none;width:16px;">◻</span>'
+                  + '<i class="bi bi-file-earmark-pdf" style="color:#ff6b6b;font-size:12px;flex:none;"></i>'
+                  + '<span style="color:var(--ferreto-text-muted,#8b949e);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">' + escHtml(l.name || '') + '</span>'
+                  + '</a>');
+              });
+              g.others.forEach(l => {
+                items.push('<a href="' + escHtml(l.path) + (l.path.includes('?')?'&':'?') + 'a=view" style="text-decoration:none;display:flex;align-items:center;gap:8px;padding:4px 0;font-size:11px;" title="' + escHtml(l.name||'') + '">'
+                  + '<span style="color:var(--ferreto-text-faint,#6b7488);font-size:13px;flex:none;width:16px;">◻</span>'
+                  + '<i class="bi bi-file-earmark" style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;flex:none;"></i>'
+                  + '<span style="color:var(--ferreto-text-muted,#8b949e);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">' + escHtml(l.name || '') + '</span>'
+                  + '</a>');
+              });
+              const visibleItems = items.slice(0, 15);
+              const hasMore = items.length > 15;
+              return '<div style="margin-bottom:8px;border:1px solid var(--ferreto-border,#30363d);border-radius:8px;overflow:hidden;">'
+                + '<div id="' + headerId + '" style="display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer;background:var(--ferreto-surface-2,rgba(255,255,255,.04));transition:background .15s;" onclick="var b=document.getElementById(\'' + bodyId + '\');var h=this.querySelector(\'.gdi-chevron\');if(b.style.display===\'none\'){b.style.display=\'block\';h.style.transform=\'rotate(90deg)\';}else{b.style.display=\'none\';h.style.transform=\'none\';}">'
+                + '<i class="bi bi-chevron-right gdi-chevron" style="font-size:10px;color:var(--ferreto-text-muted,#8b949e);transition:transform .15s;flex:none;"></i>'
+                + '<i class="bi bi-folder-fill" style="color:var(--ferreto-secondary,#5ddeda);font-size:14px;flex:none;"></i>'
+                + '<span style="color:var(--ferreto-text,#e6edf3);font-size:12px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(gname) + '</span>'
+                + '<span style="color:var(--ferreto-text-muted,#8b949e);font-size:10px;flex:none;">' + total + '</span>'
+                + '</div>'
+                + '<div id="' + bodyId + '" style="display:none;padding:6px 10px;">'
+                + visibleItems.join('')
+                + (hasMore ? '<div style="color:var(--ferreto-text-faint,#6b7488);font-size:10px;padding:4px 0 4px 24px;">+ ' + (items.length-15) + ' mais</div>' : '')
+                + '</div>'
                 + '</div>';
             }).join('');
           })()}
