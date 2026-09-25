@@ -2543,16 +2543,16 @@
   const root=GDI_ROOT();
   const fab=document.createElement('button');
   fab.id='gdi-ai-fab';fab.title='Meggy';
-  // ★ v1.0.82: FAB agora usa foto real da Meggy (ImgBB → repo público modular/assets/).
-  // Painel do chat (linha ~2553) mantém o SVG MEGGY_AVATAR (estilo flat, melhor para header).
-  fab.innerHTML='<span class="gdi-ai-fab-ico"><img src="/modular/assets/meggy-fab.jpg?v='+(window.CACHE_VERSION||'87')+'" alt="Meggy" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;"></span><span id="gdi-ai-fab-badge"></span>';
+  // ★ v1.0.83: FAB + chat header agora usam foto real da Meggy (PNG transparente).
+  // Background preto removido → dog head flutua sobre o FAB.
+  fab.innerHTML='<span class="gdi-ai-fab-ico"><img src="/modular/assets/meggy-fab.png?v='+(window.CACHE_VERSION||'88')+'" alt="Meggy" style="width:100%;height:100%;object-fit:contain;display:block;"></span><span id="gdi-ai-fab-badge"></span>';
   root.appendChild(fab);
 
   const panel=document.createElement('div');
   panel.id='gdi-ai-panel';
   panel.innerHTML=`
     <div id="gdi-ai-head">
-      <div class="gdi-ai-avatar">${MEGGY_AVATAR}</div>
+      <div class="gdi-ai-avatar"><img src="/modular/assets/meggy-fab.png?v=${window.CACHE_VERSION||'88'}" alt="Meggy" style="width:100%;height:100%;object-fit:contain;display:block;"></div>
       <div class="gdi-ai-info">
         <div class="gdi-ai-name">${MEGGY_NAME}<span class="gdi-ai-tag">${MEGGY_TAG}</span></div>
         <div class="gdi-ai-status"><span class="gdi-ai-dot"></span> verificando…</div>
