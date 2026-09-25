@@ -29,7 +29,7 @@
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  const CACHE_VERSION = '58';  // ★ v1.0.62b (FIX collectCourses): renderSimulado e renderRadar quebrados — collectCourses era local do M22 IIFE, inacessível de M23/M24. Exposto via window.collectCourses. Bump 57→58.
+  const CACHE_VERSION = '59';  // ★ v1.0.62c: bump 58→59 para forçar CDN reload (purge throttled). Fix collectCourses scope.
 
   const MODULES = [
     'gdi-core.js',
