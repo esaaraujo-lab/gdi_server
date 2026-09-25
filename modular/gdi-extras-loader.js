@@ -32,8 +32,8 @@
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  // ★ v1.0.81: bump 85 → 86 (novo SVG da Meggy em gdi-meggy.js).
-  const CACHE_VERSION = '86';  // ★ v1.0.81: novo avatar SVG da Meggy
+  // ★ v1.0.82: bump 86 → 87 (FAB da Meggy agora usa foto real em /modular/assets/meggy-fab.jpg).
+  const CACHE_VERSION = '87';  // ★ v1.0.82: foto real da Meggy no FAB
   window.CACHE_VERSION = CACHE_VERSION;
 
   const MODULES = [
