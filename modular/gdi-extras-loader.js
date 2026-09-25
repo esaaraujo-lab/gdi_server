@@ -32,8 +32,8 @@
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  // ★ v1.0.80 (BUG 11): bump 84 → 85 (casamento com worker URLs no gdi-worker-bridge.js).
-  const CACHE_VERSION = '85';  // ★ v1.0.80: infra fixes (bridge/app/storage/workers/loader)
+  // ★ v1.0.81: bump 85 → 86 (novo SVG da Meggy em gdi-meggy.js).
+  const CACHE_VERSION = '86';  // ★ v1.0.81: novo avatar SVG da Meggy
   window.CACHE_VERSION = CACHE_VERSION;
 
   const MODULES = [
