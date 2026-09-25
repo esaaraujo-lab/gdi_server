@@ -1256,12 +1256,34 @@
       GDI_ROOT().appendChild(panel);
     }
     panel.style.display='flex';
+    panel.classList.remove('gdi-central-collapsed'); // ★ v1.0.70: remove collapsed state
     // ★ uma única renderização: espera estado OU fallback em caso de erro
     ensureState().then(()=>{
       if(panel&&panel.style.display!=='none')renderPanel();
     }).catch(()=>renderPanel());
     // ★ TRILHA-ONBOARDING: dispara onboarding na 1ª abertura do painel
     try{ showOnboarding(); }catch(_){}
+  }
+
+  // ★ v1.0.70: SIDEBAR RETRÁTIL — quando usuário navega para drive/vídeo,
+  //   o painel se retrai (fica só a sidebar visível) em vez de fechar completamente.
+  //   Botão na sidebar re-expande o painel.
+  function collapsePanel(){
+    if(!panel || panel.style.display !== 'flex') return;
+    panel.classList.add('gdi-central-collapsed');
+    // Adiciona botão flutuante para re-expandir
+    let expandBtn = document.querySelector('#gdi-central-expand');
+    if(!expandBtn){
+      expandBtn = document.createElement('button');
+      expandBtn.id = 'gdi-central-expand';
+      expandBtn.innerHTML = '📋 Área do Aluno';
+      expandBtn.style.cssText = 'position:fixed;top:60px;left:0;z-index:10001;background:linear-gradient(135deg,#ff8b9f,#c026d3);border:0;border-radius:0 10px 10px 0;padding:10px 14px;cursor:pointer;color:#fff;font-size:12px;font-weight:600;box-shadow:2px 2px 12px rgba(0,0,0,.3);transition:all .15s;';
+      expandBtn.onclick = () => {
+        panel.classList.remove('gdi-central-collapsed');
+        expandBtn.remove();
+      };
+      GDI_ROOT().appendChild(expandBtn);
+    }
   }
 
   // ★ TRILHA-ONBOARDING: modal de boas-vindas (1ª visita). Flag: localStorage 'gdi-onboarding-done'.
@@ -1311,6 +1333,7 @@
   }
   // ★ Expõe openPanel para outros módulos
   window.__gdiOpenCentral=openPanel;
+  window.__gdiCollapseCentral=collapsePanel; // ★ v1.0.70: sidebar retrátil
 
   // ═══ PATCH E: renderSidebar() (1x) + renderBody(tab) (em cada troca de aba) ═══
   // ★ definição das abas agrupadas — tabs REMOVIDAS: cursos, mar, revisoes, fc, subjects, trails
@@ -1523,12 +1546,12 @@
     box.innerHTML = `
       <div style="margin-bottom:18px;">
         <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 4px;">☁️ Explorar Drives</h3>
-        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0;">Navegue pelos drives compartilhados para encontrar novos cursos.</p>
+        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0;">Navegue pelos drives compartilhados para encontrar novos cursos. A Área do Aluno se retrai automaticamente.</p>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;">
         ${drives.map((name, idx) => {
           const ident = courseIdentity('/'+idx+':/', name);
-          return `<a href="/${idx}:/" style="text-decoration:none;display:block;padding:16px;border-radius:12px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);border-top:3px solid ${ident.color};transition:all .15s;cursor:pointer;" onmouseover="this.style.background='var(--ferreto-surface-3,rgba(255,255,255,.08))';this.style.borderColor='${ident.color}';" onmouseout="this.style.background='var(--ferreto-surface-2,rgba(255,255,255,.04))';this.style.borderColor='var(--ferreto-border,#30363d)';">
+          return `<a href="/${idx}:/" data-gdi-drive-link="${idx}" style="text-decoration:none;display:block;padding:16px;border-radius:12px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);border-top:3px solid ${ident.color};transition:all .15s;cursor:pointer;" onmouseover="this.style.background='var(--ferreto-surface-3,rgba(255,255,255,.08))';this.style.borderColor='${ident.color}';" onmouseout="this.style.background='var(--ferreto-surface-2,rgba(255,255,255,.04))';this.style.borderColor='var(--ferreto-border,#30363d)';">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
               <span style="font-size:28px;flex:none;">${ident.icon}</span>
               <b style="color:var(--ferreto-text,#e6edf3);font-size:13px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(name)}</b>
@@ -1538,6 +1561,15 @@
         }).join('')}
       </div>
     `;
+    // ★ v1.0.70: auto-retrai a Área do Aluno ao clicar num drive
+    box.querySelectorAll('[data-gdi-drive-link]').forEach(a => {
+      a.addEventListener('click', (e) => {
+        // Deixa a navegação acontecer, mas retrai o painel
+        setTimeout(() => {
+          if(window.__gdiCollapseCentral) window.__gdiCollapseCentral();
+        }, 100);
+      });
+    });
   }
 
   // ★ Dashboard "Início" — visão geral com atalhos
@@ -2036,6 +2068,9 @@
 
   // ★ Modal para adicionar curso manualmente
   function showAddCourseModal(box){
+    // ★ FIX v1.0.70 (Bug #4): singleton check — não criar múltiplos overlays
+    const existing = document.querySelector('.gdi-modal-overlay');
+    if(existing){ existing.remove(); }
     // ★ FIX local: garante esc() disponível mesmo se o escopo externo não tiver
     const esc=window.escHtml||(s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;'));
     const colors=['#ff8b9f','#5ddeda','#c026d3','#3fb950','#ffd43b','#7aa2ff','#ff6b6b','#a78bfa'];
@@ -2806,7 +2841,10 @@
             const groups = {};
             const seenIds = new Set();
             lessons.forEach(l => {
-              const dedupKey = (l.name || '') + '|' + (l.path || '');
+              // ★ FIX v1.0.70 (Bug #1): dedupe por nome base (sem extensão) + path
+              // Isto previne que mp4 + mp3 + watched-resume da mesma aula apareçam 3x
+              const baseName = (l.name || '').replace(/\.[^.]+$/, '').toLowerCase();
+              const dedupKey = baseName + '|' + (l.path || '').replace(/\.[^.]+$/, '').toLowerCase();
               if(seenIds.has(dedupKey)) return;
               seenIds.add(dedupKey);
               let relPath = l.path || '';
@@ -3518,6 +3556,11 @@
     const s=document.createElement('style');s.id='gdi-central-style';s.textContent=`
 /* ═══ ÁREA DO ALUNO v3 — design moderno (sidebar + dashboard) ═══ */
 #gdi-central{position:fixed;inset:0;z-index:10001;background:var(--ferreto-bg,#070910);color:var(--ferreto-text,#f3f5fa);font-family:var(--ferreto-font-body,'Rubik',sans-serif);display:none;overflow-y:auto;}
+/* ★ v1.0.70: SIDEBAR RETRÁTIL — estado collapsed mostra só a sidebar */
+#gdi-central.gdi-central-collapsed{width:auto;inset:auto 0 0 auto;height:auto;min-height:0;max-height:60px;overflow:hidden;}
+#gdi-central.gdi-central-collapsed .gdi-central-box{height:auto;min-height:0;}
+#gdi-central.gdi-central-collapsed .gdi-central-main,
+#gdi-central.gdi-central-collapsed .gdi-central-head{display:none !important;}
 @keyframes gdi-central-in{from{opacity:0;transform:scale(.98)}to{opacity:1;transform:none}}
 .gdi-central-box{width:100%;height:100%;min-height:100vh;margin:0;padding:0;background:var(--ferreto-bg,#070910);border:0;border-radius:0;}
 .gdi-central-head{display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--ferreto-border,#21262d);background:linear-gradient(135deg,rgba(255,139,159,.08),rgba(93,222,218,.05));flex-shrink:0;flex-wrap:nowrap;}
@@ -4804,41 +4847,42 @@
   // and starts a non-blocking scan. Limited to 1 concurrent scan.
   // ─────────────────────────────────────────────────────────────
   let _autoScanRunning = false;
+  let _autoScanQueue = [];  // ★ v1.0.70: fila de cursos pendentes para scan serial
   function autoScanPending(){
     if(_autoScanRunning) return;
-    _autoScanRunning = true;
-    try{
-      const manual = JSON.parse(localStorage.getItem('gdi-manual-courses-v1') || '[]');
-      if(!Array.isArray(manual) || !manual.length){ _autoScanRunning = false; return; }
-
-      // Find first course that needs scanning (no state OR not done/scanning)
-      for(const c of manual){
-        if(!c || !c.path) continue;
-        // Skip drive-root paths (they're not real courses — Task 16 / FIX 3)
-        // ★ FIX v49: regex was ^\d+:\/$ which did NOT match /0:/ (leading slash).
-        // Now ^\/\d+:\/?$ matches /0:/ and /0: (with or without trailing slash).
-        if(/^\/\d+:\/?$/.test(c.path)) continue;
-        const sp = getScanProgress(c.path);
-        if(!sp || (sp.status !== 'done' && sp.status !== 'scanning')){
-          console.log('[Scanner] auto-scan iniciando para:', c.name || c.path);
-          startScan(c.path, function(state, lessonsData){
-            // Re-render home if it's the active tab
-            if(state.status === 'done' || state.status === 'error'){
-              console.log('[Scanner] auto-scan concluído:', c.name, '-',
-                (lessonsData ? lessonsData.lessons.length : 0), 'aulas');
-              try{
-                const body = document.getElementById('gdi-central-body');
-                if(body && window.__gdiCurrentTab === 'home' && typeof renderHome === 'function'){
-                  renderHome(body);
-                }
-              }catch(_){}
-            }
-          });
-          break;  // only 1 at a time
-        }
+    // ★ v1.0.70 (Bug #3): busca cursos que precisam de scan e enfileira
+    const manual = JSON.parse(localStorage.getItem('gdi-manual-courses-v1') || '[]');
+    if(!Array.isArray(manual) || !manual.length) return;
+    _autoScanQueue = [];
+    for(const c of manual){
+      if(!c || !c.path) continue;
+      if(/^\/\d+:\/?$/.test(c.path)) continue;
+      const sp = getScanProgress(c.path);
+      if(!sp || (sp.status !== 'done' && sp.status !== 'scanning')){
+        _autoScanQueue.push(c);
       }
-    }catch(_){}
-    _autoScanRunning = false;
+    }
+    if(_autoScanQueue.length === 0) return;
+    // Processa 1 curso por vez, serialmente (evita 503 do CF Worker)
+    _autoScanRunning = true;
+    processScanQueue();
+  }
+
+  function processScanQueue(){
+    if(_autoScanQueue.length === 0){
+      _autoScanRunning = false;
+      return;
+    }
+    const c = _autoScanQueue.shift();
+    console.log('[Scanner] auto-scan iniciando para:', c.name || c.path);
+    startScan(c.path, function(state, lessonsData){
+      if(state.status === 'done' || state.status === 'error'){
+        console.log('[Scanner] auto-scan concluído:', c.name, '-',
+          (lessonsData ? lessonsData.lessons.length : 0), 'aulas');
+        // Próximo curso após 2s (evita 503)
+        setTimeout(processScanQueue, 2000);
+      }
+    });
   }
 
   // ─────────────────────────────────────────────────────────────
