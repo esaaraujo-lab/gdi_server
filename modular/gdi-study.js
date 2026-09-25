@@ -4352,60 +4352,6 @@
     try{localStorage.setItem(LS_LESSONS_PREFIX+courseKey, JSON.stringify(data))}catch(_){}
   }
 
-  // Video extension matcher — same regex as app.min.js buildPlaylistFromFiles
-  const VIDEO_EXT = /\.(mp4|webm|mkv|mov|m4v|avi|mpg|mpeg|wmv|flv|3gp)(\?|$)/i;
-
-  // Scan ONE folder — returns {lessons:[], subfolders:[]}
-  // Uses window.gdiListAllFiles (worker bridge — non-blocking).
-  async function scanFolder(folderPath, depth){
-    if(depth > SCAN_MAX_DEPTH) return {lessons:[], subfolders:[]};
-    try{
-      const pw = (typeof window.gdiGetPw === 'function') ? (window.gdiGetPw(folderPath)||'') : '';
-      const files = (typeof window.gdiListAllFiles === 'function')
-        ? await window.gdiListAllFiles(folderPath, pw)
-        : [];
-      if(!Array.isArray(files)) return {lessons:[], subfolders:[]};
-      const lessons = [];
-      const subfolders = [];
-      for(let i=0; i<files.length; i++){
-        const f = files[i];
-        if(!f) continue;
-        const name = f.name || '';
-        const mime = f.mimeType || '';
-        if(mime === 'application/vnd.google-apps.folder'){
-          subfolders.push(f);
-        } else if(mime.indexOf('video/') === 0 || VIDEO_EXT.test(name)){
-          // It's a video lesson
-          if(/\.part-/i.test(name)) continue;  // skip partial files
-          const bytes = Number(f.size)||0;
-          if(bytes && bytes < 1024*1024) continue;  // skip < 1MB (probably not a real lesson)
-          lessons.push({
-            name: name,
-            path: folderPath + encodeURIComponent(name),
-            folder: folderPath,
-            size: bytes,
-            mimeType: mime,
-            depth: depth
-          });
-        }
-      }
-      return {lessons, subfolders};
-    }catch(e){
-      console.warn('[Scanner] erro escaneando', folderPath, e && e.message);
-      return {lessons:[], subfolders:[]};
-    }
-  }
-
-  // Compute folder depth relative to the course root path.
-  // Each '/' in the path beyond the root counts as one level.
-  function depthOf(folderPath, rootPath){
-    try{
-      const f = (folderPath||'').split('/').filter(Boolean).length;
-      const r = (rootPath||'').split('/').filter(Boolean).length;
-      return Math.max(0, f - r);
-    }catch(_){return 0}
-  }
-
   // Main scan function — incremental, resumable.
   // courseKey == coursePath (the Drive folder path, e.g. /4:/CANTE COM EXCELENCIA 2.0/)
   // Calls onProgress(state, lessonsData) after each folder.
