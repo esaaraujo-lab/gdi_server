@@ -24,13 +24,12 @@
 (function(){
   'use strict';
 
-  // ★★★ Web Workers vindos do mesmo repo público via jsdelivr CDN ★★★
-  // Mesmo BASE_URL do gdi-extras-loader.js — consistência + cache CDN.
-  // TROQUE PUBLIC_REPO pelo mesmo valor do loader:
-  const PUBLIC_REPO = 'esaaraujo-lab/gdi_server';  // ← TROQUE AQUI (igual ao loader)
-  const WORKER_BASE = 'https://cdn.jsdelivr.net/gh/' + PUBLIC_REPO + '@main/modular/';
-  const LIST_WORKER_URL  = WORKER_BASE + 'gdi-list-worker.js';
-  const PDF_WORKER_URL   = WORKER_BASE + 'meggy-pdf-worker.js';
+  // ★★★ Web Workers servidos pela mesma rota /modular/ do Cloudflare Worker (worker.js)
+  // — mesmo proxy que o gdi-extras-loader.js usa. Consistência + cache controlada
+  //   por CACHE_VERSION (sem CDN jsdelivr com cache stale).
+  const WORKER_BASE = '/modular/';
+  const LIST_WORKER_URL  = WORKER_BASE + 'gdi-list-worker.js?v=' + (window.CACHE_VERSION || '85');
+  const PDF_WORKER_URL   = WORKER_BASE + 'meggy-pdf-worker.js?v=' + (window.CACHE_VERSION || '85');
 
   // ───────────────────────── LRU cache de listagem ─────────────────────────
   const LIST_TTL = 5 * 60 * 1000;        // 5 min (antes 45s)
@@ -251,21 +250,33 @@
   // trocamos por uma versão que delega ao worker. Senão, guardamos para
   // aplicar quando gdiIsaPdf aparecer.
 
+  // Guardamos uma referência de captura, mas em runtime preferimos ler
+  // window.gdiIsaPdf._origExtractPdfText (definido por applyPdfPatch) — isso garante
+  // que tenhamos o original mesmo se o bridge tiver carregado ANTES do gdi-meggy.js.
   const _origExtractPdfText = (window.gdiIsaPdf && window.gdiIsaPdf.extractPdfText) || null;
 
   function patchedExtractPdfText(url, onProgress){
-    const w = getPdfWorker();
-    if (w) {
+    const wPromise = getPdfWorker();
+    if (wPromise && typeof wPromise.then === 'function') {
       const id = ++_pdfId;
-      return new Promise((resolve, reject) => {
-        _pdfPending.set(id, { resolve, reject, onProgress });
-        w.postMessage({ type: 'extract', id, url, maxPages: 60, maxChars: 25000, tryOcr: true });
-      }).catch(err => {
-        console.warn('[gdi-worker-bridge] pdf extract fallback', err);
-        return _origExtractPdfText ? _origExtractPdfText(url, onProgress) : '';
+      return wPromise.then(w => {
+        if (!w) {
+          const orig = (window.gdiIsaPdf && window.gdiIsaPdf._origExtractPdfText) || _origExtractPdfText || null;
+          return orig ? orig(url, onProgress) : Promise.resolve('');
+        }
+        return new Promise((resolve, reject) => {
+          _pdfPending.set(id, { resolve, reject, onProgress });
+          w.postMessage({ type: 'extract', id, url, maxPages: 60, maxChars: 25000, tryOcr: true });
+        }).catch(err => {
+          console.warn('[gdi-worker-bridge] pdf extract fallback', err);
+          _pdfPending.delete(id);
+          const orig = (window.gdiIsaPdf && window.gdiIsaPdf._origExtractPdfText) || _origExtractPdfText || null;
+          return orig ? orig(url, onProgress) : '';
+        });
       });
     }
-    return _origExtractPdfText ? _origExtractPdfText(url, onProgress) : Promise.resolve('');
+    const orig = (window.gdiIsaPdf && window.gdiIsaPdf._origExtractPdfText) || _origExtractPdfText || null;
+    return orig ? orig(url, onProgress) : Promise.resolve('');
   }
 
   function applyPdfPatch(){
@@ -289,10 +300,13 @@
   applyPdfPatch();
 
   // Se gdi-meggy.js carregar DEPOIS do bridge, re-aplica o patch.
+  // ★ FIX BUG 12 (v80): janela estendida de 5s (10 tries) para 30s (60 tries) —
+  // em CDNs lentas gdi-meggy.js pode demorar >5s para chegar; sem isso o patch
+  // nunca era aplicado e o extractPdfText continuava na thread principal.
   let _applyTries = 0;
   const _applyTimer = setInterval(() => {
     applyPdfPatch();
-    if (++_applyTries > 10 || (window.gdiIsaPdf && window.gdiIsaPdf._extractPatched)) {
+    if (++_applyTries > 60 || (window.gdiIsaPdf && window.gdiIsaPdf._extractPatched)) {
       clearInterval(_applyTimer);
     }
   }, 500);
