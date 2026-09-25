@@ -550,7 +550,12 @@
       answers.forEach(a=>{if(a){gradeQ(a.id,a.acertou);if(a.acertou)hits++;}});
       const total=queue.length;
         // ★ FIX: atualiza contador de simulados para conquistas
-        try{localStorage.setItem('gdi-simulados-count',String((window.gdiAchievements?window.gdiAchievements:undefined)||(lsGet('gdi-simulados-v1',[]).length)));}catch(_){}
+        // ★ v1.0.84: count from the array (+1 because this runs BEFORE the
+        //    new simulado is appended at line below). Previously used
+        //    `window.gdiAchievements || count` which coerced the truthy
+        //    achievements OBJECT to "[object Object]" → parseInt → NaN →
+        //    achievements "Primeiro simulado"/"5 simulados" NEVER unlocked.
+        try{localStorage.setItem('gdi-simulados-count',String(lsGet('gdi-simulados-v1',[]).length+1));}catch(_){}
       // anti-duplicação: se já existe salvo neste segundo, pula
       const recent=simus().find(s=>s.date>Date.now()-2000);
       if(!recent){
@@ -1624,6 +1629,29 @@
     const t=todayMin(),g=goalMin(),pct=Math.min(100,Math.round(t/g*100));
     const cards=lsGet(LS_CARDS,[]);
     const dueCount=cards.filter(c=>(c.due||0)<=Date.now()).length;
+    // ★ v1.0.84: best-effort background sync from Drive, guarded to avoid spamming
+    // on every renderHome call. After sync completes, if user is still on the home
+    // tab, re-render so newly-restored course tiles appear. Recursion-safe: the
+    // guard remains set during the .then re-render, so the inner renderHome call
+    // skips re-triggering the sync; only .finally clears the guard.
+    try{
+      if(!window.__gdiSyncInProgress){
+        window.__gdiSyncInProgress = true;
+        const p = (typeof window.gdiSyncCoursesFromDrive === 'function')
+          ? window.gdiSyncCoursesFromDrive()
+          : Promise.resolve();
+        Promise.resolve(p).catch(()=>{}).then(()=>{
+          try{
+            if(window.__gdiCurrentTab === 'home'){
+              const b = document.getElementById('gdi-central-body');
+              if(b && typeof renderHome === 'function') renderHome(b);
+            }
+          }catch(_){}
+        }).finally(()=>{
+          try{ window.__gdiSyncInProgress = false; }catch(_){}
+        });
+      }
+    }catch(_){ try{ window.__gdiSyncInProgress = false; }catch(_){} }
     const courses=collectCourses();
     // usa localStorage direto (M23 está em escopo diferente)
     const questionsCount=lsGet('gdi-questions-v1',[]).length;
@@ -2490,7 +2518,27 @@
     if(firstColor)firstColor.style.borderWidth='4px';
 
     // ── Close handlers ──
-    const close=()=>{if(overlay&&overlay.parentNode)overlay.remove();};
+    // ★ v1.0.84 BUG #11: when the addmateria modal closes, restore the home tab
+    // if 'addmateria' was the highlighted sidebar tab. Without this, the sidebar
+    // stays on 'addmateria' (which has no real body — it's a modal trigger) while
+    // the body shows stale content from the previous tab → confusing mismatch.
+    // If the modal was opened from a button (e.g. "Adicionar curso" on home/cursos),
+    // 'addmateria' is NOT active in the sidebar → we leave everything alone.
+    const close=()=>{
+      if(overlay&&overlay.parentNode)overlay.remove();
+      try{
+        const panelEl = box.closest ? box.closest('#gdi-central') : null;
+        if(panelEl){
+          const addTab = panelEl.querySelector('.gdi-central-tab[data-t="addmateria"]');
+          if(addTab && addTab.classList.contains('active')){
+            const homeTab = panelEl.querySelector('.gdi-central-tab[data-t="home"]');
+            if(homeTab && !homeTab.classList.contains('active')){
+              homeTab.click();  // re-runs tab click handler → activate + renderBody('home')
+            }
+          }
+        }
+      }catch(_){}
+    };
     overlay.querySelector('#gdi-amc-x').onclick=close;
     overlay.querySelector('#gdi-amc-cancel').onclick=close;
     overlay.onclick=(e)=>{if(e.target===overlay)close();};
@@ -3875,29 +3923,37 @@
       const lib=window.pdfjsLib;
       if(lib&&lib.GlobalWorkerOptions)lib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
       const buf=await file.arrayBuffer();
-      const doc=await lib.getDocument({data:buf,disableFontFace:true}).promise;
-      const n=Math.min(doc.numPages,60);
-      let txt='';
-      for(let i=1;i<=n;i++){
-        const pg=await doc.getPage(i);
-        const tc=await pg.getTextContent({normalizeWhitespace:true,includeMarkedContent:true});
-        let pt='';
-        for(const item of tc.items){if(item.str!==undefined){pt+=item.str;if(item.hasEOL)pt+='\n';}}
-        txt+=pt+'\n\n';
-        if(txt.length>25000)break;
-      }
-      try{doc.destroy();}catch(_){}
-      txt=txt.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim().slice(0,8000);
-      if(txt.length<50){status.innerHTML='<div class="gdi-ai-err">Não foi possível extrair texto deste PDF.</div>';return;}
+      // ★ v1.0.84: wrap doc lifecycle in try/finally so doc.destroy() runs
+      //    even if getPage/getTextContent throws (prevents PDFDocumentProxy leak).
+      let doc;
+      try {
+        doc=await lib.getDocument({data:buf,disableFontFace:true}).promise;
+        const n=Math.min(doc.numPages,60);
+        let txt='';
+        for(let i=1;i<=n;i++){
+          const pg=await doc.getPage(i);
+          const tc=await pg.getTextContent({normalizeWhitespace:true,includeMarkedContent:true});
+          let pt='';
+          for(const item of tc.items){if(item.str!==undefined){pt+=item.str;if(item.hasEOL)pt+='\n';}}
+          txt+=pt+'\n\n';
+          if(txt.length>25000)break;
+        }
+        txt=txt.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim().slice(0,8000);
+        if(txt.length<50){status.innerHTML='<div class="gdi-ai-err">Não foi possível extrair texto deste PDF.</div>';return;}
 
-      status.innerHTML='<div class="gdi-ai-loading" style="padding:20px;text-align:center;"><div class="gdi-ai-typing" style="margin:0 auto;"><span></span><span></span><span></span></div><p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin-top:10px;">Meggy está analisando a prova e criando o plano…</p></div>';
-      const resp=await callMeggy('Analise esta prova anterior de concurso/vestibular e crie um plano de estudos focado. Identifique os 5 temas mais cobrados e sugira quantas horas dedicar a cada um (total ~100h). Formato Markdown com ## títulos, lista de temas com horas, e justificativa breve:\n\n'+txt);
-      const plan={id:uid(),name:file.name,date:Date.now(),plan:resp,topics:(resp.match(/##\s+(.+)/g)||[]).length};
-      const plans=lsGet('gdi-exam-plans-v1',[]);
-      plans.push(plan);
-      lsSet('gdi-exam-plans-v1',plans);
-      showPlan(box,plan);
-      showToast('Plano de estudos criado!');
+        status.innerHTML='<div class="gdi-ai-loading" style="padding:20px;text-align:center;"><div class="gdi-ai-typing" style="margin:0 auto;"><span></span><span></span><span></span></div><p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin-top:10px;">Meggy está analisando a prova e criando o plano…</p></div>';
+        const resp=await callMeggy('Analise esta prova anterior de concurso/vestibular e crie um plano de estudos focado. Identifique os 5 temas mais cobrados e sugira quantas horas dedicar a cada um (total ~100h). Formato Markdown com ## títulos, lista de temas com horas, e justificativa breve:\n\n'+txt);
+        const plan={id:uid(),name:file.name,date:Date.now(),plan:resp,topics:(resp.match(/##\s+(.+)/g)||[]).length};
+        const plans=lsGet('gdi-exam-plans-v1',[]);
+        plans.push(plan);
+        lsSet('gdi-exam-plans-v1',plans);
+        showPlan(box,plan);
+        showToast('Plano de estudos criado!');
+      }catch(e){
+        status.innerHTML='<div class="gdi-ai-err">Erro: '+esc(e.message)+'</div>';
+      }finally{
+        try{ if(doc) doc.destroy(); }catch(_){}
+      }
     }catch(e){
       status.innerHTML='<div class="gdi-ai-err">Erro: '+esc(e.message)+'</div>';
     }
@@ -5009,11 +5065,27 @@
     try{ cleanupOrphanCourses(); }catch(_){}
   }, 2000);
 
-  // ★ Task 16 / FIX 1: auto-scan pending courses 5s after page load (after GDIUser ready)
+  // ★ v1.0.84 / CRITICAL: sync courses from Drive on user:ready BEFORE auto-scan.
+  // Without this, a new device / cleared localStorage / private window shows NO
+  // course tiles until the user manually re-adds every course. Cross-device
+  // persistence was broken because syncCoursesFromDrive was defined + exported
+  // but NEVER called. Now it runs first, then autoScanPending picks up the
+  // restored courses and background-scans them for lesson counts.
   if(typeof Bus !== 'undefined' && typeof Bus.onGlobal === 'function'){
     Bus.onGlobal('user:ready', function(){
       setTimeout(function(){
-        try{ autoScanPending(); }catch(_){}
+        try{
+          // ★ v1.0.84: sync courses from Drive FIRST, so user sees their courses on any device.
+          if(typeof syncCoursesFromDrive === 'function'){
+            syncCoursesFromDrive().catch(()=>{}).finally(()=>{
+              try{ autoScanPending(); }catch(_){}
+            });
+          } else {
+            try{ autoScanPending(); }catch(_){}
+          }
+        }catch(_){
+          try{ autoScanPending(); }catch(_){}
+        }
       }, 5000);
     });
     // Also try on page:change (in case user navigates and modules are ready)
@@ -5025,7 +5097,17 @@
   }else{
     // Fallback if Bus not available at IIFE init time
     setTimeout(function(){
-      try{ autoScanPending(); }catch(_){}
+      try{
+        if(typeof syncCoursesFromDrive === 'function'){
+          syncCoursesFromDrive().catch(()=>{}).finally(()=>{
+            try{ autoScanPending(); }catch(_){}
+          });
+        } else {
+          try{ autoScanPending(); }catch(_){}
+        }
+      }catch(_){
+        try{ autoScanPending(); }catch(_){}
+      }
     }, 5000);
   }
 
