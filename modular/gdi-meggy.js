@@ -2035,7 +2035,8 @@
       try { await _inflight[key]; } catch(_){}
     }
     // limpa cache em memória
-    _chainCache={};
+    // ★ v1.0.84: only wipe current key, not all lessons (preserves in-flight generateAll for other lessons)
+    if(key) delete _chainCache[key];
     // limpa cache do Drive (★FIX: também limpa mindmap, antes ficava preso)
     try{
       await fetch('/api/ai/cache',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -2545,14 +2546,14 @@
   fab.id='gdi-ai-fab';fab.title='Meggy';
   // ★ v1.0.83: FAB + chat header agora usam foto real da Meggy (PNG transparente).
   // Background preto removido → dog head flutua sobre o FAB.
-  fab.innerHTML='<span class="gdi-ai-fab-ico"><img src="/modular/assets/meggy-fab.png?v='+(window.CACHE_VERSION||'88')+'" alt="Meggy" style="width:100%;height:100%;object-fit:contain;display:block;"></span><span id="gdi-ai-fab-badge"></span>';
+  fab.innerHTML='<span class="gdi-ai-fab-ico"><img src="/modular/assets/meggy-fab.png?v='+(window.CACHE_VERSION||'89')+'" alt="Meggy" style="width:100%;height:100%;object-fit:contain;display:block;"></span><span id="gdi-ai-fab-badge"></span>';
   root.appendChild(fab);
 
   const panel=document.createElement('div');
   panel.id='gdi-ai-panel';
   panel.innerHTML=`
     <div id="gdi-ai-head">
-      <div class="gdi-ai-avatar"><img src="/modular/assets/meggy-fab.png?v=${window.CACHE_VERSION||'88'}" alt="Meggy" style="width:100%;height:100%;object-fit:contain;display:block;"></div>
+      <div class="gdi-ai-avatar"><img src="/modular/assets/meggy-fab.png?v=${window.CACHE_VERSION||'89'}" alt="Meggy" style="width:100%;height:100%;object-fit:contain;display:block;"></div>
       <div class="gdi-ai-info">
         <div class="gdi-ai-name">${MEGGY_NAME}<span class="gdi-ai-tag">${MEGGY_TAG}</span></div>
         <div class="gdi-ai-status"><span class="gdi-ai-dot"></span> verificando…</div>
@@ -2585,7 +2586,26 @@
   panel.querySelectorAll('.gdi-ai-quick').forEach(btn => {
     btn.onclick = () => {
       const action = btn.dataset.action;
-      const lessonName = (typeof realLessonName === 'function') ? (realLessonName('') || '') : '';
+      // ★ v1.0.84: inline lesson name extraction (realLessonName is in another IIFE, not accessible).
+      let lessonName = '';
+      try {
+        // Try window.realLessonName first (if exported)
+        if (typeof window.realLessonName === 'function') {
+          lessonName = window.realLessonName('') || '';
+        }
+        // Fallback: extract from document.title or URL
+        if (!lessonName) {
+          const t = document.title || '';
+          // title is usually "filename - siteName" or just "filename"
+          lessonName = t.split(' - ')[0].split(' | ')[0].trim();
+        }
+        // Fallback: URL pathname last segment
+        if (!lessonName) {
+          const p = window.location.pathname;
+          const seg = p.split('/').filter(Boolean).pop() || '';
+          lessonName = decodeURIComponent(seg);
+        }
+      } catch(_){}
       const ctx = lessonName ? ` (Aula atual: ${lessonName}. URL: ${window.location.pathname}) ` : ' ';
       let prompt = '';
       if(action === 'resumir') prompt = `Gere um resumo${ctx}desta aula`;
