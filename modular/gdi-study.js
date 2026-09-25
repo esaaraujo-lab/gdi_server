@@ -1260,6 +1260,47 @@
     ensureState().then(()=>{
       if(panel&&panel.style.display!=='none')renderPanel();
     }).catch(()=>renderPanel());
+    // ★ TRILHA-ONBOARDING: dispara onboarding na 1ª abertura do painel
+    try{ showOnboarding(); }catch(_){}
+  }
+
+  // ★ TRILHA-ONBOARDING: modal de boas-vindas (1ª visita). Flag: localStorage 'gdi-onboarding-done'.
+  function showOnboarding(){
+    try{
+      if(localStorage.getItem('gdi-onboarding-done')) return;
+      localStorage.setItem('gdi-onboarding-done', '1');
+    }catch(_){ return; }
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:20px;';
+    overlay.innerHTML = `
+      <div style="background:var(--ferreto-surface,#161b26);border-radius:16px;max-width:480px;padding:28px;text-align:center;border:1px solid var(--ferreto-border,#30363d);">
+        <div style="font-size:56px;margin-bottom:12px;">🐩</div>
+        <h2 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 8px;font-size:20px;">Au au! Eu sou a Meggy!</h2>
+        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;line-height:1.6;margin:0 0 18px;">
+          Sua tutora de estudos. Aqui você pode:
+        </p>
+        <div style="text-align:left;margin-bottom:20px;padding:0 8px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;color:var(--ferreto-text,#e6edf3);font-size:13px;">
+            <span style="font-size:20px;">📂</span> Navegue pelos drives e adicione cursos
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;color:var(--ferreto-text,#e6edf3);font-size:13px;">
+            <span style="font-size:20px;">🐩</span> Peça resumos e questões à Meggy
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;color:var(--ferreto-text,#e6edf3);font-size:13px;">
+            <span style="font-size:20px;">❓</span> Pratique com questões e simulados
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;color:var(--ferreto-text,#e6edf3);font-size:13px;">
+            <span style="font-size:20px;">📊</span> Acompanhe seu progresso
+          </div>
+        </div>
+        <button id="gdi-onboarding-close" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);border:0;border-radius:10px;padding:10px 24px;color:#fff;font-size:14px;font-weight:600;cursor:pointer;width:100%;">
+          Vamos começar! 🎉
+        </button>
+      </div>
+    `;
+    (document.querySelector('#gdi-study') || document.body).appendChild(overlay);
+    overlay.querySelector('#gdi-onboarding-close').onclick = () => overlay.remove();
+    overlay.onclick = (e) => { if(e.target === overlay) overlay.remove(); };
   }
   function closePanel(){
     FC.active=false;
@@ -2734,6 +2775,46 @@
           }).join('') + '</div>';
         })()}
       </div>
+
+      ${/* ★ TRILHA-ONBOARDING: trilha visual do curso (timeline vertical com ✓/▶/◻) */ ''}
+      ${lessons.length > 0 ? `
+      <div style="margin-top:18px;border-top:1px solid var(--ferreto-border,#21262d);padding-top:14px;">
+        <b style="color:var(--ferreto-text,#f0f6fc);font-size:13px;display:block;margin-bottom:10px;">🛤️ Trilha do Curso</b>
+        <div style="max-height:300px;overflow-y:auto;padding-right:6px;">
+          ${(function(){
+            // ★ Agrupa aulas por disciplina (primeiro segmento após coursePath)
+            const coursePathClean = String(c.key).replace(/\/$/, '');
+            const groups = {};
+            lessons.forEach(l => {
+              let relPath = l.path || '';
+              try{ relPath = decodeURIComponent(relPath); }catch(_){ relPath = l.path || ''; }
+              if(relPath.indexOf(coursePathClean) === 0) relPath = relPath.slice(coursePathClean.length);
+              const segs = relPath.split('/').filter(Boolean);
+              const gname = segs.length > 1 ? segs[0] : 'Aulas';
+              if(!groups[gname]) groups[gname] = [];
+              groups[gname].push(l);
+            });
+            return Object.keys(groups).sort((a,b) => a.localeCompare(b,'pt-BR')).map(gname => {
+              const items = groups[gname];
+              return '<div style="margin-bottom:14px;">'
+                + '<div style="color:var(--ferreto-secondary,#5ddeda);font-size:12px;font-weight:600;margin-bottom:6px;">' + escHtml(gname) + ' · ' + items.length + '</div>'
+                + items.slice(0,20).map(l => {
+                    const isWatched = !!l.watched;
+                    const isCurrent = !!l.resumed && !isWatched;
+                    const icon = isWatched ? '✓' : (isCurrent ? '▶' : '◻');
+                    const color = isWatched ? '#3fb950' : (isCurrent ? 'var(--ferreto-primary,#ff8b9f)' : 'var(--ferreto-text-faint,#6b7488)');
+                    return '<div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:11px;">'
+                      + '<span style="color:' + color + ';font-size:13px;flex:none;width:16px;">' + icon + '</span>'
+                      + '<span style="color:var(--ferreto-text-muted,#8b949e);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">' + escHtml(l.name || '') + '</span>'
+                      + '</div>';
+                  }).join('')
+                + (items.length > 20 ? '<div style="color:var(--ferreto-text-faint,#6b7488);font-size:10px;padding:3px 0 3px 24px;">+ ' + (items.length-20) + ' mais</div>' : '')
+                + '</div>';
+            }).join('');
+          })()}
+        </div>
+      </div>
+      ` : ''}
     </div>`;
 
     box.querySelector('#gdi-detail-back').onclick=()=>renderCursos(box);
@@ -3375,9 +3456,9 @@
   if(!document.getElementById('gdi-central-style')){
     const s=document.createElement('style');s.id='gdi-central-style';s.textContent=`
 /* ═══ ÁREA DO ALUNO v3 — design moderno (sidebar + dashboard) ═══ */
-#gdi-central{position:fixed;inset:0;z-index:10001;background:var(--ferreto-bg,#070910);color:var(--ferreto-text,#f3f5fa);font-family:var(--ferreto-font-body,'Rubik',sans-serif);display:none;overflow-y:auto;}
+#gdi-central{position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.6);color:var(--ferreto-text,#f3f5fa);font-family:var(--ferreto-font-body,'Rubik',sans-serif);display:none;overflow-y:auto;}
 @keyframes gdi-central-in{from{opacity:0;transform:scale(.98)}to{opacity:1;transform:none}}
-.gdi-central-box{width:100%;height:100%;min-height:100vh;margin:0;padding:0;background:var(--ferreto-bg,#070910);border:0;border-radius:0;}
+.gdi-central-box{width:min(1000px,100vw);height:100vh;min-height:100vh;margin:0 auto;padding:0;background:var(--ferreto-bg,#070910);border:0;border-radius:0;box-shadow:0 0 60px rgba(0,0,0,.5);}
 .gdi-central-head{display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--ferreto-border,#21262d);background:linear-gradient(135deg,rgba(255,139,159,.08),rgba(93,222,218,.05));flex-shrink:0;flex-wrap:nowrap;}
 .gdi-central-head-title{display:flex;align-items:center;gap:10px;flex-shrink:0;}
 .gdi-central-head-title b{color:var(--ferreto-text,#f0f6fc);font-size:16px;font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-weight:600;}
