@@ -32,7 +32,9 @@
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  const CACHE_VERSION = '84';  // ★ v1.0.74: re-apply critical fixes after sandbox reset
+  // ★ v1.0.80 (BUG 11): bump 84 → 85 (casamento com worker URLs no gdi-worker-bridge.js).
+  const CACHE_VERSION = '85';  // ★ v1.0.80: infra fixes (bridge/app/storage/workers/loader)
+  window.CACHE_VERSION = CACHE_VERSION;
 
   const MODULES = [
     'gdi-core.js',
@@ -80,11 +82,39 @@
       try {
         const link = document.createElement('link');
         link.rel = 'prefetch';
-        link.href = moduleUrl(w);   // = '/modular/' + w + '?v=4'
+        link.href = moduleUrl(w);   // = '/modular/' + w + '?v=' + CACHE_VERSION
         link.as = 'script';
         document.head.appendChild(link);
       } catch(_) {}
     });
+  }
+
+  // ★ FIX BUG 10 (v80): retry com backoff para carga do gdi-core.js —
+  // se /modular/ retornar 502/503 (Cloudflare Worker cold start, deploy,
+  // brief outage), o bootstrap falhava silenciosamente e a UI ficava morta.
+  // Agora tenta 3× com backoff linear (1s, 2s) antes de desistir.
+  async function loadCoreWithRetry(url, attempts){
+    attempts = attempts || 3;
+    for (let i = 0; i < attempts; i++) {
+      try { await loadScript(url, false); return true; }
+      catch(e) {
+        console.warn('[GDI Loader] core load attempt ' + (i+1) + '/' + attempts + ' failed:', e.message);
+        if (i < attempts - 1) await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+      }
+    }
+    _bootstrapPromise = null;
+    try { (window.showToast || function(m){console.error(m);})('Falha ao carregar módulos. Recarregue a página.'); } catch(_){}
+    return false;
+  }
+
+  // ★ FIX BUG 10 (v80): retry simples (2× com 500ms) para módulos auxiliares —
+  // menos agressivo que o core (esses rodam em paralelo via Promise.allSettled).
+  async function loadWithRetry(url, isAsync){
+    for (let i = 0; i < 2; i++) {
+      try { await loadScript(url, isAsync); return true; }
+      catch(e) { if (i === 0) await new Promise(r => setTimeout(r, 500)); else throw e; }
+    }
+    return false;
   }
 
   // ★★★ GUARD CRÍTICO contra duplicate bootstrap ★★★
@@ -132,7 +162,8 @@
       console.log('[GDI Loader] Bus disponível, prosseguindo carga modular');
 
       try{
-        await loadScript(moduleUrl('gdi-core.js'), false);
+        const coreOk = await loadCoreWithRetry(moduleUrl('gdi-core.js'));
+        if (!coreOk) return;
         console.log('[GDI Loader] ✓ gdi-core.js carregado');
       }catch(e){
         console.error('[GDI Loader] FALHA CRÍTICA no core:', e.message);
@@ -144,9 +175,10 @@
       // Carrega o bridge logo após o core (antes dos demais) para que os
       // overrides de gdiListAllFiles / extractPdfText estejam em vigor
       // quando gdi-ui.js / gdi-meggy.js rodarem seus init().
+      // ★ FIX BUG 10 (v80): cada módulo ganha retry de 2× (loadWithRetry).
       const others = MODULES.slice(1);
       const results = await Promise.allSettled(
-        others.map(m => loadScript(moduleUrl(m), true))
+        others.map(m => loadWithRetry(moduleUrl(m), true).catch(e => { throw e; }))
       );
 
       let ok = 0, fail = 0;
