@@ -401,113 +401,120 @@
       throw new Error('PDF vazio ou muito pequeno ('+(buf?buf.byteLength:0)+' bytes)');
     }
 
+    // ★ v80-FIX-MEGGY BUG 2: wrap entire doc lifecycle in try/finally so
+    //    doc.destroy() runs even if getPage/getTextContent/OCR throws.
+    //    Previously, doc.destroy() only ran on success paths → leak on error.
     let doc;
     try{
-      doc=await pdfjs.getDocument({data:buf,disableFontFace:true,isEvalSupported:false}).promise;
-    }catch(e){
-      throw new Error('pdf.js não conseguiu abrir o PDF: '+(e&&e.message||e));
-    }
-    const n=Math.min(doc.numPages,100);
-    let txt='';
-
-    for(let i=1;i<=n;i++){
-      const pg=await doc.getPage(i);
-      // ★ opções avançadas: normaliza whitespace, combina text items adjacentes,
-      // inclui marked content (alguns PDFs usam isso para texto)
-      let tc;
       try{
-        tc=await pg.getTextContent({normalizeWhitespace:true,disableCombineTextItems:false,includeMarkedContent:true});
-      }catch(_){
-        tc=await pg.getTextContent(); // fallback sem opções
+        doc=await pdfjs.getDocument({data:buf,disableFontFace:true,isEvalSupported:false}).promise;
+      }catch(e){
+        throw new Error('pdf.js não conseguiu abrir o PDF: '+(e&&e.message||e));
       }
+      const n=Math.min(doc.numPages,100);
+      let txt='';
 
-      // extrai texto de items — x.str, x.str+hasEOL, também pega "transform" position
-      let pageText='';
-      for(const item of tc.items){
-        if(item.str!==undefined){
-          pageText+=item.str;
-          if(item.hasEOL)pageText+='\n';
-        }else if(item.type==='markedContent'||item.type==='beginMarkedContent'){
-          // marked content — pode conter texto estruturado
-          continue;
-        }
-      }
-
-      // se página ficou vazia mas tem texto, tenta sem opções
-      if(!pageText.trim()){
+      for(let i=1;i<=n;i++){
+        const pg=await doc.getPage(i);
+        // ★ opções avançadas: normaliza whitespace, combina text items adjacentes,
+        // inclui marked content (alguns PDFs usam isso para texto)
+        let tc;
         try{
-          const tc2=await pg.getTextContent();
-          pageText=tc2.items.map(x=>(x.str||'')+(x.hasEOL?'\n':' ')).join('');
+          tc=await pg.getTextContent({normalizeWhitespace:true,disableCombineTextItems:false,includeMarkedContent:true});
+        }catch(_){
+          tc=await pg.getTextContent(); // fallback sem opções
+        }
+
+        // extrai texto de items — x.str, x.str+hasEOL, também pega "transform" position
+        let pageText='';
+        for(const item of tc.items){
+          if(item.str!==undefined){
+            pageText+=item.str;
+            if(item.hasEOL)pageText+='\n';
+          }else if(item.type==='markedContent'||item.type==='beginMarkedContent'){
+            // marked content — pode conter texto estruturado
+            continue;
+          }
+        }
+
+        // se página ficou vazia mas tem texto, tenta sem opções
+        if(!pageText.trim()){
+          try{
+            const tc2=await pg.getTextContent();
+            pageText=tc2.items.map(x=>(x.str||'')+(x.hasEOL?'\n':' ')).join('');
+          }catch(_){}
+        }
+
+        txt+=pageText+'\n\n';
+        if(txt.length>50000)break;
+      }
+
+      // ★ fallback: tenta extrair de annotations/form fields
+      // (alguns PDFs têm texto em campos de formulário)
+      if(!txt.trim()||txt.trim().length<50){
+        try{
+          for(let i=1;i<=n;i++){
+            const pg=await doc.getPage(i);
+            const annots=await pg.getAnnotations();
+            for(const a of annots){
+              if(a.fieldValue&&typeof a.fieldValue==='string')txt+=a.fieldValue+'\n';
+              if(a.contents&&typeof a.contents==='string')txt+=a.contents+'\n';
+            }
+            if(txt.length>10000)break;
+          }
         }catch(_){}
       }
 
-      txt+=pageText+'\n\n';
-      if(txt.length>50000)break;
-    }
-
-    // ★ fallback: tenta extrair de annotations/form fields
-    // (alguns PDFs têm texto em campos de formulário)
-    if(!txt.trim()||txt.trim().length<50){
-      try{
-        for(let i=1;i<=n;i++){
-          const pg=await doc.getPage(i);
-          const annots=await pg.getAnnotations();
-          for(const a of annots){
-            if(a.fieldValue&&typeof a.fieldValue==='string')txt+=a.fieldValue+'\n';
-            if(a.contents&&typeof a.contents==='string')txt+=a.contents+'\n';
+      // ★★ FALLBACK OCR (Tesseract.js) — para PDFs escaneados (só imagens) ★★
+      // Se pdf.js extraiu menos de 50 chars, é provável que o PDF seja escaneado.
+      // Renderizamos cada página como imagem e rodamos OCR em português.
+      // ★ Limita a 15 páginas no OCR (~3-6 min no total). Para PDFs maiores,
+      // as primeiras 15 páginas já dão contexto suficiente para a Meggy gerar
+      // resumo + questões + pílulas úteis.
+      if(!txt.trim()||txt.trim().length<50){
+        const ocrMaxPages=Math.min(doc.numPages,15);
+        if(progressCb)progressCb({phase:'ocr-init',page:0,total:ocrMaxPages});
+        try{
+          let ocrTxt='';
+          for(let i=1;i<=ocrMaxPages;i++){
+            if(progressCb)progressCb({phase:'ocr-page',page:i,total:ocrMaxPages,progress:0});
+            let pageTxt='';
+            try{
+              pageTxt=await ocrPdfPage(pdfjs,doc,i,(pNum,pTotal,p)=>{
+                if(progressCb)progressCb({phase:'ocr-page',page:pNum,total:pTotal,progress:p});
+              });
+            }catch(ocrErr){
+              console.warn('[Meggy] OCR falhou na página',i,'(não crítico):',ocrErr.message);
+              pageTxt='';
+            }
+            ocrTxt+=pageTxt+'\n\n';
+            if(ocrTxt.length>50000)break;
           }
-          if(txt.length>10000)break;
-        }
-      }catch(_){}
-    }
-
-    // ★★ FALLBACK OCR (Tesseract.js) — para PDFs escaneados (só imagens) ★★
-    // Se pdf.js extraiu menos de 50 chars, é provável que o PDF seja escaneado.
-    // Renderizamos cada página como imagem e rodamos OCR em português.
-    // ★ Limita a 15 páginas no OCR (~3-6 min no total). Para PDFs maiores,
-    // as primeiras 15 páginas já dão contexto suficiente para a Meggy gerar
-    // resumo + questões + pílulas úteis.
-    if(!txt.trim()||txt.trim().length<50){
-            const ocrMaxPages=Math.min(doc.numPages,15);
-      if(progressCb)progressCb({phase:'ocr-init',page:0,total:ocrMaxPages});
-      try{
-        let ocrTxt='';
-        for(let i=1;i<=ocrMaxPages;i++){
-          if(progressCb)progressCb({phase:'ocr-page',page:i,total:ocrMaxPages,progress:0});
-          let pageTxt='';
-          try{
-            pageTxt=await ocrPdfPage(pdfjs,doc,i,(pNum,pTotal,p)=>{
-              if(progressCb)progressCb({phase:'ocr-page',page:pNum,total:pTotal,progress:p});
-            });
-          }catch(ocrErr){
-            console.warn('[Meggy] OCR falhou na página',i,'(não crítico):',ocrErr.message);
-            pageTxt='';
+          if(ocrTxt.trim().length>50){
+            // sucesso! OCR extraiu texto
+            // (doc.destroy() agora tratado pelo finally — v80-FIX-MEGGY BUG 2)
+            if(progressCb)progressCb({phase:'ocr-done',chars:ocrTxt.length});
+            return ocrTxt.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim().slice(0,50000);
           }
-          ocrTxt+=pageTxt+'\n\n';
-          if(ocrTxt.length>50000)break;
+        }catch(ocrErr){
+          console.warn('[Meggy] OCR falhou:',ocrErr.message);
+          // continua para o erro descritivo abaixo
         }
-        if(ocrTxt.trim().length>50){
-          // sucesso! OCR extraiu texto
-          try{doc.destroy();}catch(_){}
-          if(progressCb)progressCb({phase:'ocr-done',chars:ocrTxt.length});
-          return ocrTxt.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim().slice(0,50000);
-        }
-      }catch(ocrErr){
-        console.warn('[Meggy] OCR falhou:',ocrErr.message);
-        // continua para o erro descritivo abaixo
       }
-    }
 
-    try{doc.destroy();}catch(_){}
-    // limpa texto: remove espaços excessivos, decodifica entidades
-    txt=txt.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim();
-    const result=txt.slice(0,50000);
-    if(!result||result.length<50){
-      // ★ Erro descritivo: PDF provavelmente é escaneado (só imagens)
-      // e o OCR também falhou ou não retornou texto útil
-      throw new Error('PDF sem texto selecionável e OCR não conseguiu extrair. Possíveis causas:\n• PDF é composto só de imagens (escaneado) e o OCR falhou\n• PDF está criptografado ou corrompido\n• Falha ao baixar modelos de OCR do CDN (Tesseract.js)\n\nTente abrir o PDF num leitor comum para confirmar o conteúdo.');
+      // (doc.destroy() agora tratado pelo finally — v80-FIX-MEGGY BUG 2)
+      // limpa texto: remove espaços excessivos, decodifica entidades
+      txt=txt.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim();
+      const result=txt.slice(0,50000);
+      if(!result||result.length<50){
+        // ★ Erro descritivo: PDF provavelmente é escaneado (só imagens)
+        // e o OCR também falhou ou não retornou texto útil
+        throw new Error('PDF sem texto selecionável e OCR não conseguiu extrair. Possíveis causas:\n• PDF é composto só de imagens (escaneado) e o OCR falhou\n• PDF está criptografado ou corrompido\n• Falha ao baixar modelos de OCR do CDN (Tesseract.js)\n\nTente abrir o PDF num leitor comum para confirmar o conteúdo.');
+      }
+      return result;
+    } finally {
+      try { if(doc) doc.destroy(); } catch(_){}
     }
-    return result;
   }
 
   // ── ISA call (POST /api/ai) ──
@@ -591,24 +598,26 @@
   // ═══ PATCH B: Inserção em batch de questões (elimina O(N²) no localStorage) ═══
   // Lê LS 1×, faz push de todos os itens únicos, grava 1×.
   // Retorna o número de itens efetivamente adicionados (após dedupe por statement).
+  // ★ v80-FIX-MEGGY BUG 1: serialize writes with a per-key promise chain to
+  //    avoid read-modify-write races when called concurrently from generateAll
+  //    (parallel PDF processing). Last-write-wins was losing question batches.
+  let _qWriteChain = Promise.resolve();
   function addQBatch(newItems){
-    if(!newItems||!newItems.length)return 0;
-    const all=lsGet(LQ,[]);
-    const seen=new Set(all.map(x=>x.statement));
-    let added=0;
-    for(const item of newItems){
-      if(!item||!item.statement||seen.has(item.statement))continue;
-      all.push(Object.assign({
-        id:'q'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
-        createdAt:Date.now(),
-        hits:0,
-        misses:0
-      },item));
-      seen.add(item.statement);
-      added++;
-    }
-    if(added)lsSet(LQ,all);
-    return added;
+    if(!newItems || !newItems.length) return 0;
+    _qWriteChain = _qWriteChain.then(() => {
+      const all = lsGet(LQ, []);
+      const seen = new Set(all.map(x => x.statement));
+      let added = 0;
+      for(const item of newItems){
+        if(!item || !item.statement || seen.has(item.statement)) continue;
+        all.push(Object.assign({id:'q'+Date.now()+'_'+Math.random().toString(36).slice(2,7), createdAt:Date.now(), hits:0, misses:0}, item));
+        seen.add(item.statement);
+        added++;
+      }
+      if(added) lsSet(LQ, all);
+      return added;
+    });
+    return _qWriteChain;
   }
 
   // ── Summaries storage ──
@@ -901,6 +910,10 @@
   let _chainCache={};
   // ★ Sprint 6: LRU no _chainCache (limita a 5 aulas em memória)
   const _chainCacheMax=5;
+  // ★ v80-FIX-MEGGY BUG 5: per-key in-flight promise map. Concurrent calls
+  //    to generateAll (e.g. user clicks Resumo then Questões fast) share the
+  //    same in-flight promise — avoids duplicate PDF extraction + API calls.
+  const _inflight={};
   function _chainCacheEvict(){
     const keys=Object.keys(_chainCache);
     if(keys.length>_chainCacheMax){
@@ -931,8 +944,15 @@
 
   // Gera TODOS os materiais EM PARALELO TOTAL (não em cascata)
   // Cada tarefa usa uma chave NVIDIA diferente (se houver múltiplas)
+  // ★ v80-FIX-MEGGY BUG 5: hoist `key` and wrap entire body in an async IIFE
+  //    stored in _inflight[key]. Concurrent calls share the same promise —
+  //    prevents duplicate PDF extraction + API calls when user clicks
+  //    Resumo/Questões/Pílulas fast in succession.
   async function generateAll(items,lesson,trigger,progressCb){
     const key=lessonKey();
+    if(_inflight[key]) return _inflight[key];
+    _inflight[key] = (async () => {
+      try {
     // ★ FIX 3 (Task 13): deriva coursePath e subject da URL atual para passar
     //    explicitamente ao saveIsaSummary (que agora também persiste no Drive).
     //    Antes, saveIsaSummary derivava sozinho — mas sempre que generateAll
@@ -1142,6 +1162,11 @@
     }
 
     return _chainCache[key];
+      } finally {
+        delete _inflight[key];
+      }
+    })();
+    return _inflight[key];
   }
 
   // ── Summary flow (com cadeia) ──
@@ -1972,6 +1997,19 @@
         };
       }
     }
+    // ★ v80-FIX-MEGGY BUG 4: register a page:change listener so the keyHandler
+    //    is cleaned up if the user navigates away mid-session. Bus has no
+    //    offGlobal, so the closure no-ops once __fcKeyCleanup is null (set
+    //    when the session ends naturally via the _origDraw wrapper below).
+    const _pageCleanup = () => {
+      if(bodyEl.__fcKeyCleanup){
+        try{ bodyEl.__fcKeyCleanup(); }catch(_){}
+        bodyEl.__fcKeyCleanup = null;
+      }
+    };
+    if(typeof Bus !== 'undefined' && typeof Bus.onGlobal === 'function'){
+      Bus.onGlobal('page:change', _pageCleanup);
+    }
     draw();
     // cleanup final quando sessão terminar (idx>=queue.length)
     const _origDraw=draw;
@@ -1988,12 +2026,20 @@
   async function regenerate(items,bodyEl,lessonName){
     if(!items||!items.length){setError(bodyEl,'Nenhum PDF disponível.');return;}
     const lesson=realLessonName(lessonName||items[0].name);
+    const key=lessonKey();
+    // ★ v80-FIX-MEGGY BUG 8: wait for any in-flight generateAll before
+    //    clearing _chainCache. Otherwise the in-flight .then() writes its
+    //    results into the NEW (empty) _chainCache, repopulating it and
+    //    defeating the regenerate.
+    if(_inflight && _inflight[key]){
+      try { await _inflight[key]; } catch(_){}
+    }
     // limpa cache em memória
     _chainCache={};
     // limpa cache do Drive (★FIX: também limpa mindmap, antes ficava preso)
     try{
       await fetch('/api/ai/cache',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({key:lessonKey(),summary:null,questions:null,mindmap:null,lessonName:lesson})});
+        body:JSON.stringify({key,summary:null,questions:null,mindmap:null,lessonName:lesson})});
     }catch(_){}
     // regenera tudo em cadeia
     await summary(items,bodyEl,lessonName);
@@ -2116,12 +2162,18 @@
       st.textContent='.gdi-resumo-modal .gdi-resumo-content h1,.gdi-resumo-modal .gdi-resumo-content h2,.gdi-resumo-modal .gdi-resumo-content h3{color:var(--ferreto-text,#f0f6fc);margin-top:18px;}.gdi-resumo-modal .gdi-resumo-content h1{font-size:20px;}.gdi-resumo-modal .gdi-resumo-content h2{font-size:17px;border-left:3px solid #ff8b9f;padding-left:10px;}.gdi-resumo-modal .gdi-resumo-content h3{font-size:14px;}.gdi-resumo-modal .gdi-resumo-content code{background:rgba(255,255,255,.08);padding:2px 6px;border-radius:3px;font-family:Courier New,monospace;font-size:12px;}.gdi-resumo-modal .gdi-resumo-content pre{background:rgba(255,255,255,.06);padding:12px;border-radius:6px;overflow-x:auto;}.gdi-resumo-modal .gdi-resumo-content blockquote{border-left:3px solid #ff8b9f;margin:10px 0;padding:4px 14px;color:var(--ferreto-text-muted,#9aa4b8);font-style:italic;}.gdi-resumo-modal .gdi-resumo-content a{color:#5ddeda;}';
       document.head.appendChild(st);
     }
-    const close=()=>overlay.remove();
+    // ★ v80-FIX-MEGGY BUG 6: define escHandler BEFORE close so close() can
+    //    remove it. Previously, close() only removed the overlay — clicking
+    //    X or backdrop left escHandler attached to document forever.
+    const escHandler=(e)=>{if(e.key==='Escape')close();};
+    const close=()=>{
+      document.removeEventListener('keydown',escHandler);
+      overlay.remove();
+    };
     overlay.querySelector('.gdi-resumo-x').onclick=close;
     overlay.querySelector('.gdi-resumo-close').onclick=close;
     overlay.querySelector('.gdi-resumo-pdf').onclick=()=>downloadAsPdf(lesson,markdownText);
     overlay.onclick=(e)=>{if(e.target===overlay)close();};
-    const escHandler=(e)=>{if(e.key==='Escape'){close();document.removeEventListener('keydown',escHandler);}};
     document.addEventListener('keydown',escHandler);
   }
 
@@ -2525,20 +2577,29 @@
 
   // ═══ Quick action buttons (Resumir / Questões / Explicar) ═══
   // Fills the input with a canned prompt and triggers send().
+  // ★ v80-FIX-MEGGY BUG 7: inject current lesson context so prompts aren't
+  //    generic ("desta aula" with no awareness). Falls back to document.title.
   panel.querySelectorAll('.gdi-ai-quick').forEach(btn => {
     btn.onclick = () => {
       const action = btn.dataset.action;
+      const lessonName = (typeof realLessonName === 'function') ? (realLessonName('') || '') : '';
+      const ctx = lessonName ? ` (Aula atual: ${lessonName}. URL: ${window.location.pathname}) ` : ' ';
       let prompt = '';
-      if(action === 'resumir') prompt = 'Gere um resumo desta aula';
-      else if(action === 'questoes') prompt = 'Crie 5 questões sobre este tema';
-      else if(action === 'explicar') prompt = 'Explique o conceito principal desta aula';
+      if(action === 'resumir') prompt = `Gere um resumo${ctx}desta aula`;
+      else if(action === 'questoes') prompt = `Crie 5 questões${ctx}sobre o tema desta aula`;
+      else if(action === 'explicar') prompt = `Explique${ctx}o conceito principal desta aula`;
       if(prompt){ input.value = prompt; send(); }
     };
   });
 
   function addMsg(role,text){
     const m={role,text};
-    messages.push(m);save();
+    messages.push(m);
+    // ★ v80-FIX-MEGGY BUG 3: cap in-memory messages at 50 (sessionStorage is
+    //    already trimmed to 20 in save(), but `messages` grew unbounded, and
+    //    renderHistory() rebuilt DOM for every message on every page:change).
+    if(messages.length > 50) messages = messages.slice(-50);
+    save();
     const el=document.createElement('div');
     el.className='gdi-ai-msg '+(role==='user'?'user':'assistant');
     el.innerHTML='<div class="gdi-ai-bubble">'+(role==='user'?esc(text):renderMd(text))+'</div>';
