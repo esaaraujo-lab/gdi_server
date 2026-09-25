@@ -29,11 +29,12 @@
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  const CACHE_VERSION = '35';  // ★ Task FINAL: 4-issue fix — (1) gdi-meggy.js: extractPdfText limits 25k→50k chars, maxPages 60→100, OCR try/catch per page (non-fatal), added classifyMaterial() before generateAll, replaced summary prompt with PROFUNDO E DETALHADO version (min 2000 chars, ## Pegadinhas de Prova + ## Resumo Rápido sections, uses 40000 chars of source); (2) gdi-study.js: resumeInterruptedScans now ALWAYS clears stuck 'scanning' state and restarts (was preserving stuck state), startScan auto-restarts scans stuck >5min (was returning 'scan já em andamento' forever), added 'Remover' button to detail page (modal confirm → removes from gdi-manual-courses-v1 + clears scan state), added 'Reiniciar Scan' button to detail page (clearScanState + startScan); (3) CACHE_VERSION 34→35 forces CDN reload; (4) worker.js APP_VERSION 1.0.36→1.0.37
+  const CACHE_VERSION = '74';  // ★ v1.0.74: re-apply critical fixes after sandbox reset
 
   const MODULES = [
     'gdi-core.js',
-    'gdi-worker-bridge.js',   // NEW: bridge para Web Workers (depois do core, antes dos demais)
+    'gdi-worker-bridge.js',
+    'storage.js',
     'gdi-pdf.js',
     'gdi-ui.js',
     'gdi-meggy.js',
