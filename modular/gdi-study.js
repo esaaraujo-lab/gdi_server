@@ -1283,7 +1283,8 @@
   //  permanecem definidos como funções para preservar a API pública — window.* e GDI_MODULES.)
   const TAB_GROUPS=[
     {label:null,tabs:[
-      {id:'home',icon:'bi-house-door',label:'Início'}
+      {id:'home',icon:'bi-house-door',label:'Início'},
+      {id:'drives',icon:'bi-cloud-arrow-down',label:'Explorar Drives'}  // ★ v1.0.65: tab para navegar drives
     ]},
     {label:'Praticar',tabs:[
       {id:'questoes',icon:'bi-patch-question',label:'Questões'},
@@ -1377,6 +1378,7 @@
     // ★ FIX 1b (Task 14): RE-ADICIONADO handler da aba 'addmateria' (Task 13 havia removido por engano)
     if(currentTab==='addmateria'){showAddCourseModal(body);return;}
     if(currentTab==='home')renderHome(body);
+    else if(currentTab==='drives')renderDrives(body);  // ★ v1.0.65: tab Explorar Drives
     else if(currentTab==='questoes')renderQuestoes(body);
     else if(currentTab==='simulado')renderSimulado(body);
     else if(currentTab==='cronograma')renderCronograma(body);
@@ -1434,6 +1436,58 @@
     // ativa a tab atual no sidebar
     panel.querySelectorAll('.gdi-central-tab').forEach(b=>b.classList.toggle('active',b.dataset.t===tab));
     renderBody(tab);
+  }
+
+  // ★ v1.0.65 (REDESIGN): Identifica disciplina do curso por palavras-chave no nome/drive
+  // Retorna {icon, color, gradient} para o card ter identidade visual
+  function courseIdentity(courseKey, courseName){
+    const n = ((courseName||'') + ' ' + (driveNameOf(courseKey)||'')).toLowerCase();
+    // Direito / Tribunais / Jurídico
+    if(/direito|tribunal|tj|trt|trf|tre|oab|judici|constitucional|penal|civil|administrativo|processual|jurídic/.test(n))
+      return {icon:'⚖️', color:'#5ddeda', gradient:'linear-gradient(135deg,#0d3b66,#5ddeda)'};
+    // Policial / PRF / PF / Segurança
+    if(/polic|prf|pf\b|rodovi|federal|seguranç/.test(n))
+      return {icon:'🚔', color:'#3fb950', gradient:'linear-gradient(135deg,#1a3a1a,#3fb950)'};
+    // Saúde / Medicina / Enfermagem
+    if(/saúde|medic|enferm|nutri|psiquia|medcurso|saude/.test(n))
+      return {icon:'🔬', color:'#ff8b9f', gradient:'linear-gradient(135deg,#5a1a2a,#ff8b9f)'};
+    // Música / Canto
+    if(/músic|music|canto|voz|coral/.test(n))
+      return {icon:'🎵', color:'#c026d3', gradient:'linear-gradient(135deg,#3a0a3a,#c026d3)'};
+    // Fitness / Educação Física
+    if(/fit|física|fisica|hipopress|exerc|treino|muscul/.test(n))
+      return {icon:'🏋️', color:'#ffd43b', gradient:'linear-gradient(135deg,#3a3a0a,#ffd43b)'};
+    // Educação / Magistério / Pedagógico
+    if(/educa|magistér|pedagóg|professor|concurso sme|see |cursinho/.test(n))
+      return {icon:'📚', color:'#5ddeda', gradient:'linear-gradient(135deg,#0a2a3a,#5ddeda)'};
+    // ENEM / Vestibular
+    if(/enem|vestib|fuvest|unicamp|usp/.test(n))
+      return {icon:'🎓', color:'#ff8b9f', gradient:'linear-gradient(135deg,#3a0a1a,#ff8b9f)'};
+    // Default
+    return {icon:'📁', color:'#5ddeda', gradient:'linear-gradient(135deg,#0d1117,#5ddeda)'};
+  }
+
+  // ★ v1.0.65 (REDESIGN): renderDrives — mostra os 12 drives como cards navegáveis
+  function renderDrives(box){
+    const drives = window.drive_names || [];
+    box.innerHTML = `
+      <div style="margin-bottom:18px;">
+        <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 4px;">☁️ Explorar Drives</h3>
+        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0;">Navegue pelos drives compartilhados para encontrar novos cursos.</p>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;">
+        ${drives.map((name, idx) => {
+          const ident = courseIdentity('/'+idx+':/', name);
+          return `<a href="/${idx}:/" style="text-decoration:none;display:block;padding:16px;border-radius:12px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);border-top:3px solid ${ident.color};transition:all .15s;cursor:pointer;" onmouseover="this.style.background='var(--ferreto-surface-3,rgba(255,255,255,.08))';this.style.borderColor='${ident.color}';" onmouseout="this.style.background='var(--ferreto-surface-2,rgba(255,255,255,.04))';this.style.borderColor='var(--ferreto-border,#30363d)';">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+              <span style="font-size:28px;flex:none;">${ident.icon}</span>
+              <b style="color:var(--ferreto-text,#e6edf3);font-size:13px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(name)}</b>
+            </div>
+            <div style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">Drive ${idx} · Clique para navegar →</div>
+          </a>`;
+        }).join('')}
+      </div>
+    `;
   }
 
   // ★ Dashboard "Início" — visão geral com atalhos
@@ -1512,6 +1566,7 @@
           ${courses.slice(0,6).map(c=>{
             const name=cleanCourseName(c.key);
             const drive=driveNameOf(c.key);
+            const ident=courseIdentity(c.key, name);
             // ★ FIX 3 (Task 14): usa totalLessons (real) ao invés de c.lessons.size (visited paths)
             const total=c.totalLessons||c.lessons.size||0;
             const watched=c.watched||0;
@@ -1519,8 +1574,11 @@
             const progress=total>0?Math.min(100,Math.round(watched/total*100)):(watched>0?100:0);
             const progressColor=progress>=80?'#3fb950':progress>=40?'#ffd43b':'var(--ferreto-primary,#ff8b9f)';
             const coursePath=c.key;  // e.g. /4:/CANTE COM EXCELENCIA 2.0 + COMUNIDADE/
-            return `<div class="gdi-course" data-course-key="${escHtml(c.key)}" style="cursor:pointer;">
-              <b title="${escHtml(courseName(c.key))}">${escHtml(name)}</b>
+            return `<div class="gdi-course" data-course-key="${escHtml(c.key)}" style="cursor:pointer;border-top:3px solid ${ident.color};">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                <span style="font-size:24px;flex:none;">${ident.icon}</span>
+                <b title="${escHtml(courseName(c.key))}" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(name)}</b>
+              </div>
               ${drive?`<small><i class="bi bi-hdd"></i> ${escHtml(drive)}</small>`:'<small>&nbsp;</small>'}
               <div class="gdi-course-stats">
                 <div class="gdi-course-stat"><span class="gdi-course-stat-num" data-stat="total">${total}</span><span class="gdi-course-stat-label">Aulas</span></div>
@@ -1803,20 +1861,22 @@
       try{if(_mcName&&String(_mcName).indexOf('%')>=0)_mcName=decodeURIComponent(_mcName);}catch(_){}
       const name=_mcName||cleanCourseName(c.key);
       const drive=driveNameOf(c.key);
-      const icon=mc.icon||'📁';
-      const color=mc.color||'var(--ferreto-primary,#ff8b9f)';
+      // ★ v1.0.65 (REDESIGN): usa courseIdentity para ícone/cor se não for manual, ou mantém o manual
+      const ident=courseIdentity(c.key, name);
+      const icon=mc.icon||ident.icon;
+      const color=mc.color||ident.color;
       const isManual=c.manual===true;
       const progress=c.lessons.size>0?Math.round(c.watched/c.lessons.size*100):0;
       const progressColor=progress>=80?'#3fb950':progress>=40?'#ffd43b':'var(--ferreto-primary,#ff8b9f)';
       const remaining=c.lessons.size-c.watched;
       const el=document.createElement('div');el.className='gdi-course';
       el.style.cursor='pointer';
-      // ★ destaque visual para curso manual: border-left com a cor do manualCourse
-      if(isManual)el.style.borderLeft='4px solid '+color;
+      // ★ v1.0.65: border-top com a cor da identidade visual (aplica a todos, não só manuais)
+      el.style.borderTop='3px solid '+color;
       el.innerHTML=`
         <div class="gdi-course-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
           <b title="${escHtml(_mcName||courseName(c.key))}" style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;">
-            ${isManual?`<span style="font-size:18px;flex:none;">${icon}</span>`:''}
+            <span style="font-size:20px;flex:none;">${icon}</span>
             <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(name)}</span>
           </b>
           <button class="gdi-course-remove" title="${isManual?'Remover curso manual':'Ocultar curso'}" style="background:transparent;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:14px;padding:2px 6px;flex:none;border-radius:6px;transition:all .15s;"><i class="bi bi-x-lg"></i></button>
