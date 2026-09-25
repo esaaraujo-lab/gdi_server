@@ -32,8 +32,8 @@
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  // ★ v1.0.83: bump 87 → 88 (foto da Meggy com background transparente PNG no FAB + chat).
-  const CACHE_VERSION = '88';  // ★ v1.0.83: PNG transparente da Meggy
+  // ★ v1.0.84: bump 88 → 89 (52 bug fixes — syncCoursesFromDrive, battalion, scanner, quick actions, M5, NOTE_KEY).
+  const CACHE_VERSION = '89';  // ★ v1.0.84: ULTIMA versão pré-modularização
   window.CACHE_VERSION = CACHE_VERSION;
 
   const MODULES = [
