@@ -2332,18 +2332,18 @@
   // CSS
   if(!document.getElementById('gdi-ai-style')){
     const s=document.createElement('style');s.id='gdi-ai-style';s.textContent=`
-#gdi-ai-fab{position:fixed;bottom:20px;right:20px;z-index:10001;width:56px;height:56px;border-radius:50%;
-  border:0;cursor:pointer;background:linear-gradient(135deg,#ff8b9f 0%,#c026d3 55%,#5ddeda 130%);
+#gdi-ai-fab{position:fixed;bottom:20px;right:20px;z-index:2147483646;width:56px;height:56px;border-radius:50%;
+  border:0;cursor:pointer;background:linear-gradient(135deg,rgba(255,139,159,.7) 0%,rgba(192,38,211,.7) 55%,rgba(93,222,218,.7) 130%);
   color:#fff;font-size:24px;display:flex;align-items:center;justify-content:center;
-  box-shadow:0 8px 28px -6px rgba(255,139,159,.5),0 0 0 1px rgba(255,255,255,.12);
-  transition:transform .18s,box-shadow .18s;}
-#gdi-ai-fab:hover{transform:scale(1.08) translateY(-2px);box-shadow:0 12px 36px -6px rgba(255,139,159,.6);}
+  box-shadow:0 8px 28px -6px rgba(255,139,159,.4),0 0 0 1px rgba(255,255,255,.08);
+  transition:transform .18s,box-shadow .18s,opacity .18s;opacity:.65;}
+#gdi-ai-fab:hover{transform:scale(1.08) translateY(-2px);box-shadow:0 12px 36px -6px rgba(255,139,159,.6);opacity:1;}
 #gdi-ai-fab .gdi-ai-fab-ico{width:40px;height:40px;line-height:1;display:flex;align-items:center;justify-content:center;}#gdi-ai-fab .gdi-ai-fab-ico svg{width:100%;height:100%;border-radius:50%;}
 #gdi-ai-fab-badge{position:absolute;top:-2px;right:-2px;width:16px;height:16px;border-radius:50%;
   background:#5ddeda;border:2px solid var(--ferreto-bg,#070910);display:none;}
 #gdi-ai-fab-badge.show{display:block;animation:gdi-ai-pulse 1.6s ease infinite;}
 @keyframes gdi-ai-pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.25);}}
-#gdi-ai-panel{position:fixed;bottom:88px;right:20px;z-index:10001;width:380px;max-width:calc(100vw - 32px);
+#gdi-ai-panel{position:fixed;bottom:88px;right:20px;z-index:2147483647;width:380px;max-width:calc(100vw - 32px);
   height:540px;max-height:calc(100vh - 120px);display:none;flex-direction:column;
   background:var(--ferreto-surface,rgba(22,27,38,.92));
   -webkit-backdrop-filter:blur(22px);backdrop-filter:blur(22px);
@@ -2486,7 +2486,7 @@
   panel.id='gdi-ai-panel';
   panel.innerHTML=`
     <div id="gdi-ai-head">
-      <div class="gdi-ai-avatar">' + MEGGY_AVATAR + '</div>
+      <div class="gdi-ai-avatar">${MEGGY_AVATAR}</div>
       <div class="gdi-ai-info">
         <div class="gdi-ai-name">${MEGGY_NAME}<span class="gdi-ai-tag">${MEGGY_TAG}</span></div>
         <div class="gdi-ai-status"><span class="gdi-ai-dot"></span> verificando…</div>
