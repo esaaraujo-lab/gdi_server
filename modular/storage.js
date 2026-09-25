@@ -23,10 +23,11 @@
   function memo(key, ttlMs, fn){
     const ent = _mem.get(key);
     const now = Date.now();
-    if (ent && now - ent.t < ttlMs) return ent.p;          // hit
-    if (ent && ent.p) return ent.p;                        // in-flight dedupe
-    const p = fn().catch(err => { _mem.delete(key); throw err; });
-    _mem.set(key, { t: now, p });
+    if (ent && ent.done && now - ent.t < ttlMs) return ent.p;  // HIT (resolved + within TTL)
+    if (ent && !ent.done) return ent.p;                        // in-flight dedupe
+    const p = fn().then(v => { const e = _mem.get(key); if (e) e.done = true; return v; })
+                  .catch(err => { _mem.delete(key); throw err; });
+    _mem.set(key, { t: now, p, done: false });
     if (_mem.size > _MEM_MAX) _mem.delete(_mem.keys().next().value);
     return p;
   }
@@ -102,7 +103,7 @@
   async function isaCacheSet(lessonKey, data){
     try{
       await fetch('/api/ai/cache',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({key:lessonKey,...data})});
+        body:JSON.stringify({...data, key: lessonKey})});
       invalidate('isa:'+lessonKey);
     }catch(_){}
   }
