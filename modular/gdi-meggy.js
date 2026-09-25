@@ -2543,7 +2543,9 @@
   const root=GDI_ROOT();
   const fab=document.createElement('button');
   fab.id='gdi-ai-fab';fab.title='Meggy';
-  fab.innerHTML='<span class="gdi-ai-fab-ico">'+MEGGY_AVATAR+'</span><span id="gdi-ai-fab-badge"></span>';
+  // ★ v1.0.82: FAB agora usa foto real da Meggy (ImgBB → repo público modular/assets/).
+  // Painel do chat (linha ~2553) mantém o SVG MEGGY_AVATAR (estilo flat, melhor para header).
+  fab.innerHTML='<span class="gdi-ai-fab-ico"><img src="/modular/assets/meggy-fab.jpg?v='+(window.CACHE_VERSION||'87')+'" alt="Meggy" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;"></span><span id="gdi-ai-fab-badge"></span>';
   root.appendChild(fab);
 
   const panel=document.createElement('div');
