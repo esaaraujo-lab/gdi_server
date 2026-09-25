@@ -32,11 +32,14 @@ function ensurePdfjs() {
   pdfjsReady = new Promise((resolve, reject) => {
     try {
       importScripts('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js');
-      // dentro do worker, o PDF.js usa o fake worker (roda na própria thread do worker)
-      self.pdfjsLib.GlobalWorkerOptions.workerSrc = '';
-      // desabilita o worker interno — já estamos num worker
+      // dentro do worker, o PDF.js roda na própria thread do worker (fake worker).
+      // ★ FIX BUG 8 (v80): 'data:,' é um data URI inválido — pdf.js podia erroar/hangar.
+      // Usamos um data URI de script vazio válido (string vazia em base64) para silenciar
+      // o getDocument sem disparar o worker interno. Além disso, repassamos disableWorker:true
+      // na chamada getDocument (ver extractFromBuffer).
       if (self.pdfjsLib.GlobalWorkerOptions) {
-        self.pdfjsLib.GlobalWorkerOptions.workerSrc = 'data:,';
+        // Valid empty script — disables pdf.js internal worker (we're already in a worker)
+        self.pdfjsLib.GlobalWorkerOptions.workerSrc = 'data:text/javascript;base64,';
       }
       resolve(self.pdfjsLib);
     } catch (err) {
@@ -79,7 +82,10 @@ async function handleExtractBuf({ id, buf, maxPages, maxChars, tryOcr }) {
 
 async function extractFromBuffer({ id, buf, maxPages, maxChars, tryOcr }) {
   const lib = await ensurePdfjs();
-  const doc = await lib.getDocument({ data: buf, disableFontFace: true }).promise;
+  // ★ FIX BUG 8 (v80): disableWorker:true — desabilita o worker interno do pdf.js
+  // (já estamos dentro de um Web Worker; um worker dentro de worker é proibido e o
+  // 'data:,' inválido podia erroar silenciosamente).
+  const doc = await lib.getDocument({ data: buf, disableFontFace: true, disableWorker: true }).promise;
   const n = Math.min(doc.numPages, maxPages || 60);
   let text = '';
   let usedOcr = false;
@@ -133,12 +139,19 @@ async function ocrPage(lib, page) {
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, viewport.width, viewport.height);
   await page.render({ canvasContext: ctx, viewport }).promise;
-  // Tesseract.js aceita OffscreenCanvas em algumas versões; senão converte para blob
-  let imageInput = canvas;
+  // Tesseract.js aceita ArrayBuffer (e em algumas versões OffscreenCanvas), mas se
+  // convertToBlob falhar (browser antigo, OOM, etc.), NÃO devemos passar o
+  // OffscreenCanvas cru — Tesseract não sabe ler e trava a recognize().
+  // ★ FIX BUG 9 (v80): retorna string vazia em vez de prosseguir com input inválido.
+  let imageInput = null;
   try {
     const blob = await canvas.convertToBlob({ type: 'image/png' });
     imageInput = await blob.arrayBuffer();
-  } catch (_) { /* mantém canvas */ }
+  } catch (e) {
+    console.warn('[meggy-pdf-worker] convertToBlob failed, skipping OCR', e.message);
+    return '';
+  }
+  if (!imageInput) return '';
   const result = await Tesseract.recognize(imageInput, 'por', { logger: () => {} });
   return (result && result.data && result.data.text) || '';
 }
