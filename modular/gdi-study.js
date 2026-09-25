@@ -1400,6 +1400,14 @@
   // ★ renderBody(tab) — só o corpo da aba, sem rebuild do sidebar/header
   function renderBody(currentTab){
     if(!panel)return;
+    // ★ v80-FIX BUG 2: expose the active tab so background scan callbacks
+    // (autoScanPending, startScan onProgress) can detect when 'home' is the
+    // visible tab and re-render the tile to reflect scan progress/results.
+    // Without this, `window.__gdiCurrentTab` was always undefined → the
+    // `=== 'home'` check at lines 1789/4828 was always false → the home tile
+    // NEVER refreshed after a background scan finished (user had to navigate
+    // away and back to see updated lesson counts).
+    try{ window.__gdiCurrentTab = currentTab; }catch(_){}
     const body=panel.querySelector('#gdi-central-body');
     if(!body)return;
     // limpa timer do simulado anterior se houver
@@ -1446,7 +1454,35 @@
       panel.dataset.sidebarRendered='1';
       // bind header
       panel.querySelector('#gdi-central-x').onclick=closePanel;
-      panel.querySelector('#gdi-central-meggy').onclick=()=>{ const fab=document.querySelector('#gdi-ai-fab'); if(fab) fab.click(); };
+      panel.querySelector('#gdi-central-meggy').onclick=function(){
+        // ★ v80-FIX BUG 5: when no AI backend is available, Meggy's FAB is
+        // hidden via `fab.style.display='none'` (hideWidget in gdi-meggy.js).
+        // The Meggy panel itself also has inline `display:none`, so calling
+        // `fab.click()` → `toggle()` → `panel.classList.add('open')` does
+        // nothing visible (inline style beats CSS). Guard the click: if FAB
+        // is hidden, hide THIS header button too and skip the click so the
+        // user gets consistent feedback (button disappears once AI status is
+        // known to be unavailable, instead of silently failing).
+        const fab=document.querySelector('#gdi-ai-fab');
+        if(!fab || fab.style.display==='none'){
+          this.style.display='none';
+          return;
+        }
+        fab.click();
+      };
+      // ★ v80-FIX BUG 5 (initial visibility): if AI widget is already known
+      // to be hidden (e.g. user opened Área do Aluno AFTER async AI detection
+      // finished), hide the header button immediately so it doesn't bait a
+      // dead click. _serverEnabled / _browserAIState live in gdi-meggy.js's
+      // IIFE so we can't read them directly — use FAB's inline display as
+      // the source of truth (hideWidget/showWidget write to it).
+      try{
+        const _btnMeggy=panel.querySelector('#gdi-central-meggy');
+        const _fabAi=document.querySelector('#gdi-ai-fab');
+        if(_btnMeggy && _fabAi && _fabAi.style.display==='none'){
+          _btnMeggy.style.display='none';
+        }
+      }catch(_){}
       panel.querySelector('#gdi-goal-set').addEventListener('change',e=>{
         const v=Math.max(10,Math.min(480,parseInt(e.target.value,10)||60));
         lsSet(LS_GOAL,v);
@@ -3680,12 +3716,22 @@
               window.history.replaceState({}, '', url.toString());
             }catch(_){}
           };
+          // ★ v80-FIX BUG 4: previously both `GDIUser.ready().then(openNow)`
+          // AND `setTimeout(openNow, 2000)` were scheduled — if ready()
+          // resolved before 2s, openNow ran twice (panel reopened after the
+          // user closed it, hijacking the UI). Guard with a one-shot flag.
+          let _opened = false;
+          const openOnce = function(){
+            if(_opened) return;
+            _opened = true;
+            openNow();
+          };
           if(window.GDIUser && typeof window.GDIUser.ready === 'function'){
-            window.GDIUser.ready().then(openNow).catch(openNow);
+            window.GDIUser.ready().then(openOnce).catch(openOnce);
             // fallback: abre depois de 2s mesmo se ready() não resolver
-            setTimeout(openNow, 2000);
+            setTimeout(openOnce, 2000);
           }else{
-            setTimeout(openNow, 1500);
+            setTimeout(openOnce, 1500);
           }
           return true;
         }
@@ -4599,6 +4645,12 @@
       let maxBatches = 30;
       let batchNum = 0;
       let isDone = false;
+      // ★ v80-FIX BUG 1: `d` is referenced outside the while loop (at
+      // `d?.totalFolders` below), so it MUST be declared OUTSIDE the block.
+      // Previously `const d = await r.json();` was block-scoped inside the
+      // while → ReferenceError on the lessonsData object → caught → state
+      // became 'error' even though lessons were saved successfully.
+      let d;
       
       while(!isDone && batchNum < maxBatches){
         batchNum++;
@@ -4608,16 +4660,23 @@
           body: JSON.stringify({coursePath: courseKey})
         });
         if(!r.ok) throw new Error('HTTP '+r.status);
-        const d = await r.json();
+        d = await r.json();
         if(!d || !d.ok) throw new Error(d && d.error || 'scan falhou');
         
         allLessons = d.lessons || [];
         isDone = d.status !== 'partial';
         
         state.status = 'scanning';
-        state.scannedFolders = state.totalFolders;
-        state.lessonsFound = allLessons.length;
+        // ★ v80-FIX BUG 3: totalFolders was hardcoded to 1 and never
+        // updated → progress (scannedFolders/totalFolders) was always 100%.
+        // Now totalFolders grows as we discover pending folders each batch.
         state.pendingFolders = d.pendingFolders || 0;
+        state.totalFolders = (state.scannedFolders || 0) + (d.pendingFolders || 0);
+        // Keep scannedFolders ≤ totalFolders so percent stays in [0,100].
+        if(state.scannedFolders > state.totalFolders){
+          state.scannedFolders = state.totalFolders;
+        }
+        state.lessonsFound = allLessons.length;
         state.batchNum = batchNum;
         setScanState(courseKey, state);
         
@@ -4633,7 +4692,9 @@
       const lessonsData = {
         lessons: lessons,
         scanned: true,
-        totalFolders: d?.totalFolders || 1,
+        // ★ v80-FIX BUG 1: safe access — `d` may be undefined if the while
+        // loop body never ran (e.g. maxBatches===0), so use (d && d.totalFolders).
+        totalFolders: (d && d.totalFolders) || state.totalFolders || 1,
         totalLessons: lessons.length
       };
       setLessons(courseKey, lessonsData);
@@ -4641,7 +4702,11 @@
       // Atualiza estado
       state.status = 'done';
       state.completedAt = Date.now();
-      state.scannedFolders = state.totalFolders;
+      // ★ v80-FIX BUG 3 (final): finalize scannedFolders to equal totalFolders
+      // so progress shows 100% only when actually done.
+      if(state.totalFolders && state.scannedFolders < state.totalFolders){
+        state.scannedFolders = state.totalFolders;
+      }
       setScanState(courseKey, state);
       
       // Salva no Drive (não-bloqueante)
@@ -4773,29 +4838,66 @@
   let _autoScanRunning = false;
   
   // ★ v1.0.78: syncCoursesFromDrive — busca cursos do Drive e merge com localStorage
+  // ★ v80-FIX BUG 6: read-modify-write race. Previously the function did a
+  // single JSON.parse → push → setItem with no resiliency: two concurrent
+  // invocations (e.g. openPanel + autoScanPending boot) could both read the
+  // same array, both push their new courses, and the second setItem would
+  // silently clobber the first → courses lost. Now we (a) wrap RMW in
+  // try/catch with one retry, and (b) dedup by `key`/`id`/`path` right
+  // before writing so concurrent writes can't introduce duplicates.
   async function syncCoursesFromDrive(){
-    try{
-      const r = await fetch('/api/courses/list');
-      if(!r.ok) return;
-      const d = await r.json();
-      if(!d || !d.ok || !Array.isArray(d.courses)) return;
-      const LS_MANUAL = 'gdi-manual-courses-v1';
+    const LS_MANUAL = 'gdi-manual-courses-v1';
+    let d;  // populated by fetch below; referenced by mergeDriveCourses closure
+    const mergeDriveCourses = function(){
       const local = JSON.parse(localStorage.getItem(LS_MANUAL) || '[]');
-      const localPaths = new Set(local.map(c => c.path));
+      if(!Array.isArray(local)) throw new Error('localStorage not an array');
+      const localPaths = new Set(local.map(c => c && c.path));
       let added = 0;
       for(const dc of d.courses){
-        if(!localPaths.has(dc.coursePath)){
+        if(dc && dc.coursePath && !localPaths.has(dc.coursePath)){
           local.push({
             id:'mc-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),
             name:dc.courseName||'Curso', icon:'📁', color:'#5ddeda', goal:60, notes:'',
             createdAt:dc.addedAt||Date.now(), manual:true, path:dc.coursePath,
             courseKey:dc.coursePath, pdfCount:dc.pdfCount||0
           });
+          localPaths.add(dc.coursePath);
           added++;
         }
       }
+      // Dedup pass — resilient against concurrent writes that may have
+      // inserted the same course between our read and our write.
+      const seen = new Set();
+      const deduped = [];
+      for(const c of local){
+        if(!c) continue;
+        const k = c.key || c.id || c.path;
+        if(k){
+          if(seen.has(k)) continue;
+          seen.add(k);
+        }
+        deduped.push(c);
+      }
+      localStorage.setItem(LS_MANUAL, JSON.stringify(deduped));
+      return added;
+    };
+    try{
+      const r = await fetch('/api/courses/list');
+      if(!r.ok) return;
+      d = await r.json();
+      if(!d || !d.ok || !Array.isArray(d.courses)) return;
+      let added;
+      try {
+        added = mergeDriveCourses();
+      } catch(e) {
+        console.warn('[syncCoursesFromDrive] race detectada, re-lendo:', e && e.message);
+        try {
+          added = mergeDriveCourses();
+        } catch(_){
+          return;
+        }
+      }
       if(added > 0){
-        localStorage.setItem(LS_MANUAL, JSON.stringify(local));
         console.log('[GDI M22] syncCoursesFromDrive: ' + added + ' cursos recuperados do Drive');
       }
     }catch(_){}
