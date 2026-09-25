@@ -28,8 +28,8 @@
   // — mesmo proxy que o gdi-extras-loader.js usa. Consistência + cache controlada
   //   por CACHE_VERSION (sem CDN jsdelivr com cache stale).
   const WORKER_BASE = '/modular/';
-  const LIST_WORKER_URL  = WORKER_BASE + 'gdi-list-worker.js?v=' + (window.CACHE_VERSION || '86');
-  const PDF_WORKER_URL   = WORKER_BASE + 'meggy-pdf-worker.js?v=' + (window.CACHE_VERSION || '86');
+  const LIST_WORKER_URL  = WORKER_BASE + 'gdi-list-worker.js?v=' + (window.CACHE_VERSION || '87');
+  const PDF_WORKER_URL   = WORKER_BASE + 'meggy-pdf-worker.js?v=' + (window.CACHE_VERSION || '87');
 
   // ───────────────────────── LRU cache de listagem ─────────────────────────
   const LIST_TTL = 5 * 60 * 1000;        // 5 min (antes 45s)
