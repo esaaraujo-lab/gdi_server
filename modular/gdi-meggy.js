@@ -2369,20 +2369,23 @@
   if(!document.getElementById('gdi-ai-style')){
     const s=document.createElement('style');s.id='gdi-ai-style';s.textContent=`
 #gdi-ai-fab{position:fixed;bottom:20px;right:20px;z-index:2147483646;width:56px;height:56px;border-radius:50%;
-  border:0;cursor:pointer;background:linear-gradient(135deg,#ff8b9f 0%,#c026d3 55%,#5ddeda 130%);
+  border:0;cursor:pointer;background:linear-gradient(135deg,rgba(255,139,159,.7) 0%,rgba(192,38,211,.7) 55%,rgba(93,222,218,.7) 130%);
   color:#fff;font-size:24px;display:flex;align-items:center;justify-content:center;
-  box-shadow:0 8px 28px -6px rgba(255,139,159,.5),0 0 0 1px rgba(255,255,255,.12);
-  transition:transform .18s,box-shadow .18s;}
-#gdi-ai-fab:hover{transform:scale(1.08) translateY(-2px);box-shadow:0 12px 36px -6px rgba(255,139,159,.6);}
+  box-shadow:0 8px 28px -6px rgba(255,139,159,.4),0 0 0 1px rgba(255,255,255,.08);
+  transition:transform .18s,box-shadow .18s,opacity .18s;opacity:.65;}
+#gdi-ai-fab:hover{transform:scale(1.08) translateY(-2px);box-shadow:0 12px 36px -6px rgba(255,139,159,.6);opacity:1;}
 #gdi-ai-fab .gdi-ai-fab-ico{width:40px;height:40px;line-height:1;display:flex;align-items:center;justify-content:center;}#gdi-ai-fab .gdi-ai-fab-ico svg{width:100%;height:100%;border-radius:50%;}
 #gdi-ai-fab-badge{position:absolute;top:-2px;right:-2px;width:16px;height:16px;border-radius:50%;
   background:#5ddeda;border:2px solid var(--ferreto-bg,#070910);display:none;}
 #gdi-ai-fab-badge.show{display:block;animation:gdi-ai-pulse 1.6s ease infinite;}
 @keyframes gdi-ai-pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.25);}}
-#gdi-ai-panel{position:fixed;inset:0;z-index:2147483647;display:none;flex-direction:column;
-  background:var(--ferreto-surface,rgba(22,27,38,.98));
+#gdi-ai-panel{position:fixed;bottom:88px;right:20px;z-index:2147483647;width:380px;max-width:calc(100vw - 32px);
+  height:540px;max-height:calc(100vh - 120px);display:none;flex-direction:column;
+  background:var(--ferreto-surface,rgba(22,27,38,.92));
   -webkit-backdrop-filter:blur(22px);backdrop-filter:blur(22px);
-  animation:gdi-ai-in .22s ease;font-family:var(--ferreto-font-body,'Rubik',sans-serif);}
+  border:1px solid var(--ferreto-border-strong,rgba(255,255,255,.16));
+  border-radius:18px;box-shadow:0 20px 60px -12px rgba(0,0,0,.6);
+  overflow:hidden;transform-origin:bottom right;animation:gdi-ai-in .22s ease;font-family:var(--ferreto-font-body,'Rubik',sans-serif);}
 @keyframes gdi-ai-in{from{opacity:0;transform:scale(.92) translateY(12px);}to{opacity:1;transform:none;}}
 #gdi-ai-panel.open{display:flex;}
 #gdi-ai-head{display:flex;align-items:center;gap:10px;padding:14px 16px;
@@ -2889,25 +2892,67 @@
   };
 
   // ═══ MEGGY-HEADER-CONTEXTUAL: trigger de banner ao trocar de aula ═══
-  // 3s após video:switched (espera playlistVideos/currentIndex estabilizar),
-  // se houver uma aula ativa, mostra "Quer um resumo desta aula? 🐩".
-  // Clique → abre chat + preenche "Gere um resumo desta aula" + dispara send().
+  // ★ v1.0.72: Meggy proativa — captura título da aula e salva na memória automaticamente
+  //   Quando uma aula carrega, Meggy salva o título no cérebro (lastLessons)
+  //   e tenta capturar transcrições/PDFs da pasta para pré-carregar na memória
   if(typeof Bus !== 'undefined' && typeof Bus.onGlobal === 'function'){
     Bus.onGlobal('video:switched', () => {
       setTimeout(() => {
         try {
           const lesson = window.playlistVideos?.[window.currentIndex]?.origName;
-          if(lesson && window.__gdiMeggySuggest){
-            window.__gdiMeggySuggest('Quer um resumo desta aula? 🐩', () => {
-              const fab = document.querySelector('#gdi-ai-fab');
-              if(fab) fab.click();
-              setTimeout(() => {
-                const input = document.querySelector('#gdi-ai-input');
-                if(input){ input.value = 'Gere um resumo desta aula'; }
-                const sendBtn = document.querySelector('#gdi-ai-send');
-                if(sendBtn) sendBtn.click();
-              }, 300);
-            });
+          if(lesson){
+            // Salva na memória da Meggy
+            try{
+              const mem = JSON.parse(localStorage.getItem('gdi-meggy-memory-v1') || '{}');
+              if(!mem.lastLessons) mem.lastLessons = [];
+              if(!mem.lastLessons.includes(lesson)){
+                mem.lastLessons.unshift(lesson);
+                if(mem.lastLessons.length > 10) mem.lastLessons = mem.lastLessons.slice(0, 10);
+              }
+              mem.interactions = (mem.interactions || 0) + 1;
+              localStorage.setItem('gdi-meggy-memory-v1', JSON.stringify(mem));
+            }catch(_){}
+
+            // Sugestão proativa (banner flutuante)
+            if(window.__gdiMeggySuggest){
+              window.__gdiMeggySuggest('Quer um resumo desta aula? 🐩', () => {
+                const fab = document.querySelector('#gdi-ai-fab');
+                if(fab) fab.click();
+                setTimeout(() => {
+                  const input = document.querySelector('#gdi-ai-input');
+                  if(input){ input.value = 'Gere um resumo desta aula'; }
+                  const sendBtn = document.querySelector('#gdi-ai-send');
+                  if(sendBtn) sendBtn.click();
+                }, 300);
+              });
+            }
+
+            // ★ v1.0.72: Pré-captura de materiais da aula (transcrição/PDF)
+            //   Busca na pasta atual arquivos com "transcri" no nome e salva no cérebro
+            try{
+              const fPath = window.location.pathname.split('/').slice(0, -1).join('/') + '/';
+              if(window.gdiListAllFiles && fPath && fPath !== '/' && !fPath.endsWith(': /')){
+                window.gdiListAllFiles(fPath, '').then(files => {
+                  if(!Array.isArray(files)) return;
+                  // Procura transcrição (.md, .txt, .pdf com "transcri" no nome)
+                  const transc = files.find(f => {
+                    const n = (f.name || '').toLowerCase();
+                    return /transcri/.test(n) && /\.(md|txt|pdf)$/i.test(n);
+                  });
+                  if(transc){
+                    const mem = JSON.parse(localStorage.getItem('gdi-meggy-memory-v1') || '{}');
+                    if(!mem.topics) mem.topics = [];
+                    const topic = 'Transcrição: ' + (transc.name || 'aula');
+                    if(!mem.topics.includes(topic)){
+                      mem.topics.unshift(topic);
+                      if(mem.topics.length > 50) mem.topics = mem.topics.slice(0, 50);
+                    }
+                    localStorage.setItem('gdi-meggy-memory-v1', JSON.stringify(mem));
+                    console.log('[Meggy] Transcrição capturada:', transc.name);
+                  }
+                }).catch(()=>{});
+              }
+            }catch(_){}
           }
         } catch(_) {}
       }, 3000); // espera 3s após troca de vídeo
