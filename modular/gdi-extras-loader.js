@@ -29,7 +29,7 @@
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  const CACHE_VERSION = '56';  // ★ v1.0.61 (Task STORAGE-FIX): storage.js estava faltando no array MODULES — GDIStorage nunca era carregado! Adicionado storage.js antes de gdi-pdf/gdi-ui/gdi-meggy/gdi-study (que dependem dele). Bump 55→56.
+  const CACHE_VERSION = '57';  // ★ v1.0.62 (Task P1-FIXES): B-01 NOTE_KEY, B-02 cache/list GET, SE-06/07 auth diagnósticos, API-BUG-01/02, 10 dead code removido. Bump 56→57.
 
   const MODULES = [
     'gdi-core.js',
