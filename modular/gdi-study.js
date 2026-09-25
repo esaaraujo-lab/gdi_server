@@ -1562,40 +1562,105 @@
       </div>
       <div id="gdi-drive-browser" style="margin-top:18px;display:none;"></div>
     `;
-    // ★ v1.0.71: Drives integrados — carrega conteúdo DENTRO do painel
+    // ★ v1.0.72: Drives integrados — carrega conteúdo DENTRO do painel
+    //   Pastas são clicáveis e carregam dentro do painel recursivamente
+    //   Vídeos/PDFs abrem em nova aba (fora do painel)
     box.querySelectorAll('[data-gdi-drive-link]').forEach(card => {
       card.addEventListener('click', async (e) => {
         const driveIdx = card.dataset.gdiDriveLink;
-        const browser = box.querySelector('#gdi-drive-browser');
-        if(browser){
-          browser.style.display = 'block';
-          browser.innerHTML = '<div style="text-align:center;padding:20px;"><div class="gdi-mat-isa-spin"></div><p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin-top:10px;">Carregando drive...</p></div>';
-          try {
-            const pw = window.gdiGetPw ? window.gdiGetPw() : '';
-            const result = await window.gdiListAllFiles('/' + driveIdx + ':/', pw);
-            if(Array.isArray(result) && result.length){
-              const folders = result.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
-              browser.innerHTML = '<div style="margin-bottom:10px;"><button id="gdi-drive-back" class="gdi-mode-btn" style="font-size:11px;">← Voltar para drives</button></div>' +
-                '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;">' +
-                folders.slice(0, 30).map(f => {
-                  const fn = f.name || f.title || 'Pasta';
-                  const fp = f.path || (f.parentPath ? f.parentPath + '/' + encodeURIComponent(fn) : '/' + driveIdx + ':/' + encodeURIComponent(fn) + '/');
-                  return '<a href="' + escHtml(fp) + '" style="text-decoration:none;display:block;padding:12px;border-radius:8px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);cursor:pointer;" onmouseover="this.style.background=\'var(--ferreto-surface-3,rgba(255,255,255,.08))\'" onmouseout="this.style.background=\'var(--ferreto-surface-2,rgba(255,255,255,.04))\'">' +
-                    '<div style="display:flex;align-items:center;gap:6px;"><i class="bi bi-folder-fill" style="color:var(--ferreto-secondary,#5ddeda);font-size:16px;"></i>' +
-                    '<span style="color:var(--ferreto-text,#e6edf3);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(fn) + '</span></div></a>';
-                }).join('') + '</div>';
-              // Back button
-              const backBtn = browser.querySelector('#gdi-drive-back');
-              if(backBtn) backBtn.onclick = () => { browser.style.display = 'none'; renderDrives(box); };
-            } else {
-              browser.innerHTML = '<p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">Nenhum conteúdo encontrado.</p>';
-            }
-          } catch(err) {
-            browser.innerHTML = '<p style="color:#ff8b8b;font-size:12px;">Erro: ' + escHtml(err.message) + '</p>';
-          }
-        }
+        await browseDriveInPanel(box, '/' + driveIdx + ':/', window.drive_names?.[driveIdx] || ('Drive ' + driveIdx));
       });
     });
+  }
+
+  // ★ v1.0.72: Navegação de drive DENTRO do painel — recursiva
+  async function browseDriveInPanel(box, path, title) {
+    const browser = box.querySelector('#gdi-drive-browser') || box;
+    browser.style.display = 'block';
+    browser.innerHTML = '<div style="text-align:center;padding:20px;"><div class="gdi-mat-isa-spin"></div><p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin-top:10px;">Carregando...</p></div>';
+    try {
+      const pw = window.gdiGetPw ? window.gdiGetPw() : '';
+      const result = await window.gdiListAllFiles(path, pw);
+      if(!Array.isArray(result) || !result.length) {
+        browser.innerHTML = '<p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">Nenhum conteúdo encontrado.</p>';
+        return;
+      }
+      const folders = result.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
+      const files = result.filter(f => !f.mimeType || f.mimeType !== 'application/vnd.google-apps.folder');
+
+      // Breadcrumb with back button
+      let bcHtml = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;flex-wrap:wrap;">';
+      bcHtml += '<button id="gdi-drive-home" class="gdi-mode-btn" style="font-size:11px;padding:4px 8px;">☁️ Drives</button>';
+      const segs = path.split('/').filter(Boolean);
+      let acc = '';
+      for(let i = 0; i < segs.length; i++) {
+        const seg = segs[i];
+        acc += '/' + seg;
+        let displayName = seg;
+        if(/^\d+:$/.test(seg) && window.drive_names) displayName = window.drive_names[parseInt(seg)] || seg;
+        try { displayName = decodeURIComponent(displayName); } catch(_) {}
+        const isLast = i === segs.length - 1;
+        bcHtml += '<span style="color:var(--ferreto-text-faint,#6b7488);font-size:11px;">/</span>';
+        if(isLast) {
+          bcHtml += '<span style="color:var(--ferreto-text,#e6edf3);font-size:12px;font-weight:600;">' + escHtml(displayName) + '</span>';
+        } else {
+          bcHtml += '<button class="gdi-drive-bc-btn gdi-mode-btn" data-path="' + escHtml(acc + '/') + '" style="font-size:11px;padding:2px 6px;">' + escHtml(displayName) + '</button>';
+        }
+      }
+      bcHtml += '</div>';
+
+      // Folder grid
+      let content = bcHtml;
+      if(folders.length) {
+        content += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin-bottom:14px;">';
+        folders.slice(0, 50).forEach(f => {
+          const fn = f.name || f.title || 'Pasta';
+          const fp = path.endsWith('/') ? path + encodeURIComponent(fn) + '/' : path + '/' + encodeURIComponent(fn) + '/';
+          content += '<div class="gdi-drive-folder" data-path="' + escHtml(fp) + '" data-name="' + escHtml(fn) + '" style="padding:10px 12px;border-radius:8px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);cursor:pointer;transition:all .15s;">'
+            + '<div style="display:flex;align-items:center;gap:6px;"><i class="bi bi-folder-fill" style="color:var(--ferreto-secondary,#5ddeda);font-size:16px;flex:none;"></i>'
+            + '<span style="color:var(--ferreto-text,#e6edf3);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(fn) + '</span></div></div>';
+        });
+        content += '</div>';
+      }
+
+      // Files (videos/PDFs) — abrem em nova aba
+      if(files.length) {
+        content += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px;">';
+        files.slice(0, 30).forEach(f => {
+          const fn = f.name || f.title || 'Arquivo';
+          const fp = path.endsWith('/') ? path + encodeURIComponent(fn) : path + '/' + encodeURIComponent(fn);
+          const isVideo = f.mimeType && f.mimeType.includes('video');
+          const isPdf = (f.fileExtension || '').toLowerCase() === 'pdf' || (f.mimeType||'').includes('pdf');
+          const icon = isVideo ? 'bi-camera-video' : (isPdf ? 'bi-file-earmark-pdf' : 'bi-file-earmark');
+          const iconColor = isVideo ? 'var(--ferreto-secondary,#5ddeda)' : (isPdf ? '#ff6b6b' : 'var(--ferreto-text-muted,#8b949e)');
+          content += '<a href="' + escHtml(fp) + '?a=view" target="_blank" style="text-decoration:none;padding:8px 10px;border-radius:6px;background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#30363d);display:flex;align-items:center;gap:6px;transition:all .15s;">'
+            + '<i class="bi ' + icon + '" style="color:' + iconColor + ';font-size:14px;flex:none;"></i>'
+            + '<span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(fn) + '</span></a>';
+        });
+        content += '</div>';
+      }
+
+      browser.innerHTML = content;
+
+      // Wire folder clicks — recursive navigation
+      browser.querySelectorAll('.gdi-drive-folder').forEach(el => {
+        el.onmouseenter = () => { el.style.background = 'var(--ferreto-surface-3,rgba(255,255,255,.08))'; el.style.borderColor = 'var(--ferreto-secondary,#5ddeda)'; };
+        el.onmouseleave = () => { el.style.background = 'var(--ferreto-surface-2,rgba(255,255,255,.04))'; el.style.borderColor = 'var(--ferreto-border,#30363d)'; };
+        el.onclick = () => browseDriveInPanel(box, el.dataset.path, el.dataset.name);
+      });
+
+      // Wire breadcrumb buttons
+      browser.querySelectorAll('.gdi-drive-bc-btn').forEach(el => {
+        el.onclick = () => browseDriveInPanel(box, el.dataset.path, '');
+      });
+
+      // Wire home button
+      const homeBtn = browser.querySelector('#gdi-drive-home');
+      if(homeBtn) homeBtn.onclick = () => renderDrives(box);
+
+    } catch(err) {
+      browser.innerHTML = '<p style="color:#ff8b8b;font-size:12px;">Erro: ' + escHtml(err.message) + '</p>';
+    }
   }
 
   // ★ Dashboard "Início" — visão geral com atalhos
