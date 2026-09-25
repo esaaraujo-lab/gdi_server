@@ -33,10 +33,11 @@
   if(window.__gdiM9Isa)return;window.__gdiM9Isa=true;
   const LS_SUM='gdi-isa-summaries-v1';
   const LQ='gdi-questions-v1';
-  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
-  const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
-  const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+  // ★ P2-STANDARDIZE: esc/lsGet/lsSet/uid delegam para os helpers canônicos em window (definidos em gdi-core.js). Fallback local mantém comportamento se window ainda não estiver pronto.
+  const esc=window.escHtml||(s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;'));
+  const lsGet=window.gdiLsGet||((k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}});
+  const lsSet=window.gdiLsSet||((k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}});
+  const uid=window.gdiUid||(()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8));
 
   // ── Robust JSON array parser ──
   // LLMs frequentemente retornam texto antes/depois do JSON, cercam o
@@ -2451,7 +2452,10 @@
     }
     return txt.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
   }
-  function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  // ★ P2-STANDARDIZE: esc agora delega para window.escHtml (escapa os 5 chars & < > " ')
+  // em vez de só 3 (& < >). Mantida como function declaration para preservar hoisting
+  // (renderMd/addMsg/renderHistory referenciam esc e são chamadas depois).
+  function esc(s){return (window.escHtml||function(x){return String(x||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');})(s);}
 
   // ── Detecção da IA do navegador ──
   // Chrome 127+ com "Prompt API for Gemini Nano" habilitado expõe
@@ -2594,8 +2598,9 @@
   // A Meggy mantém um perfil do aluno e aprende com as interações.
   // Persistido em localStorage + enviado como contexto nas conversas.
   const MEMORY_KEY='gdi-meggy-memory-v1';
-  const _meggyLsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
-  const _meggyLsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
+  // ★ P2-STANDARDIZE: _meggyLsGet/_meggyLsSet delegam para window.gdiLsGet/gdiLsSet.
+  const _meggyLsGet=window.gdiLsGet||((k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}});
+  const _meggyLsSet=window.gdiLsSet||((k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}});
   function loadMemory(){
     return _meggyLsGet(MEMORY_KEY,{interactions:0,topics:[],weaknesses:[],preferences:{},lastLessons:[]});
   }
