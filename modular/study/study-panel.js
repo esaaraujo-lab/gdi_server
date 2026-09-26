@@ -1191,11 +1191,15 @@
       const backBtn = body.querySelector('#gdi-media-back');
       if(backBtn) backBtn.onclick = restoreSidebarFromMediaView;
     }
-    // Navega a página principal para o vídeo (navegação completa — mais confiável que render())
-    // Adiciona ?central=1 para a Área do Aluno auto-abrir na página do vídeo
+    // Navega a página principal para o vídeo via pushState + render()
+    // pushState muda a URL do browser → file() faz POST para a URL correta → worker retorna JSON do vídeo
     try{
-      var navUrl = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'central=1';
-      window.location.href = navUrl;
+      window.history.pushState({}, '', url);
+      if(typeof window.render === 'function'){
+        window.render(url);
+      } else {
+        window.location.href = url;
+      }
     }catch(_){
       try{ window.location.href = url; }catch(__){}
     }
@@ -1211,8 +1215,9 @@
       if(backBtn) backBtn.onclick = restoreSidebarFromMediaView;
     }
     try{
-      var navUrl = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'central=1';
-      window.location.href = navUrl;
+      window.history.pushState({}, '', url);
+      if(typeof window.render === 'function'){ window.render(url); }
+      else { window.location.href = url; }
     }catch(_){ try{ window.location.href = url; }catch(__){} }
   }
   function renderPdfInSplit(url){
