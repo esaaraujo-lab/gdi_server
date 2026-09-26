@@ -1,14 +1,25 @@
 // ═══════════════════════════════════════════════════════════════
-// meggy-pdf-engine.js — PDF text extraction (pdf.js + Tesseract OCR)
+// meggy-pdf-engine.js — PDF text extraction (pdf.js + Tesseract OCR
+//                       + CF Workers AI vision OCR — v91)
 //
 // Module 2 of 7 (modular/meggy/).
 // Sourced from gdi-meggy.js M9-ISA IIFE (lines 239-518).
 //
 // Exposes:
 //   • window.__gdiMeggy.pdf = { gdiEnsurePdfjs, ensurePdfjs, ensureTesseract,
-//     ocrPdfPage, getFileType, extractTextFile, extractPdfText }
+//     ocrPdfPage, getFileType, extractTextFile, extractPdfText,
+//     ocrPageWithAI, getCfAI, setAiOcrConfig, useAiOcr, aiOcrConfig }
 //   • window.gdiEnsurePdfjs   (alias — also defined in gdi-core.js:235 as fallback)
 //   • window._pdfjsPromise    (memoization slot, shared with gdi-core.js)
+//
+// v91 — AI OCR routing:
+//   • extractPdfText(url, progressCb, opts) — opts.useAiOcr = true (or set
+//     window.__gdiMeggy.pdf.useAiOcr = true) tries CF Workers AI vision model
+//     (llava-1.5-7b-hf, then uform-gen2-qwen-500m) BEFORE Tesseract.
+//   • CF AI is reached via /api/ai/ocr worker endpoint (POST {model, image, prompt}).
+//     If the endpoint is missing (HTTP 404) or network fails, getCfAI() returns
+//     null and ocrPageWithAI() returns null — caller falls back to Tesseract.
+//   • The probe result is cached in _cfAiAvailable so we don't spam 404s per page.
 //
 // Guard: window.__gdiMeggyPdf
 // Depends on: window.__gdiMeggy.utils (none strictly required, since
@@ -22,6 +33,8 @@
 
   // ═══ PATCH F: Consolidated pdf.js loader (idempotent, sets workerSrc once) ═══
   // Outros módulos (gdi-study, gdi-core M9, gdi-pdf) podem usar o mesmo loader.
+  // ★ v91 FIX: reset window._pdfjsPromise on failure so a transient CDN hiccup
+  //    doesn't permanently break PDF extraction for the session.
   if(!window.gdiEnsurePdfjs){
     window.gdiEnsurePdfjs=function(){
       if(window._pdfjsPromise)return window._pdfjsPromise;
@@ -46,10 +59,14 @@
             }catch(_){}
             resolve(window.pdfjsLib);
           }else{
+            window._pdfjsPromise=null; // ★ v91 FIX: allow retry on next call
             reject(new Error('pdfjsLib não exposto pelo CDN'));
           }
         };
-        s.onerror=()=>reject(new Error('Falha ao carregar pdf.js do CDN'));
+        s.onerror=()=>{
+          window._pdfjsPromise=null; // ★ v91 FIX: allow retry on next call
+          reject(new Error('Falha ao carregar pdf.js do CDN'));
+        };
         document.head.appendChild(s);
       });
       return window._pdfjsPromise;
@@ -64,6 +81,8 @@
   // ── Dynamic load Tesseract.js (OCR para PDFs escaneados) ──
   // ★ Carrega só quando necessário (PDFs sem texto selecionável).
   // Usa modelo em português (por) + inglês (eng) como fallback.
+  // ★ v91 FIX: reset tesseractPromise on failure so a transient CDN hiccup
+  //    doesn't permanently break OCR for the session.
   let tesseractPromise=null;
   function ensureTesseract(){
     if(window.Tesseract)return Promise.resolve(window.Tesseract);
@@ -74,12 +93,139 @@
       s.crossOrigin='anonymous';
       s.onload=()=>{
         if(window.Tesseract)resolve(window.Tesseract);
-        else reject(new Error('Tesseract não exposto pelo CDN'));
+        else{
+          tesseractPromise=null; // ★ v91 FIX: allow retry on next call
+          reject(new Error('Tesseract não exposto pelo CDN'));
+        }
       };
-      s.onerror=()=>reject(new Error('Falha ao carregar Tesseract.js do CDN'));
+      s.onerror=()=>{
+        tesseractPromise=null; // ★ v91 FIX: allow retry on next call
+        reject(new Error('Falha ao carregar Tesseract.js do CDN'));
+      };
       document.head.appendChild(s);
     });
     return tesseractPromise;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // v91: AI OCR ROUTING — CF Workers AI vision models (llava / uform)
+  // ═══════════════════════════════════════════════════════════════
+  // Master toggle: set window.__gdiMeggy.pdf.useAiOcr = true, OR pass
+  // {useAiOcr:true} as 3rd arg of extractPdfText().
+  // When enabled, ocrPdfPage tries CF AI vision FIRST (fast, accurate for
+  // typed/printed text in PT-BR); if CF AI is unavailable or returns empty,
+  // falls back to Tesseract (existing behavior).
+  let _aiOcrConfig={
+    visionModel:'@cf/llava-hf/llava-1.5-7b-hf',       // primary — accurate, multi-lingual
+    fallbackModel:'@cf/unum/uform-gen2-qwen-500m',    // smaller/faster fallback
+    prompt:'Extract all visible text from this image. Return only the raw text content, preserving line breaks and reading order. Do not add commentary or markdown formatting.'
+  };
+  // _cfAiAvailable: null=unknown (try once), true=available, false=known-unavailable
+  // (cached after the first 404/network error so we don't spam failed requests
+  // per page). Caller can force a re-probe by setting it back to null.
+  let _cfAiAvailable=null;
+
+  // Helper: Uint8Array → base64 (chunked to avoid call-stack overflow on large images)
+  function _uint8ToBase64(bytes){
+    let binary='';
+    const chunkSize=0x8000; // 32KB chunks
+    for(let i=0;i<bytes.length;i+=chunkSize){
+      const chunk=bytes.subarray(i,Math.min(i+chunkSize,bytes.length));
+      binary+=String.fromCharCode.apply(null,chunk);
+    }
+    return btoa(binary);
+  }
+
+  // getCfAI: returns a stub that proxies .run(model, params) to /api/ai/ocr.
+  // Returns null when CF AI is known to be unavailable (cached probe result).
+  // The browser can't reach the CF Workers AI binding directly — the worker
+  // endpoint /api/ai/ocr (POST {model, image, prompt}) does the proxy.
+  function getCfAI(){
+    if(_cfAiAvailable===false)return null;
+    return {
+      run: async (model, params) => {
+        if(_cfAiAvailable===false)throw new Error('CF AI unavailable (cached)');
+        const imageB64=_uint8ToBase64(params.image);
+        let r;
+        try{
+          r=await fetch('/api/ai/ocr',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({
+              model:model,
+              image:imageB64,
+              prompt:params.prompt
+            })
+          });
+        }catch(e){
+          _cfAiAvailable=false; // network error → don't retry per-page
+          throw e;
+        }
+        if(r.status===404){
+          _cfAiAvailable=false; // endpoint missing (older worker) → don't retry
+          throw new Error('CF AI OCR endpoint not available (404)');
+        }
+        if(!r.ok)throw new Error('CF AI OCR HTTP '+r.status);
+        _cfAiAvailable=true;
+        return await r.json();
+      }
+    };
+  }
+
+  // setAiOcrConfig: allows overriding visionModel/fallbackModel/prompt at runtime.
+  function setAiOcrConfig(opts){
+    if(!opts||typeof opts!=='object')return;
+    if(opts.visionModel)_aiOcrConfig.visionModel=String(opts.visionModel);
+    if(opts.fallbackModel)_aiOcrConfig.fallbackModel=String(opts.fallbackModel);
+    if(opts.prompt)_aiOcrConfig.prompt=String(opts.prompt);
+    // Re-probe CF AI on next call (config might be different)
+    _cfAiAvailable=null;
+  }
+
+  // ocrPageWithAI: tries CF Workers AI vision model on a rendered canvas.
+  // Returns extracted text on success, or null on failure (caller falls back
+  // to Tesseract). progressCb is the same shape used by ocrPdfPage:
+  //   progressCb(pageNum, pageTotal, progress0to1)
+  async function ocrPageWithAI(canvas, progressCb, pageNum, pageTotal){
+    try{
+      // HTMLCanvasElement uses toBlob (callback-based); wrap in Promise.
+      // (NOTE: the spec example used canvas.convertToBlob — that's OffscreenCanvas.
+      //  HTMLCanvasElement only has toBlob/toDataURL.)
+      const blob=await new Promise((resolve,reject)=>{
+        try{
+          canvas.toBlob(b=>b?resolve(b):reject(new Error('toBlob returned null')),'image/png');
+        }catch(e){reject(e);}
+      });
+      if(!blob)throw new Error('Failed to convert canvas to PNG blob');
+      const arrayBuffer=await blob.arrayBuffer();
+      const cfAI=getCfAI();
+      if(!cfAI)throw new Error('CF AI not available');
+      if(progressCb)progressCb(pageNum,pageTotal,0.5);
+      // Try primary vision model first, then fallback model.
+      const models=[_aiOcrConfig.visionModel,_aiOcrConfig.fallbackModel];
+      for(const model of models){
+        try{
+          const result=await cfAI.run(model,{
+            image:new Uint8Array(arrayBuffer),
+            prompt:_aiOcrConfig.prompt
+          });
+          const text=String((result&&(result.response||result.description||result.text||''))||'').trim();
+          if(text.length>5){
+            if(progressCb)progressCb(pageNum,pageTotal,1);
+            return text;
+          }
+          console.warn('[Meggy] AI OCR model',model,'returned empty text — trying next');
+        }catch(e){
+          // If CF AI is now known-unavailable, abort model loop (no point retrying).
+          if(_cfAiAvailable===false)throw e;
+          console.warn('[Meggy] AI OCR model',model,'failed:',e.message,'— trying next');
+        }
+      }
+      return null; // all models failed or returned empty
+    }catch(e){
+      console.warn('[Meggy] AI OCR falhou, caindo para Tesseract:',e.message);
+      return null;
+    }
   }
 
   // ── OCR de uma página: renderiza no canvas e roda Tesseract ──
@@ -88,7 +234,9 @@
   //   - scale 3x (melhor precisão que 2x, ainda razoável em memória)
   //   - PSM 3 (auto page segmentation — funciona para texto corrido e múltiplas colunas)
   //   - idiomas: português + inglês
-  async function ocrPdfPage(pdfjs,doc,pageNum,progressCb){
+  // ★ v91: opts.useAiOcr = true tenta CF Workers AI vision model ANTES do Tesseract.
+  //   Se a IA falhar (endpoint 404, rede, ou resposta vazia), cai para Tesseract.
+  async function ocrPdfPage(pdfjs,doc,pageNum,progressCb,opts){
     const page=await doc.getPage(pageNum);
     // escala 3x para melhorar precisão do OCR (testado: 2x = muita falha, 3x = bom)
     const viewport=page.getViewport({scale:3});
@@ -100,6 +248,17 @@
     ctx.fillStyle='#fff';
     ctx.fillRect(0,0,canvas.width,canvas.height);
     await page.render({canvasContext:ctx,viewport}).promise;
+
+    // ★ v91: AI OCR (CF Workers AI vision) — try first if enabled
+    const useAiOcr=!!(opts&&opts.useAiOcr);
+    if(useAiOcr){
+      const aiText=await ocrPageWithAI(canvas,progressCb,pageNum,doc.numPages);
+      if(aiText&&aiText.trim().length>5){
+        return aiText;
+      }
+      // else fall through to Tesseract
+    }
+
     const Tesseract=await ensureTesseract();
     // idioma: português + inglês (modelos baixados do CDN do Tesseract)
     // ★ parâmetros otimizados:
@@ -158,8 +317,12 @@
   //   - Suporta um callback de progresso (para mostrar "OCR: página 3/11…")
   //   - Limita a 8 páginas no OCR (tempo total ~2-4 min para PDF grande)
   //   - Idiomas: português + inglês
-  async function extractPdfText(url, progressCb){
+  // ★ v91: opts.useAiOcr = true (or window.__gdiMeggy.pdf.useAiOcr = true)
+  //   tenta CF Workers AI vision model ANTES do Tesseract no fallback de OCR.
+  async function extractPdfText(url, progressCb, opts){
     const pdfjs=await ensurePdfjs();
+    // Resolve AI OCR flag: explicit opt > namespace flag > false (default)
+    const useAiOcr=!!((opts&&opts.useAiOcr) || (window.__gdiMeggy.pdf && window.__gdiMeggy.pdf.useAiOcr));
 
     // ★ Tenta fetch com credenciais same-origin primeiro; se falhar,
     // tenta sem credenciais (alguns workers rejeitam cookies em fetch cross-origin)
@@ -262,16 +425,16 @@
       // resumo + questões + pílulas úteis.
       if(!txt.trim()||txt.trim().length<50){
         const ocrMaxPages=Math.min(doc.numPages,15);
-        if(progressCb)progressCb({phase:'ocr-init',page:0,total:ocrMaxPages});
+        if(progressCb)progressCb({phase:'ocr-init',page:0,total:ocrMaxPages,engine:useAiOcr?'ai-then-tesseract':'tesseract'});
         try{
           let ocrTxt='';
           for(let i=1;i<=ocrMaxPages;i++){
-            if(progressCb)progressCb({phase:'ocr-page',page:i,total:ocrMaxPages,progress:0});
+            if(progressCb)progressCb({phase:'ocr-page',page:i,total:ocrMaxPages,progress:0,engine:useAiOcr?'ai-then-tesseract':'tesseract'});
             let pageTxt='';
             try{
               pageTxt=await ocrPdfPage(pdfjs,doc,i,(pNum,pTotal,p)=>{
-                if(progressCb)progressCb({phase:'ocr-page',page:pNum,total:pTotal,progress:p});
-              });
+                if(progressCb)progressCb({phase:'ocr-page',page:pNum,total:pTotal,progress:p,engine:useAiOcr?'ai-then-tesseract':'tesseract'});
+              },{useAiOcr:useAiOcr});
             }catch(ocrErr){
               console.warn('[Meggy] OCR falhou na página',i,'(não crítico):',ocrErr.message);
               pageTxt='';
@@ -284,7 +447,7 @@
           if(ocrTxt.trim().length>50){
             // sucesso! OCR extraiu texto
             // (doc.destroy() agora tratado pelo finally — v80-FIX-MEGGY BUG 2)
-            if(progressCb)progressCb({phase:'ocr-done',chars:ocrTxt.length});
+            if(progressCb)progressCb({phase:'ocr-done',chars:ocrTxt.length,engine:useAiOcr?'ai-then-tesseract':'tesseract'});
             // ★ v87-FIX-MEGGY-MODULES BUG 5: OCR also keeps up to 200K chars
             return ocrTxt.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim().slice(0,200000);
           }
@@ -319,7 +482,17 @@
     ocrPdfPage,
     getFileType,
     extractTextFile,
-    extractPdfText
+    extractPdfText,
+    // ★ v91: AI OCR routing
+    ocrPageWithAI,
+    getCfAI,
+    setAiOcrConfig,
+    // Master toggle (set window.__gdiMeggy.pdf.useAiOcr = true to enable AI-first OCR).
+    // Can also be enabled per-call via extractPdfText(url, cb, {useAiOcr:true}).
+    useAiOcr: false,
+    // Expose config (read-only mirror; use setAiOcrConfig() to mutate).
+    // Returning a getter would freeze the shape — instead we expose the live object.
+    aiOcrConfig: _aiOcrConfig
   };
 
   // ── Aliases para compatibilidade ──
