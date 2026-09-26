@@ -32,18 +32,34 @@
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  // ★ v1.0.85: bump 89 → 90 (foto Meggy flood-fill — olhos/nariz preservados, centralizada, FAB sem texto overlay).
-  const CACHE_VERSION = '90';  // ★ v1.0.85: foto Meggy corrigida (flood-fill + centróide + CSS FAB)
+  // ★ v1.0.86: bump 90 → 91 (MODULARIZAÇÃO — gdi-study.js + gdi-meggy.js split em 15 módulos em study/ + meggy/).
+  const CACHE_VERSION = '91';  // ★ v1.0.86: modularização completa
   window.CACHE_VERSION = CACHE_VERSION;
 
   const MODULES = [
+    // 1. Core (mantém)
     'gdi-core.js',
     'gdi-worker-bridge.js',
     'storage.js',
     'gdi-pdf.js',
     'gdi-ui.js',
-    'gdi-meggy.js',
-    'gdi-study.js'
+    // 2. Meggy modularizado (7 módulos em modular/meggy/) — substitui gdi-meggy.js
+    'meggy/meggy-utils.js',          // 1o — helpers + CSS + constants
+    'meggy/meggy-pdf-engine.js',     // PDF.js + OCR
+    'meggy/meggy-cache.js',          // generateAll + _chainCache/_inflight
+    'meggy/meggy-questions.js',      // question bank + quiz
+    'meggy/meggy-flashcards.js',     // flashcards
+    'meggy/meggy-summaries.js',      // summary/mindmap + battalion + ASSEMBLA gdiIsaPdf
+    'meggy/meggy-widget.js',         // FAB + chat panel + __gdiMeggySuggest
+    // 3. Study modularizado (8 módulos em modular/study/) — substitui gdi-study.js
+    'study/study-theme.js',          // 1o — CSS BlackTie
+    'study/study-scanner.js',        // scanner incremental
+    'study/study-courses.js',        // courses + add modal
+    'study/study-questions.js',      // questões/simulado/cronograma
+    'study/study-advanced.js',       // provas/redação/radar
+    'study/study-tabs-legacy.js',    // stubs antigos
+    'study/study-player-guard.js',   // video stall watchdog
+    'study/study-panel.js'           // LAST — shell + home + drives + nav
   ];
 
   // Também carrega os 2 Web Workers que agora suportam a plataforma:
