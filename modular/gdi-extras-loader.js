@@ -191,18 +191,22 @@
       // Carrega o bridge logo após o core (antes dos demais) para que os
       // overrides de gdiListAllFiles / extractPdfText estejam em vigor
       // quando gdi-ui.js / gdi-meggy.js rodarem seus init().
-      // ★ FIX BUG 10 (v80): cada módulo ganha retry de 2× (loadWithRetry).
+      // ★ v1.0.86: CARGA SEQUENCIAL (não paralela) — garante ordem de dependências.
+      // Os módulos meggy/* e study/* usam `const U = window.__gdiMeggy.utils` em load-time,
+      // então meggy-utils.js DEVE carregar antes de meggy-questions.js etc.
+      // Cada módulo ganha retry de 2× (loadWithRetry).
       const others = MODULES.slice(1);
-      const results = await Promise.allSettled(
-        others.map(m => loadWithRetry(moduleUrl(m), true).catch(e => { throw e; }))
-      );
-
       let ok = 0, fail = 0;
-      results.forEach((r, i) => {
-        const name = others[i];
-        if(r.status === 'fulfilled'){ ok++; console.log('[GDI Loader] ✓', name); }
-        else{ fail++; console.warn('[GDI Loader] ✗', name, '—', r.reason.message); }
-      });
+      for (const m of others) {
+        try {
+          await loadWithRetry(moduleUrl(m), true);
+          ok++;
+          console.log('[GDI Loader] ✓', m);
+        } catch(e) {
+          fail++;
+          console.warn('[GDI Loader] ✗', m, '—', e.message);
+        }
+      }
 
       prefetchWorkers();
 
