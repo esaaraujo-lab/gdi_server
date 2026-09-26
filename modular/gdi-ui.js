@@ -280,11 +280,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     btn.innerHTML='<i class="bi bi-sun-fill"></i>';
     btn.style.color='#ffd43b';
     btn.title='Sair do modo descanso';
-    // v91: persist rest mode across video switches. localStorage is the
-    // single source of truth — on page:change/video:switched we re-enable
-    // the overlay if this flag is set. Only user input (mousemove/keydown/
-    // mousedown/touchstart) clears it (see exitSleep below).
-    try{localStorage.setItem('gdi-rest-mode','1');}catch(_){}
   }
   function exitSleep(){
     if(!sleeping)return;
@@ -295,13 +290,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     btn.innerHTML='<i class="bi bi-moon-stars-fill"></i>';
     btn.style.color='#74c0fc';
     btn.title='Modo descanso (apenas \u00e1udio) \u2014 clique para ligar';
-    // v91: clear the persistence flag — but ONLY when exitSleep is called
-    // from a user-input path (mousemove/keydown/click on overlay). When
-    // exitSleep is called from syncFs (no-video/fullscreen edge case) we
-    // also clear it, since the user navigated away from a media page.
-    // The previous "video ended → exitSleep" binding was REMOVED (see
-    // bindOnce below) precisely so auto-advance doesn't clear the flag.
-    try{localStorage.removeItem('gdi-rest-mode');}catch(_){}
   }
   function syncFs(){
     ensureEls();
@@ -334,49 +322,12 @@ body.gdi-fv .gdi-player-wrap iframe{
     Bus.onGlobal('media:ready',({type,el})=>{
       if(type==='video'&&el&&!el.__gdiSleepEnd){
         el.__gdiSleepEnd=true;
-        // v91: REMOVED the `el.addEventListener('ended', () => exitSleep())`
-        // binding. The 'ended' event fires whenever a video finishes —
-        // including the natural end that triggers auto-advance to the next
-        // video in the playlist. Calling exitSleep() here was causing rest
-        // mode to turn OFF the moment a video ended, so the next video
-        // would start with a bright screen. Rest mode now persists across
-        // video switches (see the page:change/video:switched listeners
-        // below) and is only dismissed by explicit user input.
+        try{el.addEventListener('ended',()=>exitSleep());}catch(_){}
       }
     });
-    // v91: persist rest mode across video switches. If localStorage says
-    // the user had rest mode on, re-enable it shortly after the new video
-    // loads. This covers both in-playlist switches (video:switched) and
-    // full page navigations between video files (page:change).
-    const _maybeRestoreSleep=()=>{
-      try{
-        if(localStorage.getItem('gdi-rest-mode')==='1'){
-          // Re-enter sleep only if not already sleeping (avoid resetting
-          // wakeGuard on an already-on overlay). The small timeout lets
-          // the new <video> element mount and the playlist UI settle.
-          setTimeout(()=>{
-            try{
-              if(localStorage.getItem('gdi-rest-mode')==='1'&&!sleeping){
-                ensureEls();enterSleep();
-              }
-            }catch(_){}
-          },500);
-        }
-      }catch(_){}
-    };
-    Bus.onGlobal('video:switched',_maybeRestoreSleep);
-    Bus.onGlobal('page:change',_maybeRestoreSleep);
-    // Expose for the init function below (so it can also restore on boot).
-    window.__gdiSleepMaybeRestore=_maybeRestoreSleep;
   }
   window.GDI_MODULES.push({name:'sleep-mode',init:function(){
     ensureEls();bindOnce();syncFs();
-    // v91: on init (after every page:change re-triggers the module loader),
-    // also try to restore rest mode if localStorage says it was on. This
-    // catches the case where the page:change event fired BEFORE bindOnce
-    // registered its listener (race between render() emitting page:change
-    // and the module loader calling init()).
-    try{if(window.__gdiSleepMaybeRestore)window.__gdiSleepMaybeRestore();}catch(_){}
   }});
   console.log('[GDI M11] v3.2 descanso registrado');
 })();
