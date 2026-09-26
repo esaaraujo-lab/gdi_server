@@ -241,6 +241,15 @@
           `).join('')}
         </div>
       `).join('')}
+      <div class="gdi-pomodoro-sidebar" style="padding:12px;border-top:1px solid var(--ferreto-border,#30363d);margin-top:auto;">
+        <div style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">🍅 Pomodoro</div>
+        <div id="gdi-pomo-time" style="font-size:24px;font-weight:700;color:var(--ferreto-text,#e6edf3);text-align:center;margin-bottom:8px;">25:00</div>
+        <div style="display:flex;gap:4px;justify-content:center;">
+          <button id="gdi-pomo-start" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);border:0;border-radius:6px;padding:4px 12px;color:#fff;font-size:11px;cursor:pointer;">▶</button>
+          <button id="gdi-pomo-reset" style="background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);border-radius:6px;padding:4px 8px;color:var(--ferreto-text,#e6edf3);font-size:11px;cursor:pointer;">↺</button>
+        </div>
+        <div id="gdi-pomo-phase" style="font-size:10px;color:var(--ferreto-text-muted,#8b949e);text-align:center;margin-top:4px;">Foco</div>
+      </div>
     </aside>`;
   }
 
@@ -387,8 +396,12 @@
         S.panel.querySelectorAll('.gdi-central-tab').forEach(x=>x.classList.remove('active'));
         this.classList.add('active');
         S.tab=this.dataset.t;S.FC.active=false;
+        // ★ v91: sai do modo media (video/PDF split) ao trocar de aba
+        if(S.panel.classList.contains('collapsed')) S.panel.classList.remove('collapsed');
         renderBody(S.tab);
       });
+      // ★ v91: Pomodoro sidebar widget init
+      try{ initPomodoro(); }catch(_){}
     }else{
       // atualiza stats inline (não rebuilda)
       updateHeaderStats();
@@ -488,9 +501,17 @@
           const isPdf = (f.fileExtension||'').toLowerCase() === 'pdf' || (f.mimeType||'').includes('pdf');
           const icon = isVideo ? 'bi-camera-video' : (isPdf ? 'bi-file-earmark-pdf' : 'bi-file-earmark');
           const iconColor = isVideo ? 'var(--ferreto-secondary,#5ddeda)' : (isPdf ? '#ff6b6b' : 'var(--ferreto-text-muted,#8b949e)');
-          content += '<a href="' + escHtml(fp) + '?a=view" style="text-decoration:none;padding:8px 10px;border-radius:6px;background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#30363d);display:flex;align-items:center;gap:6px;transition:all .15s;">'
-            + '<i class="bi ' + icon + '" style="color:' + iconColor + ';font-size:14px;flex:none;"></i>'
-            + '<span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(fn) + '</span></a>';
+          // ★ v91: video/PDF abrem DENTRO do painel (sidebar colapsa). Outros arquivos continuam como <a href>.
+          if(isVideo || isPdf){
+            const tag = isVideo ? 'video' : 'pdf';
+            content += '<div class="gdi-drive-file-inline" data-gdi-media="' + tag + '" data-url="' + escHtml(fp) + '" data-name="' + escHtml(fn) + '" style="padding:8px 10px;border-radius:6px;background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#30363d);display:flex;align-items:center;gap:6px;transition:all .15s;cursor:pointer;">'
+              + '<i class="bi ' + icon + '" style="color:' + iconColor + ';font-size:14px;flex:none;"></i>'
+              + '<span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(fn) + '</span></div>';
+          } else {
+            content += '<a href="' + escHtml(fp) + '?a=view" style="text-decoration:none;padding:8px 10px;border-radius:6px;background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#30363d);display:flex;align-items:center;gap:6px;transition:all .15s;">'
+              + '<i class="bi ' + icon + '" style="color:' + iconColor + ';font-size:14px;flex:none;"></i>'
+              + '<span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(fn) + '</span></a>';
+          }
         });
         content += '</div>';
       }
@@ -500,6 +521,18 @@
         el.onmouseenter = () => { el.style.background = 'var(--ferreto-surface-3,rgba(255,255,255,.08))'; el.style.borderColor = 'var(--ferreto-secondary,#5ddeda)'; };
         el.onmouseleave = () => { el.style.background = 'var(--ferreto-surface-2,rgba(255,255,255,.04))'; el.style.borderColor = 'var(--ferreto-border,#30363d)'; };
         el.onclick = () => browseDriveInPanel(box, el.dataset.path, el.dataset.name);
+      });
+      // ★ v91: bind video/PDF inline cards — abrem DENTRO do painel (sidebar colapsa)
+      browser.querySelectorAll('[data-gdi-media]').forEach(el => {
+        el.onmouseenter = () => { el.style.background = 'var(--ferreto-surface-3,rgba(255,255,255,.08))'; el.style.borderColor = 'var(--ferreto-secondary,#5ddeda)'; };
+        el.onmouseleave = () => { el.style.background = 'var(--ferreto-surface-2,rgba(255,255,255,.04))'; el.style.borderColor = 'var(--ferreto-border,#30363d)'; };
+        el.onclick = () => {
+          const url = el.dataset.url;
+          const name = el.dataset.name;
+          const type = el.dataset.gdiMedia;
+          if(type === 'video') openVideoInPanel(url, name);
+          else if(type === 'pdf') openPdfSplitInPanel(url, name);
+        };
       });
       browser.querySelectorAll('.gdi-drive-bc-btn').forEach(el => {
         el.onclick = () => browseDriveInPanel(box, el.dataset.path, '');
@@ -985,7 +1018,300 @@
   /* botão "Escanear agora" manual + botão scanning — reduz padding/font em mobile */
   .gdi-btn-scan-now{font-size:10px!important;padding:5px 8px!important;}
 }
+/* ★ v91: Pomodoro sidebar widget */
+.gdi-pomodoro-sidebar{flex-shrink:0;}
+.gdi-pomodoro-sidebar button{transition:all .15s;}
+.gdi-pomodoro-sidebar button:hover{filter:brightness(1.1);}
+/* ★ v91: collapsed sidebar (video/PDF split mode — sidebar vira só ícones) */
+#gdi-central.collapsed .gdi-central-sidebar{width:60px;padding:10px 6px;}
+#gdi-central.collapsed .gdi-central-sidebar-group{padding:0 4px;}
+#gdi-central.collapsed .gdi-central-sidebar-label{display:none;}
+#gdi-central.collapsed .gdi-central-tab{padding:9px 8px;justify-content:center;}
+#gdi-central.collapsed .gdi-central-tab span,
+#gdi-central.collapsed .gdi-central-tab .gdi-tab-badge{display:none;}
+/* When video/PDF split is active, body becomes a fixed-height flex container (no scroll) */
+#gdi-central.collapsed .gdi-central-body{overflow:hidden;padding:12px;}
+#gdi-central.collapsed .gdi-pomodoro-sidebar{padding:6px 2px;border-top:1px solid var(--ferreto-border,#30363d);}
+#gdi-central.collapsed .gdi-pomodoro-sidebar > div:first-child{font-size:14px;margin-bottom:2px;text-align:center;letter-spacing:0;}
+#gdi-central.collapsed .gdi-pomodoro-sidebar > div[style*="display:flex"]{display:none!important;}
+#gdi-central.collapsed .gdi-pomodoro-sidebar > #gdi-pomo-time{font-size:13px;margin:2px 0;}
+#gdi-central.collapsed .gdi-pomodoro-sidebar > #gdi-pomo-phase{font-size:9px;}
+.gdi-central-video-container{flex:1;display:flex;align-items:center;justify-content:center;background:#000;}
+.gdi-mode-btn{background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);color:var(--ferreto-text,#e6edf3);border-radius:6px;cursor:pointer;font-family:inherit;}
+.gdi-mode-btn:hover{background:var(--ferreto-surface-3,rgba(255,255,255,.08));}
 `;document.head.appendChild(s);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // v91: Pomodoro timer (sidebar widget) + Video/PDF in-panel viewer
+  // ═══════════════════════════════════════════════════════════════
+
+  // ── Pomodoro state ──
+  const POMO_DURATIONS = { focus: 25*60, short: 5*60, long: 15*60 };
+  const POMO_PHASE_LABEL = { focus: 'Foco', short: 'Pausa curta', long: 'Pausa longa' };
+  const POMO_LS = 'gdi-pomodoro-state';
+  let _pomoTimer = null;
+  let _pomoState = null;
+  let _pomoLastSave = 0;
+
+  function pomoLoad(){
+    try{
+      const s = JSON.parse(localStorage.getItem(POMO_LS) || 'null');
+      if(s && typeof s === 'object' && s.phase && POMO_DURATIONS[s.phase]){
+        _pomoState = {
+          phase: s.phase,
+          cycle: Math.max(0, Math.min(3, parseInt(s.cycle,10) || 0)),
+          remaining: Math.max(0, parseInt(s.remaining,10) || POMO_DURATIONS[s.phase]),
+          running: !!s.running,
+          endsAt: parseInt(s.endsAt,10) || 0
+        };
+        // If running but endsAt passed, finalize current phase on next tick
+        return;
+      }
+    }catch(_){}
+    _pomoState = { phase:'focus', cycle:0, remaining:POMO_DURATIONS.focus, running:false, endsAt:0 };
+  }
+  function pomoSave(){
+    try{ localStorage.setItem(POMO_LS, JSON.stringify(_pomoState)); }catch(_){}
+  }
+  function pomoPhaseDuration(phase){ return POMO_DURATIONS[phase] || POMO_DURATIONS.focus; }
+  function pomoFormatTime(sec){
+    sec = Math.max(0, Math.floor(sec));
+    const m = Math.floor(sec/60);
+    const s = sec % 60;
+    return String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+  }
+  function pomoUpdateDOM(){
+    if(!S.panel || !_pomoState) return;
+    const timeEl = S.panel.querySelector('#gdi-pomo-time');
+    const phaseEl = S.panel.querySelector('#gdi-pomo-phase');
+    const startBtn = S.panel.querySelector('#gdi-pomo-start');
+    if(timeEl) timeEl.textContent = pomoFormatTime(_pomoState.remaining);
+    if(phaseEl) phaseEl.textContent = POMO_PHASE_LABEL[_pomoState.phase] || 'Foco';
+    if(startBtn) startBtn.textContent = _pomoState.running ? '⏸' : '▶';
+  }
+  function pomoAdvancePhase(){
+    // Transition: focus → short break (or long after 4 cycles); breaks → focus
+    if(_pomoState.phase === 'focus'){
+      _pomoState.cycle += 1;
+      if(_pomoState.cycle >= 4){
+        _pomoState.phase = 'long';
+        _pomoState.cycle = 0;  // reset cycle counter after long break
+      } else {
+        _pomoState.phase = 'short';
+      }
+    } else {
+      _pomoState.phase = 'focus';
+    }
+    _pomoState.remaining = pomoPhaseDuration(_pomoState.phase);
+    _pomoState.endsAt = _pomoState.running ? Date.now() + _pomoState.remaining*1000 : 0;
+  }
+  function pomoTick(){
+    if(!_pomoState || !_pomoState.running) return;
+    const now = Date.now();
+    const remaining = Math.max(0, Math.round((_pomoState.endsAt - now)/1000));
+    if(remaining <= 0){
+      // Phase complete — advance and PAUSE (user can re-start the next phase)
+      pomoAdvancePhase();
+      _pomoState.running = false;
+      _pomoState.endsAt = 0;
+      pomoSave();
+      pomoUpdateDOM();
+      try{ showToast('🍅 Pomodoro: ' + (POMO_PHASE_LABEL[_pomoState.phase] || 'Foco') + ' — toque para iniciar', 'info'); }catch(_){}
+      // beep via WebAudio (no asset needed)
+      try{
+        const ac = new (window.AudioContext || window.webkitAudioContext)();
+        const o = ac.createOscillator(); const g = ac.createGain();
+        o.connect(g); g.connect(ac.destination);
+        o.frequency.value = 880; o.type = 'sine';
+        g.gain.setValueAtTime(0.15, ac.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.5);
+        o.start(); o.stop(ac.currentTime + 0.5);
+      }catch(_){}
+      return;
+    }
+    _pomoState.remaining = remaining;
+    pomoUpdateDOM();
+    // Save at most every ~5s to avoid localStorage thrash
+    if(now - _pomoLastSave > 5000){ pomoSave(); _pomoLastSave = now; }
+  }
+  function pomoStartToggle(){
+    if(!_pomoState) pomoLoad();
+    if(_pomoState.running){
+      _pomoState.running = false;
+      _pomoState.endsAt = 0;
+    } else {
+      _pomoState.running = true;
+      _pomoState.endsAt = Date.now() + _pomoState.remaining*1000;
+    }
+    pomoSave(); _pomoLastSave = Date.now();
+    pomoUpdateDOM();
+  }
+  function pomoReset(){
+    if(!_pomoState) pomoLoad();
+    _pomoState.running = false;
+    _pomoState.endsAt = 0;
+    _pomoState.remaining = pomoPhaseDuration(_pomoState.phase);
+    pomoSave(); _pomoLastSave = Date.now();
+    pomoUpdateDOM();
+  }
+  function initPomodoro(){
+    if(!S.panel) return;
+    if(!_pomoState) pomoLoad();
+    // Re-bind handlers (sidebar may have been re-rendered). Idempotent.
+    const startBtn = S.panel.querySelector('#gdi-pomo-start');
+    const resetBtn = S.panel.querySelector('#gdi-pomo-reset');
+    if(startBtn) startBtn.onclick = pomoStartToggle;
+    if(resetBtn) resetBtn.onclick = pomoReset;
+    pomoUpdateDOM();
+    // Start interval once globally (not per render)
+    if(!_pomoTimer){
+      _pomoTimer = setInterval(pomoTick, 1000);
+    }
+  }
+
+  // ── Video / PDF in-panel viewer (sidebar collapses) ──
+  function restoreSidebarFromMediaView(){
+    if(!S.panel) return;
+    S.panel.classList.remove('collapsed');
+    // Re-render the current tab body
+    try{ renderBody(S.tab); }catch(_){}
+  }
+  function openVideoInPanel(url, name){
+    if(!S.panel) return;
+    const body = S.panel.querySelector('#gdi-central-body');
+    if(!body) return;
+    S.panel.classList.add('collapsed');
+    // Build a view URL — the existing app router uses ?a=view
+    const viewUrl = url + (url.includes('?') ? '&' : '?') + 'a=view';
+    body.innerHTML = `
+      <div style="display:flex;flex-direction:column;height:100%;gap:8px;min-height:0;">
+        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
+          <button id="gdi-media-back" class="gdi-mode-btn" style="font-size:12px;padding:6px 10px;"><i class="bi bi-arrow-left"></i> Voltar</button>
+          <b style="color:var(--ferreto-text,#f0f6fc);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">🎬 ${escHtml(name)}</b>
+        </div>
+        <div class="gdi-central-video-container" style="flex:1;display:flex;align-items:center;justify-content:center;background:#000;border-radius:12px;overflow:hidden;min-height:0;">
+          <video src="${escHtml(viewUrl)}" controls autoplay playsinline style="max-width:100%;max-height:100%;"></video>
+        </div>
+      </div>`;
+    const backBtn = body.querySelector('#gdi-media-back');
+    if(backBtn) backBtn.onclick = restoreSidebarFromMediaView;
+  }
+  function openPdfSplitInPanel(url, name){
+    if(!S.panel) return;
+    const body = S.panel.querySelector('#gdi-central-body');
+    if(!body) return;
+    S.panel.classList.add('collapsed');
+    const viewUrl = url + (url.includes('?') ? '&' : '?') + 'a=view';
+    const notesKey = 'gdi-pdf-notes-' + url;
+    let savedNotes = '';
+    try{ savedNotes = localStorage.getItem(notesKey) || ''; }catch(_){}
+    body.innerHTML = `
+      <div style="display:flex;flex-direction:column;height:100%;gap:8px;min-height:0;">
+        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
+          <button id="gdi-media-back" class="gdi-mode-btn" style="font-size:12px;padding:6px 10px;"><i class="bi bi-arrow-left"></i> Voltar</button>
+          <b style="color:var(--ferreto-text,#f0f6fc);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">📄 ${escHtml(name)}</b>
+        </div>
+        <div style="flex:1;display:flex;gap:10px;min-height:0;">
+          <div style="flex:1;background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#30363d);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;min-width:0;">
+            <div style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--ferreto-border,#30363d);font-size:11px;color:var(--ferreto-text-muted,#8b949e);flex-shrink:0;">
+              <button id="gdi-pdf-split-prev" class="gdi-mode-btn" style="font-size:11px;padding:3px 8px;"><i class="bi bi-chevron-left"></i></button>
+              <span>Pág <span id="gdi-pdf-split-num">1</span> / <span id="gdi-pdf-split-count">?</span></span>
+              <button id="gdi-pdf-split-next" class="gdi-mode-btn" style="font-size:11px;padding:3px 8px;"><i class="bi bi-chevron-right"></i></button>
+              <span style="flex:1;"></span>
+              <a href="${escHtml(viewUrl)}" target="_blank" rel="noopener" style="color:var(--ferreto-secondary,#5ddeda);text-decoration:none;font-size:11px;">Abrir original ↗</a>
+            </div>
+            <div style="flex:1;overflow:auto;padding:10px;background:#525659;min-height:0;">
+              <div id="gdi-pdf-split-spinner" style="color:#fff;text-align:center;padding:20px;">Carregando PDF…</div>
+              <canvas id="gdi-pdf-split-canvas" style="max-width:100%;display:none;margin:0 auto;background:#fff;border-radius:4px;"></canvas>
+            </div>
+          </div>
+          <div style="width:320px;flex-shrink:0;background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#30363d);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;min-height:0;">
+            <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ferreto-text,#e6edf3);flex-shrink:0;">
+              <span style="font-size:18px;">🐩</span> <b>Notas & Meggy</b>
+            </div>
+            <textarea id="gdi-pdf-split-notes" placeholder="Anotações deste PDF (salvas automaticamente)…" style="flex:1;min-height:200px;background:var(--ferreto-surface-3,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);font-size:12px;font-family:inherit;padding:8px;resize:none;">${escHtml(savedNotes)}</textarea>
+            <button id="gdi-pdf-split-meggy" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);border:0;border-radius:8px;padding:8px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;flex-shrink:0;">🐩 Pedir resumo à Meggy</button>
+            <small style="color:var(--ferreto-text-muted,#8b949e);font-size:10px;text-align:center;flex-shrink:0;">Notas salvas localmente</small>
+          </div>
+        </div>
+      </div>`;
+    const backBtn = body.querySelector('#gdi-media-back');
+    if(backBtn) backBtn.onclick = restoreSidebarFromMediaView;
+    // Notes auto-save
+    const notesEl = body.querySelector('#gdi-pdf-split-notes');
+    if(notesEl){
+      notesEl.addEventListener('input', function(){
+        try{ localStorage.setItem(notesKey, this.value); }catch(_){}
+      });
+    }
+    // Meggy button — open Meggy FAB if available
+    const meggyBtn = body.querySelector('#gdi-pdf-split-meggy');
+    if(meggyBtn){
+      meggyBtn.onclick = function(){
+        const fab = document.querySelector('#gdi-ai-fab');
+        if(fab && fab.style.display !== 'none'){
+          fab.click();
+        } else {
+          try{ showToast('Meggy indisponível neste momento', 'info'); }catch(_){}
+        }
+      };
+    }
+    // Render PDF using pdfjsLib (lazy-load from CDN if needed)
+    renderPdfInSplit(viewUrl);
+  }
+  function renderPdfInSplit(url){
+    const canvas = document.getElementById('gdi-pdf-split-canvas');
+    const spinner = document.getElementById('gdi-pdf-split-spinner');
+    const numEl = document.getElementById('gdi-pdf-split-num');
+    const countEl = document.getElementById('gdi-pdf-split-count');
+    const prevBtn = document.getElementById('gdi-pdf-split-prev');
+    const nextBtn = document.getElementById('gdi-pdf-split-next');
+    if(!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let pdfDoc = null;
+    let pageNum = 1;
+    const scale = 1.0;
+    function renderPage(){
+      if(!pdfDoc) return;
+      pdfDoc.getPage(pageNum).then(function(page){
+        const vp = page.getViewport({scale: scale});
+        canvas.width = vp.width;
+        canvas.height = vp.height;
+        canvas.style.display = 'block';
+        if(spinner) spinner.style.display = 'none';
+        page.render({canvasContext: ctx, viewport: vp}).promise.catch(function(){});
+        if(numEl) numEl.textContent = pageNum;
+      }).catch(function(){});
+    }
+    function loadLib(){
+      if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+      return new Promise(function(resolve, reject){
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+        s.onload = function(){ resolve(window.pdfjsLib); };
+        s.onerror = function(){ reject(new Error('pdf.js failed to load')); };
+        document.head.appendChild(s);
+      });
+    }
+    loadLib().then(function(lib){
+      if(!lib.GlobalWorkerOptions.workerSrc){
+        lib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+      }
+      return lib.getDocument(url).promise;
+    }).then(function(doc){
+      pdfDoc = doc;
+      if(countEl) countEl.textContent = doc.numPages;
+      renderPage();
+    }).catch(function(err){
+      if(spinner) spinner.innerHTML = '<div style="color:#ff8b8b;">Erro: ' + escHtml(err.message || '') + '</div><br><a href="' + escHtml(url) + '" target="_blank" rel="noopener" style="color:#5ddeda;">Abrir PDF ↗</a>';
+    });
+    if(prevBtn) prevBtn.onclick = function(){
+      if(pdfDoc && pageNum > 1){ pageNum--; renderPage(); }
+    };
+    if(nextBtn) nextBtn.onclick = function(){
+      if(pdfDoc && pageNum < pdfDoc.numPages){ pageNum++; renderPage(); }
+    };
   }
 
   // ═══ Área do Aluno agora é uma ABA na navbar (não mais flutuante).
