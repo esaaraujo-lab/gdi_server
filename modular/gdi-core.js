@@ -960,6 +960,20 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         return{name:x.name,label:cls.l,icon:cls.i,ord:cls.ord,match,url};
       });
       items.sort((x,y)=>x.match-y.match||x.ord-y.ord||x.name.localeCompare(y.name,undefined,{numeric:true}));
+      // ★ v87-FIX-MEGGY-MODULES BUG 6: when multiple PDFs are present, keep
+      //    ONLY the ones whose filename matches the current lesson name
+      //    (courseBase). Before, the panel SORTED matching PDFs first but
+      //    still passed ALL of them to generateAll → Meggy mixed content
+      //    from 5 different lessons. Now: if any PDF matches, filter to just
+      //    those; otherwise fall back to the full list (legacy behavior).
+      if(base && items.length>1){
+        const _matches=items.filter(x=>x.name.toLowerCase().includes(base));
+        if(_matches.length>0){
+          // mutate `items` in place (preserve reference — `const items`).
+          items.length=0;
+          for(let i=0;i<_matches.length;i++)items.push(_matches[i]);
+        }
+      }
       // ★ salva items para o botão "Regerar" encontrar
       tabsEl.__items=items;
       const used={};
