@@ -1179,45 +1179,46 @@
   }
   function openVideoInPanel(url, name){
     if(!S.panel) return;
-    const body = S.panel.querySelector('#gdi-central-body');
-    if(!body) return;
+    // ★ v1.0.92: Navega a página principal para o vídeo (render(url)) — o painel da Área do Aluno
+    // fica como overlay por cima (position:fixed). O sidebar recolhe para dar espaço.
+    // Isto carrega a PÁGINA COMPLETA do index (player + playlist + notas + materiais + download + modos).
+    // iframe não funciona porque a sessão não é compartilhada corretamente.
     S.panel.classList.add('collapsed');
-    // ★ v1.0.92: Usa IFRAME que carrega a PÁGINA COMPLETA do index (player + playlist + notas + materiais + download + modos)
-    // Antes: <video src> simples (só player, sem playlist/notas/materiais)
-    // Agora: iframe carrega a URL do vídeo → GDI index renderiza TUDO (file_video + M9 + M5 + M6 etc.)
-    body.innerHTML = `
-      <div style="display:flex;flex-direction:column;height:100%;gap:0;min-height:0;">
-        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;padding:6px 10px;background:var(--ferreto-surface,rgba(22,27,38,.92));border-bottom:1px solid var(--ferreto-border,#30363d);">
-          <button id="gdi-media-back" class="gdi-mode-btn" style="font-size:12px;padding:6px 10px;flex-shrink:0;"><i class="bi bi-arrow-left"></i> Voltar</button>
-          <b style="color:var(--ferreto-text,#f0f6fc);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">🎬 ${escHtml(name)}</b>
-          <button id="gdi-media-open" class="gdi-mode-btn" style="font-size:12px;padding:6px 10px;flex-shrink:0;" title="Abrir em tela cheia"><i class="bi bi-box-arrow-up-right"></i></button>
-        </div>
-        <iframe src="${escHtml(url)}" style="flex:1;width:100%;border:0;min-height:0;background:#0d1117;" allow="autoplay;fullscreen;encrypted-media" allowfullscreen id="gdi-media-iframe"></iframe>
-      </div>`;
-    const backBtn = body.querySelector('#gdi-media-back');
-    if(backBtn) backBtn.onclick = restoreSidebarFromMediaView;
-    const openBtn = body.querySelector('#gdi-media-open');
-    if(openBtn) openBtn.onclick = function(){ try{ window.open(url, '_blank'); }catch(_){} };
+    // Mostra um indicador "Abrindo vídeo…" no body do painel
+    const body = S.panel.querySelector('#gdi-central-body');
+    if(body){
+      body.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;padding:20px;"><div style="font-size:48px;">🎬</div><div style="color:var(--ferreto-text,#f0f6fc);font-size:14px;text-align:center;">Abrindo:<br><b>'+escHtml(name)+'</b></div><div style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">Carregando player completo…</div><button id="gdi-media-back" class="gdi-mode-btn" style="font-size:12px;padding:6px 12px;margin-top:8px;"><i class="bi bi-arrow-left"></i> Voltar</button></div>';
+      const backBtn = body.querySelector('#gdi-media-back');
+      if(backBtn) backBtn.onclick = restoreSidebarFromMediaView;
+    }
+    // Navega a página principal para o vídeo (usando o router do GDI index)
+    try{
+      if(typeof window.render === 'function'){
+        window.render(url);
+      } else if(typeof window.history !== 'undefined'){
+        window.history.pushState({}, '', url);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      } else {
+        window.location.href = url;
+      }
+    }catch(_){
+      try{ window.location.href = url; }catch(__){}
+    }
   }
   function openPdfSplitInPanel(url, name){
     if(!S.panel) return;
-    const body = S.panel.querySelector('#gdi-central-body');
-    if(!body) return;
+    // ★ v1.0.92: PDF também navega a página principal (render(url)) — painel fica como overlay
     S.panel.classList.add('collapsed');
-    // ★ v1.0.92: PDF também usa iframe — carrega a página completa do visualizador GDI
-    body.innerHTML = `
-      <div style="display:flex;flex-direction:column;height:100%;gap:0;min-height:0;">
-        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;padding:6px 10px;background:var(--ferreto-surface,rgba(22,27,38,.92));border-bottom:1px solid var(--ferreto-border,#30363d);">
-          <button id="gdi-media-back" class="gdi-mode-btn" style="font-size:12px;padding:6px 10px;flex-shrink:0;"><i class="bi bi-arrow-left"></i> Voltar</button>
-          <b style="color:var(--ferreto-text,#f0f6fc);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">📄 ${escHtml(name)}</b>
-          <button id="gdi-media-open" class="gdi-mode-btn" style="font-size:12px;padding:6px 10px;flex-shrink:0;" title="Abrir em tela cheia"><i class="bi bi-box-arrow-up-right"></i></button>
-        </div>
-        <iframe src="${escHtml(url)}" style="flex:1;width:100%;border:0;min-height:0;background:#0d1117;" allow="fullscreen" allowfullscreen id="gdi-media-iframe"></iframe>
-      </div>`;
-    const backBtn = body.querySelector('#gdi-media-back');
-    if(backBtn) backBtn.onclick = restoreSidebarFromMediaView;
-    const openBtn = body.querySelector('#gdi-media-open');
-    if(openBtn) openBtn.onclick = function(){ try{ window.open(url, '_blank'); }catch(_){} };
+    const body = S.panel.querySelector('#gdi-central-body');
+    if(body){
+      body.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;padding:20px;"><div style="font-size:48px;">📄</div><div style="color:var(--ferreto-text,#f0f6fc);font-size:14px;text-align:center;">Abrindo:<br><b>'+escHtml(name)+'</b></div><div style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">Carregando visualizador…</div><button id="gdi-media-back" class="gdi-mode-btn" style="font-size:12px;padding:6px 12px;margin-top:8px;"><i class="bi bi-arrow-left"></i> Voltar</button></div>';
+      const backBtn = body.querySelector('#gdi-media-back');
+      if(backBtn) backBtn.onclick = restoreSidebarFromMediaView;
+    }
+    try{
+      if(typeof window.render === 'function'){ window.render(url); }
+      else { window.location.href = url; }
+    }catch(_){ try{ window.location.href = url; }catch(__){} }
   }
   function renderPdfInSplit(url){
     const canvas = document.getElementById('gdi-pdf-split-canvas');
