@@ -476,7 +476,9 @@
         const hasPdfjs=pdfErrors.some(e=>/pdf\.js/.test(e.error));
         detail+='\nSugestões:\n';
         if(hasHttp)detail+='• Verifique se o PDF está acessível (sem proteção de link) e se você está logado.\n';
-        if(hasScanned)detail+='• Alguns PDFs são escaneados (só imagens) — a Meggy não faz OCR ainda.\n';
+        // ★ v91 FIX: mensagem stale — a Meggy FAZ OCR (Tesseract + opcionalmente CF Workers AI vision).
+        //    Quando o erro chega aqui, o OCR já foi tentado e falhou (ou o PDF é 100% imagem sem texto).
+        if(hasScanned)detail+='• Alguns PDFs são escaneados (só imagens) — a Meggy tentou OCR (Tesseract + IA) mas não conseguiu extrair texto útil. Tente um PDF com texto selecionável.\n';
         if(hasPdfjs)detail+='• O PDF pode estar corrompido ou criptografado.\n';
         if(!hasHttp&&!hasScanned&&!hasPdfjs)detail+='• Tente abrir o PDF no navegador para confirmar que carrega normalmente.\n';
       }
