@@ -1182,83 +1182,42 @@
     const body = S.panel.querySelector('#gdi-central-body');
     if(!body) return;
     S.panel.classList.add('collapsed');
-    // Build a view URL — the existing app router uses ?a=view
-    const viewUrl = url + (url.includes('?') ? '&' : '?') + 'a=view';
+    // ★ v1.0.92: Usa IFRAME que carrega a PÁGINA COMPLETA do index (player + playlist + notas + materiais + download + modos)
+    // Antes: <video src> simples (só player, sem playlist/notas/materiais)
+    // Agora: iframe carrega a URL do vídeo → GDI index renderiza TUDO (file_video + M9 + M5 + M6 etc.)
     body.innerHTML = `
-      <div style="display:flex;flex-direction:column;height:100%;gap:8px;min-height:0;">
-        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
-          <button id="gdi-media-back" class="gdi-mode-btn" style="font-size:12px;padding:6px 10px;"><i class="bi bi-arrow-left"></i> Voltar</button>
-          <b style="color:var(--ferreto-text,#f0f6fc);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">🎬 ${escHtml(name)}</b>
+      <div style="display:flex;flex-direction:column;height:100%;gap:0;min-height:0;">
+        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;padding:6px 10px;background:var(--ferreto-surface,rgba(22,27,38,.92));border-bottom:1px solid var(--ferreto-border,#30363d);">
+          <button id="gdi-media-back" class="gdi-mode-btn" style="font-size:12px;padding:6px 10px;flex-shrink:0;"><i class="bi bi-arrow-left"></i> Voltar</button>
+          <b style="color:var(--ferreto-text,#f0f6fc);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">🎬 ${escHtml(name)}</b>
+          <button id="gdi-media-open" class="gdi-mode-btn" style="font-size:12px;padding:6px 10px;flex-shrink:0;" title="Abrir em tela cheia"><i class="bi bi-box-arrow-up-right"></i></button>
         </div>
-        <div class="gdi-central-video-container" style="flex:1;display:flex;align-items:center;justify-content:center;background:#000;border-radius:12px;overflow:hidden;min-height:0;">
-          <video src="${escHtml(viewUrl)}" controls autoplay playsinline style="max-width:100%;max-height:100%;"></video>
-        </div>
+        <iframe src="${escHtml(url)}" style="flex:1;width:100%;border:0;min-height:0;background:#0d1117;" allow="autoplay;fullscreen;encrypted-media" allowfullscreen id="gdi-media-iframe"></iframe>
       </div>`;
     const backBtn = body.querySelector('#gdi-media-back');
     if(backBtn) backBtn.onclick = restoreSidebarFromMediaView;
+    const openBtn = body.querySelector('#gdi-media-open');
+    if(openBtn) openBtn.onclick = function(){ try{ window.open(url, '_blank'); }catch(_){} };
   }
   function openPdfSplitInPanel(url, name){
     if(!S.panel) return;
     const body = S.panel.querySelector('#gdi-central-body');
     if(!body) return;
     S.panel.classList.add('collapsed');
-    const viewUrl = url + (url.includes('?') ? '&' : '?') + 'a=view';
-    const notesKey = 'gdi-pdf-notes-' + url;
-    let savedNotes = '';
-    try{ savedNotes = localStorage.getItem(notesKey) || ''; }catch(_){}
+    // ★ v1.0.92: PDF também usa iframe — carrega a página completa do visualizador GDI
     body.innerHTML = `
-      <div style="display:flex;flex-direction:column;height:100%;gap:8px;min-height:0;">
-        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
-          <button id="gdi-media-back" class="gdi-mode-btn" style="font-size:12px;padding:6px 10px;"><i class="bi bi-arrow-left"></i> Voltar</button>
-          <b style="color:var(--ferreto-text,#f0f6fc);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">📄 ${escHtml(name)}</b>
+      <div style="display:flex;flex-direction:column;height:100%;gap:0;min-height:0;">
+        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;padding:6px 10px;background:var(--ferreto-surface,rgba(22,27,38,.92));border-bottom:1px solid var(--ferreto-border,#30363d);">
+          <button id="gdi-media-back" class="gdi-mode-btn" style="font-size:12px;padding:6px 10px;flex-shrink:0;"><i class="bi bi-arrow-left"></i> Voltar</button>
+          <b style="color:var(--ferreto-text,#f0f6fc);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">📄 ${escHtml(name)}</b>
+          <button id="gdi-media-open" class="gdi-mode-btn" style="font-size:12px;padding:6px 10px;flex-shrink:0;" title="Abrir em tela cheia"><i class="bi bi-box-arrow-up-right"></i></button>
         </div>
-        <div style="flex:1;display:flex;gap:10px;min-height:0;">
-          <div style="flex:1;background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#30363d);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;min-width:0;">
-            <div style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--ferreto-border,#30363d);font-size:11px;color:var(--ferreto-text-muted,#8b949e);flex-shrink:0;">
-              <button id="gdi-pdf-split-prev" class="gdi-mode-btn" style="font-size:11px;padding:3px 8px;"><i class="bi bi-chevron-left"></i></button>
-              <span>Pág <span id="gdi-pdf-split-num">1</span> / <span id="gdi-pdf-split-count">?</span></span>
-              <button id="gdi-pdf-split-next" class="gdi-mode-btn" style="font-size:11px;padding:3px 8px;"><i class="bi bi-chevron-right"></i></button>
-              <span style="flex:1;"></span>
-              <a href="${escHtml(viewUrl)}" target="_blank" rel="noopener" style="color:var(--ferreto-secondary,#5ddeda);text-decoration:none;font-size:11px;">Abrir original ↗</a>
-            </div>
-            <div style="flex:1;overflow:auto;padding:10px;background:#525659;min-height:0;">
-              <div id="gdi-pdf-split-spinner" style="color:#fff;text-align:center;padding:20px;">Carregando PDF…</div>
-              <canvas id="gdi-pdf-split-canvas" style="max-width:100%;display:none;margin:0 auto;background:#fff;border-radius:4px;"></canvas>
-            </div>
-          </div>
-          <div style="width:320px;flex-shrink:0;background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#30363d);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;min-height:0;">
-            <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ferreto-text,#e6edf3);flex-shrink:0;">
-              <span style="font-size:18px;">🐩</span> <b>Notas & Meggy</b>
-            </div>
-            <textarea id="gdi-pdf-split-notes" placeholder="Anotações deste PDF (salvas automaticamente)…" style="flex:1;min-height:200px;background:var(--ferreto-surface-3,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);font-size:12px;font-family:inherit;padding:8px;resize:none;">${escHtml(savedNotes)}</textarea>
-            <button id="gdi-pdf-split-meggy" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);border:0;border-radius:8px;padding:8px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;flex-shrink:0;">🐩 Pedir resumo à Meggy</button>
-            <small style="color:var(--ferreto-text-muted,#8b949e);font-size:10px;text-align:center;flex-shrink:0;">Notas salvas localmente</small>
-          </div>
-        </div>
+        <iframe src="${escHtml(url)}" style="flex:1;width:100%;border:0;min-height:0;background:#0d1117;" allow="fullscreen" allowfullscreen id="gdi-media-iframe"></iframe>
       </div>`;
     const backBtn = body.querySelector('#gdi-media-back');
     if(backBtn) backBtn.onclick = restoreSidebarFromMediaView;
-    // Notes auto-save
-    const notesEl = body.querySelector('#gdi-pdf-split-notes');
-    if(notesEl){
-      notesEl.addEventListener('input', function(){
-        try{ localStorage.setItem(notesKey, this.value); }catch(_){}
-      });
-    }
-    // Meggy button — open Meggy FAB if available
-    const meggyBtn = body.querySelector('#gdi-pdf-split-meggy');
-    if(meggyBtn){
-      meggyBtn.onclick = function(){
-        const fab = document.querySelector('#gdi-ai-fab');
-        if(fab && fab.style.display !== 'none'){
-          fab.click();
-        } else {
-          try{ showToast('Meggy indisponível neste momento', 'info'); }catch(_){}
-        }
-      };
-    }
-    // Render PDF using pdfjsLib (lazy-load from CDN if needed)
-    renderPdfInSplit(viewUrl);
+    const openBtn = body.querySelector('#gdi-media-open');
+    if(openBtn) openBtn.onclick = function(){ try{ window.open(url, '_blank'); }catch(_){} };
   }
   function renderPdfInSplit(url){
     const canvas = document.getElementById('gdi-pdf-split-canvas');
