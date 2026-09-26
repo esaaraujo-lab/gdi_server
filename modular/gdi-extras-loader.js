@@ -32,8 +32,8 @@
 
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
-  // ★ v1.0.86: bump 90 → 91 (MODULARIZAÇÃO — gdi-study.js + gdi-meggy.js split em 15 módulos em study/ + meggy/).
-  const CACHE_VERSION = '91';  // ★ v1.0.86: modularização completa
+  // ★ v1.0.87: bump 91 → 92 (fix redação char limit + chat slowness + PDF limits + PDF per lesson + battalion key).
+  const CACHE_VERSION = '92';  // ★ v1.0.87: 6 fixes Meggy
   window.CACHE_VERSION = CACHE_VERSION;
 
   const MODULES = [
