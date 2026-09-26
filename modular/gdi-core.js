@@ -1142,3 +1142,99 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   Bus.onGlobal('video:switched',()=>{setTimeout(build,80);});
   window.GDI_MODULES.push({name:'materials',init:build});
 })();
+
+// ═══ M11-BRIDGE: REST MODE (MODO DESCANSO) PERSISTENCE — v91 ═══
+// Backup/safety bridge for the sleep-mode module in gdi-ui.js (M11).
+// M11 owns the #gdi-sleep-overlay element and the enterSleep/exitSleep
+// closures; this bridge lives in gdi-core.js (loaded first) and adds a
+// defensive persistence layer so rest mode survives video switches even
+// if M11 hasn't bound its listeners yet, or if the overlay was recreated.
+//
+// Single source of truth: localStorage 'gdi-rest-mode' === '1'.
+//   • Mousemove/keydown (user activity) → clear flag + hide overlay.
+//   • video:switched / page:change → if flag is '1', re-show overlay
+//     after a short delay so the new <video> has time to mount.
+//
+// This is intentionally idempotent with M11 — both layers may set/clear
+// the same localStorage key and the same overlay style; running both is
+// safe and only strengthens the persistence guarantee.
+(function(){
+  const LS_KEY='gdi-rest-mode';
+  const lsGet=()=>{try{return localStorage.getItem(LS_KEY)==='1';}catch(_){return false;}};
+  const lsSet=v=>{try{v?localStorage.setItem(LS_KEY,'1'):localStorage.removeItem(LS_KEY);}catch(_){}};
+  const getOverlay=()=>document.getElementById('gdi-sleep-overlay');
+
+  // Direct DOM manipulation of the overlay (mirrors M11's enterSleep).
+  function showOverlay(){
+    const ov=getOverlay();
+    if(ov){
+      ov.style.transition='opacity 2.5s ease';
+      ov.style.pointerEvents='all';
+      ov.style.opacity='0.97';
+    }
+    lsSet(true);
+  }
+  // Direct DOM manipulation of the overlay (mirrors M11's exitSleep).
+  function hideOverlay(){
+    const ov=getOverlay();
+    if(ov){
+      ov.style.transition='opacity .5s ease';
+      ov.style.opacity='0';
+      ov.style.pointerEvents='none';
+    }
+    lsSet(false);
+  }
+
+  // Public helper so external scripts / settings panels can toggle rest
+  // mode without depending on M11's private closures.
+  window.gdiRestMode={
+    enable:showOverlay,
+    disable:hideOverlay,
+    isEnabled:lsGet,
+    toggle:()=>{lsGet()?hideOverlay():showOverlay();}
+  };
+
+  // Only dismiss rest mode on explicit user activity. We deliberately
+  // keep the wake guard short (no 2.5s grace — M11 already has its own
+  // guard) and we do NOT dismiss on 'ended' / video:switched / page:change.
+  let _bridgeBound=false;
+  function bindBridge(){
+    if(_bridgeBound)return;_bridgeBound=true;
+    ['mousemove','mousedown','keydown','touchstart'].forEach(ev=>{
+      document.addEventListener(ev,()=>{
+        if(!lsGet())return;
+        // If the overlay isn't currently visible, M11 already handled it;
+        // only act if we still believe rest mode should be on.
+        const ov=getOverlay();
+        if(ov&&parseFloat(ov.style.opacity||'0')>0.5){
+          hideOverlay();
+        }
+      },{passive:true});
+    });
+
+    // Re-enable overlay after a video switch / page change if rest mode
+    // was on. The 500ms delay lets the new <video> element mount (so M11
+    // can also re-bind its own listeners if needed).
+    const restore=()=>{
+      if(!lsGet())return;
+      setTimeout(()=>{
+        if(!lsGet())return;
+        const ov=getOverlay();
+        if(ov&&parseFloat(ov.style.opacity||'0')<0.5){
+          showOverlay();
+        }
+      },500);
+    };
+    if(typeof Bus!=='undefined'&&typeof Bus.onGlobal==='function'){
+      Bus.onGlobal('video:switched',restore);
+      Bus.onGlobal('page:change',restore);
+    }
+  }
+
+  // Bind as soon as DOM is ready (and also immediately if it's already ready).
+  function _boot(){bindBridge();}
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',_boot,{once:true});
+  }else{_boot();}
+  console.log('[GDI M11-BRIDGE] v91 rest-mode persistence registered');
+})();
