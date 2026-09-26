@@ -195,7 +195,10 @@
       }catch(e){
         throw new Error('pdf.js não conseguiu abrir o PDF: '+(e&&e.message||e));
       }
-      const n=Math.min(doc.numPages,100);
+      // ★ v87-FIX-MEGGY-MODULES BUG 5: raise page cap 100 -> 500 so Meggy
+      //    reads the entirety of large PDFs (user: "deve ler a totalidade
+      //    de paginas dos pdfs, para gerar os resumos").
+      const n=Math.min(doc.numPages,500);
       let txt='';
 
       for(let i=1;i<=n;i++){
@@ -230,7 +233,9 @@
         }
 
         txt+=pageText+'\n\n';
-        if(txt.length>50000)break;
+        // ★ v87-FIX-MEGGY-MODULES BUG 5: raise per-extraction char cap
+        //    50000 -> 200000 so we keep ~4x more text before bailing.
+        if(txt.length>200000)break;
       }
 
       // ★ fallback: tenta extrair de annotations/form fields
@@ -272,13 +277,16 @@
               pageTxt='';
             }
             ocrTxt+=pageTxt+'\n\n';
-            if(ocrTxt.length>50000)break;
+            // ★ v87-FIX-MEGGY-MODULES BUG 5: raise OCR per-extraction cap
+            //    50000 -> 200000 to match text-extraction limit.
+            if(ocrTxt.length>200000)break;
           }
           if(ocrTxt.trim().length>50){
             // sucesso! OCR extraiu texto
             // (doc.destroy() agora tratado pelo finally — v80-FIX-MEGGY BUG 2)
             if(progressCb)progressCb({phase:'ocr-done',chars:ocrTxt.length});
-            return ocrTxt.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim().slice(0,50000);
+            // ★ v87-FIX-MEGGY-MODULES BUG 5: OCR also keeps up to 200K chars
+            return ocrTxt.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim().slice(0,200000);
           }
         }catch(ocrErr){
           console.warn('[Meggy] OCR falhou:',ocrErr.message);
@@ -289,7 +297,9 @@
       // (doc.destroy() agora tratado pelo finally — v80-FIX-MEGGY BUG 2)
       // limpa texto: remove espaços excessivos, decodifica entidades
       txt=txt.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim();
-      const result=txt.slice(0,50000);
+      // ★ v87-FIX-MEGGY-MODULES BUG 5: keep 200000 chars of final text
+      //    (was 50000). 200K chars ≈ 50K tokens — fits modern 128K-context LLMs.
+      const result=txt.slice(0,200000);
       if(!result||result.length<50){
         // ★ Erro descritivo: PDF provavelmente é escaneado (só imagens)
         // e o OCR também falhou ou não retornou texto útil
