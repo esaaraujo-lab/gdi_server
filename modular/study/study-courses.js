@@ -463,7 +463,12 @@
     })();
   }
   // ★ invalidar bestInCache quando usuário marcar/desmarcar vídeo
-  Bus.onGlobal('watched:changed',()=>{bestInCache.clear();});
+  // ★ REVIEW-08 FIX: guard against Bus not being loaded yet (study-scanner.js
+  //   uses typeof Bus !== 'undefined' everywhere; this site was raw → would
+  //   throw ReferenceError and abort the whole IIFE if Bus loads late).
+  if(typeof Bus !== 'undefined' && Bus && typeof Bus.onGlobal === 'function'){
+    Bus.onGlobal('watched:changed',()=>{bestInCache.clear();});
+  }
 
   // ★ Otimização: limpa nome do curso (remove paths crus, underscores, etc)
   function cleanCourseName(ck){
@@ -590,10 +595,26 @@
       const icon=mc.icon||'📁';
       const color=mc.color||'var(--ferreto-primary,#ff8b9f)';
       const isManual=c.manual===true;
-      const progress=c.lessons.size>0?Math.round(c.watched/c.lessons.size*100):0;
+      // ★ REVIEW-08 FIX: previously used c.lessons.size (always 0 for manual
+      //   courses — collectCourses sets lessons:new Set() and never populates
+      //   it). For manual courses the real total is c.totalLessons (from
+      //   manualCourse.pdfCount and/or scanner.getScanProgress). Falling back
+      //   to c.lessons.size only matters for legacy non-manual tiles (kept for
+      //   API compat). Without this, manual cards always showed "Aulas: 0".
+      const total = isManual ? (c.totalLessons||0) : (c.lessons.size||0);
+      const watched = c.watched||0;
+      const remaining = Math.max(0, total - watched);
+      const progress = total > 0 ? Math.min(100, Math.round(watched/total*100)) : 0;
       const progressColor=progress>=80?'#3fb950':progress>=40?'#ffd43b':'var(--ferreto-primary,#ff8b9f)';
-      const remaining=c.lessons.size-c.watched;
+      // ★ REVIEW-08 FIX: surface scanner state on the courses-list card too.
+      //   collectCourses already enriches each course with scanStatus /
+      //   scanPercent / scanLessonsFound — but renderCourseCard was ignoring
+      //   them and rendering a static "Meggy processando…" label + "…/0".
+      const scanStatus = c.scanStatus || null;
+      const scanPercent = c.scanPercent || 0;
+      const totalDisplay = (scanStatus === 'scanning' && total === 0) ? '…' : String(total);
       const el=document.createElement('div');el.className='gdi-course';
+      el.setAttribute('data-course-key', c.key);  // ★ REVIEW-08: enables onProgress callback to update this card in real-time
       el.style.cursor='pointer';
       // ★ destaque visual para curso manual: border-left com a cor do manualCourse
       if(isManual)el.style.borderLeft='4px solid '+color;
@@ -603,25 +624,32 @@
             ${isManual?`<span style="font-size:18px;flex:none;">${icon}</span>`:''}
             <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(name)}</span>
           </b>
-          <button class="gdi-course-remove" title="${isManual?'Remover curso manual':'Ocultar curso'}" style="background:transparent;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:14px;padding:2px 6px;flex:none;border-radius:6px;transition:all .15s;"><i class="bi bi-x-lg"></i></button>
+          <button class="gdi-course-remove" title="${isManual?'Ocultar curso':'Ocultar curso'}" style="background:transparent;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:14px;padding:2px 6px;flex:none;border-radius:6px;transition:all .15s;"><i class="bi bi-x-lg"></i></button>
         </div>
         ${isManual
-          ? `<small style="color:var(--ferreto-secondary,#5ddeda);font-size:10px;display:block;margin-top:4px;"><i class="bi bi-hdd"></i> ${escHtml(drive||'Drive')} · <span style="color:#ffd43b;"><i class="bi bi-hourglass-split"></i> Meggy processando…</span></small>`
+          ? `<small style="color:var(--ferreto-secondary,#5ddeda);font-size:10px;display:block;margin-top:4px;"><i class="bi bi-hdd"></i> ${escHtml(drive||'Drive')}${scanStatus==='scanning'?' · <span style="color:var(--ferreto-secondary,#5ddeda);"><i class="bi bi-arrow-repeat"></i> Escaneando '+scanPercent+'%</span>':scanStatus==='done'?' · <span style="color:#3fb950;"><i class="bi bi-check2"></i> '+scanPercent+'% mapeado</span>':' · <span style="color:#ffd43b;"><i class="bi bi-hourglass-split"></i> Meggy processando…</span>'}</small>`
           : (drive?`<small style="color:var(--ferreto-secondary,#5ddeda);font-size:10px;display:block;margin-top:2px;"><i class="bi bi-hdd"></i> ${escHtml(drive)}${c.lastAt?` · última: ${dateBr(c.lastAt)}`:''}</small>`:'<small>&nbsp;</small>')
         }
         <div class="gdi-course-stats">
           ${isManual
-            ? `<div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:#ffd43b;">…</span><span class="gdi-course-stat-label">Batalhão</span></div>
-               <div class="gdi-course-stat"><span class="gdi-course-stat-num">0</span><span class="gdi-course-stat-label">Assistidas</span></div>`
+            ? `<div class="gdi-course-stat"><span class="gdi-course-stat-num" data-stat="total">${totalDisplay}</span><span class="gdi-course-stat-label">Aulas</span></div>
+               <div class="gdi-course-stat"><span class="gdi-course-stat-num" data-stat="watched" style="color:#3fb950;">${watched}</span><span class="gdi-course-stat-label">Feitas</span></div>
+               <div class="gdi-course-stat"><span class="gdi-course-stat-num" data-stat="remaining" style="color:#ffd43b;">${remaining}</span><span class="gdi-course-stat-label">Restam</span></div>
+               <div class="gdi-course-stat"><span class="gdi-course-stat-num" data-stat="progress" style="color:${progressColor};">${progress}%</span><span class="gdi-course-stat-label">Concl.</span></div>`
             : `<div class="gdi-course-stat"><span class="gdi-course-stat-num">${c.lessons.size}</span><span class="gdi-course-stat-label">Aulas</span></div>
                <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:#3fb950;">${c.watched}</span><span class="gdi-course-stat-label">Feitas</span></div>
                <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:#ffd43b;">${remaining}</span><span class="gdi-course-stat-label">Restam</span></div>
                <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:${progressColor};">${progress}%</span><span class="gdi-course-stat-label">Concl.</span></div>`
           }
         </div>
-        ${isManual?'':`<div class="gdi-progress-bar"><div class="gdi-progress-fill" style="width:${progress}%;background:${progressColor};"></div></div>`}
+        <div class="gdi-progress-bar"><div class="gdi-progress-fill" style="width:${progress}%;background:${progressColor};"></div></div>
+        ${isManual && scanStatus === 'scanning' ? `
+        <div class="gdi-scan-bar-wrap" style="margin-top:6px;height:3px;background:var(--ferreto-surface-3,rgba(255,255,255,.08));border-radius:2px;overflow:hidden;">
+          <div class="gdi-scan-progress" style="height:100%;width:${scanPercent}%;background:var(--ferreto-secondary,#5ddeda);transition:width .3s;"></div>
+        </div>
+        <small class="gdi-scan-status" style="color:var(--ferreto-text-muted,#8b949e);font-size:10px;display:block;margin-top:2px;"><i class="bi bi-arrow-repeat"></i> Escaneando aulas... ${scanPercent}%</small>` : ''}
         <button class="gdi-btn-continue gdi-course-continue" ${isManual?'':'disabled'}>
-          ${isManual?'<i class="bi bi-hourglass-split"></i> Meggy preparando materiais…':'<i class="bi bi-hourglass-split"></i> Verificando…'}
+          ${isManual?(scanStatus==='scanning'?'<i class="bi bi-hourglass-split"></i> Escaneando aulas…':scanStatus==='done'?'<i class="bi bi-folder2-open"></i> Abrir pasta no Drive':'<i class="bi bi-hourglass-split"></i> Meggy preparando materiais…'):'<i class="bi bi-hourglass-split"></i> Verificando…'}
         </button>`;
       grid.appendChild(el);
 
