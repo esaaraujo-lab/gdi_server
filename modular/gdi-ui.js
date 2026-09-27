@@ -736,7 +736,7 @@ body.gdi-fv .gdi-player-wrap iframe{
           <span style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);text-transform:uppercase;">\ud83e\uddd0 Revis\u00e3o ${idx+1} de ${due.length}</span>
           <button class="gdi-mode-btn" id="gdi-srs-close" style="padding:2px 8px;font-size:11px;">\u2715</button>
         </div>
-        <div style="font-size:12px;color:var(--ferreto-secondary,#7aa2ff);margin-bottom:4px;">${escHtml(realNameOf(n.key))}${n.t!=null?' \u00b7 '+gdiFmtTime(n.t):''}</div>
+        <div style="font-size:12px;color:var(--ferreto-secondary,#ff8b9f);margin-bottom:4px;">${escHtml(realNameOf(n.key))}${n.t!=null?' \u00b7 '+gdiFmtTime(n.t):''}</div>
         <div style="font-size:15px;line-height:1.5;margin-bottom:16px;">${escHtml(n.text)}</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button id="gdi-srs-good" class="gdi-btn gdi-btn-primary"><i class="bi bi-check2"></i> Lembrei</button>
@@ -883,7 +883,7 @@ body.gdi-fv .gdi-player-wrap iframe{
       else head='Continuar';
       const sub=r?('parou em '+gdiFmtTime(r.t)):'sem posi\u00e7\u00e3o salva';
       html+=`<div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;">
-        <i class="bi bi-play-circle-fill" style="font-size:30px;color:var(--ferreto-primary,#7aa2ff);"></i>
+        <i class="bi bi-play-circle-fill" style="font-size:30px;color:var(--ferreto-primary,#ff8b9f);"></i>
         <div style="min-width:0;">
           <div style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);text-transform:uppercase;letter-spacing:.06em;">${escHtml(head)}</div>
           <div style="font-weight:600;color:var(--ferreto-text,#f0f6fc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(lbl.name)}</div>
@@ -1030,7 +1030,7 @@ body.gdi-fv .gdi-player-wrap iframe{
     let html='';
     if(total){
       const pct=Math.round(done/total*100);
-      html+=`<i class="bi bi-bar-chart-fill" style="color:var(--ferreto-primary,#7aa2ff);"></i>
+      html+=`<i class="bi bi-bar-chart-fill" style="color:var(--ferreto-primary,#ff8b9f);"></i>
         <span>${done}/${total} assistido${done===1?'':'s'} (${pct}%)</span>
         <div style="flex:1;max-width:160px;height:5px;background:var(--ferreto-surface-3,rgba(255,255,255,.1));border-radius:3px;overflow:hidden;">
           <div style="height:5px;width:${pct}%;background:${pct>=100?'#1a7f37':'#1f6feb'};transition:width .4s;"></div>
