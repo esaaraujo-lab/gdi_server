@@ -33,7 +33,7 @@
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
   // ★ v1.0.87: bump 91 → 92 (fix redação char limit + chat slowness + PDF limits + PDF per lesson + battalion key).
-  const CACHE_VERSION = '92';  // ★ v1.0.87: 6 fixes Meggy
+  const CACHE_VERSION = '93';  // ★ v1.0.89 P1: C1/C4/C5 + auto-open + classic toggle
   window.CACHE_VERSION = CACHE_VERSION;
 
   const MODULES = [
