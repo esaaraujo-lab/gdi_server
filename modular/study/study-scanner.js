@@ -145,6 +145,14 @@
       if(onProgress) try{ onProgress(state, getLessons(courseKey)); }catch(_){}
       return state;
     }
+    // ★ REVIEW-09 FIX: reset progress counters for a fresh scan. Previously
+    // `scannedFolders` and `totalFolders` from a previous (interrupted or
+    // completed) scan were reused → progress percentage was stale / wrong.
+    state.scannedFolders = 0;
+    state.totalFolders = 0;
+    state._maxTotal = 0;       // discovered denominator (grows as server finds subfolders)
+    state.pendingFolders = 0;
+    state.lessonsFound = 0;
     state.status = 'scanning';
     state.startedAt = Date.now();
     setScanState(courseKey, state);
@@ -178,11 +186,39 @@
         isDone = d.status !== 'partial';
 
         state.status = 'scanning';
-        // ★ v80-FIX BUG 3: totalFolders was hardcoded to 1 and never
-        // updated → progress (scannedFolders/totalFolders) was always 100%.
-        // Now totalFolders grows as we discover pending folders each batch.
+        // ★ REVIEW-09 FIX (real-time progress): determine totalFolders and
+        // scannedFolders from the most authoritative source available:
+        //   1. d.totalFolders + d.scannedFolders (server knows exactly —
+        //      also handles "server discovered more subfolders mid-scan"
+        //      because the server updates totalFolders as it goes).
+        //   2. d.totalFolders alone → scanned = total - pending.
+        //   3. Fallback: track _maxTotal = max(scanned + pending) seen so far
+        //      (best-effort denominator when server only reports pending).
+        // Previously scannedFolders was NEVER incremented in this loop →
+        // percent stayed at 0% throughout the scan and only jumped to 100%
+        // at the very end via the finalisation block. Now the progress bar
+        // advances in real time as the server processes folders.
         state.pendingFolders = d.pendingFolders || 0;
-        state.totalFolders = (state.scannedFolders || 0) + (d.pendingFolders || 0);
+        if(typeof d.totalFolders === 'number' && d.totalFolders >= 0){
+          state.totalFolders = d.totalFolders;
+          state._maxTotal = d.totalFolders;
+        } else {
+          const candidateTotal = (state.scannedFolders || 0) + (d.pendingFolders || 0);
+          if(!state._maxTotal || state._maxTotal < candidateTotal){
+            state._maxTotal = candidateTotal;
+          }
+          state.totalFolders = state._maxTotal;
+        }
+        if(typeof d.scannedFolders === 'number'){
+          state.scannedFolders = d.scannedFolders;
+        } else {
+          state.scannedFolders = Math.max(0, state.totalFolders - state.pendingFolders);
+        }
+        // Edge case: done with 0 folders → force total=1 so percent=100% (not 0/0=0%)
+        if(isDone && state.totalFolders === 0){
+          state.totalFolders = 1;
+          state.scannedFolders = 1;
+        }
         // Keep scannedFolders ≤ totalFolders so percent stays in [0,100].
         if(state.scannedFolders > state.totalFolders){
           state.scannedFolders = state.totalFolders;
