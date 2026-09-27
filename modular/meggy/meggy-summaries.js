@@ -464,7 +464,6 @@
     mindmap:            function() { return window.__gdiMeggy.summaries.mindmap.apply(this, arguments); },
     flashcards:         function() { return window.__gdiMeggy.flashcards.flashcards.apply(this, arguments); },
     regenerate:         function() { return window.__gdiMeggy.cache.regenerate.apply(this, arguments); },
-    extractPdfText:     function() { return window.__gdiMeggy.pdf.extractPdfText.apply(this, arguments); },
     saveIsaSummary:     function() { return window.__gdiMeggy.cache.saveIsaSummary.apply(this, arguments); },
     listIsaSummaries:   function() { return window.__gdiMeggy.cache.listIsaSummaries.apply(this, arguments); },
     delIsaSummary:      function() { return window.__gdiMeggy.cache.delIsaSummary.apply(this, arguments); },
