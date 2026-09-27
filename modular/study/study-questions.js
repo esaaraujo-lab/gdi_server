@@ -482,7 +482,7 @@
           <span style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">✓ ${hits} ✗ ${misses}</span>
         </div>
         <div class="gdi-course" style="margin-bottom:14px;">
-          <b style="color:var(--ferreto-secondary,#7aa2ff);font-size:11px;display:block;margin-bottom:8px;">${esc(q.subject||'')}</b>
+          <b style="color:var(--ferreto-secondary,#ff8b9f);font-size:11px;display:block;margin-bottom:8px;">${esc(q.subject||'')}</b>
           <div style="color:var(--ferreto-text,#f0f6fc);font-size:14px;line-height:1.6;">${esc(q.statement)}</div>
         </div>
         <div id="gdi-q-opts" style="display:flex;flex-direction:column;gap:8px;"></div>
@@ -887,7 +887,7 @@
           <span id="sim-timer" style="color:${left<60000?'#ff6b6b':'var(--ferreto-primary,#ff8b9f)'};font-weight:600;font-size:14px;font-variant-numeric:tabular-nums;">⏱ ${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}</span>
         </div>
         <div class="gdi-course" style="margin-bottom:14px;">
-          <b style="color:var(--ferreto-secondary,#7aa2ff);font-size:11px;display:block;margin-bottom:8px;">${esc(q.subject||'')}</b>
+          <b style="color:var(--ferreto-secondary,#ff8b9f);font-size:11px;display:block;margin-bottom:8px;">${esc(q.subject||'')}</b>
           <div style="color:var(--ferreto-text,#f0f6fc);font-size:14px;line-height:1.6;">${esc(q.statement)}</div>
         </div>
         <div id="sim-opts" style="display:flex;flex-direction:column;gap:8px;"></div>
@@ -1333,7 +1333,7 @@
     .gdi-q-card:hover{border-color:var(--ferreto-border-strong,#30363d);box-shadow:0 8px 24px -12px rgba(0,0,0,.55);transform:translateY(-1px);}
     .gdi-q-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px;}
     .gdi-q-card-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex:1;min-width:0;}
-    .gdi-q-subj{color:var(--ferreto-secondary,#7aa2ff);font-size:13px;font-family:var(--ferreto-font-display,'Poppins',sans-serif);}
+    .gdi-q-subj{color:var(--ferreto-secondary,#ff8b9f);font-size:13px;font-family:var(--ferreto-font-display,'Poppins',sans-serif);}
     .gdi-q-badge{display:inline-flex;align-items:center;gap:3px;font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(255,255,255,.06);color:var(--ferreto-text-muted,#8b949e);border:1px solid rgba(255,255,255,.06);white-space:nowrap;line-height:1.4;}
     .gdi-q-badge-shared{background:rgba(93,222,218,.10);color:var(--ferreto-secondary,#5ddeda);border-color:rgba(93,222,218,.22);}
     .gdi-q-badge-due{background:rgba(255,139,159,.12);color:var(--ferreto-primary,#ff8b9f);border-color:rgba(255,139,159,.26);}
