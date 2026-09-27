@@ -186,8 +186,6 @@
   function deleteSubject(id){
     U.lsSet(LS_SUBJECTS,getSubjects().filter(s=>s.id!==id));
   }
-  // expor para outros módulos
-  window.gdiSubjects={get:getSubjects,save:saveSubject,delete:deleteSubject,LS:LS_SUBJECTS};
 
   // ── Flashcards flow (aba no M9 — BIBLIOTECA organizada por disciplina → tema) ──
   // ★ REFACTORED (PATCH E): virtualização por accordion. Todos os temas
@@ -762,7 +760,13 @@
   };
 
   // ── Aliases para compatibilidade ──
-  // window.gdiSubjects já foi definido acima (preserved for gdi-study.js callers)
+  // ★ v1.0.90: Re-export window.gdiSubjects for backward compat (was in monolith gdi-meggy.js)
+  window.gdiSubjects = {
+    get: getSubjects,
+    save: saveSubject,
+    delete: deleteSubject,
+    LS: LS_SUBJECTS
+  };
 
   console.log('[GDI Extras] meggy-flashcards ativo (Module 5/7)');
 })();
