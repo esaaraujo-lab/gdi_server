@@ -254,10 +254,6 @@
           `).join('')}
         </div>
       `).join('')}
-      <button id="gdi-pomo-sidebar-btn" style="padding:8px;border-top:1px solid var(--ferreto-border,#30363d);margin-top:auto;background:none;border-left:0;border-right:0;border-bottom:0;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;color:var(--ferreto-text,#e6edf3);font-size:13px;transition:all .15s;" title="Pomodoro">
-        <span style="font-size:20px;">🍅</span>
-        <span id="gdi-pomo-sidebar-time" style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);font-variant-numeric:tabular-nums;">25:00</span>
-      </button>
     </aside>`;
   }
 
@@ -437,54 +433,8 @@
     // ativa a S.tab atual no sidebar
     S.panel.querySelectorAll('.gdi-central-tab').forEach(b=>b.classList.toggle('active',b.dataset.t===S.tab));
     renderBody(S.tab);
-    // ★ Pomodoro widget — inicializa após o sidebar estar no DOM
-    try{ initPomodoro(); }catch(_){}
   }
 
-  // ★ Pomodoro sidebar button — abre o painel clássico do M12 (sem lógica própria)
-  function initPomodoro(){
-    if(window.__gdiPomoSidebarInit) return;
-    window.__gdiPomoSidebarInit = true;
-
-    var btn = document.querySelector('#gdi-pomo-sidebar-btn');
-    if(!btn) return;
-
-    btn.addEventListener('click', function(){
-      // Find the classic Pomodoro navbar button
-      var navBtn = document.getElementById('gdi-pom-nav-btn');
-      if(navBtn){
-        // Force visible (M12 hides it when no video, but we want it always available)
-        var nav = document.getElementById('gdi-pom-nav');
-        if(nav) nav.style.display = '';
-        navBtn.click();
-      } else {
-        // Fallback: try to trigger M12 injection
-        if(window.GDI_MODULES){
-          var pomMod = window.GDI_MODULES.find(function(m){return m.name === 'pom-nav' || m.name === 'pomodoro';});
-          if(pomMod && pomMod.init) pomMod.init();
-          setTimeout(function(){
-            var nb = document.getElementById('gdi-pom-nav-btn');
-            if(nb){
-              var nv = document.getElementById('gdi-pom-nav');
-              if(nv) nv.style.display = '';
-              nb.click();
-            }
-          }, 200);
-        }
-      }
-    });
-
-    // Sync sidebar time with classic Pomodoro display
-    setInterval(function(){
-      try {
-        var classicDisplay = document.getElementById('gdi-pom-display');
-        var sidebarTime = document.getElementById('gdi-pomo-sidebar-time');
-        if(classicDisplay && sidebarTime){
-          sidebarTime.textContent = classicDisplay.textContent;
-        }
-      } catch(_){}
-    }, 1000);
-  }
   // ★ v1.0.73: renderDrives — mostra os 12 drives como cards navegáveis DENTRO do painel
   function renderDrives(box){
     const drives = window.drive_names || [];
