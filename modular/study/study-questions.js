@@ -107,6 +107,10 @@
   let _qFilterSubject=null; // null = todas (closure-private; synced from window._qFilterSubject)
   let _qShown=0;            // quantas questões já estão renderizadas
   const QPAGE=20;
+  // ★ P1 FIX: filtros dropdown por curso/disciplina (Questões) + timer do simulado
+  let _qCourseFilter=null;     // null = Todos os cursos
+  let _qDisciplineFilter=null; // null = Todas as disciplinas
+  let _simuladoTimer=null;     // setInterval do simulado ativo (p/ limpar ao trocar aba)
   function renderQuestoes(box){
     // ★ v1.0.86 FIX (radar→questions filter bug): sync closure var from
     // window._qFilterSubject, which is written by renderRadar in
@@ -130,6 +134,14 @@
     _qShown=0; // reset ao entrar na aba
     box.innerHTML=`
       ${hero}
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+        <select id="gdi-q-course-filter" style="background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);font-size:12px;padding:6px 10px;">
+          <option value="">Todos os cursos</option>
+        </select>
+        <select id="gdi-q-discipline-filter" style="background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);font-size:12px;padding:6px 10px;">
+          <option value="">Todas as disciplinas</option>
+        </select>
+      </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
         <b style="color:var(--ferreto-text,#f0f6fc);">${qs.length} questões</b>
         ${due?`<span style="color:var(--ferreto-primary,#ff8b9f);font-size:12px;">${due} p/ revisar hoje</span>`:''}
@@ -146,6 +158,54 @@
       <div id="gdi-q-subjects" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;max-width:760px;"></div>
       <div id="gdi-q-list" style="display:flex;flex-direction:column;gap:8px;max-width:760px;"></div>
     `;
+    // ★ P1 FIX: popula dropdowns de curso/disciplina (Questões)
+    try {
+      var _courses = (typeof window.collectCourses === 'function') ? window.collectCourses() : [];
+      var _courseSel = box.querySelector('#gdi-q-course-filter');
+      if(_courseSel && _courses.length) {
+        _courses.forEach(function(c) {
+          // extrai nome legível do curso (mesma lógica do renderSimulado)
+          var seg = String(c.key||'').split('/').filter(Boolean).slice(1).join('/');
+          var name = seg || c.key || c.name || c.coursePath || 'Curso';
+          try { name = decodeURIComponent(name); } catch(_) {}
+          var opt = document.createElement('option');
+          opt.value = name; opt.textContent = name;
+          if(_qCourseFilter === name) opt.selected = true;
+          _courseSel.appendChild(opt);
+        });
+        _courseSel.onchange = function() {
+          _qCourseFilter = _courseSel.value || null;
+          _qShown = 0;
+          drawSubjects();
+          drawList();
+        };
+      }
+      var _discSel = box.querySelector('#gdi-q-discipline-filter');
+      if(_discSel) {
+        // popula dropdown de disciplina a partir das matérias das questões
+        var _subjMap = {};
+        qs.forEach(function(q){ var s = q.subject || '—'; _subjMap[s] = (_subjMap[s]||0)+1; });
+        Object.keys(_subjMap).sort().forEach(function(s) {
+          var opt = document.createElement('option');
+          opt.value = s; opt.textContent = s + ' (' + _subjMap[s] + ')';
+          if(_qDisciplineFilter === s) opt.selected = true;
+          _discSel.appendChild(opt);
+        });
+        _discSel.onchange = function() {
+          _qDisciplineFilter = _discSel.value || null;
+          // sincroniza com as pills de subject (reutiliza lógica existente)
+          _qFilterSubject = _qDisciplineFilter;
+          window._qFilterSubject = _qFilterSubject;
+          _qShown = 0;
+          drawSubjects();
+          drawList();
+        };
+        // se já há filtro de disciplina via pills, reflete no dropdown
+        if(_qFilterSubject && _qDisciplineFilter !== _qFilterSubject) {
+          _discSel.value = _qFilterSubject;
+        }
+      }
+    }catch(_){}
     // ── Subject filter pills (Task 4) ──
     function drawSubjects(){
       const el=box.querySelector('#gdi-q-subjects');
@@ -166,6 +226,9 @@
         if(!_qFilterSubject)_qFilterSubject=null;
         // ★ v1.0.86 FIX: write back to window so radar/other modules see the change
         window._qFilterSubject=_qFilterSubject;
+        // ★ P1 FIX: sincroniza dropdown de disciplina com a pill clicada
+        _qDisciplineFilter=_qFilterSubject;
+        try{var _ds=box.querySelector('#gdi-q-discipline-filter');if(_ds)_ds.value=_qFilterSubject||'';}catch(_){}
         drawSubjects();
         _qShown=0; // reset paginação ao trocar filtro
         drawList();
@@ -176,8 +239,13 @@
       const list=box.querySelector('#gdi-q-list');
       const all=questions();
       if(!all.length){list.innerHTML='<div class="gdi-notes-empty">Nenhuma questão. Clique em "Gerar com Meggy" ou "Adicionar".</div>';return;}
-      const filtered=_qFilterSubject?all.filter(q=>(q.subject||'—')===_qFilterSubject):all;
-      if(!filtered.length){list.innerHTML='<div class="gdi-notes-empty">Nenhuma questão nesta matéria.</div>';return;}
+      // ★ P1 FIX: aplica filtro por curso (dropdown) + subject (pills/dropdown disciplina)
+      let filtered=all;
+      if(_qCourseFilter){
+        filtered=filtered.filter(q=>(q.course&&q.course.includes(_qCourseFilter))||(q.subject&&q.subject.includes(_qCourseFilter))||(q.path&&q.path.includes(_qCourseFilter)));
+      }
+      filtered=_qFilterSubject?filtered.filter(q=>(q.subject||'—')===_qFilterSubject):filtered;
+      if(!filtered.length){list.innerHTML='<div class="gdi-notes-empty">Nenhuma questão com os filtros atuais.</div>';return;}
       const reversed=filtered.slice().reverse();
       // monta HTML de cada linha UMA vez em array
       const rowHtmlFor=q=>{
@@ -444,6 +512,8 @@
 
   // ── Render: Simulado (C.2 — sem necessidade de paginação: histórico já capped em 20) ──
   function renderSimulado(box){
+    // ★ S2 FIX: limpa timer do simulado anterior ao (re)entrar na aba
+    if(_simuladoTimer){clearInterval(_simuladoTimer);_simuladoTimer=null;}
     const qs=questions();
     const sims=simus().slice().reverse();
     // lista cursos do aluno para filtrar questões por curso
@@ -484,7 +554,9 @@
         // filtra por curso (subject/path) quando selecionado
         let pool=qs;
         if(courseFilter){
-          pool=qs.filter(q=>(q.subject&&q.subject.includes(courseFilter))||(q.path&&q.path.includes(courseFilter)));
+          // ★ S1 FIX: filtro por curso era frágil — só casava contra q.subject (nome da aula)
+          //   e q.path. Agora também confere q.course quando existe.
+          pool=qs.filter(q=>(q.course&&q.course.includes(courseFilter))||(q.subject&&q.subject.includes(courseFilter))||(q.path&&q.path.includes(courseFilter)));
           if(pool.length<5){showToast('Poucas questões deste curso — usando todas');pool=qs;}
         }
         // tenta enriquecer com questões compartilhadas por outros alunos da mesma matéria
@@ -555,12 +627,18 @@
         };
         optsEl.appendChild(b);
       });
-      box.querySelector('#sim-skip').onclick=()=>{idx++;draw();};
+      box.querySelector('#sim-skip').onclick=()=>{
+        // ★ S3 FIX: "Pular" não classificava no SRS — agora marca como respondida (box 0 = relearn)
+        try{ if(window.__gdiMeggy && window.__gdiMeggy.questions && window.__gdiMeggy.questions.markAnswered) { window.__gdiMeggy.questions.markAnswered(q.id||q.statement, false); } }catch(_){}
+        idx++;draw();
+      };
       const prev=box.querySelector('#sim-prev');if(prev)prev.onclick=()=>{idx--;draw();};
     }
     function finish(){
       // ★ FIX: limpa timer imediatamente para evitar salvar simulado duplicado
       if(box.__simTimer){clearInterval(box.__simTimer);box.__simTimer=null;}
+      // ★ S2 FIX: sincroniza também a variável de módulo (_simuladoTimer)
+      if(_simuladoTimer){clearInterval(_simuladoTimer);_simuladoTimer=null;}
       const dur=Math.round((Date.now()-t0)/1000);
       let hits=0;
       answers.forEach(a=>{if(a){gradeQ(a.id,a.acertou);if(a.acertou)hits++;}});
@@ -588,9 +666,9 @@
       box.querySelector('#sim-back').onclick=()=>renderSimulado(box);
     }
     draw();
-    const timer=setInterval(()=>{if(Date.now()>=deadline){clearInterval(timer);finish();}},1000);
-    // armazena timer p/ limpeza se trocar de aba
-    box.__simTimer=timer;
+    _simuladoTimer=setInterval(()=>{if(Date.now()>=deadline){clearInterval(_simuladoTimer);_simuladoTimer=null;finish();}},1000);
+    // armazena timer p/ limpeza se trocar de aba (legado: mantém box.__simTimer p/ compat)
+    box.__simTimer=_simuladoTimer;
   }
 
   // ── Render: Cronograma (C.4 — paginação nos itens futuros) ──
