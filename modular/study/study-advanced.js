@@ -134,7 +134,8 @@
         });
       }
       const lib=window.pdfjsLib;
-      if(lib&&lib.GlobalWorkerOptions)lib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+      if(!lib){status.innerHTML='<div class="gdi-ai-err">Biblioteca de PDF não carregou. Verifique sua conexão e tente novamente.</div>';return;}
+      if(lib.GlobalWorkerOptions)lib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
       const buf=await file.arrayBuffer();
       // ★ v1.0.84: wrap doc lifecycle in try/finally so doc.destroy() runs
       //    even if getPage/getTextContent throws (prevents PDFDocumentProxy leak).
@@ -161,7 +162,7 @@
         plans.push(plan);
         lsSet('gdi-exam-plans-v1',plans);
         showPlan(box,plan);
-        showToast('Plano de estudos criado!');
+        if(window.showToast)showToast('Plano de estudos criado!');
       }catch(e){
         status.innerHTML='<div class="gdi-ai-err">Erro: '+esc(e.message)+'</div>';
       }finally{
@@ -260,9 +261,13 @@
           }else if(f.type==='application/pdf'){
             if(window.gdiIsaPdf&&window.gdiIsaPdf.extractPdfText){
               const url=URL.createObjectURL(f);
-              const txt=await window.gdiIsaPdf.extractPdfText(url);
-              box.querySelector('#red-text').value=txt;
-              if(statusDrop)statusDrop.innerHTML='<span style="color:#3fb950;"><i class="bi bi-check-circle"></i> Texto extraído do PDF ('+txt.length+' chars).</span>';
+              try{
+                const txt=await window.gdiIsaPdf.extractPdfText(url);
+                box.querySelector('#red-text').value=txt;
+                if(statusDrop)statusDrop.innerHTML='<span style="color:#3fb950;"><i class="bi bi-check-circle"></i> Texto extraído do PDF ('+txt.length+' chars).</span>';
+              }finally{
+                try{URL.revokeObjectURL(url);}catch(_){}
+              }
             }else if(statusDrop){statusDrop.innerHTML='<span style="color:#ff6b6b;">Carregue o módulo de PDFs primeiro.</span>';}
           }
         }catch(err){if(statusDrop)statusDrop.innerHTML='<span style="color:#ff6b6b;">Erro: '+esc(err.message)+'</span>';}
@@ -274,7 +279,7 @@
       const text=box.querySelector('#red-text').value.trim();
       const status=box.querySelector('#red-status');
       const result=box.querySelector('#red-result');
-      if(!text||text.length<50){showToast('Escreva ou cole sua redação primeiro (mínimo 50 caracteres)');return;}
+      if(!text||text.length<50){if(window.showToast)showToast('Escreva ou cole sua redação primeiro (mínimo 50 caracteres)');return;}
       status.innerHTML='<i class="bi bi-hourglass-split"></i> Meggy está corrigindo…';
       result.innerHTML='';
       try{
@@ -325,11 +330,11 @@
           const md='---\n'+'banca: "'+banca+'"\n'+'tipo: "'+tipo+'"\n'+'data: '+new Date().toISOString()+'\n'+'score: '+score+'\n'+'---\n\n# Redação Corrigida\n\n## Redação Original\n\n'+text+'\n\n## Correção da Meggy\n\n'+resp+'\n';
           if(window.gdiIsaPdf&&window.gdiIsaPdf.saveEssayMD){
             await window.gdiIsaPdf.saveEssayMD(md,banca,tipo,score);
-            showToast('Redação corrigida! Nota: '+score+' · MD salvo no Drive');
+            if(window.showToast)showToast('Redação corrigida! Nota: '+score+' · MD salvo no Drive');
           }else{
-            showToast('Redação corrigida! Nota: '+score);
+            if(window.showToast)showToast('Redação corrigida! Nota: '+score);
           }
-        }catch(_){showToast('Redação corrigida! Nota: '+score);}
+        }catch(_){if(window.showToast)showToast('Redação corrigida! Nota: '+score);}
         status.innerHTML='';
         result.innerHTML=`<div class="gdi-isa-summary-body" style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;padding:20px;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.8;margin-top:14px;">
           ${renderMd(resp)}
@@ -370,9 +375,13 @@
     const cron=lsGet('gdi-cronograma-v1',null);
     const aulasMenosEstudadas=[];
     if(cron&&Array.isArray(cron.plan)){
-      cron.plan.forEach(t=>{if(t&&t.name&&t.type==='study')aulasMenosEstudadas.push(t.name);});
+      // ★ FIX (REVIEW-04): cronograma tasks use type:'estudo' (pt-BR) and field
+      //   'aula' (not 'name'). Old check t.type==='study' && t.name NEVER matched
+      //   → "Aulas menos estudadas" section was always empty.
+      cron.plan.forEach(t=>{if(t&&t.aula&&t.type==='estudo')aulasMenosEstudadas.push(t.aula);});
     }
-    const trails=window.gdiTrails?window.gdiTrails.get():[];
+    // ★ FIX (REVIEW-04): robustness — guard against gdiTrails existing without .get()
+    const trails=(window.gdiTrails&&typeof window.gdiTrails.get==='function')?window.gdiTrails.get():[];
     // ★ Late binding: collectCourses is exposed by study-courses.js as window.collectCourses.
     const courses=(typeof window.collectCourses==='function')?window.collectCourses():[];
     const subjects=Object.entries(bySubject).filter(([,v])=>v.total>=1).sort((a,b)=>b[1].total-a[1].total);
@@ -439,6 +448,11 @@
           //    renderQuestoes (in study-questions.js) picks it up when
           //    next called. The closure var _qFilterSubject in M23 was
           //    never reachable from this IIFE — window.* is the bridge.
+          // ★ FIX (REVIEW-04): set filter immediately + retry after 200ms.
+          //    renderQuestoes reads window._qFilterSubject at call time, so
+          //    setting it before the tab renders is enough; the retry covers
+          //    slow renders where the tab click hasn't fired yet.
+          try{window._qFilterSubject=subj;}catch(_){}
           setTimeout(()=>{try{window._qFilterSubject=subj;}catch(_){}},200);
         }
       };
