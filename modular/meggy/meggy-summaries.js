@@ -335,8 +335,53 @@
     // 4) Sort por data decrescente
     all.sort((a,b)=>(b.date||0)-(a.date||0));
 
+    // ★ Header fixo no topo da aba — sempre mostra o caminho para gerar um novo
+    // resumo. Antes o usuário só tinha o texto "Gere resumos assistindo às aulas
+    // e clicando no botão 'Resumo' no painel de materiais" sem botão claro.
+    const headerHtml = `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid var(--ferreto-border,#21262d);">
+      <div style="min-width:0;">
+        <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 4px;font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-size:16px;font-weight:600;">📋 Meus Resumos</h3>
+        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0;">${all.length} resumo${all.length===1?'':'s'} · Clique num arquivo para ver, baixar PDF ou deletar.</p>
+      </div>
+      <button id="gdi-resumo-new" class="gdi-mode-btn" style="font-size:13px;padding:8px 14px;display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#ff8b9f,#c026d3);border:0;color:#fff;font-weight:600;border-radius:8px;cursor:pointer;">
+        <i class="bi bi-plus-lg"></i> Gerar novo resumo
+      </button>
+    </div>`;
+
+    // ★ Helper: wire the "Gerar novo resumo" CTA — leva o usuário à aba Drives
+    // onde ele encontra uma aula e abre o painel de materiais (que tem a aba
+    // "Resumo" da Meggy).
+    const wireNewResumoCta = (root) => {
+      const btn = root && root.querySelector('#gdi-resumo-new');
+      if(btn){
+        btn.onclick = () => {
+          if(typeof window.__gdiOpenCentral === 'function'){
+            try{
+              window.__gdiOpenCentral('drives');
+              if(typeof showToast === 'function'){
+                showToast('Navegue até uma aula e clique na aba "Resumo" 🐩');
+              }
+              return;
+            }catch(_){/* fallthrough */}
+          }
+          if(typeof showToast === 'function'){
+            showToast('Abra uma aula e clique em "Resumo" no painel de materiais');
+          }
+        };
+      }
+    };
+
     if(!all.length){
-      bodyEl.innerHTML='<div class="gdi-empty-state"><span class="gdi-empty-state-icon">📋</span><h3>Nenhum resumo ainda</h3><p>Gere resumos assistindo às aulas e clicando no botão "Resumo" no painel de materiais.</p></div>';
+      bodyEl.innerHTML = headerHtml
+        + '<div class="gdi-empty-state" style="padding:40px 20px;">'
+        + '<span class="gdi-empty-state-icon" style="font-size:48px;display:block;margin-bottom:12px;">📋</span>'
+        + '<h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 8px;font-family:var(--ferreto-font-display,\'Poppins\',sans-serif);">Nenhum resumo ainda</h3>'
+        + '<p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin:0 0 16px;line-height:1.6;">Gere resumos assistindo às aulas e clicando no botão <b>"Resumo"</b> no painel de materiais da Meggy 🐩</p>'
+        + '<button id="gdi-resumo-new" class="gdi-mode-btn" style="font-size:13px;padding:10px 18px;display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#ff8b9f,#c026d3);border:0;color:#fff;font-weight:600;border-radius:8px;cursor:pointer;">'
+        + '<i class="bi bi-cloud-arrow-down"></i> Explorar drives para gerar'
+        + '</button>'
+        + '</div>';
+      wireNewResumoCta(bodyEl);
       return;
     }
 
@@ -347,7 +392,7 @@
       if(!bySubject[s])bySubject[s]=[];
       bySubject[s].push(r);
     });
-    let html='<div class="gdi-resumos-list" style="display:flex;flex-direction:column;gap:18px;">';
+    let html=headerHtml + '<div class="gdi-resumos-list" style="display:flex;flex-direction:column;gap:18px;">';
     for(const subject in bySubject){
       html+=`<div class="gdi-resumos-group"><h3 style="color:var(--ferreto-text,#f0f6fc);font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-size:14px;font-weight:600;margin:0 0 8px;display:flex;align-items:center;gap:6px;"><i class="bi bi-folder2-open" style="color:#5ddeda;"></i> ${U.esc(subject)}${subject==='Drive'?'<span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;font-weight:400;">(salvos no Google Drive)</span>':''}</h3>`;
       html+='<div style="display:flex;flex-direction:column;gap:8px;">';
@@ -450,6 +495,8 @@
         window.renderResumos(bodyEl);
       }
     });
+    // ★ Wire CTA "Gerar novo resumo" (presente no header de todas as branchs)
+    wireNewResumoCta(bodyEl);
   }
 
   // ═══════════════════════════════════════════════════════════════
