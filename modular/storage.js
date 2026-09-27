@@ -83,7 +83,15 @@
     const str=coursePath+'/'+pdfName;
     for(let i=0;i<str.length;i++) hash=((hash<<5)-hash+str.charCodeAt(i))|0;
     const raw='m'+Math.abs(hash).toString(36);
-    if(kind==='questoes'||kind==='flashcards'||kind==='simulados')return raw+'.json';
+    // FIX (align with worker.js handleMaterialsSave FIX 4 / Task 21):
+    // The worker saves lessons + cards as .json (structured data), while
+    // resumos/brain/pilulas stay markdown. The client previously listed only
+    // questoes/flashcards/simulados as JSON, so materialExists() for
+    // 'lessons'/'cards' would query for a .md file the worker never wrote
+    // (it wrote .json) -> perpetual "not found" -> unnecessary regeneration.
+    // Mirroring the worker's kind list keeps client/worker in sync.
+    // resumos still correctly resolves to .md (the CRITICAL v1.0.80 check).
+    if(kind==='questoes'||kind==='flashcards'||kind==='simulados'||kind==='lessons'||kind==='cards')return raw+'.json';
     return raw+'.md';
   }
 
