@@ -41,6 +41,7 @@
   --ferreto-grad:linear-gradient(135deg,#ff8b9f 0%,#c026d3 55%,#5ddeda 130%);
   --ferreto-grad-soft:linear-gradient(135deg,rgba(255,139,159,.16),rgba(93,222,218,.12));
   --ferreto-glow:rgba(255,139,159,.35);
+  --gdi-text:var(--ferreto-text,#f3f5fa);--gdi-text-muted:var(--ferreto-text-muted,#9aa4b8);
 }
 [data-bs-theme="dark"]{
   --ferreto-bg:#070910;--ferreto-bg-2:#0d1119;
