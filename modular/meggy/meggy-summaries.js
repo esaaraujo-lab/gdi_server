@@ -338,10 +338,17 @@
     // ★ Header fixo no topo da aba — sempre mostra o caminho para gerar um novo
     // resumo. Antes o usuário só tinha o texto "Gere resumos assistindo às aulas
     // e clicando no botão 'Resumo' no painel de materiais" sem botão claro.
+    // ★ FIX (REV-07): quando all.length===0 a mensagem de contagem dizia
+    // "0 resumos · Clique num arquivo para ver, baixar PDF ou deletar." —
+    // contraditório com o empty-state logo abaixo ("Nenhum resumo ainda").
+    // Agora a submensagem muda conforme haja ou não resumos.
+    const subMsg = all.length
+      ? `${all.length} resumo${all.length===1?'':'s'} · Clique num arquivo para ver, baixar PDF ou deletar.`
+      : 'Gere resumos assistindo às aulas e clicando no botão "Resumo" no painel de materiais.';
     const headerHtml = `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid var(--ferreto-border,#21262d);">
       <div style="min-width:0;">
         <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 4px;font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-size:16px;font-weight:600;">📋 Meus Resumos</h3>
-        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0;">${all.length} resumo${all.length===1?'':'s'} · Clique num arquivo para ver, baixar PDF ou deletar.</p>
+        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0;">${U.esc(subMsg)}</p>
       </div>
       <button id="gdi-resumo-new" class="gdi-mode-btn" style="font-size:13px;padding:8px 14px;display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#ff8b9f,#c026d3);border:0;color:#fff;font-weight:600;border-radius:8px;cursor:pointer;">
         <i class="bi bi-plus-lg"></i> Gerar novo resumo
@@ -351,9 +358,15 @@
     // ★ Helper: wire the "Gerar novo resumo" CTA — leva o usuário à aba Drives
     // onde ele encontra uma aula e abre o painel de materiais (que tem a aba
     // "Resumo" da Meggy).
+    // ★ FIX (REV-07): antes usava querySelector('#gdi-resumo-new') — quando o
+    // empty-state era renderizado, dois elementos compartilhavam o mesmo id
+    // (header + empty-state CTA). querySelector retornava só o primeiro, então
+    // o botão visível do empty-state ("Explorar drives para gerar") ficava SEM
+    // handler. Agora usamos querySelectorAll e ligamos TODOS os botões com esse
+    // id — todos fazem a mesma ação.
     const wireNewResumoCta = (root) => {
-      const btn = root && root.querySelector('#gdi-resumo-new');
-      if(btn){
+      const btns = root ? root.querySelectorAll('#gdi-resumo-new') : [];
+      btns.forEach(btn => {
         btn.onclick = () => {
           if(typeof window.__gdiOpenCentral === 'function'){
             try{
@@ -368,7 +381,7 @@
             showToast('Abra uma aula e clique em "Resumo" no painel de materiais');
           }
         };
-      }
+      });
     };
 
     if(!all.length){
