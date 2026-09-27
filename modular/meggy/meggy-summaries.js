@@ -191,7 +191,13 @@
   // ★ chamado quando aluno adiciona um curso na Central de Estudos
   async function startBattalion(courseKey, coursePath, lessonName, pdfList){
     try{
-      const body={courseKey, coursePath, lessonName, pdfs:pdfList.map(p=>({name:p.name||'',url:p.url||'',text:p.text||''}))};
+      // ★ FIX-05-MEGGY-CACHE: filtra PDFs que NÃO têm nem texto nem URL —
+      //    são inutilizáveis e fariam o worker perder tempo (e gerar
+      //    resumos vazios sob a chave courseKey/pdfName, poluindo o cache).
+      //    Antes o map só fazia `text:p.text||''`, repassando entradas vazias.
+      const usable = (pdfList||[]).filter(p => p && (p.text || p.url));
+      if(!usable.length) return false;
+      const body={courseKey, coursePath, lessonName, pdfs:usable.map(p=>({name:p.name||'',url:p.url||'',text:p.text||''}))};
       const r=await fetch('/api/ai/battalion',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       const d=await r.json();
       return !!(d&&d.ok);
@@ -535,6 +541,32 @@
     startBattalion:     function() { return window.__gdiMeggy.summaries.startBattalion.apply(this, arguments); },
     getBattalionStatus: function() { return window.__gdiMeggy.summaries.getBattalionStatus.apply(this, arguments); }
   });
+
+  // ★ FIX C1 (Task FIX-07): extractPdfText — the 16th gdiIsaPdf method.
+  //   The C1 fix removed it from Object.assign (correct — Object.assign would
+  //   clobber the bridge patch if the bridge loaded first). But removing it
+  //   ENTIRELY left window.gdiIsaPdf.extractPdfText === undefined, which broke
+  //   two things:
+  //     (a) gdi-worker-bridge.js applyPdfPatch() guards with
+  //         `typeof window.gdiIsaPdf.extractPdfText === 'function'` — that
+  //         never matched, so the worker-based patch was NEVER applied.
+  //     (b) Callers (study-courses.js:1234, gdi-study.js:2606/4048,
+  //         study-advanced.js:303) check `window.gdiIsaPdf.extractPdfText`
+  //         before calling — they found undefined and skipped extraction,
+  //         so startBattalion sent PDFs with empty .text → server couldn't
+  //         generate summaries.
+  //   Resolution: keep extractPdfText OUT of Object.assign (C1 intent), but
+  //   add it separately with a guard — only set if not already a function,
+  //   so we don't clobber the bridge patch if the bridge loaded first. The
+  //   bridge's 500ms polling (gdi-worker-bridge.js:307) will then detect this
+  //   wrapper and wrap it with the worker version. meggy-pdf-engine.js exposes
+  //   the real impl at window.__gdiMeggy.pdf.extractPdfText (late-bind, so
+  //   load order doesn't matter).
+  if (typeof window.gdiIsaPdf.extractPdfText !== 'function') {
+    window.gdiIsaPdf.extractPdfText = function() {
+      return window.__gdiMeggy.pdf.extractPdfText.apply(this, arguments);
+    };
+  }
 
   // ── Namespace exports ──
   window.__gdiMeggy.summaries = {
