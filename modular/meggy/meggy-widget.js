@@ -173,9 +173,12 @@
     if(window.marked){
       try{
         const html=marked.parse(txt);
-        // ★ FIX: nunca retorna HTML não sanitizado — fallback escapa
+        // ★ FIX: nunca retorna HTML não sanitizado quando gdiSanitize está
+        //    disponível. Se gdiSanitize faltar (raro — gdi-core.js sempre
+        //    define), retorna HTML parseado (não escapado) para que Markdown
+        //    renderize em vez de degradar para texto puro.
         if(window.gdiSanitize){try{return window.gdiSanitize(html);}catch(_){}}
-        return esc(txt).replace(/\n/g,'<br>');
+        return html;
       }catch(_){}
     }
     return txt.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
@@ -246,7 +249,7 @@
   // ★ v1.0.85: FAB usa foto real da Meggy (PNG transparente, flood-fill bg removal — olhos/nariz preservados).
   // object-fit:cover preenche o círculo; alt vazio para não mostrar texto overlay.
   // ★ v1.0.86 modularização: fallback '91' (CACHE_VERSION bump planejado).
-  fab.innerHTML='<span class="gdi-ai-fab-ico"><img src="/modular/assets/meggy-fab.png?v='+(window.CACHE_VERSION||'94')+'" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;"></span><span id="gdi-ai-fab-badge"></span>';
+  fab.innerHTML='<span class="gdi-ai-fab-ico"><img src="/modular/assets/meggy-fab.png?v='+(window.CACHE_VERSION||'95')+'" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;"></span><span id="gdi-ai-fab-badge"></span>';
   // ★ FIX: hide FAB until AI availability is confirmed (prevents visibility flash
   //    when neither browser AI nor server is available). showWidget() reveals it.
   fab.style.display='none';
@@ -256,7 +259,7 @@
   panel.id='gdi-ai-panel';
   panel.innerHTML=`
     <div id="gdi-ai-head">
-      <div class="gdi-ai-avatar"><img src="/modular/assets/meggy-fab.png?v=${window.CACHE_VERSION||'94'}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;"></div>
+      <div class="gdi-ai-avatar"><img src="/modular/assets/meggy-fab.png?v=${window.CACHE_VERSION||'95'}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;"></div>
       <div class="gdi-ai-info">
         <div class="gdi-ai-name"><span>${MEGGY_NAME}</span><span class="gdi-ai-tag">${MEGGY_TAG}</span></div>
         <div class="gdi-ai-status"><span class="gdi-ai-dot"></span> verificando…</div>
@@ -468,12 +471,16 @@
       try{
         const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({message:txt,messages:hist})});
-        const data=await r.json();
+        // ★ FIX-FIX-08: tolera respostas não-JSON (ex.: página de erro HTML do
+        //    Cloudflare 5xx) sem lançar — extrai mensagem de erro quando possível.
+        let data=null;
+        try{ data=await r.json(); }catch(_){}
         hideTyping();
-        if(data.ok&&data.response){response=data.response;}
-        else{
+        if(r.ok&&data&&data.ok&&data.response){
+          response=data.response;
+        }else{
           const errEl=document.createElement('div');errEl.className='gdi-ai-err';
-          errEl.textContent=data.error||'Não consegui responder agora. Tente novamente.';
+          errEl.textContent=(data&&data.error)||('Não consegui responder agora'+(r.status?' (HTTP '+r.status+')':'')+'. Tente novamente.');
           body.appendChild(errEl);body.scrollTop=body.scrollHeight;
           setTimeout(()=>errEl.remove(),5000);
           busy=false;sendBtn.disabled=false;input.focus();
