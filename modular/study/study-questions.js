@@ -156,7 +156,9 @@
         <button id="gdi-q-flasherr" class="gdi-mode-btn" style="font-size:12px;" ${err?'':'disabled'} title="Cria flashcards a partir das questões que você errou"><i class="bi bi-card-text"></i> Flashcards das erradas</button>
       </div>
       <div id="gdi-q-subjects" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;max-width:760px;"></div>
-      <div id="gdi-q-list" style="display:flex;flex-direction:column;gap:8px;max-width:760px;"></div>
+      <div id="gdi-q-list" style="display:flex;flex-direction:column;gap:10px;max-width:760px;"></div>
+      <h4 class="gdi-q-section" style="margin-top:24px;">Questões da comunidade</h4>
+      <div id="gdi-q-shared" style="display:flex;flex-direction:column;gap:10px;max-width:760px;"></div>
     `;
     // ★ P1 FIX: popula dropdowns de curso/disciplina (Questões)
     try {
@@ -199,6 +201,7 @@
           _qShown = 0;
           drawSubjects();
           drawList();
+          loadShared();
         };
         // se já há filtro de disciplina via pills, reflete no dropdown
         if(_qFilterSubject && _qDisciplineFilter !== _qFilterSubject) {
@@ -206,6 +209,86 @@
         }
       }
     }catch(_){}
+    // ★ REVIEW-02: card renderer — statement + alternatives + answer + show-answer
+    // toggle. Defined at renderQuestoes scope so both drawList and loadShared reuse it.
+    const rowHtmlFor=q=>{
+      const s=qSrs()[q.id];
+      const dueNow=!s||s.due<=Date.now();
+      const isShared=(q.source==='shared');
+      const correct=Number(q.correct)||0;
+      const opts=Array.isArray(q.options)?q.options:[];
+      const alternatives=opts.map((opt,i)=>{
+        const isCorrect=i===correct;
+        return `<div class="gdi-q-opt${isCorrect?' gdi-q-opt-correct':''}">
+          <span class="gdi-q-opt-letter">${String.fromCharCode(65+i)})</span>
+          <span class="gdi-q-opt-text">${esc(opt)}</span>
+          ${isCorrect?'<span class="gdi-q-opt-check" title="Alternativa correta"><i class="bi bi-check2-circle"></i></span>':''}
+        </div>`;
+      }).join('');
+      const expl=q.explanation?`<div class="gdi-q-expl"><b><i class="bi bi-lightbulb"></i> Explicação:</b> ${esc(q.explanation)}</div>`:'';
+      const srcBadge=isShared
+        ? `<span class="gdi-q-badge gdi-q-badge-shared" title="Questão compartilhada pela comunidade"><i class="bi bi-people"></i> comunidade</span>`
+        : `<span class="gdi-q-badge gdi-q-badge-src">${esc(q.source||'manual')}</span>`;
+      const courseSeg=(q.course||q.path)?String(q.course||q.path||'').split('/').filter(Boolean).slice(-1)[0]:'';
+      const courseLbl=courseSeg?`<span class="gdi-q-badge gdi-q-badge-course" title="Curso"><i class="bi bi-journal-text"></i> ${esc(courseSeg)}</span>`:'';
+      const srsBadge=!isShared?(s?`<span class="gdi-q-badge gdi-q-badge-srs" title="Caixa Leitner (SRS)">\uD83D\uDCE6 box ${s.box}</span>`:`<span class="gdi-q-badge gdi-q-badge-srs" title="Ainda não respondida">\u25CB nova</span>`):'';
+      const dueBadge=!isShared?(dueNow?`<span class="gdi-q-badge gdi-q-badge-due" title="Vencida para revisão hoje"><i class="bi bi-clock"></i> revisar hoje</span>`:`<span class="gdi-q-badge gdi-q-badge-future" title="Próxima revisão"><i class="bi bi-calendar3"></i> ${fmtDate(new Date(s.due).toISOString().slice(0,10))}</span>`):'';
+      return `<div class="gdi-q-card" data-qid="${esc(q.id)}">
+        <div class="gdi-q-card-head">
+          <div class="gdi-q-card-meta">
+            <b class="gdi-q-subj">${esc(q.subject||'—')}</b>
+            ${srcBadge}${courseLbl}${srsBadge}${dueBadge}
+          </div>
+          ${isShared?'':`<button class="gdi-note-del" data-del="${esc(q.id)}" title="Excluir questão"><i class="bi bi-x-lg"></i></button>`}
+        </div>
+        <div class="gdi-q-stmt">${esc(q.statement)}</div>
+        <div class="gdi-q-answer" hidden>
+          <div class="gdi-q-opts">${alternatives}</div>
+          ${expl}
+        </div>
+        <div class="gdi-q-card-foot">
+          <button class="gdi-mode-btn gdi-q-toggle" data-toggle="${esc(q.id)}"><i class="bi bi-eye"></i> Mostrar resposta</button>
+        </div>
+      </div>`;
+    };
+    // ★ REVIEW-02: event delegation for delete + show-answer toggle. Works after
+    // load-more append without rebinding (delegation lives on the container).
+    function wireCardActions(container){
+      if(!container)return;
+      container.onclick=(e)=>{
+        const delBtn=e.target.closest('[data-del]');
+        if(delBtn){delQ(delBtn.dataset.del);drawSubjects();_qShown=0;drawList();return;}
+        const togBtn=e.target.closest('[data-toggle]');
+        if(togBtn){
+          const card=togBtn.closest('.gdi-q-card');
+          if(!card)return;
+          const ans=card.querySelector('.gdi-q-answer');
+          if(!ans)return;
+          if(ans.hasAttribute('hidden')){ans.removeAttribute('hidden');togBtn.innerHTML='<i class="bi bi-eye-slash"></i> Ocultar resposta';}
+          else{ans.setAttribute('hidden','');togBtn.innerHTML='<i class="bi bi-eye"></i> Mostrar resposta';}
+        }
+      };
+    }
+    // ★ REVIEW-02: fetch + display shared/community questions (checklist item 9).
+    // Uses window.gdiIsaPdf.fetchSharedQuestions (same helper as renderSimulado).
+    async function loadShared(){
+      const el=box.querySelector('#gdi-q-shared');
+      if(!el)return;
+      if(!window.gdiIsaPdf||typeof window.gdiIsaPdf.fetchSharedQuestions!=='function'){el.innerHTML='';return;}
+      el.innerHTML='<div class="gdi-q-loading"><span class="gdi-q-spin"></span> Buscando questões da comunidade…</div>';
+      try{
+        const items=await window.gdiIsaPdf.fetchSharedQuestions(_qFilterSubject||null);
+        if(!items||!items.length){
+          el.innerHTML='<div class="gdi-notes-empty" style="font-size:12px;text-align:center;padding:14px;">Nenhuma questão da comunidade disponível ainda.</div>';
+          return;
+        }
+        const show=items.slice(0,20);
+        el.innerHTML=show.map(rowHtmlFor).join('')+(items.length>show.length?`<div class="gdi-notes-empty" style="font-size:11px;text-align:center;">+${items.length-show.length} questões da comunidade disponíveis no simulado.</div>`:'');
+        wireCardActions(el);
+      }catch(_){
+        el.innerHTML='<div class="gdi-notes-empty" style="font-size:12px;text-align:center;padding:14px;">Não foi possível carregar questões da comunidade agora.</div>';
+      }
+    }
     // ── Subject filter pills (Task 4) ──
     function drawSubjects(){
       const el=box.querySelector('#gdi-q-subjects');
@@ -232,34 +315,36 @@
         drawSubjects();
         _qShown=0; // reset paginação ao trocar filtro
         drawList();
+        loadShared();
       });
     }
     // ★ PAGINAÇÃO: monta linhas em array, insere em lotes de QPAGE
     function drawList(){
       const list=box.querySelector('#gdi-q-list');
       const all=questions();
-      if(!all.length){list.innerHTML='<div class="gdi-notes-empty">Nenhuma questão. Clique em "Gerar com Meggy" ou "Adicionar".</div>';return;}
+      if(!all.length){
+        list.innerHTML=`<div class="gdi-notes-empty" style="text-align:center;padding:28px 12px;">
+          <div style="font-size:30px;margin-bottom:6px;">\uD83D\uDCED</div>
+          <b style="color:var(--ferreto-text,#f0f6fc);display:block;margin-bottom:4px;">Nenhuma questão ainda</b>
+          <span style="font-size:12px;">Clique em <b>Gerar com Meggy</b>, <b>Adicionar</b> ou <b>Importar JSON</b> para começar.</span>
+        </div>`;
+        return;
+      }
       // ★ P1 FIX: aplica filtro por curso (dropdown) + subject (pills/dropdown disciplina)
       let filtered=all;
       if(_qCourseFilter){
         filtered=filtered.filter(q=>(q.course&&q.course.includes(_qCourseFilter))||(q.subject&&q.subject.includes(_qCourseFilter))||(q.path&&q.path.includes(_qCourseFilter)));
       }
       filtered=_qFilterSubject?filtered.filter(q=>(q.subject||'—')===_qFilterSubject):filtered;
-      if(!filtered.length){list.innerHTML='<div class="gdi-notes-empty">Nenhuma questão com os filtros atuais.</div>';return;}
-      const reversed=filtered.slice().reverse();
-      // monta HTML de cada linha UMA vez em array
-      const rowHtmlFor=q=>{
-        const s=qSrs()[q.id];
-        const dueNow=!s||s.due<=Date.now();
-        return `<div class="gdi-note" data-qid="${esc(q.id)}" style="display:flex;align-items:center;gap:10px;">
-          <span style="flex:1;min-width:0;">
-            <b style="color:var(--ferreto-text,#f0f6fc);">${esc(q.subject||'—')}</b> <span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">· ${q.source||'manual'} · box ${s?s.box:0}</span>
-            <div style="color:var(--ferreto-text,#e6edf3);font-size:13px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(q.statement.slice(0,90))}</div>
-          </span>
-          <span style="font-size:10px;color:${dueNow?'var(--ferreto-primary,#ff8b9f)':'var(--ferreto-text-muted,#8b949e)'};white-space:nowrap;">${dueNow?'hoje':fmtDate(new Date(s?s.due:Date.now()).toISOString().slice(0,10))}</span>
-          <button class="gdi-note-del" data-del="${esc(q.id)}" title="Excluir"><i class="bi bi-x-lg"></i></button>
+      if(!filtered.length){
+        list.innerHTML=`<div class="gdi-notes-empty" style="text-align:center;padding:24px 12px;">
+          <div style="font-size:26px;margin-bottom:6px;">\uD83D\uDD0D</div>
+          <b style="color:var(--ferreto-text,#f0f6fc);display:block;margin-bottom:4px;">Nenhuma questão com os filtros atuais</b>
+          <span style="font-size:12px;">Limpe os filtros ou adicione novas questões a esta disciplina/curso.</span>
         </div>`;
-      };
+        return;
+      }
+      const reversed=filtered.slice().reverse();
       // render inicial: primeiras _qShown (ou QPAGE se _qShown==0)
       const initialCount=Math.min(_qShown||QPAGE,reversed.length);
       _qShown=initialCount;
@@ -270,10 +355,8 @@
         html+=`<button id="gdi-q-more" class="gdi-btn gdi-btn-ghost" style="align-self:flex-start;font-size:12px;">Carregar mais (${reversed.length-_qShown} restantes)</button>`;
       }
       list.innerHTML=html;
-      // handler deletar (event delegation)
-      list.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{
-        delQ(b.dataset.del);drawSubjects();_qShown=0;drawList();
-      });
+      // ★ REVIEW-02: delegation handles delete + show-answer toggle (incl. appended cards)
+      wireCardActions(list);
       // handler carregar mais — append via insertAdjacentHTML (não re-renderiza tudo)
       const moreBtn=list.querySelector('#gdi-q-more');
       if(moreBtn){
@@ -285,9 +368,7 @@
           next.forEach(q=>appendHtml+=rowHtmlFor(q));
           moreBtn.insertAdjacentHTML('beforebegin',appendHtml);
           _qShown+=next.length;
-          // rebind deletar nas novas linhas
-          list.querySelectorAll('[data-del]').forEach(b=>{if(!b._qBound){b._qBound=true;b.onclick=()=>{delQ(b.dataset.del);drawSubjects();_qShown=0;drawList();};}});
-          // atualiza ou remove botão "Carregar mais"
+          // delegation já cobre as novas linhas — sem rebind manual
           if(reversed.length>_qShown){
             moreBtn.textContent='Carregar mais ('+(reversed.length-_qShown)+' restantes)';
           }else{
@@ -298,6 +379,7 @@
     }
     drawSubjects();
     drawList();
+    loadShared();
 
     // ★ hero CTA
     const heroBtn=box.querySelector('#hero-gen');
@@ -609,24 +691,48 @@
           <div style="color:var(--ferreto-text,#f0f6fc);font-size:14px;line-height:1.6;">${esc(q.statement)}</div>
         </div>
         <div id="sim-opts" style="display:flex;flex-direction:column;gap:8px;"></div>
+        <div id="sim-feedback" style="margin-top:14px;"></div>
         <div style="margin-top:14px;display:flex;gap:8px;">
           <button class="gdi-mode-btn" id="sim-skip">Pular</button>
           ${idx>0?'<button class="gdi-mode-btn" id="sim-prev">← Anterior</button>':''}
         </div>
       </div>`;
       const optsEl=box.querySelector('#sim-opts');
-      const picked=answers[idx]?answers[idx].picked:-1;
+      const prevAns=answers[idx];
+      // ★ REVIEW-01-SIMULADO FIX: o handler antigo só registrava a resposta e
+      //   aplicava um highlight quase invisível (rgba .12) — sem verde/vermelho,
+      //   sem explicação e sem botão "Próxima". O usuário clicava e "nada
+      //   acontecia". Agora espelha o padrão do renderQuestoes: revela
+      //   correto/errado, mostra a explicação e cria o botão Próxima.
+      //   O SRS continua sendo graduado apenas em finish() (não chamamos
+      //   gradeQ aqui para evitar dupla graduação).
+      const revealAnswer=(pickedIdx)=>{
+        const acertou=pickedIdx===q.correct;
+        optsEl.querySelectorAll('button').forEach((bb,bi)=>{
+          bb.disabled=true;bb.style.cursor='default';bb.style.opacity='.7';
+          if(bi===q.correct)bb.style.background='rgba(63,185,80,.18)';
+          if(bi===pickedIdx&&!acertou)bb.style.background='rgba(255,107,107,.18)';
+        });
+        const fb=box.querySelector('#sim-feedback');
+        fb.innerHTML=`<div class="gdi-course" style="border-left:3px solid ${acertou?'#3fb950':'#ff6b6b'};">
+          <b style="color:${acertou?'#3fb950':'#ff6b6b'};">${acertou?'✓ Correto':'✗ Errado'}</b>
+          ${q.explanation?`<div style="color:var(--ferreto-text,#e6edf3);font-size:13px;margin-top:6px;line-height:1.5;">${esc(q.explanation)}</div>`:''}
+        </div>
+        <button class="gdi-btn gdi-btn-primary" id="sim-next" style="margin-top:12px;">${idx+1<queue.length?'Próxima →':'Ver resultado'}</button>`;
+        fb.querySelector('#sim-next').onclick=()=>{idx++;draw();};
+      };
       (q.options||[]).forEach((opt,i)=>{
         const b=document.createElement('button');
         b.className='gdi-note';b.style.cursor='pointer';b.style.textAlign='left';
-        if(i===picked)b.style.background='var(--ferreto-surface-3,rgba(255,255,255,.12))';
         b.innerHTML=`<span style="display:flex;align-items:center;gap:10px;"><b style="color:var(--ferreto-primary,#ff8b9f);">${String.fromCharCode(65+i)})</b> <span style="color:var(--ferreto-text,#e6edf3);">${esc(opt)}</span></span>`;
         b.onclick=()=>{
           answers[idx]={picked:i,correct:q.correct,id:q.id,acertou:i===q.correct};
-          optsEl.querySelectorAll('button').forEach((bb,bi)=>{bb.style.background=bi===i?'var(--ferreto-surface-3,rgba(255,255,255,.12))':'';});
+          revealAnswer(i);
         };
         optsEl.appendChild(b);
       });
+      // se voltou a uma questão já respondida (botão Anterior), reexibe o feedback
+      if(prevAns){revealAnswer(prevAns.picked);}
       box.querySelector('#sim-skip').onclick=()=>{
         // ★ S3 FIX: "Pular" não classificava no SRS — agora marca como respondida (box 0 = relearn)
         try{ if(window.__gdiMeggy && window.__gdiMeggy.questions && window.__gdiMeggy.questions.markAnswered) { window.__gdiMeggy.questions.markAnswered(q.id||q.statement, false); } }catch(_){}
@@ -650,6 +756,25 @@
         //    achievements OBJECT to "[object Object]" → parseInt → NaN →
         //    achievements "Primeiro simulado"/"5 simulados" NEVER unlocked.
         try{localStorage.setItem('gdi-simulados-count',String(lsGet('gdi-simulados-v1',[]).length+1));}catch(_){}
+        // ★ FIX: trigger achievement check immediately so "Primeiro simulado" /
+        //    "5 simulados" unlock right after finishing (previously only
+        //    evaluated on the next video-watch event in gdi-core.js, so the
+        //    badge stayed locked — and the Conquistas tab/home dashboard count
+        //    was stale — until the user watched another aula).
+        try{
+          if(window.gdiAchievements&&typeof window.gdiAchievements.checkAll==='function'){
+            const _d=(window.GDIUser&&window.GDIUser.dump)?(window.GDIUser.dump()||{}):{};
+            window.gdiAchievements.checkAll({
+              watched:Object.keys(_d.watched||{}).length,
+              streak:window._gdiStreakCache||0,
+              cardsStudied:parseInt(localStorage.getItem('gdi-cards-studied-count')||'0',10)||0,
+              simulados:parseInt(localStorage.getItem('gdi-simulados-count')||'0',10)||0,
+              goalMet:false,
+              cardsCreated:(JSON.parse(localStorage.getItem('gdi-cards-v1')||'[]')).length,
+              summaries:(JSON.parse(localStorage.getItem('gdi-isa-summaries-v1')||'[]')).length
+            });
+          }
+        }catch(_){}
       // anti-duplicação: se já existe salvo neste segundo, pula
       const recent=simus().find(s=>s.date>Date.now()-2000);
       if(!recent){
@@ -700,9 +825,10 @@
         let ai=0;
         for(let d=0;d<days&&ai<aulas.length;d++){
           for(let k=0;k<perDay&&ai<aulas.length;k++,ai++){
-            plan.push({date:addDays(todayStr(),d),aula:aulas[ai].name,path:aulas[ai].path,type:'estudo'});
+            // ★ FIX (REVIEW-04): add id + done field for CRUD support in renderCronograma
+            plan.push({id:uid(),date:addDays(todayStr(),d),aula:aulas[ai].name,path:aulas[ai].path,type:'estudo',done:false});
             // agenda revisões 1,7,30 dias depois
-            [1,7,30].forEach(r=>{const rd=addDays(addDays(todayStr(),d),r);if(rd<=prova)plan.push({date:rd,aula:aulas[ai].name,path:aulas[ai].path,type:'revisão'});});
+            [1,7,30].forEach(r=>{const rd=addDays(addDays(todayStr(),d),r);if(rd<=prova)plan.push({id:uid(),date:rd,aula:aulas[ai].name,path:aulas[ai].path,type:'revisão',done:false});});
           }
         }
         lsSet(LS_CRON,{prova,perDay,gerado:Date.now(),plan});
@@ -712,13 +838,36 @@
       return;
     }
     // cronograma existe — mostra
+    // ★ FIX (REVIEW-04): migra plan items legados p/ ter id + done (1x só)
+    let _needSave=false;
+    cron.plan.forEach(t=>{ if(!t){return;} if(!t.id){t.id=uid();_needSave=true;} if(typeof t.done!=='boolean'){t.done=false;_needSave=true;} });
+    if(_needSave)lsSet(LS_CRON,cron);
     const todayQ=todayStr();
-    const hoje=cron.plan.filter(t=>t.date===todayQ);
-    const futurasAll=cron.plan.filter(t=>t.date>todayQ);
+    const hoje=cron.plan.filter(t=>t&&t.date===todayQ);
+    const futurasAll=cron.plan.filter(t=>t&&t.date>todayQ);
     const diasRest=Math.max(0,Math.ceil((new Date(cron.prova+'T12:00:00')-new Date(todayQ+'T12:00:00'))/86400000));
+    // ★ FIX (REVIEW-04): progresso geral (X/Y concluídas)
+    const totalTasks=cron.plan.length;
+    const totalDone=cron.plan.filter(t=>t&&t.done).length;
+    const pctDone=totalTasks?Math.round(totalDone/totalTasks*100):0;
+    // ★ FIX (REVIEW-04): CRUD helpers — toggle done, delete, add custom task
+    const toggleDone=id=>{const c=lsGet(LS_CRON,null);if(!c||!Array.isArray(c.plan))return;const t=c.plan.find(x=>x.id===id);if(t){t.done=!t.done;lsSet(LS_CRON,c);renderCronograma(box);}};
+    const delTask=id=>{const c=lsGet(LS_CRON,null);if(!c||!Array.isArray(c.plan))return;c.plan=c.plan.filter(x=>x.id!==id);lsSet(LS_CRON,c);renderCronograma(box);};
+    const addTask=(date,aula,type)=>{const c=lsGet(LS_CRON,null);if(!c||!Array.isArray(c.plan))return;c.plan.push({id:uid(),date,aula,path:null,type:type||'estudo',done:false});lsSet(LS_CRON,c);renderCronograma(box);};
     // ★ PAGINAÇÃO C.4 — 15 itens por página nos futuros
     const CRON_PAGE=15;
     let cronPage=box.__cronPage||0;
+    // ★ FIX (REVIEW-04): row renderer compartilhado (hoje + futuras) com checkbox + delete + done state
+    const rowHtml=(t,withDate)=>{
+      const icon=t.type==='revisão'?'🔄':'▶';
+      const iconColor=t.type==='revisão'?'var(--ferreto-secondary,#5ddeda)':'var(--ferreto-primary,#ff8b9f)';
+      const textStyle=t.done?'text-decoration:line-through;color:var(--ferreto-text-faint,#6b7488);':'color:var(--ferreto-text,#e6edf3);';
+      return `<div class="gdi-note" style="padding:6px 10px;align-items:center;${t.done?'opacity:.6;':''}">
+        <button class="gdi-cron-check" data-done="${esc(t.id)}" title="${t.done?'Desmarcar':'Concluir'}" style="background:none;border:1px solid var(--ferreto-border,#30363d);border-radius:50%;width:22px;height:22px;min-width:22px;cursor:pointer;color:${t.done?'#3fb950':'var(--ferreto-text-muted,#8b949e)'};font-size:13px;display:flex;align-items:center;justify-content:center;flex:none;padding:0;">${t.done?'✓':''}</button>
+        <span style="flex:1;font-size:12px;${textStyle}"><b style="color:${iconColor};">${icon}</b> ${esc(t.aula)}${withDate?` <span style=\"color:var(--ferreto-text-muted,#8b949e);font-size:11px;\">· ${fmtDate(t.date)} · ${t.type}</span>`:''}</span>
+        <button class="gdi-cron-del" data-del="${esc(t.id)}" title="Excluir" style="background:none;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:11px;padding:4px 6px;flex:none;"><i class=\"bi bi-x-lg\"></i></button>
+      </div>`;
+    };
     function renderFuturas(){
       const totalPages=Math.max(1,Math.ceil(futurasAll.length/CRON_PAGE));
       if(cronPage>=totalPages)cronPage=totalPages-1;
@@ -726,7 +875,10 @@
       const futuras=futurasAll.slice(cronPage*CRON_PAGE,(cronPage+1)*CRON_PAGE);
       const el=box.querySelector('#cr-futuras');
       if(!el)return;
-      el.innerHTML=futuras.map(t=>`<div class="gdi-note" style="padding:6px 10px;"><span style="flex:1;color:var(--ferreto-text,#e6edf3);font-size:12px;">${esc(t.aula)}</span><span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">${fmtDate(t.date)} · ${t.type}</span></div>`).join('')||'<div class="gdi-notes-empty">Sem tarefas futuras.</div>';
+      el.innerHTML=futuras.length?futuras.map(t=>rowHtml(t,true)).join(''):'<div class="gdi-notes-empty">Sem tarefas futuras.</div>';
+      // ★ FIX (REVIEW-04): bind checkbox + delete nos itens futuros
+      el.querySelectorAll('[data-done]').forEach(b=>b.onclick=()=>toggleDone(b.dataset.done));
+      el.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>delTask(b.dataset.del));
       const pager=box.querySelector('#cr-pager');
       if(pager){
         if(totalPages>1){
@@ -746,19 +898,62 @@
       }
     }
     box.innerHTML=`<div style="max-width:760px;">
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
         <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0;">📅 Prova em ${fmtDate(cron.prova)}</h3>
         <span style="color:var(--ferreto-primary,#ff8b9f);font-weight:600;">${diasRest} dias restantes</span>
         <button class="gdi-mode-btn" id="cr-reset" style="font-size:11px;margin-left:auto;"><i class="bi bi-arrow-clockwise"></i> Refazer</button>
       </div>
+      <div style="margin-bottom:18px;">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ferreto-text-muted,#8b949e);margin-bottom:4px;">
+          <span>Progresso geral</span><span>${totalDone}/${totalTasks} tarefa${totalTasks===1?'':'s'} concluída${totalDone===1?'':'s'} (${pctDone}%)</span>
+        </div>
+        <div style="height:6px;background:var(--ferreto-surface-3,rgba(255,255,255,.08));border-radius:3px;overflow:hidden;">
+          <div style="height:100%;width:${pctDone}%;background:var(--ferreto-grad);border-radius:3px;transition:width .3s;"></div>
+        </div>
+      </div>
       ${hoje.length?`<div style="margin-bottom:18px;">
-        <h4 style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px;">Hoje (${hoje.length} tarefas)</h4>
-        ${hoje.map(t=>`<div class="gdi-note"><span style="flex:1;"><b style="color:${t.type==='revisão'?'var(--ferreto-secondary,#5ddeda)':'var(--ferreto-primary,#ff8b9f)'};">${t.type==='revisão'?'🔄':'▶'}</b> ${esc(t.aula)}</span><span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">${t.type}</span></div>`).join('')}
+        <h4 style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px;">Hoje (${hoje.length} tarefa${hoje.length===1?'':'s'})</h4>
+        <div id="cr-hoje" style="display:flex;flex-direction:column;gap:4px;">${hoje.map(t=>rowHtml(t,false)).join('')}</div>
       </div>`:'<p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin-bottom:18px;">Nada para hoje. 🎉</p>'}
       <h4 style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px;">Próximos dias</h4>
       <div id="cr-futuras" style="display:flex;flex-direction:column;gap:4px;"></div>
       <div id="cr-pager" style="margin-top:10px;text-align:center;"></div>
+      <div style="margin-top:24px;padding:14px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#21262d);border-radius:12px;">
+        <h4 style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 10px;">➕ Adicionar tarefa manual</h4>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+          <div>
+            <label style="display:block;font-size:11px;color:var(--ferreto-text-muted,#8b949e);margin-bottom:3px;">Data</label>
+            <input id="cr-add-date" type="date" value="${todayQ}" style="background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);padding:6px 8px;font-size:12px;">
+          </div>
+          <div style="flex:1;min-width:200px;">
+            <label style="display:block;font-size:11px;color:var(--ferreto-text-muted,#8b949e);margin-bottom:3px;">Conteúdo/aula</label>
+            <input id="cr-add-name" type="text" placeholder="Ex.: Revisar Direito Constitucional" style="width:100%;background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);padding:6px 8px;font-size:12px;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;color:var(--ferreto-text-muted,#8b949e);margin-bottom:3px;">Tipo</label>
+            <select id="cr-add-type" style="background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);padding:6px 8px;font-size:12px;">
+              <option value="estudo">▶ Estudo</option>
+              <option value="revisão">🔄 Revisão</option>
+            </select>
+          </div>
+          <button id="cr-add-btn" class="gdi-btn gdi-btn-primary" style="font-size:12px;"><i class="bi bi-plus-lg"></i> Adicionar</button>
+        </div>
+      </div>
     </div>`;
+    // ★ FIX (REVIEW-04): bind handlers das tarefas de HOJE (antes de renderFuturas p/ não tocar nos futuros)
+    box.querySelectorAll('#cr-hoje [data-done]').forEach(b=>b.onclick=()=>toggleDone(b.dataset.done));
+    box.querySelectorAll('#cr-hoje [data-del]').forEach(b=>b.onclick=()=>delTask(b.dataset.del));
+    // bind add-task handler
+    const addBtn=box.querySelector('#cr-add-btn');
+    if(addBtn)addBtn.onclick=()=>{
+      const date=box.querySelector('#cr-add-date').value;
+      const aula=box.querySelector('#cr-add-name').value.trim();
+      const type=box.querySelector('#cr-add-type').value;
+      if(!date){showToast('Selecione uma data');return;}
+      if(!aula){showToast('Digite o conteúdo da tarefa');return;}
+      addTask(date,aula,type);
+      showToast('Tarefa adicionada ao cronograma');
+    };
     renderFuturas();
     box.querySelector('#cr-reset').onclick=()=>{lsSet(LS_CRON,null);box.__cronPage=0;renderCronograma(box);};
   }
@@ -818,6 +1013,34 @@
     .gdi-central-box textarea{font-family:inherit;resize:vertical;}
     .gdi-central-box textarea:focus,.gdi-central-box input:focus{outline:none;border-color:var(--ferreto-primary,#ff8b9f)!important;box-shadow:0 0 0 3px var(--ferreto-glow,rgba(255,139,159,.25))!important;}
     .gdi-central-box select{font-family:inherit;}
+    /* ★ REVIEW-02: question card UI — clean, professional, hover + answer reveal */
+    .gdi-q-card{background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#21262d);border-radius:12px;padding:14px 16px;transition:border-color .15s ease,box-shadow .15s ease,transform .15s ease;}
+    .gdi-q-card:hover{border-color:var(--ferreto-border-strong,#30363d);box-shadow:0 8px 24px -12px rgba(0,0,0,.55);transform:translateY(-1px);}
+    .gdi-q-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px;}
+    .gdi-q-card-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex:1;min-width:0;}
+    .gdi-q-subj{color:var(--ferreto-secondary,#7aa2ff);font-size:13px;font-family:var(--ferreto-font-display,'Poppins',sans-serif);}
+    .gdi-q-badge{display:inline-flex;align-items:center;gap:3px;font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(255,255,255,.06);color:var(--ferreto-text-muted,#8b949e);border:1px solid rgba(255,255,255,.06);white-space:nowrap;line-height:1.4;}
+    .gdi-q-badge-shared{background:rgba(93,222,218,.10);color:var(--ferreto-secondary,#5ddeda);border-color:rgba(93,222,218,.22);}
+    .gdi-q-badge-due{background:rgba(255,139,159,.12);color:var(--ferreto-primary,#ff8b9f);border-color:rgba(255,139,159,.26);}
+    .gdi-q-badge-future{color:var(--ferreto-text-faint,#6b7488);}
+    .gdi-q-stmt{color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.55;margin-bottom:10px;}
+    .gdi-q-answer{margin-top:4px;padding-top:10px;border-top:1px dashed var(--ferreto-border,#21262d);}
+    .gdi-q-opts{display:flex;flex-direction:column;gap:6px;margin-bottom:10px;}
+    .gdi-q-opt{display:flex;align-items:flex-start;gap:8px;padding:7px 10px;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);font-size:13px;color:var(--ferreto-text,#e6edf3);line-height:1.45;}
+    .gdi-q-opt-correct{background:rgba(63,185,80,.12);border-color:rgba(63,185,80,.38);}
+    .gdi-q-opt-letter{color:var(--ferreto-primary,#ff8b9f);font-weight:600;flex:none;}
+    .gdi-q-opt-correct .gdi-q-opt-letter{color:#3fb950;}
+    .gdi-q-opt-text{flex:1;}
+    .gdi-q-opt-check{color:#3fb950;flex:none;font-size:15px;line-height:1.3;}
+    .gdi-q-expl{font-size:12px;color:var(--ferreto-text,#e6edf3);line-height:1.55;background:rgba(255,255,255,.03);border-radius:8px;padding:8px 10px;border-left:3px solid var(--ferreto-secondary,#5ddeda);}
+    .gdi-q-expl b{color:var(--ferreto-secondary,#5ddeda);}
+    .gdi-q-card-foot{display:flex;gap:8px;}
+    .gdi-q-toggle{font-size:12px;}
+    .gdi-q-toggle:hover{color:var(--ferreto-primary,#ff8b9f)!important;border-color:rgba(255,139,159,.4)!important;}
+    .gdi-q-section{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ferreto-text-muted,#8b949e);font-weight:600;}
+    .gdi-q-loading{display:flex;align-items:center;gap:8px;color:var(--ferreto-text-muted,#8b949e);font-size:12px;padding:14px;}
+    .gdi-q-spin{width:14px;height:14px;border:2px solid rgba(255,255,255,.15);border-top-color:var(--ferreto-primary,#ff8b9f);border-radius:50%;display:inline-block;animation:gdi-q-spin .8s linear infinite;flex:none;}
+    @keyframes gdi-q-spin{to{transform:rotate(360deg);}}
     `;
     document.head.appendChild(s);
   }
