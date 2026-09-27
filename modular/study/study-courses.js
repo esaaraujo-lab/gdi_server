@@ -47,6 +47,15 @@
   const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
   // ★ FIX: esc local para o M22 (Área do Aluno) — usa escHtml global do app.min.js quando disponível
   const esc=s=>{try{return window.escHtml?window.escHtml(s):String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');}catch(_){return String(s||'');}};
+  // ★ REVIEW-09 FIX: module-level `escHtml` and `showToast` aliases. Many
+  // template literals in this file reference `escHtml(...)` and `showToast(...)`
+  // as BARE identifiers (not `window.escHtml`). If app.min.js hasn't loaded yet
+  // (or is missing these globals), the bare reference throws ReferenceError at
+  // runtime and aborts the whole render. Binding them here as `const` means the
+  // bare identifier always resolves — to the global when present, or to a safe
+  // fallback (esc / no-op) when not. Same for showToast.
+  const escHtml = window.escHtml || esc;
+  const showToast = window.showToast || function(){};
   const fmtMin=m=>{m=Math.round(m);return m>=60?Math.floor(m/60)+'h'+String(m%60).padStart(2,'0'):m+'min'};
   const dayKey=t=>{const d=new Date(t||Date.now());return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
   const dateBr=t=>new Date(t).toLocaleDateString('pt-BR');
@@ -656,10 +665,22 @@
       const contBtn=el.querySelector('.gdi-course-continue');
       function applyTarget(tg){
         if(isManual){
-          // curso manual: clicar leva ao path no drive
-          contBtn.disabled=false;
-          contBtn.innerHTML=`<i class="bi bi-folder2-open"></i> Abrir pasta no Drive`;
-          contBtn.onclick=(e)=>{e.stopPropagation();location.href=c.key;};
+          // ★ REVIEW-09 FIX: for manual courses, if there's a resumable lesson
+          // (target = bestIn returned a watched/resume path), offer "Continuar"
+          // exactly like auto-tiles — so the user can pick up where they left
+          // off. Only fall back to "Abrir pasta no Drive" when there's nothing
+          // to continue. Previously manual cards ALWAYS showed "Abrir pasta no
+          // Drive" even when the user had watched lessons → "Continuar" never
+          // worked from the card for manual courses.
+          if(tg){
+            contBtn.disabled=false;
+            contBtn.innerHTML=`<i class="bi bi-play-fill"></i> Continuar: ${escHtml(realName(tg).slice(0,30))}`;
+            contBtn.onclick=(e)=>{e.stopPropagation();location.href=tg+(tg.includes('?')?'&':'?')+'a=view';};
+          }else{
+            contBtn.disabled=false;
+            contBtn.innerHTML=`<i class="bi bi-folder2-open"></i> Abrir pasta no Drive`;
+            contBtn.onclick=(e)=>{e.stopPropagation();location.href=c.key;};
+          }
           return;
         }
         if(tg){
@@ -673,12 +694,14 @@
         }
       }
       // ★ PATCH C: se target foi pre-buscado, usa; senão faz fetch aqui (fallback)
+      // ★ REVIEW-09: for manual courses we ALSO want bestIn() so applyTarget
+      // receives the resumable lesson path (if any). Previously the `else if
+      // (isManual){ applyTarget(null); }` branch skipped bestIn entirely →
+      // manual cards never got a "Continuar" target.
       if(target!==undefined){
         applyTarget(target);
-      }else if(isManual){
-        applyTarget(null);
       }else{
-        bestIn(c.key).then(applyTarget);
+        bestIn(c.key).then(applyTarget).catch(()=>applyTarget(null));
       }
 
       // botão remover
@@ -1459,6 +1482,12 @@
           //   Direito Administrativo — 45 aulas · 12 assistidas · 33 restantes
           //   Direito Constitucional — 38 aulas · 5 assistidas · 33 restantes
           // etc.
+          // ★ REVIEW-09: each discipline row is now EXPANDABLE — clicking the
+          // row toggles an inline list of individual lessons with watch-status
+          // icons (✓ watched / ○ not watched). A separate 📂 icon keeps the
+          // "open folder in Drive" navigation. This satisfies "course detail
+          // shows all lessons with watch status" without losing the compact
+          // discipline overview.
           if(!lessons.length && !total){
             return '<div class="gdi-notes-empty"><i class="bi bi-info-circle" style="font-size:18px;color:var(--ferreto-text-muted,#8b949e);vertical-align:middle;"></i> <span style="vertical-align:middle;">Nenhuma aula encontrada ainda.</span><div style="margin-top:8px;font-size:12px;"><a href="'+escHtml(coursePath)+'" style="color:var(--ferreto-secondary,#5ddeda);text-decoration:underline;"><i class="bi bi-folder2-open"></i> Abrir pasta no Drive</a></div></div>';
           }
@@ -1477,20 +1506,38 @@
             const segs = rel.split('/').filter(Boolean);
             // disciplina = primeiro segmento após o curso (ou "Aulas" se estiver na raiz)
             const disc = segs.length > 1 ? segs[0] : (segs.length === 1 ? 'Aulas' : 'Outros');
-            if(!groups[disc]) groups[disc] = { total: 0, watched: 0, path: cp + (cp.endsWith('/')?'':'/') + encodeURIComponent(disc) + '/' };
+            if(!groups[disc]) groups[disc] = { total: 0, watched: 0, path: cp + (cp.endsWith('/')?'':'/') + encodeURIComponent(disc) + '/', lessons: [] };
             groups[disc].total++;
             if(l.watched) groups[disc].watched++;
+            groups[disc].lessons.push(l);
           }
           const arr = Object.keys(groups).sort((a,b) => a.localeCompare(b,'pt-BR'));
           if(!arr.length){
             return '<div class="gdi-notes-empty"><i class="bi bi-hourglass-split" style="color:var(--ferreto-secondary,#5ddeda);"></i> <span>Escaneando disciplinas...</span></div>';
+          }
+          // ★ REVIEW-09: helper to render a single lesson row with watch status.
+          // Sorted by name (natural/numeric) so lessons appear in order within a discipline.
+          function renderLessonRow(l){
+            const wIcon = l.watched
+              ? '<i class="bi bi-check-circle-fill" style="color:#3fb950;flex:none;font-size:14px;" title="Assistida"></i>'
+              : '<i class="bi bi-circle" style="color:var(--ferreto-text-muted,#8b949e);flex:none;font-size:14px;" title="Não assistida"></i>';
+            const resumedTag = l.resumed ? ' <span style="color:var(--ferreto-secondary,#5ddeda);font-size:9px;border:1px solid rgba(93,222,218,.3);border-radius:4px;padding:0 4px;">retomar</span>' : '';
+            return '<a href="'+escHtml(l.path)+(String(l.path).includes('?')?'&':'?')+'a=view" class="gdi-lesson-row" style="display:flex;align-items:center;gap:8px;padding:6px 10px 6px 4px;text-decoration:none;border-radius:6px;" data-lesson-path="'+escHtml(l.path)+'">'
+              + wIcon
+              + '<span style="color:var(--ferreto-text,#e6edf3);font-size:12px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(l.name||realName(l.path))+'</span>'
+              + resumedTag
+              + '</a>';
           }
           return '<div style="display:flex;flex-direction:column;gap:8px;">' + arr.map(disc => {
             const g = groups[disc];
             const remaining = Math.max(0, g.total - g.watched);
             const pct = g.total > 0 ? Math.round(g.watched / g.total * 100) : 0;
             const color = pct >= 80 ? '#3fb950' : pct >= 40 ? '#ffd43b' : 'var(--ferreto-primary,#ff8b9f)';
-            return '<div class="gdi-note" style="display:flex;align-items:center;gap:12px;cursor:pointer;padding:10px 12px;" data-disc-path="'+escHtml(g.path)+'">'
+            // sort lessons inside the discipline by name (numeric-aware)
+            const sortedLessons = g.lessons.slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR',{numeric:true}));
+            return '<div class="gdi-disc-block" style="border:1px solid var(--ferreto-border,#21262d);border-radius:10px;overflow:hidden;">'
+              + '<div class="gdi-note gdi-disc-row" style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 12px;user-select:none;" data-disc-path="'+escHtml(g.path)+'" data-disc-name="'+escHtml(disc)+'">'
+              + '<i class="bi bi-chevron-right gdi-disc-chevron" style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;flex:none;transition:transform .15s;"></i>'
               + '<i class="bi bi-folder-fill" style="color:var(--ferreto-secondary,#5ddeda);font-size:18px;flex:none;"></i>'
               + '<div style="flex:1;min-width:0;">'
               + '<div style="color:var(--ferreto-text,#e6edf3);font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(disc)+'</div>'
@@ -1500,11 +1547,18 @@
               + '<span style="color:#ffd43b;">'+remaining+' restantes</span>'
               + '</div>'
               + '</div>'
-              + '<div style="flex:none;text-align:right;">'
+              + '<div style="flex:none;text-align:right;display:flex;align-items:center;gap:8px;">'
+              + '<div>'
               + '<div style="font-size:16px;font-weight:700;color:'+color+';">'+pct+'%</div>'
               + '<div style="width:60px;height:4px;background:var(--ferreto-surface-3,rgba(255,255,255,.08));border-radius:2px;margin-top:3px;overflow:hidden;">'
               + '<div style="height:4px;width:'+pct+'%;background:'+color+';border-radius:2px;"></div>'
               + '</div>'
+              + '</div>'
+              + '<a href="'+escHtml(g.path)+'" class="gdi-disc-open" onclick="event.stopPropagation()" title="Abrir pasta no Drive" style="color:var(--ferreto-text-muted,#8b949e);font-size:14px;flex:none;padding:4px;border-radius:6px;text-decoration:none;"><i class="bi bi-box-arrow-up-right"></i></a>'
+              + '</div>'
+              + '</div>'
+              + '<div class="gdi-disc-lessons" style="display:none;border-top:1px solid var(--ferreto-border,#21262d);background:var(--ferreto-surface-2,rgba(255,255,255,.02));padding:6px 8px 6px 30px;max-height:280px;overflow-y:auto;">'
+              + sortedLessons.map(renderLessonRow).join('')
               + '</div>'
               + '</div>';
           }).join('') + '</div>';
@@ -1594,11 +1648,23 @@
         contBtn.innerHTML='<i class="bi bi-check2-all" style="color:#3fb950;"></i> Tudo em dia!';
       }
     });
-    // ★ Task 18: click em disciplina → abre pasta no Drive (não aula individual)
-    box.querySelectorAll('[data-disc-path]').forEach(el=>{
-      el.onclick=()=>{
-        const p=el.dataset.discPath;
-        if(p)location.href=p;  // abre a pasta da disciplina
+    // ★ REVIEW-09: click em disciplina → TOGGLE expandable lessons list
+    // (was: navigate to folder). The folder navigation is now a separate
+    // <a class="gdi-disc-open"> icon inside the row, so the row click is free
+    // to expand/collapse the inline lesson list with watch-status icons.
+    box.querySelectorAll('.gdi-disc-row').forEach(row=>{
+      row.onclick=(e)=>{
+        // ignore clicks on the open-folder link (it has its own onclick stopPropagation)
+        if(e.target.closest('.gdi-disc-open')) return;
+        const block=row.closest('.gdi-disc-block');
+        if(!block) return;
+        const lessons=block.querySelector('.gdi-disc-lessons');
+        const chevron=row.querySelector('.gdi-disc-chevron');
+        if(lessons){
+          const isOpen = lessons.style.display !== 'none';
+          lessons.style.display = isOpen ? 'none' : 'block';
+          if(chevron) chevron.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(90deg)';
+        }
       };
     });
 
