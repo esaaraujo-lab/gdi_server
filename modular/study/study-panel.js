@@ -266,6 +266,7 @@
         </span>`:''}
       </div>
       <input id="gdi-goal-set" type="number" min="10" max="480" value="${g}" title="Meta diária (minutos)" style="width:56px;background:var(--ferreto-surface-2,rgba(255,255,255,.07));border:1px solid var(--ferreto-border,#30363d);border-radius:6px;color:var(--ferreto-text,#f0f6fc);text-align:center;padding:5px;font-size:12px;flex-shrink:0;">
+      <button id="gdi-classic-mode-btn" class="gdi-mode-btn" style="font-size:11px;padding:4px 10px;" title="Usar modo Index clássico">🗂️ Index</button>
       <button id="gdi-central-meggy" title="Meggy" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);border:0;border-radius:10px;padding:6px 12px;cursor:pointer;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px;flex-shrink:0;"><span style="font-size:16px;">🐩</span> Meggy</button>
       <button id="gdi-central-x" title="Fechar (Esc)">✕</button>
     </div>`;
@@ -363,6 +364,13 @@
           return;
         }
         fab.click();
+      };
+      // ★ v1.0.89 P1: classic mode toggle — switches to old Index UX
+      var classicBtn = S.panel.querySelector('#gdi-classic-mode-btn');
+      if(classicBtn) classicBtn.onclick = function() {
+        try { localStorage.setItem('gdi-classic-mode', '1'); }catch(_){}
+        try { closePanel(); }catch(_){}
+        try { if(typeof showToast === 'function') showToast('Modo Index ativado. Clique em "Área do Aluno" para voltar.', 'info'); }catch(_){}
       };
       // ★ v80-FIX BUG 5 (initial visibility): if AI widget is already known
       // to be hidden (e.g. user opened Área do Aluno AFTER async AI detection
@@ -1059,6 +1067,13 @@
   // Suporta também ?central=questoes, ?central=resumos, etc. (abre direto numa aba)
   (function(){
     function tryOpenFromURL(){
+      try {
+        if(localStorage.getItem('gdi-classic-mode') === '1') {
+          // Clear the flag after first use — next login will auto-open again
+          localStorage.removeItem('gdi-classic-mode');
+          return; // Don't auto-open
+        }
+      }catch(_){}
       try{
         if(window.__gdiAutoOpenDone) return false;
         const params = new URLSearchParams(window.location.search);
@@ -1091,7 +1106,7 @@
           if(window.GDIUser && typeof window.GDIUser.ready === 'function'){
             window.GDIUser.ready().then(openOnce).catch(openOnce);
             // fallback: abre depois de 2s mesmo se ready() não resolver
-            setTimeout(openOnce, 2000);
+            setTimeout(openOnce, 800);
           }else{
             setTimeout(openOnce, 1500);
           }
@@ -1101,7 +1116,7 @@
       return false;
     }
     // Tenta abrir imediatamente (se já logado) e também após page:change
-    setTimeout(tryOpenFromURL, 1000);
+    setTimeout(tryOpenFromURL, 200);
     // ★ FIX 10 (Task 21): was `if(window.Bus)` — but Bus is declared with `const` in
     // app.min.js, so `window.Bus` is undefined. The check always failed, so tryOpenFromURL
     // was never re-run on page:change or user:ready. Use `typeof Bus !== 'undefined'`
