@@ -1,6 +1,6 @@
 # MANUAL TÉCNICO — GDI Index (Educa/Meggy)
 
-**Versão atual:** 1.0.60 · **CACHE_VERSION:** 55 · **Build:** 2026-09-23 03:20
+**Versão atual:** 1.0.90 · **CACHE_VERSION:** 55 · **Build:** 2025-09-27
 
 Manual técnico de referência para desenvolvedores. Documenta toda a arquitetura, endpoints, funções, módulos e fluxos do GDI Index — plataforma de estudos construída sobre o Google Drive Index (GDI-JS 2.5.9).
 
@@ -829,8 +829,8 @@ const authConfig = {
 
 ```js
 const CDN_VERSION = '2.5.9';      // fork base (GDI-JS)
-const APP_VERSION = '1.0.60';     // build atual (footer)
-const BUILD_DATE = '2026-09-23 03:20';
+const APP_VERSION = '1.0.90';     // build atual (footer)
+const BUILD_DATE = '2025-09-27';
 const CACHE_VERSION = '55';       // cache-buster módulos CDN
 ```
 
@@ -918,7 +918,34 @@ const CACHE_VERSION = '55';       // cache-buster módulos CDN
 
 ---
 
-## Apêndice — Histórico de Versões (v1.0.49-v1.0.60)
+## Changelog — v1.0.90
+
+### Fase 1 — Estabilização
+- C1 CRITICAL: gdiIsaPdf extractPdfText patch preservado (removido do Object.assign)
+- C2 HIGH: NOTE_KEY() defensive fallback
+- C3 HIGH: Rest mode persiste entre trocas de vídeo (localStorage + video:switched)
+- C4 HIGH: GH_TOKEN + NVIDIA_API_KEY_4..10 + NVIDIA_API_URL/MODELS na compat layer
+- C5 MEDIUM: study-theme.js querySelector corrigido
+- C6 MEDIUM: M9 per-lesson filter antes do slice(0,12)
+- C8 MEDIUM: window.gdiSubjects re-exportado por meggy-flashcards.js
+- C9 LOW: Dead Pomodoro CSS removido de study-theme.js
+- C10 LOW: Dead addEventListener removido de worker.js
+- Bus.offGlobal adicionado a gdi-core.js
+- Monólitos gdi-study.js + gdi-meggy.js removidos da whitelist/loader
+- S1-S3: Simulado fixes (filtro curso, timer cleanup, SRS skip)
+- Questões: dropdown por curso + disciplina
+
+### Fase 2 — Enhancements
+- Shaka Player opcional (configurável via PLAYER var no worker.js, default plyr)
+- Shaka UI com shaka.ui.Overlay (controles + Smart TV remote)
+- Pomodoro no sidebar da Área do Aluno
+- Rest mode fix completo (wakeGuard 10s, nav keys não acorda, overlay pointer-events)
+- Auto-open Área do Aluno após login (delay 200ms)
+- Botão "🗂️ Index" para modo clássico (toggle one-shot via localStorage)
+
+---
+
+## Apêndice — Histórico de Versões (v1.0.49-v1.0.90)
 
 | Versão | Task | Descrição |
 |---|---|---|
@@ -934,9 +961,10 @@ const CACHE_VERSION = '55';       // cache-buster módulos CDN
 | 1.0.58 | SCAN-CURSOR | Scan incremental BFS com cursor no Drive |
 | 1.0.59 | SCAN-PATH | Passa parsed.subPath como startPath |
 | 1.0.60 | SCAN-CURSOR-VALIDATE | Valida paths do cursor, descarta inválidos |
+| 1.0.90 | FASE1+FASE2 | Estabilização (C1-C10, S1-S3) + Enhancements (Shaka Player, Pomodoro sidebar, rest mode fix, auto-open, Index button) — ver seção Changelog acima |
 
 ---
 
-**Manual gerado em:** 2026-09-25
+**Manual gerado em:** 2025-09-27
 **Cobertura:** 17.900 linhas de código revisadas
 **Repos:** público `esaaraujo-lab/gdi_server` · privado `esaaraujo-lab/student_gdi`
