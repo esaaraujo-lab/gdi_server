@@ -254,15 +254,10 @@
           `).join('')}
         </div>
       `).join('')}
-      <div style="padding:10px;border-top:1px solid var(--ferreto-border,#30363d);margin-top:auto;">
-        <div style="font-size:10px;color:var(--ferreto-text-muted,#8b949e);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px;">🍅 Pomodoro</div>
-        <div id="gdi-pomo-time" style="font-size:22px;font-weight:700;color:var(--ferreto-text,#e6edf3);text-align:center;margin-bottom:6px;font-variant-numeric:tabular-nums;">25:00</div>
-        <div style="display:flex;gap:4px;justify-content:center;">
-          <button id="gdi-pomo-start" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);border:0;border-radius:6px;padding:3px 12px;color:#fff;font-size:11px;cursor:pointer;">▶</button>
-          <button id="gdi-pomo-reset" style="background:rgba(255,255,255,.04);border:1px solid var(--ferreto-border,#30363d);border-radius:6px;padding:3px 8px;color:var(--ferreto-text,#e6edf3);font-size:11px;cursor:pointer;">↺</button>
-        </div>
-        <div id="gdi-pomo-phase" style="font-size:9px;color:var(--ferreto-text-muted,#8b949e);text-align:center;margin-top:3px;">Foco</div>
-      </div>
+      <button id="gdi-pomo-sidebar-btn" style="padding:8px;border-top:1px solid var(--ferreto-border,#30363d);margin-top:auto;background:none;border-left:0;border-right:0;border-bottom:0;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;color:var(--ferreto-text,#e6edf3);font-size:13px;transition:all .15s;" title="Pomodoro">
+        <span style="font-size:20px;">🍅</span>
+        <span id="gdi-pomo-sidebar-time" style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);font-variant-numeric:tabular-nums;">25:00</span>
+      </button>
     </aside>`;
   }
 
@@ -446,135 +441,49 @@
     try{ initPomodoro(); }catch(_){}
   }
 
-  // ★ Pomodoro widget — timer 25/5/15 com persistência em localStorage
+  // ★ Pomodoro sidebar button — abre o painel clássico do M12 (sem lógica própria)
   function initPomodoro(){
-    if(window.__gdiPomoInit) return;
-    window.__gdiPomoInit = true;
-    const LS_KEY='gdi-pomodoro-state';
-    const DURATIONS={focus:25*60,short:5*60,long:15*60};
-    const PHASE_LABELS={focus:'Foco',short:'Pausa curta',long:'Pausa longa'};
-    let intervalId=null;
-    let state={phase:'focus',cycle:0,endsAt:0,running:false};
-    function load(){
-      try{
-        const raw=localStorage.getItem(LS_KEY);
-        if(raw){
-          const s=JSON.parse(raw);
-          if(s&&typeof s.phase==='string'&&typeof s.cycle==='number'&&typeof s.endsAt==='number'){
-            state=s;
-            // se o timer expirou enquanto o painel estava fechado, avança fase
-            if(state.running && state.endsAt && Date.now()>=state.endsAt){
-              advancePhase();
+    if(window.__gdiPomoSidebarInit) return;
+    window.__gdiPomoSidebarInit = true;
+
+    var btn = document.querySelector('#gdi-pomo-sidebar-btn');
+    if(!btn) return;
+
+    btn.addEventListener('click', function(){
+      // Find the classic Pomodoro navbar button
+      var navBtn = document.getElementById('gdi-pom-nav-btn');
+      if(navBtn){
+        // Force visible (M12 hides it when no video, but we want it always available)
+        var nav = document.getElementById('gdi-pom-nav');
+        if(nav) nav.style.display = '';
+        navBtn.click();
+      } else {
+        // Fallback: try to trigger M12 injection
+        if(window.GDI_MODULES){
+          var pomMod = window.GDI_MODULES.find(function(m){return m.name === 'pom-nav' || m.name === 'pomodoro';});
+          if(pomMod && pomMod.init) pomMod.init();
+          setTimeout(function(){
+            var nb = document.getElementById('gdi-pom-nav-btn');
+            if(nb){
+              var nv = document.getElementById('gdi-pom-nav');
+              if(nv) nv.style.display = '';
+              nb.click();
             }
-          }
+          }, 200);
         }
-      }catch(_){}
-    }
-    function save(){
-      try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(_){}
-    }
-    function beep(){
-      try{
-        const AC=window.AudioContext||window.webkitAudioContext;
-        if(!AC) return;
-        const ctx=new AC();
-        const osc=ctx.createOscillator();
-        const gain=ctx.createGain();
-        osc.connect(gain);gain.connect(ctx.destination);
-        osc.type='sine';osc.frequency.value=880;
-        gain.gain.setValueAtTime(0.001, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime+0.01);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.6);
-        osc.start();
-        osc.stop(ctx.currentTime+0.6);
-        // segundo bip
-        const osc2=ctx.createOscillator();
-        const gain2=ctx.createGain();
-        osc2.connect(gain2);gain2.connect(ctx.destination);
-        osc2.type='sine';osc2.frequency.value=660;
-        gain2.gain.setValueAtTime(0.001, ctx.currentTime+0.3);
-        gain2.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime+0.31);
-        gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.9);
-        osc2.start(ctx.currentTime+0.3);
-        osc2.stop(ctx.currentTime+0.9);
-      }catch(_){}
-    }
-    function currentDuration(){
-      return DURATIONS[state.phase]||DURATIONS.focus;
-    }
-    function advancePhase(){
-      // Foco -> (cycle+1)%4==0 ? long : short -> focus ...
-      if(state.phase==='focus'){
-        state.cycle=(state.cycle||0)+1;
-        state.phase=(state.cycle%4===0)?'long':'short';
-      }else{
-        // vinhamos de uma pausa, voltamos ao foco
-        state.phase='focus';
       }
-      state.endsAt=0;
-      state.running=false;
-      save();
-    }
-    function remainingSec(){
-      if(!state.running||!state.endsAt) return currentDuration();
-      return Math.max(0, Math.round((state.endsAt-Date.now())/1000));
-    }
-    function fmt(sec){
-      const m=Math.floor(sec/60);
-      const s=sec%60;
-      return (m<10?'0':'')+m+':'+(s<10?'0':'')+s;
-    }
-    function render(){
-      const timeEl=document.getElementById('gdi-pomo-time');
-      const phaseEl=document.getElementById('gdi-pomo-phase');
-      const startBtn=document.getElementById('gdi-pomo-start');
-      if(timeEl) timeEl.textContent=fmt(remainingSec());
-      if(phaseEl) phaseEl.textContent=PHASE_LABELS[state.phase]||'Foco';
-      if(startBtn) startBtn.textContent=state.running?'⏸':'▶';
-    }
-    function tick(){
-      if(!state.running) return;
-      const r=remainingSec();
-      if(r<=0){
-        beep();
-        advancePhase();
-      }
-      render();
-    }
-    function start(){
-      state.running=true;
-      state.endsAt=Date.now()+currentDuration()*1000;
-      save();
-      render();
-    }
-    function pause(){
-      state.running=false;
-      state.endsAt=0;
-      save();
-      render();
-    }
-    function reset(){
-      state.running=false;
-      state.endsAt=0;
-      state.phase='focus';
-      state.cycle=0;
-      save();
-      render();
-    }
-    function bind(){
-      const startBtn=document.getElementById('gdi-pomo-start');
-      const resetBtn=document.getElementById('gdi-pomo-reset');
-      if(startBtn) startBtn.onclick=function(){
-        if(state.running) pause(); else start();
-      };
-      if(resetBtn) resetBtn.onclick=function(){ reset(); };
-    }
-    // init
-    load();
-    bind();
-    render();
-    if(intervalId) clearInterval(intervalId);
-    intervalId=setInterval(tick,1000);
+    });
+
+    // Sync sidebar time with classic Pomodoro display
+    setInterval(function(){
+      try {
+        var classicDisplay = document.getElementById('gdi-pom-display');
+        var sidebarTime = document.getElementById('gdi-pomo-sidebar-time');
+        if(classicDisplay && sidebarTime){
+          sidebarTime.textContent = classicDisplay.textContent;
+        }
+      } catch(_){}
+    }, 1000);
   }
   // ★ v1.0.73: renderDrives — mostra os 12 drives como cards navegáveis DENTRO do painel
   function renderDrives(box){
@@ -1091,26 +1000,32 @@
     for(const k in(d.notes||{}))(d.notes[k]||[]).forEach(x=>{const e=d.srs&&d.srs[k+'|'+x.at];if((e?e.due:(x.at+86400000))<=now)srsDue++;});
     const totalH=Object.values(per).reduce((a,b)=>a+b,0)/3600;
     box.innerHTML=`
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
-        ${chip('\ud83d\udd25',streak+' dia'+(streak===1?'':'s')+' seguidos')}
-        ${chip('\u23f1\ufe0f',fmtMin(todayMin())+' hoje')}
-        ${chip('\ud83d\udcca',fmtMin(wkMin)+' na semana')}
-        ${chip('\u2753','\u2248'+totalH.toFixed(1).replace('.',',')+'h no total')}
-        ${chip('\u2705',Object.keys(w).length+' conclu\u00eddas')}
-        ${chip('\u25b6',Object.keys(r).length+' em andamento')}
-        ${chip('\ud83d\udcdd',notesN+' anota\u00e7\u00f5es')}
-        ${srsDue?chip('\ud83c\udf93',srsDue+' revis\u00f5es vencidas'):''}
-      </div>
-      <h4 style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px;">\u00daltimos 3 meses \u00b7 atividades por dia</h4>
-      <div class="heat" style="margin-bottom:18px;overflow-x:auto;padding-bottom:4px;">${heat}</div>
-      <h4 style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px;">Horas por curso (estimativa)</h4>
-      ${top.map(t2=>`<div style="margin-bottom:8px;min-width:260px;max-width:640px;">
-        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--ferreto-text,#e6edf3);margin-bottom:3px;">
-          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:78%;">${escHtml(courseName(t2.ck))}</span>
-          <span style="color:var(--ferreto-text-muted,#8b949e);">${t2.h.toFixed(1).replace('.',',')}h</span>
+      <div style="max-width:760px;">
+        <div style="margin-bottom:18px;">
+          <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 4px;font-family:var(--ferreto-font-display,'Poppins',sans-serif);">\uD83D\uDCA0 Estat\u00edsticas</h3>
+          <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0;line-height:1.5;">Seu hist\u00f3rico de estudo dos \u00faltimos 3 meses. Mantenha a sequ\u00eancia de dias (🔥 <b>streak</b>) e equilibre as mat\u00e9rias para evoluir mais r\u00e1pido.</p>
         </div>
-        <div style="height:6px;background:var(--ferreto-surface-3,rgba(255,255,255,.08));border-radius:3px;overflow:hidden;"><div style="height:6px;width:${Math.max(3,Math.round(t2.h/maxH*100))}%;background:var(--ferreto-grad);"></div></div>
-      </div>`).join('')||'<div class="gdi-notes-empty">Sem dados ainda.</div>'}`;
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+          ${chip('\uD83D\uDD25',streak+' dia'+(streak===1?'':'s')+' seguidos')}
+          ${chip('\u23f1\ufe0f',fmtMin(todayMin())+' hoje')}
+          ${chip('\uD83D\uDCCA',fmtMin(wkMin)+' na semana')}
+          ${chip('\u2753','\u2248'+totalH.toFixed(1).replace('.',',')+'h no total')}
+          ${chip('\u2705',Object.keys(w).length+' conclu\u00eddas')}
+          ${chip('\u25b6',Object.keys(r).length+' em andamento')}
+          ${chip('\uD83D\uDCDD',notesN+' anota\u00e7\u00f5es')}
+          ${srsDue?chip('\uD83C\uDF93',srsDue+' revis\u00f5es vencidas'):''}
+        </div>
+        <h4 style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px;">\u00daltimos 3 meses \u00b7 atividades por dia</h4>
+        <div class="heat" style="margin-bottom:18px;overflow-x:auto;padding-bottom:4px;">${heat}</div>
+        <h4 style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px;">Horas por curso (estimativa)</h4>
+        ${top.map(t2=>`<div style="margin-bottom:8px;min-width:260px;max-width:640px;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--ferreto-text,#e6edf3);margin-bottom:3px;">
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:78%;">${escHtml(courseName(t2.ck))}</span>
+            <span style="color:var(--ferreto-text-muted,#8b949e);">${t2.h.toFixed(1).replace('.',',')}h</span>
+          </div>
+          <div style="height:6px;background:var(--ferreto-surface-3,rgba(255,255,255,.08));border-radius:3px;overflow:hidden;"><div style="height:6px;width:${Math.max(3,Math.round(t2.h/maxH*100))}%;background:var(--ferreto-grad);"></div></div>
+        </div>`).join('')||'<div class="gdi-notes-empty">Sem dados ainda.</div>'}
+      </div>`;
   }
   if(!document.getElementById('gdi-central-style')){
     const s=document.createElement('style');s.id='gdi-central-style';s.textContent=`
