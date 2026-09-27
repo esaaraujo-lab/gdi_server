@@ -106,7 +106,11 @@
 .gdi-ai-err{font-size:12px;color:#ff8b8b;text-align:center;padding:8px;margin:0 4px;}
 .gdi-ai-provider{font-size:10px;color:var(--ferreto-text-faint,#6b7488);text-align:center;padding:2px 0 6px;letter-spacing:.02em;}
 .gdi-ai-provider b{color:var(--ferreto-secondary,#5ddeda);}
+.gdi-ai-quick-actions{display:flex;gap:6px;padding:8px 12px;border-top:1px solid var(--ferreto-border,rgba(255,255,255,.09));}
+.gdi-ai-quick{flex:1;padding:6px 8px;border:1px solid var(--ferreto-border,#30363d);border-radius:8px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));color:var(--ferreto-text,#e6edf3);font-size:11px;cursor:pointer;transition:background .15s,border-color .15s,color .15s;}
+.gdi-ai-quick:hover{background:var(--ferreto-surface-3,rgba(255,255,255,.08));border-color:var(--ferreto-primary,#ff8b9f);color:var(--ferreto-primary,#ff8b9f);}
 @media(max-width:480px){#gdi-ai-panel{right:8px;left:8px;width:auto;bottom:80px;height:calc(100vh - 160px);}}
+@media(max-width:380px){.gdi-ai-quick{font-size:10px;padding:5px 4px;}}
 `;document.documentElement.appendChild(s);
   }
 
@@ -194,6 +198,9 @@
   // object-fit:cover preenche o círculo; alt vazio para não mostrar texto overlay.
   // ★ v1.0.86 modularização: fallback '91' (CACHE_VERSION bump planejado).
   fab.innerHTML='<span class="gdi-ai-fab-ico"><img src="/modular/assets/meggy-fab.png?v='+(window.CACHE_VERSION||'94')+'" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;"></span><span id="gdi-ai-fab-badge"></span>';
+  // ★ FIX: hide FAB until AI availability is confirmed (prevents visibility flash
+  //    when neither browser AI nor server is available). showWidget() reveals it.
+  fab.style.display='none';
   root.appendChild(fab);
 
   const panel=document.createElement('div');
@@ -209,14 +216,14 @@
     </div>
     <div id="gdi-ai-body"></div>
     <div class="gdi-ai-provider"></div>
-    <div class="gdi-ai-quick-actions" style="display:flex;gap:6px;padding:8px 12px;border-top:1px solid var(--ferreto-border,rgba(255,255,255,.09));">
-      <button class="gdi-ai-quick" data-action="resumir" style="flex:1;padding:6px 8px;border:1px solid var(--ferreto-border,#30363d);border-radius:8px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));color:var(--ferreto-text,#e6edf3);font-size:11px;cursor:pointer;">💬 Resumir</button>
-      <button class="gdi-ai-quick" data-action="questoes" style="flex:1;padding:6px 8px;border:1px solid var(--ferreto-border,#30363d);border-radius:8px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));color:var(--ferreto-text,#e6edf3);font-size:11px;cursor:pointer;">❓ Questões</button>
-      <button class="gdi-ai-quick" data-action="explicar" style="flex:1;padding:6px 8px;border:1px solid var(--ferreto-border,#30363d);border-radius:8px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));color:var(--ferreto-text,#e6edf3);font-size:11px;cursor:pointer;">💡 Explicar</button>
+    <div class="gdi-ai-quick-actions">
+      <button class="gdi-ai-quick" data-action="resumir" title="Gerar um resumo da aula atual">💬 Resumir</button>
+      <button class="gdi-ai-quick" data-action="questoes" title="Criar questões de revisão">❓ Questões</button>
+      <button class="gdi-ai-quick" data-action="explicar" title="Explicar o conceito principal">💡 Explicar</button>
     </div>
     <div id="gdi-ai-input-wrap">
-      <input id="gdi-ai-input" type="text" placeholder="Pergunte à Meggy 🐩 sobre a aula, peça um resumo..." autocomplete="off">
-      <button id="gdi-ai-send" title="Enviar"><i class="bi bi-send-fill"></i></button>
+      <input id="gdi-ai-input" type="text" placeholder="Pergunte à Meggy 🐩 sobre a aula, peça um resumo..." autocomplete="off" aria-label="Mensagem para a Meggy">
+      <button id="gdi-ai-send" title="Enviar" aria-label="Enviar mensagem"><i class="bi bi-send-fill"></i></button>
     </div>`;
   root.appendChild(panel);
 
@@ -370,15 +377,19 @@
   async function send(){
     const txt=input.value.trim();if(!txt||busy)return;
     busy=true;sendBtn.disabled=true;input.value='';
+    // ★ FIX: limpa mensagens de erro de tentativas anteriores antes de continuar.
+    panel.querySelectorAll('.gdi-ai-err').forEach(el=>el.remove());
     addMsg('user',txt);
     showTyping();
 
     // histórico para enviar (role/content) + contexto de memória
     const hist=messages.filter(m=>m.role!=='system').slice(-8).map(m=>({role:m.role,content:m.text}));
-    // adiciona contexto de memória na primeira mensagem do histórico
+    // ★ FIX: PREPEND contexto de memória como mensagem inicial — antes era
+    //    `hist[0]=...` que SOBRESCREVIA (perdia) a mensagem mais antiga do
+    //    histórico. Agora insere no início preservando o histórico real.
     const memCtx=buildMemoryContext();
-    if(memCtx&&hist.length>0){
-      hist[0]={role:'assistant',content:'Contexto do aluno: '+memCtx};
+    if(memCtx){
+      hist.unshift({role:'assistant',content:'Contexto do aluno: '+memCtx});
     }
 
     let response=null,usedLocal=false;
@@ -522,7 +533,7 @@
       banner.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:2147483645;max-width:420px;padding:10px 16px;border-radius:12px;background:linear-gradient(135deg,rgba(255,139,159,.95),rgba(192,38,211,.95));color:#fff;font-size:13px;box-shadow:0 8px 28px -6px rgba(255,139,159,.4);display:none;align-items:center;gap:8px;cursor:pointer;animation:gdi-ai-in .3s ease;';
       banner.innerHTML = '<span class="gdi-suggest-text"></span><span class="gdi-suggest-close" style="margin-left:auto;font-size:16px;opacity:.7;">×</span>';
       (GDI_ROOT()||document.body).appendChild(banner);
-      banner.querySelector('.gdi-suggest-close').onclick = (e) => { e.stopPropagation(); banner.classList.remove('show'); banner.style.display='none'; };
+      banner.querySelector('.gdi-suggest-close').onclick = (e) => { e.stopPropagation(); clearTimeout(banner.__timer); banner.style.display='none'; };
     }
     banner.querySelector('.gdi-suggest-text').textContent = text;
     banner.onclick = () => {
