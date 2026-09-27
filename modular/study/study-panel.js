@@ -181,11 +181,24 @@
     // ★ uma única renderização: espera estado OU fallback em caso de erro
     ensureState().then(()=>{
       if(S.panel&&S.panel.style.display!=='none')renderPanel();
-    }).catch(()=>renderPanel());
+    }).catch(()=>{
+      // ★ REVIEW-09 FIX: don't re-render if the user already closed the panel
+      // (e.g. clicked Index/Esc/✕ while ensureState() was still resolving).
+      // Previously this unconditionally called renderPanel() on rejection,
+      // which could re-render a hidden panel and re-bind handlers
+      // unnecessarily.
+      if(S.panel&&S.panel.style.display!=='none')renderPanel();
+    });
     try{ showOnboarding(); }catch(_){}
   }
   function closePanel(){
-    S.FC.active=false;
+    // ★ REVIEW-09 FIX: guard S.FC — if another module clears state.FC (or
+    // state is reassigned), `S.FC.active=false` would throw TypeError BEFORE
+    // reaching `S.panel.style.display='none'`, leaving the panel stuck open.
+    // The Index button's `try{closePanel()}catch(_){}` would swallow the
+    // error → panel stays open but toast says "Modo Index ativado" (false
+    // success). Guard so the display:'none' line ALWAYS runs.
+    try{ if(S&&S.FC) S.FC.active=false; }catch(_){}
     // ★ limpa timer do simulado se ativo (evita salvar simulado fantasma)
     const body=S.panel&&S.panel.querySelector('#gdi-central-body');
     if(body&&body.__simTimer){clearInterval(body.__simTimer);body.__simTimer=null;}
@@ -356,9 +369,15 @@
         </div>
       </div>`;
       S.panel.dataset.sidebarRendered='1';
-      // bind header
-      S.panel.querySelector('#gdi-central-x').onclick=closePanel;
-      S.panel.querySelector('#gdi-central-meggy').onclick=function(){
+      // bind header — ★ REVIEW-09 FIX: null-check each querySelector before
+      // assigning .onclick. Previously, if any element was missing (e.g. HTML
+      // malformed, partial render, or future template change), the throw
+      // skipped ALL subsequent bindings — including the Index button, leaving
+      // it dead (click did nothing).
+      const _xBtn=S.panel.querySelector('#gdi-central-x');
+      if(_xBtn) _xBtn.onclick=closePanel;
+      const _meggyBtn=S.panel.querySelector('#gdi-central-meggy');
+      if(_meggyBtn) _meggyBtn.onclick=function(){
         // ★ v80-FIX BUG 5: when no AI backend is available, Meggy's FAB is
         // hidden via `fab.style.display='none'` (hideWidget in gdi-meggy.js).
         // The Meggy S.panel itself also has inline `display:none`, so calling
@@ -375,10 +394,17 @@
         fab.click();
       };
       // ★ v1.0.89 P1: classic mode toggle — switches to old Index UX
+      // ★ REVIEW-09 FIX: closePanel() is now defensive (never throws), but add
+      // a belt-and-suspenders fallback `display='none'` AFTER closePanel so
+      // the panel is guaranteed hidden even if an unforeseen edge case throws
+      // inside closePanel. Previously, the `try{closePanel()}catch(_){}`
+      // swallowed any error and the panel stayed open while the toast still
+      // showed "Modo Index ativado" — confusing the user.
       var classicBtn = S.panel.querySelector('#gdi-classic-mode-btn');
       if(classicBtn) classicBtn.onclick = function() {
         try { localStorage.setItem('gdi-classic-mode', '1'); }catch(_){}
         try { closePanel(); }catch(_){}
+        try { if(S.panel) S.panel.style.display='none'; }catch(_){}  // ★ fallback
         try { if(typeof showToast === 'function') showToast('Modo Index ativado. Clique em "Área do Aluno" para voltar.', 'info'); }catch(_){}
       };
       // ★ v80-FIX BUG 5 (initial visibility): if AI widget is already known
@@ -394,7 +420,8 @@
           _btnMeggy.style.display='none';
         }
       }catch(_){}
-      S.panel.querySelector('#gdi-goal-set').addEventListener('change',e=>{
+      const _goalInput=S.panel.querySelector('#gdi-goal-set');
+      if(_goalInput) _goalInput.addEventListener('change',e=>{
         const v=Math.max(10,Math.min(480,parseInt(e.target.value,10)||60));
         lsSet(LS_GOAL,v);
         updateHeaderStats();  // só atualiza o número, não rebuilda
@@ -403,7 +430,9 @@
       S.panel.querySelectorAll('.gdi-central-tab').forEach(b=>b.onclick=function(){
         S.panel.querySelectorAll('.gdi-central-tab').forEach(x=>x.classList.remove('active'));
         this.classList.add('active');
-        S.tab=this.dataset.t;S.FC.active=false;
+        S.tab=this.dataset.t;
+        // ★ REVIEW-09 FIX: guard S.FC (same rationale as closePanel)
+        try{ if(S.FC) S.FC.active=false; }catch(_){}
         renderBody(S.tab);
       });
     }else{
@@ -550,6 +579,24 @@
   // ★ v1.0.73: renderDrives — mostra os 12 drives como cards navegáveis DENTRO do painel
   function renderDrives(box){
     const drives = window.drive_names || [];
+    // ★ Empty/loading state — drive_names pode não ter carregado ainda (worker
+    // ainda não injetou o bootstrap). Antes o grid ficava vazio sem mensagem,
+    // dando a impressão de aba quebrada.
+    if(!drives.length){
+      box.innerHTML = `
+        <div style="margin-bottom:18px;">
+          <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 4px;">☁️ Explorar Drives</h3>
+          <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0;">Clique num drive para explorar. Tudo abre aqui dentro.</p>
+        </div>
+        <div class="gdi-empty-state" style="padding:40px 20px;">
+          <div class="gdi-mat-isa-spin" style="margin:0 auto 12px;"></div>
+          <p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin:0;">Carregando drives…</p>
+          <p style="color:var(--ferreto-text-faint,#6b7488);font-size:11px;margin-top:6px;">Se persistir, recarregue a página.</p>
+        </div>
+        <div id="gdi-drive-browser" style="display:none;"></div>
+      `;
+      return;
+    }
     box.innerHTML = `
       <div style="margin-bottom:18px;">
         <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 4px;">☁️ Explorar Drives</h3>
@@ -580,42 +627,76 @@
     });
   }
 
+  // ★ Helper: build drive breadcrumb HTML (Drives home + Voltar + path segments).
+  // Extraído para poder reusar nos ramos empty/error — antes o usuário ficava
+  // preso numa pasta vazia sem poder voltar.
+  function buildDriveBreadcrumb(path){
+    let html = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;flex-wrap:wrap;">';
+    html += '<button id="gdi-drive-home" class="gdi-mode-btn" style="font-size:11px;padding:4px 8px;" title="Voltar para lista de drives">☁️ Drives</button>';
+    // ★ Botão "Voltar" (sobe UM nível — diferente do "Drives" que volta pra raiz)
+    const stripped = String(path||'').replace(/\/+$/,'');
+    const lastSlash = stripped.lastIndexOf('/');
+    const parentPath = lastSlash > 0 ? stripped.slice(0, lastSlash + 1) : '';
+    if(parentPath){
+      html += '<button id="gdi-drive-up" class="gdi-mode-btn" data-path="' + escHtml(parentPath) + '" style="font-size:11px;padding:4px 8px;" title="Subir um nível"><i class="bi bi-arrow-left"></i> Voltar</button>';
+    }
+    const segs = String(path||'').split('/').filter(Boolean);
+    let acc = '';
+    for(let i = 0; i < segs.length; i++){
+      const seg = segs[i];
+      acc += '/' + seg;
+      let displayName = seg;
+      if(/^\d+:$/.test(seg) && window.drive_names) displayName = window.drive_names[parseInt(seg)] || seg;
+      try { displayName = decodeURIComponent(displayName); } catch(_) {}
+      const isLast = i === segs.length - 1;
+      html += '<span style="color:var(--ferreto-text-faint,#6b7488);font-size:11px;">/</span>';
+      if(isLast){
+        html += '<span style="color:var(--ferreto-text,#e6edf3);font-size:12px;font-weight:600;">' + escHtml(displayName) + '</span>';
+      }else{
+        html += '<button class="gdi-drive-bc-btn gdi-mode-btn" data-path="' + escHtml(acc + '/') + '" style="font-size:11px;padding:2px 6px;">' + escHtml(displayName) + '</button>';
+      }
+    }
+    html += '</div>';
+    return html;
+  }
+
+  // ★ Helper: wire breadcrumb buttons (home / up / segment). Reusado em todos
+  // os ramos do browseDriveInPanel (success/empty/error).
+  function wireDriveBreadcrumb(box, browser){
+    if(!browser) return;
+    const homeBtn = browser.querySelector('#gdi-drive-home');
+    if(homeBtn) homeBtn.onclick = (e)=>{ e.preventDefault(); renderDrives(box); };
+    const upBtn = browser.querySelector('#gdi-drive-up');
+    if(upBtn) upBtn.onclick = (e)=>{ e.preventDefault(); browseDriveInPanel(box, upBtn.dataset.path, ''); };
+    browser.querySelectorAll('.gdi-drive-bc-btn').forEach(el=>{
+      el.onclick = (e)=>{ e.preventDefault(); browseDriveInPanel(box, el.dataset.path, ''); };
+    });
+  }
+
   // ★ v1.0.73: Navegação de drive DENTRO do painel — recursiva
   async function browseDriveInPanel(box, path, title) {
     const browser = box.querySelector('#gdi-drive-browser');
     if(!browser) return;
     browser.style.display = 'block';
     browser.innerHTML = '<div style="text-align:center;padding:20px;"><div class="gdi-mat-isa-spin"></div><p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin-top:10px;">Carregando...</p></div>';
+    // ★ Breadcrumb é construído ANTES da chamada async — assim podemos mostrá-lo
+    // mesmo se a API falhar ou retornar vazio (antes o usuário ficava preso).
+    const bcHtml = buildDriveBreadcrumb(path);
     try {
       const pw = window.gdiGetPw ? window.gdiGetPw() : '';
       const result = await window.gdiListAllFiles(path, pw);
       if(!Array.isArray(result) || !result.length) {
-        browser.innerHTML = '<p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">Nenhum conteúdo encontrado.</p>';
+        // ★ FIX: antes o ramo vazio não renderizava breadcrumb — usuário ficava
+        // preso numa pasta vazia. Agora mostra breadcrumb + mensagem clara.
+        browser.innerHTML = bcHtml
+          + '<div style="padding:30px 20px;text-align:center;color:var(--ferreto-text-muted,#8b949e);font-size:13px;">'
+          + '<i class="bi bi-folder2-open" style="font-size:32px;display:block;margin-bottom:8px;opacity:.5;"></i>'
+          + 'Pasta vazia.</div>';
+        wireDriveBreadcrumb(box, browser);
         return;
       }
       const folders = result.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
       const files = result.filter(f => !f.mimeType || f.mimeType !== 'application/vnd.google-apps.folder');
-
-      // Breadcrumb
-      let bcHtml = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;flex-wrap:wrap;">';
-      bcHtml += '<button id="gdi-drive-home" class="gdi-mode-btn" style="font-size:11px;padding:4px 8px;">☁️ Drives</button>';
-      const segs = path.split('/').filter(Boolean);
-      let acc = '';
-      for(let i = 0; i < segs.length; i++) {
-        const seg = segs[i];
-        acc += '/' + seg;
-        let displayName = seg;
-        if(/^\d+:$/.test(seg) && window.drive_names) displayName = window.drive_names[parseInt(seg)] || seg;
-        try { displayName = decodeURIComponent(displayName); } catch(_) {}
-        const isLast = i === segs.length - 1;
-        bcHtml += '<span style="color:var(--ferreto-text-faint,#6b7488);font-size:11px;">/</span>';
-        if(isLast) {
-          bcHtml += '<span style="color:var(--ferreto-text,#e6edf3);font-size:12px;font-weight:600;">' + escHtml(displayName) + '</span>';
-        } else {
-          bcHtml += '<button class="gdi-drive-bc-btn gdi-mode-btn" data-path="' + escHtml(acc + '/') + '" style="font-size:11px;padding:2px 6px;">' + escHtml(displayName) + '</button>';
-        }
-      }
-      bcHtml += '</div>';
 
       let content = bcHtml;
       if(folders.length) {
@@ -651,13 +732,15 @@
         el.onmouseleave = () => { el.style.background = 'var(--ferreto-surface-2,rgba(255,255,255,.04))'; el.style.borderColor = 'var(--ferreto-border,#30363d)'; };
         el.onclick = () => browseDriveInPanel(box, el.dataset.path, el.dataset.name);
       });
-      browser.querySelectorAll('.gdi-drive-bc-btn').forEach(el => {
-        el.onclick = () => browseDriveInPanel(box, el.dataset.path, '');
-      });
-      const homeBtn = browser.querySelector('#gdi-drive-home');
-      if(homeBtn) homeBtn.onclick = () => renderDrives(box);
+      wireDriveBreadcrumb(box, browser);
     } catch(err) {
-      browser.innerHTML = '<p style="color:#ff8b8b;font-size:12px;">Erro: ' + escHtml(err.message) + '</p>';
+      // ★ FIX: antes o catch substituía o HTML por só uma mensagem de erro —
+      // usuário perdia a breadcrumb e não conseguia voltar. Agora mantém.
+      browser.innerHTML = bcHtml
+        + '<div style="padding:20px;color:#ff8b8b;font-size:13px;background:rgba(255,107,107,.06);border:1px solid rgba(255,107,107,.2);border-radius:8px;">'
+        + '<i class="bi bi-exclamation-triangle"></i> Erro: ' + escHtml(err.message || String(err))
+        + '<br><small style="color:var(--ferreto-text-muted,#8b949e);">Tente voltar e entrar novamente.</small></div>';
+      wireDriveBreadcrumb(box, browser);
     }
   }
 
@@ -906,10 +989,31 @@
       box.innerHTML='<div class="gdi-notes-empty">Sistema de conquistas indisponível.</div>';
       return;
     }
+    // ★ FIX: re-run checkAll BEFORE reading the unlocked list so the grid is
+    // always fresh. Previously, achievements like "Primeiro simulado"/"5
+    // simulados" were only evaluated on the next video-watch event (see
+    // gdi-core.js), so a user finishing a simulado and opening Conquistas
+    // would see a stale (still-locked) badge until they watched another aula.
+    try{
+      if(typeof window.gdiAchievements.checkAll==='function'){
+        const _d=(window.GDIUser&&window.GDIUser.dump)?(window.GDIUser.dump()||{}):{};
+        window.gdiAchievements.checkAll({
+          watched:Object.keys(_d.watched||{}).length,
+          streak:window._gdiStreakCache||0,
+          cardsStudied:parseInt(localStorage.getItem('gdi-cards-studied-count')||'0',10)||0,
+          simulados:parseInt(localStorage.getItem('gdi-simulados-count')||'0',10)||0,
+          goalMet:false,
+          cardsCreated:(JSON.parse(localStorage.getItem('gdi-cards-v1')||'[]')).length,
+          summaries:(JSON.parse(localStorage.getItem('gdi-isa-summaries-v1')||'[]')).length
+        });
+      }
+    }catch(_){}
     const unlocked=window.gdiAchievements.getUnlocked();
     const defs=window.gdiAchievements.defs();
     const total=defs.length;
-    const pct=Math.round(unlocked.length/total*100);
+    // ★ FIX: guard against division by zero — if defs is empty, pct would be
+    // NaN, producing an invalid "width:NaN%" on the progress bar.
+    const pct=total>0?Math.round(unlocked.length/total*100):0;
     box.innerHTML=`<div style="max-width:760px;">
       <div style="text-align:center;margin-bottom:20px;padding:20px;background:linear-gradient(135deg,rgba(255,139,159,.1),rgba(93,222,218,.06));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;">
         <div style="font-size:48px;margin-bottom:8px;">🏆</div>
@@ -1197,7 +1301,10 @@
       else openPanel();
       return;
     }
-    if(!S.FC.active||!S.panel||S.panel.style.display==='none')return;
+    // ★ REVIEW-09 FIX: guard S.FC existence (same rationale as closePanel —
+    // without this, a null S.FC would throw TypeError and break the flashcard
+    // space/1/2/3 keyboard shortcuts).
+    if(!S.FC||!S.FC.active||!S.panel||S.panel.style.display==='none')return;
     if(e.code==='Space'){e.preventDefault();S.FC.flip&&S.FC.flip();}
     else if(e.key==='1'||e.key==='2'||e.key==='3'){S.FC.grade&&S.FC.grade(+e.key);}
   });
