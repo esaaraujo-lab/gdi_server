@@ -333,7 +333,7 @@ Bus.onGlobal('watched:changed',window._gdiComputeStreak);
 .gdi-debug-head{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:#161b22;cursor:pointer;user-select:none;color:var(--ferreto-text-muted,#8b949e);}
 .gdi-debug-head:hover{background:#1c2128;}
 .gdi-debug-head strong{color:#f0f6fc;display:flex;align-items:center;gap:6px;}
-.gdi-dbg-count{background:#1f6feb;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;}
+.gdi-dbg-count{background:var(--ferreto-primary,#ff8b9f);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;}
 .gdi-debug-actions{display:flex;gap:8px;}
 .gdi-debug-actions button{background:none;border:1px solid #30363d;color:var(--ferreto-text-muted,#8b949e);border-radius:4px;padding:2px 9px;cursor:pointer;font-size:11px;}
 .gdi-debug-actions button:hover{background:#1c2128;color:#f0f6fc;}
@@ -355,7 +355,7 @@ Bus.onGlobal('watched:changed',window._gdiComputeStreak);
 .gdi-mat-tab i{font-size:20px;}
 .gdi-mat-tab span{font-size:10px;font-weight:600;letter-spacing:.02em;}
 .gdi-mat-tab:hover{background:rgba(255,255,255,.13);color:#fff;}
-.gdi-mat-tab.active{background:var(--bs-primary,#1f6feb);border-color:var(--bs-primary,#1f6feb);color:#fff;}
+.gdi-mat-tab.active{background:var(--ferreto-primary,#ff8b9f);border-color:var(--ferreto-primary,#ff8b9f);color:#fff;}
 .gdi-mat-body{height:calc(100dvh - 250px);min-height:420px;border:1px solid rgba(255,255,255,.12);
   border-radius:12px;overflow:hidden;background:#161b22;position:relative;}
 body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
@@ -364,12 +364,12 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 #gdi-note-input{width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:8px;
   color:var(--ferreto-text,#e6edf3);padding:8px;font-size:13px;resize:vertical;min-height:44px;}
 .gdi-notes-actions{display:flex;align-items:center;gap:8px;margin-top:6px;}
-#gdi-note-time{font-size:11px;color:var(--ferreto-primary,#7aa2ff);font-variant-numeric:tabular-nums;cursor:pointer;}
-#gdi-note-save{margin-left:auto;background:var(--bs-primary,#1f6feb);border:0;color:#fff;border-radius:7px;
+#gdi-note-time{font-size:11px;color:var(--ferreto-primary,#ff8b9f);font-variant-numeric:tabular-nums;cursor:pointer;}
+#gdi-note-save{margin-left:auto;background:var(--ferreto-primary,#ff8b9f);border:0;color:#fff;border-radius:7px;
   padding:5px 12px;font-size:12px;cursor:pointer;}
 #gdi-notes-list{margin-top:8px;max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;}
 .gdi-note{display:flex;gap:8px;align-items:flex-start;background:rgba(255,255,255,.05);border-radius:8px;padding:6px 8px;font-size:12px;}
-.gdi-note-time{color:var(--ferreto-primary,#7aa2ff);cursor:pointer;white-space:nowrap;font-variant-numeric:tabular-nums;font-size:11px;margin-top:2px;}
+.gdi-note-time{color:var(--ferreto-primary,#ff8b9f);cursor:pointer;white-space:nowrap;font-variant-numeric:tabular-nums;font-size:11px;margin-top:2px;}
 .gdi-note-text{flex:1;color:var(--ferreto-text,#e6edf3);word-break:break-word;}
 .gdi-note-del{background:none;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:13px;padding:0 2px;}
 .gdi-note-del:hover{color:#ff6b6b;}
@@ -379,7 +379,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 #gdi-sleep-btn{opacity:.8;transition:opacity .25s ease;}
 #gdi-sleep-btn:hover{opacity:1;}
 #gdi-note-marks{position:relative;height:16px;margin-top:4px;cursor:pointer;display:none;}
-.gdi-note-mark{position:absolute;top:3px;width:10px;height:10px;border-radius:50%;background:#7aa2ff;
+.gdi-note-mark{position:absolute;top:3px;width:10px;height:10px;border-radius:50%;background:#ff8b9f;
   border:2px solid #0b0e14;transform:translateX(-50%);transition:transform .12s,background .12s;}
 .gdi-note-mark:hover{background:#ffd43b;transform:translateX(-50%) scale(1.35);}
 #gdi-progress-line{margin-top:6px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ferreto-text-muted,#8b949e);flex-wrap:wrap;}
@@ -398,7 +398,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 .gdi-playlist-item{padding:8px 12px;margin:3px 0;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:13px;background:rgba(255,255,255,0.05);color:var(--gdi-text,#e6edf3);transition:background .15s;}
 .gdi-playlist-item:hover{background:rgba(255,255,255,0.12);}
 .gdi-playlist-item>div:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80%;}
-.gdi-playlist-item.cur{background:var(--bs-primary,#1f6feb);color:#fff;}
+.gdi-playlist-item.cur{background:var(--ferreto-primary,#ff8b9f);color:#fff;}
 .gdi-playlist-item.watched{opacity:.75;}
 .gdi-playlist-item.watched .bi-check-circle-fill{color:#3fb950;}
 .gdi-pl-size{font-size:11px;opacity:.8;white-space:nowrap;}
@@ -882,8 +882,8 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     if(!right)return null;
     if(!right.dataset.m9){
       right.dataset.m9='1';
-      right.innerHTML=`<div class="gdi-mat-head"><strong><i class="bi bi-journal-bookmark-fill" style="color:var(--ferreto-primary,#7aa2ff);"></i> Materiais da aula</strong><span id="gdi-mat-status"></span></div>
-      <div class="gdi-mat-tabs" id="gdi-mat-tabs"><span class="gdi-mat-loading">Buscando PDFs da aula\u2026</span></div>
+      right.innerHTML=`<div class="gdi-mat-head"><strong><i class="bi bi-journal-bookmark-fill" style="color:var(--ferreto-primary,#ff8b9f);"></i> Materiais da aula</strong><span id="gdi-mat-status"></span></div>
+      <div class="gdi-mat-tabs" id="gdi-mat-tabs"><span class="gdi-mat-loading">Buscando materiais da aula\u2026</span></div>
       <div class="gdi-mat-body" id="gdi-mat-body"></div>`;
     }
     return{
@@ -908,11 +908,15 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       // ★C.3: busy-wait 40×200ms removido. Em vez disso, escuta o evento
       // Bus 'slots:ready' (emitido pelo app.min.js quando os slots são criados).
       // Fallback one-shot de 5s: se o evento não disparar, faz um retry.
-      // offGlobal now exists (F1 polyfill above) but this one-shot site still
-      // uses the guard flag `done` (equivalent — listener no-ops after 1st fire).
+      // ★ FIX-09 (Task FIX-09-UI-CORE): offGlobal is now available (F1
+      //    polyfill above). Use it to actually detach the one-shot listener
+      //    after first fire (or after the 5s fallback) so it doesn't linger
+      //    in Bus's internal Map across many lesson switches. The `done`
+      //    flag stays as a defensive guard against double-resolve.
       await new Promise(resolve=>{
         let done=false;
-        const onReady=()=>{if(!done){done=true;resolve();}};
+        const detach=()=>{try{if(typeof Bus!=='undefined'&&typeof Bus.offGlobal==='function')Bus.offGlobal('slots:ready',onReady);}catch(_){}};
+        const onReady=()=>{if(!done){done=true;detach();resolve();}};
         // ★ FIX 11 (Task 21): was `if(window.Bus&&typeof Bus.onGlobal==='function')` —
         // but Bus is declared with `const` in app.min.js, so `window.Bus` is undefined.
         // The check always failed, so the slots:ready listener was never registered and
@@ -921,7 +925,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         if(typeof Bus !== 'undefined' && typeof Bus.onGlobal === 'function'){
           Bus.onGlobal('slots:ready',onReady);
         }
-        setTimeout(()=>{if(!done){done=true;resolve();}},5000);
+        setTimeout(()=>{if(!done){done=true;detach();resolve();}},5000);
       });
       if(myGen!==gen)return;
       panel=ensurePanel();
@@ -937,10 +941,23 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     const curPath=window.location.pathname;
     const fPath=curPath.split("/").slice(0,-1).join("/")+"/";
     const pPath=curPath.split("/").slice(0,-2).join("/")+"/";
-    tabsEl.innerHTML='<span class="gdi-mat-loading">Buscando PDFs da aula\u2026</span>';
+    tabsEl.innerHTML='<span class="gdi-mat-loading">Buscando materiais da aula\u2026</span>';
     if(statusEl)statusEl.textContent='';
     bodyEl.innerHTML='';
-    const isPdf=x=>(x.fileExtension||'').toLowerCase()==='pdf'||/pdf/i.test(x.mimeType||'');
+    // ★ FIX M9 (Task FIX-09-UI-CORE): the file filter previously ONLY accepted
+    //    PDFs (`isPdf`), so MD files in the lesson folder (resumos saved by
+    //    the Meggy, lesson notes, .meggy.ai materials) were silently dropped.
+    //    Now: accept PDFs AND Markdown files. Markdown is detected by either
+    //    fileExtension==='md' or a mimeType containing 'markdown'.
+    const isMaterial=x=>{
+      const ext=(x.fileExtension||'').toLowerCase();
+      const mt=x.mimeType||'';
+      if(ext==='pdf'||/pdf/i.test(mt))return true;
+      if(ext==='md'||/markdown/i.test(mt))return true;
+      return false;
+    };
+    // back-compat alias (used by sub-folder recursion below)
+    const isPdf=isMaterial;
     try{
       let found=[];
       // ★C.2: se window.playlistVideos já tem itens de fPath, a chamada
@@ -984,6 +1001,51 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       const seen=new Set();const uniq=[];
       found.forEach(x=>{if(!seen.has(x.name)){seen.add(x.name);uniq.push(x)}});
       const base=courseBase();
+      // ★ FIX M9 (Task FIX-09-UI-CORE): also collect resumos from the global
+      //    .meggy.ai/resumos/ folder via GDIStorage.listMaterials. These are
+      //    MD files saved by the Meggy batalhão/summary flows that live OUTSIDE
+      //    the lesson's local Drive folder — so gdiListAllFiles(fPath) misses
+      //    them entirely. Without this, resumos generated on another device
+      //    (or after clearing localStorage) never appeared in the materials
+      //    panel even though they exist on Drive. Best-effort: silent on failure.
+      //    Each matching Drive item is injected as a synthetic file object so
+      //    the existing classify()/per-lesson filter/slice(0,12) pipeline
+      //    handles it identically to a local MD.
+      try{
+        if(window.GDIStorage && typeof window.GDIStorage.listMaterials==='function' && base){
+          // safeNormalize mirrors meggy-summaries.js' safeLesson encoding:
+          // [^a-zA-Z0-9_-] -> _. Drive file names look like
+          // <safeLesson>_<safePdf>_<timestamp>.md, so we match by checking
+          // whether the safe base appears as a prefix-ish substring of the
+          // Drive file name (case-insensitive).
+          const safeBase=String(base).toLowerCase().replace(/[^a-z0-9_-]+/g,'_').replace(/^_+|_+$/g,'');
+          if(safeBase){
+            const driveItems=await window.GDIStorage.listMaterials('resumos','');
+            if(Array.isArray(driveItems) && driveItems.length){
+              for(const it of driveItems){
+                if(!it || !it.name)continue;
+                if(!/\.md$/i.test(it.name))continue;
+                const fn=String(it.name).toLowerCase();
+                // match if safeBase is a substring (covers safeLesson_pdf_ts.md
+                // and the rare case where the lesson name itself is the file name)
+                if(fn.indexOf(safeBase)===-1)continue;
+                // dedup against the same name in case the local folder ALSO has it
+                if(seen.has(it.name))continue;
+                seen.add(it.name);
+                uniq.push({
+                  name: it.name,
+                  fileExtension: 'md',
+                  mimeType: 'text/markdown',
+                  size: Number(it.size)||0,
+                  link: it.downloadUrl || '',
+                  _driveId: it.id || '',
+                  _modified: it.modified || null
+                });
+              }
+            }
+          }
+        }
+      }catch(_){ /* best-effort: Drive indisponível — segue só com local */ }
       // ★ C6 FIX (M9 per-lesson filter ordering): the slice(0,12) cap
       //    previously ran on `uniq` BEFORE the per-lesson filter, so
       //    matching PDFs sitting at index 12+ in the dedup'd list were
@@ -1001,18 +1063,28 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       if(!pdfs.length){
         if(tabsEl.isConnected){
           tabsEl.innerHTML='';
-          if(statusEl)statusEl.textContent='sem PDF';
-          if(bodyEl)bodyEl.innerHTML=`<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material PDF encontrado para esta aula.</div></div>`;
+          if(statusEl)statusEl.textContent='sem material';
+          if(bodyEl)bodyEl.innerHTML=`<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material (PDF ou resumo) encontrado para esta aula.</div></div>`;
           lastKey=p;
         }
         return;
       }
       const items=pdfs.map(x=>{
         const cls=classify(x.name);
-        const b2=UI.second_domain_for_dl?UI.downloaddomain+x.link:window.location.origin+x.link;
-        const url=b2+(x.link.includes('?')?'&':'?')+'inline=true';
+        // ★ FIX M9: handle both local Drive files (link is a relative path
+        //    like /download.aspx?id=… — needs origin/second_domain prefix)
+        //    and Drive resumos (link is also a relative path from
+        //    generateLink in worker.js — same shape). If the link is already
+        //    absolute (http(s)://), use it as-is to avoid malformed URLs.
+        const link=x.link||'';
+        const isAbs=/^https?:\/\//i.test(link);
+        const b2=isAbs?link:(UI.second_domain_for_dl?UI.downloaddomain+link:window.location.origin+link);
+        const url=b2+(link.includes('?')?'&':'?')+'inline=true';
         const match=base&&x.name.toLowerCase().includes(base)?0:1;
-        return{name:x.name,label:cls.l,icon:cls.i,ord:cls.ord,match,url};
+        // ★ FIX M9: tag MD items so show() knows to render them as HTML
+        //    (marked + gdiSanitize) instead of trying to embed as a PDF.
+        const isMd=(x.fileExtension||'').toLowerCase()==='md'||/markdown/i.test(x.mimeType||'');
+        return{name:x.name,label:cls.l,icon:cls.i,ord:cls.ord,match,url,kind:isMd?'md':'pdf'};
       });
       items.sort((x,y)=>x.match-y.match||x.ord-y.ord||x.name.localeCompare(y.name,undefined,{numeric:true}));
       // ★ C6 FIX: per-lesson filter now applied upstream on `uniq`
@@ -1044,11 +1116,66 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         <div class="gdi-mat-tab gdi-mat-isa" data-mat="isa-flashcards" title="Flashcards desta aula">
           <i class="bi bi-card-text"></i><span>Flashcards</span>
         </div>`;
-      if(statusEl)statusEl.textContent=items.length+' PDF'+(items.length>1?'s':'');
+      if(statusEl)statusEl.textContent=items.length+' material'+(items.length>1?'is':'');
       const isMobile=Os.isMobile;
+      // ★ FIX M9: shared MD-renderer — used by both desktop and mobile paths
+      //    when an item is tagged kind:'md'. Fetches the file content, runs it
+      //    through marked (if available) and gdiSanitize (anti-XSS — required
+      //    for shared resumos / LLM output), and renders into a scrollable
+      //    container. Falls back to <pre> if marked isn't loaded, and to an
+      //    "Open in new tab" link if the fetch fails (CORS / network).
+      function renderMdItem(item,viewer){
+        if(!viewer)return;
+        viewer.innerHTML='<div style="text-align:center;padding:24px;color:var(--ferreto-text-muted,#8b949e);"><div class="gdi-mat-isa-spin" style="margin:0 auto 10px;"></div>Carregando resumo…</div>';
+        (async()=>{
+          try{
+            const resp=await fetch(item.url,{credentials:'same-origin'});
+            if(!resp.ok)throw new Error('HTTP '+resp.status);
+            const txt=await resp.text();
+            let html;
+            if(window.marked){
+              try{html=window.marked.parse(txt);}catch(_){html='<pre style="white-space:pre-wrap;">'+escHtml(txt)+'</pre>';}
+            }else{
+              html='<pre style="white-space:pre-wrap;">'+escHtml(txt)+'</pre>';
+            }
+            if(window.gdiSanitize)html=window.gdiSanitize(html);
+            viewer.innerHTML='<div style="padding:18px 22px;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.75;max-width:760px;margin:0 auto;">'+html+'</div>';
+          }catch(err){
+            console.warn('[M9 md] falhou ao carregar resumo:',err);
+            viewer.innerHTML=`<div style="text-align:center;padding:24px;color:var(--ferreto-text,#e6edf3);">
+              <i class="bi bi-exclamation-triangle" style="font-size:34px;color:#ffa94d;"></i>
+              <div style="margin-top:8px;font-size:13px;">N\u00e3o foi poss\u00edvel carregar o resumo dentro da p\u00e1gina.</div>
+              <a href="${item.url}" target="_blank" rel="noopener" class="gdi-btn gdi-btn-primary" style="margin-top:14px;text-decoration:none;">
+                <i class="bi bi-box-arrow-up-right"></i> Abrir em nova aba
+              </a>
+            </div>`;
+          }
+        })();
+      }
       function show(idx){
         if(!tabsEl.isConnected||!bodyEl.isConnected)return;
         tabsEl.querySelectorAll('.gdi-mat-tab').forEach(t=>t.classList.toggle('active',+t.dataset.mat===idx));
+        const item=items[idx];
+        // ★ FIX M9: MD files render as HTML (marked + sanitize), not as PDF.
+        //    Both desktop and mobile use the same renderer — no pdf.js, no
+        //    iframe. Browsers can't natively embed .md and trying to load
+        //    the .md URL into an iframe just downloads it on most browsers.
+        if(item && item.kind==='md'){
+          bodyEl.innerHTML=`<div class="gdi-mat-md-viewer" style="height:100%;display:flex;flex-direction:column;gap:10px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 14px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));border-bottom:1px solid var(--ferreto-border,#21262d);flex-shrink:0;">
+              <div style="min-width:0;flex:1;display:flex;align-items:center;gap:8px;">
+                <i class="bi bi-file-earmark-text" style="color:var(--ferreto-primary,#ff8b9f);"></i>
+                <span style="font-weight:600;color:var(--ferreto-text,#f0f6fc);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(item.name)}</span>
+              </div>
+              <a href="${item.url}" target="_blank" rel="noopener" class="gdi-mode-btn" style="text-decoration:none;font-size:11px;padding:5px 10px;flex:none;" title="Abrir em aba nova (baixar)">
+                <i class="bi bi-box-arrow-up-right"></i> Abrir
+              </a>
+            </div>
+            <div class="gdi-mat-md-content" style="flex:1;overflow-y:auto;background:var(--ferreto-surface,#161b22);"></div>
+          </div>`;
+          renderMdItem(item, bodyEl.querySelector('.gdi-mat-md-content'));
+          return;
+        }
         if(isMobile){
           // ★ Android/iOS: muitos navegadores móveis NÃO renderizam PDF em <iframe>
           // e abrem popup de download. Usamos pdf.js (viewer) embutido para
@@ -1177,10 +1304,10 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       });
       show(0);
       lastKey=p;
-      console.log('[GDI Materiais] aula:',base||'(sem nome)','\u2192',items.length,'PDFs:',items.map(x=>x.tabLabel).join(' | '));
+      console.log('[GDI Materiais] aula:',base||'(sem nome)','\u2192',items.length,'material(is):',items.map(x=>x.tabLabel).join(' | '));
     }catch(err){
       if(myGen!==gen)return;
-      if(statusEl)statusEl.textContent='sem PDF';
+      if(statusEl)statusEl.textContent='sem material';
       if(bodyEl)bodyEl.innerHTML=`<div class="gdi-mat-empty"><i class="bi bi-wifi-off" style="font-size:34px;"></i><div>N\u00e3o foi poss\u00edvel carregar os materiais.</div></div>`;
     }
   }
