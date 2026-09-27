@@ -235,16 +235,40 @@
         if(!isDone) await new Promise(r => setTimeout(r, 500));
       }
 
+      // ★ FIX-06 BUG #1 (Task FIX-06-SCANNER-COURSES): if the loop exited
+      // because batchNum hit maxBatches while the server is STILL reporting
+      // status='partial', the scan is NOT actually complete. Previously the
+      // code unconditionally set state.status='done' and saved lessons with
+      // scanned:true — that lied to the UI (showed 100% complete + "scan
+      // finalizado") and persisted an incomplete lesson list as if it were
+      // the full set. Now we detect the partial-exit case and mark the
+      // state as 'error' (so the UI surfaces a "Reiniciar Scan" affordance)
+      // while still saving whatever lessons were discovered so far with
+      // scanned:false (so the user can see partial progress).
+      const maxBatchesReached = !isDone;
       const lessons = allLessons;
       const lessonsData = {
         lessons: lessons,
-        scanned: true,
+        scanned: !maxBatchesReached,
         // ★ v80-FIX BUG 1: safe access — `d` may be undefined if the while
         // loop body never ran (e.g. maxBatches===0), so use (d && d.totalFolders).
         totalFolders: (d && d.totalFolders) || state.totalFolders || 1,
         totalLessons: lessons.length
       };
       setLessons(courseKey, lessonsData);
+
+      if(maxBatchesReached){
+        // Scan stalled — server still partial after maxBatches. Mark as
+        // error so the UI offers "Reiniciar Scan" / "Escanear agora".
+        state.status = 'error';
+        state.error = 'Scan atingiu o limite de ' + maxBatches +
+          ' batches e o servidor ainda reportava status=partial. Clique em ' +
+          '"Reiniciar Scan" para continuar de onde parou.';
+        state.completedAt = Date.now();
+        setScanState(courseKey, state);
+        if(onProgress) try{ onProgress(state, lessonsData); }catch(_){}
+        return state;
+      }
 
       // Atualiza estado
       state.status = 'done';
@@ -416,11 +440,28 @@
       }
       // Dedup pass — resilient against concurrent writes that may have
       // inserted the same course between our read and our write.
+      // ★ FIX-06 BUG #3: previously the dedup key was `c.key || c.id ||
+      // c.path`. Manual courses saved by gdiAddCourseFromDrive /
+      // showAddCourseModal do NOT have a `key` field (only `courseKey`),
+      // and each insert generates a fresh unique `id` like
+      // `mc-<timestamp>-<rand>`. So when two concurrent syncs both inserted
+      // the same Drive course (same `path`, different `id`), the dedup pass
+      // would key on `id` and keep BOTH duplicates — defeating the entire
+      // purpose of the pass. Now we prefer `path` / `courseKey` (the true
+      // business identifier for a course) before falling back to `key`
+      // and `id`. We normalize the path via `low()` (lowercased + decoded)
+      // so URL-encoded vs decoded variants of the same path also collapse.
       const seen = new Set();
       const deduped = [];
+      const _low = s => {
+        try { return decodeURIComponent(String(s||'').split('?')[0].replace(/\/+$/,'')).toLowerCase(); }
+        catch(_) { return String(s||'').toLowerCase(); }
+      };
       for(const c of local){
         if(!c) continue;
-        const k = c.key || c.id || c.path;
+        // Prefer path-based identifiers (the true uniqueness key for a
+        // course) before falling back to opaque id fields.
+        const k = c.path ? _low(c.path) : (c.courseKey ? _low(c.courseKey) : (c.key || c.id));
         if(k){
           if(seen.has(k)) continue;
           seen.add(k);
@@ -515,8 +556,14 @@
       const original = manual.length;
       const cleaned = manual.filter(c => {
         if(!c || !c.path) return false;
-        // Remove drive roots (e.g., /0:/, /4:/)
-        if(/^\d+:\/$/.test(c.path)) return false;
+        // Remove drive roots (e.g., /0:/, /4:/, /0:)
+        // ★ FIX-06 BUG #2: regex was `/^\d+:\/$/` which is missing the
+        // leading slash — it would only match "0:/" but the paths stored in
+        // localStorage always start with "/" (e.g. "/0:/"). The check was
+        // effectively a no-op and relied on the segs.length<2 fallback
+        // below to actually catch drive roots. Now the regex matches both
+        // "/0:" and "/0:/" (consistent with autoScanPending + scanCourse).
+        if(/^\/\d+:\/?$/.test(c.path)) return false;
         // Remove if path is just /<drive>:/ (no subfolder)
         const segs = c.path.split('/').filter(Boolean);
         if(segs.length < 2) return false;
