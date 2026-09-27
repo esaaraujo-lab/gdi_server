@@ -90,40 +90,49 @@
   //   - idiomas: português + inglês
   async function ocrPdfPage(pdfjs,doc,pageNum,progressCb){
     const page=await doc.getPage(pageNum);
-    // escala 3x para melhorar precisão do OCR (testado: 2x = muita falha, 3x = bom)
-    const viewport=page.getViewport({scale:3});
-    const canvas=document.createElement('canvas');
-    const ctx=canvas.getContext('2d');
-    canvas.width=viewport.width;
-    canvas.height=viewport.height;
-    // fundo branco para páginas transparentes
-    ctx.fillStyle='#fff';
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-    await page.render({canvasContext:ctx,viewport}).promise;
-    const Tesseract=await ensureTesseract();
-    // idioma: português + inglês (modelos baixados do CDN do Tesseract)
-    // ★ parâmetros otimizados:
-    //   - tessedit_pageseg_mode=3 (auto — detecta orientação + colunas automaticamente)
-    //   - preserve_interword_spaces=1 (mantém espaços entre palavras)
-    const result=await Tesseract.recognize(
-      canvas,
-      'por+eng',
-      {
-        logger:m=>{
-          if(m.status==='recognizing text'&&progressCb){
-            progressCb(pageNum,doc.numPages,m.progress);
-          }
-        },
-        // path dos modelos de idioma (CDN jsdelivr)
-        corePath:'https://cdn.jsdelivr.net/npm/tesseract.js-core@5',
-        workerPath:'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
-        langPath:'https://tessdata.project-fast.com/4.0.0',
-        // parâmetros do Tesseract engine
-        tessedit_pageseg_mode:'3',
-        preserve_interword_spaces:'1',
-      }
-    );
-    return result.data.text||'';
+    let canvas;
+    try{
+      // escala 3x para melhorar precisão do OCR (testado: 2x = muita falha, 3x = bom)
+      const viewport=page.getViewport({scale:3});
+      canvas=document.createElement('canvas');
+      const ctx=canvas.getContext('2d');
+      canvas.width=viewport.width;
+      canvas.height=viewport.height;
+      // fundo branco para páginas transparentes
+      ctx.fillStyle='#fff';
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      await page.render({canvasContext:ctx,viewport}).promise;
+      const Tesseract=await ensureTesseract();
+      // idioma: português + inglês (modelos baixados do CDN do Tesseract)
+      // ★ parâmetros otimizados:
+      //   - tessedit_pageseg_mode=3 (auto — detecta orientação + colunas automaticamente)
+      //   - preserve_interword_spaces=1 (mantém espaços entre palavras)
+      const result=await Tesseract.recognize(
+        canvas,
+        'por+eng',
+        {
+          logger:m=>{
+            if(m.status==='recognizing text'&&progressCb){
+              progressCb(pageNum,doc.numPages,m.progress);
+            }
+          },
+          // path dos modelos de idioma (CDN jsdelivr)
+          corePath:'https://cdn.jsdelivr.net/npm/tesseract.js-core@5',
+          workerPath:'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
+          langPath:'https://tessdata.project-fast.com/4.0.0',
+          // parâmetros do Tesseract engine
+          tessedit_pageseg_mode:'3',
+          preserve_interword_spaces:'1',
+        }
+      );
+      return result.data.text||'';
+    } finally {
+      // ★ FIX-FIX-08: libera canvas backing store + página para evitar leak de
+      //    memória durante loops de OCR (cada canvas 3x ~30-50MB; sem isso,
+      //    15 páginas acumulam ~600MB antes do GC rodar).
+      try{ if(canvas){ canvas.width=0; canvas.height=0; } }catch(_){}
+      try{ if(typeof page.cleanup==='function') page.cleanup(); }catch(_){}
+    }
   }
 
   // ── get file type by extension (md/txt/html/pdf) ──
@@ -148,7 +157,7 @@
     return txt;
   }
 
-  // ── Extract text from PDF (up to 30 pages, ~8000 chars) ──
+  // ── Extract text from PDF (up to 500 pages, ~200000 chars) ──
   // FIX: alguns PDFs têm texto selecionável mas getTextContent() básico
   // retorna vazio (fontes com encoding custom, text runs fragmentados).
   // Usa opções avançadas + fallback em annotations.
@@ -156,7 +165,7 @@
   // com opções alternativas de fetch + fallback para PDFs escaneados.
   // ★FIX v3: OCR (Tesseract.js) como fallback quando pdf.js retorna vazio.
   //   - Suporta um callback de progresso (para mostrar "OCR: página 3/11…")
-  //   - Limita a 8 páginas no OCR (tempo total ~2-4 min para PDF grande)
+  //   - Limita a 15 páginas no OCR (tempo total ~3-6 min para PDF grande)
   //   - Idiomas: português + inglês
   async function extractPdfText(url, progressCb){
     const pdfjs=await ensurePdfjs();
@@ -193,6 +202,11 @@
       try{
         doc=await pdfjs.getDocument({data:buf,disableFontFace:true,isEvalSupported:false}).promise;
       }catch(e){
+        // ★ FIX-FIX-08: detecta PDFs protegidos por senha (PasswordException do
+        //    pdf.js) e dá erro descritivo em vez da mensagem genérica/cryptic.
+        if(e&&e.name==='PasswordException'){
+          throw new Error('PDF protegido por senha. Não é possível extrair texto de PDFs criptografados sem a senha.');
+        }
         throw new Error('pdf.js não conseguiu abrir o PDF: '+(e&&e.message||e));
       }
       // ★ v87-FIX-MEGGY-MODULES BUG 5: raise page cap 100 -> 500 so Meggy
@@ -203,33 +217,40 @@
 
       for(let i=1;i<=n;i++){
         const pg=await doc.getPage(i);
-        // ★ opções avançadas: normaliza whitespace, combina text items adjacentes,
-        // inclui marked content (alguns PDFs usam isso para texto)
-        let tc;
-        try{
-          tc=await pg.getTextContent({normalizeWhitespace:true,disableCombineTextItems:false,includeMarkedContent:true});
-        }catch(_){
-          tc=await pg.getTextContent(); // fallback sem opções
-        }
-
-        // extrai texto de items — x.str, x.str+hasEOL, também pega "transform" position
         let pageText='';
-        for(const item of tc.items){
-          if(item.str!==undefined){
-            pageText+=item.str;
-            if(item.hasEOL)pageText+='\n';
-          }else if(item.type==='markedContent'||item.type==='beginMarkedContent'){
-            // marked content — pode conter texto estruturado
-            continue;
-          }
-        }
-
-        // se página ficou vazia mas tem texto, tenta sem opções
-        if(!pageText.trim()){
+        try{
+          // ★ opções avançadas: normaliza whitespace, combina text items adjacentes,
+          // inclui marked content (alguns PDFs usam isso para texto)
+          let tc;
           try{
-            const tc2=await pg.getTextContent();
-            pageText=tc2.items.map(x=>(x.str||'')+(x.hasEOL?'\n':' ')).join('');
-          }catch(_){}
+            tc=await pg.getTextContent({normalizeWhitespace:true,disableCombineTextItems:false,includeMarkedContent:true});
+          }catch(_){
+            tc=await pg.getTextContent(); // fallback sem opções
+          }
+
+          // extrai texto de items — x.str, x.str+hasEOL, também pega "transform" position
+          for(const item of tc.items){
+            if(item.str!==undefined){
+              pageText+=item.str;
+              if(item.hasEOL)pageText+='\n';
+            }else if(item.type==='markedContent'||item.type==='beginMarkedContent'){
+              // marked content — pode conter texto estruturado
+              continue;
+            }
+          }
+
+          // se página ficou vazia mas tem texto, tenta sem opções
+          if(!pageText.trim()){
+            try{
+              const tc2=await pg.getTextContent();
+              pageText=tc2.items.map(x=>(x.str||'')+(x.hasEOL?'\n':' ')).join('');
+            }catch(_){}
+          }
+        } finally {
+          // ★ FIX-FIX-08: libera recursos da página após extração (evita leak de
+          //    memória em PDFs de 500 páginas — cada página cached consome ~2-5MB
+          //    de operator list + fontes; sem isso, 500 páginas = ~1-2GB antes do GC).
+          try{ if(typeof pg.cleanup==='function') pg.cleanup(); }catch(_){}
         }
 
         txt+=pageText+'\n\n';
@@ -244,10 +265,14 @@
         try{
           for(let i=1;i<=n;i++){
             const pg=await doc.getPage(i);
-            const annots=await pg.getAnnotations();
-            for(const a of annots){
-              if(a.fieldValue&&typeof a.fieldValue==='string')txt+=a.fieldValue+'\n';
-              if(a.contents&&typeof a.contents==='string')txt+=a.contents+'\n';
+            try{
+              const annots=await pg.getAnnotations();
+              for(const a of annots){
+                if(a.fieldValue&&typeof a.fieldValue==='string')txt+=a.fieldValue+'\n';
+                if(a.contents&&typeof a.contents==='string')txt+=a.contents+'\n';
+              }
+            } finally {
+              try{ if(typeof pg.cleanup==='function') pg.cleanup(); }catch(_){}
             }
             if(txt.length>10000)break;
           }
