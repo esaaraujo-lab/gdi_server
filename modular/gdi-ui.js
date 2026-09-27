@@ -280,6 +280,8 @@ body.gdi-fv .gdi-player-wrap iframe{
     btn.innerHTML='<i class="bi bi-sun-fill"></i>';
     btn.style.color='#ffd43b';
     btn.title='Sair do modo descanso';
+    // ★ C3 FIX: persiste flag p/ re-entrar no modo descanso ao trocar de vídeo
+    try{localStorage.setItem('gdi-rest-mode','1');}catch(_){}
   }
   function exitSleep(){
     if(!sleeping)return;
@@ -290,6 +292,8 @@ body.gdi-fv .gdi-player-wrap iframe{
     btn.innerHTML='<i class="bi bi-moon-stars-fill"></i>';
     btn.style.color='#74c0fc';
     btn.title='Modo descanso (apenas \u00e1udio) \u2014 clique para ligar';
+    // ★ C3 FIX: limpa flag p/ não re-entrar automaticamente
+    try{localStorage.removeItem('gdi-rest-mode');}catch(_){}
   }
   function syncFs(){
     ensureEls();
@@ -306,7 +310,9 @@ body.gdi-fv .gdi-player-wrap iframe{
     if(btn.parentElement!==host)host.appendChild(btn);
     if(overlay.parentElement!==host)host.appendChild(overlay);
     btn.style.display=(video&&!fsOk)?'none':'flex';
-    if(sleeping&&video&&!fsOk)exitSleep();
+    // ★ C3 FIX (removed): não chamar exitSleep() aqui — modo descanso deve persistir
+    //   ao trocar de vídeo. Anteriormente `if(sleeping&&video&&!fsOk)exitSleep();`
+    //   encerrava o descanso sempre que o usuário saía do fullscreen entre vídeos.
   }
   function bindOnce(){
     if(bound)return;bound=true;
@@ -316,6 +322,11 @@ body.gdi-fv .gdi-player-wrap iframe{
       document.addEventListener(ev,e=>{
         if(!sleeping||Date.now()<wakeGuard)return;
         if(ev!=='mousemove'&&e.target&&btn&&(e.target===btn||btn.contains(e.target)))return;
+        // ★ C3 FIX: atalhos de navegação J/K/←/→ NÃO encerram o modo descanso
+        if(ev==='keydown'&&e&&e.key){
+          var _k=String(e.key);
+          if(_k==='j'||_k==='k'||_k==='J'||_k==='K'||_k==='ArrowLeft'||_k==='ArrowRight')return;
+        }
         exitSleep();
       },{passive:true});
     });
@@ -324,6 +335,14 @@ body.gdi-fv .gdi-player-wrap iframe{
         el.__gdiSleepEnd=true;
         try{el.addEventListener('ended',()=>exitSleep());}catch(_){}
       }
+    });
+    // ★ C3 FIX: re-entra no modo descanso ao trocar de vídeo se o flag persistido estiver setado
+    Bus.onGlobal('video:switched', function(){
+      try {
+        if(localStorage.getItem('gdi-rest-mode') === '1') {
+          setTimeout(function(){ try{enterSleep();}catch(_){} }, 500);
+        }
+      }catch(_){}
     });
   }
   window.GDI_MODULES.push({name:'sleep-mode',init:function(){
