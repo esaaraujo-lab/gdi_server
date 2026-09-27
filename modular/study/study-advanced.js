@@ -59,14 +59,31 @@
         if(!plans.length){
           listEl.innerHTML='';
         }else{
-          listEl.innerHTML=slice.map(p=>`<div class="gdi-note" style="cursor:pointer;" data-id="${esc(p.id)}">
+          listEl.innerHTML=slice.map(p=>`<div class="gdi-note" style="cursor:pointer;align-items:center;" data-id="${esc(p.id)}">
             <span style="flex:1;"><b style="color:var(--ferreto-text,#f0f6fc);">${esc(p.name)}</b><br><span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">${new Date(p.date).toLocaleDateString('pt-BR')} · ${p.topics||''} temas</span></span>
+            <button class="provas-del gdi-mode-btn" data-del="${esc(p.id)}" title="Excluir plano" style="font-size:12px;padding:4px 9px;color:#ff6b6b;background:transparent;border:1px solid rgba(255,107,107,.3);"><i class="bi bi-trash"></i></button>
             <i class="bi bi-chevron-right" style="color:var(--ferreto-text-muted,#8b949e);"></i>
           </div>`).join('');
           listEl.querySelectorAll('[data-id]').forEach(el=>{
-            el.onclick=()=>{
+            el.onclick=(ev)=>{
+              if(ev.target.closest('.provas-del'))return;
               const p=plans.find(x=>x.id===el.dataset.id);
               if(p)showPlan(box,p);
+            };
+          });
+          // ★ FIX (REVIEW-04): allow deleting old exam plans from the list.
+          listEl.querySelectorAll('.provas-del').forEach(btn=>{
+            btn.onclick=(ev)=>{
+              ev.stopPropagation();
+              const id=btn.dataset.del;
+              if(!confirm('Excluir este plano de estudos? Esta ação não pode ser desfeita.'))return;
+              const idx=plans.findIndex(p=>p.id===id);
+              if(idx>=0){
+                plans.splice(idx,1);
+                lsSet('gdi-exam-plans-v1',plans);
+                if(window.showToast)showToast('Plano excluído.');
+                renderList();
+              }
             };
           });
         }
@@ -144,7 +161,21 @@
         doc=await lib.getDocument({data:buf,disableFontFace:true}).promise;
         const n=Math.min(doc.numPages,60);
         let txt='';
+        // ★ FIX (REVIEW-04): show real per-page progress bar during PDF
+        //    extraction instead of a single generic "Extraindo texto…" spinner.
+        const progressHtml=(cur,total,label)=>{
+          const pct=total>0?Math.round(cur/total*100):0;
+          return '<div class="gdi-ai-loading" style="padding:20px;text-align:center;">'
+            +'<div class="gdi-ai-typing" style="margin:0 auto;"><span></span><span></span><span></span></div>'
+            +'<p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin-top:10px;">'+esc(label)+'</p>'
+            +'<div style="margin:10px auto 0;max-width:320px;height:6px;background:var(--ferreto-surface-3,rgba(255,255,255,.08));border-radius:3px;overflow:hidden;">'
+            +'<div style="height:100%;width:'+pct+'%;background:var(--ferreto-primary,#ff8b9f);border-radius:3px;transition:width .2s;"></div>'
+            +'</div>'
+            +'<p style="color:var(--ferreto-text-faint,#6b7488);font-size:11px;margin-top:6px;">'+cur+' de '+total+' páginas</p>'
+            +'</div>';
+        };
         for(let i=1;i<=n;i++){
+          status.innerHTML=progressHtml(i,n,'Extraindo página '+i+'…');
           const pg=await doc.getPage(i);
           const tc=await pg.getTextContent({normalizeWhitespace:true,includeMarkedContent:true});
           let pt='';
@@ -175,16 +206,26 @@
 
   function showPlan(box,plan){
     box.innerHTML=`<div style="max-width:760px;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
         <button class="gdi-mode-btn" id="prova-back" style="font-size:12px;"><i class="bi bi-arrow-left"></i> Voltar</button>
         <b style="color:var(--ferreto-text,#f0f6fc);">${esc(plan.name)}</b>
-        <span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">${new Date(plan.date).toLocaleDateString('pt-BR')}</span>
+        <span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">${new Date(plan.date).toLocaleDateString('pt-BR')} · ${plan.topics||0} temas</span>
+        <button class="gdi-mode-btn" id="prova-del" title="Excluir plano" style="font-size:11px;padding:4px 10px;margin-left:auto;color:#ff6b6b;border:1px solid rgba(255,107,107,.3);"><i class="bi bi-trash"></i> Excluir</button>
       </div>
       <div class="gdi-isa-summary-body" style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;padding:20px;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.8;">
         ${renderMd(plan.plan)}
       </div>
     </div>`;
     box.querySelector('#prova-back').onclick=()=>renderProvas(box);
+    // ★ FIX (REVIEW-04): allow deleting the currently-open plan.
+    const delBtn=box.querySelector('#prova-del');
+    if(delBtn)delBtn.onclick=()=>{
+      if(!confirm('Excluir este plano de estudos? Esta ação não pode ser desfeita.'))return;
+      const arr=lsGet('gdi-exam-plans-v1',[]).filter(p=>p.id!==plan.id);
+      lsSet('gdi-exam-plans-v1',arr);
+      if(window.showToast)showToast('Plano excluído.');
+      renderProvas(box);
+    };
   }
 
   // ── Render: Correção de Redação ──
@@ -415,9 +456,11 @@
         </div>
       </div>`;
     }).join('');
-    box.innerHTML=`<div>
-      <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 4px;font-family:var(--ferreto-font-display,'Poppins',sans-serif);">🎯 Mapa de Fracos</h3>
-      <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0 0 16px;line-height:1.5;">Clique em um tile para abrir as questões daquela matéria. Foque nas áreas em <b style="color:#ff6b6b;">vermelho</b> (acerto < 40%) e <b style="color:#ffd43b;">amarelo</b> (40-60%).</p>
+    box.innerHTML=`<div style="max-width:760px;">
+      <div style="margin-bottom:18px;">
+        <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 4px;font-family:var(--ferreto-font-display,'Poppins',sans-serif);">\uD83C\uDFAF Mapa de Fracos</h3>
+        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0;line-height:1.5;">Clique em um tile para abrir as quest\u00f5es daquela mat\u00e9ria. Foque nas \u00e1reas em <b style="color:#ff6b6b;">vermelho</b> (acerto &lt; 40%) e <b style="color:#ffd43b;">amarelo</b> (40-60%).</p>
+      </div>
       ${weakSubjects.length?`<div style="background:rgba(255,107,107,.08);border:1px solid rgba(255,107,107,.3);border-radius:12px;padding:14px 16px;margin-bottom:16px;">
         <b style="color:#ff8b8b;font-size:13px;"><i class="bi bi-exclamation-triangle-fill"></i> Foque em:</b>
         <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
