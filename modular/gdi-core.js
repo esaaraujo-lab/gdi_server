@@ -30,6 +30,49 @@ const GDI_ROOT=()=>document.documentElement; // UI flutuante vive aqui (fora do 
 
 window.GDI_MODULES = window.GDI_MODULES || [];
 
+// ══════════════════════════════════════════════════════════════
+// ★ F1 FIX: Bus.offGlobal polyfill.
+// Bus is defined in app.min.js as `const Bus=(()=>{const m=new Map();
+//   function add(e,f,scope){...}; return{on,onGlobal,reset,emit}; })()`
+// — it has on/onGlobal/emit/reset but NO offGlobal. The ideal fix adds
+// the 6-line `offGlobal` method inside that IIFE (it needs the closure's
+// `m` Map). This file cannot reach `m`, so we attach `offGlobal` here via
+// a wrapping shim: each onGlobal call is fronted by a forwarder we control
+// (stored in our side-table); offGlobal nulls the forwarder's user-fn
+// reference, so subsequent emits no-op for that listener. This neutralizes
+// listener accumulation in M9 slots:ready and flashcard sessions.
+// Idempotent + defensive: no-op if Bus is missing or already patched.
+// NOTE: a sibling patch to app.min.js (adding the literal `offGlobal`
+// method to the Bus IIFE) is still recommended for a TRUE removal that
+// also shrinks Bus's internal Map. See worklog F1 report.
+// ══════════════════════════════════════════════════════════════
+(function(){
+  if(typeof Bus==='undefined')return;
+  if(typeof Bus.onGlobal!=='function')return;
+  if(typeof Bus.offGlobal==='function')return; // already patched / native
+  const side=new Map(); // name -> Array<{f, fwd}>
+  const _origOnGlobal=Bus.onGlobal.bind(Bus);
+  Bus.onGlobal=function(name,fn){
+    const fwd=function(){if(fwd._f)return fwd._f.apply(this,arguments);};
+    fwd._f=fn;
+    let arr=side.get(name);
+    if(!arr){arr=[];side.set(name,arr);}
+    arr.push({f:fn,fwd});
+    return _origOnGlobal(name,fwd);
+  };
+  Bus.offGlobal=function(name,fn){
+    if(!side.has(name))return;
+    const arr=side.get(name);
+    const idx=arr.findIndex(function(x){return x.f===fn;});
+    if(idx>=0){
+      const rec=arr[idx];
+      rec.f=null; rec.fwd._f=null; // neutralize: emit→fwd→no-op
+      arr.splice(idx,1);
+    }
+    if(arr.length===0)side.delete(name);
+  };
+})();
+
 // ★ v1.0.76: courseIdentity — global function for course icon/color by discipline
 // Defined here (gdi-core.js) so it's available to all modules regardless of CDN cache state
 window.gdiCourseIdentity = function(courseKey, courseName){
@@ -865,8 +908,8 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       // ★C.3: busy-wait 40×200ms removido. Em vez disso, escuta o evento
       // Bus 'slots:ready' (emitido pelo app.min.js quando os slots são criados).
       // Fallback one-shot de 5s: se o evento não disparar, faz um retry.
-      // Bus não tem offGlobal — o listener vira no-op após o primeiro disparo
-      // (guard flag `done`).
+      // offGlobal now exists (F1 polyfill above) but this one-shot site still
+      // uses the guard flag `done` (equivalent — listener no-ops after 1st fire).
       await new Promise(resolve=>{
         let done=false;
         const onReady=()=>{if(!done){done=true;resolve();}};
@@ -940,7 +983,20 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       if(!found.length)found=(await gdiListAllFiles(pPath,gdiGetPw(pPath))).filter(isPdf);
       const seen=new Set();const uniq=[];
       found.forEach(x=>{if(!seen.has(x.name)){seen.add(x.name);uniq.push(x)}});
-      const pdfs=uniq.slice(0,12);
+      const base=courseBase();
+      // ★ C6 FIX (M9 per-lesson filter ordering): the slice(0,12) cap
+      //    previously ran on `uniq` BEFORE the per-lesson filter, so
+      //    matching PDFs sitting at index 12+ in the dedup'd list were
+      //    dropped before the filter could keep them. Now: filter first
+      //    (fall back to the full list when no match — legacy behavior),
+      //    THEN cap to 12. Fixes Meggy mixing content from other lessons
+      //    when the current lesson's PDFs were beyond index 12 in uniq.
+      let pool=uniq;
+      if(base && uniq.length>1){
+        const _matches=uniq.filter(x=>x.name.toLowerCase().includes(base));
+        if(_matches.length>0)pool=_matches;
+      }
+      const pdfs=pool.slice(0,12);
       if(myGen!==gen)return;
       if(!pdfs.length){
         if(tabsEl.isConnected){
@@ -951,7 +1007,6 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         }
         return;
       }
-      const base=courseBase();
       const items=pdfs.map(x=>{
         const cls=classify(x.name);
         const b2=UI.second_domain_for_dl?UI.downloaddomain+x.link:window.location.origin+x.link;
@@ -960,20 +1015,10 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         return{name:x.name,label:cls.l,icon:cls.i,ord:cls.ord,match,url};
       });
       items.sort((x,y)=>x.match-y.match||x.ord-y.ord||x.name.localeCompare(y.name,undefined,{numeric:true}));
-      // ★ v87-FIX-MEGGY-MODULES BUG 6: when multiple PDFs are present, keep
-      //    ONLY the ones whose filename matches the current lesson name
-      //    (courseBase). Before, the panel SORTED matching PDFs first but
-      //    still passed ALL of them to generateAll → Meggy mixed content
-      //    from 5 different lessons. Now: if any PDF matches, filter to just
-      //    those; otherwise fall back to the full list (legacy behavior).
-      if(base && items.length>1){
-        const _matches=items.filter(x=>x.name.toLowerCase().includes(base));
-        if(_matches.length>0){
-          // mutate `items` in place (preserve reference — `const items`).
-          items.length=0;
-          for(let i=0;i<_matches.length;i++)items.push(_matches[i]);
-        }
-      }
+      // ★ C6 FIX: per-lesson filter now applied upstream on `uniq`
+      //    BEFORE the slice(0,12) cap (see C6 FIX above). The previous
+      //    in-place mutation here ran AFTER the cap and could not recover
+      //    PDFs that the cap had already discarded — removed.
       // ★ salva items para o botão "Regerar" encontrar
       tabsEl.__items=items;
       const used={};
