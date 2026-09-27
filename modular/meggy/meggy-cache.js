@@ -66,6 +66,20 @@
     return _qWriteChain;
   }
 
+  // ★ FIX-05-MEGGY-CACHE: helper para filtrar o banco local por curso.
+  //    Antes as questões só tinham `subject` (nome da aula) — impossível
+  //    agregar por curso. Agora generateAll etiqueta cada questão com
+  //    `course` (nome do curso derivado da URL), e esta função permite
+  //    à Central de Estudos listar todas as questões de um curso.
+  //    Compatível com questões legadas (sem `course`): retorna-as quando
+  //    courseName for vazio.
+  function questionsByCourse(courseName){
+    const all = U.lsGet(LQ, []);
+    if(!courseName) return all;
+    const needle = String(courseName).toLowerCase();
+    return all.filter(q => q && q.course && String(q.course).toLowerCase() === needle);
+  }
+
   // ── Summaries storage ──
   // ★ FIX: agora salva também o path do curso e a matéria — para o botão
   // "Resumo" no painel de materiais (M9) agrupar corretamente.
@@ -302,7 +316,49 @@
       console.warn('[Meggy] Battalion resumos/ fallback failed (non-critical):', e && e.message || e);
     }
 
-    console.info('[Meggy] cache miss — no hit for primary, PDF-key, or Battalion resumos/. Will extract.');
+    console.info('[Meggy] cache miss via primary/PDF-key/Battalion-Drive. Probing shared summaries pool…');
+
+    // (4) Shared summaries pool — VISIBLE TO ALL STUDENTS.
+    //     ★ FIX-05-MEGGY-CACHE (KEY FIX): when student A finishes generateAll,
+    //       it calls saveSharedSummary() → POST /api/ai/shared-summaries with
+    //       {lessonName, summary, questions}. Student B's cacheGetRobust MUST
+    //       consult this pool, otherwise the cross-student memory chain is
+    //       broken: B always re-extracts the PDF and re-pays the LLM cost
+    //       even though A already produced a perfectly good resumo.
+    //     This step runs LAST so we prefer the student's own Drive/URL cache
+    //     (which may be fresher) before falling back to the shared pool.
+    try{
+      if(window.__gdiMeggy && window.__gdiMeggy.summaries &&
+         typeof window.__gdiMeggy.summaries.fetchSharedSummaries === 'function'){
+        let sharedLesson = '';
+        try{ sharedLesson = (typeof U.realLessonName === 'function') ? (U.realLessonName('') || '') : ''; }catch(_){ sharedLesson = ''; }
+        if(sharedLesson){
+          const shared = await window.__gdiMeggy.summaries.fetchSharedSummaries(sharedLesson);
+          if(Array.isArray(shared) && shared.length){
+            // Most recent entry with a non-empty summary wins.
+            const hit = shared
+              .slice()
+              .sort((a,b)=>(b.date||0)-(a.date||0))
+              .find(s => s && s.summary && String(s.summary).trim());
+            if(hit){
+              console.info('[Meggy] cache hit via shared summaries pool (visible to all students):', sharedLesson);
+              // Shared pool carries summary + questions but no mindmap —
+              // caller (generateAll) will regenerate only the pílulas.
+              return {
+                summary: hit.summary,
+                questions: Array.isArray(hit.questions) ? hit.questions : [],
+                mindmap: null,
+                _shared: true
+              };
+            }
+          }
+        }
+      }
+    }catch(e){
+      console.warn('[Meggy] shared summaries pool fallback failed (non-critical):', e && e.message || e);
+    }
+
+    console.info('[Meggy] cache miss — no hit in primary, PDF-key, Battalion resumos/, or shared pool. Will extract.');
     return null;
   }
   async function cacheSave(summary,questions,lessonName,mindmap){
@@ -317,8 +373,23 @@
       // ★ tenta endpoint granular primeiro; senão, cache unificado
       const granular=await GRANULAR_AVAILABLE();
       const endpoint=granular?'/api/ai/summaries':'/api/ai/cache';
+      const key=U.lessonKey();
       await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({key:U.lessonKey(),summary,questions,mindmap:mindmapToSave,lessonName})});
+        body:JSON.stringify({key,summary,questions,mindmap:mindmapToSave,lessonName})});
+      // ★ FIX-05-MEGGY-CACHE: also update _chainCache in memory so the next
+      //    generateAll() returns fresh data instead of stale. Before this fix,
+      //    cacheSave only wrote to Drive — callers like generateQuestions
+      //    ("Gerar mais 5 questões", meggy-questions.js) saw their merged
+      //    questions LOST from in-memory cache on the next generateAll call,
+      //    which then re-extracted the PDF and overwrote the merged set.
+      //    Conservative: only overwrite in-memory fields when the caller
+      //    passes a NON-EMPTY value — avoids wiping a perfectly good in-memory
+      //    summary when the caller passed `null` because Drive's cacheGet
+      //    transiently failed (network blip) but _chainCache still has it.
+      if(!_chainCache[key]) _chainCache[key]={};
+      if(summary)                        _chainCache[key].summary   = summary;
+      if(Array.isArray(questions) && questions.length) _chainCache[key].questions = questions;
+      if(mindmapToSave)                  _chainCache[key].mindmap   = mindmapToSave;
     }catch(_){/* não bloqueia o fluxo se o cache falhar */}
   }
 
@@ -362,11 +433,17 @@
     //    e garante consistência entre os 2 call-sites (cache hit e geração nova).
     const _p=window.location.pathname||'';
     const _seg=_p.split('/').filter(Boolean);
-    let _coursePath='',_subject='';
+    let _coursePath='',_subject='',_courseName='';
     if(_seg.length>=2){
       _coursePath='/'+_seg.slice(0,2).join('/')+'/';
-      if(_seg.length>=3)_subject=decodeURIComponent(_seg[2]);
+      try{ _courseName=decodeURIComponent(_seg[1]); }catch(_){ _courseName=_seg[1]; }
+      if(_seg.length>=3){
+        try{ _subject=decodeURIComponent(_seg[2]); }catch(_){ _subject=_seg[2]; }
+      }
     }
+    // ★ FIX-05-MEGGY-CACHE: _courseName é usado para etiquetar questões com
+    //    `course` (filtro por curso na Central de Estudos). Antes as questões
+    //    só tinham `subject:lesson` — impossível filtrar por curso.
     // se já tem tudo no cache em memória, pula
     if(_chainCache[key]&&_chainCache[key].summary&&_chainCache[key].mindmap&&_chainCache[key].questionsGenerated){
       return _chainCache[key];
@@ -391,14 +468,15 @@
       _chainCache[key].questionsGenerated=true;
       _chainCache[key].questions=cached.questions;
       // ★ PATCH B: carrega questões no banco local em batch (1 read + 1 write)
+      // ★ FIX-05-MEGGY-CACHE: etiqueta com `course` (filtro por curso).
       const _batch=[];
       cached.questions.forEach(q=>{
         if(q&&q.statement){
           let cleanQ;
           if(q.type==='tf'||(!q.options&&q.correct!==undefined)){
-            cleanQ={subject:lesson,type:'tf',statement:String(q.statement),options:['Certo','Errado'],correct:Math.max(0,Math.min(1,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
+            cleanQ={course:_courseName,subject:lesson,type:'tf',statement:String(q.statement),options:['Certo','Errado'],correct:Math.max(0,Math.min(1,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
           }else if(Array.isArray(q.options)){
-            cleanQ={subject:lesson,type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min(3,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
+            cleanQ={course:_courseName,subject:lesson,type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min(3,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
           }
           if(cleanQ)_batch.push(cleanQ);
         }
@@ -408,6 +486,47 @@
       if(cached.questions.length)autoCreateFlashcards(cached.questions,lesson,U.lessonKey());
       saveIsaSummary(lesson,_chainCache[key].summary,_coursePath,_subject);
             return _chainCache[key];
+    }
+
+    // ★ FIX-05-MEGGY-CACHE (KEY FIX): PARTIAL cache hit — summary + questions
+    //    exist but mindmap is missing. This happens when the resumo came from
+    //    the shared summaries pool (step 4 in cacheGetRobust), which carries
+    //    summary+questions but no pílulas. Without this handler, student B
+    //    would fall through to PDF extraction and RE-GENERATE the questions
+    //    (wasting LLM calls), even though student A already shared them.
+    //    Here we preload the shared/cached questions into the local bank and
+    //    mark questionsGenerated so the AI question task is skipped — only
+    //    the pílulas task runs (which needs PDF text, so extraction still
+    //    happens, but only for the mindmap, not for re-asking the LLM).
+    if(_chainCache[key].summary && !_chainCache[key].mindmap &&
+       _chainCache[key].cachedQuestions && _chainCache[key].cachedQuestions.length &&
+       !_chainCache[key].questionsGenerated){
+      _chainCache[key].questionsGenerated = true;
+      _chainCache[key]._allCleanQ = [];
+      const _batchPreload = [];
+      _chainCache[key].cachedQuestions.forEach(q=>{
+        if(q&&q.statement){
+          let cleanQ;
+          if(q.type==='tf'||(!q.options&&q.correct!==undefined)){
+            cleanQ={type:'tf',statement:String(q.statement),options:['Certo','Errado'],correct:Math.max(0,Math.min(1,Number(q.correct)||0)),explanation:String(q.explanation||''),legalText:String(q.legalText||q.fundamentacao||''),fundamentacao:String(q.fundamentacao||'')};
+          }else if(Array.isArray(q.options)){
+            cleanQ={type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min(3,Number(q.correct)||0)),explanation:String(q.explanation||''),legalText:String(q.legalText||q.fundamentacao||''),fundamentacao:String(q.fundamentacao||'')};
+          }
+          if(cleanQ){
+            // _allCleanQ keeps the cache-shape (no course/subject) for the
+            // final POST to /api/ai/cache + saveSharedSummary.
+            _chainCache[key]._allCleanQ.push(cleanQ);
+            // local-bank copy carries course+subject tags for filtering.
+            _batchPreload.push(Object.assign({course:_courseName,subject:lesson,source:(cached&&cached._shared)?'ISA-shared':'ISA-PDF'},cleanQ));
+          }
+        }
+      });
+      addQBatch(_batchPreload);
+      if(_chainCache[key].cachedQuestions.length){
+        autoCreateFlashcards(_chainCache[key].cachedQuestions, lesson, U.lessonKey());
+      }
+      _chainCache[key].questions = _chainCache[key]._allCleanQ;
+      console.info('[Meggy] partial cache hit (summary+questions, no mindmap) — preloaded '+_batchPreload.length+' questions, will generate only pílulas.');
     }
 
     // só extrai PDF se precisa gerar algo
@@ -527,7 +646,7 @@
       for(const pdf of pdfTexts){
         const existing=extractQuestionsFromText(pdf.text);
         for(const q of existing){
-          _batchExtract.push({subject:lesson,type:'open',statement:q,options:[],correct:0,explanation:'Questão extraída do material.',source:'PDF-extract'});
+          _batchExtract.push({course:_courseName,subject:lesson,type:'open',statement:q,options:[],correct:0,explanation:'Questão extraída do material.',source:'PDF-extract'});
         }
       }
       addQBatch(_batchExtract);
@@ -552,7 +671,7 @@
                     cleanQ={type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min(3,Number(q.correct)||0)),explanation:String(q.explanation||''),legalText:String(q.legalText||q.fundamentacao||''),fundamentacao:String(q.fundamentacao||'')};
                   }
                   if(cleanQ){
-                    _batchAI.push(Object.assign({subject:lesson,source:'ISA-PDF'},cleanQ));
+                    _batchAI.push(Object.assign({course:_courseName,subject:lesson,source:'ISA-PDF'},cleanQ));
                     _chainCache[key]._allCleanQ.push(cleanQ);
                   }
                 });
@@ -635,7 +754,7 @@
   window.__gdiMeggy.cache = {
     generateAll, regenerate,
     cacheGet, cacheGetRobust, cacheSave,
-    addQ, addQBatch,
+    addQ, addQBatch, questionsByCourse,
     saveIsaSummary, listIsaSummaries, delIsaSummary,
     downloadAsPdf, copySummary,
     autoCreateFlashcards,
