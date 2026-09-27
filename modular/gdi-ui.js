@@ -273,9 +273,12 @@ body.gdi-fv .gdi-player-wrap iframe{
   function enterSleep(){
     if(sleeping)return;
     sleeping=true;
-    wakeGuard=Date.now()+2500;
+    // ★ C3 FIX (complete): wakeGuard 10s — mousemove não acorda nos primeiros 10s
+    wakeGuard=Date.now()+10000;
     overlay.style.transition='opacity 2.5s ease';
-    overlay.style.pointerEvents='all';
+    // ★ C3 FIX (complete): pointerEvents 'none' — cliques passam para a playlist/controles
+    //   em vez de serem capturados pelo overlay (que encerraria o descanso).
+    overlay.style.pointerEvents='none';
     overlay.style.opacity='0.97';
     btn.innerHTML='<i class="bi bi-sun-fill"></i>';
     btn.style.color='#ffd43b';
@@ -300,7 +303,9 @@ body.gdi-fv .gdi-player-wrap iframe{
     const fs=fsEl();
     const wrap=wrapEl();
     const video=!!wrap,audio=onAudioPage();
-    if(!video&&!audio){btn.style.display='none';if(sleeping)exitSleep();return;}
+    // ★ C3 FIX (complete): NÃO chamar exitSleep() aqui — modo descanso persiste
+    //   mesmo quando não há mídia temporariamente (ex.: durante troca de vídeo).
+    if(!video&&!audio){btn.style.display='none';return;}
     let fsOk=false;
     if(fs&&fs.tagName!=='VIDEO'){
       if(!video)fsOk=true;
@@ -322,10 +327,11 @@ body.gdi-fv .gdi-player-wrap iframe{
       document.addEventListener(ev,e=>{
         if(!sleeping||Date.now()<wakeGuard)return;
         if(ev!=='mousemove'&&e.target&&btn&&(e.target===btn||btn.contains(e.target)))return;
-        // ★ C3 FIX: atalhos de navegação J/K/←/→ NÃO encerram o modo descanso
+        // ★ C3 FIX (complete): atalhos de navegação NÃO encerram o modo descanso.
+        //   J/K (prev/next), setas (seek), espaço (play/pause) são ignorados.
         if(ev==='keydown'&&e&&e.key){
-          var _k=String(e.key);
-          if(_k==='j'||_k==='k'||_k==='J'||_k==='K'||_k==='ArrowLeft'||_k==='ArrowRight')return;
+          var navKeys=['j','k','J','K','ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' ','Spacebar'];
+          if(navKeys.indexOf(String(e.key))!==-1)return;
         }
         exitSleep();
       },{passive:true});
