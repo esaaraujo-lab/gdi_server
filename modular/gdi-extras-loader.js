@@ -34,7 +34,7 @@
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
   // ★ v1.0.87: bump 91 → 92 (fix redação char limit + chat slowness + PDF limits + PDF per lesson + battalion key).
   // ★ v1.0.90: Fase 1 completa + Fase 2 (Shaka opcional + Pomodoro + rest mode fix + dead code removal)
-  const CACHE_VERSION = '95';
+  const CACHE_VERSION = '96';
   window.CACHE_VERSION = CACHE_VERSION;
 
   const MODULES = [
