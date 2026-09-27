@@ -241,6 +241,15 @@
           `).join('')}
         </div>
       `).join('')}
+      <div style="padding:10px;border-top:1px solid var(--ferreto-border,#30363d);margin-top:auto;">
+        <div style="font-size:10px;color:var(--ferreto-text-muted,#8b949e);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px;">🍅 Pomodoro</div>
+        <div id="gdi-pomo-time" style="font-size:22px;font-weight:700;color:var(--ferreto-text,#e6edf3);text-align:center;margin-bottom:6px;font-variant-numeric:tabular-nums;">25:00</div>
+        <div style="display:flex;gap:4px;justify-content:center;">
+          <button id="gdi-pomo-start" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);border:0;border-radius:6px;padding:3px 12px;color:#fff;font-size:11px;cursor:pointer;">▶</button>
+          <button id="gdi-pomo-reset" style="background:rgba(255,255,255,.04);border:1px solid var(--ferreto-border,#30363d);border-radius:6px;padding:3px 8px;color:var(--ferreto-text,#e6edf3);font-size:11px;cursor:pointer;">↺</button>
+        </div>
+        <div id="gdi-pomo-phase" style="font-size:9px;color:var(--ferreto-text-muted,#8b949e);text-align:center;margin-top:3px;">Foco</div>
+      </div>
     </aside>`;
   }
 
@@ -404,6 +413,139 @@
     // ativa a S.tab atual no sidebar
     S.panel.querySelectorAll('.gdi-central-tab').forEach(b=>b.classList.toggle('active',b.dataset.t===S.tab));
     renderBody(S.tab);
+    // ★ Pomodoro widget — inicializa após o sidebar estar no DOM
+    try{ initPomodoro(); }catch(_){}
+  }
+
+  // ★ Pomodoro widget — timer 25/5/15 com persistência em localStorage
+  function initPomodoro(){
+    if(window.__gdiPomoInit) return;
+    window.__gdiPomoInit = true;
+    const LS_KEY='gdi-pomodoro-state';
+    const DURATIONS={focus:25*60,short:5*60,long:15*60};
+    const PHASE_LABELS={focus:'Foco',short:'Pausa curta',long:'Pausa longa'};
+    let intervalId=null;
+    let state={phase:'focus',cycle:0,endsAt:0,running:false};
+    function load(){
+      try{
+        const raw=localStorage.getItem(LS_KEY);
+        if(raw){
+          const s=JSON.parse(raw);
+          if(s&&typeof s.phase==='string'&&typeof s.cycle==='number'&&typeof s.endsAt==='number'){
+            state=s;
+            // se o timer expirou enquanto o painel estava fechado, avança fase
+            if(state.running && state.endsAt && Date.now()>=state.endsAt){
+              advancePhase();
+            }
+          }
+        }
+      }catch(_){}
+    }
+    function save(){
+      try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(_){}
+    }
+    function beep(){
+      try{
+        const AC=window.AudioContext||window.webkitAudioContext;
+        if(!AC) return;
+        const ctx=new AC();
+        const osc=ctx.createOscillator();
+        const gain=ctx.createGain();
+        osc.connect(gain);gain.connect(ctx.destination);
+        osc.type='sine';osc.frequency.value=880;
+        gain.gain.setValueAtTime(0.001, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime+0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.6);
+        osc.start();
+        osc.stop(ctx.currentTime+0.6);
+        // segundo bip
+        const osc2=ctx.createOscillator();
+        const gain2=ctx.createGain();
+        osc2.connect(gain2);gain2.connect(ctx.destination);
+        osc2.type='sine';osc2.frequency.value=660;
+        gain2.gain.setValueAtTime(0.001, ctx.currentTime+0.3);
+        gain2.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime+0.31);
+        gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.9);
+        osc2.start(ctx.currentTime+0.3);
+        osc2.stop(ctx.currentTime+0.9);
+      }catch(_){}
+    }
+    function currentDuration(){
+      return DURATIONS[state.phase]||DURATIONS.focus;
+    }
+    function advancePhase(){
+      // Foco -> (cycle+1)%4==0 ? long : short -> focus ...
+      if(state.phase==='focus'){
+        state.cycle=(state.cycle||0)+1;
+        state.phase=(state.cycle%4===0)?'long':'short';
+      }else{
+        // vinhamos de uma pausa, voltamos ao foco
+        state.phase='focus';
+      }
+      state.endsAt=0;
+      state.running=false;
+      save();
+    }
+    function remainingSec(){
+      if(!state.running||!state.endsAt) return currentDuration();
+      return Math.max(0, Math.round((state.endsAt-Date.now())/1000));
+    }
+    function fmt(sec){
+      const m=Math.floor(sec/60);
+      const s=sec%60;
+      return (m<10?'0':'')+m+':'+(s<10?'0':'')+s;
+    }
+    function render(){
+      const timeEl=document.getElementById('gdi-pomo-time');
+      const phaseEl=document.getElementById('gdi-pomo-phase');
+      const startBtn=document.getElementById('gdi-pomo-start');
+      if(timeEl) timeEl.textContent=fmt(remainingSec());
+      if(phaseEl) phaseEl.textContent=PHASE_LABELS[state.phase]||'Foco';
+      if(startBtn) startBtn.textContent=state.running?'⏸':'▶';
+    }
+    function tick(){
+      if(!state.running) return;
+      const r=remainingSec();
+      if(r<=0){
+        beep();
+        advancePhase();
+      }
+      render();
+    }
+    function start(){
+      state.running=true;
+      state.endsAt=Date.now()+currentDuration()*1000;
+      save();
+      render();
+    }
+    function pause(){
+      state.running=false;
+      state.endsAt=0;
+      save();
+      render();
+    }
+    function reset(){
+      state.running=false;
+      state.endsAt=0;
+      state.phase='focus';
+      state.cycle=0;
+      save();
+      render();
+    }
+    function bind(){
+      const startBtn=document.getElementById('gdi-pomo-start');
+      const resetBtn=document.getElementById('gdi-pomo-reset');
+      if(startBtn) startBtn.onclick=function(){
+        if(state.running) pause(); else start();
+      };
+      if(resetBtn) resetBtn.onclick=function(){ reset(); };
+    }
+    // init
+    load();
+    bind();
+    render();
+    if(intervalId) clearInterval(intervalId);
+    intervalId=setInterval(tick,1000);
   }
   // ★ v1.0.73: renderDrives — mostra os 12 drives como cards navegáveis DENTRO do painel
   function renderDrives(box){
