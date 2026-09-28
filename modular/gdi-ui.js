@@ -392,6 +392,13 @@ body.gdi-fv .gdi-player-wrap iframe{
     const safeParse=s=>{try{return JSON.parse(s)}catch(e){return null}};
     const flashEl=document.createElement('div');flashEl.id='gdi-pom-flash';
     GDI_ROOT().appendChild(flashEl);
+    // ★ FIX UIUX-16: flag de "document listener bound" no escopo do init
+    // (closure). Antes, era guardado em nav.__pomDocBound — mas nav é
+    // recriado a cada page:change via injectPomNav, zerando o flag e
+    // adicionando um NOVO listener click no document a cada troca de
+    // página → vazamento cumulativo. Como o init só roda 1×
+    // (__gdiPomodoroBooted), este flag persiste corretamente.
+    let __pomDocBound=false;
 
     // ★ Pomodoro agora é botão na navbar (como Central de Estudos)
     function injectPomNav(){
@@ -435,7 +442,9 @@ body.gdi-fv .gdi-player-wrap iframe{
     // tenta injetar com retries (igual Central de Estudos)
     injectPomNav();
     for(let i=1;i<=10;i++)setTimeout(injectPomNav,i*300);
-    Bus.onGlobal('page:change',()=>setTimeout(injectPomNav,100));
+    // ★ FIX UIUX-21: este handler de page:change foi consolidado com os
+    // outros 2 (que eram registrados mais abaixo nas linhas 461 e 586).
+    // Ver bloco único antes de updateUI() no final do init().
     window.GDI_MODULES=window.GDI_MODULES||[];
     window.GDI_MODULES.push({name:'pom-nav',init:function(){injectPomNav();}});
 
@@ -451,7 +460,8 @@ body.gdi-fv .gdi-player-wrap iframe{
     }
     function refreshBase(){baseTitle=document.title.replace(/^\d\d:\d\d \S+ \u00b7 /,'');if(st.running)updateUI();}
     Bus.onGlobal('media:ready',()=>setTimeout(check,50));
-    Bus.onGlobal('page:change',()=>{setTimeout(check,30);setTimeout(refreshBase,60);});
+    // ★ FIX UIUX-21: handler de page:change consolidado — ver bloco único
+    // antes de updateUI() no final do init(). Estava duplicado em 3 lugares.
     Bus.onGlobal('title:change',()=>setTimeout(refreshBase,30));
     function persist(){try{localStorage.setItem(SKEY,JSON.stringify({phase:st.phase,total:st.total,remain:st.remain,running:st.running,dots:st.dots,endAt:st.endAt}))}catch(e){}}
     (function(){const s=safeParse(localStorage.getItem(SKEY));if(!s)return;
@@ -535,10 +545,16 @@ body.gdi-fv .gdi-player-wrap iframe{
         navBtn.addEventListener('click',e=>{e.stopPropagation();panelOpen=!panelOpen;$id('gdi-pom-panel')?.classList.toggle('open',panelOpen);if(panelOpen)updateUI();});
       }
       // fecha painel ao clicar fora
-      const nav=$id('gdi-pom-nav');
-      if(nav&&!nav.__pomDocBound){
-        nav.__pomDocBound=true;
-        document.addEventListener('click',e=>{if(panelOpen&&!nav.contains(e.target)){panelOpen=false;$id('gdi-pom-panel')?.classList.remove('open');}},{capture:true});
+      // ★ FIX UIUX-16: usa flag de closure (__pomDocBound) em vez de
+      // nav.__pomDocBound. Listener re-busca o nav atual via $id() a cada
+      // click — antes, capturava o nav antigo (stale) que já tinha sido
+      // removido do DOM.
+      if(!__pomDocBound){
+        __pomDocBound=true;
+        document.addEventListener('click',e=>{
+          const nav=$id('gdi-pom-nav');
+          if(panelOpen&&nav&&!nav.contains(e.target)){panelOpen=false;$id('gdi-pom-panel')?.classList.remove('open');}
+        },{capture:true});
       }
       const startBtn=$id('gdi-pom-start'),skipBtn=$id('gdi-pom-skip'),resetBtn=$id('gdi-pom-reset');
       if(startBtn&&!startBtn.__pomBound){startBtn.__pomBound=true;startBtn.addEventListener('click',e=>{e.stopPropagation();st.running?pause():start();});}
@@ -570,7 +586,16 @@ body.gdi-fv .gdi-player-wrap iframe{
     setTimeout(bindPomClicks,50);
     setTimeout(bindPomClicks,500);
     setTimeout(bindPomClicks,1500);
-    Bus.onGlobal('page:change',()=>setTimeout(bindPomClicks,200));
+    // ★ FIX UIUX-21: 3 handlers separados de page:change (antes nas linhas
+    // 438, 454 e 573) consolidados em 1. Cada page:change agora dispara 1
+    // callback (com 4 setTimeouts) em vez de 3 callbacks separados → menos
+    // overhead no event bus e menos entries no Map do Bus.
+    Bus.onGlobal('page:change',()=>{
+      setTimeout(injectPomNav,100);
+      setTimeout(check,30);
+      setTimeout(refreshBase,60);
+      setTimeout(bindPomClicks,200);
+    });
     updateUI();
     console.log('[GDI Pomodoro] v2.5 pronto');
   }});
@@ -1139,7 +1164,12 @@ body.gdi-fv .gdi-player-wrap iframe{
 const GDIDebug=(()=>{const i=[];let e=null;function t(){return new Date().toISOString().slice(11,23)}function n(){if(e||(e=document.getElementById("gdi-debug-log")),!e)return;const d={req:"#da77f2",api:"#69db7c",error:"#ff6b6b",warn:"#ffa94d",info:"#74c0fc"},o=i.map(r=>{const p=d[r.type]||"#aaa",g=r.data!=null?typeof r.data=="string"?r.data:JSON.stringify(r.data,null,2):"";return`<div class="gdi-dbg-entry"><span class="gdi-dbg-ts">${r.ts}</span><span class="gdi-dbg-badge" style="color:${p}">[${r.type.toUpperCase()}]</span><span class="gdi-dbg-msg">${escHtml(r.label)}</span>`+(g?`<pre class="gdi-dbg-pre">${escHtml(g)}</pre>`:"")+"</div>"}).join("");e.innerHTML=o||'<span class="gdi-dbg-empty">No entries yet.</span>',e.scrollTop=e.scrollHeight;const s=document.getElementById("gdi-dbg-count");s&&(s.textContent=i.length)}function a(d,o,s){window.UI?.debug_mode&&(i.push({ts:t(),type:d,label:o,data:s!==void 0?s:null}),n())}function c(){e=document.getElementById("gdi-debug-log"),i.length>0&&n(),a("info","Debug attached",{path:window.location.pathname,search:window.location.search,drive:window.current_drive_order,version:window.UI?.version,model_type:window.MODEL?.root_type})}function l(){i.length=0,e&&(e.innerHTML='<span class="gdi-dbg-empty">Cleared.</span>');const d=document.getElementById("gdi-dbg-count");d&&(d.textContent="0")}return{log:a,attach:c,clear:l}})();
 window.GDIDebug=GDIDebug;
 
-if(window.UI?.debug_mode){const i=window.fetch.bind(window);window.fetch=async function(t,n){const a=typeof t=="string"?t:t.url||String(t),c=(n?.method||"GET").toUpperCase();let l;try{l=n?.body?JSON.parse(n.body):void 0}catch{l=n?.body}GDIDebug.log("req",`\u2192 ${c} ${a}`,l!==void 0?l:null);const d=Date.now();try{const o=await i(t,n),s=o.clone();let r;try{r=await s.json()}catch{r=null}return GDIDebug.log(o.ok?"api":"error",`\u2190 ${o.status} ${a} (${Date.now()-d}ms)`,r),o}catch(o){throw GDIDebug.log("error",`\u2717 FETCH FAILED: ${a}`,String(o)),o}};const e=console.error.bind(console);console.error=function(...t){GDIDebug.log("error",t.map(n=>n instanceof Error?n.stack||n.message:typeof n=="object"?JSON.stringify(n):String(n)).join(" ")),e(...t)},window.addEventListener("error",t=>{GDIDebug.log("error",`Uncaught: ${t.message}`,`${t.filename}:${t.lineno}:${t.colno}`)}),window.addEventListener("unhandledrejection",t=>{GDIDebug.log("error",`UnhandledPromise: ${String(t.reason)}`)})}
+// ★ FIX UIUX-17: window.addEventListener('error'/'unhandledrejection') +
+// overrides de window.fetch e console.error eram registrados SEM guard.
+// Se gdi-ui.js fosse re-avaliado (ex: hot-reload, loader retry), os
+// listeners se acumulavam e o fetch wrap ficava aninhado (wrap de wrap).
+// Guard __gdiDebugBound torna o setup idempotente.
+if(window.UI?.debug_mode && !window.__gdiDebugBound){window.__gdiDebugBound=true;const i=window.fetch.bind(window);window.fetch=async function(t,n){const a=typeof t=="string"?t:t.url||String(t),c=(n?.method||"GET").toUpperCase();let l;try{l=n?.body?JSON.parse(n.body):void 0}catch{l=n?.body}GDIDebug.log("req",`\u2192 ${c} ${a}`,l!==void 0?l:null);const d=Date.now();try{const o=await i(t,n),s=o.clone();let r;try{r=await s.json()}catch{r=null}return GDIDebug.log(o.ok?"api":"error",`\u2190 ${o.status} ${a} (${Date.now()-d}ms)`,r),o}catch(o){throw GDIDebug.log("error",`\u2717 FETCH FAILED: ${a}`,String(o)),o}};const e=console.error.bind(console);console.error=function(...t){GDIDebug.log("error",t.map(n=>n instanceof Error?n.stack||n.message:typeof n=="object"?JSON.stringify(n):String(n)).join(" ")),e(...t)},window.addEventListener("error",t=>{GDIDebug.log("error",`Uncaught: ${t.message}`,`${t.filename}:${t.lineno}:${t.colno}`)}),window.addEventListener("unhandledrejection",t=>{GDIDebug.log("error",`UnhandledPromise: ${String(t.reason)}`)})}
 
 window.GDI_MODULES.push({name:'debug',init:function(){
   if(!(window.UI&&window.UI.debug_mode))return;
