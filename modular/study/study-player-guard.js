@@ -16,6 +16,22 @@
   const STALL_MS=15000;
   const FIRST_PLAY_HINT_MS=3500;
 
+  // ★ FIX 20-6 #14 (Agent 6): module-level registry of all active guards.
+  //    Each attach() pushes its `st` (state) object here; the page:change
+  //    Bus listener (registered below) iterates this Set and clears every
+  //    guard's setTimeout + overlay. Without this, when the user navigated
+  //    away from a video page mid-stall-watch, the 15s setTimeout would
+  //    still fire `check()` against a now-detached <video> element (its
+  //    parentNode check at line 49 returns early, but the timer itself
+  //    was never cleared — accumulating across SPA navigations).
+  //    The task spec mentioned "setInterval(videoStallCheck, 3000)" which
+  //    doesn't literally exist in this file; the actual mechanism is a
+  //    self-rescheduling setTimeout (via arm() at line 46/71), and the same
+  //    leak applies. The fix is identical: track + clear on page:change.
+  //    Also: the video element's 'ended' event already calls clearTimer()
+  //    (line 135 below); that's the "media:ended" half of the spec.
+  const _activeGuards = new Set();
+
   if(!document.getElementById('gdi-stall-style')){
     const s=document.createElement('style');s.id='gdi-stall-style';s.textContent=`
 .gdi-stall-overlay{position:absolute;inset:0;background:rgba(7,9,16,.82);
@@ -40,6 +56,9 @@
     if(!v||v.__gdiGuard)return;v.__gdiGuard=true;
     const st={timer:null,retryUsed:false,lastT:v.currentTime||0,lastAt:Date.now(),
               overlay:null,hint:null,hintTimer:null};
+    // ★ FIX 20-6 #14 (Agent 6): register this guard so the page:change Bus
+    //    listener can clear its timers when the user navigates away.
+    _activeGuards.add(st);
 
     function clearTimer(){if(st.timer){clearTimeout(st.timer);st.timer=null;}}
     function clearOverlay(){if(st.overlay){st.overlay.remove();st.overlay=null;}}
@@ -132,10 +151,39 @@
       if(!st.retryUsed){st.retryUsed=true;try{v.load();v.play().catch(function(){});}catch(_){}arm();}
       else{showOverlay();}
     });
-    v.addEventListener('ended',function(){clearTimer();clearOverlay();});
+    v.addEventListener('ended',function(){clearTimer();clearOverlay();
+      // ★ FIX 20-6 #14 (Agent 6): also deregister from _activeGuards on ended
+      //    so the page:change listener doesn't iterate a stale guard whose
+      //    video element has finished and may be replaced.
+      _activeGuards.delete(st);
+    });
 
     arm();armHint();
     console.log('[GDI Player-Guard] monitorando vídeo');
+  }
+
+  // ★ FIX 20-6 #14 (Agent 6): clear ALL active guards' timers + overlays on
+  //    page:change. This is the missing cleanup that left setTimeout arms
+  //    firing against detached <video> elements after SPA navigation.
+  //    Without this, a user who:
+  //      1. opens a video page (guard attaches, arm() schedules check in 15s)
+  //      2. navigates to "Questões" tab 3s later (video element detached)
+  //    would have check() fire at the 15s mark against a detached video —
+  //    the parentNode check returns early (line 49) but the timer was
+  //    already needlessly held. With 10 such navigations during a study
+  //    session, 10 orphan setTimeout arms accumulate in the event loop.
+  function _clearAllGuards(){
+    _activeGuards.forEach(function(st){
+      try{
+        if(st.timer){clearTimeout(st.timer);st.timer=null;}
+        if(st.hintTimer){clearTimeout(st.hintTimer);st.hintTimer=null;}
+        if(st.overlay){st.overlay.remove();st.overlay=null;}
+        if(st.hint){st.hint.remove();st.hint=null;}
+      }catch(_){}
+    });
+    // Don't delete from the Set — the video element might still be in the
+    // DOM (e.g., SPA route that reuses the same <video>). The 'ended'
+    // listener + check()'s parentNode null-check handle final cleanup.
   }
 
   // ── Namespace exposure ──
@@ -151,6 +199,11 @@
   if(typeof Bus !== 'undefined' && typeof Bus.onGlobal === 'function'){
     Bus.onGlobal('media:ready',function(d){
       if(d&&d.type==='video'&&d.el)attach(d.el);
+    });
+    // ★ FIX 20-6 #14 (Agent 6): clear all active guards' timers on page:change.
+    //    See _clearAllGuards() docstring above for the leak this prevents.
+    Bus.onGlobal('page:change', function(){
+      try{ _clearAllGuards(); }catch(_){}
     });
   }
 
