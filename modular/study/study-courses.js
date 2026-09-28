@@ -170,7 +170,7 @@
           if(typeof window.gdiRefreshCentralPanel==='function'){
             window.gdiRefreshCentralPanel();
           }else if(typeof window.renderCursos==='function'){
-            window.renderCursos(box);
+            window.renderCursos(box).catch(()=>{});
           }
         }catch(e){console.warn('[AddCourse] erro ao re-renderizar:',e.message);}
       }
@@ -370,6 +370,9 @@
     // aluno via aba "Adicionar matéria" e carregam totalLessons (pdfCount do Drive scan).
     const LS_MANUAL='gdi-manual-courses-v1';
     const manual=lsGet(LS_MANUAL,[]);
+    // ★ FIX (Agent 10 E-1): defensive — if localStorage was corrupted into
+    //    a non-array shape, return [] instead of crashing the whole UI.
+    if(!Array.isArray(manual)) return [];
     const map=new Map();
 
     // Pré-computa prefixo lower de cada curso manual para casar paths assistidos.
@@ -570,7 +573,7 @@
         if(ok){
           lsSet(LS_HIDDEN,[]);
           showToast('Cursos restaurados');
-          renderCursos(box);
+          renderCursos(box).catch(()=>{});
         }
       };
       return;
@@ -733,7 +736,7 @@
           if(ok){
             hideCourse(c.key);
             showToast('Curso ocultado');
-            renderCursos(box);
+            renderCursos(box).catch(()=>{});
           }
         };
       }
@@ -909,7 +912,12 @@
     const loadingEl=overlay.querySelector('#gdi-amc-loading');
     const currentInfoEl=overlay.querySelector('#gdi-amc-current-info');
 
-    function normPath(p){return p||'/';}
+    function normPath(p){
+      // ★ FIX (Agent 10 F-1): always strip trailing slash for consistency.
+      //    Previously returned the raw path, so '/0:/Cursos/' vs '/0:/Cursos'
+      //    were treated as different keys (cache misses, orphan lessons).
+      return (p||'').replace(/\/+$/,'') || '/';
+    }
     function pathSegments(p){
       // /0:/Cursos/Direito/Constitucional → ['0:', 'Cursos', 'Direito', 'Constitucional']
       return normPath(p).split('/').filter(Boolean);
@@ -1145,7 +1153,7 @@
         }
         if(window.showToast)showToast('Curso "'+courseName+'" adicionado! 🐩 Batalhão de IA iniciando em background...');
         try{
-          renderCursos(box);
+          renderCursos(box).catch(()=>{});
         }catch(e){
           console.warn('[AddCourse] erro ao re-renderizar:',e.message);
         }
@@ -1341,8 +1349,16 @@
           });
           lsSet(LS_MANUAL,manual);
           if(overlay&&overlay.parentNode)overlay.remove();
+          // ★ FIX (Agent 10 Bug 22): mirror v1.0.101 fix for doAddCourseFromDrive —
+          //    after closing the manual-add modal, click the 'home' tab so the
+          //    user sees the course list (otherwise the body stays empty because
+          //    renderBody('addmateria') only reopens this modal).
+          try{
+            const homeTab = document.querySelector('.gdi-central-tab[data-t="home"]');
+            if(homeTab) homeTab.click();
+          }catch(_){}
           showToast('Curso "'+name+'" adicionado! 🐩 Batalhão de IA iniciando em background...');
-          try{renderCursos(box);}catch(_){}
+          try{renderCursos(box).catch(()=>{});}catch(_){}
           // ★ BATALHÃO para manual
           try{
             const pdfs=[];
@@ -1438,7 +1454,7 @@
         <button id="gdi-restore-all" class="gdi-btn gdi-btn-primary" style="font-size:12px;"><i class="bi bi-arrow-counterclockwise"></i> Restaurar todos</button>
       </div>
     </div>`;
-    box.querySelector('#gdi-hidden-back').onclick=()=>renderCursos(box);
+    box.querySelector('#gdi-hidden-back').onclick=()=>{try{renderCursos(box).catch(()=>{});}catch(_){}};
     box.querySelectorAll('.gdi-restore-one').forEach(b=>{
       b.onclick=()=>{
         unhideCourse(b.dataset.ck);
@@ -1456,7 +1472,7 @@
       if(ok){
         lsSet(LS_HIDDEN,[]);
         showToast('Todos os cursos restaurados');
-        renderCursos(box);
+        renderCursos(box).catch(()=>{});
       }
     };
   }
@@ -1664,8 +1680,15 @@
       </div>
     </div>`;
 
-    box.querySelector('#gdi-detail-back').onclick=()=>renderCursos(box);
-    box.querySelector('#gdi-detail-hide').onclick=async ()=>{
+    // ★ FIX (Agent 16 UIUX-5): null-check every querySelector result before
+    //    assigning .onclick — openCourseDetail's box.innerHTML template is
+    //    conditional (e.g. #gdi-detail-scan is only rendered for !scanning or
+    //    error states), so a missing element used to throw TypeError and
+    //    break the whole detail view.
+    const _detailBack = box.querySelector('#gdi-detail-back');
+    if(_detailBack) _detailBack.onclick=()=>{try{renderCursos(box).catch(()=>{});}catch(_){}};
+    const _detailHide = box.querySelector('#gdi-detail-hide');
+    if(_detailHide) _detailHide.onclick=async ()=>{
       const ok=await window.gdiModal({
         title:'Ocultar curso',
         message:'Ocultar "'+name+'" da sua lista de cursos?',
@@ -1676,7 +1699,7 @@
       if(ok){
         hideCourse(c.key);
         showToast('Curso ocultado');
-        renderCursos(box);
+        renderCursos(box).catch(()=>{});
       }
     };
     // ★ Task FINAL / Fix 2c: botão "Remover" — remove o curso permanentemente
@@ -1684,7 +1707,8 @@
     // ★ v1.0.97 FIX: também chama POST /api/courses/remove para remover o user do
     //   general_courses.json no servidor. Sem isso, syncCoursesFromDrive() re-lê o
     //   servidor e re-adiciona o curso a cada renderHome.
-    box.querySelector('#gdi-detail-remove').onclick=async ()=>{
+    const _detailRemove = box.querySelector('#gdi-detail-remove');
+    if(_detailRemove) _detailRemove.onclick=async ()=>{
       const ok=await window.gdiModal({
         title:'Remover curso',
         message:'Remover "'+name+'" definitivamente da sua lista? Esta ação não pode ser desfeita. (Ocultar é reversível; Remover apaga o registro local.)',
@@ -1723,14 +1747,15 @@
         // limpa também da lista de ocultos (se estava oculto)
         try{unhideCourse(c.key);}catch(_){}
         showToast('Curso removido');
-        renderCursos(box);
+        renderCursos(box).catch(()=>{});
       }catch(e){
         showToast('Erro ao remover: '+(e&&e.message||e));
       }
     };
     // ★ Task FINAL / Fix 2d: botão "Reiniciar Scan" — limpa o estado do
     //   scanner e dispara um novo scan imediatamente.
-    box.querySelector('#gdi-detail-restart-scan').onclick=function(){
+    const _detailRestart = box.querySelector('#gdi-detail-restart-scan');
+    if(_detailRestart) _detailRestart.onclick=function(){
       const restartBtn=box.querySelector('#gdi-detail-restart-scan');
       const ck=(restartBtn && restartBtn.dataset && restartBtn.dataset.courseKey) || c.key;
       try{
@@ -1755,7 +1780,9 @@
       }
     };
     const contBtn=box.querySelector('#gdi-detail-continue');
-    bestIn(c.key).then(target=>{
+    // ★ FIX (Agent 16 UIUX-5): contBtn may be null if template omitted the
+    //    continue button; guard the .then() body to avoid TypeError.
+    if(contBtn) bestIn(c.key).then(target=>{
       if(target){
         contBtn.disabled=false;
         contBtn.innerHTML=`<i class="bi bi-play-fill"></i> Continuar: ${escHtml(realName(target).slice(0,40))}`;
@@ -1766,7 +1793,7 @@
         contBtn.style.flex='1';contBtn.style.justifyContent='center';
         contBtn.innerHTML='<i class="bi bi-check2-all" style="color:#3fb950;"></i> Tudo em dia!';
       }
-    });
+    }).catch(()=>{});
     // ★ Task 18: click em disciplina → abre pasta no Drive (não aula individual)
     box.querySelectorAll('[data-disc-path]').forEach(el=>{
       el.onclick=()=>{
