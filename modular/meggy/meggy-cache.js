@@ -106,7 +106,12 @@
     arr.unshift({
       id:U.uid(),
       lesson:String(lesson||'Aula').slice(0,200),
-      summary:String(summary||''),
+      // ★ FIX-MEGGY (Task 20-7 #6): cap summary at 50000 chars to prevent
+      //   localStorage quota exhaustion (LS_SUM has up to 200 entries; 200 ×
+      //   unbounded summary could exceed the 5-10MB localStorage limit and
+      //   throw QuotaExceededError, which would lose the ENTIRE batch since
+      //   lsSet is inside the chain).
+      summary:String(summary||'').slice(0,50000),
       path:derivedCourse,
       subject:derivedSubject||'Geral',
       date:Date.now()
@@ -226,8 +231,25 @@
     if(n){
       window.__gdiMeggyCacheFcFallbackChain = window.__gdiMeggyCacheFcFallbackChain.then(() => {
         const cards=U.lsGet('gdi-cards-v1',[]);
+        // ★ v1.0.103 FIX (Task 20-18 #9): O(N×C) → O(N+C) dedup via Set<string>.
+        //   Previously `cards.some(x => x.f === c.f)` ran INSIDE the newCards loop —
+        //   O(C) per new card, O(N×C) total for N new cards vs C existing. For a fresh
+        //   lesson generating 20 questions into a 1,000-card library, that's 20,000
+        //   string comparisons per autoCreateFlashcards call. Set.has() drops it to
+        //   ~1,020 ops (1,000 to build the Set once + 20 lookups). The Set is also
+        //   updated as we push new (deduplicated) cards, so subsequent iterations see
+        //   them too — preserves the original "skip if already in cards" semantics
+        //   even if `newCards` itself contains duplicate fronts.
+        const _existingFronts = new Set();
+        for(let _i = 0; _i < cards.length; _i++){
+          const _c = cards[_i];
+          if(_c && typeof _c.f === 'string') _existingFronts.add(_c.f);
+        }
         for(const c of newCards){
-          if(!cards.some(x=>x.f===c.f)) cards.push(c);
+          if(!_existingFronts.has(c.f)){
+            cards.push(c);
+            _existingFronts.add(c.f);
+          }
         }
         U.lsSet('gdi-cards-v1',cards);
       }).catch(e=>console.warn('[Meggy] autoCreateFlashcards fallback chain error:', e&&e.message));
@@ -266,20 +288,71 @@
     //    find the Battalion's persistent memory, which is saved under
     //    `courseKey/pdfName` keys that never match U.lessonKey() (URL).
     const _key = keyOverride || U.lessonKey();
+    // ★ FIX-MEGGY (Task 20-7 #2): distinguish "cache miss" (return null) from
+    //   "server down / network error" (throw). Before, the catch swallowed
+    //   ALL errors and returned null — callers couldn't tell a transient
+    //   outage from a legitimate miss, leading to silent regeneration loops.
+    //   Now: throw on fetch failures, JSON parse failures, and HTTP 5xx;
+    //   return null only on HTTP 4xx/200-with-no-cached (legitimate miss).
+    let granular;
     try{
-      // ★ tenta endpoint granular primeiro (summaries)
-      const granular=await GRANULAR_AVAILABLE();
+      granular = await GRANULAR_AVAILABLE();
+    }catch(e){
+      // GRANULAR_AVAILABLE already swallows internally, but defensively:
+      throw new Error('cacheGet: GRANULAR_AVAILABLE probe failed: ' + (e && e.message || e));
+    }
+    let r;
+    try{
       if(granular){
-        const r=await fetch('/api/ai/summaries?key='+encodeURIComponent(_key),{cache:'no-store'});
-        const d=await r.json();
-        if(d&&d.ok&&d.cached)return d.cached;
-        return null;
+        r = await fetch('/api/ai/summaries?key='+encodeURIComponent(_key),{cache:'no-store'});
+      }else{
+        r = await fetch('/api/ai/cache?key='+encodeURIComponent(_key),{cache:'no-store'});
       }
-      // fallback: cache unificado antigo
-      const r=await fetch('/api/ai/cache?key='+encodeURIComponent(_key),{cache:'no-store'});
-      const d=await r.json();
-      return (d&&d.ok&&d.cached)?d.cached:null;
-    }catch(_){return null;}
+    }catch(e){
+      // Network error (fetch threw — DNS, CORS, offline, etc.)
+      throw new Error('cacheGet: network error: ' + (e && e.message || e));
+    }
+    if(!r.ok && r.status >= 500){
+      // Server error — distinguish from miss
+      throw new Error('cacheGet: server error HTTP ' + r.status);
+    }
+    if(!r.ok){
+      // HTTP 4xx (404, 403, etc.) — treat as miss (return null)
+      return null;
+    }
+    let d;
+    try{
+      d = await r.json();
+    }catch(e){
+      throw new Error('cacheGet: invalid JSON response: ' + (e && e.message || e));
+    }
+    return (d && d.ok && d.cached) ? d.cached : null;
+  }
+
+  // ★ FIX-MEGGY (Task 20-7 #4): per-URL failed-download tracker with TTL.
+  //   When a Battalion resumos/ file exists but its download fails (network
+  //   error or non-OK HTTP), we record the URL for _FAILED_DOWNLOAD_TTL so
+  //   subsequent cacheGetRobust calls SKIP it instead of falling through to
+  //   "cache miss → regenerate". Without this, a transient Drive outage
+  //   caused infinite regeneration: every render re-matched the same file,
+  //   re-failed the download, fell through to miss, regenerated, saved,
+  //   and on the next render did it all again. Differentiates "file exists
+  //   but couldn't download" (skip + TTL) from "file doesn't exist" (no
+  //   match → fall through normally).
+  const _failedDownloadURLs = new Map();
+  const _FAILED_DOWNLOAD_TTL = 5 * 60 * 1000; // 5 min
+  function _isFailedDownload(url){
+    if(!url) return false;
+    const ts = _failedDownloadURLs.get(url);
+    if(!ts) return false;
+    if(Date.now() - ts > _FAILED_DOWNLOAD_TTL){
+      _failedDownloadURLs.delete(url);
+      return false;
+    }
+    return true;
+  }
+  function _markFailedDownload(url){
+    if(url) _failedDownloadURLs.set(url, Date.now());
   }
 
   // ★ v87-FIX-MEGGY-MODULES BUG 4: robust cache lookup that probes multiple
@@ -295,8 +368,24 @@
   //          window.GDIStorage.listMaterials, matched by lesson name
   //    Returns the first hit (or null). Logs misses so we can debug.
   async function cacheGetRobust(){
+    // ★ FIX-MEGGY (Task 20-7 #2): cacheGet now throws on network/server
+    //   errors. cacheGetRobust is "robust" by design — it should try each
+    //   strategy and fall through, so we wrap each cacheGet call in its
+    //   own try/catch. The last network error is remembered and re-thrown
+    //   at the end IF no strategy returned a hit AND no strategy returned
+    //   a clean null (miss). This way: (a) a single down endpoint doesn't
+    //   abort the whole lookup, (b) a fully-down cache layer surfaces the
+    //   error to generateAll instead of silently regenerating.
+    let _lastNetErr = null;
+
     // (1) primary key
-    const primary = await cacheGet();
+    let primary = null;
+    try{
+      primary = await cacheGet();
+    }catch(e){
+      _lastNetErr = e;
+      console.warn('[Meggy] cacheGet primary failed (will try alternates):', e && e.message);
+    }
     if(primary){
       console.info('[Meggy] cache hit via primary lesson key:', U.lessonKey());
       return primary;
@@ -308,10 +397,15 @@
     if(/\.(mp4|webm|mov|m4v|avi|mkv|m3u8)$/i.test(p)){
       const pdfKey = p.replace(/\.[a-z0-9]+$/i, '.pdf');
       if(pdfKey && pdfKey !== p){
-        const hit2 = await cacheGet(pdfKey);
-        if(hit2){
-          console.info('[Meggy] cache hit via PDF-extension key:', pdfKey);
-          return hit2;
+        try{
+          const hit2 = await cacheGet(pdfKey);
+          if(hit2){
+            console.info('[Meggy] cache hit via PDF-extension key:', pdfKey);
+            return hit2;
+          }
+        }catch(e){
+          _lastNetErr = e;
+          console.warn('[Meggy] cacheGet PDF-key failed (will try Battalion):', e && e.message);
         }
       }
     }
@@ -343,17 +437,48 @@
                 const match = items.find(it => it && it.name && norm(it.name).includes(base));
                 if(match){
                   let content = match.content || '';
+                  let downloadFailed = false;
                   if(!content && match.downloadUrl){
-                    try{
-                      const r = await fetch(match.downloadUrl, {cache:'no-store'});
-                      if(r.ok) content = await r.text();
-                    }catch(_){ content = ''; }
+                    // ★ FIX-MEGGY (Task 20-7 #4): differentiate "file exists
+                    //   but couldn't download" from "file doesn't exist".
+                    //   If the URL is in the failed-download TTL map, skip
+                    //   (don't retry every render → no infinite regeneration).
+                    if(_isFailedDownload(match.downloadUrl)){
+                      console.info('[Meggy] Battalion resumos/ match found but download recently failed (within ' +
+                        (_FAILED_DOWNLOAD_TTL/1000/60) + 'min TTL); skipping to avoid infinite regeneration:', match.name);
+                      downloadFailed = true;
+                    }else{
+                      try{
+                        const r = await fetch(match.downloadUrl, {cache:'no-store'});
+                        if(r.ok){
+                          content = await r.text();
+                        }else{
+                          // HTTP error — file exists but couldn't be fetched.
+                          _markFailedDownload(match.downloadUrl);
+                          downloadFailed = true;
+                          console.warn('[Meggy] Battalion resumos/ download HTTP '+r.status+'; marking failed for ' +
+                            (_FAILED_DOWNLOAD_TTL/1000/60) + 'min:', match.name);
+                        }
+                      }catch(e){
+                        // Network error — file exists but couldn't be downloaded.
+                        _markFailedDownload(match.downloadUrl);
+                        downloadFailed = true;
+                        console.warn('[Meggy] Battalion resumos/ download network error; marking failed for ' +
+                          (_FAILED_DOWNLOAD_TTL/1000/60) + 'min:', match.name, e && e.message);
+                      }
+                    }
                   }
                   if(content){
                     console.info('[Meggy] cache hit via Battalion resumos/ folder:', match.name);
                     // Wrap in the shape cacheGet() returns. Questions/mindmap not
                     // in the MD file — caller will regenerate them as needed.
                     return { summary: content, questions: [], mindmap: null };
+                  }
+                  if(downloadFailed){
+                    // ★ FIX-MEGGY (Task 20-7 #4): surface the failure to caller
+                    //   so generateAll doesn't silently regenerate (and re-save,
+                    //   re-matching the same un-downloadable file on next render).
+                    throw new Error('Battalion resumos/ file exists but download failed: ' + match.name);
                   }
                 }
               }
@@ -362,7 +487,18 @@
         }
       }
     }catch(e){
+      // If this is our own "download failed" signal, propagate it.
+      if(e && e.message && /^Battalion resumos\/ file exists/.test(e.message)){
+        throw e;
+      }
       console.warn('[Meggy] Battalion resumos/ fallback failed (non-critical):', e && e.message || e);
+    }
+
+    // If any strategy threw a network/server error AND no strategy returned
+    // a clean miss (we wouldn't reach here if any had hit), surface the last
+    // error so the caller can distinguish "cache layer down" from "true miss".
+    if(_lastNetErr){
+      throw _lastNetErr;
     }
 
     console.info('[Meggy] cache miss — no hit for primary, PDF-key, or Battalion resumos/. Will extract.');
@@ -382,7 +518,14 @@
       const endpoint=granular?'/api/ai/summaries':'/api/ai/cache';
       await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({key:U.lessonKey(),summary,questions,mindmap:mindmapToSave,lessonName})});
-    }catch(_){/* não bloqueia o fluxo se o cache falhar */}
+    }catch(e){
+      // ★ FIX-MEGGY (Task 20-7 #3): log instead of silently swallowing —
+      //   the original `catch(_){}` hid Drive cache failures, making cache
+      //   misses look like normal behavior and complicating diagnosis.
+      //   Non-blocking: we still don't re-throw (caller's flow continues),
+      //   but the warn leaves a breadcrumb in the console.
+      console.warn('[Meggy] cacheSave failed (non-blocking):', e && e.message || e);
+    }
   }
 
   // ── GERAÇÃO EM CADEIA: resumo + pílulas + questões ──
@@ -421,6 +564,15 @@
   //    stored in _inflight[key]. Concurrent calls share the same promise —
   //    prevents duplicate PDF extraction + API calls when user clicks
   //    Resumo/Questões/Pílulas fast in succession.
+  // ★ FIX-MEGGY (Task 20-7 #5) VERIFIED: the `try {` on the next line is the
+  //    VERY FIRST statement inside the async IIFE — there is NO synchronous
+  //    code between `(async () => {` and `try {` that could throw and leak
+  //    `_inflight[key]`. If `U.lessonKey()` (line above the IIFE) throws, the
+  //    assignment `_inflight[key] = ...` never runs, so no leak. If the IIFE
+  //    itself throws synchronously (impossible — async functions always return
+  //    a Promise), the `finally` still runs because the throw is inside `try`.
+  //    Conclusion: the try wraps the ENTIRE IIFE body; _inflight[key] is
+  //    always cleaned up. No code change needed — this comment is the audit.
   async function generateAll(items,lesson,trigger,progressCb){
     const key=U.lessonKey();
     if(_inflight[key]) return _inflight[key];
@@ -443,6 +595,14 @@
     }
     // se já tem tudo no cache em memória, pula
     if(_chainCache[key]&&_chainCache[key].summary&&_chainCache[key].mindmap&&_chainCache[key].questionsGenerated){
+      // ★ FIX-MEGGY (Task 20-7 #1): LRU touch — delete + re-set moves the key
+      //   to the end of insertion order (MRU position). _chainCacheEvict
+      //   removes the FIRST key (LRU), so this ensures recently-used entries
+      //   survive eviction. Without this, eviction is pure FIFO (oldest
+      //   insertion wins) — the comment "aproximação LRU" was misleading.
+      const _hit=_chainCache[key];
+      delete _chainCache[key];
+      _chainCache[key]=_hit;
       return _chainCache[key];
     }
 
@@ -472,7 +632,13 @@
           if(q.type==='tf'||(!q.options&&q.correct!==undefined)){
             cleanQ={subject:lesson,type:'tf',statement:String(q.statement),options:['Certo','Errado'],correct:Math.max(0,Math.min(1,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
           }else if(Array.isArray(q.options)){
-            cleanQ={subject:lesson,type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min(3,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
+            // ★ FIX-MEGGY (Task 20-7 #7): generalize Math.min(3,...) to
+            //   (q.options.length||4)-1 so MC questions with 5 options (A-E,
+            //   common in some concursos) don't have their `correct` index
+            //   silently clamped to 3 (option D). The hardcoded `3` assumed
+            //   4-option MC; (length-1) handles any option count, with 4 as
+            //   the fallback if options is somehow empty/invalid.
+            cleanQ={subject:lesson,type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min((q.options.length||4)-1,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
           }
           if(cleanQ)_batch.push(cleanQ);
         }
@@ -625,7 +791,9 @@
                   if(q.type==='tf'||(!q.options&&q.correct!==undefined)){
                     cleanQ={type:'tf',statement:String(q.statement),options:['Certo','Errado'],correct:Math.max(0,Math.min(1,Number(q.correct)||0)),explanation:String(q.explanation||''),legalText:String(q.legalText||q.fundamentacao||''),fundamentacao:String(q.fundamentacao||'')};
                   }else if(Array.isArray(q.options)){
-                    cleanQ={type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min(3,Number(q.correct)||0)),explanation:String(q.explanation||''),legalText:String(q.legalText||q.fundamentacao||''),fundamentacao:String(q.fundamentacao||'')};
+                    // ★ FIX-MEGGY (Task 20-7 #7): see note above — generalize
+                    //   Math.min(3,...) → (q.options.length||4)-1 for 5+ option MC.
+                    cleanQ={type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min((q.options.length||4)-1,Number(q.correct)||0)),explanation:String(q.explanation||''),legalText:String(q.legalText||q.fundamentacao||''),fundamentacao:String(q.fundamentacao||'')};
                   }
                   if(cleanQ){
                     _batchAI.push(Object.assign({subject:lesson,source:'ISA-PDF'},cleanQ));
@@ -664,7 +832,14 @@
           mindmap:_chainCache[key].mindmap||null,
           lessonName:lesson
         })});
-    }catch(_){}
+    }catch(e){
+      // ★ FIX 20-14 #E (Agent 14): align with Fix #3 (Task 20-7 cacheSave
+      //   console.warn) — the original `catch(_){}` silently swallowed Drive
+      //   cache save failures, making it impossible to diagnose why generated
+      //   materials weren't persisting. Still non-blocking (generation result
+      //   is returned regardless), but the warn leaves a breadcrumb.
+      console.warn('[Meggy] generateAll cache save failed (non-blocking):', e&&e.message||e);
+    }
     // compartilha no pool de resumos
     if(_chainCache[key].summary){
       // late-bind to summaries module
@@ -700,7 +875,10 @@
     try{
       await fetch('/api/ai/cache',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({key,summary:null,questions:null,mindmap:null,lessonName:lesson})});
-    }catch(_){}
+    }catch(e){
+      // ★ FIX 20-14 #E (cont.): same console.warn alignment as generateAll above.
+      console.warn('[Meggy] regenerate cache clear failed (non-blocking):', e&&e.message||e);
+    }
     // regenera tudo em cadeia — late-bind to summaries module
     if(window.__gdiMeggy.summaries && window.__gdiMeggy.summaries.summary){
       await window.__gdiMeggy.summaries.summary(items,bodyEl,lessonName);
