@@ -28,6 +28,61 @@
  * ============================================================================ */
 
 const MAX_PAGES = 50;
+// ★ FIX Task 20-9 Item 12: MAX_DEPTH é um safety cap contra listas de subpastas
+// gigantes ( Drive folder com 500+ subpastas, ou bug do caller que envia array
+// não-truncado). handleScan não recursa hoje (só varre 1 nível de subpastas),
+// mas se uma varredura recursiva for adicionada no futuro, este limite também
+// protege contra recursão profunda. Aplicado como cap no número de subFolders
+// processados (MAX_DEPTH * 20 = 300 pastas) — acima disso, trunca + loga warning.
+const MAX_DEPTH = 15;
+const MAX_SUBFOLDERS = MAX_DEPTH * 20;  // 300 — cap duro em handleScan
+
+// ★ FIX Task 20-9 Item 13: Drive API pode retornar 429 (rate limit) sob carga.
+// Antes, qualquer `!r.ok` (incluindo 429) fazia `break` imediato, truncando
+// silenciosamente a listagem. Agora, em 429/503, esperamos 1s e tentamos de
+// novo (até RATE_LIMIT_MAX_RETRIES vezes). Outros erros (401/403/404/500)
+// continuam com break imediato.
+const RATE_LIMIT_MAX_RETRIES = 3;
+const RATE_LIMIT_DELAY_MS = 1000;
+
+async function fetchFolderPage(path, body, timeoutMs){
+  let lastErr = null;
+  for (let attempt = 0; attempt <= RATE_LIMIT_MAX_RETRIES; attempt++) {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), timeoutMs || 30000);
+    let r;
+    try {
+      r = await fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: ctrl.signal,
+      });
+    } catch(e) {
+      lastErr = e;
+      clearTimeout(to);
+      // Network/abort error — retry once for transient blips
+      if (attempt < RATE_LIMIT_MAX_RETRIES) {
+        await new Promise(rr => setTimeout(rr, RATE_LIMIT_DELAY_MS));
+        continue;
+      }
+      throw e;
+    }
+    clearTimeout(to);
+    // ★ FIX Task 20-9 Item 13: 429 ou 503 → rate-limited / temporarily unavailable.
+    // Espera 1s e tenta de novo (até RATE_LIMIT_MAX_RETRIES).
+    if (r.status === 429 || r.status === 503) {
+      if (attempt < RATE_LIMIT_MAX_RETRIES) {
+        await new Promise(rr => setTimeout(rr, RATE_LIMIT_DELAY_MS));
+        continue;
+      }
+      // retries exhausted — retorna a response para o caller tratar (break)
+    }
+    return r;
+  }
+  if (lastErr) throw lastErr;
+  return null;  // unreachable
+}
 
 // ★★★ Task 8: processar múltiplas mensagens em paralelo (era 1 por vez) ★★★
 // Antes: 16 gdiListAllFiles do M14 ficavam enfileiradas, cada uma com até 50 páginas
@@ -47,25 +102,21 @@ self.onmessage = (ev) => {
 };
 
 /* ---------------- list: paginação de uma única pasta ---------------- */
+// ★ FIX Task 20-9 Item 11 (VERIFY): o `done` message envia `files: out` (array
+// acumulado COMPLETO), enquanto cada `page` tick envia apenas `files.slice()`
+// (os NOVOS arquivos daquela página). NÃO há duplicação de page ticks — o
+// bridge acumula os `page` messages em `p.accum` e no `done` prefere `msg.files`
+// (que é o mesmo array acumulado no worker). Comportamento correto, mantido.
 async function handleList({ id, path, pw, probeOnly }) {
   const out = [];
   let token = '';
   let idx = 0;
   for (let guard = 0; guard < MAX_PAGES; guard++) {
-    const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 30000);
-    let r;
-    try {
-      r = await fetch(path, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: '', type: 'folder', password: pw || '', page_token: token, page_index: idx }),
-        signal: ctrl.signal,
-      });
-    } finally {
-      clearTimeout(to);
-    }
-    if (!r.ok) break;
+    // ★ FIX Task 20-9 Item 13: usa fetchFolderPage (retry em 429/503).
+    const r = await fetchFolderPage(path, {
+      id: '', type: 'folder', password: pw || '', page_token: token, page_index: idx
+    }, 30000);
+    if (!r || !r.ok) break;
     const page = await r.json();
     const files = page && page.data && Array.isArray(page.data.files) ? page.data.files : [];
     // push em chunks para evitar estouro de stack com spread gigante
@@ -95,6 +146,15 @@ async function handleScan({ id, parentPath, subFolders, pw, initialItems }) {
   // ou refactor). Guard previne TypeError opaco. Mesmo guard aplicado em
   // todos os sites de `subFolders.length` / `subFolders.slice()` abaixo.
   if (!Array.isArray(subFolders)) subFolders = [];
+  // ★ FIX Task 20-9 Item 12: safety cap contra listas de subpastas gigantes
+  // (Drive folder com 500+ subpastas, ou bug do caller). Acima de MAX_SUBFOLDERS
+  // (300 = MAX_DEPTH * 20), trunca e loga warning — sem isso, o worker podia
+  // ficar varrendo milhares de pastas em sequência (cada uma com paginação de
+  // até 50 páginas), travando o worker por minutos.
+  if (subFolders.length > MAX_SUBFOLDERS) {
+    console.warn('[gdi-list-worker] subFolders truncated from', subFolders.length, 'to', MAX_SUBFOLDERS);
+    subFolders = subFolders.slice(0, MAX_SUBFOLDERS);
+  }
   const collected = [];
   let cursor = 0;
   const INITIAL = initialItems || 60;
@@ -159,18 +219,11 @@ async function listAllFilesInternal(path, pw) {
   const out = [];
   let token = '', idx = 0;
   for (let guard = 0; guard < MAX_PAGES; guard++) {
-    const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 30000);
-    let r;
-    try {
-      r = await fetch(path, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: '', type: 'folder', password: pw || '', page_token: token, page_index: idx }),
-        signal: ctrl.signal,
-      });
-    } finally { clearTimeout(to); }
-    if (!r.ok) break;
+    // ★ FIX Task 20-9 Item 13: usa fetchFolderPage (retry em 429/503).
+    const r = await fetchFolderPage(path, {
+      id: '', type: 'folder', password: pw || '', page_token: token, page_index: idx
+    }, 30000);
+    if (!r || !r.ok) break;
     const page = await r.json();
     const files = page && page.data && Array.isArray(page.data.files) ? page.data.files : [];
     for (let i = 0; i < files.length; i++) out.push(files[i]);
