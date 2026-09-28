@@ -185,6 +185,12 @@
       }
       return {ok:false, reason:(d && d.reason) || (d && d.error) || 'unknown'};
     }catch(e){
+      // ★ Fix 17 (Task 20-8): log so failures aren't completely silent —
+      //   the caller (questions() folder-first load) treats this as
+      //   best-effort and falls back to the legacy cache, so without a
+      //   console.warn here a misconfigured discipline folder or a network
+      //   blip would be invisible in dev tools.
+      console.warn('[Meggy] loadQuestionsFromDisciplineFolder failed:', e && e.message || e);
       return {ok:false, reason:'network', error:e && e.message || String(e)};
     }
   }
@@ -223,11 +229,32 @@
   }
 
   // ── Questions flow: gera tudo em cadeia + abre quiz ──
+  // ★ Fix 14 (Task 20-8): spinner-aware loading helper. The previous code
+  //   called U.setLoading(bodyEl, text) which renders only text — during the
+  //   5-15s AI generation window the user saw a static message and assumed
+  //   the page was frozen. This helper renders the same Ferreto-themed
+  //   spinner used elsewhere (e.g. renderResumos) alongside the status text.
+  function _setLoadingWithSpinner(bodyEl, text){
+    try {
+      bodyEl.innerHTML = '<div class="gdi-empty-state" style="padding:40px 20px;text-align:center;">'
+        + '<div class="gdi-spinner" style="margin:0 auto 12px;width:32px;height:32px;'
+          + 'border:3px solid var(--ferreto-surface-3,rgba(255,255,255,.08));'
+          + 'border-top-color:var(--ferreto-primary,#ff8b9f);'
+          + 'border-radius:50%;animation:gdi-scan-spin 1s linear infinite;"></div>'
+        + '<p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin:0;">'
+          + U.esc(text) + '</p>'
+        + '</div>';
+    } catch(_) {
+      // Fall back to the text-only loader if our HTML construction fails.
+      try { U.setLoading(bodyEl, text); } catch(__){}
+    }
+  }
+
   async function questions(items,bodyEl,lessonName){
     if(!items||!items.length){U.setError(bodyEl,'Nenhum PDF disponível.');return;}
     const lesson=U.realLessonName(lessonName||items[0].name);
     bodyEl.__items=items;bodyEl.__lesson=lesson;
-    U.setLoading(bodyEl,'Meggy está lendo todos os materiais e criando resumo + pílulas + questões…');
+    _setLoadingWithSpinner(bodyEl,'Meggy está lendo todos os materiais e criando resumo + pílulas + questões…');
 
     // ★ TASK 7 (Scanner Distribuído — Section 9.2): folder-first load.
     //   Before any regeneration, try to load a shared question bank from
@@ -259,14 +286,26 @@
 
     try{
       await window.__gdiMeggy.cache.generateAll(items,lesson,'questions',(p)=>{
-        if(p.phase==='extract')U.setLoading(bodyEl,'Extraindo texto: '+p.pdf+'…');
-        else if(p.phase==='ocr-init')U.setLoading(bodyEl,'PDF escaneado detectado — iniciando OCR (pode levar alguns minutos)…');
-        else if(p.phase==='ocr-page')U.setLoading(bodyEl,'OCR em andamento — página '+p.page+' de '+p.total+(p.progress?(' ('+Math.round(p.progress*100)+'%)'):'')+'…');
-        else if(p.phase==='ocr-done')U.setLoading(bodyEl,'OCR concluído ('+p.chars+' caracteres). Gerando questões…');
+        if(p.phase==='extract')_setLoadingWithSpinner(bodyEl,'Extraindo texto: '+(p.pdf||'material')+'…');
+        else if(p.phase==='ocr-init')_setLoadingWithSpinner(bodyEl,'PDF escaneado detectado — iniciando OCR (pode levar alguns minutos)…');
+        else if(p.phase==='ocr-page')_setLoadingWithSpinner(bodyEl,'OCR em andamento — página '+p.page+' de '+p.total+(p.progress?(' ('+Math.round(p.progress*100)+'%)'):'')+'…');
+        else if(p.phase==='ocr-done')_setLoadingWithSpinner(bodyEl,'OCR concluído ('+p.chars+' caracteres). Gerando questões…');
       });
     }catch(e){U.setError(bodyEl,e.message);return;}
     // carrega questões do cache se existirem (★ PATCH B: batch insert)
-    const cached=await window.__gdiMeggy.cache.cacheGet();
+    // ★ FIX 20-14 #B (Agent 14): cacheGet now throws on network/server errors
+    //   (Task 20-7 #2). Previously it returned null on ALL errors, so the old
+    //   `const cached=await cacheGet()` was safe. Now we must wrap in try/catch
+    //   so a transient cache outage doesn't reject the entire questions()
+    //   call (which would surface as an unhandled rejection in the tab-click
+    //   handler). On error, fall through with cached=null — the quiz still
+    //   starts with whatever was loaded via addQBatch above.
+    let cached=null;
+    try{
+      cached=await window.__gdiMeggy.cache.cacheGet();
+    }catch(e){
+      console.warn('[Meggy] questions() cacheGet failed (non-blocking):', e&&e.message||e);
+    }
     if(cached&&cached.questions&&Array.isArray(cached.questions)&&cached.questions.length){
       const _batch=[];
       cached.questions.forEach(q=>{
@@ -275,7 +314,7 @@
           if(q.type==='tf'||(!q.options&&q.correct!==undefined)){
             cleanQ={subject:lesson,type:'tf',statement:String(q.statement),options:['Certo','Errado'],correct:Math.max(0,Math.min(1,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
           }else if(Array.isArray(q.options)){
-            cleanQ={subject:lesson,type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min(3,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
+            cleanQ={subject:lesson,type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min((q.options.length||4)-1,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
           }
           if(cleanQ)_batch.push(cleanQ);
         }
@@ -294,7 +333,7 @@
             _deriveDisciplineName() || lesson,
             cached.questions,
             _currentUsername()
-          ).catch(()=>{});
+          ).catch(e=>console.warn('[Meggy] saveQuestionsToDisciplineFolder (cached bank) failed:', e && e.message || e));
         }
       }catch(_){ /* best-effort */ }
     }
@@ -303,12 +342,27 @@
 
   // ── generateQuestions: gera mais questões de um PDF específico (para "Gerar mais 5") ──
   if(!window.__gdiPdfCursor)window.__gdiPdfCursor=0;
+  // ★ Fix 13 (Task 20-8): track the lesson the cursor was advanced for.
+  //   When the user switches to a different lesson (via the materials tab),
+  //   reset the cursor to 0 so question generation restarts from the first
+  //   PDF instead of resuming at a stale offset from the previous lesson.
+  let _gdiPdfCursorLesson = null;
   async function generateQuestions(items,bodyEl,lesson){
     if(!items||!items.length)return false;
+    // ★ Fix 13: reset cursor on lesson change.
+    if(_gdiPdfCursorLesson !== lesson){
+      _gdiPdfCursorLesson = lesson;
+      window.__gdiPdfCursor = 0;
+    }
     const pdfIdx=window.__gdiPdfCursor%items.length;
     window.__gdiPdfCursor++;
     const pdfItem=items[pdfIdx];
-    U.setLoading(bodyEl,'Extraindo texto do PDF: '+U.esc(pdfItem.name||'material')+'…');
+    // ★ FIX 20-14 #A (Agent 14): use spinner-aware loader here too — Fix 14
+    //   (Task 20-8) only covered questions() but NOT generateQuestions()
+    //   (the "Gerar mais 5 questões" flow). Both flows have 5-15s AI
+    //   generation windows where a static text message looks like a frozen
+    //   page. Now consistent with questions().
+    _setLoadingWithSpinner(bodyEl,'Extraindo texto do PDF: '+U.esc(pdfItem.name||'material')+'…');
     let text;
     const extractPdfText = window.__gdiMeggy.pdf.extractPdfText; // late-bind
     try{
@@ -324,7 +378,8 @@
       if(!text||text.trim().length<50){U.setError(bodyEl,'Falha ao extrair texto.');return false;}
     }
     if(!text||text.trim().length<50){U.setError(bodyEl,'PDF sem texto extraível.');return false;}
-    U.setLoading(bodyEl,'Meggy está criando questões…');
+    // ★ FIX 20-14 #A (cont.): spinner during AI generation.
+    _setLoadingWithSpinner(bodyEl,'Meggy está criando questões…');
     let resp;
     try{
       resp=await U.callIsa('Baseado neste material, gere 5 questões de concurso público em JSON array. Misture:\n- 3 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"explanation":"..."}\n- 2 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"explanation":"..."}\nSem comentários, só JSON:\n\n'+text.slice(0,15000));
@@ -340,7 +395,7 @@
       if(q.type==='tf'||(!q.options&&q.correct!==undefined)){
         cleanQ={subject:lesson,type:'tf',statement:String(q.statement),options:['Certo','Errado'],correct:Math.max(0,Math.min(1,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
       }else if(Array.isArray(q.options)){
-        cleanQ={subject:lesson,type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min(3,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
+        cleanQ={subject:lesson,type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min((q.options.length||4)-1,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
       }
       if(cleanQ){
         _batchGen.push(cleanQ);
@@ -349,9 +404,22 @@
     });
     window.__gdiMeggy.cache.addQBatch(_batchGen);
     if(cleanArr.length){
-      const existing=await window.__gdiMeggy.cache.cacheGet();
+      // ★ FIX 20-14 #B (cont.): same try/catch guard for cacheGet in
+      //   generateQuestions(). The caller (#gdi-q-gen-more onclick) doesn't
+      //   catch rejections, so an unhandled cacheGet throw would surface as a
+      //   console error. Fall through with existing=null on error.
+      let existing=null;
+      try{
+        existing=await window.__gdiMeggy.cache.cacheGet();
+      }catch(e){
+        console.warn('[Meggy] generateQuestions() cacheGet failed (non-blocking):', e&&e.message||e);
+      }
       const merged=[...((existing&&existing.questions)||[]),...cleanArr];
-      window.__gdiMeggy.cache.cacheSave(existing?.summary||null,merged,lesson);
+      // ★ FIX 20-14 #B (cont.): pass existing.mindmap explicitly so cacheSave
+      //   doesn't need to re-call cacheGet internally (which would throw the
+      //   same network error and skip the save entirely, losing the merged
+      //   bank to the Drive cache).
+      window.__gdiMeggy.cache.cacheSave(existing?.summary||null,merged,lesson,existing?.mindmap);
 
       // ★ TASK 7 (Scanner Distribuído — Section 9.2): persist the merged
       //   bank to the discipline folder so other students can reuse it
@@ -367,7 +435,7 @@
             _deriveDisciplineName() || lesson,
             merged,
             _currentUsername()
-          ).catch(()=>{});
+          ).catch(e=>console.warn('[Meggy] saveQuestionsToDisciplineFolder (generated bank) failed:', e && e.message || e));
         }
       }catch(_){ /* best-effort */ }
     }
@@ -412,7 +480,21 @@
       return;
     }
     // pega até 5 questões
-    const batch=pending.slice(0,5);
+    // ★ Fix 15 (Task 20-8): Fisher-Yates shuffle the pending pool BEFORE
+    //   slicing 5, so the user doesn't always see the same 5 questions in
+    //   the same order on every restart (which previously happened whenever
+    //   `pending.length` reset to the full lesson set — the first 5 by
+    //   insertion order would always come up first). The shuffle is
+    //   non-destructive (works on a .slice() copy) so the underlying bank
+    //   order is preserved for other callers.
+    const shuffled = pending.slice();
+    for(let i = shuffled.length - 1; i > 0; i--){
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = shuffled[i];
+      shuffled[i] = shuffled[j];
+      shuffled[j] = tmp;
+    }
+    const batch=shuffled.slice(0,5);
     runQuizSession(bodyEl,lesson,batch);
   }
 
