@@ -1641,6 +1641,9 @@
     };
     // ★ Task FINAL / Fix 2c: botão "Remover" — remove o curso permanentemente
     //   do localStorage (não apenas oculta). Pede confirmação via modal.
+    // ★ v1.0.97 FIX: também chama POST /api/courses/remove para remover o user do
+    //   general_courses.json no servidor. Sem isso, syncCoursesFromDrive() re-lê o
+    //   servidor e re-adiciona o curso a cada renderHome.
     box.querySelector('#gdi-detail-remove').onclick=async ()=>{
       const ok=await window.gdiModal({
         title:'Remover curso',
@@ -1652,9 +1655,27 @@
       if(!ok) return;
       try{
         const LS_MANUAL_RM='gdi-manual-courses-v1';
+        const LS_HIDDEN='gdi-hidden-courses-v1';  // ★ v1.0.97: dupla proteção local
+        // 1. Marca como hidden localmente (primeira camada de proteção)
+        const hidden=lsGet(LS_HIDDEN,[]);
+        if(c && c.key && !hidden.includes(c.key)){
+          hidden.push(c.key);
+          lsSet(LS_HIDDEN, hidden);
+        }
+        // 2. Remove do localStorage
         const manual=lsGet(LS_MANUAL_RM,[]);
         const next=manual.filter(m=>!m || m.path!==c.key);
         lsSet(LS_MANUAL_RM,next);
+        // 3. Remove do servidor (segunda camada — impede syncCoursesFromDrive de re-adicionar)
+        try{
+          await fetch('/api/courses/remove', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({coursePath: c.key})
+          });
+        }catch(e){
+          console.warn('[Remover curso] falha ao remover do servidor (continua com hidden local):', e && e.message);
+        }
         // limpa estado do scanner e cache de aulas
         if(window.gdiCourseScanner){
           try{window.gdiCourseScanner.clearScanState(c.key);}catch(_){}
