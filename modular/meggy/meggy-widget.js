@@ -113,6 +113,12 @@
   let messages=[];
   try{messages=JSON.parse(sessionStorage.getItem(STORE))||[];}catch(_){}
 
+  // ★ Fix 4 (Task 20-8): VERIFIED — the in-memory cap (50, applied in
+  //   addMsg() BEFORE save() is called) runs first, so save() always sees a
+  //   bounded array. The slice(-20) below is the secondary storage cap. Both
+  //   caps are applied BEFORE JSON.stringify + sessionStorage.setItem, so the
+  //   stored blob never exceeds 20 entries even if addMsg() is called in a
+  //   tight loop.
   function save(){try{sessionStorage.setItem(STORE,JSON.stringify(messages.slice(-20)));}catch(_){}}
 
   // ── Local renderMd + esc (kept duplicated per study §8.9 rec (a) — first pass) ──
@@ -141,7 +147,14 @@
     try{
       const ai=(window.ai&&window.ai.languageModel)?window.ai.languageModel:(window.LanguageModel);
       if(ai&&typeof ai.capabilities==='function'){
-        const caps=await ai.capabilities();
+        // ★ Fix 6 (Task 20-8): 5s timeout — ai.capabilities() can hang on
+        //   some Chrome versions (especially when the Prompt API flag is
+        //   half-enabled), leaving _browserAIState stuck at 'unknown' and the
+        //   widget hidden forever.
+        const caps=await Promise.race([
+          ai.capabilities(),
+          new Promise((_,reject)=>setTimeout(()=>reject(new Error('capabilities() timeout')),5000))
+        ]);
         if(caps&&caps.available==='readily'){_browserAIState='ready';return 'ready';}
         if(caps&&caps.available==='after-download'){_browserAIState='download';return 'download';}
         _browserAIState='no';return 'no';
@@ -155,11 +168,17 @@
     try{
       const ai=(window.ai&&window.ai.languageModel)?window.ai.languageModel:(window.LanguageModel);
       if(!ai)return null;
-      _browserSession=await ai.create({
-        systemPrompt:ISA_SYS,
-        temperature:0.7,
-        topK:3
-      });
+      // ★ Fix 6 (Task 20-8): 5s timeout — ai.create() can hang while
+      //   downloading the model (Gemini Nano is ~1.8GB). Without a timeout,
+      //   the chat panel would appear frozen indefinitely on first use.
+      _browserSession=await Promise.race([
+        ai.create({
+          systemPrompt:ISA_SYS,
+          temperature:0.7,
+          topK:3
+        }),
+        new Promise((_,reject)=>setTimeout(()=>reject(new Error('create() timeout')),5000))
+      ]);
       return _browserSession;
     }catch(e){console.warn('[Meggy] não pôde criar sessão do navegador:',e);_browserSession=null;return null;}
   }
@@ -531,10 +550,23 @@
 
   let busy=false;
   async function send(){
-    const txt=input.value.trim();if(!txt||busy)return;
-    busy=true;sendBtn.disabled=true;input.value='';
-    try {
+    const txt=input.value.trim();
+    if(!txt||busy)return;
+    busy=true;
+    sendBtn.disabled=true;
+    // ★ Fix 7 (Task 20-8): save the text so we can restore it on error.
+    //   Previously, input.value='' ran BEFORE the async AI call — if the
+    //   fetch failed, the user lost their text and had to retype it.
+    const savedText = txt;
     addMsg('user',txt);
+    input.value='';  // clear only AFTER the user message is in history
+    try {
+    // ★ Fix 5 (Task 20-8): await the initial browser-AI probe so we don't
+    //   skip the local-AI path just because the probe hasn't completed yet
+    //   (e.g. user opens the panel and types within the first ~100ms of
+    //   page load). probeBrowserAI() returns the cached probe promise.
+    try{ await probeBrowserAI(); }catch(_){}
+
     showTyping();
 
     // histórico para enviar (role/content) + contexto de memória
@@ -562,6 +594,8 @@
         hideTyping();
         if(data.ok&&data.response){response=data.response;}
         else{
+          // ★ Fix 7: restore the user's text so they can retry / edit.
+          input.value = savedText;
           const errEl=document.createElement('div');errEl.className='gdi-ai-err';
           errEl.textContent=data.error||'Não consegui responder agora. Tente novamente.';
           body.appendChild(errEl);body.scrollTop=body.scrollHeight;
@@ -570,6 +604,8 @@
         }
       }catch(e){
         hideTyping();
+        // ★ Fix 7: restore the user's text so they can retry / edit.
+        input.value = savedText;
         const errEl=document.createElement('div');errEl.className='gdi-ai-err';
         errEl.textContent='Erro de conexão. Verifique sua internet.';
         body.appendChild(errEl);body.scrollTop=body.scrollHeight;
@@ -585,23 +621,99 @@
     } finally {
       busy=false;
       sendBtn.disabled=false;
-      input.focus();
+      try{ input.focus(); }catch(_){}
     }
   }
 
+  // ★ Fix 1 & 2 (Task 20-8): focus management for the chat panel.
+  //   _previouslyFocused: the element that had focus before the panel opened.
+  //   Restored on close so screen-reader/keyboard users return to where they
+  //   were (e.g. the FAB button or the underlying page content).
+  let _previouslyFocused = null;
+
+  // ★ Fix 1 (Task 20-8): helper — collect all visible focusable elements
+  //   inside the panel. Used by the Tab-trap keydown handler.
+  function _getPanelFocusable(){
+    try {
+      return Array.from(panel.querySelectorAll(
+        'button, input, [tabindex]:not([tabindex="-1"]), a[href], textarea, select'
+      )).filter(el => {
+        if(el.disabled) return false;
+        if(el.getAttribute('aria-hidden') === 'true') return false;
+        // offsetParent is null for fixed/hidden elements; the input itself
+        // is always reachable when the panel is open.
+        try{ return el.offsetParent !== null || el === input; }catch(_){ return false; }
+      });
+    }catch(_){ return []; }
+  }
+
   function toggle(){
-    const open=panel.classList.toggle('open');
-    try{sessionStorage.setItem('gdi-meggy-open',open?'1':'0');}catch(_){}
-    if(open){badge.classList.remove('show');renderHistory();updateStatus();setTimeout(()=>input.focus(),100);}
+    const willOpen = !panel.classList.contains('open');
+    if(willOpen){
+      // ★ Fix 2: save focus BEFORE opening so we can restore it on close.
+      _previouslyFocused = document.activeElement;
+      panel.classList.add('open');
+      try{sessionStorage.setItem('gdi-meggy-open','1');}catch(_){}
+      badge.classList.remove('show');
+      renderHistory();
+      updateStatus();
+      // ★ Fix 3 (Task 20-8): only focus the input if the user hasn't Tabbed
+      //   away from the opener (FAB) during the 100ms delay. If they moved
+      //   focus to the page content (e.g. they were reading and clicked the
+      //   FAB by accident), don't steal focus back from where they are now.
+      const opener = _previouslyFocused;
+      setTimeout(()=>{
+        const cur = document.activeElement;
+        if(cur === opener || cur === document.body || cur === null){
+          try{ input.focus(); }catch(_){}
+        }
+      },100);
+    } else {
+      panel.classList.remove('open');
+      try{sessionStorage.setItem('gdi-meggy-open','0');}catch(_){}
+      // ★ Fix 2: restore focus to the element that was focused before opening.
+      if(_previouslyFocused && typeof _previouslyFocused.focus === 'function'){
+        try{ _previouslyFocused.focus(); }catch(_){}
+      }
+      _previouslyFocused = null;
+    }
   }
   // ★ v1.0.86: open/close convenience wrappers (for namespace exports)
   function open(){ if(!panel.classList.contains('open')) toggle(); }
   function close(){ if(panel.classList.contains('open')) toggle(); }
 
   fab.addEventListener('click',toggle);
-  panel.querySelector('#gdi-ai-close').addEventListener('click',()=>{panel.classList.remove('open');try{sessionStorage.setItem('gdi-meggy-open','0');}catch(_){}});
+  // ★ Fix 2 (Task 20-8): route the X button through close() so focus is
+  //   restored (previously it directly removed the .open class, bypassing
+  //   the focus-restore logic in toggle()).
+  panel.querySelector('#gdi-ai-close').addEventListener('click', close);
   sendBtn.addEventListener('click',send);
   input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
+
+  // ★ Fix 1 (Task 20-8): focus trap — Tab/Shift+Tab wraps between first and
+  //   last focusable elements inside the panel. Without this, Tab can escape
+  //   to the underlying page (which is hidden behind the panel but still
+  //   tabbable), breaking keyboard navigation and trapping screen-reader
+  //   users outside the chat UI.
+  panel.addEventListener('keydown', e => {
+    if(e.key !== 'Tab') return;
+    const focusable = _getPanelFocusable();
+    if(!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+    if(e.shiftKey){
+      if(active === first || !panel.contains(active)){
+        e.preventDefault();
+        try{ last.focus(); }catch(_){}
+      }
+    } else {
+      if(active === last || !panel.contains(active)){
+        e.preventDefault();
+        try{ first.focus(); }catch(_){}
+      }
+    }
+  });
 
   // ═══ PATCH A: page:change com debounce 1.5s + gate por painel aberto ═══
   // Antes: a cada navegação, re-parseava Markdown × 20 msgs + iterava TODAS
@@ -653,9 +765,25 @@
     return {name:'Meggy AI (BlackTie)',label:'Meggy AI <b>(BlackTie GLM · /api/ai)</b>'};
   }
 
+  // ★ Fix 5 (Task 20-8): probe the browser AI immediately on module load
+  //   (not lazily on first send). Store the probe promise so callers (notably
+  //   send()) can await it before reading _browserAIState — otherwise a fast
+  //   user click within the first ~100ms would see 'unknown' and skip the
+  //   local-AI path even when Gemini Nano is actually available.
+  let _browserAIProbePromise = null;
+  function probeBrowserAI(){
+    if(!_browserAIProbePromise){
+      _browserAIProbePromise = detectBrowserAI().catch(()=>{
+        // detectBrowserAI sets _browserAIState='no' on any failure path,
+        // so nothing to do here — just swallow to keep the promise resolved.
+      });
+    }
+    return _browserAIProbePromise;
+  }
+
   // detecta a IA do navegador ao carregar (1×) + status do servidor
   Promise.all([
-    detectBrowserAI(),
+    probeBrowserAI(),
     checkServerStatus()
   ]).then(function(){
     updateStatus();
