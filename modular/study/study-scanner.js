@@ -8,7 +8,8 @@
 //                startScan, getScanState, setScanState, setLessons, getLessons,
 //                autoScanPending, scanCourseLessons, cleanupOrphanCourses,
 //                scanCourse, getScanProgress, getCourseLessons, countWatched,
-//                clearScanState, resumeInterruptedScans
+//                clearScanState, resumeInterruptedScans,
+//                getDistributedStatus, rescanCourse, validateCoursePath   ← v1.2
 //            }
 // Aliases:   window.gdiCourseScanner (original monolith alias, preserved),
 //            window.gdiSyncCoursesFromDrive, window.autoScanPending,
@@ -132,7 +133,9 @@
       status: 'scanning',
       startedAt: Date.now(),
       scannedFolders: 0,
+      scannedCount: 0,
       totalFolders: 1,
+      pendingFolders: 0,
       queue: [],
       scanned: []
     };
@@ -145,156 +148,152 @@
       if(onProgress) try{ onProgress(state, getLessons(courseKey)); }catch(_){}
       return state;
     }
-    // ★ REVIEW-09 FIX: reset progress counters for a fresh scan. Previously
-    // `scannedFolders` and `totalFolders` from a previous (interrupted or
-    // completed) scan were reused → progress percentage was stale / wrong.
-    state.scannedFolders = 0;
-    state.totalFolders = 0;
-    state._maxTotal = 0;       // discovered denominator (grows as server finds subfolders)
-    state.pendingFolders = 0;
-    state.lessonsFound = 0;
     state.status = 'scanning';
     state.startedAt = Date.now();
     setScanState(courseKey, state);
     if(onProgress) try{ onProgress(state, getLessons(courseKey)); }catch(_){}
 
-    try {
-      // ★ v1.0.78: SCAN INCREMENTAL — loop de batches até status=done
-      let allLessons = [];
-      let maxBatches = 30;
-      let batchNum = 0;
-      let isDone = false;
-      // ★ v80-FIX BUG 1: `d` is referenced outside the while loop (at
-      // `d?.totalFolders` below), so it MUST be declared OUTSIDE the block.
-      // Previously `const d = await r.json();` was block-scoped inside the
-      // while → ReferenceError on the lessonsData object → caught → state
-      // became 'error' even though lessons were saved successfully.
-      let d;
+    // ─────────────────────────────────────────────────────────────
+    // ★ v1.0.96 / ENG-SCANNER-DISTRIBUTED §6.1 — Polling loop.
+    //
+    // Each batch on the worker processes at most SCAN_MAX_SUBREQ=40 subrequests
+    // (Cloudflare subrequest limit). For a deep course (TJ SP = 3077 aulas,
+    // ~47 folders), a single POST returns status='partial' with pendingFolders>0.
+    // We must loop until status==='done' (or cached:true) or pendingFolders===0.
+    //
+    // Budget: MAX_POLLS=50 batches × POLL_INTERVAL=600ms ≈ 30s. If we exceed
+    // the budget, mark state='partial' (NOT error — student can resume later).
+    // ─────────────────────────────────────────────────────────────
+    const MAX_POLLS     = 50;
+    const POLL_INTERVAL = 600;
+    let pollCount   = 0;
+    let allLessons  = [];
+    let lastD       = null;  // last successful response (used in catch)
 
-      while(!isDone && batchNum < maxBatches){
-        batchNum++;
+    try{
+      while(pollCount < MAX_POLLS){
         const r = await fetch('/api/courses/scan-progress', {
-          method: 'POST',
-          headers: {'Content-Type':'application/json'},
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
           body: JSON.stringify({coursePath: courseKey})
         });
         if(!r.ok) throw new Error('HTTP '+r.status);
-        d = await r.json();
-        if(!d || !d.ok) throw new Error(d && d.error || 'scan falhou');
+        const d = await r.json().catch(()=>null);
+        if(!d || !d.ok) throw new Error((d && d.error) || 'scan falhou');
+        lastD = d;
 
         allLessons = d.lessons || [];
-        isDone = d.status !== 'partial';
 
-        state.status = 'scanning';
-        // ★ REVIEW-09 FIX (real-time progress): determine totalFolders and
-        // scannedFolders from the most authoritative source available:
-        //   1. d.totalFolders + d.scannedFolders (server knows exactly —
-        //      also handles "server discovered more subfolders mid-scan"
-        //      because the server updates totalFolders as it goes).
-        //   2. d.totalFolders alone → scanned = total - pending.
-        //   3. Fallback: track _maxTotal = max(scanned + pending) seen so far
-        //      (best-effort denominator when server only reports pending).
-        // Previously scannedFolders was NEVER incremented in this loop →
-        // percent stayed at 0% throughout the scan and only jumped to 100%
-        // at the very end via the finalisation block. Now the progress bar
-        // advances in real time as the server processes folders.
+        // ★ v1.0.96: distributed scan fields (additive, no breaking changes)
+        //   scannedCount = number of folders with valid dotfiles (from server)
+        //   source       = 'direct' | 'mirror' | 'legacy' | 'distributed'
+        state.scannedCount   = (typeof d.scannedCount === 'number')
+                                  ? d.scannedCount
+                                  : (state.scannedCount || 0);
+        state.source         = d.source || state.source || 'legacy';
+        // Keep scannedFolders in sync (legacy field, used by getScanProgress)
+        state.scannedFolders = state.scannedCount;
         state.pendingFolders = d.pendingFolders || 0;
-        if(typeof d.totalFolders === 'number' && d.totalFolders >= 0){
-          state.totalFolders = d.totalFolders;
-          state._maxTotal = d.totalFolders;
-        } else {
-          const candidateTotal = (state.scannedFolders || 0) + (d.pendingFolders || 0);
-          if(!state._maxTotal || state._maxTotal < candidateTotal){
-            state._maxTotal = candidateTotal;
-          }
-          state.totalFolders = state._maxTotal;
-        }
-        if(typeof d.scannedFolders === 'number'){
-          state.scannedFolders = d.scannedFolders;
-        } else {
-          state.scannedFolders = Math.max(0, state.totalFolders - state.pendingFolders);
-        }
-        // Edge case: done with 0 folders → force total=1 so percent=100% (not 0/0=0%)
-        if(isDone && state.totalFolders === 0){
-          state.totalFolders = 1;
-          state.scannedFolders = 1;
-        }
-        // Keep scannedFolders ≤ totalFolders so percent stays in [0,100].
+        state.totalFolders   = state.scannedFolders + (d.pendingFolders || 0);
         if(state.scannedFolders > state.totalFolders){
           state.scannedFolders = state.totalFolders;
         }
-        state.lessonsFound = allLessons.length;
-        state.batchNum = batchNum;
+        state.lessonsFound   = allLessons.length;
+        state.batchNum       = pollCount + 1;
+        state.scannedBy      = d.scannedBy || state.scannedBy || null;
+
+        // Determine this iteration's terminal state.
+        //   cached  → done immediately (someone else already scanned)
+        //   done    → done (server finished in this batch)
+        //   partial → wait + loop
+        const isCached = !!d.cached;
+        const isDone   = isCached || d.status === 'done' || d.pendingFolders === 0;
+
+        if(isDone){
+          state.status         = 'done';
+          state.scannedCount   = state.totalFolders;
+          state.scannedFolders = state.totalFolders;
+          state.percent        = 100;
+          state.completedAt    = Date.now();
+          setScanState(courseKey, state);
+
+          const doneData = {
+            lessons: allLessons,
+            scanned: true,
+            totalLessons: allLessons.length,
+            scannedBy: d.scannedBy || null,
+            source: state.source,
+            cached: isCached
+          };
+          setLessons(courseKey, doneData);
+          // Best-effort save to Drive (cross-student legacy fallback)
+          try{
+            if(window.GDIStorage && window.GDIStorage.saveMaterial){
+              window.GDIStorage.saveMaterial(courseKey, courseKey, 'lessons', JSON.stringify(doneData)).catch(()=>{});
+            }
+          }catch(_){}
+          // ALWAYS call onProgress after each iteration so UI updates.
+          if(onProgress) try{ onProgress(state, doneData); }catch(_){}
+          return state;
+        }
+
+        // Partial — update progress bar, persist, notify, then wait + loop.
+        state.status   = 'scanning';
+        state.percent  = state.totalFolders
+                            ? Math.round(state.scannedFolders / state.totalFolders * 100)
+                            : 100;
         setScanState(courseKey, state);
 
-        const partialData = {lessons: allLessons, scanned: isDone, totalLessons: allLessons.length};
+        const partialData = {
+          lessons: allLessons,
+          scanned: false,
+          totalLessons: allLessons.length,
+          scannedBy: d.scannedBy || null,
+          source: state.source
+        };
         setLessons(courseKey, partialData);
         if(onProgress) try{ onProgress(state, partialData); }catch(_){}
 
-        if(d.cached){ isDone = true; break; }
-        if(!isDone) await new Promise(r => setTimeout(r, 500));
+        pollCount++;
+        await new Promise(res => setTimeout(res, POLL_INTERVAL));
       }
 
-      // ★ FIX-06 BUG #1 (Task FIX-06-SCANNER-COURSES): if the loop exited
-      // because batchNum hit maxBatches while the server is STILL reporting
-      // status='partial', the scan is NOT actually complete. Previously the
-      // code unconditionally set state.status='done' and saved lessons with
-      // scanned:true — that lied to the UI (showed 100% complete + "scan
-      // finalizado") and persisted an incomplete lesson list as if it were
-      // the full set. Now we detect the partial-exit case and mark the
-      // state as 'error' (so the UI surfaces a "Reiniciar Scan" affordance)
-      // while still saving whatever lessons were discovered so far with
-      // scanned:false (so the user can see partial progress).
-      const maxBatchesReached = !isDone;
-      const lessons = allLessons;
-      const lessonsData = {
-        lessons: lessons,
-        scanned: !maxBatchesReached,
-        // ★ v80-FIX BUG 1: safe access — `d` may be undefined if the while
-        // loop body never ran (e.g. maxBatches===0), so use (d && d.totalFolders).
-        totalFolders: (d && d.totalFolders) || state.totalFolders || 1,
-        totalLessons: lessons.length
+      // Exceeded MAX_POLLS — mark 'partial' (NOT error; student can resume).
+      state.status   = 'partial';
+      state.percent  = state.totalFolders
+                          ? Math.round(state.scannedFolders / state.totalFolders * 100)
+                          : 0;
+      state.pollsUsed = pollCount;
+      setScanState(courseKey, state);
+      const partialFinal = {
+        lessons: allLessons,
+        scanned: false,
+        totalLessons: allLessons.length,
+        scannedBy: (lastD && lastD.scannedBy) || null,
+        source: state.source
       };
-      setLessons(courseKey, lessonsData);
-
-      if(maxBatchesReached){
-        // Scan stalled — server still partial after maxBatches. Mark as
-        // error so the UI offers "Reiniciar Scan" / "Escanear agora".
-        state.status = 'error';
-        state.error = 'Scan atingiu o limite de ' + maxBatches +
-          ' batches e o servidor ainda reportava status=partial. Clique em ' +
-          '"Reiniciar Scan" para continuar de onde parou.';
-        state.completedAt = Date.now();
-        setScanState(courseKey, state);
-        if(onProgress) try{ onProgress(state, lessonsData); }catch(_){}
-        return state;
-      }
-
-      // Atualiza estado
-      state.status = 'done';
-      state.completedAt = Date.now();
-      // ★ v80-FIX BUG 3 (final): finalize scannedFolders to equal totalFolders
-      // so progress shows 100% only when actually done.
-      if(state.totalFolders && state.scannedFolders < state.totalFolders){
-        state.scannedFolders = state.totalFolders;
-      }
-      setScanState(courseKey, state);
-
-      // Salva no Drive (não-bloqueante)
-      try {
-        if(window.GDIStorage && window.GDIStorage.saveMaterial) {
-          window.GDIStorage.saveMaterial(courseKey, courseKey, 'lessons', JSON.stringify(lessonsData)).catch(()=>{});
-        }
-      } catch(_){}
-
-      if(onProgress) try{ onProgress(state, lessonsData); }catch(_){}
+      setLessons(courseKey, partialFinal);
+      if(onProgress) try{ onProgress(state, partialFinal); }catch(_){}
       return state;
-    } catch(e) {
-      console.error('[Scanner] erro:', e.message);
+    }catch(e){
+      console.error('[Scanner] erro:', e && e.message);
       state.status = 'error';
-      state.error = e.message;
+      state.error  = (e && e.message) || String(e);
       setScanState(courseKey, state);
-      if(onProgress) try{ onProgress(state, getLessons(courseKey)); }catch(_){}
+      // Persist partial lessons if any, so UI shows what we have so far.
+      if(allLessons && allLessons.length){
+        const partialOnError = {
+          lessons: allLessons,
+          scanned: false,
+          totalLessons: allLessons.length,
+          scannedBy: (lastD && lastD.scannedBy) || null,
+          source: state.source
+        };
+        setLessons(courseKey, partialOnError);
+        if(onProgress) try{ onProgress(state, partialOnError); }catch(_){}
+      } else {
+        if(onProgress) try{ onProgress(state, getLessons(courseKey)); }catch(_){}
+      }
       return state;
     }
   }
@@ -440,28 +439,11 @@
       }
       // Dedup pass — resilient against concurrent writes that may have
       // inserted the same course between our read and our write.
-      // ★ FIX-06 BUG #3: previously the dedup key was `c.key || c.id ||
-      // c.path`. Manual courses saved by gdiAddCourseFromDrive /
-      // showAddCourseModal do NOT have a `key` field (only `courseKey`),
-      // and each insert generates a fresh unique `id` like
-      // `mc-<timestamp>-<rand>`. So when two concurrent syncs both inserted
-      // the same Drive course (same `path`, different `id`), the dedup pass
-      // would key on `id` and keep BOTH duplicates — defeating the entire
-      // purpose of the pass. Now we prefer `path` / `courseKey` (the true
-      // business identifier for a course) before falling back to `key`
-      // and `id`. We normalize the path via `low()` (lowercased + decoded)
-      // so URL-encoded vs decoded variants of the same path also collapse.
       const seen = new Set();
       const deduped = [];
-      const _low = s => {
-        try { return decodeURIComponent(String(s||'').split('?')[0].replace(/\/+$/,'')).toLowerCase(); }
-        catch(_) { return String(s||'').toLowerCase(); }
-      };
       for(const c of local){
         if(!c) continue;
-        // Prefer path-based identifiers (the true uniqueness key for a
-        // course) before falling back to opaque id fields.
-        const k = c.path ? _low(c.path) : (c.courseKey ? _low(c.courseKey) : (c.key || c.id));
+        const k = c.key || c.id || c.path;
         if(k){
           if(seen.has(k)) continue;
           seen.add(k);
@@ -556,14 +538,8 @@
       const original = manual.length;
       const cleaned = manual.filter(c => {
         if(!c || !c.path) return false;
-        // Remove drive roots (e.g., /0:/, /4:/, /0:)
-        // ★ FIX-06 BUG #2: regex was `/^\d+:\/$/` which is missing the
-        // leading slash — it would only match "0:/" but the paths stored in
-        // localStorage always start with "/" (e.g. "/0:/"). The check was
-        // effectively a no-op and relied on the segs.length<2 fallback
-        // below to actually catch drive roots. Now the regex matches both
-        // "/0:" and "/0:/" (consistent with autoScanPending + scanCourse).
-        if(/^\/\d+:\/?$/.test(c.path)) return false;
+        // Remove drive roots (e.g., /0:/, /4:/)
+        if(/^\d+:\/$/.test(c.path)) return false;
         // Remove if path is just /<drive>:/ (no subfolder)
         const segs = c.path.split('/').filter(Boolean);
         if(segs.length < 2) return false;
@@ -580,6 +556,47 @@
       }
       return 0;
     }catch(_){ return 0; }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // ★ v1.0.96 / ENG-SCANNER-DISTRIBUTED §6.2-6.4 — New helpers
+  // ─────────────────────────────────────────────────────────────
+
+  // §6.2 — Get distributed scan status (per-folder dotfiles + progress).
+  // Returns the full server payload {ok, scanStatus, scanProgress, sources, ...}
+  // or null on any failure (UI should treat null as "unknown").
+  async function getDistributedStatus(courseKey){
+    try{
+      const r = await fetch('/api/courses/distributed-status?coursePath='+encodeURIComponent(courseKey));
+      const d = await r.json();
+      return d.ok ? d : null;
+    }catch(_){ return null; }
+  }
+
+  // §6.3 — Force a re-scan (stales the dotfiles for a course so the next
+  // scanCourse() rebuilds them). Returns true on success, false otherwise.
+  // Caller (study-courses.js tile menu) should invoke scanCourse() afterwards.
+  async function rescanCourse(courseKey){
+    try{
+      const r = await fetch('/api/courses/rescan', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({coursePath: courseKey})
+      });
+      const d = await r.json();
+      return !!(d && d.ok);
+    }catch(_){ return false; }
+  }
+
+  // §8.3 / "Adicionar matéria" UI — validates a typed course path exists in
+  // the Drive. Returns {ok, exists, courseName?, folderId?} on success or
+  // {ok:false, exists:false, error?} on failure.
+  async function validateCoursePath(coursePath){
+    try{
+      const r = await fetch('/api/courses/validate?coursePath='+encodeURIComponent(coursePath));
+      const d = await r.json();
+      return d.ok ? d : {ok:false, exists:false};
+    }catch(_){ return {ok:false, exists:false, error:'network'}; }
   }
 
   // ── Namespace exposure ──
@@ -599,11 +616,17 @@
     resumeInterruptedScans: resumeInterruptedScans,
     cleanupOrphanCourses: cleanupOrphanCourses,
     syncCoursesFromDrive: syncCoursesFromDrive,
+    // ★ v1.0.96 / ENG-SCANNER-DISTRIBUTED §6.2-6.4 — new distributed helpers
+    getDistributedStatus: getDistributedStatus,
+    rescanCourse: rescanCourse,
+    validateCoursePath: validateCoursePath,
     LS_SCAN_PREFIX: LS_SCAN_PREFIX,
     LS_LESSONS_PREFIX: LS_LESSONS_PREFIX,
     SCAN_PAUSE_MS: SCAN_PAUSE_MS,
     SCAN_MAX_DEPTH: SCAN_MAX_DEPTH,
-    version: '1.1'
+    MAX_POLLS: 50,
+    POLL_INTERVAL: 600,
+    version: '1.2'
   };
 
   // ── Backward-compat aliases (preserved from monolith) ──
@@ -619,11 +642,18 @@
     autoScanPending,
     cleanupOrphanCourses,
     syncCoursesFromDrive,
+    // ★ v1.0.96 / ENG-SCANNER-DISTRIBUTED — also exposed on legacy alias
+    // so callers using window.gdiCourseScanner.rescanCourse() (per §7.2) work.
+    getDistributedStatus,
+    rescanCourse,
+    validateCoursePath,
     LS_SCAN_PREFIX,
     LS_LESSONS_PREFIX,
     SCAN_PAUSE_MS,
     SCAN_MAX_DEPTH,
-    version: '1.1'
+    MAX_POLLS: 50,
+    POLL_INTERVAL: 600,
+    version: '1.2'
   };
   // Per task spec: ALSO export window.gdiSyncCoursesFromDrive and window.autoScanPending
   window.gdiSyncCoursesFromDrive = function(){
@@ -693,5 +723,5 @@
     }, 5000);
   }
 
-  console.log('[GDI Course Scanner] v1.1 — lightweight background scanner ativo (pause='+SCAN_PAUSE_MS+'ms, maxDepth='+SCAN_MAX_DEPTH+') + auto-scan + orphan cleanup — modular');
+  console.log('[GDI Course Scanner] v1.2 — distributed polling loop (MAX_POLLS=50, POLL_INTERVAL=600ms) + auto-scan + orphan cleanup + getDistributedStatus/rescanCourse/validateCoursePath — modular');
 })();
