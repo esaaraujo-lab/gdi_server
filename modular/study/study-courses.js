@@ -47,15 +47,6 @@
   const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
   // ★ FIX: esc local para o M22 (Área do Aluno) — usa escHtml global do app.min.js quando disponível
   const esc=s=>{try{return window.escHtml?window.escHtml(s):String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');}catch(_){return String(s||'');}};
-  // ★ REVIEW-09 FIX: module-level `escHtml` and `showToast` aliases. Many
-  // template literals in this file reference `escHtml(...)` and `showToast(...)`
-  // as BARE identifiers (not `window.escHtml`). If app.min.js hasn't loaded yet
-  // (or is missing these globals), the bare reference throws ReferenceError at
-  // runtime and aborts the whole render. Binding them here as `const` means the
-  // bare identifier always resolves — to the global when present, or to a safe
-  // fallback (esc / no-op) when not. Same for showToast.
-  const escHtml = window.escHtml || esc;
-  const showToast = window.showToast || function(){};
   const fmtMin=m=>{m=Math.round(m);return m>=60?Math.floor(m/60)+'h'+String(m%60).padStart(2,'0'):m+'min'};
   const dayKey=t=>{const d=new Date(t||Date.now());return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
   const dateBr=t=>new Date(t).toLocaleDateString('pt-BR');
@@ -207,6 +198,21 @@
       try{
         if(window.gdiCourseScanner && typeof window.gdiCourseScanner.startScan === 'function'){
           window.gdiCourseScanner.startScan(coursePath, function(state, lessonsData){
+            // ★ ENG-SCANNER-DISTRIBUIDO (Task 6 / Agent 6): capture cached/scannedBy.
+            // Agent 5's scanCourse populates both `state` and `lessonsData` when the
+            // course was already scanned by another student (cache hit). We mirror
+            // onto `state` defensively so the tile rendering below reads uniformly.
+            try{
+              if(lessonsData && lessonsData.cached){ state.cached = true; }
+              if(lessonsData && lessonsData.scannedBy){ state.scannedBy = lessonsData.scannedBy; }
+              if(!state.cached && window.gdiCourseScanner && typeof window.gdiCourseScanner.getCourseLessons === 'function'){
+                const stored = window.gdiCourseScanner.getCourseLessons(coursePath);
+                if(stored && stored.cached){
+                  state.cached = true;
+                  if(stored.scannedBy) state.scannedBy = stored.scannedBy;
+                }
+              }
+            }catch(_){}
             // Atualiza tile da home, se visível
             try{
               const tiles = document.querySelectorAll('[data-course-key]');
@@ -231,15 +237,49 @@
                 if(totalEl && lessonsData && lessonsData.lessons){
                   totalEl.textContent = lessonsData.lessons.length;
                 }
+                // ★ ENG-SCANNER-DISTRIBUIDO (Task 6 / Agent 6): helper to ensure
+                // .gdi-shared-badge element exists in the tile (inserted right
+                // after .gdi-scan-status). Hidden by default; only shown when
+                // state.status==='done' && state.cached===true.
+                function ensureSharedBadge(){
+                  let badge = tile.querySelector('.gdi-shared-badge');
+                  if(!badge){
+                    const s = tile.querySelector('.gdi-scan-status');
+                    if(s && s.parentNode){
+                      badge = document.createElement('span');
+                      badge.className = 'gdi-shared-badge';
+                      badge.style.cssText = 'display:none;color:#4ade80;font-size:11px;margin-top:4px;';
+                      s.parentNode.insertBefore(badge, s.nextSibling);
+                    }
+                  }
+                  return badge;
+                }
                 // Atualiza texto de status
                 const statusEl = tile.querySelector('.gdi-scan-status');
                 if(statusEl && state.status === 'scanning'){
-                  const pct = (state.totalFolders > 0)
-                    ? Math.round((state.scannedFolders||0)/state.totalFolders*100)
-                    : 0;
-                  statusEl.innerHTML = '<i class="bi bi-arrow-repeat"></i> Escaneando aulas... '+pct+'%';
+                  // ★ NEW (Task 6 / Agent 6): pasta-count progress (fallback to % when totalFolders unknown)
+                  const sf = state.scannedFolders||0;
+                  const tf = state.totalFolders||0;
+                  const pc = (tf > 0) ? Math.round(sf/tf*100) : 0;
+                  const progressText = (tf > 0)
+                    ? 'Escaneando: '+sf+'/'+tf+' pastas ('+pc+'%)'
+                    : 'Escaneando aulas... '+pc+'%';
+                  statusEl.innerHTML = '<i class="bi bi-arrow-repeat"></i> '+esc(progressText);
+                  // hide shared badge while scanning
+                  const b = ensureSharedBadge();
+                  if(b) b.style.display = 'none';
                 }else if(statusEl && state.status === 'done'){
                   statusEl.innerHTML = '<i class="bi bi-check2" style="color:#3fb950;"></i> '+((lessonsData && lessonsData.lessons && lessonsData.lessons.length)||0)+' aulas encontradas';
+                  // ★ NEW (Task 6 / Agent 6): show shared badge when cached===true, hide otherwise
+                  const b = ensureSharedBadge();
+                  if(b){
+                    if(state.cached === true){
+                      b.innerHTML = '<i class="bi bi-people-fill"></i> Compartilhado por '+esc(state.scannedBy||'outro aluno');
+                      b.style.display = 'inline-block';
+                    } else {
+                      b.style.display = 'none';
+                    }
+                  }
                   // Após 4s, esconde o status bar (mantém só contagem)
                   setTimeout(function(){
                     try{
@@ -251,6 +291,8 @@
                   }, 4000);
                 }else if(statusEl && state.status === 'error'){
                   statusEl.innerHTML = '<i class="bi bi-exclamation-triangle" style="color:#ff8b8b;"></i> Erro ao escanear';
+                  const b = ensureSharedBadge();
+                  if(b) b.style.display = 'none';
                 }
               }
             }catch(_){}
@@ -472,12 +514,7 @@
     })();
   }
   // ★ invalidar bestInCache quando usuário marcar/desmarcar vídeo
-  // ★ REVIEW-08 FIX: guard against Bus not being loaded yet (study-scanner.js
-  //   uses typeof Bus !== 'undefined' everywhere; this site was raw → would
-  //   throw ReferenceError and abort the whole IIFE if Bus loads late).
-  if(typeof Bus !== 'undefined' && Bus && typeof Bus.onGlobal === 'function'){
-    Bus.onGlobal('watched:changed',()=>{bestInCache.clear();});
-  }
+  Bus.onGlobal('watched:changed',()=>{bestInCache.clear();});
 
   // ★ Otimização: limpa nome do curso (remove paths crus, underscores, etc)
   function cleanCourseName(ck){
@@ -604,26 +641,10 @@
       const icon=mc.icon||'📁';
       const color=mc.color||'var(--ferreto-primary,#ff8b9f)';
       const isManual=c.manual===true;
-      // ★ REVIEW-08 FIX: previously used c.lessons.size (always 0 for manual
-      //   courses — collectCourses sets lessons:new Set() and never populates
-      //   it). For manual courses the real total is c.totalLessons (from
-      //   manualCourse.pdfCount and/or scanner.getScanProgress). Falling back
-      //   to c.lessons.size only matters for legacy non-manual tiles (kept for
-      //   API compat). Without this, manual cards always showed "Aulas: 0".
-      const total = isManual ? (c.totalLessons||0) : (c.lessons.size||0);
-      const watched = c.watched||0;
-      const remaining = Math.max(0, total - watched);
-      const progress = total > 0 ? Math.min(100, Math.round(watched/total*100)) : 0;
+      const progress=c.lessons.size>0?Math.round(c.watched/c.lessons.size*100):0;
       const progressColor=progress>=80?'#3fb950':progress>=40?'#ffd43b':'var(--ferreto-primary,#ff8b9f)';
-      // ★ REVIEW-08 FIX: surface scanner state on the courses-list card too.
-      //   collectCourses already enriches each course with scanStatus /
-      //   scanPercent / scanLessonsFound — but renderCourseCard was ignoring
-      //   them and rendering a static "Meggy processando…" label + "…/0".
-      const scanStatus = c.scanStatus || null;
-      const scanPercent = c.scanPercent || 0;
-      const totalDisplay = (scanStatus === 'scanning' && total === 0) ? '…' : String(total);
+      const remaining=c.lessons.size-c.watched;
       const el=document.createElement('div');el.className='gdi-course';
-      el.setAttribute('data-course-key', c.key);  // ★ REVIEW-08: enables onProgress callback to update this card in real-time
       el.style.cursor='pointer';
       // ★ destaque visual para curso manual: border-left com a cor do manualCourse
       if(isManual)el.style.borderLeft='4px solid '+color;
@@ -633,54 +654,35 @@
             ${isManual?`<span style="font-size:18px;flex:none;">${icon}</span>`:''}
             <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(name)}</span>
           </b>
-          <button class="gdi-course-remove" title="${isManual?'Ocultar curso':'Ocultar curso'}" style="background:transparent;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:14px;padding:2px 6px;flex:none;border-radius:6px;transition:all .15s;"><i class="bi bi-x-lg"></i></button>
+          <button class="gdi-course-remove" title="${isManual?'Remover curso manual':'Ocultar curso'}" style="background:transparent;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:14px;padding:2px 6px;flex:none;border-radius:6px;transition:all .15s;"><i class="bi bi-x-lg"></i></button>
         </div>
         ${isManual
-          ? `<small style="color:var(--ferreto-secondary,#5ddeda);font-size:10px;display:block;margin-top:4px;"><i class="bi bi-hdd"></i> ${escHtml(drive||'Drive')}${scanStatus==='scanning'?' · <span style="color:var(--ferreto-secondary,#5ddeda);"><i class="bi bi-arrow-repeat"></i> Escaneando '+scanPercent+'%</span>':scanStatus==='done'?' · <span style="color:#3fb950;"><i class="bi bi-check2"></i> '+scanPercent+'% mapeado</span>':' · <span style="color:#ffd43b;"><i class="bi bi-hourglass-split"></i> Meggy processando…</span>'}</small>`
+          ? `<small style="color:var(--ferreto-secondary,#5ddeda);font-size:10px;display:block;margin-top:4px;"><i class="bi bi-hdd"></i> ${escHtml(drive||'Drive')} · <span style="color:#ffd43b;"><i class="bi bi-hourglass-split"></i> Meggy processando…</span></small>`
           : (drive?`<small style="color:var(--ferreto-secondary,#5ddeda);font-size:10px;display:block;margin-top:2px;"><i class="bi bi-hdd"></i> ${escHtml(drive)}${c.lastAt?` · última: ${dateBr(c.lastAt)}`:''}</small>`:'<small>&nbsp;</small>')
         }
         <div class="gdi-course-stats">
           ${isManual
-            ? `<div class="gdi-course-stat"><span class="gdi-course-stat-num" data-stat="total">${totalDisplay}</span><span class="gdi-course-stat-label">Aulas</span></div>
-               <div class="gdi-course-stat"><span class="gdi-course-stat-num" data-stat="watched" style="color:#3fb950;">${watched}</span><span class="gdi-course-stat-label">Feitas</span></div>
-               <div class="gdi-course-stat"><span class="gdi-course-stat-num" data-stat="remaining" style="color:#ffd43b;">${remaining}</span><span class="gdi-course-stat-label">Restam</span></div>
-               <div class="gdi-course-stat"><span class="gdi-course-stat-num" data-stat="progress" style="color:${progressColor};">${progress}%</span><span class="gdi-course-stat-label">Concl.</span></div>`
+            ? `<div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:#ffd43b;">…</span><span class="gdi-course-stat-label">Batalhão</span></div>
+               <div class="gdi-course-stat"><span class="gdi-course-stat-num">0</span><span class="gdi-course-stat-label">Assistidas</span></div>`
             : `<div class="gdi-course-stat"><span class="gdi-course-stat-num">${c.lessons.size}</span><span class="gdi-course-stat-label">Aulas</span></div>
                <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:#3fb950;">${c.watched}</span><span class="gdi-course-stat-label">Feitas</span></div>
                <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:#ffd43b;">${remaining}</span><span class="gdi-course-stat-label">Restam</span></div>
                <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:${progressColor};">${progress}%</span><span class="gdi-course-stat-label">Concl.</span></div>`
           }
         </div>
-        <div class="gdi-progress-bar"><div class="gdi-progress-fill" style="width:${progress}%;background:${progressColor};"></div></div>
-        ${isManual && scanStatus === 'scanning' ? `
-        <div class="gdi-scan-bar-wrap" style="margin-top:6px;height:3px;background:var(--ferreto-surface-3,rgba(255,255,255,.08));border-radius:2px;overflow:hidden;">
-          <div class="gdi-scan-progress" style="height:100%;width:${scanPercent}%;background:var(--ferreto-secondary,#5ddeda);transition:width .3s;"></div>
-        </div>
-        <small class="gdi-scan-status" style="color:var(--ferreto-text-muted,#8b949e);font-size:10px;display:block;margin-top:2px;"><i class="bi bi-arrow-repeat"></i> Escaneando aulas... ${scanPercent}%</small>` : ''}
+        ${isManual?'':`<div class="gdi-progress-bar"><div class="gdi-progress-fill" style="width:${progress}%;background:${progressColor};"></div></div>`}
         <button class="gdi-btn-continue gdi-course-continue" ${isManual?'':'disabled'}>
-          ${isManual?(scanStatus==='scanning'?'<i class="bi bi-hourglass-split"></i> Escaneando aulas…':scanStatus==='done'?'<i class="bi bi-folder2-open"></i> Abrir pasta no Drive':'<i class="bi bi-hourglass-split"></i> Meggy preparando materiais…'):'<i class="bi bi-hourglass-split"></i> Verificando…'}
+          ${isManual?'<i class="bi bi-hourglass-split"></i> Meggy preparando materiais…':'<i class="bi bi-hourglass-split"></i> Verificando…'}
         </button>`;
       grid.appendChild(el);
 
       const contBtn=el.querySelector('.gdi-course-continue');
       function applyTarget(tg){
         if(isManual){
-          // ★ REVIEW-09 FIX: for manual courses, if there's a resumable lesson
-          // (target = bestIn returned a watched/resume path), offer "Continuar"
-          // exactly like auto-tiles — so the user can pick up where they left
-          // off. Only fall back to "Abrir pasta no Drive" when there's nothing
-          // to continue. Previously manual cards ALWAYS showed "Abrir pasta no
-          // Drive" even when the user had watched lessons → "Continuar" never
-          // worked from the card for manual courses.
-          if(tg){
-            contBtn.disabled=false;
-            contBtn.innerHTML=`<i class="bi bi-play-fill"></i> Continuar: ${escHtml(realName(tg).slice(0,30))}`;
-            contBtn.onclick=(e)=>{e.stopPropagation();location.href=tg+(tg.includes('?')?'&':'?')+'a=view';};
-          }else{
-            contBtn.disabled=false;
-            contBtn.innerHTML=`<i class="bi bi-folder2-open"></i> Abrir pasta no Drive`;
-            contBtn.onclick=(e)=>{e.stopPropagation();location.href=c.key;};
-          }
+          // curso manual: clicar leva ao path no drive
+          contBtn.disabled=false;
+          contBtn.innerHTML=`<i class="bi bi-folder2-open"></i> Abrir pasta no Drive`;
+          contBtn.onclick=(e)=>{e.stopPropagation();location.href=c.key;};
           return;
         }
         if(tg){
@@ -694,14 +696,12 @@
         }
       }
       // ★ PATCH C: se target foi pre-buscado, usa; senão faz fetch aqui (fallback)
-      // ★ REVIEW-09: for manual courses we ALSO want bestIn() so applyTarget
-      // receives the resumable lesson path (if any). Previously the `else if
-      // (isManual){ applyTarget(null); }` branch skipped bestIn entirely →
-      // manual cards never got a "Continuar" target.
       if(target!==undefined){
         applyTarget(target);
+      }else if(isManual){
+        applyTarget(null);
       }else{
-        bestIn(c.key).then(applyTarget).catch(()=>applyTarget(null));
+        bestIn(c.key).then(applyTarget);
       }
 
       // botão remover
@@ -789,6 +789,15 @@
         <!-- Painel Drive -->
         <div id="panel-drive">
           <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0 0 10px;line-height:1.5;">Navegue pelas pastas do Drive e clique em <b style="color:var(--ferreto-primary,#ff8b9f);">"Selecionar esta pasta"</b> para adicionar como curso. A Meggy vai ler os PDFs e vídeos automaticamente em background.</p>
+          <!-- ★ ENG-SCANNER-DISTRIBUIDO (Task 6 / Agent 6): Re-adicionar curso por caminho -->
+          <div class="gdi-restore-path-wrap" style="margin-bottom:12px;padding:10px 12px;background:linear-gradient(135deg,rgba(93,222,218,.05),rgba(255,139,159,.03));border:1px solid rgba(93,222,218,.2);border-radius:10px;">
+            <label style="display:block;color:var(--ferreto-text-muted,#8b949e);font-size:11px;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">Re-adicionar curso por caminho</label>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <input id="gdi-amc-restore-path" type="text" placeholder="/11:/TJ SP Escrevente" style="flex:1;min-width:200px;box-sizing:border-box;background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);padding:8px 10px;font-size:13px;font-family:'JetBrains Mono',monospace;" />
+              <button id="gdi-amc-restore-btn" class="gdi-restore-path-btn" type="button" style="padding:8px 14px;border-radius:8px;border:0;cursor:pointer;font-weight:600;background:var(--ferreto-grad);color:#fff;font-size:12px;flex:none;">Validar e adicionar</button>
+            </div>
+            <small style="display:block;color:var(--ferreto-text-faint,#6b7488);font-size:10px;margin-top:4px;">Valida o caminho no Drive e adiciona o curso sem precisar navegar pelas pastas.</small>
+          </div>
           <!-- Breadcrumb -->
           <div id="gdi-amc-bc" style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:8px 10px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;margin-bottom:10px;font-size:12px;"></div>
           <!-- Loading -->
@@ -1185,6 +1194,85 @@
     };
     overlay.addEventListener('click',selectCurrentHandler,true);
 
+    // ★ ENG-SCANNER-DISTRIBUIDO (Task 6 / Agent 6): "Re-adicionar curso por caminho"
+    // Permite ao aluno colar um coursePath (ex: /11:/TJ SP Escrevente) e validar
+    // via window.gdiCourseScanner.validateCoursePath() antes de adicionar.
+    const restorePathBtn = overlay.querySelector('#gdi-amc-restore-btn');
+    const restorePathInput = overlay.querySelector('#gdi-amc-restore-path');
+    if(restorePathBtn && restorePathInput){
+      const doRestore = async function(){
+        const coursePath = (restorePathInput.value||'').trim();
+        if(!coursePath){
+          showToast('Digite o caminho do curso (ex: /11:/TJ SP Escrevente)');
+          restorePathInput.focus();
+          return;
+        }
+        const originalText = restorePathBtn.textContent;
+        restorePathBtn.disabled = true;
+        restorePathBtn.style.opacity = '0.6';
+        restorePathBtn.style.pointerEvents = 'none';
+        restorePathBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Validando...';
+        try{
+          // Resolve courseName from path tail (fallback when validator doesn't return one)
+          const fallbackName = (function(){
+            const segs = String(coursePath).split('/').filter(Boolean);
+            let n = segs[segs.length-1] || 'Curso';
+            try{ n = decodeURIComponent(n); }catch(_){}
+            return n;
+          })();
+          // ★ Call validateCoursePath (Agent 5 exposes on window.gdiCourseScanner)
+          let result = null;
+          if(window.gdiCourseScanner && typeof window.gdiCourseScanner.validateCoursePath === 'function'){
+            try{ result = await window.gdiCourseScanner.validateCoursePath(coursePath); }
+            catch(e){ console.warn('[RestorePath] validateCoursePath erro:', e && e.message); }
+          }
+          if(result && result.exists === true){
+            const courseName = result.courseName || fallbackName;
+            if(window.showToast) showToast('Curso válido! Adicionado: '+courseName);
+            // ★ Reuse the existing add-course flow (closes modal, starts battalion, scans)
+            await window.gdiAddCourseFromDrive(coursePath, courseName, result.pdfCount || 0);
+          } else if(!result){
+            // Validator returned null/undefined — likely network error
+            if(window.showToast) showToast('Não foi possível validar o caminho. Tente novamente.');
+            restorePathInput.style.borderColor = '#ff6b6b';
+            restorePathInput.style.boxShadow = '0 0 0 3px rgba(255,107,107,.15)';
+            setTimeout(function(){
+              restorePathInput.style.borderColor = '';
+              restorePathInput.style.boxShadow = '';
+            }, 1500);
+            restorePathInput.focus();
+          } else {
+            // exists === false or other failure
+            if(window.showToast) showToast('Curso não encontrado neste drive. Verifique o caminho.');
+            restorePathInput.style.borderColor = '#ff6b6b';
+            restorePathInput.style.boxShadow = '0 0 0 3px rgba(255,107,107,.15)';
+            setTimeout(function(){
+              restorePathInput.style.borderColor = '';
+              restorePathInput.style.boxShadow = '';
+            }, 1500);
+            restorePathInput.focus();
+            restorePathInput.select();
+          }
+        }catch(err){
+          console.error('[RestorePath] erro:', err);
+          if(window.showToast) showToast('Erro: '+(err && err.message || err));
+        }finally{
+          restorePathBtn.disabled = false;
+          restorePathBtn.style.opacity = '1';
+          restorePathBtn.style.pointerEvents = 'auto';
+          restorePathBtn.textContent = originalText;
+        }
+      };
+      restorePathBtn.onclick = doRestore;
+      restorePathInput.addEventListener('keydown', function(e){
+        if(e.key === 'Enter'){
+          e.preventDefault();
+          e.stopPropagation();
+          doRestore();
+        }
+      });
+    }
+
     // ── Save handler (decide modo) ──
     saveBtn.onclick=async (e)=>{
       if(e){e.preventDefault();e.stopPropagation();}
@@ -1410,6 +1498,7 @@
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
           <button id="gdi-detail-restart-scan" data-course-key="${escHtml(c.key)}" style="font-size:12px;color:var(--ferreto-secondary,#5ddeda);border:1px solid rgba(93,222,218,.3);border-radius:8px;cursor:pointer;padding:6px 10px;background:transparent;" title="Reiniciar scanner"><i class="bi bi-arrow-repeat"></i> Reiniciar Scan</button>
+          <button class="gdi-rescan-btn dropdown-item" data-course-key="${escHtml(c.key)}" style="font-size:12px;color:var(--ferreto-secondary,#5ddeda);border:1px solid rgba(93,222,218,.3);border-radius:8px;cursor:pointer;padding:6px 10px;background:transparent;display:inline-flex;align-items:center;gap:4px;" title="Reescanear (invalida cache compartilhado)"><i class="bi bi-arrow-repeat"></i> Reescanear</button>
           <button id="gdi-detail-remove" data-course-key="${escHtml(c.key)}" style="font-size:12px;color:#ff8b8b;border:1px solid rgba(255,107,107,.3);border-radius:8px;cursor:pointer;padding:6px 10px;background:transparent;" title="Remover curso"><i class="bi bi-trash3"></i> Remover</button>
           <button id="gdi-detail-hide" class="gdi-mode-btn" style="font-size:11px;color:#ff8b8b;border-color:rgba(255,107,107,.3);" title="Ocultar curso"><i class="bi bi-eye-slash"></i> Ocultar</button>
         </div>
@@ -1482,12 +1571,6 @@
           //   Direito Administrativo — 45 aulas · 12 assistidas · 33 restantes
           //   Direito Constitucional — 38 aulas · 5 assistidas · 33 restantes
           // etc.
-          // ★ REVIEW-09: each discipline row is now EXPANDABLE — clicking the
-          // row toggles an inline list of individual lessons with watch-status
-          // icons (✓ watched / ○ not watched). A separate 📂 icon keeps the
-          // "open folder in Drive" navigation. This satisfies "course detail
-          // shows all lessons with watch status" without losing the compact
-          // discipline overview.
           if(!lessons.length && !total){
             return '<div class="gdi-notes-empty"><i class="bi bi-info-circle" style="font-size:18px;color:var(--ferreto-text-muted,#8b949e);vertical-align:middle;"></i> <span style="vertical-align:middle;">Nenhuma aula encontrada ainda.</span><div style="margin-top:8px;font-size:12px;"><a href="'+escHtml(coursePath)+'" style="color:var(--ferreto-secondary,#5ddeda);text-decoration:underline;"><i class="bi bi-folder2-open"></i> Abrir pasta no Drive</a></div></div>';
           }
@@ -1506,38 +1589,20 @@
             const segs = rel.split('/').filter(Boolean);
             // disciplina = primeiro segmento após o curso (ou "Aulas" se estiver na raiz)
             const disc = segs.length > 1 ? segs[0] : (segs.length === 1 ? 'Aulas' : 'Outros');
-            if(!groups[disc]) groups[disc] = { total: 0, watched: 0, path: cp + (cp.endsWith('/')?'':'/') + encodeURIComponent(disc) + '/', lessons: [] };
+            if(!groups[disc]) groups[disc] = { total: 0, watched: 0, path: cp + (cp.endsWith('/')?'':'/') + encodeURIComponent(disc) + '/' };
             groups[disc].total++;
             if(l.watched) groups[disc].watched++;
-            groups[disc].lessons.push(l);
           }
           const arr = Object.keys(groups).sort((a,b) => a.localeCompare(b,'pt-BR'));
           if(!arr.length){
             return '<div class="gdi-notes-empty"><i class="bi bi-hourglass-split" style="color:var(--ferreto-secondary,#5ddeda);"></i> <span>Escaneando disciplinas...</span></div>';
-          }
-          // ★ REVIEW-09: helper to render a single lesson row with watch status.
-          // Sorted by name (natural/numeric) so lessons appear in order within a discipline.
-          function renderLessonRow(l){
-            const wIcon = l.watched
-              ? '<i class="bi bi-check-circle-fill" style="color:#3fb950;flex:none;font-size:14px;" title="Assistida"></i>'
-              : '<i class="bi bi-circle" style="color:var(--ferreto-text-muted,#8b949e);flex:none;font-size:14px;" title="Não assistida"></i>';
-            const resumedTag = l.resumed ? ' <span style="color:var(--ferreto-secondary,#5ddeda);font-size:9px;border:1px solid rgba(93,222,218,.3);border-radius:4px;padding:0 4px;">retomar</span>' : '';
-            return '<a href="'+escHtml(l.path)+(String(l.path).includes('?')?'&':'?')+'a=view" class="gdi-lesson-row" style="display:flex;align-items:center;gap:8px;padding:6px 10px 6px 4px;text-decoration:none;border-radius:6px;" data-lesson-path="'+escHtml(l.path)+'">'
-              + wIcon
-              + '<span style="color:var(--ferreto-text,#e6edf3);font-size:12px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(l.name||realName(l.path))+'</span>'
-              + resumedTag
-              + '</a>';
           }
           return '<div style="display:flex;flex-direction:column;gap:8px;">' + arr.map(disc => {
             const g = groups[disc];
             const remaining = Math.max(0, g.total - g.watched);
             const pct = g.total > 0 ? Math.round(g.watched / g.total * 100) : 0;
             const color = pct >= 80 ? '#3fb950' : pct >= 40 ? '#ffd43b' : 'var(--ferreto-primary,#ff8b9f)';
-            // sort lessons inside the discipline by name (numeric-aware)
-            const sortedLessons = g.lessons.slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR',{numeric:true}));
-            return '<div class="gdi-disc-block" style="border:1px solid var(--ferreto-border,#21262d);border-radius:10px;overflow:hidden;">'
-              + '<div class="gdi-note gdi-disc-row" style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 12px;user-select:none;" data-disc-path="'+escHtml(g.path)+'" data-disc-name="'+escHtml(disc)+'">'
-              + '<i class="bi bi-chevron-right gdi-disc-chevron" style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;flex:none;transition:transform .15s;"></i>'
+            return '<div class="gdi-note" style="display:flex;align-items:center;gap:12px;cursor:pointer;padding:10px 12px;" data-disc-path="'+escHtml(g.path)+'">'
               + '<i class="bi bi-folder-fill" style="color:var(--ferreto-secondary,#5ddeda);font-size:18px;flex:none;"></i>'
               + '<div style="flex:1;min-width:0;">'
               + '<div style="color:var(--ferreto-text,#e6edf3);font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(disc)+'</div>'
@@ -1547,18 +1612,11 @@
               + '<span style="color:#ffd43b;">'+remaining+' restantes</span>'
               + '</div>'
               + '</div>'
-              + '<div style="flex:none;text-align:right;display:flex;align-items:center;gap:8px;">'
-              + '<div>'
+              + '<div style="flex:none;text-align:right;">'
               + '<div style="font-size:16px;font-weight:700;color:'+color+';">'+pct+'%</div>'
               + '<div style="width:60px;height:4px;background:var(--ferreto-surface-3,rgba(255,255,255,.08));border-radius:2px;margin-top:3px;overflow:hidden;">'
               + '<div style="height:4px;width:'+pct+'%;background:'+color+';border-radius:2px;"></div>'
               + '</div>'
-              + '</div>'
-              + '<a href="'+escHtml(g.path)+'" class="gdi-disc-open" onclick="event.stopPropagation()" title="Abrir pasta no Drive" style="color:var(--ferreto-text-muted,#8b949e);font-size:14px;flex:none;padding:4px;border-radius:6px;text-decoration:none;"><i class="bi bi-box-arrow-up-right"></i></a>'
-              + '</div>'
-              + '</div>'
-              + '<div class="gdi-disc-lessons" style="display:none;border-top:1px solid var(--ferreto-border,#21262d);background:var(--ferreto-surface-2,rgba(255,255,255,.02));padding:6px 8px 6px 30px;max-height:280px;overflow-y:auto;">'
-              + sortedLessons.map(renderLessonRow).join('')
               + '</div>'
               + '</div>';
           }).join('') + '</div>';
@@ -1648,23 +1706,11 @@
         contBtn.innerHTML='<i class="bi bi-check2-all" style="color:#3fb950;"></i> Tudo em dia!';
       }
     });
-    // ★ REVIEW-09: click em disciplina → TOGGLE expandable lessons list
-    // (was: navigate to folder). The folder navigation is now a separate
-    // <a class="gdi-disc-open"> icon inside the row, so the row click is free
-    // to expand/collapse the inline lesson list with watch-status icons.
-    box.querySelectorAll('.gdi-disc-row').forEach(row=>{
-      row.onclick=(e)=>{
-        // ignore clicks on the open-folder link (it has its own onclick stopPropagation)
-        if(e.target.closest('.gdi-disc-open')) return;
-        const block=row.closest('.gdi-disc-block');
-        if(!block) return;
-        const lessons=block.querySelector('.gdi-disc-lessons');
-        const chevron=row.querySelector('.gdi-disc-chevron');
-        if(lessons){
-          const isOpen = lessons.style.display !== 'none';
-          lessons.style.display = isOpen ? 'none' : 'block';
-          if(chevron) chevron.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(90deg)';
-        }
+    // ★ Task 18: click em disciplina → abre pasta no Drive (não aula individual)
+    box.querySelectorAll('[data-disc-path]').forEach(el=>{
+      el.onclick=()=>{
+        const p=el.dataset.discPath;
+        if(p)location.href=p;  // abre a pasta da disciplina
       };
     });
 
@@ -1708,6 +1754,57 @@
       });
     }
   }
+
+  // ★ ENG-SCANNER-DISTRIBUIDO (Task 6 / Agent 6): delegated click handler for
+  // .gdi-rescan-btn — calls rescanCourse → scanCourse to invalidate the shared
+  // cache and restart the distributed scan from scratch. Delegated on document
+  // so it works for any future-inserted button (course detail view re-renders
+  // the box on every open).
+  document.addEventListener('click', async function(e){
+    const btn = e.target.closest && e.target.closest('.gdi-rescan-btn');
+    if(!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const courseKey = btn.dataset && btn.dataset.courseKey;
+    if(!courseKey) return;
+    const ok = confirm('Reescanear este curso? O cache compartilhado será invalidado e o scan recomeçará.');
+    if(!ok) return;
+    try{
+      if(window.gdiCourseScanner && typeof window.gdiCourseScanner.rescanCourse === 'function'){
+        await window.gdiCourseScanner.rescanCourse(courseKey);
+      }else{
+        console.warn('[Reescanear] gdiCourseScanner.rescanCourse indisponível — pulando invalidação de cache');
+      }
+      if(window.showToast) showToast('Reescaneando curso...');
+      else console.log('[Reescanear] Reescaneando curso...');
+      // ★ Then restart the scan via scanCourse (per task spec).
+      // scanCourse returns a Promise; we attach .catch() to avoid unhandled rejection.
+      if(window.gdiCourseScanner && typeof window.gdiCourseScanner.scanCourse === 'function'){
+        const p = window.gdiCourseScanner.scanCourse(courseKey, function(state, lessonsData){
+          // Re-render the course detail when scan completes/fails so the user sees fresh data
+          try{
+            if(state.status === 'done' || state.status === 'error' || state.status === 'partial'){
+              const box2 = document.getElementById('gdi-central-body');
+              if(box2){
+                const fresh = (typeof window.collectCourses === 'function') ? window.collectCourses() : [];
+                const fc = fresh.find(x => x.key === courseKey);
+                if(fc && window.__gdiStudy && window.__gdiStudy.courses && typeof window.__gdiStudy.courses.openCourseDetail === 'function'){
+                  window.__gdiStudy.courses.openCourseDetail(box2, fc);
+                }
+              }
+            }
+          }catch(_){}
+        });
+        if(p && typeof p.catch === 'function') p.catch(err => console.warn('[Reescanear] scanCourse promise rejected:', err && err.message));
+      }else{
+        console.warn('[Reescanear] gdiCourseScanner.scanCourse indisponível');
+        if(window.showToast) showToast('Scanner indisponível — recarregue a página');
+      }
+    }catch(err){
+      console.error('[Reescanear] erro:', err);
+      if(window.showToast) showToast('Erro ao reescanear: '+(err && err.message || err));
+    }
+  });
 
   // ── Namespace exposure ──
   window.__gdiStudy.courses = {
