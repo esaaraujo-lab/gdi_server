@@ -28,8 +28,8 @@
   // — mesmo proxy que o gdi-extras-loader.js usa. Consistência + cache controlada
   //   por CACHE_VERSION (sem CDN jsdelivr com cache stale).
   const WORKER_BASE = '/modular/';
-  const LIST_WORKER_URL  = WORKER_BASE + 'gdi-list-worker.js?v=' + (window.CACHE_VERSION || '105');
-  const PDF_WORKER_URL   = WORKER_BASE + 'meggy-pdf-worker.js?v=' + (window.CACHE_VERSION || '105');
+  const LIST_WORKER_URL  = WORKER_BASE + 'gdi-list-worker.js?v=' + (window.CACHE_VERSION || '106');
+  const PDF_WORKER_URL   = WORKER_BASE + 'meggy-pdf-worker.js?v=' + (window.CACHE_VERSION || '106');
 
   // ───────────────────────── LRU cache de listagem ─────────────────────────
   const LIST_TTL = 5 * 60 * 1000;        // 5 min (antes 45s)
@@ -51,8 +51,13 @@
     _listCache.set(key, { at: Date.now(), files: Array.isArray(files) ? files.slice() : [] });
   }
 
-  // NÃO limpar em page:change — só invalidar quando o usuário pedir.
-  // (Antes: Bus.onGlobal('page:change', () => _listCache.clear())  ← removido)
+  // ★ FIX Task 20-9 Item 1: clear list cache on page:change to prevent stale
+  // folder listings when the user navigates between Drive folders. Previously
+  // the cache was NOT cleared on navigation (only on auth:change → 'out'),
+  // which meant a user moving from /1:/folderA → /1:/folderB could see cached
+  // listings from folderA if folderB's listing failed and fell back to cache.
+  // The LRU cap (50) + TTL (5min) bounds memory; clearing on navigation keeps
+  // data fresh. Listener registered below alongside the PDF cleanup listener.
 
   // ───────────────────────── Pool de workers ─────────────────────────
   let _listWorker = null;
@@ -66,6 +71,10 @@
     if (_listWorker) return _listWorker;
     // ★ FIX (Task 20): Web Workers não podem ser cross-origin.
     // Buscamos o script do CDN via fetch, criamos um Blob URL (same-origin), e instanciamos o Worker.
+    // ★ FIX Task 20-9 Item 2: attach a .catch() so any unexpected rejection resets
+    // _listWorker to null (otherwise it stays as a forever-rejected promise and
+    // every subsequent call returns the same rejected promise, breaking the worker
+    // permanently until reload).
     _listWorker = (async () => {
       try {
         const resp = await fetch(LIST_WORKER_URL);
@@ -87,40 +96,47 @@
         console.warn('[gdi-worker-bridge] Não foi possível criar list worker (blob), usando fallback', e.message);
         return null;
       }
-    })();
+    })().catch(e => {
+      console.warn('[gdi-worker-bridge] list worker promise rejected, resetting', e);
+      _listWorker = null;
+      return null;
+    });
     return _listWorker;
   }
 
   function getPdfWorker(){
     if (_pdfWorker) return _pdfWorker;
-    try {
-      // ★ FIX (Task 20): Blob URL technique (same as getListWorker)
-      _pdfWorker = (async () => {
-        try {
-          const resp = await fetch(PDF_WORKER_URL);
-          if (!resp.ok) throw new Error('HTTP ' + resp.status);
-          const text = await resp.text();
-          const blob = new Blob([text], {type: 'application/javascript'});
-          const blobUrl = URL.createObjectURL(blob);
-          const w = new Worker(blobUrl);
-          w.onmessage = onPdfMessage;
-          w.onerror = (e) => {
-            console.warn('[gdi-worker-bridge] pdf worker error', e);
-            for (const [id, p] of _pdfPending) { try { p.reject(new Error('worker error')); } catch(_){} }
-            _pdfPending.clear();
-            _pdfWorker = null;
-            URL.revokeObjectURL(blobUrl);
-          };
-          return w;
-        } catch(e) {
-          console.warn('[gdi-worker-bridge] Não foi possível criar pdf worker (blob), usando fallback', e.message);
-          return null;
-        }
-      })();
-    } catch(e) {
-      console.warn('[gdi-worker-bridge] Não foi possível criar pdf worker, usando fallback', e);
+    // ★ FIX (Task 20): Blob URL technique (same as getListWorker)
+    // ★ FIX Task 20-9 Item 2: if the promise rejects for any unexpected reason,
+    // reset _pdfWorker to null so the next call retries from scratch (otherwise
+    // _pdfWorker stays as a rejected promise forever and the PDF worker is
+    // permanently broken until page reload).
+    _pdfWorker = (async () => {
+      try {
+        const resp = await fetch(PDF_WORKER_URL);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const text = await resp.text();
+        const blob = new Blob([text], {type: 'application/javascript'});
+        const blobUrl = URL.createObjectURL(blob);
+        const w = new Worker(blobUrl);
+        w.onmessage = onPdfMessage;
+        w.onerror = (e) => {
+          console.warn('[gdi-worker-bridge] pdf worker error', e);
+          for (const [id, p] of _pdfPending) { try { p.reject(new Error('worker error')); } catch(_){} }
+          _pdfPending.clear();
+          _pdfWorker = null;
+          URL.revokeObjectURL(blobUrl);
+        };
+        return w;
+      } catch(e) {
+        console.warn('[gdi-worker-bridge] Não foi possível criar pdf worker (blob), usando fallback', e.message);
+        return null;
+      }
+    })().catch(e => {
+      console.warn('[gdi-worker-bridge] pdf worker promise rejected, resetting', e);
       _pdfWorker = null;
-    }
+      return null;
+    });
     return _pdfWorker;
   }
 
@@ -379,6 +395,10 @@
       if (typeof window.gdiPdfCleanup === 'function') {
         try { window.gdiPdfCleanup(); } catch(_){}
       }
+      // ★ FIX Task 20-9 Item 1: clear list cache on page navigation so the
+      // user never sees stale Drive folder listings from a previously-visited
+      // path (LRU + TTL alone don't guarantee freshness across navigations).
+      try { _listCache.clear(); } catch(_){}
     });
 
     // ★ FIX Agent 20 Bug 6 + Bug 7: Web Workers e caches NÃO são limpos em logout.
@@ -422,7 +442,17 @@
     version: '1.0',
     listCacheSize: () => _listCache.size,
     listCacheClear: () => _listCache.clear(),
-    listCacheInvalidate: (path) => _listCache.delete(path + '|' + ''),
+    listCacheInvalidate: (path) => {
+      // ★ FIX Task 20-9 Item 4: previously only deleted the empty-password key
+      // (`path + '|'`), so cached listings for the same path with a non-empty
+      // password survived invalidation and could serve stale data after a
+      // folder was renamed/reorganized. Now iterate ALL keys with the given
+      // path prefix (`path + '|' + <any-password>`).
+      const prefix = String(path || '') + '|';
+      for (const k of Array.from(_listCache.keys())) {
+        if (k.indexOf(prefix) === 0) _listCache.delete(k);
+      }
+    },
     pendingListJobs: () => _listPending.size,
     pendingPdfJobs:  () => _pdfPending.size,
     terminateAll: async () => {
