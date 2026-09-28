@@ -73,7 +73,13 @@ async function handleList({ id, path, pw, probeOnly }) {
       const chunk = files.slice(i, i + 1000);
       for (let j = 0; j < chunk.length; j++) out.push(chunk[j]);
     }
-    self.postMessage({ type: 'page', id, files: out.slice(), done: false });
+    // ★ FIX Agent 11 PERF-9: ANTES enviávamos `out.slice()` (array acumulado
+    // COMPLETO) em cada tick de página — para 50 páginas × N arquivos/page,
+    // isso é O(N²) de structured-clone + GC. Agora enviamos apenas os NOVOS
+    // arquivos desta página (`files.slice()`). A thread principal (bridge)
+    // acumula em `_listPending[id].accum` e repassa o acumulado para `onPage`,
+    // preservando o contrato original da API.
+    self.postMessage({ type: 'page', id, files: files.slice(), done: false });
     if (probeOnly) break;
     if (!page.nextPageToken) break;
     token = page.nextPageToken;
@@ -84,6 +90,11 @@ async function handleList({ id, path, pw, probeOnly }) {
 
 /* ---------------- scan: varredura paralela de subpastas -------------- */
 async function handleScan({ id, parentPath, subFolders, pw, initialItems }) {
+  // ★ FIX Agent 19 EDGE-8: `subFolders` pode vir como null/undefined se a
+  // main-thread esquecer de enviar (bug futuro em gdi-worker-bridge.js:246
+  // ou refactor). Guard previne TypeError opaco. Mesmo guard aplicado em
+  // todos os sites de `subFolders.length` / `subFolders.slice()` abaixo.
+  if (!Array.isArray(subFolders)) subFolders = [];
   const collected = [];
   let cursor = 0;
   const INITIAL = initialItems || 60;
@@ -96,6 +107,10 @@ async function handleScan({ id, parentPath, subFolders, pw, initialItems }) {
     cursor += batch.length;
     const results = await Promise.all(batch.map(folder => listOne(parentPath, folder, pw)));
     for (const vids of results) if (vids && vids.length) collected.push(...vids);
+    // ★ PERF-9 (parcial): `collected.slice()` em cada tick da primeira leva é
+    // O(N) por tick × nº de ticks — custo bounded porque a primeira leva para
+    // ao atingir INITIAL (60) itens. Não mudamos aqui para preservar o contrato
+    // do `onProgress(collected, cursor, total)` do `gdiScanCrossFolder`.
     self.postMessage({ type: 'scanPage', id, collected: collected.slice(), cursor, total: subFolders.length });
   }
 
@@ -119,6 +134,9 @@ async function handleScan({ id, parentPath, subFolders, pw, initialItems }) {
       self.postMessage({ type: 'scanDone', id, collected });
     } else {
       // throttled progress (a cada 200ms)
+      // ★ PERF-9 (parcial): `collected.slice()` aqui é O(N) por tick, mas o
+      // throttle de 200ms limita a frequência. Custo aceitável dado que o
+      // caller tipicamente ignora `collected` no `onProgress` (só usa cursor/total).
       const now = Date.now();
       if (!pump._lastReport || now - pump._lastReport > 200) {
         pump._lastReport = now;
@@ -164,6 +182,9 @@ async function listAllFilesInternal(path, pw) {
 
 /* ---------------- progress: contagem done/total por subpasta ---------- */
 async function handleProgress({ id, subFolders, parentPath, pw, isWatched }) {
+  // ★ FIX Agent 19 EDGE-8: mesmo guard de `handleScan` — `subFolders` pode
+  // vir null/undefined se a main-thread omitir o campo.
+  if (!Array.isArray(subFolders)) subFolders = [];
   // isWatched é uma função serializada? Não — funções não passam pelo postMessage.
   // Em vez disso, a thread principal envia a LISTA de paths já watched:
   //   subFolders: [{name, path}], watchedSet: { pathKey: true|at }
