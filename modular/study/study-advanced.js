@@ -31,6 +31,9 @@
   async function callMeggy(prompt){
     const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({message:prompt,messages:[]})});
+    // ★ FIX (Agent 6): check r.ok BEFORE r.json() — if /api/ai returns 500
+    //    with an HTML error page, r.json() throws a confusing SyntaxError.
+    if(!r.ok) return null;
     const data=await r.json();
     if(!data.ok)throw new Error(data.error||'Meggy indisponível');
     return data.response||'';
@@ -123,17 +126,26 @@
     if(!file.name.toLowerCase().endsWith('.pdf')){status.innerHTML='<div class="gdi-ai-err">Apenas arquivos PDF são suportados.</div>';return;}
     status.innerHTML='<div class="gdi-ai-loading" style="padding:20px;text-align:center;"><div class="gdi-ai-typing" style="margin:0 auto;"><span></span><span></span><span></span></div><p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin-top:10px;">Extraindo texto da prova…</p></div>';
     try{
-      const pdfjsLib=window.pdfjsLib;
-      if(!pdfjsLib){
-        await new Promise((res,rej)=>{
-          const s=document.createElement('script');
-          s.src='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
-          s.onload=()=>{window.pdfjsLib=window.pdfjsLib||pdfjsLib;res();};
-          s.onerror=rej;
-          document.head.appendChild(s);
-        });
+      // ★ FIX (Agent 10 Bug 23): replace inline pdf.js loader with the shared
+      //    window.gdiEnsurePdfjs() helper (provided by gdi-pdf-engine.js).
+      //    The inline loader had no fallback if CDN failed and was duplicated
+      //    from meggy-pdf-engine.js. Fall back to inline only if the helper
+      //    is unavailable (legacy load order).
+      let lib = window.pdfjsLib;
+      if(!lib){
+        if(typeof window.gdiEnsurePdfjs === 'function'){
+          await window.gdiEnsurePdfjs();
+        }else{
+          await new Promise((res,rej)=>{
+            const s=document.createElement('script');
+            s.src='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+            s.onload=()=>{window.pdfjsLib=window.pdfjsLib||pdfjsLib;res();};
+            s.onerror=rej;
+            document.head.appendChild(s);
+          });
+        }
       }
-      const lib=window.pdfjsLib;
+      lib = window.pdfjsLib;
       if(lib&&lib.GlobalWorkerOptions)lib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
       const buf=await file.arrayBuffer();
       // ★ v1.0.84: wrap doc lifecycle in try/finally so doc.destroy() runs
@@ -268,10 +280,18 @@
         }catch(err){if(statusDrop)statusDrop.innerHTML='<span style="color:#ff6b6b;">Erro: '+esc(err.message)+'</span>';}
       };
     }
-    box.querySelector('#red-corrigir').onclick=async()=>{
-      const banca=box.querySelector('#red-banca').value;
-      const tipo=box.querySelector('#red-tipo').value;
-      const text=box.querySelector('#red-text').value.trim();
+    // ★ FIX (Agent 16 UIUX-15): null-check #red-banca and #red-tipo before
+    //    assigning #red-corrigir onclick — if the template was altered (e.g.
+    //    custom CSS hides one), reading .value would throw TypeError.
+    const _redCorrigirBtn = box.querySelector('#red-corrigir');
+    if(_redCorrigirBtn) _redCorrigirBtn.onclick=async()=>{
+      const bancaSel=box.querySelector('#red-banca');
+      const tipoSel=box.querySelector('#red-tipo');
+      const textEl=box.querySelector('#red-text');
+      if(!bancaSel||!tipoSel||!textEl){showToast('Formulário de redação indisponível');return;}
+      const banca=bancaSel.value;
+      const tipo=tipoSel.value;
+      const text=textEl.value.trim();
       const status=box.querySelector('#red-status');
       const result=box.querySelector('#red-result');
       if(!text||text.length<50){showToast('Escreva ou cole sua redação primeiro (mínimo 50 caracteres)');return;}
