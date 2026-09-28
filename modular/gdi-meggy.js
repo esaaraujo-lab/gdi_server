@@ -794,7 +794,12 @@
     const path=urlPath||lessonKey()||lesson;
     questions.forEach(q=>{
       if(!q||!q.statement||!Array.isArray(q.options))return;
-      const correctLetter=String.fromCharCode(65,q.correct||0);
+      // ★ FIX Task 20-15 #24 (Agent 15): ANTES `String.fromCharCode(65, q.correct||0)`
+      // retornava DOIS caracteres ('A' + o char no codepoint `q.correct`), não a
+      // letra da alternativa correta. Para q.correct=2, isso produzia 'A\u0002'
+      // (A + ASCII STX) em vez de 'C'. Mesmo bug já corrigido em modular/meggy/
+      // meggy-cache.js:201 — replicado aqui no monolito legado.
+      const correctLetter=String.fromCharCode(65 + (q.correct||0));
       const correctText=q.options[q.correct||0]||'';
       const back=correctLetter+') '+correctText+(q.explanation?'\n\n💡 '+q.explanation:'');
       // evita duplicatas (mesma frente)
@@ -2028,7 +2033,16 @@
   // ★ usado pelo Simulado (gdi-study.js) para enriquecer o banco
   async function fetchSharedQuestions(subjectFilter){
     try{
-      const url='/api/ai/shared-flashcards'+(subjectFilter?'?subject='+encodeURIComponent(subjectFilter):'')+'&kind=question';
+      // ★ FIX Task 20-15 #25 (Agent 15): ANTES a URL era montada como
+      //   '/api/ai/shared-flashcards' + (subjectFilter?'?subject=X':'') + '&kind=question'
+      // Quando subjectFilter era vazio/null, isso produzia
+      //   '/api/ai/shared-flashcards&kind=question'
+      // (faltava o '?' inicial — o '&' virava o primeiro separador, e o servidor
+      // tratava 'shared-flashcards&kind' como pathname completo, retornando 404).
+      // Mesmo bug já corrigido em modular/meggy/meggy-summaries.js:160 —
+      // replicado aqui no monolito legado. Agora '?kind=question' vem sempre
+      // primeiro (path válido), e o filtro de subject entra como '&subject='.
+      const url='/api/ai/shared-flashcards?kind=question'+(subjectFilter?'&subject='+encodeURIComponent(subjectFilter):'');
       const r=await fetch(url,{cache:'no-store'});
       const d=await r.json();
       if(d&&d.ok&&Array.isArray(d.items)){
