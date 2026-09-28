@@ -145,9 +145,14 @@
     attach: attach
   };
 
-  Bus.onGlobal('media:ready',function(d){
-    if(d&&d.type==='video'&&d.el)attach(d.el);
-  });
+  // ★ FIX (Agent 18 Bug 4): guard Bus.onGlobal — Bus may be undefined if this
+  //    module loads before app.min.js (or in test environments). Without the
+  //    guard, `Bus.onGlobal` throws ReferenceError and breaks the entire module.
+  if(typeof Bus !== 'undefined' && typeof Bus.onGlobal === 'function'){
+    Bus.onGlobal('media:ready',function(d){
+      if(d&&d.type==='video'&&d.el)attach(d.el);
+    });
+  }
 
   window.GDI_MODULES.push({name:'player-guard',init:function(){
     try{
