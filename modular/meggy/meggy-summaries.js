@@ -64,7 +64,13 @@
       // busca os items do M9 para passar para regenerate
       const matTabs=document.querySelector('#gdi-mat-tabs');
       if(matTabs&&matTabs.__items){
-        window.gdiIsaPdf.regenerate(matTabs.__items,bodyEl,lesson);
+        // ★ FIX-MEGGY #10 (Agent 7 Bug 7-5): regenerate returns a Promise;
+        //   attach .catch so a failure surfaces as a toast instead of an
+        //   unhandled rejection (which would silently swallow the error).
+        try{
+          const p = window.gdiIsaPdf.regenerate(matTabs.__items,bodyEl,lesson);
+          if(p && typeof p.catch==='function') p.catch(e=>showToast('Erro: '+(e&&e.message||e)));
+        }catch(e){ showToast('Erro: '+(e&&e.message||e)); }
       }else{
         showToast('Navegue para a aba de materiais para regerar');
       }
@@ -381,7 +387,15 @@
 
   function _summaryModal(lesson, markdownText){
     // modal próprio (não depende de gdiModal que escapa o conteúdo)
-    document.querySelectorAll('.gdi-resumo-modal').forEach(m=>m.remove());
+    // ★ FIX-MEGGY #8 (Agent 16 UIUX-3): when removing old modals, also remove
+    //   their escHandler (stored on the overlay as _escHandler) — otherwise
+    //   each replacement modal leaks its keydown listener on document.
+    document.querySelectorAll('.gdi-resumo-modal').forEach(m=>{
+      if(m._escHandler){
+        try{ document.removeEventListener('keydown', m._escHandler); }catch(_){}
+      }
+      m.remove();
+    });
     const overlay=document.createElement('div');
     overlay.className='gdi-resumo-modal';
     overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(4px);z-index:100002;display:flex;align-items:center;justify-content:center;padding:20px;animation:gdi-modal-fade .2s ease;';
@@ -406,7 +420,10 @@
     // ★ v80-FIX-MEGGY BUG 6: define escHandler BEFORE close so close() can
     //    remove it. Previously, close() only removed the overlay — clicking
     //    X or backdrop left escHandler attached to document forever.
+    // ★ FIX-MEGGY #8 (Agent 16 UIUX-3): also store escHandler on the overlay
+    //    so that a replacement modal can remove it (see cleanup at top).
     const escHandler=(e)=>{if(e.key==='Escape')close();};
+    overlay._escHandler = escHandler;
     const close=()=>{
       document.removeEventListener('keydown',escHandler);
       overlay.remove();
@@ -429,6 +446,12 @@
   // todos os resumos de uma vez (seria pesado).
   async function renderResumos(bodyEl){
     if(!bodyEl)return;
+    // ★ FIX-MEGGY #9 (Agent 5 R7): generation token — abort early if the user
+    //   switched tabs (or triggered a re-render) while we were awaiting Drive
+    //   fetches. Without this, the stale render overwrites the newer tab's
+    //   body with the old Resumos list.
+    const __gen = (bodyEl.__renderGen = (bodyEl.__renderGen||0) + 1);
+    const isStale = () => bodyEl.__renderGen !== __gen;
     // Loading state imediato (a chamada ao Drive pode levar 1-2s)
     bodyEl.innerHTML='<div class="gdi-empty-state" style="padding:40px 20px;"><div class="gdi-spinner" style="margin:0 auto 12px;width:32px;height:32px;border:3px solid var(--ferreto-surface-3,rgba(255,255,255,.08));border-top-color:var(--ferreto-primary,#ff8b9f);border-radius:50%;animation:gdi-scan-spin 1s linear infinite;"></div><p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin:0;">Carregando resumos…</p></div>';
 
@@ -459,6 +482,7 @@
         }
       }
     }catch(_){ /* folder-first read is best-effort */ }
+    if(isStale()) return;
 
     // 1) localStorage resumos (rápido, síncrono)
     const localSummaries = window.gdiIsaPdf ? window.gdiIsaPdf.listIsaSummaries() : [];
@@ -494,6 +518,7 @@
         }
       }
     }catch(_){ /* Drive indisponível — segue só com localStorage */ }
+    if(isStale()) return;
 
     // 3) Merge: folder-first (if found) > localStorage (conteúdo já carregado)
     //    > Drive central pool (dedup por lesson name case-insensitive)
@@ -524,6 +549,7 @@
     all.sort((a,b)=>(b.date||0)-(a.date||0));
 
     if(!all.length){
+      if(isStale()) return;
       bodyEl.innerHTML='<div class="gdi-empty-state"><span class="gdi-empty-state-icon">📋</span><h3>Nenhum resumo ainda</h3><p>Gere resumos assistindo às aulas e clicando no botão "Resumo" no painel de materiais.</p></div>';
       return;
     }
@@ -563,6 +589,7 @@
       html+='</div></div>';
     }
     html+='</div>';
+    if(isStale()) return;  // ★ FIX-MEGGY #9: abort before writing final HTML
     bodyEl.innerHTML=html;
 
     // 6) Helper: lazy-load conteúdo do Drive
@@ -636,7 +663,13 @@
       }
       if(window.gdiIsaPdf && window.gdiIsaPdf.delIsaSummary){
         window.gdiIsaPdf.delIsaSummary(b.dataset.id);
-        window.renderResumos(bodyEl);
+        // ★ FIX-MEGGY #11 (Agent 7 Bug 7-13): renderResumos is async — fire-and-
+        //   forget leaves an unhandled rejection if Drive fetch fails. Wrap with
+        //   .catch so the error surfaces as a toast instead.
+        try{
+          const p = window.renderResumos(bodyEl);
+          if(p && typeof p.catch==='function') p.catch(e=>showToast('Erro ao recarregar resumos: '+(e&&e.message||e)));
+        }catch(e){ showToast('Erro ao recarregar resumos: '+(e&&e.message||e)); }
       }
     });
   }
