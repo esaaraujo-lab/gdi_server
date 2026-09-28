@@ -31,6 +31,24 @@
   // ★ v1.0.99: serialize gdi-cards-v1 writes to prevent RMW races
   let _cardsWriteChain = Promise.resolve();
 
+  // ★ FIX-MEGGY #3 (Agent 16 UIUX-2): register page:change cleanup ONCE at
+  //   module init (was inside runFlashcardSession — leaked a listener per
+  //   session). The handler iterates the set of active session bodyEls and
+  //   invokes their __fcKeyCleanup if present, then drops them.
+  const _activeFcSessions = new Set();
+  function _fcPageCleanup(){
+    _activeFcSessions.forEach(bodyEl => {
+      if(bodyEl && bodyEl.__fcKeyCleanup){
+        try{ bodyEl.__fcKeyCleanup(); }catch(_){}
+        bodyEl.__fcKeyCleanup = null;
+      }
+    });
+    _activeFcSessions.clear();
+  }
+  if(typeof Bus !== 'undefined' && typeof Bus.onGlobal === 'function'){
+    Bus.onGlobal('page:change', _fcPageCleanup);
+  }
+
   // ── CSS — Flashcards library + session styles (separate from M9-ISA styles) ──
   if(!document.getElementById('gdi-m9isa-style-fc')){
     const s=document.createElement('style');s.id='gdi-m9isa-style-fc';s.textContent=`
@@ -674,17 +692,25 @@
       const card=bodyEl.querySelector('#gdi-fc-card');
       const grade=bodyEl.querySelector('#gdi-fc-grade');
       let flipped=false;
-      card.onclick=()=>{
-        if(flipped)return;flipped=true;
-        card.classList.add('gdi-fc-flipped');
-        grade.style.display='block';
-        // foca no botão "Good" para Enter funcionar
-        const goodBtn=bodyEl.querySelector('#gdi-fc-good');
-        if(goodBtn)setTimeout(()=>goodBtn.focus(),100);
-      };
+      // ★ FIX-MEGGY #4 (Agent 16 UIUX-14): null check before assigning onclick —
+      //   throws if `#gdi-fc-card` is missing from the template (defensive).
+      if(card){
+        card.onclick=()=>{
+          if(flipped)return;flipped=true;
+          card.classList.add('gdi-fc-flipped');
+          if(grade) grade.style.display='block';
+          // foca no botão "Good" para Enter funcionar
+          const goodBtn=bodyEl.querySelector('#gdi-fc-good');
+          if(goodBtn)setTimeout(()=>goodBtn.focus(),100);
+        };
+      }
       // ★ SRS unificado via gdiGradeCard (SM-2 simplificado)
       const gradeCard=(quality)=>{
         // ★ v1.0.99: route through _cardsWriteChain
+        // ★ FIX-MEGGY #1 (Agent 5 R8 / Agent 13 Bug 13-4): hoist cardCount
+        //   so the achievement check (which runs synchronously after scheduling
+        //   the chain) doesn't referenceError on `cards` (scoped to .then()).
+        let cardCount = 0;
         _cardsWriteChain = _cardsWriteChain.then(() => {
           const cards=U.lsGet('gdi-cards-v1',[]);
           const ci=cards.findIndex(x=>x.id===c.id);
@@ -695,6 +721,7 @@
             cards[ci].lastReview=result.lastReview;
             U.lsSet('gdi-cards-v1',cards);
           }
+          cardCount = cards.length;
         }).catch(e=>console.warn('[Meggy] gradeCard chain error:', e&&e.message));
         if(quality===1)misses++;      // Again
         else if(quality===3)hits++;   // Good
@@ -705,7 +732,7 @@
           localStorage.setItem('gdi-cards-studied-count',String(n));
           // dispara checagem de conquistas
           if(window.gdiAchievements){
-            window.gdiAchievements.checkAll({cardsStudied:n,cardsCreated:cards.length});
+            window.gdiAchievements.checkAll({cardsStudied:n,cardsCreated:cardCount});
           }
         }catch(_){}
         idx++;draw();
@@ -718,8 +745,12 @@
       bodyEl.querySelector('#gdi-fc-skip').onclick=()=>{idx++;draw();};
       // ★ atalhos de teclado (1/2/3/4 + espaço para virar)
       const keyHandler=(e)=>{
+        // ★ FIX-MEGGY #2 (Agent 16 UIUX-2): bail when panel is hidden/closed —
+        //   otherwise keyHandler keeps firing on hidden panels and grades cards
+        //   the user can't see (also a memory leak).
+        if(!bodyEl || !bodyEl.offsetParent) return;
         if(!grade.style.display||grade.style.display==='none'){
-          if(e.code==='Space'){e.preventDefault();card.click();}
+          if(e.code==='Space'){e.preventDefault();if(card)card.click();}
           return;
         }
         if(e.key==='1'){e.preventDefault();gradeCard(1);}
@@ -740,19 +771,13 @@
         };
       }
     }
-    // ★ v80-FIX-MEGGY BUG 4: register a page:change listener so the keyHandler
-    //    is cleaned up if the user navigates away mid-session. Bus has no
-    //    offGlobal, so the closure no-ops once __fcKeyCleanup is null (set
-    //    when the session ends naturally via the _origDraw wrapper below).
-    const _pageCleanup = () => {
-      if(bodyEl.__fcKeyCleanup){
-        try{ bodyEl.__fcKeyCleanup(); }catch(_){}
-        bodyEl.__fcKeyCleanup = null;
-      }
-    };
-    if(typeof Bus !== 'undefined' && typeof Bus.onGlobal === 'function'){
-      Bus.onGlobal('page:change', _pageCleanup);
-    }
+    // ★ v80-FIX-MEGGY BUG 4: track this session's bodyEl so the module-level
+    //    Bus.onGlobal('page:change', _fcPageCleanup) listener (registered ONCE
+    //    at IIFE init — see FIX-MEGGY #3) can clean up its keyHandler when the
+    //    user navigates away mid-session. The closure no-ops once
+    //    __fcKeyCleanup is null (set when the session ends naturally via the
+    //    _origDraw wrapper below).
+    _activeFcSessions.add(bodyEl);
     draw();
     // cleanup final quando sessão terminar (idx>=queue.length)
     const _origDraw=draw;
@@ -761,6 +786,7 @@
       if(idx>=queue.length&&bodyEl.__fcKeyCleanup){
         bodyEl.__fcKeyCleanup();
         bodyEl.__fcKeyCleanup=null;
+        _activeFcSessions.delete(bodyEl);
       }
     };
   }
@@ -775,7 +801,23 @@
     stripExt,
     getSubjects,
     saveSubject,
-    deleteSubject
+    deleteSubject,
+    // ★ FIX-MEGGY #5 (Agent 5 R4 / Agent 14 Bug 5): expose a batch-add method
+    //   that serializes through _cardsWriteChain, so other modules (e.g.
+    //   meggy-cache.js:autoCreateFlashcards) can append cards without racing
+    //   with the library's own writes (which would silently lose data on
+    //   concurrent last-write-wins).
+    addCardsBatch(cardsArray){
+      if(!Array.isArray(cardsArray) || cardsArray.length===0) return _cardsWriteChain;
+      _cardsWriteChain = _cardsWriteChain.then(() => {
+        const existing = U.lsGet('gdi-cards-v1', []);
+        for(const c of cardsArray){
+          if(c && c.id && !existing.some(x=>x.id===c.id)) existing.push(c);
+        }
+        U.lsSet('gdi-cards-v1', existing);
+      }).catch(e=>console.warn('[Meggy] addCardsBatch chain error:', e&&e.message));
+      return _cardsWriteChain;
+    }
   };
 
   // ── Aliases para compatibilidade ──
