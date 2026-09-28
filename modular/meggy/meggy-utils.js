@@ -39,7 +39,20 @@
     'acolhedora. Use Markdown quando ajudar.';
 
   // ── Helpers ──
-  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  // ★ FIX 20-6 #4 (Agent 16): esc() must also escape single quotes (&#39;).
+  //    The previous 4-entity chain (& < > ") was sufficient for double-quoted
+  //    attribute contexts but NOT for single-quoted ones. Several consumers
+  //    embed esc() output inside single-quoted HTML attributes, e.g.:
+  //      study-questions.js: `<button data-s="${esc(s)}">`  ← double-quoted, OK
+  //      study-questions.js: `data-qid="${esc(q.id)}"`      ← double-quoted, OK
+  //      study-tabs-legacy.js (legacy): `data-id='${esc(x)}'` ← single-quoted, LEAKS
+  //    A subject name like "O'Brien" or "Direito das ONG's" inserted via
+  //    esc() into a single-quoted attribute would break out of the attribute
+  //    and could inject markup. The HTML5 spec (8.1.2.3) and OWASP both
+  //    recommend escaping ' to &#x27; (or &#39;). We use &#39; for max
+  //    compatibility with older browsers. The entity is also valid in text
+  //    content (renders as '), so existing text-context callers are unaffected.
+  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
   const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
   const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
