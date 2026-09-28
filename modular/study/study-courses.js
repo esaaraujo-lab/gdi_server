@@ -100,6 +100,20 @@
     // Decoding here is idempotent (decodeURIComponent of an already-decoded
     // string with no %XX sequences is a no-op).
     try{if(courseName&&String(courseName).indexOf('%')>=0)courseName=decodeURIComponent(courseName);}catch(_){}
+    // ★ FIX (Task 20-13 #6): normalize coursePath — strip trailing slashes for
+    //   consistent storage and duplicate detection. Without this, the same
+    //   course could be stored as '/0:/Cursos' AND '/0:/Cursos/' (two entries)
+    //   because the alreadyExists check uses strict equality (c.path===coursePath).
+    //   The add-course modal's getFolderPath() guarantees a trailing slash on
+    //   folder cards, but currentPath (used for the "Selecionar esta pasta"
+    //   button data-path) does NOT — drive roots like '/0:/' keep the slash
+    //   (normalizeNavPath adds it back) while subfolders like '/0:/Cursos'
+    //   lose it (normPath strips, normalizeNavPath doesn't re-add). The
+    //   resulting inconsistency made alreadyExists fail for re-adds. The
+    //   matching logic in collectCourses/bestIn uses low() which normalizes,
+    //   so functionally the course worked — but localStorage grew duplicates.
+    //   Normalization here is idempotent and matches the low()/norm() pattern.
+    coursePath = String(coursePath||'').replace(/\/+$/,'') || '/';
     const overlay=document.querySelector('.gdi-modal-overlay');
     const box=document.getElementById('gdi-central-body');
     const LS_MANUAL='gdi-manual-courses-v1';
@@ -108,7 +122,12 @@
 
     try{
       const manual=lsGet(LS_MANUAL,[]);
-      const alreadyExists=manual.some(c=>c.path===coursePath);
+      // ★ FIX (Task 20-13 #6): compare normalized paths so legacy entries
+      //   stored with a trailing slash (e.g. '/0:/Cursos/') still match a
+      //   re-add attempt with the slash stripped (or vice-versa). low()
+      //   normalizes + lowercases — sufficient for equality check.
+      const _normCmp = p => low(p);
+      const alreadyExists=manual.some(c=>c&&_normCmp(c.path)===_normCmp(coursePath));
 
       if(!alreadyExists){
         // ★ 1) SALVA no localStorage — aparece imediatamente na lista do aluno
@@ -122,6 +141,11 @@
           pdfCount:pdfCount||0  // ★ FIX 4: total real de aulas (Drive scan)
         });
         lsSet(LS_MANUAL,manual);
+        // ★ v1.0.103 FIX (Task 20-5 #9): emit courses:changed so caches
+        //   (bestInCache in study-courses.js, _ccCache in study-panel.js)
+        //   are invalidated. Without this, the home tile's "Continuar" button
+        //   could show stale data after adding a course.
+        try{ if(typeof Bus!=='undefined' && Bus.emit) Bus.emit('courses:changed', {}); }catch(_){}
       }
 
       // ★ 2) POST /api/courses/add — salva em general_courses.json no Drive (compartilhado)
@@ -170,7 +194,11 @@
           if(typeof window.gdiRefreshCentralPanel==='function'){
             window.gdiRefreshCentralPanel();
           }else if(typeof window.renderCursos==='function'){
-            window.renderCursos(box).catch(()=>{});
+            // ★ v1.0.103 FIX (Task 20-5 #7): await renderCursos to ensure UI
+            //   is fully updated before closing the modal. Previously the
+            //   .catch() was attached but no await — the modal closed before
+            //   the re-render finished, causing a brief flash of stale content.
+            await window.renderCursos(box).catch(()=>{});
           }
         }catch(e){console.warn('[AddCourse] erro ao re-renderizar:',e.message);}
       }
@@ -360,8 +388,17 @@
   function collectCourses(){
     const d=stateD()||{};
     // ★ cursos ocultos pelo usuário (não aparecem na lista de cursos)
-    const hidden=lsGet(LS_HIDDEN,[]);
-    const isHidden=ck=>hidden.some(h=>low(h)===low(ck));
+    // ★ v1.0.103 FIX (Task 20-18 #5): convert `hidden` array → Set<string> (lowercased)
+    //   for O(1) isHidden lookups. Previously `hidden.some(h => low(h) === low(ck))` was
+    //   O(H) per call (H ≤ 50 entries). collectCourses calls isHidden once per manual
+    //   course (C ≤ ~30) plus inside the pre-bucketing loop below — total O(C×H) ≈ 1,500
+    //   string comparisons per render. With a Set, isHidden is O(1) per call. Behavior
+    //   preserved: low() normalization applied to both keys and Set entries, so case/
+    //   trailing-slash variations still match. The non-Set `hidden` array remains in
+    //   localStorage (LS_HIDDEN) — only the in-memory lookup structure changed.
+    const hiddenRaw = lsGet(LS_HIDDEN, []);
+    const hiddenSet = new Set(Array.isArray(hiddenRaw) ? hiddenRaw.map(h => low(h)) : []);
+    const isHidden = ck => hiddenSet.has(low(ck));
 
     // ★ FIX 2 (Task 14): return ONLY manually-added courses (no more auto-tiles).
     // Auto-tiles (de watched/resume/history) mostravam dados errados, ex.: "3 aulas"
@@ -375,22 +412,70 @@
     if(!Array.isArray(manual)) return [];
     const map=new Map();
 
-    // Pré-computa prefixo lower de cada curso manual para casar paths assistidos.
-    // (Watched é armazenado por path completo; precisamos contar quantos paths
-    //  assistidos caem dentro de cada curso manual.)
+    // ★ v1.0.103 FIX (Task 20-18 #6): pre-bucket watched keys by course prefix.
+    //   Original code was O(C×W): for each manual course (C), iterate ALL watched
+    //   keys (W) and check `lk === pre || lk.indexOf(pre+'/') === 0`. For 30 courses
+    //   × 500 watched keys = 15,000 string comparisons per collectCourses call (and
+    //   this runs on every renderHome, even with the 5s memoization in study-panel.js).
+    //   Optimization: build Map<lowerCoursePath, manualEntry[]> (excluding hidden),
+    //   then for each watched key walk its ancestor paths (depth D, typically 2-4
+    //   components) and check Map.has() — O(1) per ancestor. Total cost: O(C + W×D),
+    //   i.e. 30 + 500×3 = ~1,530 ops vs 15,000.
+    //   Behavior preserved: a watched key counts toward EVERY ancestor course (matches
+    //   the original `lk===pre||lk.indexOf(pre+'/')===0` check, which also counted a
+    //   watched key in multiple courses when one course path was a prefix of another).
+    //   Walk approach is equivalent: walking ancestors of lk via '/' boundaries
+    //   yields exactly the set of paths `p` such that `lk === p` OR `lk.startsWith(p+'/')`.
     const w=(d&&d.watched)||{};
+
+    // Build Map<lowerPath, manualEntry[]> for non-hidden manual courses.
+    // Array value handles the (rare) case of two manual entries sharing the same
+    // lowercased path — both need their watched count incremented.
+    const courseByLowPath = new Map();
+    for(const m of manual){
+      if(!m||!m.path)continue;
+      if(isHidden(m.path))continue;
+      const lp = low(m.path);
+      let arr = courseByLowPath.get(lp);
+      if(!arr){ arr = []; courseByLowPath.set(lp, arr); }
+      arr.push(m);
+    }
+
+    // Initialize per-course watched counter at 0 (preserves the order/keys for the
+    // main loop below; entries that end with 0 stay 0).
+    const watchedCountByCourse = new Map();
+    for(const m of manual){
+      if(!m||!m.path)continue;
+      if(isHidden(m.path))continue;
+      watchedCountByCourse.set(m.path, 0);
+    }
+
+    // Walk each watched key's ancestor paths; increment count for every matching
+    // course. The while-loop traverses lk → parent path (slice at last '/') → ...
+    // until the string is exhausted. Depth is bounded by the path's component count.
+    for(const k in w){
+      const lk = low(k);
+      let path = lk;
+      while(path){
+        const arr = courseByLowPath.get(path);
+        if(arr){
+          for(let mi = 0; mi < arr.length; mi++){
+            const mEntry = arr[mi];
+            watchedCountByCourse.set(mEntry.path, watchedCountByCourse.get(mEntry.path) + 1);
+          }
+        }
+        const idx = path.lastIndexOf('/');
+        if(idx < 0) break;
+        path = path.slice(0, idx);
+      }
+    }
 
     for(const m of manual){
       if(!m||!m.path)continue;
       const ck=m.path;  // usa o path do drive como courseKey
       if(isHidden(ck))continue;
-      // Conta aulas assistidas (paths em d.watched cujo prefixo = course path)
-      const pre=low(ck);
-      let watchedCount=0;
-      for(const k in w){
-        const lk=low(k);
-        if(lk===pre||lk.indexOf(pre+'/')===0)watchedCount++;
-      }
+      // Conta aulas assistidas — already pre-computed via the bucket walk above.
+      const watchedCount = watchedCountByCourse.get(ck) || 0;
       let c=map.get(ck);
       if(!c){
         c={
@@ -443,15 +528,38 @@
   }
   window.collectCourses = collectCourses;
   // ★ helpers para ocultar/restaurar cursos
+  // ★ v1.0.103 FIX (Task 20-5 #10): serialize writes to LS_HIDDEN via a Promise
+  //   chain (_hiddenWriteChain). Without this, rapid sequential calls to
+  //   hideCourse/unhideCourse (e.g. user clicks hide on multiple courses
+  //   quickly, or restore-all + immediate hide) race on the read-modify-write
+  //   cycle and lose entries. Each write is appended to the chain and runs
+  //   strictly after the previous one completes.
+  let _hiddenWriteChain = Promise.resolve();
+  function _queueHiddenWrite(fn){
+    const next = _hiddenWriteChain.then(fn).catch(e => {
+      console.warn('[hideCourse] write chain error:', e && e.message);
+    });
+    // Keep the chain alive even if the caller doesn't await (fire-and-forget).
+    _hiddenWriteChain = next;
+    return next;
+  }
   function hideCourse(ck){
-    const hidden=lsGet(LS_HIDDEN,[]);
-    if(!hidden.some(h=>low(h)===low(ck)))hidden.push(ck);
-    // ★ v1.0.99: cap at 50 hidden entries
-    if(hidden.length > 50) hidden.splice(0, hidden.length - 50);
-    lsSet(LS_HIDDEN,hidden);
+    return _queueHiddenWrite(() => {
+      const hidden=lsGet(LS_HIDDEN,[]);
+      if(!hidden.some(h=>low(h)===low(ck)))hidden.push(ck);
+      // ★ v1.0.99: cap at 50 hidden entries
+      if(hidden.length > 50) hidden.splice(0, hidden.length - 50);
+      lsSet(LS_HIDDEN,hidden);
+      // ★ v1.0.103 FIX (Task 20-5 #9): emit courses:changed so caches invalidate.
+      try{ if(typeof Bus!=='undefined' && Bus.emit) Bus.emit('courses:changed', {}); }catch(_){}
+    });
   }
   function unhideCourse(ck){
-    lsSet(LS_HIDDEN,lsGet(LS_HIDDEN,[]).filter(h=>low(h)!==low(ck)));
+    return _queueHiddenWrite(() => {
+      lsSet(LS_HIDDEN,lsGet(LS_HIDDEN,[]).filter(h=>low(h)!==low(ck)));
+      // ★ v1.0.103 FIX (Task 20-5 #9): emit courses:changed so caches invalidate.
+      try{ if(typeof Bus!=='undefined' && Bus.emit) Bus.emit('courses:changed', {}); }catch(_){}
+    });
   }
   function listHiddenCourses(){
     return lsGet(LS_HIDDEN,[]);
@@ -526,7 +634,23 @@
     })();
   }
   // ★ invalidar bestInCache quando usuário marcar/desmarcar vídeo
-  Bus.onGlobal('watched:changed',()=>{bestInCache.clear();});
+  // ★ FIX (Task 20-13 #5): guard with typeof Bus !== 'undefined' — same pattern
+  //   used everywhere else in this module. Without the guard, if study-courses.js
+  //   loads before app.min.js defines Bus (e.g., bundle order regression, or a
+  //   future refactor moves Bus into a lazy-loaded chunk), these two top-level
+  //   statements would throw ReferenceError and crash the entire IIFE — leaving
+  //   window.__gdiStudy.courses unset and ALL course functions undefined. The
+  //   rest of the module already uses `typeof Bus!=='undefined'` for emit calls
+  //   (lines 478, 485, 615, 1213, 1429, 1559, 1844); these onGlobal calls were
+  //   the only unguarded Bus references.
+  if(typeof Bus !== 'undefined' && Bus && typeof Bus.onGlobal === 'function'){
+    Bus.onGlobal('watched:changed',()=>{bestInCache.clear();});
+    // ★ v1.0.103 FIX (Task 20-5 #9): also clear bestInCache on courses:changed
+    //   (hide/unhide/remove/add). Previously, removing a course kept stale
+    //   bestIn cache for that courseKey, so the next renderCursos call could
+    //   show a "Continuar: <ghost lesson>" button pointing to a removed course.
+    Bus.onGlobal('courses:changed',()=>{bestInCache.clear();});
+  }
 
   // ★ Otimização: limpa nome do curso (remove paths crus, underscores, etc)
   function cleanCourseName(ck){
@@ -571,7 +695,12 @@
           cancelText:'Cancelar'
         });
         if(ok){
-          lsSet(LS_HIDDEN,[]);
+          // ★ v1.0.103 FIX (Task 20-5 #10): route through _hiddenWriteChain
+          //   and emit courses:changed for cache invalidation.
+          await _queueHiddenWrite(() => {
+            lsSet(LS_HIDDEN,[]);
+            try{ if(typeof Bus!=='undefined' && Bus.emit) Bus.emit('courses:changed', {}); }catch(_){}
+          });
           showToast('Cursos restaurados');
           renderCursos(box).catch(()=>{});
         }
@@ -734,7 +863,11 @@
             danger:true
           });
           if(ok){
-            hideCourse(c.key);
+            // ★ v1.0.103 FIX (Task 20-5 #10): await hideCourse so the write
+            //   chain completes BEFORE renderCursos reads LS_HIDDEN. Without
+            //   this, renderCursos could race and show the course as still
+            //   visible (write was queued but not yet flushed).
+            await hideCourse(c.key);
             showToast('Curso ocultado');
             renderCursos(box).catch(()=>{});
           }
@@ -873,6 +1006,21 @@
     const panelManual=overlay.querySelector('#panel-manual');
     const saveBtn=overlay.querySelector('#gdi-amc-save');
     function setMode(m){
+      // ★ v1.0.103 FIX (Task 20-5 #12): clear selectedPath/selectedName on every
+      //   mode switch. Previously, if the user picked a folder in drive mode
+      //   (selectedPath set), then switched to manual and back to drive, the
+      //   stale selectedPath persisted — clicking "Salvar" would add a course
+      //   pointing to a folder the user no longer sees as selected in the UI.
+      if(currentMode !== m){
+        selectedPath = null;
+        selectedName = null;
+        // Also hide the "current folder info" box so it doesn't keep showing
+        // the previous selection while the user re-navigates.
+        try{
+          const infoEl = overlay.querySelector('#gdi-amc-current-info');
+          if(infoEl) infoEl.style.display = 'none';
+        }catch(_){}
+      }
       currentMode=m;
       if(m==='drive'){
         tabDrive.style.background='var(--ferreto-surface-3,rgba(255,255,255,.08))';
@@ -931,10 +1079,18 @@
       return file && (file.mimeType==='application/vnd.google-apps.folder' || file.type==='folder' || (file.dir===true) || (file.mimeType&&file.mimeType.includes('folder')));
     }
     function getFolderPath(file){
-      if(file.path)return file.path;
-      if(file.parentPath&&file.name)return file.parentPath+'/'+encodeURIComponent(file.name);
-      if(file.fullPath)return file.fullPath;
-      return null;
+      // ★ v1.0.103 FIX (Task 20-5 #11): unify path normalization with normPath.
+      //   normPath strips trailing slash; getFolderPath used to return raw
+      //   file.path (might or might not end with /). Folder paths now canonical
+      //   as "/0:/Cursos/" (with trailing /), and folder card render (line ~1108)
+      //   no longer needs the defensive `if(!target.endsWith('/'))target=target+'/';`
+      //   because getFolderPath guarantees the trailing slash.
+      let p = null;
+      if(file.path) p = file.path;
+      else if(file.parentPath && file.name) p = file.parentPath + '/' + encodeURIComponent(file.name);
+      else if(file.fullPath) p = file.fullPath;
+      if(p && !p.endsWith('/')) p = p + '/';
+      return p;
     }
     function getFileName(file){return file.name||file.title||file.originalName||'pasta';}
 
@@ -1121,11 +1277,15 @@
     async function doAddCourseFromDrive(coursePath, courseName, pdfCount){
       // ★ FIX 1 (Task 23): decode URL-encoded courseName defensively (same reason as gdiAddCourseFromDrive).
       try{if(courseName&&String(courseName).indexOf('%')>=0)courseName=decodeURIComponent(courseName);}catch(_){}
+      // ★ FIX (Task 20-13 #6): normalize coursePath — same as gdiAddCourseFromDrive.
+      //   Strips trailing slashes so '/0:/Cursos/' and '/0:/Cursos' are treated
+      //   as the same course in the duplicate check and in storage.
+      coursePath = String(coursePath||'').replace(/\/+$/,'') || '/';
       try{
         const LS_MANUAL='gdi-manual-courses-v1';
         const manual=lsGet(LS_MANUAL,[]);
-        // evita duplicar
-        if(manual.some(c=>c.path===coursePath)){
+        // evita duplicar — compare normalized (low() strips trailing slash + lowercases)
+        if(manual.some(c=>c&&low(c.path)===low(coursePath))){
           showToast('Curso "'+courseName+'" já está adicionado');
           return;
         }
@@ -1133,9 +1293,15 @@
         manual.push({
           id:courseId,name:courseName,icon:'📁',color:'#5ddeda',
           goal:60,notes:'',createdAt:Date.now(),
-          manual:true,path:coursePath,courseKey:coursePath
+          manual:true,path:coursePath,courseKey:coursePath,
+          // ★ v1.0.103 FIX (Task 20-5 #8): unify schema with gdiAddCourseFromDrive
+          //   (line 122) — add pdfCount so collectCourses() reads the same
+          //   totalLessons field regardless of which code path saved the course.
+          pdfCount:pdfCount||0
         });
         lsSet(LS_MANUAL,manual);
+        // ★ v1.0.103 FIX (Task 20-5 #9): emit courses:changed to invalidate caches.
+        try{ if(typeof Bus!=='undefined' && Bus.emit) Bus.emit('courses:changed', {}); }catch(_){}
         // ★ FIX: salva também no Drive via /api/courses/add (para persistir entre sessões/logouts)
         try{
           const r=await fetch('/api/courses/add',{
@@ -1345,9 +1511,13 @@
           manual.push({
             id:courseId,name,icon:selectedIcon,color:selectedColor,
             goal,notes,createdAt:Date.now(),
-            manual:true,path:coursePath,courseKey:coursePath
+            manual:true,path:coursePath,courseKey:coursePath,
+            // ★ v1.0.103 FIX (Task 20-5 #8): unify schema — manual add also has pdfCount=0
+            pdfCount:0
           });
           lsSet(LS_MANUAL,manual);
+          // ★ v1.0.103 FIX (Task 20-5 #9): emit courses:changed to invalidate caches.
+          try{ if(typeof Bus!=='undefined' && Bus.emit) Bus.emit('courses:changed', {}); }catch(_){}
           if(overlay&&overlay.parentNode)overlay.remove();
           // ★ FIX (Agent 10 Bug 22): mirror v1.0.101 fix for doAddCourseFromDrive —
           //    after closing the manual-add modal, click the 'home' tab so the
@@ -1456,8 +1626,10 @@
     </div>`;
     box.querySelector('#gdi-hidden-back').onclick=()=>{try{renderCursos(box).catch(()=>{});}catch(_){}};
     box.querySelectorAll('.gdi-restore-one').forEach(b=>{
-      b.onclick=()=>{
-        unhideCourse(b.dataset.ck);
+      b.onclick=async ()=>{
+        // ★ v1.0.103 FIX (Task 20-5 #10): await unhideCourse so the write
+        //   chain completes BEFORE showHiddenCoursesModal reads LS_HIDDEN.
+        await unhideCourse(b.dataset.ck);
         showToast('Curso restaurado');
         showHiddenCoursesModal(box);
       };
@@ -1470,7 +1642,13 @@
         cancelText:'Cancelar'
       });
       if(ok){
-        lsSet(LS_HIDDEN,[]);
+        // ★ v1.0.103 FIX (Task 20-5 #10): route through _hiddenWriteChain to
+        //   avoid racing with pending hideCourse writes. Also emit
+        //   courses:changed so caches invalidate.
+        await _queueHiddenWrite(() => {
+          lsSet(LS_HIDDEN,[]);
+          try{ if(typeof Bus!=='undefined' && Bus.emit) Bus.emit('courses:changed', {}); }catch(_){}
+        });
         showToast('Todos os cursos restaurados');
         renderCursos(box).catch(()=>{});
       }
@@ -1697,7 +1875,9 @@
         danger:true
       });
       if(ok){
-        hideCourse(c.key);
+        // ★ v1.0.103 FIX (Task 20-5 #10): await hideCourse to serialize write
+        //   before renderCursos reads LS_HIDDEN.
+        await hideCourse(c.key);
         showToast('Curso ocultado');
         renderCursos(box).catch(()=>{});
       }
@@ -1719,12 +1899,12 @@
       if(!ok) return;
       try{
         const LS_MANUAL_RM='gdi-manual-courses-v1';
-        const LS_HIDDEN='gdi-hidden-courses-v1';  // ★ v1.0.97: dupla proteção local
-        // 1. Marca como hidden localmente (primeira camada de proteção)
-        const hidden=lsGet(LS_HIDDEN,[]);
-        if(c && c.key && !hidden.includes(c.key)){
-          hidden.push(c.key);
-          lsSet(LS_HIDDEN, hidden);
+        // ★ v1.0.97: dupla proteção local — marca como hidden antes de remover.
+        // ★ v1.0.103 FIX (Task 20-5 #10): route through _hiddenWriteChain via
+        //   hideCourse() to avoid racing with other pending hide/unhide writes.
+        //   hideCourse also emits courses:changed for cache invalidation.
+        if(c && c.key){
+          await hideCourse(c.key);
         }
         // 2. Remove do localStorage
         const manual=lsGet(LS_MANUAL_RM,[]);
@@ -1745,7 +1925,14 @@
           try{window.gdiCourseScanner.clearScanState(c.key);}catch(_){}
         }
         // limpa também da lista de ocultos (se estava oculto)
-        try{unhideCourse(c.key);}catch(_){}
+        // ★ v1.0.103 FIX (Task 20-5 #10): await unhideCourse so the write chain
+        //   completes before renderCursos reads LS_HIDDEN (counter must be right).
+        try{ await unhideCourse(c.key); }catch(_){}
+        // ★ v1.0.103 FIX (Task 20-5 #9): emit courses:changed to invalidate caches
+        //   (bestInCache, _ccCache in study-panel.js). unhideCourse already emits,
+        //   but we emit here too in case the course was never hidden (unhide is a
+        //   no-op then) — belt-and-suspenders.
+        try{ if(typeof Bus!=='undefined' && Bus.emit) Bus.emit('courses:changed', {}); }catch(_){}
         showToast('Curso removido');
         renderCursos(box).catch(()=>{});
       }catch(e){
@@ -1782,7 +1969,14 @@
     const contBtn=box.querySelector('#gdi-detail-continue');
     // ★ FIX (Agent 16 UIUX-5): contBtn may be null if template omitted the
     //    continue button; guard the .then() body to avoid TypeError.
+    // ★ v1.0.103 FIX (Task 20-5 #13): also check contBtn.isConnected inside the
+    //    .then() callback — box may have been re-rendered (e.g. user clicked
+    //    "Reiniciar Scan" which calls openCourseDetail recursively) by the time
+    //    bestIn resolves. Without this guard, setting .disabled on a detached
+    //    node silently no-ops (no crash, but no UI update either) — and worse,
+    //    if a future change replaces contBtn with a wrapper, this would throw.
     if(contBtn) bestIn(c.key).then(target=>{
+      if(!contBtn || !contBtn.isConnected) return;  // ★ FIX #13
       if(target){
         contBtn.disabled=false;
         contBtn.innerHTML=`<i class="bi bi-play-fill"></i> Continuar: ${escHtml(realName(target).slice(0,40))}`;
