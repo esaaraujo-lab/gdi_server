@@ -59,31 +59,14 @@
         if(!plans.length){
           listEl.innerHTML='';
         }else{
-          listEl.innerHTML=slice.map(p=>`<div class="gdi-note" style="cursor:pointer;align-items:center;" data-id="${esc(p.id)}">
+          listEl.innerHTML=slice.map(p=>`<div class="gdi-note" style="cursor:pointer;" data-id="${esc(p.id)}">
             <span style="flex:1;"><b style="color:var(--ferreto-text,#f0f6fc);">${esc(p.name)}</b><br><span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">${new Date(p.date).toLocaleDateString('pt-BR')} · ${p.topics||''} temas</span></span>
-            <button class="provas-del gdi-mode-btn" data-del="${esc(p.id)}" title="Excluir plano" style="font-size:12px;padding:4px 9px;color:#ff6b6b;background:transparent;border:1px solid rgba(255,107,107,.3);"><i class="bi bi-trash"></i></button>
             <i class="bi bi-chevron-right" style="color:var(--ferreto-text-muted,#8b949e);"></i>
           </div>`).join('');
           listEl.querySelectorAll('[data-id]').forEach(el=>{
-            el.onclick=(ev)=>{
-              if(ev.target.closest('.provas-del'))return;
+            el.onclick=()=>{
               const p=plans.find(x=>x.id===el.dataset.id);
               if(p)showPlan(box,p);
-            };
-          });
-          // ★ FIX (REVIEW-04): allow deleting old exam plans from the list.
-          listEl.querySelectorAll('.provas-del').forEach(btn=>{
-            btn.onclick=(ev)=>{
-              ev.stopPropagation();
-              const id=btn.dataset.del;
-              if(!confirm('Excluir este plano de estudos? Esta ação não pode ser desfeita.'))return;
-              const idx=plans.findIndex(p=>p.id===id);
-              if(idx>=0){
-                plans.splice(idx,1);
-                lsSet('gdi-exam-plans-v1',plans);
-                if(window.showToast)showToast('Plano excluído.');
-                renderList();
-              }
             };
           });
         }
@@ -151,8 +134,7 @@
         });
       }
       const lib=window.pdfjsLib;
-      if(!lib){status.innerHTML='<div class="gdi-ai-err">Biblioteca de PDF não carregou. Verifique sua conexão e tente novamente.</div>';return;}
-      if(lib.GlobalWorkerOptions)lib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+      if(lib&&lib.GlobalWorkerOptions)lib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
       const buf=await file.arrayBuffer();
       // ★ v1.0.84: wrap doc lifecycle in try/finally so doc.destroy() runs
       //    even if getPage/getTextContent throws (prevents PDFDocumentProxy leak).
@@ -161,21 +143,7 @@
         doc=await lib.getDocument({data:buf,disableFontFace:true}).promise;
         const n=Math.min(doc.numPages,60);
         let txt='';
-        // ★ FIX (REVIEW-04): show real per-page progress bar during PDF
-        //    extraction instead of a single generic "Extraindo texto…" spinner.
-        const progressHtml=(cur,total,label)=>{
-          const pct=total>0?Math.round(cur/total*100):0;
-          return '<div class="gdi-ai-loading" style="padding:20px;text-align:center;">'
-            +'<div class="gdi-ai-typing" style="margin:0 auto;"><span></span><span></span><span></span></div>'
-            +'<p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin-top:10px;">'+esc(label)+'</p>'
-            +'<div style="margin:10px auto 0;max-width:320px;height:6px;background:var(--ferreto-surface-3,rgba(255,255,255,.08));border-radius:3px;overflow:hidden;">'
-            +'<div style="height:100%;width:'+pct+'%;background:var(--ferreto-primary,#ff8b9f);border-radius:3px;transition:width .2s;"></div>'
-            +'</div>'
-            +'<p style="color:var(--ferreto-text-faint,#6b7488);font-size:11px;margin-top:6px;">'+cur+' de '+total+' páginas</p>'
-            +'</div>';
-        };
         for(let i=1;i<=n;i++){
-          status.innerHTML=progressHtml(i,n,'Extraindo página '+i+'…');
           const pg=await doc.getPage(i);
           const tc=await pg.getTextContent({normalizeWhitespace:true,includeMarkedContent:true});
           let pt='';
@@ -193,7 +161,7 @@
         plans.push(plan);
         lsSet('gdi-exam-plans-v1',plans);
         showPlan(box,plan);
-        if(window.showToast)showToast('Plano de estudos criado!');
+        showToast('Plano de estudos criado!');
       }catch(e){
         status.innerHTML='<div class="gdi-ai-err">Erro: '+esc(e.message)+'</div>';
       }finally{
@@ -206,26 +174,16 @@
 
   function showPlan(box,plan){
     box.innerHTML=`<div style="max-width:760px;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
         <button class="gdi-mode-btn" id="prova-back" style="font-size:12px;"><i class="bi bi-arrow-left"></i> Voltar</button>
         <b style="color:var(--ferreto-text,#f0f6fc);">${esc(plan.name)}</b>
-        <span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">${new Date(plan.date).toLocaleDateString('pt-BR')} · ${plan.topics||0} temas</span>
-        <button class="gdi-mode-btn" id="prova-del" title="Excluir plano" style="font-size:11px;padding:4px 10px;margin-left:auto;color:#ff6b6b;border:1px solid rgba(255,107,107,.3);"><i class="bi bi-trash"></i> Excluir</button>
+        <span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">${new Date(plan.date).toLocaleDateString('pt-BR')}</span>
       </div>
       <div class="gdi-isa-summary-body" style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;padding:20px;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.8;">
         ${renderMd(plan.plan)}
       </div>
     </div>`;
     box.querySelector('#prova-back').onclick=()=>renderProvas(box);
-    // ★ FIX (REVIEW-04): allow deleting the currently-open plan.
-    const delBtn=box.querySelector('#prova-del');
-    if(delBtn)delBtn.onclick=()=>{
-      if(!confirm('Excluir este plano de estudos? Esta ação não pode ser desfeita.'))return;
-      const arr=lsGet('gdi-exam-plans-v1',[]).filter(p=>p.id!==plan.id);
-      lsSet('gdi-exam-plans-v1',arr);
-      if(window.showToast)showToast('Plano excluído.');
-      renderProvas(box);
-    };
   }
 
   // ── Render: Correção de Redação ──
@@ -302,13 +260,9 @@
           }else if(f.type==='application/pdf'){
             if(window.gdiIsaPdf&&window.gdiIsaPdf.extractPdfText){
               const url=URL.createObjectURL(f);
-              try{
-                const txt=await window.gdiIsaPdf.extractPdfText(url);
-                box.querySelector('#red-text').value=txt;
-                if(statusDrop)statusDrop.innerHTML='<span style="color:#3fb950;"><i class="bi bi-check-circle"></i> Texto extraído do PDF ('+txt.length+' chars).</span>';
-              }finally{
-                try{URL.revokeObjectURL(url);}catch(_){}
-              }
+              const txt=await window.gdiIsaPdf.extractPdfText(url);
+              box.querySelector('#red-text').value=txt;
+              if(statusDrop)statusDrop.innerHTML='<span style="color:#3fb950;"><i class="bi bi-check-circle"></i> Texto extraído do PDF ('+txt.length+' chars).</span>';
             }else if(statusDrop){statusDrop.innerHTML='<span style="color:#ff6b6b;">Carregue o módulo de PDFs primeiro.</span>';}
           }
         }catch(err){if(statusDrop)statusDrop.innerHTML='<span style="color:#ff6b6b;">Erro: '+esc(err.message)+'</span>';}
@@ -320,7 +274,7 @@
       const text=box.querySelector('#red-text').value.trim();
       const status=box.querySelector('#red-status');
       const result=box.querySelector('#red-result');
-      if(!text||text.length<50){if(window.showToast)showToast('Escreva ou cole sua redação primeiro (mínimo 50 caracteres)');return;}
+      if(!text||text.length<50){showToast('Escreva ou cole sua redação primeiro (mínimo 50 caracteres)');return;}
       status.innerHTML='<i class="bi bi-hourglass-split"></i> Meggy está corrigindo…';
       result.innerHTML='';
       try{
@@ -371,11 +325,11 @@
           const md='---\n'+'banca: "'+banca+'"\n'+'tipo: "'+tipo+'"\n'+'data: '+new Date().toISOString()+'\n'+'score: '+score+'\n'+'---\n\n# Redação Corrigida\n\n## Redação Original\n\n'+text+'\n\n## Correção da Meggy\n\n'+resp+'\n';
           if(window.gdiIsaPdf&&window.gdiIsaPdf.saveEssayMD){
             await window.gdiIsaPdf.saveEssayMD(md,banca,tipo,score);
-            if(window.showToast)showToast('Redação corrigida! Nota: '+score+' · MD salvo no Drive');
+            showToast('Redação corrigida! Nota: '+score+' · MD salvo no Drive');
           }else{
-            if(window.showToast)showToast('Redação corrigida! Nota: '+score);
+            showToast('Redação corrigida! Nota: '+score);
           }
-        }catch(_){if(window.showToast)showToast('Redação corrigida! Nota: '+score);}
+        }catch(_){showToast('Redação corrigida! Nota: '+score);}
         status.innerHTML='';
         result.innerHTML=`<div class="gdi-isa-summary-body" style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;padding:20px;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.8;margin-top:14px;">
           ${renderMd(resp)}
@@ -416,13 +370,9 @@
     const cron=lsGet('gdi-cronograma-v1',null);
     const aulasMenosEstudadas=[];
     if(cron&&Array.isArray(cron.plan)){
-      // ★ FIX (REVIEW-04): cronograma tasks use type:'estudo' (pt-BR) and field
-      //   'aula' (not 'name'). Old check t.type==='study' && t.name NEVER matched
-      //   → "Aulas menos estudadas" section was always empty.
-      cron.plan.forEach(t=>{if(t&&t.aula&&t.type==='estudo')aulasMenosEstudadas.push(t.aula);});
+      cron.plan.forEach(t=>{if(t&&t.name&&t.type==='study')aulasMenosEstudadas.push(t.name);});
     }
-    // ★ FIX (REVIEW-04): robustness — guard against gdiTrails existing without .get()
-    const trails=(window.gdiTrails&&typeof window.gdiTrails.get==='function')?window.gdiTrails.get():[];
+    const trails=window.gdiTrails?window.gdiTrails.get():[];
     // ★ Late binding: collectCourses is exposed by study-courses.js as window.collectCourses.
     const courses=(typeof window.collectCourses==='function')?window.collectCourses():[];
     const subjects=Object.entries(bySubject).filter(([,v])=>v.total>=1).sort((a,b)=>b[1].total-a[1].total);
@@ -456,11 +406,9 @@
         </div>
       </div>`;
     }).join('');
-    box.innerHTML=`<div style="max-width:760px;">
-      <div style="margin-bottom:18px;">
-        <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 4px;font-family:var(--ferreto-font-display,'Poppins',sans-serif);">\uD83C\uDFAF Mapa de Fracos</h3>
-        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0;line-height:1.5;">Clique em um tile para abrir as quest\u00f5es daquela mat\u00e9ria. Foque nas \u00e1reas em <b style="color:#ff6b6b;">vermelho</b> (acerto &lt; 40%) e <b style="color:#ffd43b;">amarelo</b> (40-60%).</p>
-      </div>
+    box.innerHTML=`<div>
+      <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 4px;font-family:var(--ferreto-font-display,'Poppins',sans-serif);">🎯 Mapa de Fracos</h3>
+      <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0 0 16px;line-height:1.5;">Clique em um tile para abrir as questões daquela matéria. Foque nas áreas em <b style="color:#ff6b6b;">vermelho</b> (acerto < 40%) e <b style="color:#ffd43b;">amarelo</b> (40-60%).</p>
       ${weakSubjects.length?`<div style="background:rgba(255,107,107,.08);border:1px solid rgba(255,107,107,.3);border-radius:12px;padding:14px 16px;margin-bottom:16px;">
         <b style="color:#ff8b8b;font-size:13px;"><i class="bi bi-exclamation-triangle-fill"></i> Foque em:</b>
         <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
@@ -491,11 +439,6 @@
           //    renderQuestoes (in study-questions.js) picks it up when
           //    next called. The closure var _qFilterSubject in M23 was
           //    never reachable from this IIFE — window.* is the bridge.
-          // ★ FIX (REVIEW-04): set filter immediately + retry after 200ms.
-          //    renderQuestoes reads window._qFilterSubject at call time, so
-          //    setting it before the tab renders is enough; the retry covers
-          //    slow renders where the tab click hasn't fired yet.
-          try{window._qFilterSubject=subj;}catch(_){}
           setTimeout(()=>{try{window._qFilterSubject=subj;}catch(_){}},200);
         }
       };
