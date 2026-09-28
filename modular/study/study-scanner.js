@@ -48,7 +48,15 @@
     try{const v=localStorage.getItem(LS_SCAN_PREFIX+courseKey);return v?JSON.parse(v):null}catch(_){return null}
   }
   function setScanState(courseKey, state){
-    try{localStorage.setItem(LS_SCAN_PREFIX+courseKey, JSON.stringify(state))}catch(_){}
+    try{
+      localStorage.setItem(LS_SCAN_PREFIX+courseKey, JSON.stringify(state));
+      // ★ v1.0.99: track timestamp for eviction ordering
+      try{localStorage.setItem(LS_LESSONS_PREFIX+courseKey+'__at', String(Date.now()));}catch(_){}
+    }catch(e){
+      console.warn('[Scanner] setScanState quota error:', e && e.message);
+      _evictOldestLessons();
+      try{localStorage.setItem(LS_SCAN_PREFIX+courseKey, JSON.stringify(state));}catch(_){}
+    }
   }
   function clearScanState(courseKey){
     try{localStorage.removeItem(LS_SCAN_PREFIX+courseKey)}catch(_){}
@@ -63,8 +71,38 @@
       return v?JSON.parse(v):{lessons:[],scanned:false,totalFolders:0,totalLessons:0};
     }catch(_){return {lessons:[],scanned:false,totalFolders:0,totalLessons:0}}
   }
+  // ★ v1.0.99: evict oldest lesson caches when localStorage is full
+  function _evictOldestLessons(){
+    try{
+      const keys = [];
+      for(let i=0; i<localStorage.length; i++){
+        const k = localStorage.key(i);
+        if(k && k.startsWith(LS_LESSONS_PREFIX) && !k.endsWith('__at')){
+          const at = parseInt(localStorage.getItem(k+'__at')||'0',10);
+          keys.push({key: k, at: at});
+        }
+      }
+      keys.sort((a,b) => a.at - b.at);
+      const evictCount = Math.ceil(keys.length * 0.25);
+      for(let i=0; i<evictCount && i<keys.length; i++){
+        localStorage.removeItem(keys[i].key);
+        try{localStorage.removeItem(keys[i].key+'__at');}catch(_){}
+      }
+      console.log('[Scanner] evicted', evictCount, 'oldest lesson caches');
+    }catch(_){}
+  }
   function setLessons(courseKey, data){
-    try{localStorage.setItem(LS_LESSONS_PREFIX+courseKey, JSON.stringify(data))}catch(_){}
+    try{
+      // ★ v1.0.99: cap at 500 lessons per course to prevent localStorage quota exhaustion
+      if(data && Array.isArray(data.lessons) && data.lessons.length > 500){
+        data = Object.assign({}, data, {lessons: data.lessons.slice(0, 500), truncated: true});
+      }
+      localStorage.setItem(LS_LESSONS_PREFIX+courseKey, JSON.stringify(data));
+    }catch(e){
+      console.warn('[Scanner] setLessons quota error for', courseKey, ':', e && e.message);
+      _evictOldestLessons();
+      try{localStorage.setItem(LS_LESSONS_PREFIX+courseKey, JSON.stringify(data));}catch(_){console.warn('[Scanner] setLessons retry failed');}
+    }
   }
 
   // Video extension matcher — same regex as app.min.js buildPlaylistFromFiles
@@ -565,9 +603,21 @@
         localStorage.setItem('gdi-manual-courses-v1', JSON.stringify(cleaned));
         console.log('[Cleanup] removidos', original - cleaned.length,
           'cursos órfãos. Restam:', cleaned.length);
-        return original - cleaned.length;
       }
-      return 0;
+      // ★ v1.0.99: prune hidden list — remove entries not in manual courses (orphaned hidden entries)
+      try{
+        const LS_HIDDEN = 'gdi-hidden-courses-v1';
+        const hidden = JSON.parse(localStorage.getItem(LS_HIDDEN) || '[]');
+        if(Array.isArray(hidden) && hidden.length > 0){
+          const manualPaths = new Set(cleaned.map(m => m && (m.path || m.courseKey)).filter(Boolean));
+          const prunedHidden = hidden.filter(h => manualPaths.has(h));
+          if(prunedHidden.length !== hidden.length){
+            localStorage.setItem(LS_HIDDEN, JSON.stringify(prunedHidden));
+            console.log('[Cleanup] pruned', hidden.length - prunedHidden.length, 'orphan hidden entries');
+          }
+        }
+      }catch(_){}
+      return original - cleaned.length;
     }catch(_){ return 0; }
   }
 
