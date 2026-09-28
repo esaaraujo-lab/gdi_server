@@ -174,7 +174,14 @@ window.gdiModal = window.gdiModal || function(opts){
       s.textContent='@keyframes gdi-modal-fade{from{opacity:0}to{opacity:1}}@keyframes gdi-modal-pop{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}.gdi-modal-box{animation:gdi-modal-pop .2s ease;}.gdi-modal-cancel:hover{background:rgba(255,255,255,.1)!important;}.gdi-modal-danger:hover{filter:brightness(1.1);}.gdi-modal-x:hover{background:rgba(255,107,107,.15)!important;color:#ff6b6b!important;}';
       document.head.appendChild(s);
     }
+    // ★ FIX UIUX-1: escHandler era adicionado em 'keydown' mas só removido
+    // DENTRO do próprio escHandler (ao pressionar ESC). Quando o modal fechava
+    // via X/Confirm/Cancel/backdrop, o escHandler ficava preso no document
+    // → vazamento cumulativo a cada modal aberto. close() agora remove
+    // sempre o escHandler antes de destruir o overlay.
+    const escHandlerRef={fn:null};
     const close=(result)=>{
+      if(escHandlerRef.fn){try{document.removeEventListener('keydown',escHandlerRef.fn);}catch(_){}escHandlerRef.fn=null;}
       overlay.remove();
       resolve(result);
     };
@@ -187,8 +194,9 @@ window.gdiModal = window.gdiModal || function(opts){
       }else close(true);
     };
     overlay.onclick=(e)=>{if(e.target===overlay)close(input?null:false);};
-    // ESC para fechar
-    const escHandler=(e)=>{if(e.key==='Escape'){close(input?null:false);document.removeEventListener('keydown',escHandler);}};
+    // ESC para fechar (close() já cuida do removeEventListener)
+    const escHandler=(e)=>{if(e.key==='Escape'){close(input?null:false);}};
+    escHandlerRef.fn=escHandler;
     document.addEventListener('keydown',escHandler);
     // foca no input ou no botão confirm
     setTimeout(()=>{
@@ -205,17 +213,15 @@ function escModal(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&l
 // faz uma sanitização básica removendo tags perigosas.
 window.gdiSanitize = window.gdiSanitize || function(html){
   if(window.DOMPurify){
-    try{return window.DOMPurify.sanitize(html,{ALLOWED_TAGS:['h1','h2','h3','h4','h5','h6','p','br','hr','ul','ol','li','strong','em','b','i','u','s','code','pre','blockquote','table','thead','tbody','tr','th','td','a','img','span','div','sup','sub','mark','del','ins'],ALLOWED_ATTR:['href','src','alt','title','class','target','rel','width','height','colspan','rowspan']});}catch(_){return html;}
+    try{return window.DOMPurify.sanitize(html,{ ALLOWED_TAGS:['h1','h2','h3','h4','h5','h6','p','br','hr','ul','ol','li','strong','em','b','i','u','s','code','pre','blockquote','table','thead','tbody','tr','th','td','a','img','span','div','sup','sub','mark','del','ins'],ALLOWED_ATTR:['href','src','alt','title','class','target','rel','width','height','colspan','rowspan']});}catch(_){return html;}
   }
-  // fallback básico: remove <script>, on* handlers, javascript: URLs
-  return String(html)
-    .replace(/<script[\s\S]*?<\/script>/gi,'')
-    .replace(/<style[\s\S]*?<\/style>/gi,'')
-    .replace(/<iframe[\s\S]*?<\/iframe>/gi,'')
-    .replace(/\son\w+\s*=\s*"[^"]*"/gi,'')
-    .replace(/\son\w+\s*=\s*'[^']*'/gi,'')
-    .replace(/\son\w+\s*=\s*[^\s>]+/gi,'')
-    .replace(/(href|src)\s*=\s*("javascript:[^"]*"|'javascript:[^']*'|javascript:[^\s>]+)/gi,'$1="#"');
+  // ★ FIX Agent 4 Bug 17: fallback regex era bypassable por <svg>, <object>,
+  // <embed>, data:text/html URLs e javascript: URLs com whitespace. Como
+  // DOMPurify é auto-carregado do CDN (bloco logo abaixo), este fallback só
+  // roteia em caso de falha de CDN — escapar TODO o HTML é mais seguro do
+  // que uma lista negra sempre incompleta. O output fica como texto puro
+  // (sem formatação), mas sem risco de XSS.
+  return escHtml(String(html==null?'':html));
 };
 // auto-load DOMPurify do CDN se não estiver presente
 if(!window.DOMPurify && !window.__gdiPurifyLoading){
@@ -227,6 +233,20 @@ if(!window.DOMPurify && !window.__gdiPurifyLoading){
   s.onerror=()=>console.warn('[GDI] DOMPurify falhou — usando fallback básico');
   document.head.appendChild(s);
 }
+
+// ═══ HELPER GLOBAL: VALIDAÇÃO DE TAB DA CENTRAL DE ESTUDOS (★ FIX Agent 10 Bug 20) ═══
+// tryOpenFromURL (study-panel.js / gdi-study.js) lia ?central=<tab> e passava
+// o valor cru para openPanel(tab). Tabs removidas (cursos, mar, revisoes, fc,
+// subjects, trails) e strings arbitrárias caíam no else "Aba inválida". Este
+// helper expõe a lista canônica de tabs e um validador — study-panel.js pode
+// usar `window.gdiValidTab(tab)` para normalizar antes de chamar openPanel.
+// (A aplicação direta da correção em tryOpenFromURL exigiria editar
+// study-panel.js, fora do escopo deste patch.)
+window.gdiValidTabs = Object.freeze(['home','drives','questoes','simulado','addmateria','resumos','provas','redacao','cronograma','stats','radar','achievements']);
+window.gdiValidTab = window.gdiValidTab || function(tab){
+  const t=String(tab||'').toLowerCase();
+  return window.gdiValidTabs.includes(t)?t:'home';
+};
 
 // ═══ HELPER GLOBAL: CONSOLIDATED pdf.js LOADER (★C.1 — PATCH F) ═══
 // Idempotente: carrega pdfjs-dist@3.11.174 uma única vez e seta workerSrc
@@ -621,9 +641,18 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     GDI_ROOT().appendChild(m);
     document.getElementById('gdi-exp-md').onclick=()=>{m.remove();doExport('md');};
     document.getElementById('gdi-exp-anki').onclick=()=>{m.remove();doExport('anki');};
-    setTimeout(()=>document.addEventListener('click',function h(e2){
-      if(!m.contains(e2.target)){m.remove();document.removeEventListener('click',h);}
-    }),0);
+    // ★ FIX UIUX-18: race — entre o setTimeout(0) disparar e o usuário clicar
+    // fora, o menu pode já ter sido removido por outras vias (ex: troca de
+    // aula, doExport, etc). Sem o guard, document.addEventListener rodava em
+    // um menu já recolhido e o handler `h` ficava preso no document até o
+    // primeiro click externo. Agora checamos se o menu ainda está no body.
+    setTimeout(()=>{
+      if(!document.body.contains(m))return;
+      document.addEventListener('click',function h(e2){
+        if(!document.body.contains(m)){document.removeEventListener('click',h);return;}
+        if(!m.contains(e2.target)){m.remove();document.removeEventListener('click',h);}
+      });
+    },0);
   }
   function doExport(fmt){
     const notes=notesNow().slice().sort((a,b)=>a.t-b.t);
@@ -1094,6 +1123,18 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         }
         let ifr=frames.get(items[idx].url);
         if(!ifr){
+          // ★ FIX UIUX-6: cap em 20 iframes no Map. Em sessões longas com
+          // muitas aulas, o Map crescia sem limite (1 entry por URL único),
+          // retendo iframes com PDFs pesados na memória. LRU simples: remove
+          // a entry mais antiga quando atinge o teto.
+          if(frames.size>20){
+            const firstKey=frames.keys().next().value;
+            if(firstKey!==undefined){
+              const oldIfr=frames.get(firstKey);
+              try{oldIfr&&(oldIfr.src='about:blank');}catch(_){}
+              frames.delete(firstKey);
+            }
+          }
           ifr=document.createElement('iframe');
           ifr.src=items[idx].url;ifr.loading='lazy';
           ifr.title=items[idx].name;
@@ -1107,23 +1148,23 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         bodyEl.innerHTML='';
       }
       tabsEl.querySelectorAll('.gdi-mat-tab').forEach(t=>{
-        t.addEventListener('click',()=>{
+        t.addEventListener('click',async ()=>{
           const m=t.dataset.mat;
           if(m==='isa-summary'){
             activateOnly(t);
-            if(window.gdiIsaPdf)window.gdiIsaPdf.summary(items,bodyEl,base);
+            if(window.gdiIsaPdf)try{await window.gdiIsaPdf.summary(items,bodyEl,base);}catch(e){showToast('Erro: '+e.message);}
             else showToast('Módulo Meggy indisponível');
           }else if(m==='isa-questions'){
             activateOnly(t);
-            if(window.gdiIsaPdf)window.gdiIsaPdf.questions(items,bodyEl,base);
+            if(window.gdiIsaPdf)try{await window.gdiIsaPdf.questions(items,bodyEl,base);}catch(e){showToast('Erro: '+e.message);}
             else showToast('Módulo Meggy indisponível');
           }else if(m==='isa-mindmap'){
             activateOnly(t);
-            if(window.gdiIsaPdf&&window.gdiIsaPdf.mindmap)window.gdiIsaPdf.mindmap(items,bodyEl,base);
+            if(window.gdiIsaPdf&&window.gdiIsaPdf.mindmap)try{await window.gdiIsaPdf.mindmap(items,bodyEl,base);}catch(e){showToast('Erro: '+e.message);}
             else showToast('Módulo Meggy indisponível');
           }else if(m==='isa-flashcards'){
             activateOnly(t);
-            if(window.gdiIsaPdf&&window.gdiIsaPdf.flashcards)window.gdiIsaPdf.flashcards(items,bodyEl,base);
+            if(window.gdiIsaPdf&&window.gdiIsaPdf.flashcards)try{await window.gdiIsaPdf.flashcards(items,bodyEl,base);}catch(e){showToast('Erro: '+e.message);}
             else showToast('Módulo Flashcards indisponível');
           }else{
             show(+m);
