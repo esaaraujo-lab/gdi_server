@@ -273,17 +273,17 @@ body.gdi-fv .gdi-player-wrap iframe{
   function enterSleep(){
     if(sleeping)return;
     sleeping=true;
-    // ★ C3 FIX (complete): wakeGuard 10s — mousemove não acorda nos primeiros 10s
-    wakeGuard=Date.now()+10000;
+    wakeGuard=Date.now()+2500;
     overlay.style.transition='opacity 2.5s ease';
-    // ★ C3 FIX (complete): pointerEvents 'none' — cliques passam para a playlist/controles
-    //   em vez de serem capturados pelo overlay (que encerraria o descanso).
-    overlay.style.pointerEvents='none';
+    overlay.style.pointerEvents='all';
     overlay.style.opacity='0.97';
     btn.innerHTML='<i class="bi bi-sun-fill"></i>';
     btn.style.color='#ffd43b';
     btn.title='Sair do modo descanso';
-    // ★ C3 FIX: persiste flag p/ re-entrar no modo descanso ao trocar de vídeo
+    // v91: persist rest mode across video switches. localStorage is the
+    // single source of truth — on page:change/video:switched we re-enable
+    // the overlay if this flag is set. Only user input (mousemove/keydown/
+    // mousedown/touchstart) clears it (see exitSleep below).
     try{localStorage.setItem('gdi-rest-mode','1');}catch(_){}
   }
   function exitSleep(){
@@ -295,7 +295,12 @@ body.gdi-fv .gdi-player-wrap iframe{
     btn.innerHTML='<i class="bi bi-moon-stars-fill"></i>';
     btn.style.color='#74c0fc';
     btn.title='Modo descanso (apenas \u00e1udio) \u2014 clique para ligar';
-    // ★ C3 FIX: limpa flag p/ não re-entrar automaticamente
+    // v91: clear the persistence flag — but ONLY when exitSleep is called
+    // from a user-input path (mousemove/keydown/click on overlay). When
+    // exitSleep is called from syncFs (no-video/fullscreen edge case) we
+    // also clear it, since the user navigated away from a media page.
+    // The previous "video ended → exitSleep" binding was REMOVED (see
+    // bindOnce below) precisely so auto-advance doesn't clear the flag.
     try{localStorage.removeItem('gdi-rest-mode');}catch(_){}
   }
   function syncFs(){
@@ -303,9 +308,7 @@ body.gdi-fv .gdi-player-wrap iframe{
     const fs=fsEl();
     const wrap=wrapEl();
     const video=!!wrap,audio=onAudioPage();
-    // ★ C3 FIX (complete): NÃO chamar exitSleep() aqui — modo descanso persiste
-    //   mesmo quando não há mídia temporariamente (ex.: durante troca de vídeo).
-    if(!video&&!audio){btn.style.display='none';return;}
+    if(!video&&!audio){btn.style.display='none';if(sleeping)exitSleep();return;}
     let fsOk=false;
     if(fs&&fs.tagName!=='VIDEO'){
       if(!video)fsOk=true;
@@ -315,9 +318,7 @@ body.gdi-fv .gdi-player-wrap iframe{
     if(btn.parentElement!==host)host.appendChild(btn);
     if(overlay.parentElement!==host)host.appendChild(overlay);
     btn.style.display=(video&&!fsOk)?'none':'flex';
-    // ★ C3 FIX (removed): não chamar exitSleep() aqui — modo descanso deve persistir
-    //   ao trocar de vídeo. Anteriormente `if(sleeping&&video&&!fsOk)exitSleep();`
-    //   encerrava o descanso sempre que o usuário saía do fullscreen entre vídeos.
+    if(sleeping&&video&&!fsOk)exitSleep();
   }
   function bindOnce(){
     if(bound)return;bound=true;
@@ -327,32 +328,55 @@ body.gdi-fv .gdi-player-wrap iframe{
       document.addEventListener(ev,e=>{
         if(!sleeping||Date.now()<wakeGuard)return;
         if(ev!=='mousemove'&&e.target&&btn&&(e.target===btn||btn.contains(e.target)))return;
-        // ★ C3 FIX (complete): atalhos de navegação NÃO encerram o modo descanso.
-        //   J/K (prev/next), setas (seek), espaço (play/pause) são ignorados.
-        if(ev==='keydown'&&e&&e.key){
-          var navKeys=['j','k','J','K','ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' ','Spacebar'];
-          if(navKeys.indexOf(String(e.key))!==-1)return;
-        }
         exitSleep();
       },{passive:true});
     });
     Bus.onGlobal('media:ready',({type,el})=>{
       if(type==='video'&&el&&!el.__gdiSleepEnd){
         el.__gdiSleepEnd=true;
-        try{el.addEventListener('ended',()=>exitSleep());}catch(_){}
+        // v91: REMOVED the `el.addEventListener('ended', () => exitSleep())`
+        // binding. The 'ended' event fires whenever a video finishes —
+        // including the natural end that triggers auto-advance to the next
+        // video in the playlist. Calling exitSleep() here was causing rest
+        // mode to turn OFF the moment a video ended, so the next video
+        // would start with a bright screen. Rest mode now persists across
+        // video switches (see the page:change/video:switched listeners
+        // below) and is only dismissed by explicit user input.
       }
     });
-    // ★ C3 FIX: re-entra no modo descanso ao trocar de vídeo se o flag persistido estiver setado
-    Bus.onGlobal('video:switched', function(){
-      try {
-        if(localStorage.getItem('gdi-rest-mode') === '1') {
-          setTimeout(function(){ try{enterSleep();}catch(_){} }, 500);
+    // v91: persist rest mode across video switches. If localStorage says
+    // the user had rest mode on, re-enable it shortly after the new video
+    // loads. This covers both in-playlist switches (video:switched) and
+    // full page navigations between video files (page:change).
+    const _maybeRestoreSleep=()=>{
+      try{
+        if(localStorage.getItem('gdi-rest-mode')==='1'){
+          // Re-enter sleep only if not already sleeping (avoid resetting
+          // wakeGuard on an already-on overlay). The small timeout lets
+          // the new <video> element mount and the playlist UI settle.
+          setTimeout(()=>{
+            try{
+              if(localStorage.getItem('gdi-rest-mode')==='1'&&!sleeping){
+                ensureEls();enterSleep();
+              }
+            }catch(_){}
+          },500);
         }
       }catch(_){}
-    });
+    };
+    Bus.onGlobal('video:switched',_maybeRestoreSleep);
+    Bus.onGlobal('page:change',_maybeRestoreSleep);
+    // Expose for the init function below (so it can also restore on boot).
+    window.__gdiSleepMaybeRestore=_maybeRestoreSleep;
   }
   window.GDI_MODULES.push({name:'sleep-mode',init:function(){
     ensureEls();bindOnce();syncFs();
+    // v91: on init (after every page:change re-triggers the module loader),
+    // also try to restore rest mode if localStorage says it was on. This
+    // catches the case where the page:change event fired BEFORE bindOnce
+    // registered its listener (race between render() emitting page:change
+    // and the module loader calling init()).
+    try{if(window.__gdiSleepMaybeRestore)window.__gdiSleepMaybeRestore();}catch(_){}
   }});
   console.log('[GDI M11] v3.2 descanso registrado');
 })();
@@ -736,7 +760,7 @@ body.gdi-fv .gdi-player-wrap iframe{
           <span style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);text-transform:uppercase;">\ud83e\uddd0 Revis\u00e3o ${idx+1} de ${due.length}</span>
           <button class="gdi-mode-btn" id="gdi-srs-close" style="padding:2px 8px;font-size:11px;">\u2715</button>
         </div>
-        <div style="font-size:12px;color:var(--ferreto-secondary,#ff8b9f);margin-bottom:4px;">${escHtml(realNameOf(n.key))}${n.t!=null?' \u00b7 '+gdiFmtTime(n.t):''}</div>
+        <div style="font-size:12px;color:var(--ferreto-secondary,#7aa2ff);margin-bottom:4px;">${escHtml(realNameOf(n.key))}${n.t!=null?' \u00b7 '+gdiFmtTime(n.t):''}</div>
         <div style="font-size:15px;line-height:1.5;margin-bottom:16px;">${escHtml(n.text)}</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button id="gdi-srs-good" class="gdi-btn gdi-btn-primary"><i class="bi bi-check2"></i> Lembrei</button>
@@ -883,7 +907,7 @@ body.gdi-fv .gdi-player-wrap iframe{
       else head='Continuar';
       const sub=r?('parou em '+gdiFmtTime(r.t)):'sem posi\u00e7\u00e3o salva';
       html+=`<div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;">
-        <i class="bi bi-play-circle-fill" style="font-size:30px;color:var(--ferreto-primary,#ff8b9f);"></i>
+        <i class="bi bi-play-circle-fill" style="font-size:30px;color:var(--ferreto-primary,#7aa2ff);"></i>
         <div style="min-width:0;">
           <div style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);text-transform:uppercase;letter-spacing:.06em;">${escHtml(head)}</div>
           <div style="font-weight:600;color:var(--ferreto-text,#f0f6fc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(lbl.name)}</div>
@@ -1030,7 +1054,7 @@ body.gdi-fv .gdi-player-wrap iframe{
     let html='';
     if(total){
       const pct=Math.round(done/total*100);
-      html+=`<i class="bi bi-bar-chart-fill" style="color:var(--ferreto-primary,#ff8b9f);"></i>
+      html+=`<i class="bi bi-bar-chart-fill" style="color:var(--ferreto-primary,#7aa2ff);"></i>
         <span>${done}/${total} assistido${done===1?'':'s'} (${pct}%)</span>
         <div style="flex:1;max-width:160px;height:5px;background:var(--ferreto-surface-3,rgba(255,255,255,.1));border-radius:3px;overflow:hidden;">
           <div style="height:5px;width:${pct}%;background:${pct>=100?'#1a7f37':'#1f6feb'};transition:width .4s;"></div>
