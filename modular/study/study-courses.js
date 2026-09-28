@@ -44,7 +44,7 @@
   const low=p=>norm(p).toLowerCase();
   const stripExt=s=>String(s||'').replace(/\.[a-z0-9]{1,5}$/i,'').trim();
   const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
-  const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
+  const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){console.warn('[lsSet] failed for',k,':',e&&e.message);if(window.showToast)window.showToast('Armazenamento cheio — não foi possível salvar.')}};
   // ★ FIX: esc local para o M22 (Área do Aluno) — usa escHtml global do app.min.js quando disponível
   const esc=s=>{try{return window.escHtml?window.escHtml(s):String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');}catch(_){return String(s||'');}};
   const fmtMin=m=>{m=Math.round(m);return m>=60?Math.floor(m/60)+'h'+String(m%60).padStart(2,'0'):m+'min'};
@@ -104,7 +104,7 @@
     const box=document.getElementById('gdi-central-body');
     const LS_MANUAL='gdi-manual-courses-v1';
     const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
-    const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
+    const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){console.warn('[lsSet] failed for',k,':',e&&e.message);if(window.showToast)window.showToast('Armazenamento cheio — não foi possível salvar.')}};
 
     try{
       const manual=lsGet(LS_MANUAL,[]);
@@ -436,6 +436,8 @@
   function hideCourse(ck){
     const hidden=lsGet(LS_HIDDEN,[]);
     if(!hidden.some(h=>low(h)===low(ck)))hidden.push(ck);
+    // ★ v1.0.99: cap at 50 hidden entries
+    if(hidden.length > 50) hidden.splice(0, hidden.length - 50);
     lsSet(LS_HIDDEN,hidden);
   }
   function unhideCourse(ck){
