@@ -1046,6 +1046,53 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
           }
         }
       }catch(_){ /* best-effort: Drive indisponível — segue só com local */ }
+      // ★ FIX M9 (Task ADMIN-08-CORE-SUMMARIES): NEW "resumos in lesson folder"
+      //    approach — Meggy now saves resumos as `resumo_meggy.md` DIRECTLY
+      //    INSIDE the lesson folder (not in .meggy.ai/resumos/). The local
+      //    gdiListAllFiles() scan above SHOULD pick it up via the isMaterial()
+      //    filter (which accepts .md), but to be defensive we ALSO probe the
+      //    lesson folder explicitly via the new GDIStorage.listLessonFiles()
+      //    endpoint. This catches `resumo_meggy.md` when:
+      //      (a) gdiListAllFiles failed/timed out but the storage endpoint
+      //          succeeded (different code path);
+      //      (b) the MD was uploaded with a non-standard mime type that
+      //          isMaterial() rejects;
+      //      (c) the file was just written and the legacy worker cache hasn't
+      //          caught up (listLessonFiles uses a shorter TTL).
+      //    Best-effort + dedup via `seen` — never blocks the panel render.
+      try{
+        if(window.GDIStorage && typeof window.GDIStorage.listLessonFiles==='function' && fPath){
+          // Only probe if resumo_meggy.md isn't already in `uniq` — saves a
+          // network call when gdiListAllFiles already returned it.
+          const alreadyHaveResumo = uniq.some(x =>
+            x && x.name && String(x.name).toLowerCase()==='resumo_meggy.md');
+          if(!alreadyHaveResumo){
+            const lessonFiles = await window.GDIStorage.listLessonFiles(fPath);
+            if(Array.isArray(lessonFiles) && lessonFiles.length){
+              // Look for resumo_meggy.md (case-insensitive) inside the lesson folder.
+              const rm = lessonFiles.find(f => f && f.name &&
+                String(f.name).toLowerCase()==='resumo_meggy.md');
+              if(rm && !seen.has(rm.name)){
+                seen.add(rm.name);
+                // Build a synthetic file object mirroring the shape returned
+                // by gdiListAllFiles so the existing classify()/per-lesson
+                // filter/slice(0,12) pipeline handles it identically.
+                const rmLink = rm.downloadUrl || rm.link || '';
+                uniq.push({
+                  name: rm.name,
+                  fileExtension: 'md',
+                  mimeType: rm.mimeType || 'text/markdown',
+                  size: Number(rm.size)||0,
+                  link: rmLink,
+                  _driveId: rm.id || '',
+                  _modified: rm.modified || null,
+                  _fromLessonFolder: true
+                });
+              }
+            }
+          }
+        }
+      }catch(_){ /* best-effort: lesson-folder probe falhou — segue com o que já temos */ }
       // ★ C6 FIX (M9 per-lesson filter ordering): the slice(0,12) cap
       //    previously ran on `uniq` BEFORE the per-lesson filter, so
       //    matching PDFs sitting at index 12+ in the dedup'd list were

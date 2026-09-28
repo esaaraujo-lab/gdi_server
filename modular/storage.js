@@ -161,6 +161,44 @@
     });
   }
 
+  // ═══ NEW (indice.json + lesson folder approach — Task MIGRATE-02-MEGGY-INDICE)
+  //    List the .md/.json materials living INSIDE a specific lesson folder
+  //    (the folder where the video/PDF lives). Replaces the old "save into
+  //    .meggy.ai/resumos/" pattern — now Meggy writes resumo_meggy.md /
+  //    questoes_meggy.json / mapa_meggy.md directly into the lesson folder,
+  //    and indice.json tracks WHERE each file lives. This helper lists those
+  //    files by path (not by kind) so we can find them by exact folder. ═══
+  async function listLessonMaterials(lessonPath){
+    return memo('lessonMaterials:'+lessonPath, 60_000, async function(){
+      try{
+        const r=await fetch('/api/materials/list?path='+encodeURIComponent(lessonPath));
+        if(!r.ok)return [];
+        const d=await r.json();
+        const items=(d&&d.ok&&Array.isArray(d.items))?d.items:(Array.isArray(d.items)?d.items:[]);
+        return items.filter(f => f && (
+          String(f.name||'').endsWith('.md') ||
+          String(f.name||'').endsWith('.json')
+        ));
+      }catch(_){return [];}
+    });
+  }
+
+  //    Save a material file (.md/.json) to a specific lesson folder by path.
+  //    Mirrors the new POST /api/materials/save contract used by the indice.json
+  //    approach: {path, fileName, content} instead of {coursePath, pdfName, kind, content}.
+  async function saveMaterialToLesson(lessonPath, fileName, content){
+    try{
+      const r=await fetch('/api/materials/save',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({path:lessonPath, fileName:fileName, content:content})
+      });
+      invalidate('lessonMaterials:'+lessonPath);
+      const d=await r.json();
+      return d||{ok:false};
+    }catch(e){return {ok:false, error:String(e&&e.message||e)};}
+  }
+
   async function saveCourse(coursePath, courseName, pdfCount){
     try{
       await fetch('/api/courses/add',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -249,6 +287,72 @@
         return d&&d.ok&&Array.isArray(d.items)?d.items:[];
       }catch(_){return [];}
     });
+  }
+
+  // ═══ INDICE (resumos na pasta da aula) ═════
+  // ★ v1.0.94 (Task ADMIN-08-CORE-SUMMARIES): novo modelo — resumos vivem no
+  //    Drive DENTRO da pasta da aula como `resumo_meggy.md`, e o servidor
+  //    publica um índice JSON em /api/ai/indice listando todas as aulas que
+  //    têm resumo. O cliente consulta o índice e busca o MD direto do path
+  //    da aula (não mais do bucket global .meggy.ai/resumos/).
+  //    lessonKey opcional: se passado, filtra por uma aula específica
+  //    (GET /api/ai/indice?lesson=<lessonKey>); senão, lista tudo.
+  //    Retorna array de {lessonKey, lessonName, lessonPath, courseName,
+  //    subject, resumoUrl, modified}. TTL curto (15s) — o índice muda quando
+  //    o aluno gera um novo resumo.
+  async function fetchIndice(lessonKey){
+    const key = 'indice:'+(lessonKey||'');
+    return memo(key, 15_000, async () => {
+      try{
+        let url='/api/ai/indice';
+        if(lessonKey)url+='?lesson='+encodeURIComponent(lessonKey);
+        const r=await fetch(url,{cache:'no-store'});
+        if(!r.ok)return [];
+        const d=await r.json();
+        // Aceita {ok,lessons:[...]} ou {lessons:[...]} ou array cru.
+        if(Array.isArray(d))return d;
+        if(d && Array.isArray(d.lessons))return d.lessons;
+        return [];
+      }catch(_){return [];}
+    });
+  }
+
+  // ═══ LIST LESSON FILES ═════
+  // ★ v1.0.94 (Task ADMIN-08-CORE-SUMMARIES): lista arquivos DENTRO da pasta
+  //    da aula (lessonPath). Usa o mesmo endpoint /api/materials/list, mas com
+  //    o novo parâmetro `path` (sem `kind`) — o servidor interpreta `path`
+  //    como "liste tudo dentro desta pasta no Drive". Retorna array de
+  //    {name, fileExtension, mimeType, size, modified, downloadUrl, id}.
+  //    TTL curto (15s) para refletir resumos recém-gerados.
+  async function listLessonFiles(lessonPath){
+    const key = 'lessonFiles:'+(lessonPath||'');
+    return memo(key, 15_000, async () => {
+      try{
+        const url='/api/materials/list?path='+encodeURIComponent(lessonPath||'');
+        const r=await fetch(url);
+        if(!r.ok)return [];
+        const d=await r.json();
+        return d&&d.ok&&Array.isArray(d.items)?d.items:[];
+      }catch(_){return [];}
+    });
+  }
+
+  // ═══ SAVE LESSON FILE ═════
+  // ★ v1.0.94 (Task ADMIN-08-CORE-SUMMARIES): salva um arquivo (típico:
+  //    `resumo_meggy.md`) DENTRO da pasta da aula (lessonPath). Usa o mesmo
+  //    endpoint /api/materials/save, mas com o novo payload {path, fileName,
+  //    content} — o servidor cria o arquivo dentro da pasta da aula.
+  //    Retorna true/false. Invalida o cache de listagem da pasta.
+  async function saveLessonFile(lessonPath, fileName, content){
+    try{
+      const r=await fetch('/api/materials/save',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({path:lessonPath||'',fileName:String(fileName||'').slice(0,200),content:String(content||'')})});
+      if(!r.ok)return false;
+      const d=await r.json();
+      const ok = !!(d&&d.ok);
+      if(ok) invalidate('lessonFiles:'+lessonPath);
+      return ok;
+    }catch(_){return false;}
   }
 
   // ═══ PROGRESS — scan + user KV + shared Drive ═════
@@ -363,6 +467,13 @@
     saveMaterial,
     materialExists,
     listMaterials,
+    // ★ v1.0.94: lesson-folder resumos (new approach)
+    listLessonFiles,
+    saveLessonFile,
+    fetchIndice,
+    // ★ NEW (indice.json + lesson folder approach)
+    listLessonMaterials,
+    saveMaterialToLesson,
     // Courses
     saveCourse,
     listCourses,

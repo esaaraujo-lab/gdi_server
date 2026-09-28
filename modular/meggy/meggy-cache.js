@@ -233,6 +233,63 @@
     }catch(_){return null;}
   }
 
+  // ═══ NEW (indice.json + lesson folder approach — Task MIGRATE-02-MEGGY-INDICE)
+  //    Helpers for the new persistence model:
+  //      • lessonFolderPath() — derives the lesson folder (parent of the
+  //        current lesson URL). Mirrors gdi-core.js M9 `fPath`.
+  //      • indiceGet(lessonKey) — GET /api/ai/indice?lesson=<key>
+  //      • indiceSet(entry)     — POST /api/ai/indice
+  //      • readLessonFile(lessonPath, fileName) — list lesson folder + fetch
+  //        the file content via downloadUrl (or .content field if present).
+  //    Replaces the old isa_cache.json + .meggy.ai/resumos/ model. Now each
+  //    lesson stores resumo_meggy.md / questoes_meggy.json / mapa_meggy.md
+  //    directly in ITS OWN folder, and a lightweight indice.json in .meggy.ai/
+  //    tracks WHERE each file is saved.
+  function lessonFolderPath(){
+    const p = window.location.pathname || '';
+    if(!p) return '/';
+    const idx = p.lastIndexOf('/');
+    if(idx <= 0) return p.endsWith('/') ? p : (p + '/');
+    return p.slice(0, idx + 1);
+  }
+
+  async function indiceGet(lessonKey){
+    try{
+      const r = await fetch('/api/ai/indice?lesson=' + encodeURIComponent(lessonKey), {cache:'no-store'});
+      if(!r.ok) return null;
+      const d = await r.json();
+      if(d && d.ok && d.entry) return d.entry;
+      return null;
+    }catch(_){ return null; }
+  }
+
+  async function indiceSet(entry){
+    try{
+      await fetch('/api/ai/indice', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(entry)
+      });
+    }catch(_){ /* não bloqueia o fluxo se o indice falhar */ }
+  }
+
+  async function readLessonFile(lessonPath, fileName){
+    if(!lessonPath || !fileName) return '';
+    try{
+      if(window.GDIStorage && typeof window.GDIStorage.listLessonMaterials === 'function'){
+        const items = await window.GDIStorage.listLessonMaterials(lessonPath);
+        const match = (items || []).find(it => it && it.name === fileName);
+        if(!match) return '';
+        if(match.content) return String(match.content);
+        if(match.downloadUrl){
+          const r = await fetch(match.downloadUrl, {cache:'no-store'});
+          if(r.ok) return await r.text();
+        }
+      }
+    }catch(_){ /* best-effort */ }
+    return '';
+  }
+
   // ★ v87-FIX-MEGGY-MODULES BUG 4: robust cache lookup that probes multiple
   //    key variants so Meggy can reuse the Battalion's persistent memory.
   //    Battalion saves with key `courseKey + '/' + pdfName` (e.g.,
@@ -245,152 +302,109 @@
   //      (3) Battalion's .meggy.ai/resumos/ Drive folder via
   //          window.GDIStorage.listMaterials, matched by lesson name
   //    Returns the first hit (or null). Logs misses so we can debug.
+  // ★ MIGRATE-02-MEGGY-INDICE: cacheGetRobust() now consults indice.json
+  //    (a lightweight index in .meggy.ai/) to find WHERE the lesson's resumo /
+  //    questoes / mapa files live, then reads them directly from the lesson
+  //    folder. Replaces the old 4-step probe (isa_cache primary key → PDF-
+  //    extension variant → Battalion resumos/ Drive folder → shared pool).
+  //    If indice has no entry for this lesson → returns null (will trigger
+  //    generation). If indice has an entry but files are unreadable → also
+  //    returns null (defensive — corrupt indice entry shouldn't block gen).
   async function cacheGetRobust(){
-    // (1) primary key
-    const primary = await cacheGet();
-    if(primary){
-      console.info('[Meggy] cache hit via primary lesson key:', U.lessonKey());
-      return primary;
+    const lessonKey = U.lessonKey();
+    const lessonPath = lessonFolderPath();
+
+    // (1) Check indice.json via GET /api/ai/indice?lesson=<lessonKey>
+    const entry = await indiceGet(lessonKey);
+    if(!entry){
+      console.info('[Meggy] indice miss for lessonKey:', lessonKey, '— will trigger generation.');
+      return null;
     }
 
-    // (2) PDF-extension variant — for video lesson pages, try the PDF with
-    //     the same basename in the same folder.
-    const p = window.location.pathname || '';
-    if(/\.(mp4|webm|mov|m4v|avi|mkv|m3u8)$/i.test(p)){
-      const pdfKey = p.replace(/\.[a-z0-9]+$/i, '.pdf');
-      if(pdfKey && pdfKey !== p){
-        const hit2 = await cacheGet(pdfKey);
-        if(hit2){
-          console.info('[Meggy] cache hit via PDF-extension key:', pdfKey);
-          return hit2;
-        }
-      }
+    // (2) indice hit — read resumo MD (+ questoes JSON + mapa MD) from the
+    //     lesson folder. Each file's path is stored in the indice entry; we
+    //     only need the basename to find it via listLessonMaterials.
+    const resumoName  = (entry.resumo   || (lessonPath + 'resumo_meggy.md')).split('/').pop();
+    const questoesName= (entry.questoes || (lessonPath + 'questoes_meggy.json')).split('/').pop();
+    const mapaName    = (entry.mapa     || (lessonPath + 'mapa_meggy.md')).split('/').pop();
+
+    const summary   = await readLessonFile(lessonPath, resumoName);
+    const mindmap   = await readLessonFile(lessonPath, mapaName) || null;
+    let questions = [];
+    const qRaw = await readLessonFile(lessonPath, questoesName);
+    if(qRaw){
+      try{ const parsed = JSON.parse(qRaw); if(Array.isArray(parsed)) questions = parsed; }
+      catch(_){ questions = []; }
     }
 
-    // (3) Battalion resumos/ Drive folder — match by lesson name.
-    //     Battalion writes <safeLesson>_<safePdf>_<ts>.md into .meggy.ai/resumos/.
-    //     We list the folder, find a file whose name (minus timestamp + safe-chars)
-    //     matches the current lesson name, and lazy-load its content.
-    try{
-      if(window.GDIStorage && typeof window.GDIStorage.listMaterials === 'function'){
-        const seg = p.split('/').filter(Boolean);
-        if(seg.length >= 2){
-          const coursePath = '/' + seg.slice(0,2).join('/') + '/';
-          let lessonName = '';
-          try{ lessonName = (typeof U.realLessonName === 'function') ? (U.realLessonName('') || '') : ''; }catch(_){ lessonName = ''; }
-          if(lessonName){
-            const base = lessonName.toLowerCase().replace(/\.[a-z0-9]+$/i,'').trim();
-            if(base){
-              const items = await window.GDIStorage.listMaterials('resumos', coursePath);
-              if(Array.isArray(items) && items.length){
-                // Normalize a Drive filename back to a comparable form:
-                // strip extension, strip trailing _<timestamp>, replace _ with space.
-                const norm = s => String(s||'')
-                  .replace(/\.(md|json)$/i,'')
-                  .replace(/_\d{10,}$/,'')
-                  .replace(/[_-]+/g,' ')
-                  .toLowerCase()
-                  .trim();
-                const match = items.find(it => it && it.name && norm(it.name).includes(base));
-                if(match){
-                  let content = match.content || '';
-                  if(!content && match.downloadUrl){
-                    try{
-                      const r = await fetch(match.downloadUrl, {cache:'no-store'});
-                      if(r.ok) content = await r.text();
-                    }catch(_){ content = ''; }
-                  }
-                  if(content){
-                    console.info('[Meggy] cache hit via Battalion resumos/ folder:', match.name);
-                    // Wrap in the shape cacheGet() returns. Questions/mindmap not
-                    // in the MD file — caller will regenerate them as needed.
-                    return { summary: content, questions: [], mindmap: null };
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }catch(e){
-      console.warn('[Meggy] Battalion resumos/ fallback failed (non-critical):', e && e.message || e);
+    if(!summary && !mindmap && !questions.length){
+      console.info('[Meggy] indice entry exists for', lessonKey, 'but no files readable — will trigger generation.');
+      return null;
     }
 
-    console.info('[Meggy] cache miss via primary/PDF-key/Battalion-Drive. Probing shared summaries pool…');
-
-    // (4) Shared summaries pool — VISIBLE TO ALL STUDENTS.
-    //     ★ FIX-05-MEGGY-CACHE (KEY FIX): when student A finishes generateAll,
-    //       it calls saveSharedSummary() → POST /api/ai/shared-summaries with
-    //       {lessonName, summary, questions}. Student B's cacheGetRobust MUST
-    //       consult this pool, otherwise the cross-student memory chain is
-    //       broken: B always re-extracts the PDF and re-pays the LLM cost
-    //       even though A already produced a perfectly good resumo.
-    //     This step runs LAST so we prefer the student's own Drive/URL cache
-    //     (which may be fresher) before falling back to the shared pool.
-    try{
-      if(window.__gdiMeggy && window.__gdiMeggy.summaries &&
-         typeof window.__gdiMeggy.summaries.fetchSharedSummaries === 'function'){
-        let sharedLesson = '';
-        try{ sharedLesson = (typeof U.realLessonName === 'function') ? (U.realLessonName('') || '') : ''; }catch(_){ sharedLesson = ''; }
-        if(sharedLesson){
-          const shared = await window.__gdiMeggy.summaries.fetchSharedSummaries(sharedLesson);
-          if(Array.isArray(shared) && shared.length){
-            // Most recent entry with a non-empty summary wins.
-            const hit = shared
-              .slice()
-              .sort((a,b)=>(b.date||0)-(a.date||0))
-              .find(s => s && s.summary && String(s.summary).trim());
-            if(hit){
-              console.info('[Meggy] cache hit via shared summaries pool (visible to all students):', sharedLesson);
-              // Shared pool carries summary + questions but no mindmap —
-              // caller (generateAll) will regenerate only the pílulas.
-              return {
-                summary: hit.summary,
-                questions: Array.isArray(hit.questions) ? hit.questions : [],
-                mindmap: null,
-                _shared: true
-              };
-            }
-          }
-        }
-      }
-    }catch(e){
-      console.warn('[Meggy] shared summaries pool fallback failed (non-critical):', e && e.message || e);
-    }
-
-    console.info('[Meggy] cache miss — no hit in primary, PDF-key, Battalion resumos/, or shared pool. Will extract.');
-    return null;
+    console.info('[Meggy] cache hit via indice.json (lesson folder):', lessonPath,
+      '{ resumo:' + (!!summary) + ', questoes:' + questions.length + ', mapa:' + (!!mindmap) + ' }');
+    return { summary: summary || null, questions, mindmap };
   }
-  async function cacheSave(summary,questions,lessonName,mindmap){
+
+  // ★ MIGRATE-02-MEGGY-INDICE: cacheSave() now writes resumo_meggy.md /
+  //    questoes_meggy.json / mapa_meggy.md directly into the LESSON FOLDER
+  //    (where the video lives) and updates indice.json so the next student
+  //    (or this student on another device) can find them. Replaces the old
+  //    POST /api/ai/cache (isa_cache.json) + .meggy.ai/resumos/ writes.
+  //    Still updates _chainCache (in-memory) for fast same-session access.
+  async function cacheSave(summary, questions, lessonName, mindmap){
     try{
-      // ★FIX: se mindmap não foi passado, preserva o que já está no cache
-      // (antes, ao adicionar mais questões, o cache era sobrescrito SEM mindmap)
-      let mindmapToSave=mindmap;
-      if(mindmapToSave===undefined){
-        const existing=await cacheGet();
-        mindmapToSave=(existing&&existing.mindmap)||null;
+      const lessonKey = U.lessonKey();
+      const lessonPath = lessonFolderPath();
+
+      // ★FIX (preserved): se mindmap não foi passado, preserva o que já está
+      //    no _chainCache (antes consultava o Drive via cacheGet; agora o
+      //    _chainCache é a fonte de verdade in-session — mais rápido e não
+      //    depende do legado /api/ai/cache).
+      let mindmapToSave = mindmap;
+      if(mindmapToSave === undefined){
+        mindmapToSave = (_chainCache[lessonKey] && _chainCache[lessonKey].mindmap) || null;
       }
-      // ★ tenta endpoint granular primeiro; senão, cache unificado
-      const granular=await GRANULAR_AVAILABLE();
-      const endpoint=granular?'/api/ai/summaries':'/api/ai/cache';
-      const key=U.lessonKey();
-      await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({key,summary,questions,mindmap:mindmapToSave,lessonName})});
-      // ★ FIX-05-MEGGY-CACHE: also update _chainCache in memory so the next
-      //    generateAll() returns fresh data instead of stale. Before this fix,
-      //    cacheSave only wrote to Drive — callers like generateQuestions
-      //    ("Gerar mais 5 questões", meggy-questions.js) saw their merged
-      //    questions LOST from in-memory cache on the next generateAll call,
-      //    which then re-extracted the PDF and overwrote the merged set.
-      //    Conservative: only overwrite in-memory fields when the caller
-      //    passes a NON-EMPTY value — avoids wiping a perfectly good in-memory
-      //    summary when the caller passed `null` because Drive's cacheGet
-      //    transiently failed (network blip) but _chainCache still has it.
-      if(!_chainCache[key]) _chainCache[key]={};
-      if(summary)                        _chainCache[key].summary   = summary;
-      if(Array.isArray(questions) && questions.length) _chainCache[key].questions = questions;
-      if(mindmapToSave)                  _chainCache[key].mindmap   = mindmapToSave;
-    }catch(_){/* não bloqueia o fluxo se o cache falhar */}
+
+      // (1) Save resumo_meggy.md / questoes_meggy.json / mapa_meggy.md to the
+      //     lesson folder via GDIStorage.saveMaterialToLesson (non-blocking
+      //     per file — partial failure doesn't abort the others).
+      if(window.GDIStorage && typeof window.GDIStorage.saveMaterialToLesson === 'function'){
+        if(summary){
+          try{ await window.GDIStorage.saveMaterialToLesson(lessonPath, 'resumo_meggy.md', String(summary)); }
+          catch(_){ /* não bloqueia */ }
+        }
+        if(Array.isArray(questions) && questions.length){
+          try{ await window.GDIStorage.saveMaterialToLesson(lessonPath, 'questoes_meggy.json', JSON.stringify(questions, null, 2)); }
+          catch(_){ /* não bloqueia */ }
+        }
+        if(mindmapToSave){
+          try{ await window.GDIStorage.saveMaterialToLesson(lessonPath, 'mapa_meggy.md', String(mindmapToSave)); }
+          catch(_){ /* não bloqueia */ }
+        }
+      }
+
+      // (2) Update indice.json via POST /api/ai/indice — records WHERE each
+      //     file lives so cacheGetRobust can find them next time.
+      await indiceSet({
+        lesson:     lessonKey,
+        lessonName: String(lessonName || '').slice(0, 200),
+        resumo:     lessonPath + 'resumo_meggy.md',
+        questoes:   lessonPath + 'questoes_meggy.json',
+        mapa:       lessonPath + 'mapa_meggy.md',
+        date:       Date.now()
+      });
+
+      // (3) Update _chainCache (in-memory) for fast same-session access.
+      //    Conservative: only overwrite fields when the caller passes a
+      //    NON-EMPTY value — avoids wiping a good in-memory summary when
+      //    the caller passed null (e.g. transient network blip).
+      if(!_chainCache[lessonKey]) _chainCache[lessonKey] = {};
+      if(summary)                                       _chainCache[lessonKey].summary   = summary;
+      if(Array.isArray(questions) && questions.length)  _chainCache[lessonKey].questions = questions;
+      if(mindmapToSave)                                 _chainCache[lessonKey].mindmap   = mindmapToSave;
+    }catch(_){ /* não bloqueia o fluxo se o cache falhar */ }
   }
 
   // ── GERAÇÃO EM CADEIA: resumo + pílulas + questões ──
@@ -449,12 +463,12 @@
       return _chainCache[key];
     }
 
-    // verifica cache do Drive PRIMEIRO (antes de extrair PDF)
-    // ★ v87-FIX-MEGGY-MODULES BUG 4: use cacheGetRobust() so we probe
-    //    multiple key variants (lesson URL, PDF-extension key, Battalion
-    //    resumos/ Drive folder). Before, Meggy only tried U.lessonKey(),
-    //    which never matched the Battalion's `courseKey/pdfName` keys →
-    //    persistent memory was always ignored.
+    // verifica cache PRIMEIRO (antes de extrair PDF)
+    // ★ MIGRATE-02-MEGGY-INDICE: cacheGetRobust() now consults indice.json
+    //    (a lightweight index in .meggy.ai/) to find the lesson folder's
+    //    resumo_meggy.md / questoes_meggy.json / mapa_meggy.md, then reads
+    //    them directly. Replaces the old isa_cache.json + .meggy.ai/resumos/
+    //    + shared-pool probes.
     const cached=await cacheGetRobust();
     if(!_chainCache[key]){_chainCache[key]={};_chainCacheEvict();}
     if(cached){
@@ -489,10 +503,11 @@
     }
 
     // ★ FIX-05-MEGGY-CACHE (KEY FIX): PARTIAL cache hit — summary + questions
-    //    exist but mindmap is missing. This happens when the resumo came from
-    //    the shared summaries pool (step 4 in cacheGetRobust), which carries
-    //    summary+questions but no pílulas. Without this handler, student B
-    //    would fall through to PDF extraction and RE-GENERATE the questions
+    //    exist but mindmap is missing. Under the indice.json approach this
+    //    happens when the lesson folder has resumo_meggy.md + questoes_meggy.json
+    //    but mapa_meggy.md was not yet written (e.g. previous generation was
+    //    interrupted). Without this handler, the next run would fall through
+    //    to PDF extraction and RE-GENERATE the questions
     //    (wasting LLM calls), even though student A already shared them.
     //    Here we preload the shared/cached questions into the local bank and
     //    mark questionsGenerated so the AI question task is skipped — only
@@ -697,17 +712,19 @@
       autoCreateFlashcards(_chainCache[key].questions,lesson,U.lessonKey());
     }
 
-    // salva TUDO no Drive em um único POST (resumo + pílulas + questões)
+    // ★ MIGRATE-02-MEGGY-INDICE: save step changed — now writes 3 files to
+    //    the lesson folder (resumo_meggy.md / questoes_meggy.json / mapa_meggy.md)
+    //    + updates indice.json, via cacheSave(). Replaces the old single
+    //    POST /api/ai/cache (isa_cache.json). The pipeline (extract →
+    //    generate summary/pílulas/questões in parallel) is unchanged.
     try{
-      await fetch('/api/ai/cache',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          key:U.lessonKey(),
-          summary:_chainCache[key].summary||null,
-          questions:_chainCache[key].questions||null,
-          mindmap:_chainCache[key].mindmap||null,
-          lessonName:lesson
-        })});
-    }catch(_){}
+      await cacheSave(
+        _chainCache[key].summary   || null,
+        _chainCache[key].questions || null,
+        lesson,
+        _chainCache[key].mindmap   || null
+      );
+    }catch(_){ /* não bloqueia o fluxo se o cache falhar */ }
     // compartilha no pool de resumos
     if(_chainCache[key].summary){
       // late-bind to summaries module
@@ -759,7 +776,11 @@
     downloadAsPdf, copySummary,
     autoCreateFlashcards,
     // Expose shared state for diagnostics / future modules
-    _chainCache, _inflight, _qWriteChain
+    _chainCache, _inflight, _qWriteChain,
+    // ★ MIGRATE-02-MEGGY-INDICE: expose indice.json + lesson-folder helpers
+    // so meggy-summaries.js renderResumos can reuse them (single source of
+    // truth for the indice API + lesson-folder file reads).
+    lessonFolderPath, indiceGet, indiceSet, readLessonFile
   };
 
   // ── Aliases para compatibilidade (gdiIsaPdf.* assemblado em meggy-summaries.js) ──
