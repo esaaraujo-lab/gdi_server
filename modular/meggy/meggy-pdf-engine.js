@@ -351,6 +351,10 @@
     // ★ v80-FIX-MEGGY BUG 2: wrap entire doc lifecycle in try/finally so
     //    doc.destroy() runs even if getPage/getTextContent/OCR throws.
     //    Previously, doc.destroy() only ran on success paths → leak on error.
+    // ★ FIX-MEGGY #22 (Agent 7): VERIFIED — extractPdfText wraps the entire
+    //    doc lifecycle (after pdfjs.getDocument resolves) in try/finally with
+    //    `if(doc) doc.destroy();` in the finally block. No change required;
+    //    keeping the explicit verification comment for future audits.
     let doc;
     try{
       try{
