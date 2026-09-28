@@ -36,9 +36,14 @@
 
   // ── Question bank integration (replicates M23 addQ on LS) ──
   function addQ(obj){
-    const q=U.lsGet(LQ,[]);
-    q.push({id:U.uid(),createdAt:Date.now(),hits:0,misses:0,...obj});
-    U.lsSet(LQ,q);
+    // ★ v1.0.99: route through _qWriteChain to prevent RMW race + cap at 2000
+    _qWriteChain = _qWriteChain.then(() => {
+      const q=U.lsGet(LQ,[]);
+      q.push({id:U.uid(),createdAt:Date.now(),hits:0,misses:0,...obj});
+      if(q.length > 2000) q.splice(0, q.length - 2000);
+      U.lsSet(LQ,q);
+    }).catch(err => { console.warn('[Meggy] addQ chain error:', err && err.message); });
+    return _qWriteChain;
   }
 
   // ═══ PATCH B: Inserção em batch de questões (elimina O(N²) no localStorage) ═══
@@ -60,6 +65,8 @@
         seen.add(item.statement);
         added++;
       }
+      // ★ v1.0.99: cap at 2000 entries
+      if(all.length > 2000) all.splice(0, all.length - 2000);
       if(added) U.lsSet(LQ, all);
       return added;
     }).catch(err => {
@@ -75,8 +82,11 @@
   // ★ FIX 3 (Task 13): também persiste no Drive via storage.js saveMaterial(),
   //    na subpasta 'resumos' da pasta do usuário. Assim o resumo sobrevive a
   //    limpeza do localStorage e fica acessível de outros dispositivos.
+  // ★ v1.0.99: serialize LS_SUM writes to prevent RMW race
+  let _sumWriteChain = Promise.resolve();
   function saveIsaSummary(lesson, summary, coursePath, subject){
-    const arr=U.lsGet(LS_SUM,[]);
+    _sumWriteChain = _sumWriteChain.then(() => {
+      const arr=U.lsGet(LS_SUM,[]);
     // extrai course e subject do path se não vierem explícitos
     // path típico: /7:/Sou + Carreiras Policiais 5.0/Bloco I - Direito Constitucional/01 - Aula.mp4
     let derivedCourse=coursePath||'';
@@ -101,19 +111,24 @@
       subject:derivedSubject||'Geral',
       date:Date.now()
     });
-    U.lsSet(LS_SUM,arr.slice(0,200));
+      U.lsSet(LS_SUM,arr.slice(0,200));
 
-    // ★ FIX 3 (Task 13): também salva no Drive (pasta do usuário / resumos / <hash>.md)
-    // via storage.js. O servidor cria a subpasta 'resumos' on-demand.
-    // Não-await — não bloqueia a UI; falha silenciosa (já temos o localStorage).
-    try{
-      if(window.GDIStorage && typeof window.GDIStorage.saveMaterial==='function' && derivedCourse && summary){
-        window.GDIStorage.saveMaterial(derivedCourse, String(lesson||'Aula').slice(0,200), 'resumos', String(summary)).catch(()=>{});
-      }
-    }catch(_){}
+      // ★ FIX 3 (Task 13): também salva no Drive
+      try{
+        if(window.GDIStorage && typeof window.GDIStorage.saveMaterial==='function' && derivedCourse && summary){
+          window.GDIStorage.saveMaterial(derivedCourse, String(lesson||'Aula').slice(0,200), 'resumos', String(summary)).catch(e=>console.warn('[Meggy] saveIsaSummary Drive save failed:', e&&e.message));
+        }
+      }catch(e){ console.warn('[Meggy] saveIsaSummary exception:', e&&e.message); }
+    }).catch(err => { console.warn('[Meggy] saveIsaSummary chain error:', err && err.message); });
+    return _sumWriteChain;
   }
   function listIsaSummaries(){return U.lsGet(LS_SUM,[]);}
-  function delIsaSummary(id){U.lsSet(LS_SUM,U.lsGet(LS_SUM,[]).filter(x=>x.id!==id));}
+  function delIsaSummary(id){
+    _sumWriteChain = _sumWriteChain.then(() => {
+      U.lsSet(LS_SUM,U.lsGet(LS_SUM,[]).filter(x=>x.id!==id));
+    }).catch(err => { console.warn('[Meggy] delIsaSummary chain error:', err && err.message); });
+    return _sumWriteChain;
+  }
 
   // ── Download summary as PDF (via print dialog) ──
   function downloadAsPdf(lesson, markdownText){
