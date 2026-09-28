@@ -86,10 +86,15 @@
 
   // Best-effort: discipline name = second-to-last segment (the folder
   // containing the lesson file, e.g. "Português").
+  // ★ FIX-MEGGY #17 (Agent 13 Bug 13-2): align segment-count requirement with
+  //   _deriveDisciplinePath (>= 3) — previously required >= 4, which meant
+  //   _deriveDisciplinePath() returned a non-empty path on shallow URLs
+  //   (driveIdx:/course/lesson.pdf) while _deriveDisciplineName() returned ''
+  //   for the same URL — callers got inconsistent results.
   function _deriveDisciplineName(){
     try{
       const seg = (window.location.pathname || '').split('/').filter(Boolean);
-      if(seg.length >= 4) return decodeURIComponent(seg[seg.length - 2]);
+      if(seg.length >= 3) return decodeURIComponent(seg[seg.length - 2]);
     }catch(_){}
     return '';
   }
@@ -366,7 +371,10 @@
         }
       }catch(_){ /* best-effort */ }
     }
-    showToast(cleanArr.length+' questões geradas!');
+    // ★ FIX-MEGGY #16 (Agent 6): guard showToast — module loads before
+    //   gdi-ui.js defines window.showToast on some pages, which would throw
+    //   ReferenceError here.
+    if(window.showToast) showToast(cleanArr.length+' questões geradas!');
     return cleanArr.length>0;
   }
 
@@ -374,13 +382,20 @@
   function startQuizFromBank(bodyEl,lesson){
     const all=U.lsGet(LQ,[]);
     const answered=getAnsweredIds();
+    // ★ FIX-MEGGY #18 (Agent 11 PERF-6): O(N×M) answered.includes(q.id) in
+    //   .filter() — build a Set once for O(1) lookup. With 500 answered IDs
+    //   and 200 questions this was 100k comparisons; now ~700.
+    const answeredSet = new Set(answered);
     // questões desta matéria que ainda não foram respondidas
-    let pending=all.filter(q=>q.subject===lesson&&!answered.includes(q.id));
+    let pending=all.filter(q=>q.subject===lesson&&!answeredSet.has(q.id));
     // se não tem nenhuma não-respondida, pega todas desta matéria (reinicia ciclo)
     if(pending.length===0){
       pending=all.filter(q=>q.subject===lesson);
       // limpa answered para esta matéria (reinicia)
-      const newAnswered=answered.filter(id=>!all.some(q=>q.id===id&&q.subject===lesson));
+      // ★ FIX-MEGGY #18 (cont.): build a Set of this lesson's question IDs
+      //   so the .some() inner loop is O(1) per answered id.
+      const lessonQIds = new Set(all.filter(q=>q.subject===lesson).map(q=>q.id));
+      const newAnswered=answered.filter(id=>!lessonQIds.has(id));
       try{localStorage.setItem(ANSWERED_KEY,JSON.stringify(newAnswered))}catch(_){}
     }
     if(pending.length===0){
