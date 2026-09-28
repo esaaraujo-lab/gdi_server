@@ -177,6 +177,15 @@
     (document.querySelector('#gdi-study') || document.body).appendChild(overlay);
     overlay.querySelector('#gdi-onboarding-close').onclick = () => overlay.remove();
     overlay.onclick = (e) => { if(e.target === overlay) overlay.remove(); };
+    // ★ FIX (Agent 16 UIUX-11): ESC closes the onboarding overlay.
+    //    Without this, the user could only close by clicking the button or backdrop.
+    const _onEsc = function(e){
+      if(e.key === 'Escape' && overlay.parentNode){
+        overlay.remove();
+        document.removeEventListener('keydown', _onEsc, true);
+      }
+    };
+    document.addEventListener('keydown', _onEsc, true);
   }
 
   // ★ PATCH D: openPanel faz UMA única renderização (depois do estado pronto)
@@ -189,9 +198,17 @@
     }
     S.panel.style.display='flex';
     // ★ uma única renderização: espera estado OU fallback em caso de erro
+    // ★ FIX (Agent 16 UIUX-20): openPanel race — capture a token before the
+    //   async ensureState() resolves; if the user closed the panel in the
+    //   meantime (style.display!=='flex'), abort the render to avoid painting
+    //   a hidden panel that the user already dismissed.
+    const _openToken = (S._openToken = (S._openToken||0)+1);
     ensureState().then(()=>{
-      if(S.panel&&S.panel.style.display!=='none')renderPanel();
-    }).catch(()=>renderPanel());
+      if(_openToken !== S._openToken) return; // superseded by a newer open call
+      if(S.panel && S.panel.style.display==='flex') renderPanel();
+    }).catch(()=>{
+      if(_openToken === S._openToken) renderPanel();
+    });
     try{ showOnboarding(); }catch(_){}
   }
   function closePanel(){
@@ -1333,6 +1350,10 @@
   // ★ PATCH A: MutationObserver em .gdi-nav REMOVIDO (era dispendioso e redundante)
 
   document.addEventListener('keydown',e=>{
+    // ★ FIX (Agent 16 UIUX-13): bail when any modal overlay is open —
+    //    'c'/'Escape' must NOT close/toggle the central panel while a modal
+    //    (gdiModal, showAddCourseModal, editSubject, etc.) is intercepting input.
+    if(document.querySelector && document.querySelector('.gdi-modal-overlay')) return;
     const t=e.target;
     if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable))return;
     if(e.ctrlKey||e.metaKey||e.altKey)return;
@@ -1363,9 +1384,14 @@
         const autoOpen = central || (window.MODEL && window.MODEL.autoOpenCentral ? '1' : null);
         if(autoOpen){
           window.__gdiAutoOpenDone = true;
+          // Validate the requested tab against the known set; fall back to 'home'
+          // ★ FIX (Agent 10 Bug 20): unknown ?central=foo no longer opens a blank
+          //    panel — falls back to 'home' instead.
+          const KNOWN_TABS = ['home','drives','questoes','simulado','addmateria','resumos','provas','redacao','cronograma','stats','radar','achievements'];
           // Espera GDIUser estar pronto (state carregado) antes de abrir
           const openNow = function(){
-            const tab = (autoOpen === '1' || autoOpen === 'true') ? 'home' : autoOpen;
+            let tab = (autoOpen === '1' || autoOpen === 'true') ? 'home' : autoOpen;
+            if(!KNOWN_TABS.includes(tab)){ tab = 'home'; }
             openPanel(tab);
             // Limpa o parâmetro da URL (não fica reabrindo a cada navegação)
             try{
@@ -1384,7 +1410,15 @@
             _opened = true;
             openNow();
           };
-          if(window.GDIUser && typeof window.GDIUser.ready === 'function'){
+          // ★ FIX (Agent 10 Bug 19): guard against re-invoking GDIUser.ready().
+          //    Previously, every page:change / user:ready event called ready()
+          //    again (it returns a fresh Promise that re-runs the state load).
+          //    Now we call it ONCE per session via window.__gdiUserReady.
+          if(window.__gdiUserReady){
+            // already loaded — just open
+            setTimeout(openOnce, 0);
+          }else if(window.GDIUser && typeof window.GDIUser.ready === 'function'){
+            window.__gdiUserReady = true;
             window.GDIUser.ready().then(openOnce).catch(openOnce);
             // fallback: abre depois de 2s mesmo se ready() não resolver
             setTimeout(openOnce, 2000);
