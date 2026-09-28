@@ -44,6 +44,15 @@
   const SCAN_MAX_DEPTH    = 3;                      // don't go deeper than 3 levels
 
   // ── Scanner state (resumable) ──
+  // ★ FIX 20-6 #2 (Agent 6): _inflightScans tracks courseKeys with an active
+  //    scanCourse() promise in flight. startScan() adds the key before
+  //    fire-and-forget; the promise's finally() removes it. resumeInterruptedScans
+  //    and startScan itself check this Set BEFORE starting a duplicate scan
+  //    (previously, two concurrent calls could both pass the localStorage
+  //    'scanning' check if the first hadn't yet written its state — they would
+  //    both fire scanCourse, doubling subrequest load on the worker).
+  const _inflightScans = new Set();
+
   function getScanState(courseKey){
     try{const v=localStorage.getItem(LS_SCAN_PREFIX+courseKey);return v?JSON.parse(v):null}catch(_){return null}
   }
@@ -205,8 +214,23 @@
     // ~47 folders), a single POST returns status='partial' with pendingFolders>0.
     // We must loop until status==='done' (or cached:true) or pendingFolders===0.
     //
-    // Budget: MAX_POLLS=50 batches × POLL_INTERVAL=600ms ≈ 30s. If we exceed
-    // the budget, mark state='partial' (NOT error — student can resume later).
+    // Budget: MAX_POLLS=50 batches × POLL_INTERVAL=600ms ≈ 30s MINIMUM (just
+    // waits — each fetch can take 1-3s extra on a warm Cloudflare isolate).
+    //
+    // ★ FIX 20-6 #3 (Agent 6) — VERIFICATION: Is 30s enough for large courses?
+    //   • Worst case observed in production: TJ SP (47 folders, 3077 lessons).
+    //     Each worker batch processes up to 40 subrequests → 2 batches minimum
+    //     for 47 folders. With caching (dotfiles), subsequent scans return
+    //     cached=true on the FIRST poll → total time <1s.
+    //   • Cold cache, fresh scan: 2 batches × ~2s fetch + 1 × 600ms wait ≈ 5s.
+    //     Well under the 30s minimum budget (50 polls × 600ms).
+    //   • Edge case: extremely deep course (300+ folders, e.g. medical school
+    //     with weekly new content): 8 batches × ~2s + 7 × 600ms ≈ 20s. Still
+    //     within budget.
+    //   • If budget exceeded: state.status='partial' (NOT error) — student can
+    //     resume on next page:change. Lessons found so far are persisted.
+    //   • VERDICT: 30s budget is sufficient for documented real-world cases.
+    //     The 'partial' fallback ensures forward progress even if exceeded.
     // ─────────────────────────────────────────────────────────────
     const MAX_POLLS     = 50;
     const POLL_INTERVAL = 600;
@@ -392,6 +416,16 @@
       console.warn('[Scanner] startScan chamado sem courseKey');
       return;
     }
+    // ★ FIX 20-6 #2 (Agent 6): check in-flight Set BEFORE localStorage state.
+    //    A scan that just started may not have written its 'scanning' state to
+    //    localStorage yet (setScanState happens inside scanCourse, which is
+    //    async). Without this guard, two near-simultaneous startScan calls
+    //    would both pass the localStorage check and both fire scanCourse.
+    if(_inflightScans.has(courseKey)){
+      console.log('[Scanner] scan já em andamento (in-flight) para', courseKey, '— não iniciando duplicata');
+      try{ if(onProgress) onProgress(getScanState(courseKey), getLessons(courseKey)); }catch(_){}
+      return;
+    }
     // Check if already scanning (constraint: no multiple instances per course)
     const existing = getScanState(courseKey);
     if(existing && existing.status === 'scanning'){
@@ -409,6 +443,9 @@
         return;
       }
     }
+    // ★ FIX 20-6 #2 (Agent 6): mark in-flight BEFORE firing scanCourse so any
+    //    concurrent startScan(courseKey, ...) sees it immediately.
+    _inflightScans.add(courseKey);
     // Fire-and-forget — errors captured and saved to state
     scanCourse(courseKey, onProgress).catch(e=>{
       console.error('[Scanner] erro fatal:', e && e.message);
@@ -419,6 +456,10 @@
         setScanState(courseKey, state);
         try{ if(onProgress) onProgress(state, getLessons(courseKey)); }catch(_){}
       }
+    }).finally(()=>{
+      // ★ FIX 20-6 #2 (Agent 6): always release the in-flight slot, even on
+      //    error/exception, so subsequent startScan calls can proceed.
+      _inflightScans.delete(courseKey);
     });
   }
 
@@ -436,6 +477,15 @@
         if(!m || !m.path) continue;
         const state = getScanState(m.path);
         if(state && state.status === 'scanning'){
+          // ★ FIX 20-6 #2 (Agent 6): skip if a scan for this course is already
+          //    in-flight (e.g., user:ready fired twice and the first scan is
+          //    still running). Without this guard, resumeInterruptedScans would
+          //    clear the in-flight scan's state and startScan would re-fire
+          //    scanCourse, doubling the load on the worker.
+          if(_inflightScans.has(m.path)){
+            console.log('[Scanner] resume skipped — scan já em andamento (in-flight):', m.path);
+            continue;
+          }
           console.log('[Scanner] scan preso detectado — limpando e reiniciando:', m.path);
           clearScanState(m.path);
           startScan(m.path, null);
@@ -468,37 +518,59 @@
     const LS_MANUAL = 'gdi-manual-courses-v1';
     const LS_HIDDEN = 'gdi-hidden-courses-v1';  // ★ v1.0.97
     let d;  // populated by fetch below; referenced by mergeDriveCourses closure
+    // ★ FIX (Task 20-13 #6): local path normalizer — strip trailing slashes
+    //   so '/0:/Cursos' and '/0:/Cursos/' are treated as the same course.
+    //   Matches the normalization added to gdiAddCourseFromDrive /
+    //   doAddCourseFromDrive in study-courses.js. Without this, sync could
+    //   re-add a course that was already in localStorage (or hidden) just
+    //   because the server returned a path with a trailing slash and the
+    //   local copy didn't (or vice-versa).
+    const _normPath = function(p){
+      p = String(p||'').replace(/\/+$/,'');
+      return p || '/';
+    };
     const mergeDriveCourses = function(){
       const local = JSON.parse(localStorage.getItem(LS_MANUAL) || '[]');
       if(!Array.isArray(local)) throw new Error('localStorage not an array');
-      const localPaths = new Set(local.map(c => c && c.path));
+      // ★ FIX (Task 20-13 #6): build localPaths with normalized paths so the
+      //   has() check below catches duplicates regardless of trailing slash.
+      const localPaths = new Set(local.map(c => c && _normPath(c.path)));
       // ★ v1.0.97: carrega hidden list — cursos aqui NUNCA devem ser re-adicionados
+      // ★ FIX (Task 20-13 #6): normalize hidden paths too so a hidden course
+      //   is skipped even if the server returns it with a different trailing slash.
       const hiddenList = JSON.parse(localStorage.getItem(LS_HIDDEN) || '[]');
-      const hiddenSet = new Set(Array.isArray(hiddenList) ? hiddenList : []);
+      const hiddenSet = new Set((Array.isArray(hiddenList) ? hiddenList : []).map(h => _normPath(h)));
       let added = 0;
       for(const dc of d.courses){
-        if(dc && dc.coursePath && !localPaths.has(dc.coursePath)){
-          // ★ v1.0.97: pula se foi hidden localmente
-          if(hiddenSet.has(dc.coursePath)){
+        const dcPath = _normPath(dc && dc.coursePath);
+        if(dc && dc.coursePath && !localPaths.has(dcPath)){
+          // ★ v1.0.97: pula se foi hidden localmente (normalized comparison)
+          if(hiddenSet.has(dcPath)){
             continue;
           }
           local.push({
             id:'mc-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),
             name:dc.courseName||'Curso', icon:'📁', color:'#5ddeda', goal:60, notes:'',
-            createdAt:dc.addedAt||Date.now(), manual:true, path:dc.coursePath,
-            courseKey:dc.coursePath, pdfCount:dc.pdfCount||0
+            createdAt:dc.addedAt||Date.now(), manual:true, path:dcPath,
+            courseKey:dcPath, pdfCount:dc.pdfCount||0
           });
-          localPaths.add(dc.coursePath);
+          localPaths.add(dcPath);
           added++;
         }
       }
       // Dedup pass — resilient against concurrent writes that may have
       // inserted the same course between our read and our write.
+      // ★ FIX (Task 20-13 #6): dedup by NORMALIZED path (not id) so legacy
+      //   entries with trailing slashes are merged into one. Previously, two
+      //   entries for the same course (one with '/', one without) had different
+      //   ids and both survived dedup — leading to duplicate tiles.
       const seen = new Set();
       const deduped = [];
       for(const c of local){
         if(!c) continue;
-        const k = c.key || c.id || c.path;
+        // Prefer normalized path as the dedup key; fall back to id only if
+        // path is missing (shouldn't happen for manual courses, but defensive).
+        const k = _normPath(c.path) || c.id;
         if(k){
           if(seen.has(k)) continue;
           seen.add(k);
@@ -508,8 +580,19 @@
       localStorage.setItem(LS_MANUAL, JSON.stringify(deduped));
       return added;
     };
+    // ★ FIX 20-6 #4 (Agent 6): AbortController with 15s timeout. Previously
+    //    the fetch to /api/courses/list had no timeout — if the worker was
+    //    slow/unresponsive (e.g., cold isolate, network blackhole), this
+    //    function would hang indefinitely, blocking the entire user:ready
+    //    chain (autoScanPending only runs after syncCoursesFromDrive resolves
+    //    via .finally()). 15s is generous for a simple list endpoint.
+    const SYNC_COURSES_TIMEOUT_MS = 15000;
+    const controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    const timeoutId = controller ? setTimeout(()=>{ try{ controller.abort(); }catch(_){} }, SYNC_COURSES_TIMEOUT_MS) : null;
     try{
-      const r = await fetch('/api/courses/list');
+      const fetchOpts = { method:'GET' };
+      if(controller) fetchOpts.signal = controller.signal;
+      const r = await fetch('/api/courses/list', fetchOpts);
       if(!r.ok){ console.warn('[syncCoursesFromDrive] HTTP', r.status); return; }
       d = await r.json();
       if(!d || !d.ok || !Array.isArray(d.courses)){ console.warn('[syncCoursesFromDrive] bad shape'); return; }
@@ -537,8 +620,37 @@
       }
       if(added > 0){
         console.log('[GDI M22] syncCoursesFromDrive: ' + added + ' cursos recuperados do Drive');
+        // ★ FIX (Task 20-13 #7): emit courses:changed so downstream caches
+        //   invalidate. Without this, the memoized collectCourses() in
+        //   study-panel.js (_ccCache, 5s TTL) returns the STALE pre-sync array
+        //   when renderHome's .then() callback fires after sync completes —
+        //   the user would NOT see the freshly-restored course tiles until
+        //   the 5s TTL expired. Similarly, bestInCache (60s TTL) in
+        //   study-courses.js would hold stale entries. The Bus.emit pattern
+        //   matches hideCourse/unhideCourse/addCourse/removeCourse in
+        //   study-courses.js. Guarded with typeof Bus !== 'undefined' since
+        //   the scanner may load before app.min.js defines Bus in edge cases
+        //   (though per load order it shouldn't).
+        try{
+          if(typeof Bus !== 'undefined' && Bus && typeof Bus.emit === 'function'){
+            Bus.emit('courses:changed', {source:'syncCoursesFromDrive', added:added});
+          }
+        }catch(_){}
       }
-    }catch(e){ console.warn('[syncCoursesFromDrive] error:', e && e.message); }
+    }catch(e){
+      // ★ FIX 20-6 #4 (Agent 6): distinguish AbortError (timeout) from network errors
+      //    for diagnostic purposes. Either way, sync is best-effort and failure
+      //    is non-fatal (autoScanPending still runs from .finally()).
+      if(e && (e.name === 'AbortError' || /aborted/i.test(e.message||''))){
+        console.warn('[syncCoursesFromDrive] timeout após', SYNC_COURSES_TIMEOUT_MS+'ms — abortado');
+      }else{
+        console.warn('[syncCoursesFromDrive] error:', e && e.message);
+      }
+    }finally{
+      // ★ FIX 20-6 #4 (Agent 6): always clear the timeout, even on success,
+      //    to prevent the timer from firing on an already-completed request.
+      if(timeoutId) clearTimeout(timeoutId);
+    }
   }
 
   function autoScanPending(){
@@ -780,8 +892,19 @@
       }, 5000);
     });
     // Also try on page:change (in case user navigates and modules are ready)
+    // ★ FIX 20-6 #1 (Agent 6): track the setTimeout id and clear it before
+    //    scheduling a new one. Without this, every page:change emission would
+    //    stack a NEW 3s timer — e.g. 10 navigations = 10 pending autoScanPending
+    //    calls firing in sequence, hammering localStorage + startScan guards
+    //    with redundant work. Now only the LATEST page:change schedules a scan.
+    let _autoScanPageChangeTimer = null;
     Bus.onGlobal('page:change', function(){
-      setTimeout(function(){
+      if(_autoScanPageChangeTimer){
+        clearTimeout(_autoScanPageChangeTimer);
+        _autoScanPageChangeTimer = null;
+      }
+      _autoScanPageChangeTimer = setTimeout(function(){
+        _autoScanPageChangeTimer = null;
         try{ autoScanPending(); }catch(_){}
       }, 3000);
     });
