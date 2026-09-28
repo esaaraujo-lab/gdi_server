@@ -66,20 +66,6 @@
     return _qWriteChain;
   }
 
-  // ★ FIX-05-MEGGY-CACHE: helper para filtrar o banco local por curso.
-  //    Antes as questões só tinham `subject` (nome da aula) — impossível
-  //    agregar por curso. Agora generateAll etiqueta cada questão com
-  //    `course` (nome do curso derivado da URL), e esta função permite
-  //    à Central de Estudos listar todas as questões de um curso.
-  //    Compatível com questões legadas (sem `course`): retorna-as quando
-  //    courseName for vazio.
-  function questionsByCourse(courseName){
-    const all = U.lsGet(LQ, []);
-    if(!courseName) return all;
-    const needle = String(courseName).toLowerCase();
-    return all.filter(q => q && q.course && String(q.course).toLowerCase() === needle);
-  }
-
   // ── Summaries storage ──
   // ★ FIX: agora salva também o path do curso e a matéria — para o botão
   // "Resumo" no painel de materiais (M9) agrupar corretamente.
@@ -233,63 +219,6 @@
     }catch(_){return null;}
   }
 
-  // ═══ NEW (indice.json + lesson folder approach — Task MIGRATE-02-MEGGY-INDICE)
-  //    Helpers for the new persistence model:
-  //      • lessonFolderPath() — derives the lesson folder (parent of the
-  //        current lesson URL). Mirrors gdi-core.js M9 `fPath`.
-  //      • indiceGet(lessonKey) — GET /api/ai/indice?lesson=<key>
-  //      • indiceSet(entry)     — POST /api/ai/indice
-  //      • readLessonFile(lessonPath, fileName) — list lesson folder + fetch
-  //        the file content via downloadUrl (or .content field if present).
-  //    Replaces the old isa_cache.json + .meggy.ai/resumos/ model. Now each
-  //    lesson stores resumo_meggy.md / questoes_meggy.json / mapa_meggy.md
-  //    directly in ITS OWN folder, and a lightweight indice.json in .meggy.ai/
-  //    tracks WHERE each file is saved.
-  function lessonFolderPath(){
-    const p = window.location.pathname || '';
-    if(!p) return '/';
-    const idx = p.lastIndexOf('/');
-    if(idx <= 0) return p.endsWith('/') ? p : (p + '/');
-    return p.slice(0, idx + 1);
-  }
-
-  async function indiceGet(lessonKey){
-    try{
-      const r = await fetch('/api/ai/indice?lesson=' + encodeURIComponent(lessonKey), {cache:'no-store'});
-      if(!r.ok) return null;
-      const d = await r.json();
-      if(d && d.ok && d.entry) return d.entry;
-      return null;
-    }catch(_){ return null; }
-  }
-
-  async function indiceSet(entry){
-    try{
-      await fetch('/api/ai/indice', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(entry)
-      });
-    }catch(_){ /* não bloqueia o fluxo se o indice falhar */ }
-  }
-
-  async function readLessonFile(lessonPath, fileName){
-    if(!lessonPath || !fileName) return '';
-    try{
-      if(window.GDIStorage && typeof window.GDIStorage.listLessonMaterials === 'function'){
-        const items = await window.GDIStorage.listLessonMaterials(lessonPath);
-        const match = (items || []).find(it => it && it.name === fileName);
-        if(!match) return '';
-        if(match.content) return String(match.content);
-        if(match.downloadUrl){
-          const r = await fetch(match.downloadUrl, {cache:'no-store'});
-          if(r.ok) return await r.text();
-        }
-      }
-    }catch(_){ /* best-effort */ }
-    return '';
-  }
-
   // ★ v87-FIX-MEGGY-MODULES BUG 4: robust cache lookup that probes multiple
   //    key variants so Meggy can reuse the Battalion's persistent memory.
   //    Battalion saves with key `courseKey + '/' + pdfName` (e.g.,
@@ -302,109 +231,95 @@
   //      (3) Battalion's .meggy.ai/resumos/ Drive folder via
   //          window.GDIStorage.listMaterials, matched by lesson name
   //    Returns the first hit (or null). Logs misses so we can debug.
-  // ★ MIGRATE-02-MEGGY-INDICE: cacheGetRobust() now consults indice.json
-  //    (a lightweight index in .meggy.ai/) to find WHERE the lesson's resumo /
-  //    questoes / mapa files live, then reads them directly from the lesson
-  //    folder. Replaces the old 4-step probe (isa_cache primary key → PDF-
-  //    extension variant → Battalion resumos/ Drive folder → shared pool).
-  //    If indice has no entry for this lesson → returns null (will trigger
-  //    generation). If indice has an entry but files are unreadable → also
-  //    returns null (defensive — corrupt indice entry shouldn't block gen).
   async function cacheGetRobust(){
-    const lessonKey = U.lessonKey();
-    const lessonPath = lessonFolderPath();
-
-    // (1) Check indice.json via GET /api/ai/indice?lesson=<lessonKey>
-    const entry = await indiceGet(lessonKey);
-    if(!entry){
-      console.info('[Meggy] indice miss for lessonKey:', lessonKey, '— will trigger generation.');
-      return null;
+    // (1) primary key
+    const primary = await cacheGet();
+    if(primary){
+      console.info('[Meggy] cache hit via primary lesson key:', U.lessonKey());
+      return primary;
     }
 
-    // (2) indice hit — read resumo MD (+ questoes JSON + mapa MD) from the
-    //     lesson folder. Each file's path is stored in the indice entry; we
-    //     only need the basename to find it via listLessonMaterials.
-    const resumoName  = (entry.resumo   || (lessonPath + 'resumo_meggy.md')).split('/').pop();
-    const questoesName= (entry.questoes || (lessonPath + 'questoes_meggy.json')).split('/').pop();
-    const mapaName    = (entry.mapa     || (lessonPath + 'mapa_meggy.md')).split('/').pop();
-
-    const summary   = await readLessonFile(lessonPath, resumoName);
-    const mindmap   = await readLessonFile(lessonPath, mapaName) || null;
-    let questions = [];
-    const qRaw = await readLessonFile(lessonPath, questoesName);
-    if(qRaw){
-      try{ const parsed = JSON.parse(qRaw); if(Array.isArray(parsed)) questions = parsed; }
-      catch(_){ questions = []; }
+    // (2) PDF-extension variant — for video lesson pages, try the PDF with
+    //     the same basename in the same folder.
+    const p = window.location.pathname || '';
+    if(/\.(mp4|webm|mov|m4v|avi|mkv|m3u8)$/i.test(p)){
+      const pdfKey = p.replace(/\.[a-z0-9]+$/i, '.pdf');
+      if(pdfKey && pdfKey !== p){
+        const hit2 = await cacheGet(pdfKey);
+        if(hit2){
+          console.info('[Meggy] cache hit via PDF-extension key:', pdfKey);
+          return hit2;
+        }
+      }
     }
 
-    if(!summary && !mindmap && !questions.length){
-      console.info('[Meggy] indice entry exists for', lessonKey, 'but no files readable — will trigger generation.');
-      return null;
-    }
-
-    console.info('[Meggy] cache hit via indice.json (lesson folder):', lessonPath,
-      '{ resumo:' + (!!summary) + ', questoes:' + questions.length + ', mapa:' + (!!mindmap) + ' }');
-    return { summary: summary || null, questions, mindmap };
-  }
-
-  // ★ MIGRATE-02-MEGGY-INDICE: cacheSave() now writes resumo_meggy.md /
-  //    questoes_meggy.json / mapa_meggy.md directly into the LESSON FOLDER
-  //    (where the video lives) and updates indice.json so the next student
-  //    (or this student on another device) can find them. Replaces the old
-  //    POST /api/ai/cache (isa_cache.json) + .meggy.ai/resumos/ writes.
-  //    Still updates _chainCache (in-memory) for fast same-session access.
-  async function cacheSave(summary, questions, lessonName, mindmap){
+    // (3) Battalion resumos/ Drive folder — match by lesson name.
+    //     Battalion writes <safeLesson>_<safePdf>_<ts>.md into .meggy.ai/resumos/.
+    //     We list the folder, find a file whose name (minus timestamp + safe-chars)
+    //     matches the current lesson name, and lazy-load its content.
     try{
-      const lessonKey = U.lessonKey();
-      const lessonPath = lessonFolderPath();
-
-      // ★FIX (preserved): se mindmap não foi passado, preserva o que já está
-      //    no _chainCache (antes consultava o Drive via cacheGet; agora o
-      //    _chainCache é a fonte de verdade in-session — mais rápido e não
-      //    depende do legado /api/ai/cache).
-      let mindmapToSave = mindmap;
-      if(mindmapToSave === undefined){
-        mindmapToSave = (_chainCache[lessonKey] && _chainCache[lessonKey].mindmap) || null;
+      if(window.GDIStorage && typeof window.GDIStorage.listMaterials === 'function'){
+        const seg = p.split('/').filter(Boolean);
+        if(seg.length >= 2){
+          const coursePath = '/' + seg.slice(0,2).join('/') + '/';
+          let lessonName = '';
+          try{ lessonName = (typeof U.realLessonName === 'function') ? (U.realLessonName('') || '') : ''; }catch(_){ lessonName = ''; }
+          if(lessonName){
+            const base = lessonName.toLowerCase().replace(/\.[a-z0-9]+$/i,'').trim();
+            if(base){
+              const items = await window.GDIStorage.listMaterials('resumos', coursePath);
+              if(Array.isArray(items) && items.length){
+                // Normalize a Drive filename back to a comparable form:
+                // strip extension, strip trailing _<timestamp>, replace _ with space.
+                const norm = s => String(s||'')
+                  .replace(/\.(md|json)$/i,'')
+                  .replace(/_\d{10,}$/,'')
+                  .replace(/[_-]+/g,' ')
+                  .toLowerCase()
+                  .trim();
+                const match = items.find(it => it && it.name && norm(it.name).includes(base));
+                if(match){
+                  let content = match.content || '';
+                  if(!content && match.downloadUrl){
+                    try{
+                      const r = await fetch(match.downloadUrl, {cache:'no-store'});
+                      if(r.ok) content = await r.text();
+                    }catch(_){ content = ''; }
+                  }
+                  if(content){
+                    console.info('[Meggy] cache hit via Battalion resumos/ folder:', match.name);
+                    // Wrap in the shape cacheGet() returns. Questions/mindmap not
+                    // in the MD file — caller will regenerate them as needed.
+                    return { summary: content, questions: [], mindmap: null };
+                  }
+                }
+              }
+            }
+          }
+        }
       }
+    }catch(e){
+      console.warn('[Meggy] Battalion resumos/ fallback failed (non-critical):', e && e.message || e);
+    }
 
-      // (1) Save resumo_meggy.md / questoes_meggy.json / mapa_meggy.md to the
-      //     lesson folder via GDIStorage.saveMaterialToLesson (non-blocking
-      //     per file — partial failure doesn't abort the others).
-      if(window.GDIStorage && typeof window.GDIStorage.saveMaterialToLesson === 'function'){
-        if(summary){
-          try{ await window.GDIStorage.saveMaterialToLesson(lessonPath, 'resumo_meggy.md', String(summary)); }
-          catch(_){ /* não bloqueia */ }
-        }
-        if(Array.isArray(questions) && questions.length){
-          try{ await window.GDIStorage.saveMaterialToLesson(lessonPath, 'questoes_meggy.json', JSON.stringify(questions, null, 2)); }
-          catch(_){ /* não bloqueia */ }
-        }
-        if(mindmapToSave){
-          try{ await window.GDIStorage.saveMaterialToLesson(lessonPath, 'mapa_meggy.md', String(mindmapToSave)); }
-          catch(_){ /* não bloqueia */ }
-        }
+    console.info('[Meggy] cache miss — no hit for primary, PDF-key, or Battalion resumos/. Will extract.');
+    return null;
+  }
+  async function cacheSave(summary,questions,lessonName,mindmap){
+    try{
+      // ★FIX: se mindmap não foi passado, preserva o que já está no cache
+      // (antes, ao adicionar mais questões, o cache era sobrescrito SEM mindmap)
+      let mindmapToSave=mindmap;
+      if(mindmapToSave===undefined){
+        const existing=await cacheGet();
+        mindmapToSave=(existing&&existing.mindmap)||null;
       }
-
-      // (2) Update indice.json via POST /api/ai/indice — records WHERE each
-      //     file lives so cacheGetRobust can find them next time.
-      await indiceSet({
-        lesson:     lessonKey,
-        lessonName: String(lessonName || '').slice(0, 200),
-        resumo:     lessonPath + 'resumo_meggy.md',
-        questoes:   lessonPath + 'questoes_meggy.json',
-        mapa:       lessonPath + 'mapa_meggy.md',
-        date:       Date.now()
-      });
-
-      // (3) Update _chainCache (in-memory) for fast same-session access.
-      //    Conservative: only overwrite fields when the caller passes a
-      //    NON-EMPTY value — avoids wiping a good in-memory summary when
-      //    the caller passed null (e.g. transient network blip).
-      if(!_chainCache[lessonKey]) _chainCache[lessonKey] = {};
-      if(summary)                                       _chainCache[lessonKey].summary   = summary;
-      if(Array.isArray(questions) && questions.length)  _chainCache[lessonKey].questions = questions;
-      if(mindmapToSave)                                 _chainCache[lessonKey].mindmap   = mindmapToSave;
-    }catch(_){ /* não bloqueia o fluxo se o cache falhar */ }
+      // ★ tenta endpoint granular primeiro; senão, cache unificado
+      const granular=await GRANULAR_AVAILABLE();
+      const endpoint=granular?'/api/ai/summaries':'/api/ai/cache';
+      await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({key:U.lessonKey(),summary,questions,mindmap:mindmapToSave,lessonName})});
+    }catch(_){/* não bloqueia o fluxo se o cache falhar */}
   }
 
   // ── GERAÇÃO EM CADEIA: resumo + pílulas + questões ──
@@ -447,28 +362,22 @@
     //    e garante consistência entre os 2 call-sites (cache hit e geração nova).
     const _p=window.location.pathname||'';
     const _seg=_p.split('/').filter(Boolean);
-    let _coursePath='',_subject='',_courseName='';
+    let _coursePath='',_subject='';
     if(_seg.length>=2){
       _coursePath='/'+_seg.slice(0,2).join('/')+'/';
-      try{ _courseName=decodeURIComponent(_seg[1]); }catch(_){ _courseName=_seg[1]; }
-      if(_seg.length>=3){
-        try{ _subject=decodeURIComponent(_seg[2]); }catch(_){ _subject=_seg[2]; }
-      }
+      if(_seg.length>=3)_subject=decodeURIComponent(_seg[2]);
     }
-    // ★ FIX-05-MEGGY-CACHE: _courseName é usado para etiquetar questões com
-    //    `course` (filtro por curso na Central de Estudos). Antes as questões
-    //    só tinham `subject:lesson` — impossível filtrar por curso.
     // se já tem tudo no cache em memória, pula
     if(_chainCache[key]&&_chainCache[key].summary&&_chainCache[key].mindmap&&_chainCache[key].questionsGenerated){
       return _chainCache[key];
     }
 
-    // verifica cache PRIMEIRO (antes de extrair PDF)
-    // ★ MIGRATE-02-MEGGY-INDICE: cacheGetRobust() now consults indice.json
-    //    (a lightweight index in .meggy.ai/) to find the lesson folder's
-    //    resumo_meggy.md / questoes_meggy.json / mapa_meggy.md, then reads
-    //    them directly. Replaces the old isa_cache.json + .meggy.ai/resumos/
-    //    + shared-pool probes.
+    // verifica cache do Drive PRIMEIRO (antes de extrair PDF)
+    // ★ v87-FIX-MEGGY-MODULES BUG 4: use cacheGetRobust() so we probe
+    //    multiple key variants (lesson URL, PDF-extension key, Battalion
+    //    resumos/ Drive folder). Before, Meggy only tried U.lessonKey(),
+    //    which never matched the Battalion's `courseKey/pdfName` keys →
+    //    persistent memory was always ignored.
     const cached=await cacheGetRobust();
     if(!_chainCache[key]){_chainCache[key]={};_chainCacheEvict();}
     if(cached){
@@ -482,15 +391,14 @@
       _chainCache[key].questionsGenerated=true;
       _chainCache[key].questions=cached.questions;
       // ★ PATCH B: carrega questões no banco local em batch (1 read + 1 write)
-      // ★ FIX-05-MEGGY-CACHE: etiqueta com `course` (filtro por curso).
       const _batch=[];
       cached.questions.forEach(q=>{
         if(q&&q.statement){
           let cleanQ;
           if(q.type==='tf'||(!q.options&&q.correct!==undefined)){
-            cleanQ={course:_courseName,subject:lesson,type:'tf',statement:String(q.statement),options:['Certo','Errado'],correct:Math.max(0,Math.min(1,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
+            cleanQ={subject:lesson,type:'tf',statement:String(q.statement),options:['Certo','Errado'],correct:Math.max(0,Math.min(1,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
           }else if(Array.isArray(q.options)){
-            cleanQ={course:_courseName,subject:lesson,type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min(3,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
+            cleanQ={subject:lesson,type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min(3,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
           }
           if(cleanQ)_batch.push(cleanQ);
         }
@@ -500,48 +408,6 @@
       if(cached.questions.length)autoCreateFlashcards(cached.questions,lesson,U.lessonKey());
       saveIsaSummary(lesson,_chainCache[key].summary,_coursePath,_subject);
             return _chainCache[key];
-    }
-
-    // ★ FIX-05-MEGGY-CACHE (KEY FIX): PARTIAL cache hit — summary + questions
-    //    exist but mindmap is missing. Under the indice.json approach this
-    //    happens when the lesson folder has resumo_meggy.md + questoes_meggy.json
-    //    but mapa_meggy.md was not yet written (e.g. previous generation was
-    //    interrupted). Without this handler, the next run would fall through
-    //    to PDF extraction and RE-GENERATE the questions
-    //    (wasting LLM calls), even though student A already shared them.
-    //    Here we preload the shared/cached questions into the local bank and
-    //    mark questionsGenerated so the AI question task is skipped — only
-    //    the pílulas task runs (which needs PDF text, so extraction still
-    //    happens, but only for the mindmap, not for re-asking the LLM).
-    if(_chainCache[key].summary && !_chainCache[key].mindmap &&
-       _chainCache[key].cachedQuestions && _chainCache[key].cachedQuestions.length &&
-       !_chainCache[key].questionsGenerated){
-      _chainCache[key].questionsGenerated = true;
-      _chainCache[key]._allCleanQ = [];
-      const _batchPreload = [];
-      _chainCache[key].cachedQuestions.forEach(q=>{
-        if(q&&q.statement){
-          let cleanQ;
-          if(q.type==='tf'||(!q.options&&q.correct!==undefined)){
-            cleanQ={type:'tf',statement:String(q.statement),options:['Certo','Errado'],correct:Math.max(0,Math.min(1,Number(q.correct)||0)),explanation:String(q.explanation||''),legalText:String(q.legalText||q.fundamentacao||''),fundamentacao:String(q.fundamentacao||'')};
-          }else if(Array.isArray(q.options)){
-            cleanQ={type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min(3,Number(q.correct)||0)),explanation:String(q.explanation||''),legalText:String(q.legalText||q.fundamentacao||''),fundamentacao:String(q.fundamentacao||'')};
-          }
-          if(cleanQ){
-            // _allCleanQ keeps the cache-shape (no course/subject) for the
-            // final POST to /api/ai/cache + saveSharedSummary.
-            _chainCache[key]._allCleanQ.push(cleanQ);
-            // local-bank copy carries course+subject tags for filtering.
-            _batchPreload.push(Object.assign({course:_courseName,subject:lesson,source:(cached&&cached._shared)?'ISA-shared':'ISA-PDF'},cleanQ));
-          }
-        }
-      });
-      addQBatch(_batchPreload);
-      if(_chainCache[key].cachedQuestions.length){
-        autoCreateFlashcards(_chainCache[key].cachedQuestions, lesson, U.lessonKey());
-      }
-      _chainCache[key].questions = _chainCache[key]._allCleanQ;
-      console.info('[Meggy] partial cache hit (summary+questions, no mindmap) — preloaded '+_batchPreload.length+' questions, will generate only pílulas.');
     }
 
     // só extrai PDF se precisa gerar algo
@@ -610,7 +476,9 @@
         const hasPdfjs=pdfErrors.some(e=>/pdf\.js/.test(e.error));
         detail+='\nSugestões:\n';
         if(hasHttp)detail+='• Verifique se o PDF está acessível (sem proteção de link) e se você está logado.\n';
-        if(hasScanned)detail+='• Alguns PDFs são escaneados (só imagens) — a Meggy não faz OCR ainda.\n';
+        // ★ v91 FIX: mensagem stale — a Meggy FAZ OCR (Tesseract + opcionalmente CF Workers AI vision).
+        //    Quando o erro chega aqui, o OCR já foi tentado e falhou (ou o PDF é 100% imagem sem texto).
+        if(hasScanned)detail+='• Alguns PDFs são escaneados (só imagens) — a Meggy tentou OCR (Tesseract + IA) mas não conseguiu extrair texto útil. Tente um PDF com texto selecionável.\n';
         if(hasPdfjs)detail+='• O PDF pode estar corrompido ou criptografado.\n';
         if(!hasHttp&&!hasScanned&&!hasPdfjs)detail+='• Tente abrir o PDF no navegador para confirmar que carrega normalmente.\n';
       }
@@ -661,7 +529,7 @@
       for(const pdf of pdfTexts){
         const existing=extractQuestionsFromText(pdf.text);
         for(const q of existing){
-          _batchExtract.push({course:_courseName,subject:lesson,type:'open',statement:q,options:[],correct:0,explanation:'Questão extraída do material.',source:'PDF-extract'});
+          _batchExtract.push({subject:lesson,type:'open',statement:q,options:[],correct:0,explanation:'Questão extraída do material.',source:'PDF-extract'});
         }
       }
       addQBatch(_batchExtract);
@@ -686,7 +554,7 @@
                     cleanQ={type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min(3,Number(q.correct)||0)),explanation:String(q.explanation||''),legalText:String(q.legalText||q.fundamentacao||''),fundamentacao:String(q.fundamentacao||'')};
                   }
                   if(cleanQ){
-                    _batchAI.push(Object.assign({course:_courseName,subject:lesson,source:'ISA-PDF'},cleanQ));
+                    _batchAI.push(Object.assign({subject:lesson,source:'ISA-PDF'},cleanQ));
                     _chainCache[key]._allCleanQ.push(cleanQ);
                   }
                 });
@@ -712,19 +580,17 @@
       autoCreateFlashcards(_chainCache[key].questions,lesson,U.lessonKey());
     }
 
-    // ★ MIGRATE-02-MEGGY-INDICE: save step changed — now writes 3 files to
-    //    the lesson folder (resumo_meggy.md / questoes_meggy.json / mapa_meggy.md)
-    //    + updates indice.json, via cacheSave(). Replaces the old single
-    //    POST /api/ai/cache (isa_cache.json). The pipeline (extract →
-    //    generate summary/pílulas/questões in parallel) is unchanged.
+    // salva TUDO no Drive em um único POST (resumo + pílulas + questões)
     try{
-      await cacheSave(
-        _chainCache[key].summary   || null,
-        _chainCache[key].questions || null,
-        lesson,
-        _chainCache[key].mindmap   || null
-      );
-    }catch(_){ /* não bloqueia o fluxo se o cache falhar */ }
+      await fetch('/api/ai/cache',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          key:U.lessonKey(),
+          summary:_chainCache[key].summary||null,
+          questions:_chainCache[key].questions||null,
+          mindmap:_chainCache[key].mindmap||null,
+          lessonName:lesson
+        })});
+    }catch(_){}
     // compartilha no pool de resumos
     if(_chainCache[key].summary){
       // late-bind to summaries module
@@ -767,20 +633,201 @@
     }
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // METADATA-ONLY CACHE — Scanner Distribuído (Section 9.3)
+  // ═══════════════════════════════════════════════════════════════
+  // Per Section 9.3 of PROJETO_ENG_SCANNER_DISTRIBUIDO.md, the cache now
+  // stores ONLY METADATA (path to the material file in the lesson folder),
+  // NOT the content itself. When the Meggy widget needs a resumo or
+  // questoes for a lesson, it:
+  //   (1) calls cacheGetMeta(lessonPath, materialType) to get the metadata
+  //   (2) if the entry has a `file` field, calls loadMaterialFromFolder(...)
+  //       to fetch the actual content from /api/materials/load-from-folder
+  //   (3) if the entry has a `content` field (legacy), uses it directly
+  //
+  // Backward compat: legacy cache entries with `content` field are returned
+  // as-is and treated as content-bearing. New entries are metadata-only.
+  //
+  // Agent 7 (meggy-summaries.js / meggy-questions.js) is responsible for:
+  //   - saving the material file to the lesson folder via
+  //     /api/materials/save-in-folder
+  //   - calling cacheSaveMeta(lessonPath, materialType, file, courseHash)
+  //     to register the metadata entry
+  //
+  // Endpoints (implemented by Agent 1; we code against the contract and
+  // fail silently if they're absent):
+  //   GET  /api/materials/load-from-folder?lessonPath=...&materialType=...&fileName=...
+  //        → { ok:true, content:'<markdown|json string>', file:'<actualFileName>' }
+  //        If fileName is omitted, server picks any shared file of that type
+  //        in the lesson folder (cross-student discovery).
+  //   GET  /api/materials/check-exists?lessonPath=...&materialType=...&fileName=...
+  //        → { ok:true, exists:true|false }
+  //   GET  /api/materials/meta?lessonPath=...&materialType=...
+  //        → { ok:true, entry:{...} }   (optional; falls back to localStorage)
+  //   POST /api/materials/meta  body:{lessonPath,materialType,file,generatedAt,courseHash}
+  //   DELETE /api/materials/meta  body:{lessonPath,materialType}
+  //
+  // All fetches fail gracefully (return null/false) so the widget can fall
+  // back to AI generation if endpoints are absent or files are missing.
+
+  const META_LS_PREFIX = 'gdi-mat-meta:'; // localStorage key prefix
+
+  function _metaLsKey(lessonPath, materialType){
+    return META_LS_PREFIX + materialType + ':' + lessonPath;
+  }
+
+  // Cheap, stable hash of the course segment (/drive:/CourseName/) — used
+  // as courseHash for cache entries. Same course = same hash, regardless of
+  // which lesson inside it we're looking at.
+  function deriveCourseHash(lessonPath){
+    try{
+      const p = String(lessonPath || '');
+      const seg = p.split('/').filter(Boolean);
+      if(seg.length < 2) return '';
+      const courseKey = '/' + seg.slice(0,2).join('/') + '/';
+      let h = 0;
+      for(let i=0;i<courseKey.length;i++){
+        h = ((h<<5) - h) + courseKey.charCodeAt(i);
+        h |= 0;
+      }
+      return 'c' + Math.abs(h).toString(36);
+    }catch(_){ return ''; }
+  }
+
+  // materialAuthorFromFileName: extracts the author (username) from the
+  // filename prefix (before the first underscore). Convention:
+  //   "<username>_Aula 1.md"           → "<username>"
+  //   "<username>_<discipline>.json"   → "<username>"
+  // Strips directory prefix if present (e.g., ".gdi-resumos/<user>_Aula 1.md").
+  function materialAuthorFromFileName(fileName){
+    try{
+      const n = String(fileName || '');
+      const base = n.lastIndexOf('/') >= 0 ? n.slice(n.lastIndexOf('/') + 1) : n;
+      const i = base.indexOf('_');
+      if(i <= 0) return '';
+      return base.slice(0, i);
+    }catch(_){ return ''; }
+  }
+
+  // cacheGetMeta: returns the metadata entry for a lesson+materialType.
+  //   - Legacy entry (has `content`): returned as-is (caller uses content directly)
+  //   - New metadata-only entry (has `file`): caller must call loadMaterialFromFolder
+  //   - Miss: returns null
+  async function cacheGetMeta(lessonPath, materialType){
+    if(!lessonPath || !materialType) return null;
+    // (1) localStorage mirror (fast — my own generated materials)
+    try{
+      const v = localStorage.getItem(_metaLsKey(lessonPath, materialType));
+      if(v){
+        const entry = JSON.parse(v);
+        if(entry && (entry.file || typeof entry.content !== 'undefined')){
+          return entry;
+        }
+      }
+    }catch(_){}
+    // (2) Optional server-side metadata endpoint (Agent 1 may or may not
+    //     implement). If absent (404), we fall through silently — discovery
+    //     happens via loadMaterialFromFolder (no fileName).
+    try{
+      const r = await fetch('/api/materials/meta?lessonPath=' + encodeURIComponent(lessonPath) + '&materialType=' + encodeURIComponent(materialType), {cache:'no-store'});
+      if(r.ok){
+        const d = await r.json();
+        if(d && d.ok && d.entry){
+          // Backward compat: legacy entry with `content` field — return as-is
+          if(typeof d.entry.content !== 'undefined') return d.entry;
+          // New metadata-only entry
+          if(d.entry.file) return d.entry;
+        }
+      }
+    }catch(_){}
+    return null;
+  }
+
+  // cacheSaveMeta: registers a metadata-only entry. Called by Agent 7
+  // after saving a material file to the lesson folder. Does NOT store
+  // content — only the path/fileName.
+  async function cacheSaveMeta(lessonPath, materialType, file, courseHash){
+    if(!lessonPath || !materialType || !file) return null;
+    const entry = {
+      lessonPath: lessonPath,
+      materialType: materialType,
+      file: file,
+      generatedAt: Date.now(),
+      courseHash: courseHash || deriveCourseHash(lessonPath)
+    };
+    // localStorage mirror (fast hit on next read)
+    try{ localStorage.setItem(_metaLsKey(lessonPath, materialType), JSON.stringify(entry)); }catch(_){}
+    // Server-side metadata (optional; silent fail if endpoint absent)
+    try{
+      await fetch('/api/materials/meta', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(entry)
+      });
+    }catch(_){}
+    return entry;
+  }
+
+  // invalidateCacheMeta: clears a stale entry (file deleted from Drive, etc.)
+  async function invalidateCacheMeta(lessonPath, materialType){
+    if(!lessonPath || !materialType) return;
+    try{ localStorage.removeItem(_metaLsKey(lessonPath, materialType)); }catch(_){}
+    try{
+      await fetch('/api/materials/meta', {
+        method:'DELETE',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({lessonPath, materialType})
+      });
+    }catch(_){}
+  }
+
+  // loadMaterialFromFolder: fetches content for a specific file in the
+  // lesson folder. If `fileName` is omitted, server picks any shared file
+  // of that type in the folder (cross-student discovery). Returns:
+  //   - { content, file, author } on success
+  //   - null on miss / error
+  async function loadMaterialFromFolder(lessonPath, materialType, fileName){
+    if(!lessonPath || !materialType) return null;
+    try{
+      let url = '/api/materials/load-from-folder?lessonPath=' + encodeURIComponent(lessonPath) + '&materialType=' + encodeURIComponent(materialType);
+      if(fileName) url += '&fileName=' + encodeURIComponent(fileName);
+      const r = await fetch(url, {cache:'no-store'});
+      if(!r.ok) return null;
+      const d = await r.json();
+      if(!d || !d.ok) return null;
+      const content = (typeof d.content === 'string') ? d.content : (d.content == null ? '' : String(d.content));
+      const actualFile = d.file || fileName || '';
+      const author = materialAuthorFromFileName(actualFile);
+      return { content, file: actualFile, author };
+    }catch(_){ return null; }
+  }
+
+  // materialExistsInFolder: HEAD-style check. Use this BEFORE AI generation
+  // to skip regeneration if material already exists in the lesson folder.
+  async function materialExistsInFolder(lessonPath, materialType, fileName){
+    if(!lessonPath || !materialType || !fileName) return false;
+    try{
+      const r = await fetch('/api/materials/check-exists?lessonPath=' + encodeURIComponent(lessonPath) + '&materialType=' + materialType + '&fileName=' + encodeURIComponent(fileName));
+      if(!r.ok) return false;
+      const d = await r.json();
+      return !!(d && d.ok && d.exists === true);
+    }catch(_){ return false; }
+  }
+
   // ── Namespace exports ──
   window.__gdiMeggy.cache = {
     generateAll, regenerate,
     cacheGet, cacheGetRobust, cacheSave,
-    addQ, addQBatch, questionsByCourse,
+    // ★ Task 9 (Scanner Distribuído): metadata-only cache + folder-load helpers
+    cacheGetMeta, cacheSaveMeta, invalidateCacheMeta,
+    loadMaterialFromFolder, materialExistsInFolder,
+    materialAuthorFromFileName, deriveCourseHash,
+    addQ, addQBatch,
     saveIsaSummary, listIsaSummaries, delIsaSummary,
     downloadAsPdf, copySummary,
     autoCreateFlashcards,
     // Expose shared state for diagnostics / future modules
-    _chainCache, _inflight, _qWriteChain,
-    // ★ MIGRATE-02-MEGGY-INDICE: expose indice.json + lesson-folder helpers
-    // so meggy-summaries.js renderResumos can reuse them (single source of
-    // truth for the indice API + lesson-folder file reads).
-    lessonFolderPath, indiceGet, indiceSet, readLessonFile
+    _chainCache, _inflight, _qWriteChain
   };
 
   // ── Aliases para compatibilidade (gdiIsaPdf.* assemblado em meggy-summaries.js) ──
