@@ -7,7 +7,8 @@
 // Exposes:
 //   • window.__gdiMeggy.questions = { questions, generateQuestions,
 //     startQuizFromBank, runQuizSession, extractQuestionsFromText,
-//     getAnsweredIds, markAnswered }
+//     getAnsweredIds, markAnswered, saveQuestionsToDisciplineFolder,
+//     loadQuestionsFromDisciplineFolder }
 //   • window.__gdiPdfCursor  (legacy round-robin cursor)
 //
 // Guard: window.__gdiMeggyQuestions
@@ -43,12 +44,214 @@
   function getAnsweredIds(){try{return JSON.parse(localStorage.getItem(ANSWERED_KEY)||'[]')}catch(_){return []}}
   function markAnswered(id){const arr=getAnsweredIds();if(!arr.includes(id)){arr.push(id);if(arr.length>500)arr.shift();try{localStorage.setItem(ANSWERED_KEY,JSON.stringify(arr))}catch(_){}}}
 
+  // ═══════════════════════════════════════════════════════════════
+  // ★ TASK 7 (Scanner Distribuído) — folder-first save/load helpers
+  // for the question bank. Same pattern as meggy-summaries.js: try
+  // the discipline folder FIRST (Section 9.2 of the spec), fall back
+  // to the legacy centralized cache on any failure.
+  //
+  // The "discipline folder" is the parent folder of the lesson file
+  // (e.g. "/11:/TJ SP Escrevente/Módulo 1/Português/" for a lesson at
+  // "/11:/TJ SP Escrevente/Módulo 1/Português/Aula 1.pdf").
+  //
+  // Worker endpoints (Agent 1):
+  //   POST /api/materials/save-in-folder
+  //        body: { lessonPath:<disciplinePath>, materialType:'questoes',
+  //                fileName:"<username>_<discipline>.json", content:<json> }
+  //   GET  /api/materials/load-from-folder?lessonPath=<disciplinePath>
+  //        &materialType=questoes&fileName=<username>_<discipline>.json
+  // ═══════════════════════════════════════════════════════════════
+
+  // Best-effort: derive the discipline folder path from the current URL.
+  // Returns "" when not on a lesson page or when the URL is too shallow.
+  function _deriveDisciplinePath(){
+    try{
+      const p = window.location.pathname || '';
+      if(!/^\/\d+:\//.test(p)) return '';
+      const seg = p.split('/').filter(Boolean);
+      if(seg.length < 3) return ''; // need at least driveIdx:/courseName/discipline/
+      // Drop the last segment (the lesson file); the rest is the discipline path.
+      return '/' + seg.slice(0, -1).join('/') + '/';
+    }catch(_){ return ''; }
+  }
+
+  // Best-effort: course name = segment 1 after driveIdx (e.g. "TJ SP Escrevente").
+  function _deriveCourseName(){
+    try{
+      const seg = (window.location.pathname || '').split('/').filter(Boolean);
+      if(seg.length >= 2) return decodeURIComponent(seg[1]);
+    }catch(_){}
+    return '';
+  }
+
+  // Best-effort: discipline name = second-to-last segment (the folder
+  // containing the lesson file, e.g. "Português").
+  function _deriveDisciplineName(){
+    try{
+      const seg = (window.location.pathname || '').split('/').filter(Boolean);
+      if(seg.length >= 4) return decodeURIComponent(seg[seg.length - 2]);
+    }catch(_){}
+    return '';
+  }
+
+  // Best-effort: current username (mirror of meggy-summaries.js helper).
+  function _currentUsername(){
+    try{
+      const u = window.__gdiUser || window.gdiUser;
+      if(u && (u.name || u.username || u.email)){
+        return String(u.name || u.username || u.email).split('@')[0];
+      }
+      const raw = window.localStorage && window.localStorage.getItem('gdi-user');
+      if(raw){
+        const j = JSON.parse(raw);
+        if(j && (j.name || j.username || j.email)){
+          return String(j.name || j.username || j.email).split('@')[0];
+        }
+      }
+    }catch(_){}
+    return 'meggy';
+  }
+
+  // Sanitize a string into a safe Drive file-name fragment.
+  function _safeFileFragment(s){
+    return String(s||'').replace(/[/\\?%*:|"<>]/g, '_').trim().slice(0, 120) || 'aula';
+  }
+
+  // Save question bank JSON to the discipline folder via new worker endpoint.
+  // `questions` is an array of question objects (will be JSON-stringified
+  // together with courseName, disciplineName, and a generatedAt timestamp).
+  // Returns {ok:true, mode:'folder', file:"..."} or {ok:false, reason:"..."}.
+  async function saveQuestionsToDisciplineFolder(disciplinePath, courseName, disciplineName, questions, username){
+    if(!disciplinePath || !Array.isArray(questions)) return {ok:false, reason:'invalid'};
+    try{
+      const content = JSON.stringify({
+        courseName: String(courseName||''),
+        disciplineName: String(disciplineName||''),
+        questions: questions,
+        generatedAt: Date.now()
+      });
+      const r = await fetch('/api/materials/save-in-folder', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          // ★ overload: discipline's parent folder — the worker treats
+          // this path as the folder where the material should land.
+          lessonPath: disciplinePath,
+          materialType: 'questoes',
+          fileName: `${_safeFileFragment(username||_currentUsername())}_${_safeFileFragment(disciplineName||'disciplina')}.json`,
+          content
+        })
+      });
+      if(!r.ok) return {ok:false, reason:'http_'+r.status};
+      const d = await r.json();
+      if(d && d.ok) return {ok:true, mode:'folder', file:d.file||null};
+      return {ok:false, reason:(d && d.error) || 'unknown'};
+    }catch(e){
+      return {ok:false, reason:'network', error:e && e.message || String(e)};
+    }
+  }
+
+  // Load question bank JSON from the discipline folder via new worker endpoint.
+  // Returns {ok:true, questions:[...]} or {ok:false, reason:"not_found"|...}.
+  async function loadQuestionsFromDisciplineFolder(disciplinePath, courseName, disciplineName, username){
+    if(!disciplinePath) return {ok:false, reason:'invalid'};
+    try{
+      const fileName = `${_safeFileFragment(username||_currentUsername())}_${_safeFileFragment(disciplineName||'disciplina')}.json`;
+      const url = '/api/materials/load-from-folder'
+        + '?lessonPath=' + encodeURIComponent(disciplinePath)
+        + '&materialType=' + encodeURIComponent('questoes')
+        + '&fileName=' + encodeURIComponent(fileName);
+      const r = await fetch(url, {cache:'no-store'});
+      if(!r.ok){
+        return {ok:false, reason: r.status===404 ? 'not_found' : ('http_'+r.status)};
+      }
+      const d = await r.json();
+      if(d && d.ok){
+        // Worker may return either {content:"<json string>"} or {questions:[...]}.
+        let qs = [];
+        if(Array.isArray(d.questions)) qs = d.questions;
+        else if(typeof d.content === 'string'){
+          try{
+            const parsed = JSON.parse(d.content);
+            qs = Array.isArray(parsed.questions) ? parsed.questions : (Array.isArray(parsed) ? parsed : []);
+          }catch(_){ qs = []; }
+        }else if(Array.isArray(d.content)) qs = d.content;
+        return {ok:true, questions: qs, file:d.file||null};
+      }
+      return {ok:false, reason:(d && d.reason) || (d && d.error) || 'unknown'};
+    }catch(e){
+      return {ok:false, reason:'network', error:e && e.message || String(e)};
+    }
+  }
+
+  // Normalize a raw question object (as stored in the JSON bank) into the
+  // shape used by the local question bank (LS key LQ). Returns null if invalid.
+  function _normalizeQuestion(q, lesson, source){
+    if(!q || !q.statement) return null;
+    if(q.type === 'tf' || (!q.options && q.correct !== undefined)){
+      return {
+        subject: lesson,
+        type: 'tf',
+        statement: String(q.statement),
+        options: ['Certo','Errado'],
+        correct: Math.max(0, Math.min(1, Number(q.correct)||0)),
+        explanation: String(q.explanation||''),
+        legalText: String(q.legalText||q.fundamentacao||''),
+        fundamentacao: String(q.fundamentacao||''),
+        source: source || 'ISA-folder'
+      };
+    }
+    if(Array.isArray(q.options)){
+      return {
+        subject: lesson,
+        type: 'mc',
+        statement: String(q.statement),
+        options: q.options.map(String),
+        correct: Math.max(0, Math.min((q.options.length||4)-1, Number(q.correct)||0)),
+        explanation: String(q.explanation||''),
+        legalText: String(q.legalText||q.fundamentacao||''),
+        fundamentacao: String(q.fundamentacao||''),
+        source: source || 'ISA-folder'
+      };
+    }
+    return null;
+  }
+
   // ── Questions flow: gera tudo em cadeia + abre quiz ──
   async function questions(items,bodyEl,lessonName){
     if(!items||!items.length){U.setError(bodyEl,'Nenhum PDF disponível.');return;}
     const lesson=U.realLessonName(lessonName||items[0].name);
     bodyEl.__items=items;bodyEl.__lesson=lesson;
     U.setLoading(bodyEl,'Meggy está lendo todos os materiais e criando resumo + pílulas + questões…');
+
+    // ★ TASK 7 (Scanner Distribuído — Section 9.2): folder-first load.
+    //   Before any regeneration, try to load a shared question bank from
+    //   the discipline folder. If another student already generated
+    //   questions for this discipline, populate the local bank with them
+    //   so the student can start the quiz immediately. Best-effort —
+    //   any failure (endpoint missing, network, drive read-only) is
+    //   silent and the flow continues with the legacy cache + generation.
+    try{
+      const disciplinePath = _deriveDisciplinePath();
+      if(disciplinePath){
+        const folderRes = await loadQuestionsFromDisciplineFolder(
+          disciplinePath,
+          _deriveCourseName(),
+          _deriveDisciplineName() || lesson,
+          _currentUsername()
+        );
+        if(folderRes.ok && Array.isArray(folderRes.questions) && folderRes.questions.length){
+          const _batchFolder = folderRes.questions
+            .map(q => _normalizeQuestion(q, lesson, 'ISA-folder'))
+            .filter(Boolean);
+          if(_batchFolder.length){
+            window.__gdiMeggy.cache.addQBatch(_batchFolder);
+            console.info('[Meggy] folder-first load: '+_batchFolder.length+' questions loaded from discipline folder');
+          }
+        }
+      }
+    }catch(_){ /* folder-first load is best-effort */ }
+
     try{
       await window.__gdiMeggy.cache.generateAll(items,lesson,'questions',(p)=>{
         if(p.phase==='extract')U.setLoading(bodyEl,'Extraindo texto: '+p.pdf+'…');
@@ -73,6 +276,22 @@
         }
       });
       window.__gdiMeggy.cache.addQBatch(_batch);
+
+      // ★ TASK 7: persist the freshly loaded/merged bank back to the
+      //   discipline folder so other students can reuse it (fire-and-
+      //   forget; failure is silent and does not break the quiz).
+      try{
+        const disciplinePath = _deriveDisciplinePath();
+        if(disciplinePath && _batch.length){
+          saveQuestionsToDisciplineFolder(
+            disciplinePath,
+            _deriveCourseName(),
+            _deriveDisciplineName() || lesson,
+            cached.questions,
+            _currentUsername()
+          ).catch(()=>{});
+        }
+      }catch(_){ /* best-effort */ }
     }
     startQuizFromBank(bodyEl,lesson);
   }
@@ -128,6 +347,24 @@
       const existing=await window.__gdiMeggy.cache.cacheGet();
       const merged=[...((existing&&existing.questions)||[]),...cleanArr];
       window.__gdiMeggy.cache.cacheSave(existing?.summary||null,merged,lesson);
+
+      // ★ TASK 7 (Scanner Distribuído — Section 9.2): persist the merged
+      //   bank to the discipline folder so other students can reuse it
+      //   (fire-and-forget; failure is silent and does not break the
+      //   quiz). Falls back gracefully if the endpoint is not yet
+      //   deployed or the drive is read-only.
+      try{
+        const disciplinePath = _deriveDisciplinePath();
+        if(disciplinePath){
+          saveQuestionsToDisciplineFolder(
+            disciplinePath,
+            _deriveCourseName(),
+            _deriveDisciplineName() || lesson,
+            merged,
+            _currentUsername()
+          ).catch(()=>{});
+        }
+      }catch(_){ /* best-effort */ }
     }
     showToast(cleanArr.length+' questões geradas!');
     return cleanArr.length>0;
@@ -267,7 +504,11 @@
     runQuizSession,
     extractQuestionsFromText,
     getAnsweredIds,
-    markAnswered
+    markAnswered,
+    // ★ TASK 7 (Scanner Distribuído — Section 9.2): folder-first helpers.
+    // Additive — existing API surface unchanged.
+    saveQuestionsToDisciplineFolder,
+    loadQuestionsFromDisciplineFolder
   };
 
   // ── Aliases para compatibilidade ──
