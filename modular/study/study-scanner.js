@@ -52,6 +52,8 @@
   }
   function clearScanState(courseKey){
     try{localStorage.removeItem(LS_SCAN_PREFIX+courseKey)}catch(_){}
+    // ★ v1.0.98 FIX: also clear lessons cache to prevent orphan entries + quota bloat (Agent 13 Bug 5)
+    try{localStorage.removeItem(LS_LESSONS_PREFIX+courseKey)}catch(_){}
   }
 
   // ── Lessons cache (per course) ──
@@ -466,9 +468,9 @@
     };
     try{
       const r = await fetch('/api/courses/list');
-      if(!r.ok) return;
+      if(!r.ok){ console.warn('[syncCoursesFromDrive] HTTP', r.status); return; }
       d = await r.json();
-      if(!d || !d.ok || !Array.isArray(d.courses)) return;
+      if(!d || !d.ok || !Array.isArray(d.courses)){ console.warn('[syncCoursesFromDrive] bad shape'); return; }
       let added;
       try {
         added = mergeDriveCourses();
@@ -483,7 +485,7 @@
       if(added > 0){
         console.log('[GDI M22] syncCoursesFromDrive: ' + added + ' cursos recuperados do Drive');
       }
-    }catch(_){}
+    }catch(e){ console.warn('[syncCoursesFromDrive] error:', e && e.message); }
   }
 
   function autoScanPending(){
@@ -700,7 +702,8 @@
         try{
           // ★ v1.0.84: sync courses from Drive FIRST, so user sees their courses on any device.
           if(typeof syncCoursesFromDrive === 'function'){
-            syncCoursesFromDrive().catch(()=>{}).finally(()=>{
+            // ★ v1.0.98 FIX: log sync failures instead of swallowing silently (Agent 7)
+            syncCoursesFromDrive().catch(e=>console.warn('[sync] failed:', e && e.message)).finally(()=>{
               try{ autoScanPending(); }catch(_){}
             });
           } else {
@@ -722,7 +725,8 @@
     setTimeout(function(){
       try{
         if(typeof syncCoursesFromDrive === 'function'){
-          syncCoursesFromDrive().catch(()=>{}).finally(()=>{
+          // ★ v1.0.98 FIX: log sync failures instead of swallowing silently (Agent 7)
+          syncCoursesFromDrive().catch(e=>console.warn('[sync] failed:', e && e.message)).finally(()=>{
             try{ autoScanPending(); }catch(_){}
           });
         } else {
