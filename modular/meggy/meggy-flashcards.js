@@ -28,6 +28,8 @@
   // ── Late-bound namespace shortcuts ──
   const U = window.__gdiMeggy.utils;
   const LS_SUBJECTS = U.CONSTS.LS_SUBJECTS;
+  // ★ v1.0.99: serialize gdi-cards-v1 writes to prevent RMW races
+  let _cardsWriteChain = Promise.resolve();
 
   // ── CSS — Flashcards library + session styles (separate from M9-ISA styles) ──
   if(!document.getElementById('gdi-m9isa-style-fc')){
@@ -186,6 +188,8 @@
   function deleteSubject(id){
     U.lsSet(LS_SUBJECTS,getSubjects().filter(s=>s.id!==id));
   }
+  // expor para outros módulos
+  window.gdiSubjects={get:getSubjects,save:saveSubject,delete:deleteSubject,LS:LS_SUBJECTS};
 
   // ── Flashcards flow (aba no M9 — BIBLIOTECA organizada por disciplina → tema) ──
   // ★ REFACTORED (PATCH E): virtualização por accordion. Todos os temas
@@ -268,9 +272,13 @@
         const f = bodyEl.querySelector('#gdi-fc-manual-f').value.trim();
         const b = bodyEl.querySelector('#gdi-fc-manual-b').value.trim();
         if(!f || !b){ showToast('Preencha frente e verso'); return; }
-        const cards = U.lsGet('gdi-cards-v1', []);
-        cards.push({id:U.uid(), f, b, due:Date.now()+86400000, box:0, src:'manual:'+lesson, path:urlPath, lesson:lesson, createdAt:Date.now()});
-        U.lsSet('gdi-cards-v1', cards);
+        // ★ v1.0.99: route through _cardsWriteChain + cap 1000
+        _cardsWriteChain = _cardsWriteChain.then(() => {
+          const cards = U.lsGet('gdi-cards-v1', []);
+          cards.push({id:U.uid(), f, b, due:Date.now()+86400000, box:0, src:'manual:'+lesson, path:urlPath, lesson:lesson, createdAt:Date.now()});
+          if(cards.length > 1000) cards.splice(0, cards.length - 1000);
+          U.lsSet('gdi-cards-v1', cards);
+        }).catch(e=>console.warn('[Meggy] addCard chain error:', e&&e.message));
         showToast('Flashcard adicionado!');
         flashcards(items, bodyEl, lessonName);
       };
@@ -475,8 +483,13 @@
       };
       if(subject)cardData.subject=subject;
       if(theme)cardData.theme=theme;
-      cards.push(cardData);
-      U.lsSet('gdi-cards-v1', cards);
+      // ★ v1.0.99: route through _cardsWriteChain + cap 1000
+      _cardsWriteChain = _cardsWriteChain.then(() => {
+        const cards = U.lsGet('gdi-cards-v1', []);
+        cards.push(cardData);
+        if(cards.length > 1000) cards.splice(0, cards.length - 1000);
+        U.lsSet('gdi-cards-v1', cards);
+      }).catch(e=>console.warn('[Meggy] saveNewCard chain error:', e&&e.message));
       showToast('Flashcard adicionado!');
       if(keepForm){
         fEl.value='';bEl.value='';
@@ -561,8 +574,11 @@
         btn.onclick = (e)=>{
           e.stopPropagation();
           const id = btn.dataset.cardId;
-          const cards2 = U.lsGet('gdi-cards-v1', []);
-          U.lsSet('gdi-cards-v1', cards2.filter(x=>x.id !== id));
+          // ★ v1.0.99: route through _cardsWriteChain
+          _cardsWriteChain = _cardsWriteChain.then(() => {
+            const cards2 = U.lsGet('gdi-cards-v1', []);
+            U.lsSet('gdi-cards-v1', cards2.filter(x=>x.id !== id));
+          }).catch(e=>console.warn('[Meggy] deleteCard chain error:', e&&e.message));
           showToast('Flashcard excluído');
           flashcards(items, bodyEl, lessonName);
         };
@@ -668,15 +684,18 @@
       };
       // ★ SRS unificado via gdiGradeCard (SM-2 simplificado)
       const gradeCard=(quality)=>{
-        const cards=U.lsGet('gdi-cards-v1',[]);
-        const ci=cards.findIndex(x=>x.id===c.id);
-        if(ci>=0){
-          const result=window.gdiGradeCard(cards[ci],quality);
-          cards[ci].box=result.box;
-          cards[ci].due=result.due;
-          cards[ci].lastReview=result.lastReview;
-          U.lsSet('gdi-cards-v1',cards);
-        }
+        // ★ v1.0.99: route through _cardsWriteChain
+        _cardsWriteChain = _cardsWriteChain.then(() => {
+          const cards=U.lsGet('gdi-cards-v1',[]);
+          const ci=cards.findIndex(x=>x.id===c.id);
+          if(ci>=0){
+            const result=window.gdiGradeCard(cards[ci],quality);
+            cards[ci].box=result.box;
+            cards[ci].due=result.due;
+            cards[ci].lastReview=result.lastReview;
+            U.lsSet('gdi-cards-v1',cards);
+          }
+        }).catch(e=>console.warn('[Meggy] gradeCard chain error:', e&&e.message));
         if(quality===1)misses++;      // Again
         else if(quality===3)hits++;   // Good
         else if(quality===4)hits++;   // Easy
@@ -760,13 +779,7 @@
   };
 
   // ── Aliases para compatibilidade ──
-  // ★ v1.0.90: Re-export window.gdiSubjects for backward compat (was in monolith gdi-meggy.js)
-  window.gdiSubjects = {
-    get: getSubjects,
-    save: saveSubject,
-    delete: deleteSubject,
-    LS: LS_SUBJECTS
-  };
+  // window.gdiSubjects já foi definido acima (preserved for gdi-study.js callers)
 
   console.log('[GDI Extras] meggy-flashcards ativo (Module 5/7)');
 })();
