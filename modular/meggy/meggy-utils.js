@@ -95,9 +95,9 @@
       }
       if(items.length)return items;
     }catch(_){}
-    // 6) falhou tudo — inclui os primeiros 500 chars da resposta
-    const preview=String(raw).slice(0,500).replace(/\s+/g,' ');
-    const err=new Error('Resposta não é JSON array válido. Primeiros 500 chars: '+preview);
+    // 6) falhou tudo — inclui mensagem curta (sem o conteúdo bruto,
+    //    que pode incluir dados do usuário/AI — FIX-MEGGY #21 EDGE-16).
+    const err=new Error('Resposta não é JSON array válido (falhou em todas as estratégias de parsing).');
     err.raw=String(raw);
     throw err;
   }
@@ -165,7 +165,14 @@
   }
 
   // ── Lesson key (cache key = URL pathname, estável entre visitas) ──
-  function lessonKey(){return window.location.pathname.split('?')[0];}
+  // ★ FIX-MEGGY #20 (Agent 19 EDGE-7): strip trailing slashes so that
+  //   /7:/Course/Lesson/ and /7:/Course/Lesson collapse to the same key
+  //   (otherwise cache misses when the URL has a trailing slash — common
+  //   when Drive Index redirects).
+  function lessonKey(){
+    const k = window.location.pathname.split('?')[0].replace(/\/+$/,'');
+    return k || '/';
+  }
 
   // ── Real lesson name from playlist (não "video.mp4") ──
   // A playlist tem .name que pode incluir o label da pasta (ex: "Aula 02 - ...").
@@ -188,6 +195,10 @@
   async function callIsa(prompt){
     const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({message:prompt,messages:[]})});
+    // ★ FIX-MEGGY #19 (Agent 6): check r.ok before parsing — without this, a
+    //   404/500 response with HTML body throws a confusing SyntaxError on
+    //   r.json() instead of a clear error message.
+    if(!r.ok) return null;
     const data=await r.json();
     if(!data.ok)throw new Error(data.error||'Meggy indisponível');
     return data.response||'';
