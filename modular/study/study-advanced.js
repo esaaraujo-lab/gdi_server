@@ -84,8 +84,22 @@
           <div style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;margin-top:6px;">Mostrando ${slice.length} de ${plans.length} plano(s)</div>`;
           const prev=pagerEl.querySelector('#provas-prev');
           const next=pagerEl.querySelector('#provas-next');
-          if(prev)prev.onclick=()=>{currentPage--;box.__provasPage=currentPage;renderList();};
-          if(next)next.onclick=()=>{currentPage++;box.__provasPage=currentPage;renderList();};
+          // ★ FIX 20-6 #10 (Agent 6): clamp at click time with Math.max/Math.min
+          //    so the persisted box.__provasPage never holds a transient
+          //    negative/over-range value. renderList() clamps after the fact
+          //    (lines 56-57), but if the user navigated away between click and
+          //    the next renderList, the stale negative would persist in
+          //    box.__provasPage and be re-read on next renderProvas call.
+          if(prev)prev.onclick=()=>{
+            currentPage = Math.max(0, currentPage - 1);
+            box.__provasPage = currentPage;
+            renderList();
+          };
+          if(next)next.onclick=()=>{
+            currentPage = Math.min(totalPages - 1, currentPage + 1);
+            box.__provasPage = currentPage;
+            renderList();
+          };
         }else{
           pagerEl.innerHTML=plans.length>PROVAS_PAGE?`<div style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">Mostrando ${slice.length} de ${plans.length} planos</div>`:'';
         }
@@ -124,7 +138,16 @@
   async function analyzeProva(box,file){
     const status=box.querySelector('#gdi-prova-status');
     if(!file.name.toLowerCase().endsWith('.pdf')){status.innerHTML='<div class="gdi-ai-err">Apenas arquivos PDF são suportados.</div>';return;}
-    status.innerHTML='<div class="gdi-ai-loading" style="padding:20px;text-align:center;"><div class="gdi-ai-typing" style="margin:0 auto;"><span></span><span></span><span></span></div><p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin-top:10px;">Extraindo texto da prova…</p></div>';
+    // ★ FIX 20-6 #9 (Agent 6): add an explicit rotating-border spinner
+    //    (.gdi-spinner) ALONGSIDE the typing-dots animation during PDF text
+    //    extraction. Previously only the small 3-dot typing animation was
+    //    shown, which on slow CDNs (loading pdf.js) looked like the page had
+    //    frozen — no obvious "loading in progress" cue. The spinner reuses
+    //    the gdi-scan-spin keyframes (defined in study-panel.js) and the
+    //    .gdi-spinner inline-style pattern from meggy-summaries.js.
+    //    Shared spinner HTML (rotating border) — used by both phases below.
+    const spinnerHtml = '<div class="gdi-spinner" style="margin:0 auto 10px;width:34px;height:34px;border:3px solid var(--ferreto-surface-3,rgba(255,255,255,.08));border-top-color:var(--ferreto-primary,#ff8b9f);border-radius:50%;animation:gdi-scan-spin 1s linear infinite;"></div>';
+    status.innerHTML='<div class="gdi-ai-loading" style="padding:20px;text-align:center;">'+spinnerHtml+'<div class="gdi-ai-typing" style="margin:0 auto;"><span></span><span></span><span></span></div><p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin-top:10px;">Extraindo texto da prova…</p></div>';
     try{
       // ★ FIX (Agent 10 Bug 23): replace inline pdf.js loader with the shared
       //    window.gdiEnsurePdfjs() helper (provided by gdi-pdf-engine.js).
@@ -166,7 +189,7 @@
         txt=txt.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim().slice(0,8000);
         if(txt.length<50){status.innerHTML='<div class="gdi-ai-err">Não foi possível extrair texto deste PDF.</div>';return;}
 
-        status.innerHTML='<div class="gdi-ai-loading" style="padding:20px;text-align:center;"><div class="gdi-ai-typing" style="margin:0 auto;"><span></span><span></span><span></span></div><p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin-top:10px;">Meggy está analisando a prova e criando o plano…</p></div>';
+        status.innerHTML='<div class="gdi-ai-loading" style="padding:20px;text-align:center;">'+spinnerHtml+'<div class="gdi-ai-typing" style="margin:0 auto;"><span></span><span></span><span></span></div><p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin-top:10px;">Meggy está analisando a prova e criando o plano…</p></div>';
         const resp=await callMeggy('Analise esta prova anterior de concurso/vestibular e crie um plano de estudos focado. Identifique os 5 temas mais cobrados e sugira quantas horas dedicar a cada um (total ~100h). Formato Markdown com ## títulos, lista de temas com horas, e justificativa breve:\n\n'+txt);
         const plan={id:uid(),name:file.name,date:Date.now(),plan:resp,topics:(resp.match(/##\s+(.+)/g)||[]).length};
         const plans=lsGet('gdi-exam-plans-v1',[]);
@@ -392,7 +415,13 @@
     if(cron&&Array.isArray(cron.plan)){
       cron.plan.forEach(t=>{if(t&&t.name&&t.type==='study')aulasMenosEstudadas.push(t.name);});
     }
-    const trails=window.gdiTrails?window.gdiTrails.get():[];
+    // ★ FIX 20-6 #11 (Agent 6): the previous `const trails=window.gdiTrails?window.gdiTrails.get():[];`
+    //    declaration was flagged as a dead variable (its only usage was inside
+    //    a template-literal ternary below — a usage pattern that some static
+    //    analyzers miss). Inlined the call directly into the template literal
+    //    so the variable declaration no longer exists. Behavior is identical:
+    //    if window.gdiTrails is undefined, no info banner is shown; otherwise
+    //    a one-line "N trilha(s) criada(s)" hint is rendered.
     // ★ Late binding: collectCourses is exposed by study-courses.js as window.collectCourses.
     const courses=(typeof window.collectCourses==='function')?window.collectCourses():[];
     const subjects=Object.entries(bySubject).filter(([,v])=>v.total>=1).sort((a,b)=>b[1].total-a[1].total);
@@ -441,7 +470,11 @@
           ${aulasMenosEstudadas.slice(0,5).map(n=>`<span style="color:var(--ferreto-text,#e6edf3);font-size:12px;">• ${esc(n)}</span>`).join('')}
         </div>
       </div>`:''}
-      ${trails.length?`<div style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;margin-bottom:8px;"><i class="bi bi-signpost-2"></i> ${trails.length} trilha(s) criada(s) — vincule matérias fracas a uma trilha para estudar com foco.</div>`:''}
+      ${(function(){
+        // ★ FIX 20-6 #11: inlined trails lookup — no standalone variable.
+        const _trails = (typeof window.gdiTrails === 'object' && window.gdiTrails && typeof window.gdiTrails.get === 'function') ? window.gdiTrails.get() : [];
+        return _trails.length ? `<div style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;margin-bottom:8px;"><i class="bi bi-signpost-2"></i> ${_trails.length} trilha(s) criada(s) — vincule matérias fracas a uma trilha para estudar com foco.</div>` : '';
+      })()}
       <div class="gdi-courses" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">
         ${tiles}
       </div>
