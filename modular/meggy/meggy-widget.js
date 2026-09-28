@@ -192,15 +192,15 @@
   fab.id='gdi-ai-fab';fab.title='Meggy';
   // ★ v1.0.85: FAB usa foto real da Meggy (PNG transparente, flood-fill bg removal — olhos/nariz preservados).
   // object-fit:cover preenche o círculo; alt vazio para não mostrar texto overlay.
-  // ★ v1.0.86 modularização: fallback '91' (CACHE_VERSION bump planejado).
-  fab.innerHTML='<span class="gdi-ai-fab-ico"><img src="/modular/assets/meggy-fab.png?v='+(window.CACHE_VERSION||'92')+'" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;"></span><span id="gdi-ai-fab-badge"></span>';
+  // ★ v1.0.98: fallback '99' (CACHE_VERSION atual).
+  fab.innerHTML='<span class="gdi-ai-fab-ico"><img src="/modular/assets/meggy-fab.png?v='+(window.CACHE_VERSION||'99')+'" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;"></span><span id="gdi-ai-fab-badge"></span>';
   root.appendChild(fab);
 
   const panel=document.createElement('div');
   panel.id='gdi-ai-panel';
   panel.innerHTML=`
     <div id="gdi-ai-head">
-      <div class="gdi-ai-avatar"><img src="/modular/assets/meggy-fab.png?v=${window.CACHE_VERSION||'92'}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;"></div>
+      <div class="gdi-ai-avatar"><img src="/modular/assets/meggy-fab.png?v=${window.CACHE_VERSION||'99'}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;"></div>
       <div class="gdi-ai-info">
         <div class="gdi-ai-name">${MEGGY_NAME}<span class="gdi-ai-tag">${MEGGY_TAG}</span></div>
         <div class="gdi-ai-status"><span class="gdi-ai-dot"></span> verificando…</div>
@@ -251,7 +251,7 @@
         md += `**Q${i+1}.** ${q.statement || ''}\n\n`;
         if(Array.isArray(q.options) && q.options.length){
           q.options.forEach((opt,j) => {
-            const letter = String.fromCharCode(65, j);
+            const letter = String.fromCharCode(65 + j);
             const mark = (typeof q.correct === 'number' && j === q.correct) ? ' ✅' : '';
             md += `- ${letter}) ${opt}${mark}\n`;
           });
@@ -533,6 +533,7 @@
   async function send(){
     const txt=input.value.trim();if(!txt||busy)return;
     busy=true;sendBtn.disabled=true;input.value='';
+    try {
     addMsg('user',txt);
     showTyping();
 
@@ -565,7 +566,6 @@
           errEl.textContent=data.error||'Não consegui responder agora. Tente novamente.';
           body.appendChild(errEl);body.scrollTop=body.scrollHeight;
           setTimeout(()=>errEl.remove(),5000);
-          busy=false;sendBtn.disabled=false;input.focus();
           return;
         }
       }catch(e){
@@ -574,7 +574,6 @@
         errEl.textContent='Erro de conexão. Verifique sua internet.';
         body.appendChild(errEl);body.scrollTop=body.scrollHeight;
         setTimeout(()=>errEl.remove(),5000);
-        busy=false;sendBtn.disabled=false;input.focus();
         return;
       }
     }
@@ -583,7 +582,11 @@
     // ★ atualiza banco de memória com a interação
     updateMemory(undefined,{question:txt,response:response});
     if(usedLocal)updateStatus(); // confirma que usou local
-    busy=false;sendBtn.disabled=false;input.focus();
+    } finally {
+      busy=false;
+      sendBtn.disabled=false;
+      input.focus();
+    }
   }
 
   function toggle(){
