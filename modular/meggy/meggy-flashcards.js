@@ -31,6 +31,32 @@
   // ★ v1.0.99: serialize gdi-cards-v1 writes to prevent RMW races
   let _cardsWriteChain = Promise.resolve();
 
+  // ★ FIX-MEGGY (Task 20-7 #8): pre-indexed cache of gdi-cards-v1 grouped by
+  //   discipline→theme. Avoids re-reading localStorage + re-running the O(N)
+  //   grouping loop on every flashcards() render. The cache is invalidated
+  //   (_cardsIndexCache = null) after every write chain completes
+  //   (saveNewCard, deleteCard, gradeCard, addCardsBatch, manual addBtn).
+  //   On the next flashcards() call, _getCardsIndex() rebuilds it from LS.
+  //   NOTE: extractDisciplineTheme is defined further down in this IIFE, so
+  //   _getCardsIndex() references it lazily (at call time, not at declaration).
+  let _cardsIndexCache = null;
+  function _invalidateCardsIndex(){ _cardsIndexCache = null; }
+  function _getCardsIndex(){
+    if(_cardsIndexCache) return _cardsIndexCache;
+    const allCards = U.lsGet('gdi-cards-v1', []);
+    const grouped = {};
+    allCards.forEach(c => {
+      const {discipline, theme} = extractDisciplineTheme(c);
+      if(!grouped[discipline]) grouped[discipline] = {};
+      if(!grouped[discipline][theme]) grouped[discipline][theme] = [];
+      grouped[discipline][theme].push(c);
+    });
+    const disciplines = Object.keys(grouped).sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    const totalDue = allCards.filter(c=>(c.due||0)<=Date.now()).length;
+    _cardsIndexCache = { allCards, grouped, disciplines, totalDue };
+    return _cardsIndexCache;
+  }
+
   // ★ FIX-MEGGY #3 (Agent 16 UIUX-2): register page:change cleanup ONCE at
   //   module init (was inside runFlashcardSession — leaked a listener per
   //   session). The handler iterates the set of active session bodyEls and
@@ -47,6 +73,37 @@
   }
   if(typeof Bus !== 'undefined' && typeof Bus.onGlobal === 'function'){
     Bus.onGlobal('page:change', _fcPageCleanup);
+  }
+
+  // ★ FIX-MEGGY (Task 20-7 #12): shared MutationObserver that watches for
+  //   any active session bodyEl being disconnected from the DOM. The existing
+  //   _fcPageCleanup only fires on page:change (navigation), NOT when the
+  //   M9 panel is closed via the X button or ESC (which removes bodyEl from
+  //   the DOM without emitting page:change). Without this, bodyEls of
+  //   abandoned sessions stay in _activeFcSessions forever (memory leak +
+  //   their __fcKeyCleanup keydown listeners stay attached to document).
+  //   One observer is shared by all sessions for efficiency — its callback
+  //   scans _activeFcSessions and evicts any bodyEl whose isConnected is
+  //   false. Created lazily on first session start.
+  let _fcCloseObserver = null;
+  function _ensureFcCloseObserver(){
+    if(_fcCloseObserver || typeof MutationObserver === 'undefined') return;
+    _fcCloseObserver = new MutationObserver(function(){
+      // Snapshot to avoid mutation during iteration
+      const toClean = [];
+      _activeFcSessions.forEach(bodyEl => {
+        if(bodyEl && !bodyEl.isConnected) toClean.push(bodyEl);
+      });
+      toClean.forEach(bodyEl => {
+        if(bodyEl.__fcKeyCleanup){
+          try{ bodyEl.__fcKeyCleanup(); }catch(_){}
+          bodyEl.__fcKeyCleanup = null;
+        }
+        _activeFcSessions.delete(bodyEl);
+      });
+    });
+    // childList+subtree on document.body catches panel-close removals.
+    _fcCloseObserver.observe(document.body, {childList:true, subtree:true});
   }
 
   // ── CSS — Flashcards library + session styles (separate from M9-ISA styles) ──
@@ -96,11 +153,11 @@
    fica apenas para suavizar a animação (sem ele, há flicker em alguns
    Androids), mas a regra de "qual face aparece" é 100% por opacity.
    Isso elimina qualquer conflito entre os dois mecanismos. */
-.gdi-fc-card{position:relative;perspective:1500px;height:170px;cursor:pointer;isolation:isolate;}
+.gdi-fc-card{position:relative;perspective:1500px;-webkit-perspective:1500px;height:170px;cursor:pointer;isolation:isolate;}
 .gdi-fc-card-large{height:340px;max-width:560px;margin:0 auto;}
-.gdi-fc-card-inner{position:absolute;inset:0;transform-style:preserve-3d;-webkit-transform-style:preserve-3d;transition:transform .55s cubic-bezier(.4,0,.2,1);will-change:transform;}
+.gdi-fc-card-inner{position:absolute;inset:0;transform-style:preserve-3d;-webkit-transform-style:preserve-3d;-webkit-transition:-webkit-transform .55s cubic-bezier(.4,0,.2,1);transition:transform .55s cubic-bezier(.4,0,.2,1);will-change:transform;}
 .gdi-fc-card.gdi-fc-flipped .gdi-fc-card-inner{transform:rotateY(180deg);-webkit-transform:rotateY(180deg);}
-.gdi-fc-card-face{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:18px 16px;border-radius:12px;box-sizing:border-box;text-align:center;overflow:hidden;transition:opacity .3s;will-change:transform;}
+.gdi-fc-card-face{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:18px 16px;border-radius:12px;box-sizing:border-box;text-align:center;overflow:hidden;-webkit-transition:opacity .3s;transition:opacity .3s;will-change:transform;}
 .gdi-fc-card-front{background:linear-gradient(135deg,rgba(255,139,159,.14),rgba(192,38,211,.08));border:1.5px solid rgba(255,139,159,.4);color:var(--ferreto-text,#f0f6fc);transform:translateZ(0);-webkit-transform:translateZ(0);opacity:1;}
 .gdi-fc-card-back{background:linear-gradient(135deg,rgba(93,222,218,.14),rgba(63,185,80,.08));border:1.5px solid rgba(93,222,218,.4);color:var(--ferreto-text,#e6edf3);-webkit-transform:rotateY(180deg) translateZ(0);transform:rotateY(180deg) translateZ(0);opacity:0;pointer-events:none;}
 .gdi-fc-card.gdi-fc-flipped .gdi-fc-card-front{opacity:0;pointer-events:none;}
@@ -217,18 +274,11 @@
   async function flashcards(items, bodyEl, lessonName){
     const lesson = U.realLessonName(lessonName || (items[0] && items[0].name) || 'Aula');
     const urlPath = U.lessonKey();
-    const allCards = U.lsGet('gdi-cards-v1', []);
-
-    // ── Agrupa por disciplina → tema ──
-    const grouped = {};
-    allCards.forEach(c=>{
-      const {discipline, theme} = extractDisciplineTheme(c);
-      if(!grouped[discipline]) grouped[discipline] = {};
-      if(!grouped[discipline][theme]) grouped[discipline][theme] = [];
-      grouped[discipline][theme].push(c);
-    });
-    const disciplines = Object.keys(grouped).sort((a,b)=>a.localeCompare(b,'pt-BR'));
-    const totalDue = allCards.filter(c=>(c.due||0)<=Date.now()).length;
+    // ★ FIX-MEGGY (Task 20-7 #8): use pre-indexed cache instead of re-reading
+    //   localStorage + re-grouping O(N) on every render. Cache is invalidated
+    //   after every write (see _invalidateCardsIndex calls in saveNewCard,
+    //   deleteCard, gradeCard, addCardsBatch, manual addBtn chain).
+    const { allCards, grouped, disciplines, totalDue } = _getCardsIndex();
 
     // ── Empty state ──
     if(!allCards.length){
@@ -287,8 +337,10 @@
       };
       const addBtn = bodyEl.querySelector('#gdi-fc-manual-add');
       if(addBtn) addBtn.onclick = ()=>{
-        const f = bodyEl.querySelector('#gdi-fc-manual-f').value.trim();
-        const b = bodyEl.querySelector('#gdi-fc-manual-b').value.trim();
+        // ★ FIX-MEGGY (Task 20-7 #9): cap f and b at 500 chars to prevent
+        //   localStorage bloat (1000 cards × unbounded text could exceed quota).
+        const f = String(bodyEl.querySelector('#gdi-fc-manual-f').value||'').trim().slice(0,500);
+        const b = String(bodyEl.querySelector('#gdi-fc-manual-b').value||'').trim().slice(0,500);
         if(!f || !b){ showToast('Preencha frente e verso'); return; }
         // ★ v1.0.99: route through _cardsWriteChain + cap 1000
         _cardsWriteChain = _cardsWriteChain.then(() => {
@@ -296,6 +348,8 @@
           cards.push({id:U.uid(), f, b, due:Date.now()+86400000, box:0, src:'manual:'+lesson, path:urlPath, lesson:lesson, createdAt:Date.now()});
           if(cards.length > 1000) cards.splice(0, cards.length - 1000);
           U.lsSet('gdi-cards-v1', cards);
+          // ★ FIX-MEGGY (Task 20-7 #8): invalidate pre-indexed cache after write
+          _invalidateCardsIndex();
         }).catch(e=>console.warn('[Meggy] addCard chain error:', e&&e.message));
         showToast('Flashcard adicionado!');
         flashcards(items, bodyEl, lessonName);
@@ -484,12 +538,13 @@
       const subjEl=bodyEl.querySelector('#gdi-fc-add-subject');
       const themeEl=bodyEl.querySelector('#gdi-fc-add-theme');
       if(!fEl||!bEl){return;}
-      const f=fEl.value.trim();
-      const b=bEl.value.trim();
+      // ★ FIX-MEGGY (Task 20-7 #9): cap f and b at 500 chars to prevent
+      //   localStorage bloat and avoid QuotaExceededError on the 1000-card cap.
+      const f=String(fEl.value||'').trim().slice(0,500);
+      const b=String(bEl.value||'').trim().slice(0,500);
       if(!f||!b){ showToast('Preencha frente e verso'); return; }
       const subject=subjEl?subjEl.value.trim():'';
       const theme=themeEl?themeEl.value.trim():'';
-      const cards = U.lsGet('gdi-cards-v1', []);
       const cardData={
         id:U.uid(), f, b,
         due:Date.now()+86400000,
@@ -507,6 +562,8 @@
         cards.push(cardData);
         if(cards.length > 1000) cards.splice(0, cards.length - 1000);
         U.lsSet('gdi-cards-v1', cards);
+        // ★ FIX-MEGGY (Task 20-7 #8): invalidate pre-indexed cache after write
+        _invalidateCardsIndex();
       }).catch(e=>console.warn('[Meggy] saveNewCard chain error:', e&&e.message));
       showToast('Flashcard adicionado!');
       if(keepForm){
@@ -596,6 +653,8 @@
           _cardsWriteChain = _cardsWriteChain.then(() => {
             const cards2 = U.lsGet('gdi-cards-v1', []);
             U.lsSet('gdi-cards-v1', cards2.filter(x=>x.id !== id));
+            // ★ FIX-MEGGY (Task 20-7 #8): invalidate pre-indexed cache after delete
+            _invalidateCardsIndex();
           }).catch(e=>console.warn('[Meggy] deleteCard chain error:', e&&e.message));
           showToast('Flashcard excluído');
           flashcards(items, bodyEl, lessonName);
@@ -619,6 +678,11 @@
   function runFlashcardSession(bodyEl,lesson,queue,items,lessonName){
     // ★ guard contra fila vazia (NaN% acerto)
     if(!queue||!queue.length){
+      // ★ FIX-MEGGY (Task 20-7 #11): also show a toast so the user gets
+      //   immediate feedback (the empty-state UI below is the in-panel
+      //   affordance, but a toast confirms why nothing happened when they
+      //   clicked "Estudar" / "Revisar").
+      if(typeof showToast === 'function') showToast('Nenhum flashcard para estudar nesta disciplina/tema');
       bodyEl.innerHTML=`<div class="gdi-mat-isa-result" style="text-align:center;padding:30px;">
         <div style="font-size:48px;">📭</div>
         <h3 style="color:var(--ferreto-primary,#ff8b9f);font-family:var(--ferreto-font-display,'Poppins',sans-serif);">Nenhum flashcard</h3>
@@ -684,6 +748,18 @@
           </div>
           <p style="font-size:10px;color:var(--ferreto-text-muted,#8b949e);margin-top:8px;">Atalhos: 1 2 3 4 · Espaço vira</p>
         </div>
+        <!-- ★ FIX-MEGGY (Task 20-7 #14) VERIFICATION: the SRS intervals shown
+             above are NOT hardcoded as [1,7,30] — they come from
+             window.gdiSrsIntervals (defined in gdi-core.js as [1,3,7,21,60]).
+             The fallback values 3 (for Good) and 7 (for Easy) are only used
+             when gdiSrsIntervals is undefined (gdi-core.js failed to load).
+             The SM-2 logic itself lives in window.gdiGradeCard (also in
+             gdi-core.js): it caps the card box at 4 and NEVER auto-deletes
+             cards when nb>3 — this is correct SM-2 behavior (cards graduate
+             to higher intervals via box+1 on Good, box+2 on Easy; they are
+             only deleted by explicit user action via the trash button in
+             the library). No code change needed — this comment is the
+             audit per Task 20-7 #14. -->
         <div class="gdi-fc-session-foot">
           <button id="gdi-fc-skip" title="Pular" class="gdi-fc-skip-btn"><i class="bi bi-arrow-right"></i></button>
         </div>
@@ -715,13 +791,27 @@
           const cards=U.lsGet('gdi-cards-v1',[]);
           const ci=cards.findIndex(x=>x.id===c.id);
           if(ci>=0){
-            const result=window.gdiGradeCard(cards[ci],quality);
-            cards[ci].box=result.box;
-            cards[ci].due=result.due;
-            cards[ci].lastReview=result.lastReview;
-            U.lsSet('gdi-cards-v1',cards);
+            // ★ FIX-MEGGY (Task 20-7 #10): null-check window.gdiGradeCard
+            //   before calling. If gdi-core.js failed to load (CDN outage,
+            //   module eval error, etc.), gdiGradeCard is undefined and the
+            //   call would throw — rejecting the entire _cardsWriteChain and
+            //   breaking ALL subsequent card writes (add/delete/grade) until
+            //   page reload. Now we skip the SRS update and warn, leaving
+            //   the card's box/due unchanged (it'll come back tomorrow on
+            //   the default +1d schedule from when it was created).
+            if(typeof window.gdiGradeCard === 'function'){
+              const result=window.gdiGradeCard(cards[ci],quality);
+              cards[ci].box=result.box;
+              cards[ci].due=result.due;
+              cards[ci].lastReview=result.lastReview;
+              U.lsSet('gdi-cards-v1',cards);
+            }else{
+              console.warn('[Meggy] window.gdiGradeCard not available; SRS update skipped for card', c.id);
+            }
           }
           cardCount = cards.length;
+          // ★ FIX-MEGGY (Task 20-7 #8): invalidate pre-indexed cache after grade
+          _invalidateCardsIndex();
         }).catch(e=>console.warn('[Meggy] gradeCard chain error:', e&&e.message));
         if(quality===1)misses++;      // Again
         else if(quality===3)hits++;   // Good
@@ -778,6 +868,12 @@
     //    __fcKeyCleanup is null (set when the session ends naturally via the
     //    _origDraw wrapper below).
     _activeFcSessions.add(bodyEl);
+    // ★ FIX-MEGGY (Task 20-7 #12): ensure the shared close-observer is active
+    //   so the bodyEl is evicted from _activeFcSessions if the M9 panel is
+    //   closed (X button / ESC) without finishing the session. The page:change
+    //   cleanup only fires on navigation, not on panel close — without this,
+    //   the bodyEl + its keydown listener leak until the next page change.
+    _ensureFcCloseObserver();
     draw();
     // cleanup final quando sessão terminar (idx>=queue.length)
     const _origDraw=draw;
@@ -811,10 +907,48 @@
       if(!Array.isArray(cardsArray) || cardsArray.length===0) return _cardsWriteChain;
       _cardsWriteChain = _cardsWriteChain.then(() => {
         const existing = U.lsGet('gdi-cards-v1', []);
-        for(const c of cardsArray){
-          if(c && c.id && !existing.some(x=>x.id===c.id)) existing.push(c);
+        // ★ FIX 20-14 #D (Agent 14): dedup by BOTH id AND front-text (f).
+        //   Previously dedup was id-only, but autoCreateFlashcards generates
+        //   fresh U.uid() IDs on every call — so the same lesson visited twice
+        //   (e.g. navigate away → back, or page reload) would produce cards
+        //   with different IDs but identical f/b text. id-only dedup let them
+        //   through, creating duplicate flashcards that accumulated up to the
+        //   1000-card cap. The fallback path in autoCreateFlashcards (when
+        //   this module isn't loaded yet) already dedups by f — this aligns
+        //   addCardsBatch with that behaviour. Build a Set of existing fronts
+        //   for O(1) lookup.
+        const existingFronts = new Set();
+        for(const x of existing){
+          if(x && x.f) existingFronts.add(String(x.f));
         }
+        let added = 0;
+        for(const c of cardsArray){
+          if(!c || !c.id) continue;
+          // id-based dedup (cheap Set lookup on a second Set)
+          // We skip building an id-Set because existing.some() below is
+          // called only when the front-text check passes (much rarer).
+          if(existing.some(x=>x.id===c.id)) continue;
+          // f-based dedup — prevents duplicate-content flashcards
+          const front = String(c.f||'');
+          if(front && existingFronts.has(front)) continue;
+          existing.push(c);
+          if(front) existingFronts.add(front);
+          added++;
+        }
+        // ★ FIX-MEGGY (Task 20-7 #9): cap f/b length on incoming batch cards
+        //   too (autoCreateFlashcards in meggy-cache.js can pass long statements)
+        //   and enforce the 1000-card cap (was missing — could grow unbounded
+        //   via autoCreateFlashcards from cached questions).
+        for(const c of existing){
+          if(c){ c.f = String(c.f||'').slice(0,500); c.b = String(c.b||'').slice(0,500); }
+        }
+        if(existing.length > 1000) existing.splice(0, existing.length - 1000);
         U.lsSet('gdi-cards-v1', existing);
+        // ★ FIX-MEGGY (Task 20-7 #8): invalidate pre-indexed cache after batch add
+        _invalidateCardsIndex();
+        if(added < cardsArray.length){
+          console.info('[Meggy] addCardsBatch: added '+added+' of '+cardsArray.length+' cards ('+(cardsArray.length-added)+' duplicates skipped by id/f dedup)');
+        }
       }).catch(e=>console.warn('[Meggy] addCardsBatch chain error:', e&&e.message));
       return _cardsWriteChain;
     }
