@@ -69,6 +69,17 @@ self.onmessage = async (ev) => {
 
 async function handleExtract({ id, url, maxPages, maxChars, tryOcr }) {
   const resp = await fetch(url, { credentials: 'same-origin' });
+  // ★ FIX Agent 8 E4: ANTES não checávamos `resp.ok` — se o servidor retornasse
+  // 401/403/404/500 com corpo HTML/JSON (Cloudflare 502 HTML, Drive 401 JSON,
+  // etc.), `resp.arrayBuffer()` lia o corpo do erro e pdf.js depois falhava
+  // com "Invalid PDF structure" ou "Header not found", escondendo a causa
+  // HTTP real. Agora reportamos o HTTP status de volta para a main thread
+  // (espelhando meggy-pdf-engine.js:340-345).
+  if (!resp.ok) {
+    const body = await resp.text().catch(() => '').then(t => t.slice(0, 200));
+    self.postMessage({ type: 'error', id, message: 'HTTP ' + resp.status + ' ao baixar PDF' + (body ? ' (body: ' + body + ')' : '') });
+    return;
+  }
   const buf = await resp.arrayBuffer();
   return extractFromBuffer({ id, buf, maxPages, maxChars, tryOcr });
 }
@@ -79,45 +90,58 @@ async function handleExtractBuf({ id, buf, maxPages, maxChars, tryOcr }) {
 
 async function extractFromBuffer({ id, buf, maxPages, maxChars, tryOcr }) {
   const lib = await ensurePdfjs();
-  const doc = await lib.getDocument({ data: buf, disableFontFace: true }).promise;
-  const n = Math.min(doc.numPages, maxPages || 60);
-  let text = '';
-  let usedOcr = false;
-  const MAX = maxChars || 25000;
+  let doc;
+  // ★ FIX Agent 8 E8: ANTES o `doc.destroy()` (linha abaixo do loop) só rodava
+  // no caminho de SUCESSO. Se o loop de páginas lançasse no meio (página
+  // corrupta, `pg.getTextContent()` falhando, `ocrPage()` lançando, ou
+  // `text.length > MAX` com `slice` lançando), a função saía pelo catch
+  // externo de `self.onmessage` que envia `{type:'error'}` mas NUNCA chamava
+  // `doc.destroy()` — vazando o PDFDocumentProxy na memória do worker até
+  // `terminate()`. Agora envolvemos o loop em `try/finally` com `doc.destroy()`
+  // no finally, espelhando meggy-pdf-engine.js:354-475.
+  try {
+    doc = await lib.getDocument({ data: buf, disableFontFace: true }).promise;
+    const n = Math.min(doc.numPages, maxPages || 60);
+    let text = '';
+    let usedOcr = false;
+    const MAX = maxChars || 25000;
 
-  for (let i = 1; i <= n; i++) {
-    self.postMessage({ type: 'progress', id, page: i, total: n });
-    const pg = await doc.getPage(i);
-    const tc = await pg.getTextContent({ normalizeWhitespace: true, includeMarkedContent: true });
-    let pageText = '';
-    for (let j = 0; j < tc.items.length; j++) {
-      const item = tc.items[j];
-      if (item.str !== undefined) {
-        pageText += item.str;
-        if (item.hasEOL) pageText += '\n';
-      }
-    }
-    pageText = pageText.trim();
-
-    // Se a página não tem texto visível, tenta OCR (se habilitado)
-    if (tryOcr && pageText.length < 20) {
-      self.postMessage({ type: 'ocr', id, page: i, total: n });
-      try {
-        const ocrText = await ocrPage(lib, pg);
-        if (ocrText && ocrText.length > pageText.length) {
-          pageText = ocrText;
-          usedOcr = true;
+    for (let i = 1; i <= n; i++) {
+      self.postMessage({ type: 'progress', id, page: i, total: n });
+      const pg = await doc.getPage(i);
+      const tc = await pg.getTextContent({ normalizeWhitespace: true, includeMarkedContent: true });
+      let pageText = '';
+      for (let j = 0; j < tc.items.length; j++) {
+        const item = tc.items[j];
+        if (item.str !== undefined) {
+          pageText += item.str;
+          if (item.hasEOL) pageText += '\n';
         }
-      } catch (_) { /* OCR falhou — mantém texto vazio */ }
+      }
+      pageText = pageText.trim();
+
+      // Se a página não tem texto visível, tenta OCR (se habilitado)
+      if (tryOcr && pageText.length < 20) {
+        self.postMessage({ type: 'ocr', id, page: i, total: n });
+        try {
+          const ocrText = await ocrPage(lib, pg);
+          if (ocrText && ocrText.length > pageText.length) {
+            pageText = ocrText;
+            usedOcr = true;
+          }
+        } catch (_) { /* OCR falhou — mantém texto vazio */ }
+      }
+
+      text += pageText + '\n\n';
+      try { pg.cleanup(); } catch (_) {}
+      if (text.length > MAX) { text = text.slice(0, MAX); break; }
     }
 
-    text += pageText + '\n\n';
-    try { pg.cleanup(); } catch (_) {}
-    if (text.length > MAX) { text = text.slice(0, MAX); break; }
+    self.postMessage({ type: 'done', id, text, pages: n, usedOcr });
+  } finally {
+    // Garante que o PDFDocumentProxy seja destruído mesmo em falhas parciais.
+    if (doc) { try { doc.destroy(); } catch (_) {} }
   }
-
-  try { doc.destroy(); } catch (_) {}
-  self.postMessage({ type: 'done', id, text, pages: n, usedOcr });
 }
 
 async function ocrPage(lib, page) {
