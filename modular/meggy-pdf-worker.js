@@ -27,6 +27,20 @@
 let pdfjsReady = null;
 let tesseractReady = null;
 
+// ★ FIX Task 20-9 Item 14: hard cap no número de páginas extraídas, para evitar
+// OOM em PDFs gigantes (1000+ páginas — apostilas, livros, anais de congresso).
+// Antes, `maxPages` vinha do caller (60) e era usado direto; um caller futuro
+// podia pedir 500 e travar o worker. Agora, MAX_PAGES=50 é o teto absoluto —
+// `Math.min(doc.numPages, maxPages || MAX_PAGES, MAX_PAGES)` garante que mesmo
+// se o caller pedir 60 (como o bridge faz hoje), extraímos no máximo 50.
+const MAX_PAGES = 50;
+// ★ FIX Task 20-9 Item 15: Tesseract.js pode demorar >60s em páginas densas
+// (scans de livros, imagens de alta resolução). Sem timeout, o worker ficava
+// bloqueado no `Tesseract.recognize()` por minutos, segurando o `pdfPending`
+// promise e a UI do Meggy. Agora, race com timeout de 30s — se exceder, aborta
+// o OCR da página e segue (mantém texto vazio ou parcial).
+const OCR_TIMEOUT_MS = 30000;
+
 function ensurePdfjs() {
   if (pdfjsReady) return pdfjsReady;
   pdfjsReady = new Promise((resolve, reject) => {
@@ -101,7 +115,11 @@ async function extractFromBuffer({ id, buf, maxPages, maxChars, tryOcr }) {
   // no finally, espelhando meggy-pdf-engine.js:354-475.
   try {
     doc = await lib.getDocument({ data: buf, disableFontFace: true }).promise;
-    const n = Math.min(doc.numPages, maxPages || 60);
+    // ★ FIX Task 20-9 Item 14: hard cap MAX_PAGES=50. `maxPages` do caller
+    // (hoje 60) é respeitado se menor, mas nunca excede 50. Previne OOM em
+    // PDFs de 1000+ páginas (apostilas, livros) que podiam alocar centenas
+    // de MB de canvas/text-content no worker.
+    const n = Math.min(doc.numPages, maxPages || MAX_PAGES, MAX_PAGES);
     let text = '';
     let usedOcr = false;
     const MAX = maxChars || 25000;
@@ -163,6 +181,15 @@ async function ocrPage(lib, page) {
     const blob = await canvas.convertToBlob({ type: 'image/png' });
     imageInput = await blob.arrayBuffer();
   } catch (_) { /* mantém canvas */ }
-  const result = await Tesseract.recognize(imageInput, 'por', { logger: () => {} });
+  // ★ FIX Task 20-9 Item 15: Tesseract.recognize sem timeout pode demorar
+  // minutos em páginas densas (scans de livros, alta resolução). Race com
+  // timeout de OCR_TIMEOUT_MS (30s): se exceder, rejeita e o caller (try/catch
+  // em extractFromBuffer) mantém o texto vazio/parcial e segue para a próxima
+  // página. Sem isso, o worker ficava bloqueado e a UI do Meggy pendurada.
+  const recognizeP = Tesseract.recognize(imageInput, 'por', { logger: () => {} });
+  const timeoutP = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error('OCR timeout after ' + OCR_TIMEOUT_MS + 'ms')), OCR_TIMEOUT_MS);
+  });
+  const result = await Promise.race([recognizeP, timeoutP]);
   return (result && result.data && result.data.text) || '';
 }
