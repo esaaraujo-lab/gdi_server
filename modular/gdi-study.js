@@ -1579,7 +1579,12 @@
     browser.style.display = 'block';
     browser.innerHTML = '<div style="text-align:center;padding:20px;"><div class="gdi-mat-isa-spin"></div><p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin-top:10px;">Carregando...</p></div>';
     try {
-      const pw = window.gdiGetPw ? window.gdiGetPw() : '';
+      // ★ FIX Task 20-15 #26a (Agent 15): ANTES `window.gdiGetPw()` sem path arg
+      // — `gdiGetPw(path)` usa o path para buscar senha por-pasta no localStorage.
+      // Sem o arg, caía no default (root), retornando a senha global mesmo em
+      // pastas protegidas, e o POST de listagem falhava com 401. Mesmo bug já
+      // corrigido em modular/study/study-panel.js:560 (BUG B-1) — replicado aqui.
+      const pw = window.gdiGetPw ? window.gdiGetPw(path) : '';
       const result = await window.gdiListAllFiles(path, pw);
       if(!Array.isArray(result) || !result.length) {
         browser.innerHTML = '<p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">Nenhum conteúdo encontrado.</p>';
@@ -2331,7 +2336,12 @@
       currentInfoEl.style.display='none';
       try{
         // ★ ESTRATÉGIA: chama gdiListAllFiles (faz POST no path com paginação)
-        const pw=window.gdiGetPw?window.gdiGetPw():'';
+        // ★ FIX Task 20-15 #26b (Agent 15): ANTES `window.gdiGetPw()` sem path arg
+        // — `gdiGetPw(path)` usa o path para buscar senha por-pasta no localStorage.
+        // Sem o arg, caía no default (root), retornando a senha global mesmo em
+        // pastas protegidas, e o POST de listagem falhava com 401. Mesmo bug já
+        // corrigido em modular/study/study-courses.js:1061 (BUG C-1) — replicado aqui.
+        const pw=window.gdiGetPw?window.gdiGetPw(currentPath):'';
         let allFiles=[];
         if(window.gdiListAllFiles){
           try{
@@ -4942,7 +4952,17 @@
   function autoScanPending(){
     if(_autoScanRunning) return;
     // ★ v1.0.70 (Bug #3): busca cursos que precisam de scan e enfileira
-    const manual = JSON.parse(localStorage.getItem('gdi-manual-courses-v1') || '[]');
+    // ★ FIX Task 20-15 #27 (Agent 15): ANTES `JSON.parse(localStorage.getItem(...))`
+    // podia lançar SyntaxError se o localStorage estivesse corrompido (string
+    // inválida — partial write, edição manual, bug de extensão). O erro
+    // propagava pela stack e matava o listener de 'auto-scan' no boot — toda
+    // a central de estudos ficava sem auto-scan até reload. Mesmo bug já
+    // corrigido em modular/study/study-scanner.js:621 (try/catch em torno do
+    // JSON.parse) — replicado aqui no monolito legado.
+    let manual;
+    try {
+      manual = JSON.parse(localStorage.getItem('gdi-manual-courses-v1') || '[]');
+    } catch(_) { return; }  // LS corrompido — aborta auto-scan silenciosamente
     if(!Array.isArray(manual) || !manual.length) return;
     _autoScanQueue = [];
     for(const c of manual){
