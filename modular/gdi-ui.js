@@ -189,12 +189,26 @@ body.gdi-fv .gdi-player-wrap iframe{
     }
     if(slot.dataset.m10)return;
     slot.dataset.m10='1';
-    console.log('[GDI M10] v5 ativo \u2014 slot '+(created?'CRIADO pelo extras (o core n\u00e3o fornece)':'do core'));
-    slot.innerHTML=`
-      <button class="gdi-mode-btn" data-mode="split" title="Tela dividida (v\u00eddeo + material)"><i class="bi bi-layout-split"></i><span class="d-none d-md-inline">Dividido</span></button>
-      <button class="gdi-mode-btn" data-mode="fv" title="Foco na aula (v\u00eddeo em largura total)"><i class="bi bi-lightning-charge-fill"></i><span class="d-none d-md-inline">Foco na aula</span></button>
-      <button class="gdi-mode-btn" data-mode="fm" title="Foco no material (s\u00f3 PDF, zoom autom\u00e1tico)"><i class="bi bi-file-earmark-pdf-fill"></i><span class="d-none d-md-inline">Foco no material</span></button>
-      <button class="gdi-watched-btn" id="gdi-watched-btn" title="Marcar esta aula como assistida"><i class="bi bi-eye"></i><span>Assistido</span></button>`;
+    // ★ FIX v55 (Task MATERIAL-PAGE): se for página de material (data-material-page),
+    // oculta os botões "Dividido" e "Foco na aula" (são inúteis para materiais).
+    // Só mostra "Foco no material". Também oculta o botão "Assistido" (não faz sentido para material).
+    const isMaterialPage = study && study.dataset && study.dataset.materialPage === '1';
+    console.log('[GDI M10] v5 ativo \u2014 slot '+(created?'CRIADO pelo extras (o core n\u00e3o fornece)':'do core')+(isMaterialPage?' [PÁGINA DE MATERIAL — só foco no material]':''));
+    if(isMaterialPage){
+      // Página de material: só botão "Foco no material" (sem Dividido, Foco-na-aula, Assistido)
+      slot.innerHTML=`
+        <button class="gdi-mode-btn active" data-mode="fm" title="Foco no material"><i class="bi bi-file-earmark-pdf-fill"></i><span class="d-none d-md-inline">Foco no material</span></button>`;
+    }else{
+      // Página de vídeo: todos os botões (comportamento original)
+      slot.innerHTML=`
+        <button class="gdi-mode-btn" data-mode="split" title="Tela dividida (v\u00eddeo + material)"><i class="bi bi-layout-split"></i><span class="d-none d-md-inline">Dividido</span></button>
+        <button class="gdi-mode-btn" data-mode="fv" title="Foco na aula (v\u00eddeo em largura total)"><i class="bi bi-lightning-charge-fill"></i><span class="d-none d-md-inline">Foco na aula</span></button>
+        <button class="gdi-mode-btn" data-mode="fm" title="Foco no material (s\u00f3 PDF, zoom autom\u00e1tico)"><i class="bi bi-file-earmark-pdf-fill"></i><span class="d-none d-md-inline">Foco no material</span></button>
+        <button class="gdi-watched-btn" id="gdi-watched-btn" title="Marcar esta aula como assistida"><i class="bi bi-eye"></i><span>Assistido</span></button>`;
+    }
+    // ★ MEGGY-HEADER-CONTEXTUAL: botão Meggy no header (slot #gdi-slot-modes).
+    // Adicional ao FAB (#gdi-ai-fab) — não substitui. Delega o clique ao FAB.
+    slot.innerHTML += `<button id="gdi-ai-header-btn" title="Meggy" style="margin-left:auto;background:linear-gradient(135deg,#ff8b9f,#c026d3);border:0;border-radius:10px;padding:6px 12px;cursor:pointer;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px;"><span style="font-size:16px;">🐩</span> Meggy</button>`;
     function zoom(){
       const z=document.body.classList.contains('gdi-fm')?'150':'100';
       const ifr=document.querySelector('#gdi-mat-body iframe');
@@ -226,7 +240,22 @@ body.gdi-fv .gdi-player-wrap iframe{
     slot.querySelectorAll('.gdi-mode-btn[data-mode]').forEach(b=>{
       b.addEventListener('click',()=>setMode(b.dataset.mode));
     });
-    let saved='split';try{saved=localStorage.getItem('gdi-study-mode')||'split'}catch(_){}
+    // ★ MEGGY-HEADER-CONTEXTUAL: wire do botão Meggy no header — delega clique ao FAB.
+    const meggyHeaderBtn = slot.querySelector('#gdi-ai-header-btn');
+    if(meggyHeaderBtn){
+      meggyHeaderBtn.addEventListener('click', () => {
+        const fab = document.querySelector('#gdi-ai-fab');
+        if(fab) fab.click(); // delega ao handler existente do FAB
+      });
+    }
+    // ★ FIX v55: para página de material, sempre começa em modo "fm" (foco no material).
+    // Para página de vídeo, usa o modo salvo no localStorage (comportamento original).
+    let saved='split';
+    if(isMaterialPage){
+      saved='fm';  // material page sempre abre em foco no material
+    }else{
+      try{saved=localStorage.getItem('gdi-study-mode')||'split'}catch(_){}
+    }
     setMode(['fv','fm','split'].includes(saved)?saved:'split');
     const wb=document.getElementById('gdi-watched-btn');
     if(wb&&!wb.dataset.b){
@@ -280,11 +309,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     btn.innerHTML='<i class="bi bi-sun-fill"></i>';
     btn.style.color='#ffd43b';
     btn.title='Sair do modo descanso';
-    // v91: persist rest mode across video switches. localStorage is the
-    // single source of truth — on page:change/video:switched we re-enable
-    // the overlay if this flag is set. Only user input (mousemove/keydown/
-    // mousedown/touchstart) clears it (see exitSleep below).
-    try{localStorage.setItem('gdi-rest-mode','1');}catch(_){}
   }
   function exitSleep(){
     if(!sleeping)return;
@@ -295,13 +319,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     btn.innerHTML='<i class="bi bi-moon-stars-fill"></i>';
     btn.style.color='#74c0fc';
     btn.title='Modo descanso (apenas \u00e1udio) \u2014 clique para ligar';
-    // v91: clear the persistence flag — but ONLY when exitSleep is called
-    // from a user-input path (mousemove/keydown/click on overlay). When
-    // exitSleep is called from syncFs (no-video/fullscreen edge case) we
-    // also clear it, since the user navigated away from a media page.
-    // The previous "video ended → exitSleep" binding was REMOVED (see
-    // bindOnce below) precisely so auto-advance doesn't clear the flag.
-    try{localStorage.removeItem('gdi-rest-mode');}catch(_){}
   }
   function syncFs(){
     ensureEls();
@@ -334,49 +351,12 @@ body.gdi-fv .gdi-player-wrap iframe{
     Bus.onGlobal('media:ready',({type,el})=>{
       if(type==='video'&&el&&!el.__gdiSleepEnd){
         el.__gdiSleepEnd=true;
-        // v91: REMOVED the `el.addEventListener('ended', () => exitSleep())`
-        // binding. The 'ended' event fires whenever a video finishes —
-        // including the natural end that triggers auto-advance to the next
-        // video in the playlist. Calling exitSleep() here was causing rest
-        // mode to turn OFF the moment a video ended, so the next video
-        // would start with a bright screen. Rest mode now persists across
-        // video switches (see the page:change/video:switched listeners
-        // below) and is only dismissed by explicit user input.
+        try{el.addEventListener('ended',()=>exitSleep());}catch(_){}
       }
     });
-    // v91: persist rest mode across video switches. If localStorage says
-    // the user had rest mode on, re-enable it shortly after the new video
-    // loads. This covers both in-playlist switches (video:switched) and
-    // full page navigations between video files (page:change).
-    const _maybeRestoreSleep=()=>{
-      try{
-        if(localStorage.getItem('gdi-rest-mode')==='1'){
-          // Re-enter sleep only if not already sleeping (avoid resetting
-          // wakeGuard on an already-on overlay). The small timeout lets
-          // the new <video> element mount and the playlist UI settle.
-          setTimeout(()=>{
-            try{
-              if(localStorage.getItem('gdi-rest-mode')==='1'&&!sleeping){
-                ensureEls();enterSleep();
-              }
-            }catch(_){}
-          },500);
-        }
-      }catch(_){}
-    };
-    Bus.onGlobal('video:switched',_maybeRestoreSleep);
-    Bus.onGlobal('page:change',_maybeRestoreSleep);
-    // Expose for the init function below (so it can also restore on boot).
-    window.__gdiSleepMaybeRestore=_maybeRestoreSleep;
   }
   window.GDI_MODULES.push({name:'sleep-mode',init:function(){
     ensureEls();bindOnce();syncFs();
-    // v91: on init (after every page:change re-triggers the module loader),
-    // also try to restore rest mode if localStorage says it was on. This
-    // catches the case where the page:change event fired BEFORE bindOnce
-    // registered its listener (race between render() emitting page:change
-    // and the module loader calling init()).
-    try{if(window.__gdiSleepMaybeRestore)window.__gdiSleepMaybeRestore();}catch(_){}
   }});
   console.log('[GDI M11] v3.2 descanso registrado');
 })();
