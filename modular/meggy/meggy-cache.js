@@ -62,6 +62,9 @@
       }
       if(added) U.lsSet(LQ, all);
       return added;
+    }).catch(err => {
+      console.warn('[Meggy] addQBatch chain error:', err && err.message);
+      return 0;
     });
     return _qWriteChain;
   }
@@ -85,7 +88,9 @@
       if(seg.length>=2){
         // /7:/Curso/Materia/Aula → curso = seg[1], materia = seg[2] (se houver)
         derivedCourse='/'+seg.slice(0,2).join('/')+'/';
-        if(seg.length>=3)derivedSubject=decodeURIComponent(seg[2]);
+        if(seg.length>=3){
+          try{derivedSubject=decodeURIComponent(seg[2]);}catch(_){derivedSubject=seg[2];}
+        }
       }
     }
     arr.unshift({
@@ -165,7 +170,7 @@
     const path=urlPath||U.lessonKey()||lesson;
     questions.forEach(q=>{
       if(!q||!q.statement||!Array.isArray(q.options))return;
-      const correctLetter=String.fromCharCode(65,q.correct||0);
+      const correctLetter=String.fromCharCode(65 + (q.correct||0));
       const correctText=q.options[q.correct||0]||'';
       const back=correctLetter+') '+correctText+(q.explanation?'\n\n💡 '+q.explanation:'');
       // evita duplicatas (mesma frente)
@@ -365,7 +370,9 @@
     let _coursePath='',_subject='';
     if(_seg.length>=2){
       _coursePath='/'+_seg.slice(0,2).join('/')+'/';
-      if(_seg.length>=3)_subject=decodeURIComponent(_seg[2]);
+      if(_seg.length>=3){
+        try{_subject=decodeURIComponent(_seg[2]);}catch(_){_subject=_seg[2];}
+      }
     }
     // se já tem tudo no cache em memória, pula
     if(_chainCache[key]&&_chainCache[key].summary&&_chainCache[key].mindmap&&_chainCache[key].questionsGenerated){
@@ -807,7 +814,7 @@
   async function materialExistsInFolder(lessonPath, materialType, fileName){
     if(!lessonPath || !materialType || !fileName) return false;
     try{
-      const r = await fetch('/api/materials/check-exists?lessonPath=' + encodeURIComponent(lessonPath) + '&materialType=' + materialType + '&fileName=' + encodeURIComponent(fileName));
+      const r = await fetch('/api/materials/check-exists?lessonPath=' + encodeURIComponent(lessonPath) + '&materialType=' + encodeURIComponent(materialType) + '&fileName=' + encodeURIComponent(fileName));
       if(!r.ok) return false;
       const d = await r.json();
       return !!(d && d.ok && d.exists === true);
