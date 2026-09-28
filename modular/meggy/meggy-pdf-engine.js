@@ -320,6 +320,36 @@
   // ★ v91: opts.useAiOcr = true (or window.__gdiMeggy.pdf.useAiOcr = true)
   //   tenta CF Workers AI vision model ANTES do Tesseract no fallback de OCR.
   async function extractPdfText(url, progressCb, opts){
+    // ★ FIX 20-6 #8 (Agent 16): 60s overall deadline for PDF extraction.
+    //    The extraction loop iterates up to 500 pages of pdf.js getTextContent
+    //    (lines 371-406) and, on scanned PDFs, falls through to a Tesseract
+    //    OCR loop that can run 2-4 minutes (15 pages × ~10s/page, plus
+    //    tesseract.js CDN download + lang model fetch). Without a deadline,
+    //    a stalled CDN (pdf.js script tag hanging on `s.onload`), an
+    //    unresponsive worker, or a pathological PDF would leave the user
+    //    staring at the loading spinner forever — no way to cancel or know
+    //    it had hung.
+    //
+    //    Implementation: race the existing body against a 60s timeout Promise.
+    //    Whichever settles first wins:
+    //      • work resolves → clearTimeout in .finally, return result
+    //      • timeout rejects → clearTimeout in .finally (already fired),
+    //        throw the timeout Error to the caller (who shows setError)
+    //    IMPORTANT: the inner try/finally inside `_work` STILL runs
+    //    `doc.destroy()` even when the timeout wins, because Promise.race
+    //    doesn't cancel the loser — the inner async IIFE keeps executing
+    //    in the background and its finally block fires when it eventually
+    //    settles. This prevents the PDFDocumentProxy leak that FIX-MEGGY
+    //    #22 (Agent 7) explicitly guarded against.
+    const EXTRACT_TIMEOUT_MS=60000;
+    let _t=null;
+    const _timeout=new Promise(function(_,reject){
+      _t=setTimeout(function(){
+        reject(new Error('Tempo limite excedido na extração do PDF (60s). O arquivo pode ser muito grande, escaneado, ou o CDN do Tesseract/pdf.js está lento. Tente um PDF menor ou recarregue a página.'));
+      }, EXTRACT_TIMEOUT_MS);
+    });
+
+    const _work=(async function(){
     const pdfjs=await ensurePdfjs();
     // Resolve AI OCR flag: explicit opt > namespace flag > false (default)
     const useAiOcr=!!((opts&&opts.useAiOcr) || (window.__gdiMeggy.pdf && window.__gdiMeggy.pdf.useAiOcr));
@@ -476,6 +506,15 @@
     } finally {
       try { if(doc) doc.destroy(); } catch(_){}
     }
+    })(); // end _work IIFE
+
+    // ★ FIX 20-6 #8 (Agent 16): race work against the 60s timeout. The
+    //    .finally clears the timer regardless of which side won so we don't
+    //    leak a setTimeout arm that fires after success (no-op reject on a
+    //    resolved Promise is harmless, but cleaner to clear).
+    return Promise.race([_work, _timeout]).finally(function(){
+      if(_t){ try{ clearTimeout(_t); }catch(_){} _t=null; }
+    });
   }
 
   // ── Namespace exports ──
