@@ -30,6 +30,17 @@ const GDI_ROOT=()=>document.documentElement; // UI flutuante vive aqui (fora do 
 
 window.GDI_MODULES = window.GDI_MODULES || [];
 
+// ★ VERIFIED Task 20-4 #9: GDI_MODULES.push audit. Cada módulo deste
+// arquivo (e do gdi-ui.js) roda em IIFE próprio — cada IIFE faz push
+// exatamente 1× por script-load. Nomes únicos confirmados:
+//   gdi-core.js:  auth, marks-ui, skip-intro, materials  (4)
+//   gdi-ui.js:    focus-modes, sleep-mode, pomodoro, pom-nav,
+//                 continue-card, progress, debug, clean-title,
+//                 playlist-ui  (9)
+// Total 13 módulos, 0 duplicados. O loader (gdi-extras-loader.js) tem
+// guard anti-duplicate-bootstrap (rodava 4× antes do fix); combinado
+// com IIFE, push nunca é chamado 2× para o mesmo módulo. ✓
+
 // ★ v1.0.76: courseIdentity — global function for course icon/color by discipline
 // Defined here (gdi-core.js) so it's available to all modules regardless of CDN cache state
 window.gdiCourseIdentity = function(courseKey, courseName){
@@ -179,9 +190,16 @@ window.gdiModal = window.gdiModal || function(opts){
     // via X/Confirm/Cancel/backdrop, o escHandler ficava preso no document
     // → vazamento cumulativo a cada modal aberto. close() agora remove
     // sempre o escHandler antes de destruir o overlay.
+    //
+    // ★ FIX Task 20-4 #6: focus trap. Antes, Tab no modal podia sair para
+    // elementos atrás do overlay (navbar, inputs da página, etc.), quebrando
+    // a semântica de modal e atrapalhando leitores de tela. tabHandler
+    // intercepta Tab/Shift+Tab e mantém o foco dentro do overlay.
     const escHandlerRef={fn:null};
+    const tabHandlerRef={fn:null};
     const close=(result)=>{
       if(escHandlerRef.fn){try{document.removeEventListener('keydown',escHandlerRef.fn);}catch(_){}escHandlerRef.fn=null;}
+      if(tabHandlerRef.fn){try{document.removeEventListener('keydown',tabHandlerRef.fn);}catch(_){}tabHandlerRef.fn=null;}
       overlay.remove();
       resolve(result);
     };
@@ -198,6 +216,24 @@ window.gdiModal = window.gdiModal || function(opts){
     const escHandler=(e)=>{if(e.key==='Escape'){close(input?null:false);}};
     escHandlerRef.fn=escHandler;
     document.addEventListener('keydown',escHandler);
+    // ★ Task 20-4 #6: focus trap — Tab/Shift+Tab ciclam dentro do overlay
+    const tabHandler=(e)=>{
+      if(e.key!=='Tab')return;
+      // coleta focáveis visíveis (offsetParent!==null pula display:none)
+      const focusable=overlay.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+      const vis=[];
+      focusable.forEach(el=>{try{if(el.offsetParent!==null||el===document.activeElement)vis.push(el);}catch(_){}});
+      if(!vis.length)return;
+      const first=vis[0],last=vis[vis.length-1];
+      const ae=document.activeElement;
+      if(e.shiftKey){
+        if(ae===first||ae===overlay||!overlay.contains(ae)){e.preventDefault();last.focus();}
+      }else{
+        if(ae===last||ae===overlay||!overlay.contains(ae)){e.preventDefault();first.focus();}
+      }
+    };
+    tabHandlerRef.fn=tabHandler;
+    document.addEventListener('keydown',tabHandler);
     // foca no input ou no botão confirm
     setTimeout(()=>{
       if(input){overlay.querySelector('#gdi-modal-input').focus();}
@@ -211,9 +247,18 @@ function escModal(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&l
 // Usado por todos os renderMd() dos módulos para evitar XSS via LLM
 // ou resumos compartilhados. Tenta DOMPurify se disponível; senão,
 // faz uma sanitização básica removendo tags perigosas.
+//
+// ★ VERIFIED Task 20-4 #8: o fallback agora retorna escHtml(html) (texto
+// puro escapado) em TODOS os caminhos de erro — inclusive quando
+// DOMPurify está carregado mas throws. Antes, o catch retornava `html`
+// cru (XSS potential se o LLM injetasse <script>). Agora, se DOMPurify
+// throws, caímos no escHtml — mesma política do fallback de CDN-down.
 window.gdiSanitize = window.gdiSanitize || function(html){
   if(window.DOMPurify){
-    try{return window.DOMPurify.sanitize(html,{ ALLOWED_TAGS:['h1','h2','h3','h4','h5','h6','p','br','hr','ul','ol','li','strong','em','b','i','u','s','code','pre','blockquote','table','thead','tbody','tr','th','td','a','img','span','div','sup','sub','mark','del','ins'],ALLOWED_ATTR:['href','src','alt','title','class','target','rel','width','height','colspan','rowspan']});}catch(_){return html;}
+    try{return window.DOMPurify.sanitize(html,{ ALLOWED_TAGS:['h1','h2','h3','h4','h5','h6','p','br','hr','ul','ol','li','strong','em','b','i','u','s','code','pre','blockquote','table','thead','tbody','tr','th','td','a','img','span','div','sup','sub','mark','del','ins'],ALLOWED_ATTR:['href','src','alt','title','class','target','rel','width','height','colspan','rowspan']});}
+    // ★ Task 20-4 #8: DOMPurify carregado mas throw (ex.: HTML malformado que
+    // quebra o parser interno) — NÃO retorna html cru. Cai no escHtml.
+    catch(_){return escHtml(String(html==null?'':html));}
   }
   // ★ FIX Agent 4 Bug 17: fallback regex era bypassable por <svg>, <object>,
   // <embed>, data:text/html URLs e javascript: URLs com whitespace. Como
@@ -419,6 +464,14 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 
 // ── Loader dos módulos (anti-tempestade) ──
 // ★FIX: debounce 80→150ms
+//
+// ★ FIX Task 20-4 #7: o MutationObserver em #content ficava órfão quando
+// init() rodava $("body").html(...) (criava um novo #content). O guard
+// c.__gdiModObs impedia duplicar observers no MESMO element, mas quando
+// #content era substituído por um novo node, o guard morria com o node
+// antigo e um novo observer era criado — o antigo continuava observando
+// um node detached (vazamento). Agora trackeamos a referência do
+// observer em _gdiContentObs e desconectamos antes de criar um novo.
 (function(){
   let timer=null,lastRun=0;
   function runAll(){
@@ -430,10 +483,32 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     });
   }
   function schedule(){clearTimeout(timer);timer=setTimeout(runAll,150);}
+  let _gdiContentObs=null;  // ★ Task 20-4 #7: ref ao observer atual
   function bindContent(){
     const c=document.getElementById('content');
-    if(c&&!c.__gdiModObs){c.__gdiModObs=true;
-      new MutationObserver(schedule).observe(c,{childList:true});}
+    if(!c)return;
+    // ★ FIX 20-12 #4: ordem das checagens invertida. Antes (Task 20-4 #7):
+    //   1. if(_gdiContentObs){disconnect; _gdiContentObs=null;}
+    //   2. if(c.__gdiModObs)return;
+    // O passo 1 desconectava o observer VÁLIDO (do #content atual) e o
+    // passo 2 retornava sem criar um novo — porque c.__gdiModObs já true.
+    // Resultado: após DOMContentLoaded ou window.load (que chamam
+    // bindContent de novo para o MESMO #content), o observer ficava morto
+    // → mutações em #content não disparavam schedule() → módulos não
+    // re-inicializavam. Ordem correta: checa c.__gdiModObs PRIMEIRO
+    // (return early se já observando este node); só desconecta o observer
+    // antigo se vamos observar um #content NOVO (init substituiu).
+    if(c.__gdiModObs)return;  // já observando este node específico
+    if(_gdiContentObs){
+      // #content mudou (init substituiu por um novo node) — desconecta o
+      // observer órfão que ainda referencia o node anterior detached.
+      try{_gdiContentObs.disconnect();}catch(_){}
+      _gdiContentObs=null;
+    }
+    c.__gdiModObs=true;
+    const obs=new MutationObserver(schedule);
+    obs.observe(c,{childList:true});
+    _gdiContentObs=obs;
   }
   Bus.onGlobal('page:change',schedule);
   document.addEventListener('DOMContentLoaded',()=>{bindContent();schedule();});
@@ -1127,7 +1202,13 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
           // muitas aulas, o Map crescia sem limite (1 entry por URL único),
           // retendo iframes com PDFs pesados na memória. LRU simples: remove
           // a entry mais antiga quando atinge o teto.
-          if(frames.size>20){
+          // ★ FIX 20-12 #3: condição era `frames.size>20` (off-by-one).
+          // Rastreio: com size=20 tentando add url21 → 20>20 false → não
+          // evicta → add → size=21. Com size=21 tentando add url22 → 21>20
+          // true → evict → size=20 → add → size=21. Estabiliza em 21, não
+          // 20 como diz o comentário. Trocado para `>=20` → evicta quando
+          // atinge 20, add volta para 20. Cap real agora = 20. ✓
+          if(frames.size>=20){
             const firstKey=frames.keys().next().value;
             if(firstKey!==undefined){
               const oldIfr=frames.get(firstKey);
