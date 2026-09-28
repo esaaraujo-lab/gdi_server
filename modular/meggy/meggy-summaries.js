@@ -98,7 +98,8 @@
       if(qCount>0)parts.push('✓ '+qCount+' questões');
       badgeHtml+=parts.join(' · ')+' + flashcards';
       badge.innerHTML=badgeHtml;
-      bodyEl.querySelector('.gdi-mat-isa-result')?.insertBefore(badge,bodyEl.querySelector('.gdi-mat-isa-result').firstChild);
+      const _resultEl = bodyEl.querySelector('.gdi-mat-isa-result');
+      if(_resultEl) _resultEl.insertBefore(badge, _resultEl.firstChild);
       showToast('Resumo + pílulas + '+qCount+' questões gerados!');
     }catch(e){U.setError(bodyEl,e.message);return;}
   }
@@ -139,7 +140,8 @@
         if(result.summary)parts.push('✓ Resumo');
         if(qCount>0)parts.push('✓ '+qCount+' questões');
         badge.innerHTML='<i class="bi bi-check-circle-fill"></i> <b>Gerado em cadeia:</b> '+parts.join(' · ');
-        bodyEl.querySelector('.gdi-mat-isa-result')?.insertBefore(badge,bodyEl.querySelector('.gdi-mat-isa-result').firstChild);
+        const _resultEl = bodyEl.querySelector('.gdi-mat-isa-result');
+        if(_resultEl) _resultEl.insertBefore(badge, _resultEl.firstChild);
       }
       showToast('Pílulas geradas!');
     }catch(e){U.setError(bodyEl,e.message);return;}
@@ -149,7 +151,7 @@
   // ★ usado pelo Simulado (gdi-study.js) para enriquecer o banco
   async function fetchSharedQuestions(subjectFilter){
     try{
-      const url='/api/ai/shared-flashcards'+(subjectFilter?'?subject='+encodeURIComponent(subjectFilter):'')+'&kind=question';
+      const url='/api/ai/shared-flashcards?kind=question'+(subjectFilter?'&subject='+encodeURIComponent(subjectFilter):'');
       const r=await fetch(url,{cache:'no-store'});
       const d=await r.json();
       if(d&&d.ok&&Array.isArray(d.items)){
