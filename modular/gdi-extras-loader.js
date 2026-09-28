@@ -33,7 +33,7 @@
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
   // ★ v1.0.91: bump 92 → 93 (Shaka skin + Pomodoro sidebar + video-in-panel + PDF split + rest mode fix + OCR AI routing + parallel dispatch).
-  const CACHE_VERSION = '105';  // ★ v1.0.102: 100+ bug fixes from 20-agent review (security, race, CORS, subrequest, error handling, write chains, null guards, escHandler leaks, Bus.offGlobal)
+  const CACHE_VERSION = '106';  // ★ v1.0.103: 144+ bug fixes from 20-agent deep review (security hardening, race conditions, CORS, subrequest limits, error handling, type coercion, backward compat, performance O(N²)→Set, state leak cleanup, UI/UX accessibility, legacy monolith fixes, docs)
   window.CACHE_VERSION = CACHE_VERSION;
 
   const MODULES = [
@@ -125,10 +125,24 @@
 
   // ★ FIX BUG 10 (v80): retry simples (2× com 500ms) para módulos auxiliares —
   // menos agressivo que o core (esses rodam em paralelo via Promise.allSettled).
+  // ★ FIX Task 20-9 Item 6: aumentado para 3 retries (4 tentativas totais) com
+  // backoff exponencial (500ms, 1000ms, 2000ms). Antes, 2 tentativas com 500ms
+  // fixos não eram suficientes para transient failures (Cloudflare Worker cold
+  // start, brief network blip) — módulos ficavam faltando e a UI quebrava.
   async function loadWithRetry(url, isAsync){
-    for (let i = 0; i < 2; i++) {
-      try { await loadScript(url, isAsync); return true; }
-      catch(e) { if (i === 0) await new Promise(r => setTimeout(r, 500)); else throw e; }
+    const backoff = [500, 1000, 2000];   // delays before retry 1, 2, 3
+    for (let i = 0; i <= backoff.length; i++) {
+      try {
+        await loadScript(url, isAsync);
+        return true;
+      } catch(e) {
+        if (i < backoff.length) {
+          console.warn('[GDI Loader] retry ' + (i + 1) + '/' + backoff.length + ' for', url, '—', e.message);
+          await new Promise(r => setTimeout(r, backoff[i]));
+        } else {
+          throw e;   // all retries exhausted — propagate to caller
+        }
+      }
     }
     return false;
   }
@@ -194,19 +208,87 @@
       // ★ v1.0.86: CARGA SEQUENCIAL (não paralela) — garante ordem de dependências.
       // Os módulos meggy/* e study/* usam `const U = window.__gdiMeggy.utils` em load-time,
       // então meggy-utils.js DEVE carregar antes de meggy-questions.js etc.
-      // Cada módulo ganha retry de 2× (loadWithRetry).
-      const others = MODULES.slice(1);
-      let ok = 0, fail = 0;
-      for (const m of others) {
-        try {
-          await loadWithRetry(moduleUrl(m), true);
-          ok++;
-          console.log('[GDI Loader] ✓', m);
-        } catch(e) {
-          fail++;
-          console.warn('[GDI Loader] ✗', m, '—', e.message);
+      // Cada módulo ganha retry de 3× (loadWithRetry).
+      //
+      // ★ FIX Task 20-9 Item 5: ANTES todos os 16 módulos pós-core eram carregados
+      // SEQUENCIALMENTE num único for-loop — ~5MB de JS em série, um atrás do
+      // outro, mesmo quando não houvesse dependência entre eles. Agora dividimos
+      // em 3 cadeias:
+      //   1) Core-chain (sequencial): worker-bridge → storage → gdi-pdf → gdi-ui
+      //      (gdi-ui e outros dependem do bridge + storage + gdi-pdf, então
+      //       ficam na cadeia core que roda ANTES das outras duas).
+      //   2) Meggy-chain (sequencial): meggy-utils → ... → meggy-widget
+      //      (order within chain preserved — utils must load first).
+      //   3) Study-chain (sequencial): study-theme → ... → study-panel
+      //      (order within chain preserved — theme + panel last).
+      // Chains 2 e 3 rodam EM PARALELO entre si (Promise.allSettled) depois da
+      // chain 1. Isso corta o tempo de carga sequencial ~pela metade em redes
+      // rápidas (HTTP/2 multiplexa os requests), sem quebrar dependências.
+      // ★ FIX Task 20-9 Item 7: cada módulo é envolvido em try/catch próprio —
+      // se um módulo falhar (após retries), o erro é logado mas o chain CONTINUA
+      // carregando os módulos restantes. Antes já era assim no for-loop sequencial;
+      // agora o mesmo comportamento é preservado nas chains paralelas via
+      // `loadChain` que nunca rejeita (sempre resuelve com {ok, fail} counts).
+      const CORE_CHAIN = ['gdi-worker-bridge.js', 'storage.js', 'gdi-pdf.js', 'gdi-ui.js'];
+      const MEGGY_CHAIN = [
+        'meggy/meggy-utils.js',
+        'meggy/meggy-pdf-engine.js',
+        'meggy/meggy-cache.js',
+        'meggy/meggy-questions.js',
+        'meggy/meggy-flashcards.js',
+        'meggy/meggy-summaries.js',
+        'meggy/meggy-widget.js'
+      ];
+      const STUDY_CHAIN = [
+        'study/study-theme.js',
+        'study/study-scanner.js',
+        'study/study-courses.js',
+        'study/study-questions.js',
+        'study/study-advanced.js',
+        'study/study-tabs-legacy.js',
+        'study/study-player-guard.js',
+        'study/study-panel.js'
+      ];
+
+      // loadChain: carrega módulos SEQUENCIALMENTE (preserva ordem de dependência
+      // dentro da cadeia). Nunca rejeita — falhas são contadas e logadas, e o
+      // chain continua com o próximo módulo (Item 7 fallback).
+      async function loadChain(label, mods){
+        let ok = 0, fail = 0;
+        for (const m of mods) {
+          try {
+            await loadWithRetry(moduleUrl(m), true);
+            ok++;
+            console.log('[GDI Loader] ✓', m);
+          } catch(e) {
+            fail++;
+            // ★ FIX Task 20-9 Item 7: NÃO lança — continua com próximo módulo.
+            // Antes o catch só logava; o for-loop já não propagava. Agora
+            // mantemos o mesmo contrato: módulo que falha após 3 retries é
+            // pulado, e os demais continuam carregando.
+            console.warn('[GDI Loader] ✗', m, '—', e.message, '(continuando chain)');
+          }
         }
+        console.log(`[GDI Loader] chain "${label}" done — ${ok} OK, ${fail} falhas`);
+        return { ok, fail };
       }
+
+      // 1) Core-chain primeiro (sequencial) — gdi-ui e demais dependem de
+      //    worker-bridge + storage + gdi-pdf já estarem em vigor.
+      let ok = 0, fail = 0;
+      const coreRes = await loadChain('core', CORE_CHAIN);
+      ok += coreRes.ok; fail += coreRes.fail;
+
+      // 2) Meggy + Study em PARALELO (cada chain é sequencial internamente,
+      //    mas as duas chains rodam simultaneamente via Promise.allSettled).
+      const [meggyRes, studyRes] = await Promise.allSettled([
+        loadChain('meggy', MEGGY_CHAIN),
+        loadChain('study', STUDY_CHAIN)
+      ]);
+      if (meggyRes.status === 'fulfilled') { ok += meggyRes.value.ok; fail += meggyRes.value.fail; }
+      else { fail += MEGGY_CHAIN.length; console.warn('[GDI Loader] meggy chain rejected:', meggyRes.reason); }
+      if (studyRes.status === 'fulfilled') { ok += studyRes.value.ok; fail += studyRes.value.fail; }
+      else { fail += STUDY_CHAIN.length; console.warn('[GDI Loader] study chain rejected:', studyRes.reason); }
 
       prefetchWorkers();
 
