@@ -600,6 +600,8 @@
       if(currentPage>=totalPages)currentPage=totalPages-1;
       if(currentPage<0)currentPage=0;
       const slice=filtered.slice(currentPage*PAGE_SIZE,(currentPage+1)*PAGE_SIZE);
+      // ★ v1.0.98 FIX: generation token to prevent stale cards from async race (Agent 15 Bug 3)
+      const __gen=(box.__filterGen=(box.__filterGen||0)+1);
       // limpar grid
       grid.innerHTML='';
       if(!slice.length){
@@ -608,6 +610,7 @@
       // ★ PATCH C: pré-busca bestIn em paralelo (Promise.all) — depois renderiza cards com target resolvido
       (async()=>{
         const targets=await Promise.all(slice.map(c=>bestIn(c.key).catch(()=>null)));
+        if(box.__filterGen!==__gen)return;  // ★ v1.0.98 FIX: stale — abort
         slice.forEach((c,i)=>renderCourseCard(grid,c,box,targets[i]));
       })();
       // paginação
