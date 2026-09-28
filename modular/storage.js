@@ -31,7 +31,14 @@
     // a sessão da página. Agora, só retornamos `ent.p` se a entrada ainda
     // está dentro do TTL. Caso contrário, deletamos a entrada expirada antes
     // de re-buscar, para que a próxima chamada (dedupe in-flight) funcione.
-    if (ent && now - ent.t < ttlMs) return ent.p;          // TTL hit (ainda válido)
+    if (ent && now - ent.t < ttlMs) {
+      // ★ FIX Task 20-9 Item 8: LRU — move entry to end (MRU position) on hit.
+      // Map preserves insertion order, so delete+set recoloca a entrada no fim;
+      // a eviction abaixo remove o primeiro (LRU). Antes era FIFO puro.
+      _mem.delete(key);
+      _mem.set(key, ent);
+      return ent.p;          // TTL hit (ainda válido)
+    }
     if (ent && ent.p) { _mem.delete(key); }                // expirou — limpa antes de re-fetch
     const p = fn().catch(err => { _mem.delete(key); throw err; });
     _mem.set(key, { t: now, p });
@@ -57,6 +64,25 @@
   async function folderCacheDelete(key){
     try { const c = await caches.open(FOLDER_CACHE); await c.delete(key); }
     catch(_) {}
+  }
+
+  // ★ FIX Task 20-9 Item 9: a task original referenciava `fetchIndice`, que NÃO
+  // existe neste arquivo (provavelmente confusão com outro módulo). O espírito
+  // do fix é: nenhum fetch tem timeout explícito, então um Drive API / Cloudflare
+  // Worker que fique pendente (sem responder 200 nem erro) segura a Promise
+  // indefinidamente, travando o caller (e o `memo()` in-flight) para sempre.
+  // Helper `fetchWithTimeout` aplica um AbortController com timeout default 10s;
+  // usado nos fetches mais pesados (scanCourseProgress, listAllFilesInternal-
+  // equivalents) para garantir fail-fast. Os fetches leves (GET de cache KV)
+  // continuam sem timeout pois já têm try/catch returning null/[].
+  async function fetchWithTimeout(url, opts, timeoutMs){
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), timeoutMs || 10000);
+    try {
+      return await fetch(url, { ...(opts || {}), signal: ctrl.signal });
+    } finally {
+      clearTimeout(to);
+    }
   }
 
   // ═══ Helpers de URL curta ═════
@@ -131,7 +157,10 @@
       await fetch('/api/materials/save',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({coursePath,pdfName,kind,content})});
       invalidate('matList:'+kind);
-    }catch(_){}
+    }catch(e){
+      // ★ FIX Task 20-9 Item 10: surface save failures (before: silent empty catch)
+      console.warn('[GDI Storage] saveMaterial failed —', e && e.message || e);
+    }
   }
 
   async function materialExists(coursePath, pdfName, kind){
@@ -165,7 +194,10 @@
       await fetch('/api/courses/add',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({coursePath,courseName,pdfCount:pdfCount||0,addedAt:Date.now()})});
       invalidate('courses');
-    }catch(_){}
+    }catch(e){
+      // ★ FIX Task 20-9 Item 10: surface save failures (before: silent empty catch)
+      console.warn('[GDI Storage] saveCourse failed —', e && e.message || e);
+    }
   }
 
   async function listCourses(){
@@ -204,7 +236,10 @@
       await fetch('/api/brain/save',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({fileName,markdown})});
       invalidate('memory');
-    }catch(_){}
+    }catch(e){
+      // ★ FIX Task 20-9 Item 10: surface save failures (before: silent empty catch)
+      console.warn('[GDI Storage] saveMemory failed —', e && e.message || e);
+    }
   }
 
   async function listMemory(filter){
@@ -225,7 +260,10 @@
     try{
       await fetch('/api/ai/essay/save',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({markdown,banca,tipo,score})});
-    }catch(_){}
+    }catch(e){
+      // ★ FIX Task 20-9 Item 10: surface save failures (before: silent empty catch)
+      console.warn('[GDI Storage] saveEssay failed —', e && e.message || e);
+    }
   }
 
   async function saveSharedFlashcard(card){
@@ -233,7 +271,10 @@
       await fetch('/api/ai/shared-flashcards',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify(card)});
       invalidate('sharedFc:'+card.subject);
-    }catch(_){}
+    }catch(e){
+      // ★ FIX Task 20-9 Item 10: surface save failures (before: silent empty catch)
+      console.warn('[GDI Storage] saveSharedFlashcard failed —', e && e.message || e);
+    }
   }
 
   async function listSharedFlashcards(subject){
@@ -258,15 +299,22 @@
     const hit = await folderCacheGet(cacheKey);
     if (hit) return hit;
     try{
-      const r=await fetch('/api/courses/scan-progress',{
+      // ★ FIX Task 20-9 Item 9: 10s AbortController timeout — este POST pode
+      // varrer centenas de pastas no Drive; sem timeout, um Worker que caia em
+      // loop (ou Drive API pendurado) segura a Promise indefinidamente.
+      const r = await fetchWithTimeout('/api/courses/scan-progress',{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({coursePath})
-      });
+      }, 10000);
       if(!r.ok)return null;
       const d=await r.json();
       if(d&&d.ok) await folderCachePut(cacheKey, d);
       return d&&d.ok?d:null;
-    }catch(_){return null;}
+    }catch(e){
+      // ★ FIX Task 20-9 Item 10: log para diagnóstico (antes o catch era vazio).
+      console.warn('[GDI Storage] scanCourseProgress failed for', coursePath, '—', e && e.message || e);
+      return null;
+    }
   }
 
   async function saveUserProgress(coursePath, progress, totalLessons){
@@ -276,7 +324,10 @@
         body:JSON.stringify({coursePath, progress:progress||[], totalLessons:totalLessons||0})
       });
       invalidate('userProg:'+coursePath);
-    }catch(_){}
+    }catch(e){
+      // ★ FIX Task 20-9 Item 10: surface save failures (before: silent empty catch)
+      console.warn('[GDI Storage] saveUserProgress failed for', coursePath, '—', e && e.message || e);
+    }
   }
 
   async function getUserProgress(coursePath){
@@ -311,7 +362,11 @@
       const d=await r.json();
       invalidate('sharedProg:'+coursePath);
       return !!(d&&d.ok);
-    }catch(_){return false;}
+    }catch(e){
+      // ★ FIX Task 20-9 Item 10: surface save failures (before: silent empty catch)
+      console.warn('[GDI Storage] saveSharedProgress failed for', coursePath, '—', e && e.message || e);
+      return false;
+    }
   }
 
   function buildSharedProgressMarkdown(opts){
