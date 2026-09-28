@@ -75,8 +75,21 @@
 
     // ★ Aplica modo "foco no material" (gdi-fm) — esconde o left, mostra só o painel M9.
     // Tenta aplicar imediatamente e também após 200ms (fallback caso M10 ainda não tenha injetado os botões).
+    // ★ FIX Task 20-9 Item 16: o setTimeout(applyFm, 800) dispara 800ms depois de
+    // file_material() rodar. Se o usuário navigar para outra página (file_video,
+    // file_image, etc.) nesse intervalo, o #content foi re-renderizado e o
+    // #gdi-study não existe mais — aplicar gdi-fm / mexer no grid faria CSS errado
+    // na nova view. Agora, applyFm checa `document.body.isConnected` (sempre true
+    // num tab vivo, mas defensivo) E se o #gdi-study com data-material-page="1"
+    // ainda está no DOM; se não, aborta silenciosamente.
     const applyFm = () => {
       try {
+        // Guard: se o usuário já navegou para fora da página de material, o
+        // #gdi-study[data-material-page] não existe mais — aborta para não
+        // aplicar CSS de modo-foco numa view diferente.
+        const studyEl = document.querySelector('#gdi-study[data-material-page="1"]');
+        if (!studyEl || !studyEl.isConnected) return;
+        if (!document.body || !document.body.isConnected) return;
         document.body.classList.add('gdi-fm');
         document.body.classList.remove('gdi-fv');
         // Garante que o left está oculto e o grid é 1 coluna
