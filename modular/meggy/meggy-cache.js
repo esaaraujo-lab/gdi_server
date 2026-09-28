@@ -180,22 +180,58 @@
   // ★FIX v2: agora salva urlPath (path real da aula) para permitir agrupar por
   // disciplina (pasta pai) e tema (nome da aula) na biblioteca de flashcards.
   function autoCreateFlashcards(questions,lesson,urlPath){
-    const cards=U.lsGet('gdi-cards-v1',[]);
-    let n=0;
+    // ★ FIX-MEGGY #5 (Agent 5 R4 / Agent 14 Bug 5): route through
+    //   window.__gdiMeggy.flashcards.addCardsBatch (which serializes via
+    //   _cardsWriteChain) instead of doing a direct RMW on gdi-cards-v1.
+    //   Direct lsGet→mutate→lsSet here races with the library's own
+    //   writes (manual add/delete/grade) AND with concurrent
+    //   autoCreateFlashcards calls for different lessons — last-write-wins
+    //   silently loses flashcards.
+    const fcNs = window.__gdiMeggy && window.__gdiMeggy.flashcards;
+    if(fcNs && typeof fcNs.addCardsBatch === 'function'){
+      const path=urlPath||U.lessonKey()||lesson;
+      const newCards=[];
+      questions.forEach(q=>{
+        if(!q||!q.statement||!Array.isArray(q.options))return;
+        const correctLetter=String.fromCharCode(65 + (q.correct||0));
+        const correctText=q.options[q.correct||0]||'';
+        const back=correctLetter+') '+correctText+(q.explanation?'\n\n💡 '+q.explanation:'');
+        newCards.push({
+          id:U.uid(),f:q.statement,b:back,due:Date.now()+86400000,box:0,
+          src:'ISA:'+lesson,path:path,lesson:lesson,createdAt:Date.now()
+        });
+      });
+      const n=newCards.length;
+      if(n) fcNs.addCardsBatch(newCards);
+      return n;
+    }
+    // Fallback (flashcards module not loaded yet): local serialized chain
+    //   to at least avoid races between multiple autoCreateFlashcards calls.
+    if(!window.__gdiMeggyCacheFcFallbackChain){
+      window.__gdiMeggyCacheFcFallbackChain = Promise.resolve();
+    }
     const path=urlPath||U.lessonKey()||lesson;
+    const newCards=[];
     questions.forEach(q=>{
       if(!q||!q.statement||!Array.isArray(q.options))return;
       const correctLetter=String.fromCharCode(65 + (q.correct||0));
       const correctText=q.options[q.correct||0]||'';
       const back=correctLetter+') '+correctText+(q.explanation?'\n\n💡 '+q.explanation:'');
-      // evita duplicatas (mesma frente)
-      const exists=cards.some(c=>c.f===q.statement);
-      if(!exists){
-        cards.push({id:U.uid(),f:q.statement,b:back,due:Date.now()+86400000,box:0,src:'ISA:'+lesson,path:path,lesson:lesson,createdAt:Date.now()});
-        n++;
-      }
+      newCards.push({
+        id:U.uid(),f:q.statement,b:back,due:Date.now()+86400000,box:0,
+        src:'ISA:'+lesson,path:path,lesson:lesson,createdAt:Date.now()
+      });
     });
-    if(n)U.lsSet('gdi-cards-v1',cards);
+    const n=newCards.length;
+    if(n){
+      window.__gdiMeggyCacheFcFallbackChain = window.__gdiMeggyCacheFcFallbackChain.then(() => {
+        const cards=U.lsGet('gdi-cards-v1',[]);
+        for(const c of newCards){
+          if(!cards.some(x=>x.f===c.f)) cards.push(c);
+        }
+        U.lsSet('gdi-cards-v1',cards);
+      }).catch(e=>console.warn('[Meggy] autoCreateFlashcards fallback chain error:', e&&e.message));
+    }
     return n;
   }
 
@@ -207,12 +243,19 @@
   const GRANULAR_AVAILABLE = (function(){
     // detecta uma vez se endpoints granulares existem (HEAD request)
     let _checked=null;
+    // ★ FIX-MEGGY #7 (Agent 20 Bug 8): re-probe every 5 min instead of
+    //   caching the first result forever — otherwise a deploy that adds
+    //   the granular endpoints (or removes them) doesn't take effect
+    //   until the user reloads the page.
+    let _checkedAt=0;
+    const _TTL=5*60*1000; // 5 min
     return async function(){
-      if(_checked!==null)return _checked;
+      if(_checked!==null && Date.now() - _checkedAt < _TTL) return _checked;
       try{
         const r=await fetch('/api/ai/summaries?probe=1',{method:'HEAD'});
         _checked=r.ok;
       }catch(_){_checked=false;}
+      _checkedAt=Date.now();
       return _checked;
     };
   })();
@@ -359,7 +402,16 @@
     const keys=Object.keys(_chainCache);
     if(keys.length>_chainCacheMax){
       // remove o mais antigo (primeiro inserido — aproximação LRU)
-      delete _chainCache[keys[0]];
+      // ★ FIX-MEGGY #6 (Agent 5 R5): skip in-flight keys during eviction —
+      //   if we delete a key whose _inflight promise is still running, the
+      //   IIFE continues mutating an orphaned object (it holds a reference),
+      //   but later `return _chainCache[key]` returns undefined and crashes
+      //   the caller.
+      for(let i=0;i<keys.length;i++){
+        if(_inflight[keys[i]]) continue; // still running — don't evict
+        delete _chainCache[keys[i]];
+        break;
+      }
     }
   }
 
