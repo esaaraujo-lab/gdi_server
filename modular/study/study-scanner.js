@@ -417,16 +417,27 @@
   // silently clobber the first → courses lost. Now we (a) wrap RMW in
   // try/catch with one retry, and (b) dedup by `key`/`id`/`path` right
   // before writing so concurrent writes can't introduce duplicates.
+  // ★ v1.0.97 FIX: respeita hidden list local (gdi-hidden-courses-v1) — se o user
+  // removeu um curso, ele NÃO deve ser re-adicionado pelo sync mesmo se o servidor
+  // ainda o retornar (race entre sync e remove, ou remove ainda não propagou).
   async function syncCoursesFromDrive(){
     const LS_MANUAL = 'gdi-manual-courses-v1';
+    const LS_HIDDEN = 'gdi-hidden-courses-v1';  // ★ v1.0.97
     let d;  // populated by fetch below; referenced by mergeDriveCourses closure
     const mergeDriveCourses = function(){
       const local = JSON.parse(localStorage.getItem(LS_MANUAL) || '[]');
       if(!Array.isArray(local)) throw new Error('localStorage not an array');
       const localPaths = new Set(local.map(c => c && c.path));
+      // ★ v1.0.97: carrega hidden list — cursos aqui NUNCA devem ser re-adicionados
+      const hiddenList = JSON.parse(localStorage.getItem(LS_HIDDEN) || '[]');
+      const hiddenSet = new Set(Array.isArray(hiddenList) ? hiddenList : []);
       let added = 0;
       for(const dc of d.courses){
         if(dc && dc.coursePath && !localPaths.has(dc.coursePath)){
+          // ★ v1.0.97: pula se foi hidden localmente
+          if(hiddenSet.has(dc.coursePath)){
+            continue;
+          }
           local.push({
             id:'mc-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),
             name:dc.courseName||'Curso', icon:'📁', color:'#5ddeda', goal:60, notes:'',
