@@ -26,7 +26,7 @@
     f.href='https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Rubik:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap';
     document.head.appendChild(f);
   }
-  if(!document.querySelector('link[rel="preconnect"][href*="fonts.gstatic"]')){
+  if(!document.querySelector('link[rel="preconnect"]ref*="fonts.gstatic"]')){
     const p=document.createElement('link');p.rel='preconnect';p.crossOrigin='';p.href='https://fonts.gstatic.com';document.head.appendChild(p);
   }
 
@@ -41,7 +41,6 @@
   --ferreto-grad:linear-gradient(135deg,#ff8b9f 0%,#c026d3 55%,#5ddeda 130%);
   --ferreto-grad-soft:linear-gradient(135deg,rgba(255,139,159,.16),rgba(93,222,218,.12));
   --ferreto-glow:rgba(255,139,159,.35);
-  --gdi-text:var(--ferreto-text,#f3f5fa);--gdi-text-muted:var(--ferreto-text-muted,#9aa4b8);
 }
 [data-bs-theme="dark"]{
   --ferreto-bg:#070910;--ferreto-bg-2:#0d1119;
@@ -104,6 +103,14 @@
 .gdi-note-del:hover{color:#ff6b6b!important;}
 .gdi-note-mark{background:var(--ferreto-primary)!important;}
 .gdi-note-mark:hover{background:#ffd43b!important;}
+
+/* Pomodoro FAB + painel */
+#gdi-pom-fab{background:conic-gradient(var(--ferreto-primary) calc(var(--pom-p,0)*1%),var(--ferreto-surface-3) 0)!important;box-shadow:0 6px 22px rgba(0,0,0,.5),0 0 0 1px var(--ferreto-border-strong)!important;}
+#gdi-pom-fab::after{background:var(--ferreto-bg-2)!important;border-color:var(--ferreto-border)!important;}
+#gdi-pom-fab>span{color:var(--ferreto-text)!important;}
+#gdi-pom-fab.warning{animation:gdi-pom-pulse .8s ease-in-out infinite;}
+@keyframes gdi-pom-pulse{0%,100%{box-shadow:0 6px 22px rgba(0,0,0,.5),0 0 0 1px var(--ferreto-border-strong);}50%{box-shadow:0 0 0 12px rgba(255,139,159,.25),0 6px 22px rgba(0,0,0,.5);}}
+#gdi-pom-panel{background:var(--ferreto-surface)!important;-webkit-backdrop-filter:blur(20px)!important;backdrop-filter:blur(20px)!important;border-color:var(--ferreto-border-strong)!important;border-radius:var(--ferreto-radius)!important;box-shadow:0 20px 56px rgba(0,0,0,.6)!important;color:var(--ferreto-text)!important;}
 
 /* Sleep button */
 #gdi-sleep-btn{color:var(--ferreto-text-muted)!important;background:var(--ferreto-surface-2)!important;border:1px solid var(--ferreto-border)!important;border-radius:999px!important;}
