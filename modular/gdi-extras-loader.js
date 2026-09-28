@@ -33,7 +33,7 @@
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
   // ★ v1.0.91: bump 92 → 93 (Shaka skin + Pomodoro sidebar + video-in-panel + PDF split + rest mode fix + OCR AI routing + parallel dispatch).
-  const CACHE_VERSION = '102';  // ★ v1.0.100: Fix Área do Aluno tabs — gdiGetPw path arg, modal close → home tab, null-guards, navigate('/') drive list
+  const CACHE_VERSION = '103';  // ★ v1.0.100b: force reload — gdi-core.js was stale in CDN cache
   window.CACHE_VERSION = CACHE_VERSION;
 
   const MODULES = [
