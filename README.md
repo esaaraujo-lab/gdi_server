@@ -1,6 +1,6 @@
 # GDI Index — Plataforma de Estudos Educa/Meggy 🐩
 
-**Versão:** 1.0.90 · **Build:** 2025-09-27
+**Versão:** 1.0.60 · **Build:** 2026-09-23
 
 Plataforma de estudos completa construída sobre o Google Drive Index, com IA integrada (Meggy), scanner de cursos, questões, flashcards, simulados, cronograma, correção de redação e muito mais.
 
@@ -643,33 +643,6 @@ The Player-Guard detects stalls (15s no progress) and offers "Reload" or "Contin
 ### How do I change theme (dark/light)?
 
 Theme button at top (sun/moon).
-
----
-
-## 📋 Changelog — v1.0.90 (2025-09-27)
-
-### Fase 1 — Estabilização
-- **C1 CRITICAL**: gdiIsaPdf `extractPdfText` patch preservado (removido do `Object.assign`)
-- **C2 HIGH**: `NOTE_KEY()` defensive fallback
-- **C3 HIGH**: Rest mode persiste entre trocas de vídeo (localStorage + `video:switched`)
-- **C4 HIGH**: `GH_TOKEN` + `NVIDIA_API_KEY_4..10` + `NVIDIA_API_URL`/`MODELS` na compat layer
-- **C5 MEDIUM**: `study-theme.js` `querySelector` corrigido
-- **C6 MEDIUM**: M9 per-lesson filter antes do `slice(0,12)`
-- **C8 MEDIUM**: `window.gdiSubjects` re-exportado por `meggy-flashcards.js`
-- **C9 LOW**: Dead Pomodoro CSS removido de `study-theme.js`
-- **C10 LOW**: Dead `addEventListener` removido de `worker.js`
-- `Bus.offGlobal` adicionado a `gdi-core.js`
-- Monólitos `gdi-study.js` + `gdi-meggy.js` removidos da whitelist/loader
-- **S1-S3**: Simulado fixes (filtro curso, timer cleanup, SRS skip)
-- **Questões**: dropdown por curso + disciplina
-
-### Fase 2 — Enhancements
-- **Shaka Player** opcional (configurável via `PLAYER` var no `worker.js`, default `plyr`)
-- **Shaka UI** com `shaka.ui.Overlay` (controles + Smart TV remote)
-- **Pomodoro** no sidebar da Área do Aluno
-- **Rest mode fix** completo (wakeGuard 10s, nav keys não acorda, overlay `pointer-events`)
-- **Auto-open** Área do Aluno após login (delay 200ms)
-- **Botão "🗂️ Index"** para modo clássico (toggle one-shot via localStorage)
 
 ---
 
