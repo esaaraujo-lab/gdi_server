@@ -329,9 +329,9 @@
     if(currentTab==='addmateria'){showAddCourseModal(body);return;}
     if(currentTab==='home')renderHome(body);
     else if(currentTab==='drives')renderDrives(body);
-    else if(currentTab==='questoes')window.__gdiStudy.questions.renderQuestoes(body);
-    else if(currentTab==='simulado')window.__gdiStudy.questions.renderSimulado(body);
-    else if(currentTab==='cronograma')window.__gdiStudy.questions.renderCronograma(body);
+    else if(currentTab==='questoes'){if(window.__gdiStudy&&window.__gdiStudy.questions&&typeof window.__gdiStudy.questions.renderQuestoes==='function')window.__gdiStudy.questions.renderQuestoes(body);else body.innerHTML='<div class="gdi-empty-state"><span class="gdi-empty-state-icon">📝</span><h3>Questões indisponíveis</h3><p>O módulo de questões não carregou. Tente recarregar a página.</p></div>';}
+    else if(currentTab==='simulado'){if(window.__gdiStudy&&window.__gdiStudy.questions&&typeof window.__gdiStudy.questions.renderSimulado==='function')window.__gdiStudy.questions.renderSimulado(body);else body.innerHTML='<div class="gdi-empty-state"><span class="gdi-empty-state-icon">⏱️</span><h3>Simulado indisponível</h3><p>O módulo de questões não carregou.</p></div>';}
+    else if(currentTab==='cronograma'){if(window.__gdiStudy&&window.__gdiStudy.questions&&typeof window.__gdiStudy.questions.renderCronograma==='function')window.__gdiStudy.questions.renderCronograma(body);else body.innerHTML='<div class="gdi-empty-state"><span class="gdi-empty-state-icon">📅</span><h3>Cronograma indisponível</h3><p>O módulo de questões não carregou.</p></div>';}
     else if(currentTab==='resumos'){if(window.renderResumos)renderResumos(body);else body.innerHTML='<div class="gdi-empty-state"><span class="gdi-empty-state-icon">📋</span><h3>Resumos indisponíveis</h3><p>O módulo de resumos não carregou. Tente recarregar a página.</p></div>';}
     else if(currentTab==='provas'){if(window.renderProvas)window.renderProvas(body);else body.innerHTML='<div class="gdi-empty-state"><span class="gdi-empty-state-icon">📄</span><h3>Provas indisponíveis</h3><p>O módulo de provas não carregou.</p></div>';}
     else if(currentTab==='redacao'){if(window.renderRedacao)window.renderRedacao(body);else body.innerHTML='<div class="gdi-empty-state"><span class="gdi-empty-state-icon">✍️</span><h3>Redação indisponível</h3><p>O módulo de redação não carregou.</p></div>';}
