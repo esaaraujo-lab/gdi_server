@@ -62,6 +62,10 @@
     try{localStorage.removeItem(LS_SCAN_PREFIX+courseKey)}catch(_){}
     // ★ v1.0.98 FIX: also clear lessons cache to prevent orphan entries + quota bloat (Agent 13 Bug 5)
     try{localStorage.removeItem(LS_LESSONS_PREFIX+courseKey)}catch(_){}
+    // ★ FIX (Agent 14 Bug 4): also remove the __at timestamp written by setScanState —
+    //    otherwise _evictOldestLessons still sees an orphan 'at' marker for a
+    //    cleared course, breaking eviction ordering.
+    try{localStorage.removeItem(LS_LESSONS_PREFIX+courseKey+'__at')}catch(_){}
   }
 
   // ── Lessons cache (per course) ──
@@ -513,6 +517,17 @@
       try {
         added = mergeDriveCourses();
       } catch(e) {
+        // ★ FIX (Agent 14 Bug 11): do NOT retry on QuotaExceededError — the
+        //    retry re-reads localStorage (same data) and re-writes the SAME
+        //    payload, which will fail with quota again. The retry is futile
+        //    and only delays the inevitable. Just bail out.
+        const isQuota = e && (e.name === 'QuotaExceededError' ||
+          /quota/i.test(e.message || '') ||
+          (typeof DOMException !== 'undefined' && e instanceof DOMException && e.name === 'QuotaExceededError'));
+        if(isQuota){
+          console.warn('[syncCoursesFromDrive] QuotaExceededError — aborting merge (no retry):', e && e.message);
+          return 0;
+        }
         console.warn('[syncCoursesFromDrive] race detectada, re-lendo:', e && e.message);
         try {
           added = mergeDriveCourses();
