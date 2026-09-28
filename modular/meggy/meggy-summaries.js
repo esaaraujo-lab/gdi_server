@@ -192,19 +192,48 @@
           date:new Date().toISOString()
         })});
       const d=await r.json();
-      return !!(d&&d.ok);
-    }catch(_){return false;}
+      const ok = !!(d&&d.ok);
+      // ★ Fix 10 (Task 20-8): surface failures as a toast so the user knows
+      //   their corrected redação wasn't saved. Previously this returned false
+      //   silently — callers couldn't tell network failure from a server
+      //   rejection, so the user would close the tab thinking it was saved.
+      if(!ok && typeof showToast === 'function'){
+        showToast('Não foi possível salvar a redação: '+(d&&d.error||'erro do servidor'));
+      }
+      return ok;
+    }catch(e){
+      // ★ Fix 10: same toast for network errors (fetch threw).
+      if(typeof showToast === 'function'){
+        showToast('Não foi possível salvar a redação: '+(e&&e.message||'erro de rede'));
+      }
+      return false;
+    }
   }
 
   // ── Batalhão: dispara processamento em background via worker ──
   // ★ chamado quando aluno adiciona um curso na Central de Estudos
+  // ★ Fix 11 (Task 20-8): module-level flag prevents double-start. If the
+  //   user double-clicks "Add course" or the caller retries while a previous
+  //   battalion POST is still in flight, the worker would enqueue the same
+  //   course twice and generate duplicate summaries/questions. The flag is
+  //   keyed by courseKey so different courses can still run in parallel.
+  const _battalionRunning = new Set();
   async function startBattalion(courseKey, coursePath, lessonName, pdfList){
+    if(!courseKey) return false;
+    if(_battalionRunning.has(courseKey)){
+      console.info('[Meggy] startBattalion already running for courseKey='+courseKey+' — skipping');
+      return false;
+    }
+    _battalionRunning.add(courseKey);
     try{
       const body={courseKey, coursePath, lessonName, pdfs:pdfList.map(p=>({name:p.name||'',url:p.url||'',text:p.text||''}))};
       const r=await fetch('/api/ai/battalion',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       const d=await r.json();
       return !!(d&&d.ok);
     }catch(_){return false;}
+    finally {
+      _battalionRunning.delete(courseKey);
+    }
   }
   // ── Verifica se o batalhão já processou um curso ──
   async function getBattalionStatus(courseKey){
@@ -212,7 +241,13 @@
       const r=await fetch('/api/ai/battalion/status?courseKey='+encodeURIComponent(courseKey),{cache:'no-store'});
       const d=await r.json();
       return d;
-    }catch(_){return {ok:false,processed:false};}
+    }catch(e){
+      // ★ Fix 12 (Task 20-8): differentiate network errors from "not
+      //   processed yet" — both previously returned {ok:false,processed:false}.
+      //   Callers can now check `reason==='network'` to retry vs. show a
+      //   "Generate materials" CTA when reason==='not_processed'.
+      return {ok:false, processed:false, reason:'network', error:e&&e.message||'network error'};
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -398,7 +433,22 @@
     });
     const overlay=document.createElement('div');
     overlay.className='gdi-resumo-modal';
-    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(4px);z-index:100002;display:flex;align-items:center;justify-content:center;padding:20px;animation:gdi-modal-fade .2s ease;';
+    // ★ Fix 8 (Task 20-8): use a HIGHER z-index than gdiModal (100002) so
+    //   this modal can stack on top when called from inside another modal
+    //   (e.g. opening a summary preview from the Resumos tab, which is
+    //   itself rendered inside a gdiModal). Compute dynamically: start at
+    //   100010 (above gdiModal's 100002) and stack +1 above any other open
+    //   modal we find in the DOM (.gdi-resumo-modal, .gdi-modal-overlay,
+    //   generic [data-gdi-modal]). The cleanup at the top already removed
+    //   existing .gdi-resumo-modal, so this mainly catches gdiModal itself.
+    let _z = 100010;
+    try {
+      document.querySelectorAll('.gdi-resumo-modal, .gdi-modal-overlay, .gdi-modal, [data-gdi-modal]').forEach(m => {
+        const z = parseInt(m.style && m.style.zIndex, 10);
+        if(!isNaN(z) && z >= _z) _z = z + 1;
+      });
+    } catch(_){ /* fall back to 100010 */ }
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(4px);z-index:'+_z+';display:flex;align-items:center;justify-content:center;padding:20px;animation:gdi-modal-fade .2s ease;';
     const html=U.renderMd(markdownText);
     overlay.innerHTML=`<div style="background:var(--ferreto-bg-2,#0d1119);border:1px solid var(--ferreto-border,#21262d);border-radius:14px;max-width:780px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.6);">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--ferreto-border,#21262d);gap:10px;">
@@ -485,7 +535,15 @@
     if(isStale()) return;
 
     // 1) localStorage resumos (rápido, síncrono)
-    const localSummaries = window.gdiIsaPdf ? window.gdiIsaPdf.listIsaSummaries() : [];
+    // ★ Fix 9 (Task 20-8): listIsaSummaries() may return null or a non-array
+    //   if the underlying localStorage cache was corrupted; guard so the
+    //   for/of below doesn't throw. Also defensively coerce listMaterials'
+    //   result (already guarded with Array.isArray below, but reinforced here).
+    let localSummaries = [];
+    try {
+      const ls = window.gdiIsaPdf ? window.gdiIsaPdf.listIsaSummaries() : [];
+      if (Array.isArray(ls)) localSummaries = ls;
+    } catch(_) { localSummaries = []; }
 
     // 2) Drive resumos (.meggy.ai/resumos/) — best-effort, não bloqueia
     let driveSummaries = [];
@@ -662,7 +720,23 @@
         if(!ok)return;
       }
       if(window.gdiIsaPdf && window.gdiIsaPdf.delIsaSummary){
-        window.gdiIsaPdf.delIsaSummary(b.dataset.id);
+        // ★ FIX 20-14 #C (Agent 14): delIsaSummary schedules the delete on the
+        //   _sumWriteChain promise but the OLD code didn't await it before
+        //   calling renderResumos — the re-render read from localStorage while
+        //   the delete was still pending, so the deleted item STAYED in the list
+        //   (until the next manual refresh). Now we await the chain (it resolves
+        //   to the next _sumWriteChain promise) so the LS read in renderResumos
+        //   sees the post-delete state. delIsaSummary's own .catch() inside
+        //   meggy-cache.js prevents rejection from propagating, but we also
+        //   guard here for defensiveness.
+        try{
+          const delP = window.gdiIsaPdf.delIsaSummary(b.dataset.id);
+          if(delP && typeof delP.then === 'function'){
+            await delP;
+          }
+        }catch(e){
+          console.warn('[Meggy] delIsaSummary await failed (non-blocking):', e&&e.message||e);
+        }
         // ★ FIX-MEGGY #11 (Agent 7 Bug 7-13): renderResumos is async — fire-and-
         //   forget leaves an unhandled rejection if Drive fetch fails. Wrap with
         //   .catch so the error surfaces as a toast instead.
