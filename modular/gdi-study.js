@@ -20,12 +20,12 @@
 // ═══════════════════════════════════════════════════════════════
 (function(){
   const LQ='gdi-questions-v1',LS_SRS='gdi-q-srs-v1',LS_SIM='gdi-simulados-v1',LS_CRON='gdi-cronograma-v1',LS_ERR='gdi-caderno-erros-v1';
-  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
-  const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
+  const esc=window.escHtml||(s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;'));
+  const lsGet=window.gdiLsGet||((k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}});
+  const lsSet=window.gdiLsSet||((k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}});
   const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
   const fmtDate=ds=>{try{return new Date(ds+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})}catch(_){return ds}};
-  const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+  const uid=window.gdiUid||(()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8));
   // ★ Fisher-Yates shuffle (substitui o biased Math.random()-.5 sort)
   function fisherYates(arr){const a=[...arr];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
 
@@ -39,7 +39,7 @@
   // ── SRS das questões ( Leitner 5 boxes ) ──
   const qSrs=()=>lsGet(LS_SRS,{});
   const saveQSrs=s=>lsSet(LS_SRS,s);
-  const BOX_INTERVALS=[1,3,7,21,60]; // dias
+  const BOX_INTERVALS=window.gdiSrsIntervals||[1,3,7,21,60]; // dias (P2-STANDARDIZE: delega para window.gdiSrsIntervals)
   function gradeQ(id,acertou){
     const s=qSrs();const cur=s[id]||{box:0,due:Date.now()+86400000,last:0};
     if(acertou){cur.box=Math.min(4,cur.box+1);}
@@ -550,12 +550,7 @@
       answers.forEach(a=>{if(a){gradeQ(a.id,a.acertou);if(a.acertou)hits++;}});
       const total=queue.length;
         // ★ FIX: atualiza contador de simulados para conquistas
-        // ★ v1.0.84: count from the array (+1 because this runs BEFORE the
-        //    new simulado is appended at line below). Previously used
-        //    `window.gdiAchievements || count` which coerced the truthy
-        //    achievements OBJECT to "[object Object]" → parseInt → NaN →
-        //    achievements "Primeiro simulado"/"5 simulados" NEVER unlocked.
-        try{localStorage.setItem('gdi-simulados-count',String(lsGet('gdi-simulados-v1',[]).length+1));}catch(_){}
+        try{localStorage.setItem('gdi-simulados-count',String((window.gdiAchievements?window.gdiAchievements:undefined)||(lsGet('gdi-simulados-v1',[]).length)));}catch(_){}
       // anti-duplicação: se já existe salvo neste segundo, pula
       const recent=simus().find(s=>s.date>Date.now()-2000);
       if(!recent){
@@ -743,10 +738,11 @@
   const norm=p=>dec(String(p||'').split('?')[0].replace(/\/+$/,''));
   const low=p=>norm(p).toLowerCase();
   const stripExt=s=>String(s||'').replace(/\.[a-z0-9]{1,5}$/i,'').trim();
-  const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
-  const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
-  // ★ FIX: esc local para o M22 (Área do Aluno) — usa escHtml global do app.min.js quando disponível
-  const esc=s=>{try{return window.escHtml?window.escHtml(s):String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');}catch(_){return String(s||'');}};
+  const lsGet=window.gdiLsGet||((k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}});
+  const lsSet=window.gdiLsSet||((k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}});
+  // ★ FIX/P2-STANDARDIZE: esc local para o M22 (Área do Aluno) — delega para
+  // window.escHtml (canonical, definido em gdi-core.js / app.min.js).
+  const esc=window.escHtml||(s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;'));
   const fmtMin=m=>{m=Math.round(m);return m>=60?Math.floor(m/60)+'h'+String(m%60).padStart(2,'0'):m+'min'};
   const dayKey=t=>{const d=new Date(t||Date.now());return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
   const dateBr=t=>new Date(t).toLocaleDateString('pt-BR');
@@ -803,8 +799,8 @@
     const overlay=document.querySelector('.gdi-modal-overlay');
     const box=document.getElementById('gdi-central-body');
     const LS_MANUAL='gdi-manual-courses-v1';
-    const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
-    const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
+    const lsGet=window.gdiLsGet||((k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}});
+    const lsSet=window.gdiLsSet||((k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}});
 
     try{
       const manual=lsGet(LS_MANUAL,[]);
@@ -998,7 +994,6 @@
     const m=/^\/(\d+):/.exec(ck||'');
     return(window.drive_names&&m&&window.drive_names[+m[1]])||'';
   }
-  // ★ v1.0.76: courseIdentity moved to gdi-core.js as window.gdiCourseIdentity (CDN cache fix)
   function collectCourses(){
     const d=stateD()||{};
     // ★ cursos ocultos pelo usuário (não aparecem na lista de cursos)
@@ -1080,6 +1075,7 @@
 
     return [...map.values()].sort((a,b)=>b.lastAt-a.lastAt);
   }
+  // ★ FIX v62: expõe collectCourses no window para que M23 (renderSimulado) e M24 (renderRadar) possam acessar
   window.collectCourses = collectCourses;
   // ★ helpers para ocultar/restaurar cursos
   function hideCourse(ck){
@@ -1251,34 +1247,6 @@
   const dueCards=()=>cards().filter(c=>(c.due||0)<=Date.now());
   let FC={active:false,flip:null,grade:null};
   let panel=null,tab='home';
-
-  // ═══ showOnboarding: first-time-user welcome overlay ═══
-  // Shows ONCE per browser (gated by localStorage 'gdi-onboarding-done').
-  // 4-step guide: navigate drives / ask Meggy / practice / track progress.
-  function showOnboarding(){
-    try{
-      if(localStorage.getItem('gdi-onboarding-done')) return;
-      localStorage.setItem('gdi-onboarding-done', '1');
-    }catch(_){ return; }
-    const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:20px;';
-    overlay.innerHTML = `<div style="background:var(--ferreto-bg-2,#0d1119);border-radius:16px;max-width:480px;padding:28px;text-align:center;border:1px solid var(--ferreto-border,#30363d);">
-      <div style="font-size:56px;margin-bottom:12px;">🐩</div>
-      <h2 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 8px;font-size:20px;">Au au! Eu sou a Meggy!</h2>
-      <p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;line-height:1.6;margin:0 0 18px;">Sua tutora de estudos. Aqui você pode:</p>
-      <div style="text-align:left;margin-bottom:20px;padding:0 8px;">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;color:var(--ferreto-text,#e6edf3);font-size:13px;"><span style="font-size:20px;">📂</span> Navegue pelos drives e adicione cursos</div>
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;color:var(--ferreto-text,#e6edf3);font-size:13px;"><span style="font-size:20px;">🐩</span> Peça resumos e questões à Meggy</div>
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;color:var(--ferreto-text,#e6edf3);font-size:13px;"><span style="font-size:20px;">❓</span> Pratique com questões e simulados</div>
-        <div style="display:flex;align-items:center;gap:10px;color:var(--ferreto-text,#e6edf3);font-size:13px;"><span style="font-size:20px;">📊</span> Acompanhe seu progresso</div>
-      </div>
-      <button id="gdi-onboarding-close" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);border:0;border-radius:10px;padding:10px 24px;color:#fff;font-size:14px;font-weight:600;cursor:pointer;width:100%;">Vamos começar! 🎉</button>
-    </div>`;
-    (document.querySelector('#gdi-study') || document.body).appendChild(overlay);
-    overlay.querySelector('#gdi-onboarding-close').onclick = () => overlay.remove();
-    overlay.onclick = (e) => { if(e.target === overlay) overlay.remove(); };
-  }
-
   // ★ PATCH D: openPanel faz UMA única renderização (depois do estado pronto)
   function openPanel(t){
     if(t)tab=t;
@@ -1288,11 +1256,73 @@
       GDI_ROOT().appendChild(panel);
     }
     panel.style.display='flex';
+    panel.classList.remove('gdi-central-collapsed'); // ★ v1.0.70: remove collapsed state
     // ★ uma única renderização: espera estado OU fallback em caso de erro
     ensureState().then(()=>{
       if(panel&&panel.style.display!=='none')renderPanel();
     }).catch(()=>renderPanel());
+    // ★ TRILHA-ONBOARDING: dispara onboarding na 1ª abertura do painel
     try{ showOnboarding(); }catch(_){}
+  }
+
+  // ★ v1.0.70: SIDEBAR RETRÁTIL — quando usuário navega para drive/vídeo,
+  //   o painel se retrai (fica só a sidebar visível) em vez de fechar completamente.
+  //   Botão na sidebar re-expande o painel.
+  function collapsePanel(){
+    if(!panel || panel.style.display !== 'flex') return;
+    panel.classList.add('gdi-central-collapsed');
+    // Adiciona botão flutuante para re-expandir
+    let expandBtn = document.querySelector('#gdi-central-expand');
+    if(!expandBtn){
+      expandBtn = document.createElement('button');
+      expandBtn.id = 'gdi-central-expand';
+      expandBtn.innerHTML = '📋 Área do Aluno';
+      expandBtn.style.cssText = 'position:fixed;top:60px;left:0;z-index:10001;background:linear-gradient(135deg,#ff8b9f,#c026d3);border:0;border-radius:0 10px 10px 0;padding:10px 14px;cursor:pointer;color:#fff;font-size:12px;font-weight:600;box-shadow:2px 2px 12px rgba(0,0,0,.3);transition:all .15s;';
+      expandBtn.onclick = () => {
+        panel.classList.remove('gdi-central-collapsed');
+        expandBtn.remove();
+      };
+      GDI_ROOT().appendChild(expandBtn);
+    }
+  }
+
+  // ★ TRILHA-ONBOARDING: modal de boas-vindas (1ª visita). Flag: localStorage 'gdi-onboarding-done'.
+  function showOnboarding(){
+    try{
+      if(localStorage.getItem('gdi-onboarding-done')) return;
+      localStorage.setItem('gdi-onboarding-done', '1');
+    }catch(_){ return; }
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:20px;';
+    overlay.innerHTML = `
+      <div style="background:var(--ferreto-surface,#161b26);border-radius:16px;max-width:480px;padding:28px;text-align:center;border:1px solid var(--ferreto-border,#30363d);">
+        <div style="font-size:56px;margin-bottom:12px;">🐩</div>
+        <h2 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 8px;font-size:20px;">Au au! Eu sou a Meggy!</h2>
+        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;line-height:1.6;margin:0 0 18px;">
+          Sua tutora de estudos. Aqui você pode:
+        </p>
+        <div style="text-align:left;margin-bottom:20px;padding:0 8px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;color:var(--ferreto-text,#e6edf3);font-size:13px;">
+            <span style="font-size:20px;">📂</span> Navegue pelos drives e adicione cursos
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;color:var(--ferreto-text,#e6edf3);font-size:13px;">
+            <span style="font-size:20px;">🐩</span> Peça resumos e questões à Meggy
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;color:var(--ferreto-text,#e6edf3);font-size:13px;">
+            <span style="font-size:20px;">❓</span> Pratique com questões e simulados
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;color:var(--ferreto-text,#e6edf3);font-size:13px;">
+            <span style="font-size:20px;">📊</span> Acompanhe seu progresso
+          </div>
+        </div>
+        <button id="gdi-onboarding-close" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);border:0;border-radius:10px;padding:10px 24px;color:#fff;font-size:14px;font-weight:600;cursor:pointer;width:100%;">
+          Vamos começar! 🎉
+        </button>
+      </div>
+    `;
+    (document.querySelector('#gdi-study') || document.body).appendChild(overlay);
+    overlay.querySelector('#gdi-onboarding-close').onclick = () => overlay.remove();
+    overlay.onclick = (e) => { if(e.target === overlay) overlay.remove(); };
   }
   function closePanel(){
     FC.active=false;
@@ -1303,6 +1333,7 @@
   }
   // ★ Expõe openPanel para outros módulos
   window.__gdiOpenCentral=openPanel;
+  window.__gdiCollapseCentral=collapsePanel; // ★ v1.0.70: sidebar retrátil
 
   // ═══ PATCH E: renderSidebar() (1x) + renderBody(tab) (em cada troca de aba) ═══
   // ★ definição das abas agrupadas — tabs REMOVIDAS: cursos, mar, revisoes, fc, subjects, trails
@@ -1317,7 +1348,7 @@
   const TAB_GROUPS=[
     {label:null,tabs:[
       {id:'home',icon:'bi-house-door',label:'Início'},
-      {id:'drives',icon:'bi-cloud-arrow-down',label:'Explorar Drives'}
+      {id:'drives',icon:'bi-cloud-arrow-down',label:'Explorar Drives'}  // ★ v1.0.65: tab para navegar drives
     ]},
     {label:'Praticar',tabs:[
       {id:'questoes',icon:'bi-patch-question',label:'Questões'},
@@ -1377,7 +1408,7 @@
         </span>`:''}
       </div>
       <input id="gdi-goal-set" type="number" min="10" max="480" value="${g}" title="Meta diária (minutos)" style="width:56px;background:var(--ferreto-surface-2,rgba(255,255,255,.07));border:1px solid var(--ferreto-border,#30363d);border-radius:6px;color:var(--ferreto-text,#f0f6fc);text-align:center;padding:5px;font-size:12px;flex-shrink:0;">
-      <button id="gdi-central-meggy" title="Meggy" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);border:0;border-radius:10px;padding:6px 12px;cursor:pointer;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px;flex-shrink:0;"><span style="font-size:16px;">🐩</span> Meggy</button>
+      <button id="gdi-central-meggy" title="Meggy (tutora de estudos)" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);border:0;border-radius:10px;padding:6px 12px;cursor:pointer;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px;flex-shrink:0;"><span style="font-size:16px;">🐩</span> Meggy</button>
       <button id="gdi-central-x" title="Fechar (Esc)">✕</button>
     </div>`;
   }
@@ -1405,14 +1436,6 @@
   // ★ renderBody(tab) — só o corpo da aba, sem rebuild do sidebar/header
   function renderBody(currentTab){
     if(!panel)return;
-    // ★ v80-FIX BUG 2: expose the active tab so background scan callbacks
-    // (autoScanPending, startScan onProgress) can detect when 'home' is the
-    // visible tab and re-render the tile to reflect scan progress/results.
-    // Without this, `window.__gdiCurrentTab` was always undefined → the
-    // `=== 'home'` check at lines 1789/4828 was always false → the home tile
-    // NEVER refreshed after a background scan finished (user had to navigate
-    // away and back to see updated lesson counts).
-    try{ window.__gdiCurrentTab = currentTab; }catch(_){}
     const body=panel.querySelector('#gdi-central-body');
     if(!body)return;
     // limpa timer do simulado anterior se houver
@@ -1420,7 +1443,7 @@
     // ★ FIX 1b (Task 14): RE-ADICIONADO handler da aba 'addmateria' (Task 13 havia removido por engano)
     if(currentTab==='addmateria'){showAddCourseModal(body);return;}
     if(currentTab==='home')renderHome(body);
-    else if(currentTab==='drives')renderDrives(body);
+    else if(currentTab==='drives')renderDrives(body);  // ★ v1.0.65: tab Explorar Drives
     else if(currentTab==='questoes')renderQuestoes(body);
     else if(currentTab==='simulado')renderSimulado(body);
     else if(currentTab==='cronograma')renderCronograma(body);
@@ -1459,35 +1482,14 @@
       panel.dataset.sidebarRendered='1';
       // bind header
       panel.querySelector('#gdi-central-x').onclick=closePanel;
-      panel.querySelector('#gdi-central-meggy').onclick=function(){
-        // ★ v80-FIX BUG 5: when no AI backend is available, Meggy's FAB is
-        // hidden via `fab.style.display='none'` (hideWidget in gdi-meggy.js).
-        // The Meggy panel itself also has inline `display:none`, so calling
-        // `fab.click()` → `toggle()` → `panel.classList.add('open')` does
-        // nothing visible (inline style beats CSS). Guard the click: if FAB
-        // is hidden, hide THIS header button too and skip the click so the
-        // user gets consistent feedback (button disappears once AI status is
-        // known to be unavailable, instead of silently failing).
-        const fab=document.querySelector('#gdi-ai-fab');
-        if(!fab || fab.style.display==='none'){
-          this.style.display='none';
-          return;
-        }
-        fab.click();
-      };
-      // ★ v80-FIX BUG 5 (initial visibility): if AI widget is already known
-      // to be hidden (e.g. user opened Área do Aluno AFTER async AI detection
-      // finished), hide the header button immediately so it doesn't bait a
-      // dead click. _serverEnabled / _browserAIState live in gdi-meggy.js's
-      // IIFE so we can't read them directly — use FAB's inline display as
-      // the source of truth (hideWidget/showWidget write to it).
-      try{
-        const _btnMeggy=panel.querySelector('#gdi-central-meggy');
-        const _fabAi=document.querySelector('#gdi-ai-fab');
-        if(_btnMeggy && _fabAi && _fabAi.style.display==='none'){
-          _btnMeggy.style.display='none';
-        }
-      }catch(_){}
+      // ★ FIX-PERSISTENCE-MEGGY-HEADER: wire Meggy header button (delegates to FAB #gdi-ai-fab)
+      const meggyBtn = panel.querySelector('#gdi-central-meggy');
+      if(meggyBtn){
+        meggyBtn.onclick = () => {
+          const fab = document.querySelector('#gdi-ai-fab');
+          if(fab) fab.click();
+        };
+      }
       panel.querySelector('#gdi-goal-set').addEventListener('change',e=>{
         const v=Math.max(10,Math.min(480,parseInt(e.target.value,10)||60));
         lsSet(LS_GOAL,v);
@@ -1509,17 +1511,46 @@
     renderBody(tab);
   }
 
-  // ★ v1.0.73: renderDrives — mostra os 12 drives como cards navegáveis DENTRO do painel
+  // ★ v1.0.65 (REDESIGN): Identifica disciplina do curso por palavras-chave no nome/drive
+  // Retorna {icon, color, gradient} para o card ter identidade visual
+  function courseIdentity(courseKey, courseName){
+    const n = ((courseName||'') + ' ' + (driveNameOf(courseKey)||'')).toLowerCase();
+    // Direito / Tribunais / Jurídico
+    if(/direito|tribunal|tj|trt|trf|tre|oab|judici|constitucional|penal|civil|administrativo|processual|jurídic/.test(n))
+      return {icon:'⚖️', color:'#5ddeda', gradient:'linear-gradient(135deg,#0d3b66,#5ddeda)'};
+    // Policial / PRF / PF / Segurança
+    if(/polic|prf|pf\b|rodovi|federal|seguranç/.test(n))
+      return {icon:'🚔', color:'#3fb950', gradient:'linear-gradient(135deg,#1a3a1a,#3fb950)'};
+    // Saúde / Medicina / Enfermagem
+    if(/saúde|medic|enferm|nutri|psiquia|medcurso|saude/.test(n))
+      return {icon:'🔬', color:'#ff8b9f', gradient:'linear-gradient(135deg,#5a1a2a,#ff8b9f)'};
+    // Música / Canto
+    if(/músic|music|canto|voz|coral/.test(n))
+      return {icon:'🎵', color:'#c026d3', gradient:'linear-gradient(135deg,#3a0a3a,#c026d3)'};
+    // Fitness / Educação Física
+    if(/fit|física|fisica|hipopress|exerc|treino|muscul/.test(n))
+      return {icon:'🏋️', color:'#ffd43b', gradient:'linear-gradient(135deg,#3a3a0a,#ffd43b)'};
+    // Educação / Magistério / Pedagógico
+    if(/educa|magistér|pedagóg|professor|concurso sme|see |cursinho/.test(n))
+      return {icon:'📚', color:'#5ddeda', gradient:'linear-gradient(135deg,#0a2a3a,#5ddeda)'};
+    // ENEM / Vestibular
+    if(/enem|vestib|fuvest|unicamp|usp/.test(n))
+      return {icon:'🎓', color:'#ff8b9f', gradient:'linear-gradient(135deg,#3a0a1a,#ff8b9f)'};
+    // Default
+    return {icon:'📁', color:'#5ddeda', gradient:'linear-gradient(135deg,#0d1117,#5ddeda)'};
+  }
+
+  // ★ v1.0.65 (REDESIGN): renderDrives — mostra os 12 drives como cards navegáveis
   function renderDrives(box){
     const drives = window.drive_names || [];
     box.innerHTML = `
       <div style="margin-bottom:18px;">
         <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 4px;">☁️ Explorar Drives</h3>
-        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0;">Clique num drive para explorar. Tudo abre aqui dentro.</p>
+        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0;">Navegue pelos drives compartilhados. Clique para explorar o conteúdo.</p>
       </div>
-      <div id="gdi-drive-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;">
         ${drives.map((name, idx) => {
-          const ident = window.gdiCourseIdentity('/'+idx+':/', name);
+          const ident = courseIdentity('/'+idx+':/', name);
           return `<div data-gdi-drive-link="${idx}" style="padding:16px;border-radius:12px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);border-top:3px solid ${ident.color};transition:all .15s;cursor:pointer;" onmouseover="this.style.background='var(--ferreto-surface-3,rgba(255,255,255,.08))';this.style.borderColor='${ident.color}';" onmouseout="this.style.background='var(--ferreto-surface-2,rgba(255,255,255,.04))';this.style.borderColor='var(--ferreto-border,#30363d)';">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
               <span style="font-size:28px;flex:none;">${ident.icon}</span>
@@ -1529,23 +1560,22 @@
           </div>`;
         }).join('')}
       </div>
-      <div id="gdi-drive-browser" style="display:none;"></div>
+      <div id="gdi-drive-browser" style="margin-top:18px;display:none;"></div>
     `;
+    // ★ v1.0.72: Drives integrados — carrega conteúdo DENTRO do painel
+    //   Pastas são clicáveis e carregam dentro do painel recursivamente
+    //   Vídeos/PDFs abrem em nova aba (fora do painel)
     box.querySelectorAll('[data-gdi-drive-link]').forEach(card => {
-      card.addEventListener('click', async () => {
+      card.addEventListener('click', async (e) => {
         const driveIdx = card.dataset.gdiDriveLink;
-        // ★ Esconde o grid de drives e mostra só o browser
-        const grid = box.querySelector('#gdi-drive-grid');
-        if(grid) grid.style.display = 'none';
         await browseDriveInPanel(box, '/' + driveIdx + ':/', window.drive_names?.[driveIdx] || ('Drive ' + driveIdx));
       });
     });
   }
 
-  // ★ v1.0.73: Navegação de drive DENTRO do painel — recursiva
+  // ★ v1.0.72: Navegação de drive DENTRO do painel — recursiva
   async function browseDriveInPanel(box, path, title) {
-    const browser = box.querySelector('#gdi-drive-browser');
-    if(!browser) return;
+    const browser = box.querySelector('#gdi-drive-browser') || box;
     browser.style.display = 'block';
     browser.innerHTML = '<div style="text-align:center;padding:20px;"><div class="gdi-mat-isa-spin"></div><p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin-top:10px;">Carregando...</p></div>';
     try {
@@ -1558,7 +1588,7 @@
       const folders = result.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
       const files = result.filter(f => !f.mimeType || f.mimeType !== 'application/vnd.google-apps.folder');
 
-      // Breadcrumb
+      // Breadcrumb with back button
       let bcHtml = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;flex-wrap:wrap;">';
       bcHtml += '<button id="gdi-drive-home" class="gdi-mode-btn" style="font-size:11px;padding:4px 8px;">☁️ Drives</button>';
       const segs = path.split('/').filter(Boolean);
@@ -1579,6 +1609,7 @@
       }
       bcHtml += '</div>';
 
+      // Folder grid
       let content = bcHtml;
       if(folders.length) {
         content += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin-bottom:14px;">';
@@ -1591,33 +1622,42 @@
         });
         content += '</div>';
       }
+
+      // Files (videos/PDFs) — abrem em nova aba
       if(files.length) {
         content += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px;">';
         files.slice(0, 30).forEach(f => {
           const fn = f.name || f.title || 'Arquivo';
           const fp = path.endsWith('/') ? path + encodeURIComponent(fn) : path + '/' + encodeURIComponent(fn);
           const isVideo = f.mimeType && f.mimeType.includes('video');
-          const isPdf = (f.fileExtension||'').toLowerCase() === 'pdf' || (f.mimeType||'').includes('pdf');
+          const isPdf = (f.fileExtension || '').toLowerCase() === 'pdf' || (f.mimeType||'').includes('pdf');
           const icon = isVideo ? 'bi-camera-video' : (isPdf ? 'bi-file-earmark-pdf' : 'bi-file-earmark');
           const iconColor = isVideo ? 'var(--ferreto-secondary,#5ddeda)' : (isPdf ? '#ff6b6b' : 'var(--ferreto-text-muted,#8b949e)');
-          content += '<a href="' + escHtml(fp) + '?a=view" style="text-decoration:none;padding:8px 10px;border-radius:6px;background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#30363d);display:flex;align-items:center;gap:6px;transition:all .15s;">'
+          content += '<a href="' + escHtml(fp) + '?a=view" target="_blank" style="text-decoration:none;padding:8px 10px;border-radius:6px;background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#30363d);display:flex;align-items:center;gap:6px;transition:all .15s;">'
             + '<i class="bi ' + icon + '" style="color:' + iconColor + ';font-size:14px;flex:none;"></i>'
             + '<span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(fn) + '</span></a>';
         });
         content += '</div>';
       }
+
       browser.innerHTML = content;
 
+      // Wire folder clicks — recursive navigation
       browser.querySelectorAll('.gdi-drive-folder').forEach(el => {
         el.onmouseenter = () => { el.style.background = 'var(--ferreto-surface-3,rgba(255,255,255,.08))'; el.style.borderColor = 'var(--ferreto-secondary,#5ddeda)'; };
         el.onmouseleave = () => { el.style.background = 'var(--ferreto-surface-2,rgba(255,255,255,.04))'; el.style.borderColor = 'var(--ferreto-border,#30363d)'; };
         el.onclick = () => browseDriveInPanel(box, el.dataset.path, el.dataset.name);
       });
+
+      // Wire breadcrumb buttons
       browser.querySelectorAll('.gdi-drive-bc-btn').forEach(el => {
         el.onclick = () => browseDriveInPanel(box, el.dataset.path, '');
       });
+
+      // Wire home button
       const homeBtn = browser.querySelector('#gdi-drive-home');
       if(homeBtn) homeBtn.onclick = () => renderDrives(box);
+
     } catch(err) {
       browser.innerHTML = '<p style="color:#ff8b8b;font-size:12px;">Erro: ' + escHtml(err.message) + '</p>';
     }
@@ -1629,29 +1669,6 @@
     const t=todayMin(),g=goalMin(),pct=Math.min(100,Math.round(t/g*100));
     const cards=lsGet(LS_CARDS,[]);
     const dueCount=cards.filter(c=>(c.due||0)<=Date.now()).length;
-    // ★ v1.0.84: best-effort background sync from Drive, guarded to avoid spamming
-    // on every renderHome call. After sync completes, if user is still on the home
-    // tab, re-render so newly-restored course tiles appear. Recursion-safe: the
-    // guard remains set during the .then re-render, so the inner renderHome call
-    // skips re-triggering the sync; only .finally clears the guard.
-    try{
-      if(!window.__gdiSyncInProgress){
-        window.__gdiSyncInProgress = true;
-        const p = (typeof window.gdiSyncCoursesFromDrive === 'function')
-          ? window.gdiSyncCoursesFromDrive()
-          : Promise.resolve();
-        Promise.resolve(p).catch(()=>{}).then(()=>{
-          try{
-            if(window.__gdiCurrentTab === 'home'){
-              const b = document.getElementById('gdi-central-body');
-              if(b && typeof renderHome === 'function') renderHome(b);
-            }
-          }catch(_){}
-        }).finally(()=>{
-          try{ window.__gdiSyncInProgress = false; }catch(_){}
-        });
-      }
-    }catch(_){ try{ window.__gdiSyncInProgress = false; }catch(_){} }
     const courses=collectCourses();
     // usa localStorage direto (M23 está em escopo diferente)
     const questionsCount=lsGet('gdi-questions-v1',[]).length;
@@ -1722,7 +1739,7 @@
           ${courses.slice(0,6).map(c=>{
             const name=cleanCourseName(c.key);
             const drive=driveNameOf(c.key);
-            const ident=window.gdiCourseIdentity(c.key, name);
+            const ident=courseIdentity(c.key, name);
             // ★ FIX 3 (Task 14): usa totalLessons (real) ao invés de c.lessons.size (visited paths)
             const total=c.totalLessons||c.lessons.size||0;
             const watched=c.watched||0;
@@ -2017,20 +2034,22 @@
       try{if(_mcName&&String(_mcName).indexOf('%')>=0)_mcName=decodeURIComponent(_mcName);}catch(_){}
       const name=_mcName||cleanCourseName(c.key);
       const drive=driveNameOf(c.key);
-      const icon=mc.icon||'📁';
-      const color=mc.color||'var(--ferreto-primary,#ff8b9f)';
+      // ★ v1.0.65 (REDESIGN): usa courseIdentity para ícone/cor se não for manual, ou mantém o manual
+      const ident=courseIdentity(c.key, name);
+      const icon=mc.icon||ident.icon;
+      const color=mc.color||ident.color;
       const isManual=c.manual===true;
       const progress=c.lessons.size>0?Math.round(c.watched/c.lessons.size*100):0;
       const progressColor=progress>=80?'#3fb950':progress>=40?'#ffd43b':'var(--ferreto-primary,#ff8b9f)';
       const remaining=c.lessons.size-c.watched;
       const el=document.createElement('div');el.className='gdi-course';
       el.style.cursor='pointer';
-      // ★ destaque visual para curso manual: border-left com a cor do manualCourse
-      if(isManual)el.style.borderLeft='4px solid '+color;
+      // ★ v1.0.65: border-top com a cor da identidade visual (aplica a todos, não só manuais)
+      el.style.borderTop='3px solid '+color;
       el.innerHTML=`
         <div class="gdi-course-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
           <b title="${escHtml(_mcName||courseName(c.key))}" style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;">
-            ${isManual?`<span style="font-size:18px;flex:none;">${icon}</span>`:''}
+            <span style="font-size:20px;flex:none;">${icon}</span>
             <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(name)}</span>
           </b>
           <button class="gdi-course-remove" title="${isManual?'Remover curso manual':'Ocultar curso'}" style="background:transparent;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:14px;padding:2px 6px;flex:none;border-radius:6px;transition:all .15s;"><i class="bi bi-x-lg"></i></button>
@@ -2140,6 +2159,9 @@
 
   // ★ Modal para adicionar curso manualmente
   function showAddCourseModal(box){
+    // ★ FIX v1.0.70 (Bug #4): singleton check — não criar múltiplos overlays
+    const existing = document.querySelector('.gdi-modal-overlay');
+    if(existing){ existing.remove(); }
     // ★ FIX local: garante esc() disponível mesmo se o escopo externo não tiver
     const esc=window.escHtml||(s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;'));
     const colors=['#ff8b9f','#5ddeda','#c026d3','#3fb950','#ffd43b','#7aa2ff','#ff6b6b','#a78bfa'];
@@ -2404,7 +2426,9 @@
         // mostra info da pasta atual
         const totalPdfs=pdfs.length;
         const totalVideos=videos.length;
-        const isDriveRoot = /^\/\d+:\/?$/.test(currentPath); if(currentPath!=='/' && !isDriveRoot){
+        // ★ FIX v1.0.67 (Bug B): não permite selecionar drive roots (ex: /0:/) como curso
+        const isDriveRoot = /^\/\d+:\/?$/.test(currentPath);
+        if(currentPath!=='/' && !isDriveRoot){
           const segs=pathSegments(currentPath);
           const courseName=decodeURIComponent(getDriveName(segs[segs.length-1]));
           selectedPath=currentPath;
@@ -2518,27 +2542,7 @@
     if(firstColor)firstColor.style.borderWidth='4px';
 
     // ── Close handlers ──
-    // ★ v1.0.84 BUG #11: when the addmateria modal closes, restore the home tab
-    // if 'addmateria' was the highlighted sidebar tab. Without this, the sidebar
-    // stays on 'addmateria' (which has no real body — it's a modal trigger) while
-    // the body shows stale content from the previous tab → confusing mismatch.
-    // If the modal was opened from a button (e.g. "Adicionar curso" on home/cursos),
-    // 'addmateria' is NOT active in the sidebar → we leave everything alone.
-    const close=()=>{
-      if(overlay&&overlay.parentNode)overlay.remove();
-      try{
-        const panelEl = box.closest ? box.closest('#gdi-central') : null;
-        if(panelEl){
-          const addTab = panelEl.querySelector('.gdi-central-tab[data-t="addmateria"]');
-          if(addTab && addTab.classList.contains('active')){
-            const homeTab = panelEl.querySelector('.gdi-central-tab[data-t="home"]');
-            if(homeTab && !homeTab.classList.contains('active')){
-              homeTab.click();  // re-runs tab click handler → activate + renderBody('home')
-            }
-          }
-        }
-      }catch(_){}
-    };
+    const close=()=>{if(overlay&&overlay.parentNode)overlay.remove();};
     overlay.querySelector('#gdi-amc-x').onclick=close;
     overlay.querySelector('#gdi-amc-cancel').onclick=close;
     overlay.onclick=(e)=>{if(e.target===overlay)close();};
@@ -2742,12 +2746,14 @@
     //    Cada aula escaneada recebe watched=true se seu path estiver em d.watched.
     let scannedCount = 0;
     let scanStatus = null;
+    let scanErrorMsg = '';
     if(window.gdiCourseScanner){
       try{
         const sp = window.gdiCourseScanner.getScanProgress(c.key);
         if(sp){
           scanStatus = sp.status;
           scannedCount = sp.lessonsFound || 0;
+          scanErrorMsg = sp.error || '';  // ★ FIX v54: show actual error message
         }
         const scanned = window.gdiCourseScanner.getCourseLessons(c.key);
         if(scanned && Array.isArray(scanned.lessons) && scanned.lessons.length){
@@ -2825,7 +2831,7 @@
       <div style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ferreto-text-muted,#8b949e);">
         ${scanStatus==='scanning'
           ? '<i class="bi bi-arrow-repeat" style="color:var(--ferreto-secondary,#5ddeda);"></i> Escaneando aulas em background... <b style="color:var(--ferreto-text,#e6edf3);">'+scannedCount+'</b> encontradas até agora (a lista abaixo cresce em tempo real).'
-          : '<i class="bi bi-exclamation-triangle" style="color:#ff8b8b;"></i> O scanner encontrou um erro. Algumas aulas podem estar ausentes da lista.'}
+          : '<i class="bi bi-exclamation-triangle" style="color:#ff8b8b;"></i> O scanner encontrou um erro. Algumas aulas podem estar ausentes da lista.'+(scanErrorMsg?'<br><span style="color:#ff8b8b;font-size:11px;">Detalhe: '+escHtml(scanErrorMsg)+'</span>':'')}
       </div>`:''}
 
       <div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;">
@@ -2859,8 +2865,9 @@
             return '<div class="gdi-notes-empty"><i class="bi bi-info-circle" style="font-size:18px;color:var(--ferreto-text-muted,#8b949e);vertical-align:middle;"></i> <span style="vertical-align:middle;">Nenhuma aula encontrada ainda.</span><div style="margin-top:8px;font-size:12px;"><a href="'+escHtml(coursePath)+'" style="color:var(--ferreto-secondary,#5ddeda);text-decoration:underline;"><i class="bi bi-folder2-open"></i> Abrir pasta no Drive</a></div></div>';
           }
           // Agrupa por disciplina: a pasta imediatamente dentro do curso
-          // path típico: /9:/Curso/TRT/Direito Administrativo/Bloco I/001 - aula.mp4
-          // disciplina = "Direito Administrativo" (primeiro segmento após coursePath)
+          // path típico: /10:/Sou + Carreiras Policiais 5.0/7 - Disciplinas.../exercicios.pdf
+          // disciplina = "7 - Disciplinas..." (primeiro segmento após coursePath)
+          // ★ FIX v1.0.69: pula drive IDs (ex: "10:") ao extrair disciplina
           const groups = {};
           for(const l of lessons){
             // extrai disciplina do path (relativo ao coursePath)
@@ -2870,9 +2877,12 @@
             let cp = coursePath;
             try{ cp = decodeURIComponent(coursePath); }catch(_){ cp = coursePath; }
             if(rel.indexOf(cp) === 0) rel = rel.slice(cp.length);
+            rel = rel.replace(/^\/+/, ''); // strip leading slashes
             const segs = rel.split('/').filter(Boolean);
-            // disciplina = primeiro segmento após o curso (ou "Aulas" se estiver na raiz)
-            const disc = segs.length > 1 ? segs[0] : (segs.length === 1 ? 'Aulas' : 'Outros');
+            // ★ FIX: pula drive IDs no primeiro segmento
+            let discIdx = 0;
+            while(discIdx < segs.length && /^\d+:$/.test(segs[discIdx])) discIdx++;
+            const disc = segs.length > discIdx + 1 ? segs[discIdx] : (segs.length > 0 ? 'Aulas' : 'Outros');
             if(!groups[disc]) groups[disc] = { total: 0, watched: 0, path: cp + (cp.endsWith('/')?'':'/') + encodeURIComponent(disc) + '/' };
             groups[disc].total++;
             if(l.watched) groups[disc].watched++;
@@ -2906,6 +2916,95 @@
           }).join('') + '</div>';
         })()}
       </div>
+
+      ${/* ★ TRILHA-ONBOARDING: trilha visual do curso (timeline vertical com ✓/▶/◻) */ ''}
+      ${lessons.length > 0 ? `
+      <div style="margin-top:18px;border-top:1px solid var(--ferreto-border,#21262d);padding-top:14px;">
+        <b style="color:var(--ferreto-text,#f0f6fc);font-size:13px;display:block;margin-bottom:10px;">📚 Materiais por Disciplina</b>
+        <div style="max-height:400px;overflow-y:auto;padding-right:6px;">
+          ${(function(){
+            // ★ v1.0.69: Trilha redesenhada como sanfona retrátil por disciplina
+            // - Agrupa por disciplina (pulando drive IDs)
+            // - Separa vídeos/áudios de PDFs/materiais
+            // - Sanfona: clica na disciplina para expandir/recolher
+            // - Cada item é clicável (abre no player/visualizador)
+            const coursePathClean = String(c.key).replace(/\/$/, '');
+            const groups = {};
+            const seenIds = new Set();
+            lessons.forEach(l => {
+              // ★ FIX v1.0.70 (Bug #1): dedupe por nome base (sem extensão) + path
+              // Isto previne que mp4 + mp3 + watched-resume da mesma aula apareçam 3x
+              const baseName = (l.name || '').replace(/\.[^.]+$/, '').toLowerCase();
+              const dedupKey = baseName + '|' + (l.path || '').replace(/\.[^.]+$/, '').toLowerCase();
+              if(seenIds.has(dedupKey)) return;
+              seenIds.add(dedupKey);
+              let relPath = l.path || '';
+              try{ relPath = decodeURIComponent(relPath); }catch(_){ relPath = l.path || ''; }
+              if(relPath.indexOf(coursePathClean) === 0) relPath = relPath.slice(coursePathClean.length);
+              relPath = relPath.replace(/^\/+/, '');
+              const segs = relPath.split('/').filter(Boolean);
+              // Pula drive IDs
+              let discIdx = 0;
+              while(discIdx < segs.length && /^\d+:$/.test(segs[discIdx])) discIdx++;
+              let gname = 'Aulas';
+              if(segs.length > discIdx + 1) gname = segs[discIdx];
+              else if(segs.length > 0) gname = 'Aulas';
+              if(!groups[gname]) groups[gname] = { videos: [], pdfs: [], others: [] };
+              if(l.type === 'video' || l.type === 'audio') groups[gname].videos.push(l);
+              else if(l.type === 'pdf') groups[gname].pdfs.push(l);
+              else groups[gname].others.push(l);
+            });
+            const accordionId = 'gdi-trilha-' + Date.now();
+            return Object.keys(groups).sort((a,b) => a.localeCompare(b,'pt-BR')).map((gname, idx) => {
+              const g = groups[gname];
+              const total = g.videos.length + g.pdfs.length + g.others.length;
+              const headerId = accordionId + '-h-' + idx;
+              const bodyId = accordionId + '-b-' + idx;
+              // Constrói lista de itens (vídeos primeiro, depois PDFs)
+              const items = [];
+              g.videos.forEach(l => {
+                const isWatched = !!l.watched;
+                const icon = isWatched ? '✓' : '▶';
+                const color = isWatched ? '#3fb950' : 'var(--ferreto-primary,#ff8b9f)';
+                items.push('<a href="' + escHtml(l.path) + (l.path.includes('?')?'&':'?') + 'a=view" style="text-decoration:none;display:flex;align-items:center;gap:8px;padding:4px 0;font-size:11px;" title="' + escHtml(l.name||'') + '">'
+                  + '<span style="color:' + color + ';font-size:13px;flex:none;width:16px;">' + icon + '</span>'
+                  + '<i class="bi bi-camera-video" style="color:var(--ferreto-secondary,#5ddeda);font-size:12px;flex:none;"></i>'
+                  + '<span style="color:var(--ferreto-text-muted,#8b949e);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">' + escHtml(l.name || '') + '</span>'
+                  + '</a>');
+              });
+              g.pdfs.forEach(l => {
+                items.push('<a href="' + escHtml(l.path) + (l.path.includes('?')?'&':'?') + 'a=view" style="text-decoration:none;display:flex;align-items:center;gap:8px;padding:4px 0;font-size:11px;" title="' + escHtml(l.name||'') + '">'
+                  + '<span style="color:var(--ferreto-text-faint,#6b7488);font-size:13px;flex:none;width:16px;">◻</span>'
+                  + '<i class="bi bi-file-earmark-pdf" style="color:#ff6b6b;font-size:12px;flex:none;"></i>'
+                  + '<span style="color:var(--ferreto-text-muted,#8b949e);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">' + escHtml(l.name || '') + '</span>'
+                  + '</a>');
+              });
+              g.others.forEach(l => {
+                items.push('<a href="' + escHtml(l.path) + (l.path.includes('?')?'&':'?') + 'a=view" style="text-decoration:none;display:flex;align-items:center;gap:8px;padding:4px 0;font-size:11px;" title="' + escHtml(l.name||'') + '">'
+                  + '<span style="color:var(--ferreto-text-faint,#6b7488);font-size:13px;flex:none;width:16px;">◻</span>'
+                  + '<i class="bi bi-file-earmark" style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;flex:none;"></i>'
+                  + '<span style="color:var(--ferreto-text-muted,#8b949e);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">' + escHtml(l.name || '') + '</span>'
+                  + '</a>');
+              });
+              const visibleItems = items.slice(0, 15);
+              const hasMore = items.length > 15;
+              return '<div style="margin-bottom:8px;border:1px solid var(--ferreto-border,#30363d);border-radius:8px;overflow:hidden;">'
+                + '<div id="' + headerId + '" style="display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer;background:var(--ferreto-surface-2,rgba(255,255,255,.04));transition:background .15s;" onclick="var b=document.getElementById(\'' + bodyId + '\');var h=this.querySelector(\'.gdi-chevron\');if(b.style.display===\'none\'){b.style.display=\'block\';h.style.transform=\'rotate(90deg)\';}else{b.style.display=\'none\';h.style.transform=\'none\';}">'
+                + '<i class="bi bi-chevron-right gdi-chevron" style="font-size:10px;color:var(--ferreto-text-muted,#8b949e);transition:transform .15s;flex:none;"></i>'
+                + '<i class="bi bi-folder-fill" style="color:var(--ferreto-secondary,#5ddeda);font-size:14px;flex:none;"></i>'
+                + '<span style="color:var(--ferreto-text,#e6edf3);font-size:12px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(gname) + '</span>'
+                + '<span style="color:var(--ferreto-text-muted,#8b949e);font-size:10px;flex:none;">' + total + '</span>'
+                + '</div>'
+                + '<div id="' + bodyId + '" style="display:none;padding:6px 10px;">'
+                + visibleItems.join('')
+                + (hasMore ? '<div style="color:var(--ferreto-text-faint,#6b7488);font-size:10px;padding:4px 0 4px 24px;">+ ' + (items.length-15) + ' mais</div>' : '')
+                + '</div>'
+                + '</div>';
+            }).join('');
+          })()}
+        </div>
+      </div>
+      ` : ''}
     </div>`;
 
     box.querySelector('#gdi-detail-back').onclick=()=>renderCursos(box);
@@ -3548,6 +3647,11 @@
     const s=document.createElement('style');s.id='gdi-central-style';s.textContent=`
 /* ═══ ÁREA DO ALUNO v3 — design moderno (sidebar + dashboard) ═══ */
 #gdi-central{position:fixed;inset:0;z-index:10001;background:var(--ferreto-bg,#070910);color:var(--ferreto-text,#f3f5fa);font-family:var(--ferreto-font-body,'Rubik',sans-serif);display:none;overflow-y:auto;}
+/* ★ v1.0.70: SIDEBAR RETRÁTIL — estado collapsed mostra só a sidebar */
+#gdi-central.gdi-central-collapsed{width:auto;inset:auto 0 0 auto;height:auto;min-height:0;max-height:60px;overflow:hidden;}
+#gdi-central.gdi-central-collapsed .gdi-central-box{height:auto;min-height:0;}
+#gdi-central.gdi-central-collapsed .gdi-central-main,
+#gdi-central.gdi-central-collapsed .gdi-central-head{display:none !important;}
 @keyframes gdi-central-in{from{opacity:0;transform:scale(.98)}to{opacity:1;transform:none}}
 .gdi-central-box{width:100%;height:100%;min-height:100vh;margin:0;padding:0;background:var(--ferreto-bg,#070910);border:0;border-radius:0;}
 .gdi-central-head{display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--ferreto-border,#21262d);background:linear-gradient(135deg,rgba(255,139,159,.08),rgba(93,222,218,.05));flex-shrink:0;flex-wrap:nowrap;}
@@ -3746,13 +3850,14 @@
   (function(){
     function tryOpenFromURL(){
       try{
+        // ★ v1.0.64: guard para não reabrir a cada page:change quando autoOpenCentral está setado
         if(window.__gdiAutoOpenDone) return false;
         const params = new URLSearchParams(window.location.search);
         const central = params.get('central');
-        // ★ v1.0.75: também verifica window.MODEL.autoOpenCentral (homepage serve SPA com este flag)
+        // ★ v1.0.64: também verifica window.MODEL.autoOpenCentral (homepage serve SPA com este flag)
         const autoOpen = central || (window.MODEL && window.MODEL.autoOpenCentral ? '1' : null);
         if(autoOpen){
-          window.__gdiAutoOpenDone = true;
+          window.__gdiAutoOpenDone = true; // marca como aberto — não reabre em page:change subsequentes
           // Espera GDIUser estar pronto (state carregado) antes de abrir
           const openNow = function(){
             const tab = (autoOpen === '1' || autoOpen === 'true') ? 'home' : autoOpen;
@@ -3764,22 +3869,12 @@
               window.history.replaceState({}, '', url.toString());
             }catch(_){}
           };
-          // ★ v80-FIX BUG 4: previously both `GDIUser.ready().then(openNow)`
-          // AND `setTimeout(openNow, 2000)` were scheduled — if ready()
-          // resolved before 2s, openNow ran twice (panel reopened after the
-          // user closed it, hijacking the UI). Guard with a one-shot flag.
-          let _opened = false;
-          const openOnce = function(){
-            if(_opened) return;
-            _opened = true;
-            openNow();
-          };
           if(window.GDIUser && typeof window.GDIUser.ready === 'function'){
-            window.GDIUser.ready().then(openOnce).catch(openOnce);
+            window.GDIUser.ready().then(openNow).catch(openNow);
             // fallback: abre depois de 2s mesmo se ready() não resolver
-            setTimeout(openOnce, 2000);
+            setTimeout(openNow, 2000);
           }else{
-            setTimeout(openOnce, 1500);
+            setTimeout(openNow, 1500);
           }
           return true;
         }
@@ -3810,10 +3905,10 @@
 // Integra com /api/ai (Meggy) e extractPdfText (M9-ISA).
 // ═══════════════════════════════════════════════════════════════
 (function(){
-  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
-  const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
-  const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+  const esc=window.escHtml||(s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;'));
+  const lsGet=window.gdiLsGet||((k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}});
+  const lsSet=window.gdiLsSet||((k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}});
+  const uid=window.gdiUid||(()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8));
 
   async function callMeggy(prompt){
     const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -3923,37 +4018,29 @@
       const lib=window.pdfjsLib;
       if(lib&&lib.GlobalWorkerOptions)lib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
       const buf=await file.arrayBuffer();
-      // ★ v1.0.84: wrap doc lifecycle in try/finally so doc.destroy() runs
-      //    even if getPage/getTextContent throws (prevents PDFDocumentProxy leak).
-      let doc;
-      try {
-        doc=await lib.getDocument({data:buf,disableFontFace:true}).promise;
-        const n=Math.min(doc.numPages,60);
-        let txt='';
-        for(let i=1;i<=n;i++){
-          const pg=await doc.getPage(i);
-          const tc=await pg.getTextContent({normalizeWhitespace:true,includeMarkedContent:true});
-          let pt='';
-          for(const item of tc.items){if(item.str!==undefined){pt+=item.str;if(item.hasEOL)pt+='\n';}}
-          txt+=pt+'\n\n';
-          if(txt.length>25000)break;
-        }
-        txt=txt.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim().slice(0,8000);
-        if(txt.length<50){status.innerHTML='<div class="gdi-ai-err">Não foi possível extrair texto deste PDF.</div>';return;}
-
-        status.innerHTML='<div class="gdi-ai-loading" style="padding:20px;text-align:center;"><div class="gdi-ai-typing" style="margin:0 auto;"><span></span><span></span><span></span></div><p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin-top:10px;">Meggy está analisando a prova e criando o plano…</p></div>';
-        const resp=await callMeggy('Analise esta prova anterior de concurso/vestibular e crie um plano de estudos focado. Identifique os 5 temas mais cobrados e sugira quantas horas dedicar a cada um (total ~100h). Formato Markdown com ## títulos, lista de temas com horas, e justificativa breve:\n\n'+txt);
-        const plan={id:uid(),name:file.name,date:Date.now(),plan:resp,topics:(resp.match(/##\s+(.+)/g)||[]).length};
-        const plans=lsGet('gdi-exam-plans-v1',[]);
-        plans.push(plan);
-        lsSet('gdi-exam-plans-v1',plans);
-        showPlan(box,plan);
-        showToast('Plano de estudos criado!');
-      }catch(e){
-        status.innerHTML='<div class="gdi-ai-err">Erro: '+esc(e.message)+'</div>';
-      }finally{
-        try{ if(doc) doc.destroy(); }catch(_){}
+      const doc=await lib.getDocument({data:buf,disableFontFace:true}).promise;
+      const n=Math.min(doc.numPages,60);
+      let txt='';
+      for(let i=1;i<=n;i++){
+        const pg=await doc.getPage(i);
+        const tc=await pg.getTextContent({normalizeWhitespace:true,includeMarkedContent:true});
+        let pt='';
+        for(const item of tc.items){if(item.str!==undefined){pt+=item.str;if(item.hasEOL)pt+='\n';}}
+        txt+=pt+'\n\n';
+        if(txt.length>25000)break;
       }
+      try{doc.destroy();}catch(_){}
+      txt=txt.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim().slice(0,8000);
+      if(txt.length<50){status.innerHTML='<div class="gdi-ai-err">Não foi possível extrair texto deste PDF.</div>';return;}
+
+      status.innerHTML='<div class="gdi-ai-loading" style="padding:20px;text-align:center;"><div class="gdi-ai-typing" style="margin:0 auto;"><span></span><span></span><span></span></div><p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin-top:10px;">Meggy está analisando a prova e criando o plano…</p></div>';
+      const resp=await callMeggy('Analise esta prova anterior de concurso/vestibular e crie um plano de estudos focado. Identifique os 5 temas mais cobrados e sugira quantas horas dedicar a cada um (total ~100h). Formato Markdown com ## títulos, lista de temas com horas, e justificativa breve:\n\n'+txt);
+      const plan={id:uid(),name:file.name,date:Date.now(),plan:resp,topics:(resp.match(/##\s+(.+)/g)||[]).length};
+      const plans=lsGet('gdi-exam-plans-v1',[]);
+      plans.push(plan);
+      lsSet('gdi-exam-plans-v1',plans);
+      showPlan(box,plan);
+      showToast('Plano de estudos criado!');
     }catch(e){
       status.innerHTML='<div class="gdi-ai-err">Erro: '+esc(e.message)+'</div>';
     }
@@ -4609,60 +4696,6 @@
     try{localStorage.setItem(LS_LESSONS_PREFIX+courseKey, JSON.stringify(data))}catch(_){}
   }
 
-  // Video extension matcher — same regex as app.min.js buildPlaylistFromFiles
-  const VIDEO_EXT = /\.(mp4|webm|mkv|mov|m4v|avi|mpg|mpeg|wmv|flv|3gp)(\?|$)/i;
-
-  // Scan ONE folder — returns {lessons:[], subfolders:[]}
-  // Uses window.gdiListAllFiles (worker bridge — non-blocking).
-  async function scanFolder(folderPath, depth){
-    if(depth > SCAN_MAX_DEPTH) return {lessons:[], subfolders:[]};
-    try{
-      const pw = (typeof window.gdiGetPw === 'function') ? (window.gdiGetPw(folderPath)||'') : '';
-      const files = (typeof window.gdiListAllFiles === 'function')
-        ? await window.gdiListAllFiles(folderPath, pw)
-        : [];
-      if(!Array.isArray(files)) return {lessons:[], subfolders:[]};
-      const lessons = [];
-      const subfolders = [];
-      for(let i=0; i<files.length; i++){
-        const f = files[i];
-        if(!f) continue;
-        const name = f.name || '';
-        const mime = f.mimeType || '';
-        if(mime === 'application/vnd.google-apps.folder'){
-          subfolders.push(f);
-        } else if(mime.indexOf('video/') === 0 || VIDEO_EXT.test(name)){
-          // It's a video lesson
-          if(/\.part-/i.test(name)) continue;  // skip partial files
-          const bytes = Number(f.size)||0;
-          if(bytes && bytes < 1024*1024) continue;  // skip < 1MB (probably not a real lesson)
-          lessons.push({
-            name: name,
-            path: folderPath + encodeURIComponent(name),
-            folder: folderPath,
-            size: bytes,
-            mimeType: mime,
-            depth: depth
-          });
-        }
-      }
-      return {lessons, subfolders};
-    }catch(e){
-      console.warn('[Scanner] erro escaneando', folderPath, e && e.message);
-      return {lessons:[], subfolders:[]};
-    }
-  }
-
-  // Compute folder depth relative to the course root path.
-  // Each '/' in the path beyond the root counts as one level.
-  function depthOf(folderPath, rootPath){
-    try{
-      const f = (folderPath||'').split('/').filter(Boolean).length;
-      const r = (rootPath||'').split('/').filter(Boolean).length;
-      return Math.max(0, f - r);
-    }catch(_){return 0}
-  }
-
   // Main scan function — incremental, resumable.
   // courseKey == coursePath (the Drive folder path, e.g. /4:/CANTE COM EXCELENCIA 2.0/)
   // Calls onProgress(state, lessonsData) after each folder.
@@ -4681,12 +4714,18 @@
       queue: [],
       scanned: []
     };
-    // ★ v1.0.78: guard against drive-root paths
+    // ★ FIX v49 (Task SCAN-400): guard against drive-root paths (e.g. /0:/, /0:).
+    // The server API returns HTTP 400 "coursePath must include a subfolder" for
+    // these because scanning an entire drive root is not a valid course scan.
+    // This happened because some courses were added with path=/0:/ (drive root)
+    // instead of /0:/COURSE_NAME. The guard prevents the 400 loop and gives a
+    // clear error message so the user knows to re-add the course correctly.
     if(/^\/\d+:\/?$/.test(courseKey||'')){
       state.status = 'error';
       state.startedAt = Date.now();
-      state.error = 'Caminho inválido (raiz do drive). Remova este curso e adicione novamente.';
+      state.error = 'Caminho inválido (raiz do drive). Remova este curso e adicione novamente navegando até a pasta do curso.';
       setScanState(courseKey, state);
+      console.warn('[Scanner] courseKey é raiz do drive — abortando:', courseKey);
       if(onProgress) try{ onProgress(state, getLessons(courseKey)); }catch(_){}
       return state;
     }
@@ -4696,17 +4735,15 @@
     if(onProgress) try{ onProgress(state, getLessons(courseKey)); }catch(_){}
     
     try {
-      // ★ v1.0.78: SCAN INCREMENTAL — loop de batches até status=done
+      // ★ FIX v58 (Task SCAN-CURSOR): SCAN INCREMENTAL COM CURSOR
+      //   O servidor processa ~40 pastas por Worker invocation (limite CF=50 subrequests).
+      //   Retorna status=partial com pendingFolders > 0 quando há mais pastas.
+      //   Cliente chama /api/courses/scan-progress de novo para processar o próximo batch.
+      //   O cursor (lessons parciais + pendingFolders) é salvo no Drive pelo servidor.
       let allLessons = [];
-      let maxBatches = 30;
+      let maxBatches = 30; // safety: max 30 batches × 40 pastas = 1200 pastas
       let batchNum = 0;
       let isDone = false;
-      // ★ v80-FIX BUG 1: `d` is referenced outside the while loop (at
-      // `d?.totalFolders` below), so it MUST be declared OUTSIDE the block.
-      // Previously `const d = await r.json();` was block-scoped inside the
-      // while → ReferenceError on the lessonsData object → caught → state
-      // became 'error' even though lessons were saved successfully.
-      let d;
       
       while(!isDone && batchNum < maxBatches){
         batchNum++;
@@ -4716,53 +4753,62 @@
           body: JSON.stringify({coursePath: courseKey})
         });
         if(!r.ok) throw new Error('HTTP '+r.status);
-        d = await r.json();
+        const d = await r.json();
         if(!d || !d.ok) throw new Error(d && d.error || 'scan falhou');
         
-        allLessons = d.lessons || [];
-        isDone = d.status !== 'partial';
+        const batchLessons = d.lessons || [];
+        allLessons = batchLessons; // servidor retorna TODAS as lessons acumuladas (do cursor)
+        isDone = d.status !== 'partial'; // done ou cached → termina
         
+        // Atualiza estado parcial para o UI mostrar progresso
         state.status = 'scanning';
-        // ★ v80-FIX BUG 3: totalFolders was hardcoded to 1 and never
-        // updated → progress (scannedFolders/totalFolders) was always 100%.
-        // Now totalFolders grows as we discover pending folders each batch.
-        state.pendingFolders = d.pendingFolders || 0;
-        state.totalFolders = (state.scannedFolders || 0) + (d.pendingFolders || 0);
-        // Keep scannedFolders ≤ totalFolders so percent stays in [0,100].
-        if(state.scannedFolders > state.totalFolders){
-          state.scannedFolders = state.totalFolders;
-        }
+        state.scannedFolders = state.totalFolders;
         state.lessonsFound = allLessons.length;
+        state.pendingFolders = d.pendingFolders || 0;
         state.batchNum = batchNum;
         setScanState(courseKey, state);
         
-        const partialData = {lessons: allLessons, scanned: isDone, totalLessons: allLessons.length};
+        // Salva lessons parciais no localStorage para o UI mostrar
+        const partialData = {
+          lessons: allLessons,
+          scanned: isDone,
+          totalLessons: allLessons.length
+        };
         setLessons(courseKey, partialData);
+        
         if(onProgress) try{ onProgress(state, partialData); }catch(_){}
         
-        if(d.cached){ isDone = true; break; }
-        if(!isDone) await new Promise(r => setTimeout(r, 500));
+        if(d.cached){
+          console.log('[Scanner] cache hit! Curso já escaneado por outro aluno — sem re-scan');
+          isDone = true;
+          break;
+        }
+        
+        if(!isDone){
+          console.log('[Scanner] batch', batchNum, 'completo:', allLessons.length, 'aulas,', d.pendingFolders, 'pastas pendentes. Continuando...');
+          // Pequeno delay entre batches para não sobrecarregar
+          await new Promise(r => setTimeout(r, 500));
+        }
       }
       
-      const lessons = allLessons;
+      if(!isDone && batchNum >= maxBatches){
+        console.warn('[Scanner] atingiu maxBatches (30) — scan parcial. Aulas encontradas:', allLessons.length);
+      }
+      
+      console.log('[Scanner] scan completo:', allLessons.length, 'aulas encontradas em', batchNum, 'batches');
       const lessonsData = {
-        lessons: lessons,
+        lessons: allLessons,
         scanned: true,
-        // ★ v80-FIX BUG 1: safe access — `d` may be undefined if the while
-        // loop body never ran (e.g. maxBatches===0), so use (d && d.totalFolders).
-        totalFolders: (d && d.totalFolders) || state.totalFolders || 1,
-        totalLessons: lessons.length
+        totalFolders: state.totalFolders || 1,
+        totalLessons: allLessons.length
       };
       setLessons(courseKey, lessonsData);
       
-      // Atualiza estado
+      // Atualiza estado final
       state.status = 'done';
       state.completedAt = Date.now();
-      // ★ v80-FIX BUG 3 (final): finalize scannedFolders to equal totalFolders
-      // so progress shows 100% only when actually done.
-      if(state.totalFolders && state.scannedFolders < state.totalFolders){
-        state.scannedFolders = state.totalFolders;
-      }
+      state.scannedFolders = state.totalFolders;
+      state.lessonsFound = allLessons.length;
       setScanState(courseKey, state);
       
       // Salva no Drive (não-bloqueante)
@@ -4892,108 +4938,42 @@
   // and starts a non-blocking scan. Limited to 1 concurrent scan.
   // ─────────────────────────────────────────────────────────────
   let _autoScanRunning = false;
-  
-  // ★ v1.0.78: syncCoursesFromDrive — busca cursos do Drive e merge com localStorage
-  // ★ v80-FIX BUG 6: read-modify-write race. Previously the function did a
-  // single JSON.parse → push → setItem with no resiliency: two concurrent
-  // invocations (e.g. openPanel + autoScanPending boot) could both read the
-  // same array, both push their new courses, and the second setItem would
-  // silently clobber the first → courses lost. Now we (a) wrap RMW in
-  // try/catch with one retry, and (b) dedup by `key`/`id`/`path` right
-  // before writing so concurrent writes can't introduce duplicates.
-  async function syncCoursesFromDrive(){
-    const LS_MANUAL = 'gdi-manual-courses-v1';
-    let d;  // populated by fetch below; referenced by mergeDriveCourses closure
-    const mergeDriveCourses = function(){
-      const local = JSON.parse(localStorage.getItem(LS_MANUAL) || '[]');
-      if(!Array.isArray(local)) throw new Error('localStorage not an array');
-      const localPaths = new Set(local.map(c => c && c.path));
-      let added = 0;
-      for(const dc of d.courses){
-        if(dc && dc.coursePath && !localPaths.has(dc.coursePath)){
-          local.push({
-            id:'mc-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),
-            name:dc.courseName||'Curso', icon:'📁', color:'#5ddeda', goal:60, notes:'',
-            createdAt:dc.addedAt||Date.now(), manual:true, path:dc.coursePath,
-            courseKey:dc.coursePath, pdfCount:dc.pdfCount||0
-          });
-          localPaths.add(dc.coursePath);
-          added++;
-        }
-      }
-      // Dedup pass — resilient against concurrent writes that may have
-      // inserted the same course between our read and our write.
-      const seen = new Set();
-      const deduped = [];
-      for(const c of local){
-        if(!c) continue;
-        const k = c.key || c.id || c.path;
-        if(k){
-          if(seen.has(k)) continue;
-          seen.add(k);
-        }
-        deduped.push(c);
-      }
-      localStorage.setItem(LS_MANUAL, JSON.stringify(deduped));
-      return added;
-    };
-    try{
-      const r = await fetch('/api/courses/list');
-      if(!r.ok) return;
-      d = await r.json();
-      if(!d || !d.ok || !Array.isArray(d.courses)) return;
-      let added;
-      try {
-        added = mergeDriveCourses();
-      } catch(e) {
-        console.warn('[syncCoursesFromDrive] race detectada, re-lendo:', e && e.message);
-        try {
-          added = mergeDriveCourses();
-        } catch(_){
-          return;
-        }
-      }
-      if(added > 0){
-        console.log('[GDI M22] syncCoursesFromDrive: ' + added + ' cursos recuperados do Drive');
-      }
-    }catch(_){}
-  }
-  window.gdiSyncCoursesFromDrive = syncCoursesFromDrive;
-
+  let _autoScanQueue = [];  // ★ v1.0.70: fila de cursos pendentes para scan serial
   function autoScanPending(){
     if(_autoScanRunning) return;
-    _autoScanRunning = true;
-    try{
-      const manual = JSON.parse(localStorage.getItem('gdi-manual-courses-v1') || '[]');
-      if(!Array.isArray(manual) || !manual.length){ _autoScanRunning = false; return; }
-
-      // Find first course that needs scanning (no state OR not done/scanning)
-      for(const c of manual){
-        if(!c || !c.path) continue;
-        // Skip drive-root paths (they're not real courses — Task 16 / FIX 3)
-        // ★ v1.0.78: fixed regex to match /0:/ and /0:/ (with leading slash)
-        if(/^\/\d+:\/?$/.test(c.path)) continue;
-        const sp = getScanProgress(c.path);
-        if(!sp || (sp.status !== 'done' && sp.status !== 'scanning')){
-          console.log('[Scanner] auto-scan iniciando para:', c.name || c.path);
-          startScan(c.path, function(state, lessonsData){
-            // Re-render home if it's the active tab
-            if(state.status === 'done' || state.status === 'error'){
-              console.log('[Scanner] auto-scan concluído:', c.name, '-',
-                (lessonsData ? lessonsData.lessons.length : 0), 'aulas');
-              try{
-                const body = document.getElementById('gdi-central-body');
-                if(body && window.__gdiCurrentTab === 'home' && typeof renderHome === 'function'){
-                  renderHome(body);
-                }
-              }catch(_){}
-            }
-          });
-          break;  // only 1 at a time
-        }
+    // ★ v1.0.70 (Bug #3): busca cursos que precisam de scan e enfileira
+    const manual = JSON.parse(localStorage.getItem('gdi-manual-courses-v1') || '[]');
+    if(!Array.isArray(manual) || !manual.length) return;
+    _autoScanQueue = [];
+    for(const c of manual){
+      if(!c || !c.path) continue;
+      if(/^\/\d+:\/?$/.test(c.path)) continue;
+      const sp = getScanProgress(c.path);
+      if(!sp || (sp.status !== 'done' && sp.status !== 'scanning')){
+        _autoScanQueue.push(c);
       }
-    }catch(_){}
-    _autoScanRunning = false;
+    }
+    if(_autoScanQueue.length === 0) return;
+    // Processa 1 curso por vez, serialmente (evita 503 do CF Worker)
+    _autoScanRunning = true;
+    processScanQueue();
+  }
+
+  function processScanQueue(){
+    if(_autoScanQueue.length === 0){
+      _autoScanRunning = false;
+      return;
+    }
+    const c = _autoScanQueue.shift();
+    console.log('[Scanner] auto-scan iniciando para:', c.name || c.path);
+    startScan(c.path, function(state, lessonsData){
+      if(state.status === 'done' || state.status === 'error'){
+        console.log('[Scanner] auto-scan concluído:', c.name, '-',
+          (lessonsData ? lessonsData.lessons.length : 0), 'aulas');
+        // Próximo curso após 2s (evita 503)
+        setTimeout(processScanQueue, 2000);
+      }
+    });
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -5014,8 +4994,10 @@
       const original = manual.length;
       const cleaned = manual.filter(c => {
         if(!c || !c.path) return false;
-        // Remove drive roots (e.g., /0:/, /4:/)
-        if(/^\d+:\/$/.test(c.path)) return false;
+        // Remove drive roots (e.g., /0:/, /4:/, /0:)
+        // ★ FIX v49: regex was ^\d+:\/$ which did NOT match /0:/ (leading slash).
+        // Now ^\/\d+:\/?$ matches /0:/ and /0: (with or without trailing slash).
+        if(/^\/\d+:\/?$/.test(c.path)) return false;
         // Remove if path is just /<drive>:/ (no subfolder)
         const segs = c.path.split('/').filter(Boolean);
         if(segs.length < 2) return false;
@@ -5034,6 +5016,53 @@
     }catch(_){ return 0; }
   }
 
+  // ★ FIX-PERSISTENCE-MEGGY-HEADER: sync manual courses from Drive (source of truth).
+  // On page load, fetches /api/courses/list (courses saved in general_courses.json
+  // on the user's Drive folder) and merges with localStorage 'gdi-manual-courses-v1'
+  // (dedup by path). localStorage acts as cache; Drive is source of truth.
+  // Without this: courses added on browser A are lost on browser B / after clearing
+  // localStorage, even though they were POSTed to /api/courses/add at add-time.
+  // collectCourses() stays sync (reads localStorage) — this runs async in background.
+  async function syncCoursesFromDrive(){
+    try {
+      const r = await fetch('/api/courses/list');
+      if(!r.ok) return;
+      const d = await r.json();
+      if(!d || !d.ok || !Array.isArray(d.courses)) return;
+
+      const LS_MANUAL = 'gdi-manual-courses-v1';
+      const local = JSON.parse(localStorage.getItem(LS_MANUAL) || '[]');
+      if(!Array.isArray(local)) return;  // defensive — corrupted LS
+      const localPaths = new Set(local.map(c => c && c.path).filter(Boolean));
+
+      let added = 0;
+      for(const dc of d.courses) {
+        if(!dc || !dc.coursePath) continue;
+        if(localPaths.has(dc.coursePath)) continue;
+        local.push({
+          id: 'mc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+          name: dc.courseName || 'Curso',
+          icon: '📁',
+          color: '#5ddeda',
+          goal: 60,
+          notes: '',
+          createdAt: dc.addedAt || Date.now(),
+          manual: true,
+          path: dc.coursePath,
+          courseKey: dc.coursePath,
+          pdfCount: dc.pdfCount || 0
+        });
+        localPaths.add(dc.coursePath);
+        added++;
+      }
+
+      if(added > 0) {
+        localStorage.setItem(LS_MANUAL, JSON.stringify(local));
+        console.log('[GDI M22] syncCoursesFromDrive: ' + added + ' cursos recuperados do Drive');
+      }
+    }catch(_){ /* network/parse error — silent fail, localStorage stays as-is */ }
+  }
+
   // Export
   window.gdiCourseScanner = {
     startScan,
@@ -5045,6 +5074,7 @@
     resumeInterruptedScans,
     autoScanPending,
     cleanupOrphanCourses,
+    syncCoursesFromDrive,
     LS_SCAN_PREFIX,
     LS_LESSONS_PREFIX,
     SCAN_PAUSE_MS,
@@ -5054,6 +5084,18 @@
 
   // ★ Task 16 / FIX 3: expose cleanup as a standalone global for console access
   window.gdiCleanupOrphanCourses = cleanupOrphanCourses;
+  // ★ FIX-PERSISTENCE-MEGGY-HEADER: expose sync for console/debug
+  window.gdiSyncCoursesFromDrive = syncCoursesFromDrive;
+
+  // ★ FIX-PERSISTENCE-MEGGY-HEADER: on page load, sync courses from Drive FIRST
+  // (recovers courses added on other browsers/devices, or after clearing localStorage),
+  // THEN run orphan cleanup + auto-scan. Drive is source of truth; localStorage is cache.
+  // .catch safety: syncCoursesFromDrive() has internal try/catch (never rejects), but
+  // guard against any IIFE-init edge case to avoid crashing the page.
+  syncCoursesFromDrive().then(function(){
+    setTimeout(cleanupOrphanCourses, 2000);
+    setTimeout(autoScanPending, 3000);
+  }).catch(function(_){ /* silent — sync is best-effort */ });
 
   // Auto-resume interrupted scans after a short delay (lets GDIUser + worker bridge init)
   setTimeout(function(){
@@ -5065,27 +5107,11 @@
     try{ cleanupOrphanCourses(); }catch(_){}
   }, 2000);
 
-  // ★ v1.0.84 / CRITICAL: sync courses from Drive on user:ready BEFORE auto-scan.
-  // Without this, a new device / cleared localStorage / private window shows NO
-  // course tiles until the user manually re-adds every course. Cross-device
-  // persistence was broken because syncCoursesFromDrive was defined + exported
-  // but NEVER called. Now it runs first, then autoScanPending picks up the
-  // restored courses and background-scans them for lesson counts.
+  // ★ Task 16 / FIX 1: auto-scan pending courses 5s after page load (after GDIUser ready)
   if(typeof Bus !== 'undefined' && typeof Bus.onGlobal === 'function'){
     Bus.onGlobal('user:ready', function(){
       setTimeout(function(){
-        try{
-          // ★ v1.0.84: sync courses from Drive FIRST, so user sees their courses on any device.
-          if(typeof syncCoursesFromDrive === 'function'){
-            syncCoursesFromDrive().catch(()=>{}).finally(()=>{
-              try{ autoScanPending(); }catch(_){}
-            });
-          } else {
-            try{ autoScanPending(); }catch(_){}
-          }
-        }catch(_){
-          try{ autoScanPending(); }catch(_){}
-        }
+        try{ autoScanPending(); }catch(_){}
       }, 5000);
     });
     // Also try on page:change (in case user navigates and modules are ready)
@@ -5097,17 +5123,7 @@
   }else{
     // Fallback if Bus not available at IIFE init time
     setTimeout(function(){
-      try{
-        if(typeof syncCoursesFromDrive === 'function'){
-          syncCoursesFromDrive().catch(()=>{}).finally(()=>{
-            try{ autoScanPending(); }catch(_){}
-          });
-        } else {
-          try{ autoScanPending(); }catch(_){}
-        }
-      }catch(_){
-        try{ autoScanPending(); }catch(_){}
-      }
+      try{ autoScanPending(); }catch(_){}
     }, 5000);
   }
 
