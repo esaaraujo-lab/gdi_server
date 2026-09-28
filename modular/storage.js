@@ -23,8 +23,16 @@
   function memo(key, ttlMs, fn){
     const ent = _mem.get(key);
     const now = Date.now();
-    if (ent && now - ent.t < ttlMs) return ent.p;          // hit
-    if (ent && ent.p) return ent.p;                        // in-flight dedupe
+    // ★ FIX Agent 5 R19 / BUG R19: o check `if (ent && ent.p) return ent.p`
+    // devolvia a Promise RESOLVIDA mesmo DEPOIS do TTL expirar — porque `ent.p`
+    // (a Promise já resolvida) permanece truthy. Resultado: o cache NUNCA
+    // expirava sem `invalidate(keyPrefix)` explícito, e `listCourses()` /
+    // `listMaterials()` / `getUserProgress()` retornavam dados stale por toda
+    // a sessão da página. Agora, só retornamos `ent.p` se a entrada ainda
+    // está dentro do TTL. Caso contrário, deletamos a entrada expirada antes
+    // de re-buscar, para que a próxima chamada (dedupe in-flight) funcione.
+    if (ent && now - ent.t < ttlMs) return ent.p;          // TTL hit (ainda válido)
+    if (ent && ent.p) { _mem.delete(key); }                // expirou — limpa antes de re-fetch
     const p = fn().catch(err => { _mem.delete(key); throw err; });
     _mem.set(key, { t: now, p });
     if (_mem.size > _MEM_MAX) _mem.delete(_mem.keys().next().value);
@@ -308,6 +316,23 @@
 
   function buildSharedProgressMarkdown(opts){
     const {coursePath, courseName, lessons, scannedBy, scannedAt, startedBy} = opts;
+    // ★ FIX Agent 19 EDGE-5: `new Date(scannedAt).toISOString()` e
+    // `new Date(u.startedAt).toISOString()` lançam `RangeError: Invalid time
+    // value` quando o input é um valor truthy mas inválido (string 'NaN',
+    // ISO parcial, etc.) — e no caso de `u.startedAt` SEM null check, lança
+    // também para undefined/null. A função é chamada de `saveSharedProgress`
+    // (lado worker) que escreve o markdown no Drive; se lançar, o save falha
+    // silenciosamente e o markdown nunca é escrito. Helper `safeIso` engole
+    // o erro e retorna '' para que a linha seja renderizada como '—' pelo
+    // caller (que já tem ternário `scannedAt ? safeIso(scannedAt) : '—'`).
+    function safeIso(v){
+      try {
+        if (v === undefined || v === null || v === '') return '';
+        const d = new Date(v);
+        if (isNaN(d.getTime())) return '';
+        return d.toISOString();
+      } catch(_) { return ''; }
+    }
     const lines = [];
     lines.push('# Curso: '+(courseName||coursePath));
     lines.push('');
@@ -317,19 +342,27 @@
     lines.push('**Path:** `'+coursePath+'`');
     lines.push('**Total de aulas:** '+(lessons?lessons.length:0));
     lines.push('**Scanned by:** '+(scannedBy||'—'));
-    lines.push('**Scanned at:** '+(scannedAt?new Date(scannedAt).toISOString():'—'));
+    const scannedAtIso = safeIso(scannedAt);
+    lines.push('**Scanned at:** '+(scannedAtIso ? scannedAtIso : '—'));
     lines.push('');
     if(startedBy&&startedBy.length){
       lines.push('## Alunos que iniciaram este curso');
-      for(const u of startedBy)lines.push('- @'+u.username+' — iniciado em '+new Date(u.startedAt).toISOString());
+      for(const u of startedBy){
+        const iso = safeIso(u.startedAt);
+        lines.push('- @'+(u.username||'—')+' — iniciado em '+(iso ? iso : '—'));
+      }
       lines.push('');
     }
     if(lessons&&lessons.length){
       lines.push('## Lista de aulas');
       for(let i=0;i<lessons.length;i++){
         const l=lessons[i];
-        lines.push((i+1)+'. ['+l.type.toUpperCase()+'] '+l.name);
-        lines.push('   - Path: `'+l.path+'`');
+        // ★ FIX Agent 19 EDGE-6: `l.type.toUpperCase()` lança TypeError se
+        // `l.type` for undefined (scan legado antes do campo `type` existir,
+        // ou lessons.json editado à mão no Drive). Guard `String(l.type||'video')`
+        // preserva o comportamento default para lessons sem tipo sem crashar.
+        lines.push((i+1)+'. ['+String(l.type||'video').toUpperCase()+'] '+String(l.name||''));
+        lines.push('   - Path: `'+(l.path||'')+'`');
       }
       lines.push('');
     }
