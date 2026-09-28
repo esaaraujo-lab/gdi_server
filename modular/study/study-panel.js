@@ -92,7 +92,37 @@
     }catch(e){ console.warn('[study-panel] '+fnName+' failed:', e && e.message); }
     return defaultVal;
   };
-  const collectCourses   = function(){ return _safeCall.call(this, 'collectCourses', arguments, []); };
+  // ★ v1.0.103 FIX (Task 20-5 #1): memoize collectCourses with 5s TTL.
+  //   renderHome calls collectCourses() at line 603, and then again when the
+  //   background sync.then re-renders home (line 595). Without memoization,
+  //   the second call re-walks manual courses + scanner state + watched map
+  //   for nothing. The cache is invalidated by Bus.emit('courses:changed'),
+  //   fired from hideCourse/unhideCourse/remove/addCourse in study-courses.js.
+  let _ccCache = null, _ccCacheAt = 0;
+  const _CC_TTL = 5000;
+  const collectCourses   = function(){
+    if(arguments.length === 0){
+      const now = Date.now();
+      if(_ccCache && (now - _ccCacheAt) < _CC_TTL){
+        return _ccCache;
+      }
+      const r = _safeCall.call(this, 'collectCourses', arguments, []);
+      if(Array.isArray(r)){
+        _ccCache = r;
+        _ccCacheAt = now;
+      }
+      return r;
+    }
+    return _safeCall.call(this, 'collectCourses', arguments, []);
+  };
+  // Invalidate cache on courses:changed (hide/unhide/remove/add).
+  try{
+    if(typeof Bus !== 'undefined' && typeof Bus.onGlobal === 'function'){
+      Bus.onGlobal('courses:changed', function(){ _ccCache = null; _ccCacheAt = 0; });
+    }else if(window.Bus && typeof window.Bus.onGlobal === 'function'){
+      window.Bus.onGlobal('courses:changed', function(){ _ccCache = null; _ccCacheAt = 0; });
+    }
+  }catch(_){}
   const bestIn           = function(){ return _safeCall.call(this, 'bestIn', arguments, Promise.resolve(null)); };
   const realName         = function(){ return _safeCall.call(this, 'realName', arguments, ''); };
   const cleanCourseName  = function(){ return _safeCall.call(this, 'cleanCourseName', arguments, 'Curso'); };
@@ -116,11 +146,34 @@
     if(sec>0&&sec<300){const w=lsGet(LS_WATCH,{});const k=dayKey();w[k]=(w[k]||0)+sec;lsSet(LS_WATCH,w);}
   }
   // ★ PATCH F: setInterval só roda quando há home-card visível OU painel aberto
-  setInterval(()=>{
-    if(document.getElementById('gdi-home-card')||(S.panel&&S.panel.style.display==='flex')){
-      flushWatch();
+  // ★ v1.0.103 FIX (Task 20-5 #3): track interval IDs and provide start/stop
+  //   helpers so closePanel can clear them (avoiding leak when user closes the
+  //   panel permanently). openPanel restarts them. When the home-card is visible
+  //   (panel closed but dashboard chip still on page), the intervals keep
+  //   running — they're only stopped when neither panel nor home-card is present.
+  let _watchIntervalId = null;
+  let _goalIntervalId = null;
+  function _startWatchIntervals(){
+    if(_watchIntervalId === null){
+      _watchIntervalId = setInterval(()=>{
+        if(document.getElementById('gdi-home-card')||(S.panel&&S.panel.style.display==='flex')){
+          flushWatch();
+        }
+      },30000);
     }
-  },30000);
+    if(_goalIntervalId === null){
+      _goalIntervalId = setInterval(()=>{
+        if(document.getElementById('gdi-home-card')||(S.panel&&S.panel.style.display==='flex')){
+          updateGoalChip();
+        }
+      },20000);
+    }
+  }
+  function _stopWatchIntervals(){
+    if(_watchIntervalId !== null){ clearInterval(_watchIntervalId); _watchIntervalId = null; }
+    if(_goalIntervalId !== null){ clearInterval(_goalIntervalId); _goalIntervalId = null; }
+  }
+  _startWatchIntervals();
   const todayMin=()=>Math.round((lsGet(LS_WATCH,{})[dayKey()]||0)/60);
   const goalMin=()=>Math.max(10,Math.min(480,parseInt(lsGet(LS_GOAL,60),10)||60));
   function updateGoalChip(){
@@ -139,11 +192,9 @@
       </div>${t>=g?'<span style="color:#2f9e44;">\u2713 meta batida!</span>':''}`;
   }
   // ★ PATCH F: setInterval do goal-chip também gated
-  setInterval(()=>{
-    if(document.getElementById('gdi-home-card')||(S.panel&&S.panel.style.display==='flex')){
-      updateGoalChip();
-    }
-  },20000);
+  // ★ v1.0.103 FIX (Task 20-5 #3): REMOVIDO — intervalo agora gerenciado por
+  //   _startWatchIntervals()/_stopWatchIntervals() acima. Mantido apenas o
+  //   comment para preservar a história do código.
   const cards=()=>lsGet(LS_CARDS,[]);
   const saveCards=c=>lsSet(LS_CARDS,c);
   const dueCards=()=>cards().filter(c=>(c.due||0)<=Date.now());
@@ -160,7 +211,15 @@
       if(localStorage.getItem('gdi-onboarding-done')) return;
       localStorage.setItem('gdi-onboarding-done', '1');
     }catch(_){ return; }
+    // ★ v1.0.103 FIX (Task 20-5 #5): save activeElement to restore focus after close.
+    //   Without this, focus was lost to document.body when the overlay closed,
+    //   breaking keyboard navigation for screen-reader / keyboard-only users.
+    // ★ FIX (Task 20-13 #3): assign an id so the global keydown handler can
+    //   detect the onboarding overlay and bail (prevents 'c'/'Escape' from
+    //   toggling/closing the central panel behind the overlay).
+    const _prevActive = document.activeElement || null;
     const overlay = document.createElement('div');
+    overlay.id = 'gdi-onboarding-overlay';
     overlay.style.cssText = 'position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:20px;';
     overlay.innerHTML = `<div style="background:var(--ferreto-bg-2,#0d1119);border-radius:16px;max-width:480px;padding:28px;text-align:center;border:1px solid var(--ferreto-border,#30363d);">
       <div style="font-size:56px;margin-bottom:12px;">🐩</div>
@@ -175,21 +234,47 @@
       <button id="gdi-onboarding-close" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);border:0;border-radius:10px;padding:10px 24px;color:#fff;font-size:14px;font-weight:600;cursor:pointer;width:100%;">Vamos começar! 🎉</button>
     </div>`;
     (document.querySelector('#gdi-study') || document.body).appendChild(overlay);
-    overlay.querySelector('#gdi-onboarding-close').onclick = () => overlay.remove();
-    overlay.onclick = (e) => { if(e.target === overlay) overlay.remove(); };
-    // ★ FIX (Agent 16 UIUX-11): ESC closes the onboarding overlay.
-    //    Without this, the user could only close by clicking the button or backdrop.
+    // ★ v1.0.103 FIX (Task 20-5 #5): restore focus to previous activeElement on close.
+    const _restoreFocus = function(){
+      try{
+        if(_prevActive && _prevActive !== document.body && typeof _prevActive.focus === 'function'){
+          _prevActive.focus({preventScroll:true});
+        }
+      }catch(_){}
+    };
+    // ★ FIX (Task 20-13 #3): centralize close logic so ALL close paths
+    //   (button click, backdrop click, ESC) remove the ESC keydown listener.
+    //   Previously, closing via button or backdrop left the ESC listener
+    //   attached to document forever (a leak). Even though showOnboarding
+    //   only runs once per browser, the leaked listener still fires on every
+    //   ESC keypress for the rest of the session — wasteful and a potential
+    //   source of confusion if future code reuses the same pattern.
     const _onEsc = function(e){
       if(e.key === 'Escape' && overlay.parentNode){
-        overlay.remove();
-        document.removeEventListener('keydown', _onEsc, true);
+        _closeOverlay();
       }
     };
+    const _closeOverlay = function(){
+      try{ document.removeEventListener('keydown', _onEsc, true); }catch(_){}
+      try{ if(overlay.parentNode) overlay.remove(); }catch(_){}
+      _restoreFocus();
+    };
+    overlay.querySelector('#gdi-onboarding-close').onclick = () => { _closeOverlay(); };
+    overlay.onclick = (e) => { if(e.target === overlay){ _closeOverlay(); } };
+    // ★ FIX (Agent 16 UIUX-11): ESC closes the onboarding overlay.
+    //    Without this, the user could only close by clicking the button or backdrop.
     document.addEventListener('keydown', _onEsc, true);
   }
 
   // ★ PATCH D: openPanel faz UMA única renderização (depois do estado pronto)
   function openPanel(t){
+    // ★ v1.0.103 FIX (Task 20-5 #6): guard against double-open. If panel is
+    //   already visible and no tab switch was requested, skip the ensureState
+    //   re-render cycle (wasteful + races with itself via _openToken bumping).
+    if(S.panel && S.panel.style.display==='flex' && !t) return;
+    // ★ v1.0.103 FIX (Task 20-5 #3): ensure intervals are running (closePanel
+    //   may have stopped them when no home-card was visible).
+    _startWatchIntervals();
     if(t)S.tab=t;
     if(!S.panel){
       S.panel=document.createElement('div');S.panel.id='gdi-central';
@@ -207,7 +292,18 @@
       if(_openToken !== S._openToken) return; // superseded by a newer open call
       if(S.panel && S.panel.style.display==='flex') renderPanel();
     }).catch(()=>{
-      if(_openToken === S._openToken) renderPanel();
+      // ★ FIX (Task 20-13 #2): mirror the .then() guard — only render if the
+      //   panel is still visible. Previously, if ensureState() rejected AFTER
+      //   the user closed the panel, this .catch would call renderPanel() on
+      //   a hidden (display:none) panel — wastefully painting invisible DOM
+      //   and, if a newer open call had bumped the token, racing with its
+      //   render. The token check alone is insufficient because a single
+      //   open→close→open-again cycle could leave _openToken === S._openToken
+      //   true for the FIRST open's .catch (token 1 == token 1 if the second
+      //   open also failed and incremented to 2, then closed back to... no,
+      //   tokens only increment). The display check is the robust guard.
+      if(_openToken !== S._openToken) return;
+      if(S.panel && S.panel.style.display==='flex') renderPanel();
     });
     try{ showOnboarding(); }catch(_){}
   }
@@ -217,6 +313,15 @@
     const body=S.panel&&S.panel.querySelector('#gdi-central-body');
     if(body&&body.__simTimer){clearInterval(body.__simTimer);body.__simTimer=null;}
     if(S.panel)S.panel.style.display='none';
+    // ★ v1.0.103 FIX (Task 20-5 #3): clear top-level intervals on closePanel
+    //   to avoid leak when user closes the panel permanently. Only stop if no
+    //   home-card is visible (home-card lives outside the panel and still
+    //   needs the timer updates). openPanel restarts them on next open.
+    try{
+      if(!document.getElementById('gdi-home-card')){
+        _stopWatchIntervals();
+      }
+    }catch(_){}
   }
   // ★ Expõe openPanel para outros módulos
   window.__gdiOpenCentral=openPanel;
@@ -592,7 +697,10 @@
           try{
             if(window.__gdiCurrentTab === 'home'){
               const b = document.getElementById('gdi-central-body');
-              if(b && typeof renderHome === 'function') window.__gdiStudy.panel.renderHome(b);
+              // ★ v1.0.103 FIX (Task 20-5 #4): check b.isConnected — body may have
+              //   been replaced by another tab's renderBody() during the async wait,
+              //   causing the re-render to paint into a detached node.
+              if(b && b.isConnected && typeof renderHome === 'function') window.__gdiStudy.panel.renderHome(b);
             }
           }catch(_){}
         }).finally(()=>{
@@ -737,28 +845,38 @@
     // bind course cards (continue) — clicar leva a openCourseDetail
     // ★ FIX 3 (Task 14): <a> "Ir para o Drive" também tem classe .gdi-btn-continue;
     //   usar selector específico p/ só pegar o <button> Continuar, e ignorar clicks em <a>.
-    box.querySelectorAll('[data-course-key]').forEach(cardEl=>{
-      const ck=cardEl.dataset.courseKey;
-      const contBtn=cardEl.querySelector('button.gdi-btn-continue');
-      bestIn(ck).then(target=>{
+    // ★ v1.0.103 FIX (Task 20-5 #2): batch bestIn() into a single Promise.all to
+    //   avoid 6× sequential awaits (one per course tile). Each bestIn() call
+    //   otherwise kicks off its own (cached) async lookup, but Promise.all lets
+    //   them resolve in parallel — and avoids N×.then() callback scheduling.
+    // ★ v1.0.103 FIX (Task 20-5 #14): inside the async callback, null-guard
+    //   contBtn AND check contBtn.isConnected — box may have been re-rendered
+    //   (e.g. user clicked another tab) by the time bestIn resolves.
+    const _courseTiles = Array.from(box.querySelectorAll('[data-course-key]'));
+    Promise.all(_courseTiles.map(el => bestIn(el.dataset.courseKey).catch(()=>null))).then(_targets => {
+      _courseTiles.forEach((cardEl, _i) => {
+        const target = _targets[_i];
+        const contBtn = cardEl.querySelector('button.gdi-btn-continue');
+        if(!contBtn || !contBtn.isConnected) return;  // ★ FIX #14
         if(target){
-          if(contBtn){
-            contBtn.disabled=false;
-            contBtn.innerHTML=`<i class="bi bi-play-fill"></i> Continuar: ${escHtml(realName(target).slice(0,30))}`;
-            contBtn.onclick=(e)=>{e.stopPropagation();location.href=target+(target.includes('?')?'&':'?')+'a=view';};
-          }
+          contBtn.disabled=false;
+          contBtn.innerHTML=`<i class="bi bi-play-fill"></i> Continuar: ${escHtml(realName(target).slice(0,30))}`;
+          contBtn.onclick=(e)=>{e.stopPropagation();location.href=target+(target.includes('?')?'&':'?')+'a=view';};
         }else{
-          if(contBtn){
-            contBtn.disabled=true;
-            contBtn.className='gdi-btn-continue gdi-btn-done';
-            contBtn.innerHTML='<i class="bi bi-check2-all"></i> Tudo em dia!';
-          }
+          contBtn.disabled=true;
+          contBtn.className='gdi-btn-continue gdi-btn-done';
+          contBtn.innerHTML='<i class="bi bi-check2-all"></i> Tudo em dia!';
         }
       });
+    }).catch(()=>{});
+    _courseTiles.forEach(cardEl=>{
+      const ck=cardEl.dataset.courseKey;
       cardEl.onclick=(e)=>{
         // ★ ignora clicks em <button> OU <a> (Drive link navega sozinho)
         if(e.target.closest('button'))return;
         if(e.target.closest('a'))return;
+        // ★ v1.0.103 FIX (Task 20-5 #14): guard against stale cardEl (re-rendered)
+        if(!cardEl.isConnected)return;
         // abre detalhe do curso (função preservada — S.tab cursos removida mas função fica)
         const c=courses.find(x=>x.key===ck);
         if(c)openCourseDetail(box,c);
@@ -789,16 +907,19 @@
                     scanBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Escaneando '+pct+'%';
                   }
                   // Atualiza barra de progresso + stats
-                  const bar = cardEl.querySelector('.gdi-scan-progress');
-                  if(bar) bar.style.width = pct + '%';
-                  const totalEl = cardEl.querySelector('[data-stat="total"]');
-                  if(totalEl && lessonsData && lessonsData.lessons){
-                    totalEl.textContent = lessonsData.lessons.length;
+                  // ★ v1.0.103 FIX (Task 20-5 #14): null-guard cardEl (may be detached)
+                  if(cardEl && cardEl.isConnected){
+                    const bar = cardEl.querySelector('.gdi-scan-progress');
+                    if(bar) bar.style.width = pct + '%';
+                    const totalEl = cardEl.querySelector('[data-stat="total"]');
+                    if(totalEl && lessonsData && lessonsData.lessons){
+                      totalEl.textContent = lessonsData.lessons.length;
+                    }
                   }
                 }else if(state.status === 'done' || state.status === 'error'){
                   // Re-renderiza home para atualizar tile com estado final
                   const body = document.getElementById('gdi-central-body');
-                  if(body && window.__gdiCurrentTab === 'home' && typeof renderHome === 'function'){
+                  if(body && body.isConnected && window.__gdiCurrentTab === 'home' && typeof renderHome === 'function'){
                     try{ window.__gdiStudy.panel.renderHome(body); }catch(_){}
                   }
                 }
@@ -1354,6 +1475,18 @@
     //    'c'/'Escape' must NOT close/toggle the central panel while a modal
     //    (gdiModal, showAddCourseModal, editSubject, etc.) is intercepting input.
     if(document.querySelector && document.querySelector('.gdi-modal-overlay')) return;
+    // ★ FIX (Task 20-13 #4): also bail when the onboarding overlay is open.
+    //    The onboarding overlay (#gdi-onboarding-overlay) does NOT carry the
+    //    .gdi-modal-overlay class (it uses a higher z-index inline style and a
+    //    different visual treatment), so the check above does not catch it.
+    //    Without this guard, pressing 'c' while onboarding is open would
+    //    closePanel() the central panel behind the overlay — confusing the
+    //    user when they dismiss onboarding and find no panel. Pressing
+    //    Escape would also closePanel() redundantly (the onboarding overlay's
+    //    own capture-phase ESC handler already runs and dismisses it, but the
+    //    event bubbles to here in the capture-less phase and closes the panel
+    //    too). The onboarding overlay's id check is cheap and unambiguous.
+    if(document.getElementById && document.getElementById('gdi-onboarding-overlay')) return;
     const t=e.target;
     if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable))return;
     if(e.ctrlKey||e.metaKey||e.altKey)return;
@@ -1391,7 +1524,20 @@
           // Espera GDIUser estar pronto (state carregado) antes de abrir
           const openNow = function(){
             let tab = (autoOpen === '1' || autoOpen === 'true') ? 'home' : autoOpen;
-            if(!KNOWN_TABS.includes(tab)){ tab = 'home'; }
+            // ★ FIX (Task 20-13 #1): prefer window.gdiValidTab() when available
+            //   so other modules can register additional tabs without patching
+            //   KNOWN_TABS. Falls back to KNOWN_TABS for backward compat.
+            //   window.gdiValidTab(tab) should return true if `tab` is a valid,
+            //   openable tab id. If it returns false (or throws), default to 'home'.
+            let valid = false;
+            try{
+              if(typeof window.gdiValidTab === 'function'){
+                valid = !!window.gdiValidTab(tab);
+              }else{
+                valid = KNOWN_TABS.indexOf(tab) !== -1;
+              }
+            }catch(_){ valid = false; }
+            if(!valid){ tab = 'home'; }
             openPanel(tab);
             // Limpa o parâmetro da URL (não fica reabrindo a cada navegação)
             try{
