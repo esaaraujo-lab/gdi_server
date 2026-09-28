@@ -31,6 +31,26 @@
   const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
   const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
+
+  // ★ FIX (Agent 5 R9 / Agent 14): serialize all gdi-cards-v1 read-modify-write
+  //    cycles through a local Promise chain. The flashcard-creation paths in
+  //    this module (startSession miss-handler + the 'Flashcards das erradas'
+  //    button) both read 'gdi-cards-v1', mutate, and write back. Without
+  //    serialization, two concurrent RMWs (e.g. user answers wrong in quick
+  //    succession) read the same snapshot and the second write loses the first
+  //    one's new card. The chain guarantees each RMW sees the latest state.
+  let _localCardsChain = Promise.resolve();
+  function _cardsRMW(mutator){
+    _localCardsChain = _localCardsChain.then(async () => {
+      try{
+        const cur = lsGet('gdi-cards-v1', []);
+        if(!Array.isArray(cur)) return;
+        const next = mutator(cur);
+        if(next !== undefined) lsSet('gdi-cards-v1', next);
+      }catch(e){ console.warn('[study-questions] _cardsRMW failed:', e && e.message); }
+    }).catch(()=>{});
+    return _localCardsChain;
+  }
   const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
   const fmtDate=ds=>{try{return new Date(ds+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})}catch(_){return ds}};
   const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
@@ -58,8 +78,11 @@
     // caderno de erros
     if(!acertou){const err=lsGet(LS_ERR,[]);if(!err.includes(id)){err.push(id);lsSet(LS_ERR,err);}}
   }
+
+  // ★ FIX (Agent 11 PERF-6): O(N×M) errQ used Array.includes inside a filter —
+  //    N = total questions, M = err array. Convert err to a Set once per call.
+  const errQ=()=>{const errArr=lsGet(LS_ERR,[]);const errSet=new Set(Array.isArray(errArr)?errArr:[]);return questions().filter(q=>errSet.has(q.id));};
   const dueQ=()=>questions().filter(q=>{const s=qSrs()[q.id];return !s||s.due<=Date.now();});
-  const errQ=()=>{const err=lsGet(LS_ERR,[]);return questions().filter(q=>err.includes(q.id));};
 
   // ── Simulados ──
   const simus=()=>lsGet(LS_SIM,[]);
@@ -78,6 +101,9 @@
       'correct é o índice 0-3 da alternativa certa. Nível concurso público brasileiro. Sem comentários, só JSON.';
     const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({message:prompt,messages:[]})});
+    // ★ FIX (Agent 6): check r.ok BEFORE r.json() — if /api/ai returns 500
+    //    with an HTML error page, r.json() throws a confusing SyntaxError.
+    if(!r.ok) return null;
     const data=await r.json();
     if(!data.ok)throw new Error(data.error||'Meggy indisponível');
     // ★ parsing robusto: usa o helper compartilhado (window.__gdiParseJsonArray)
@@ -243,24 +269,29 @@
     const flashBtn=box.querySelector('#gdi-q-flasherr');
     if(flashBtn)flashBtn.onclick=()=>{
       const errIds=lsGet(LS_ERR,[]);
-      const errQs=questions().filter(q=>errIds.includes(q.id));
+      // ★ FIX (Agent 11 PERF-6): O(N×M) errQs used Array.includes — convert errIds to Set.
+      const errIdSet=new Set(Array.isArray(errIds)?errIds:[]);
+      const errQs=questions().filter(q=>errIdSet.has(q.id));
       if(!errQs.length){showToast('Nenhuma questão errada ainda');return;}
-      // usa o mesmo LS_CARDS do M22 ('gdi-cards-v1')
-      const LS_FC='gdi-cards-v1';
-      const cards=lsGet(LS_FC,[]);
+      // ★ FIX (Agent 5 R9 / Agent 14): route gdi-cards-v1 RMW through _cardsRMW
+      //    to serialize with startSession's auto-flashcard write.
       let n=0,dup=0;
-      errQs.forEach(q=>{
-        // evita duplicar: verifica se já existe flashcard com o mesmo enunciado
-        const front='Q: '+q.statement.slice(0,200);
-        const exists=cards.some(c=>c.f===front);
-        if(exists){dup++;return;}
-        const back='R: '+(q.options[q.correct]||'')+(q.explanation?('\n\n'+q.explanation):'');
-        cards.push({id:Date.now()+'-'+Math.random().toString(36).slice(2,7),f:front,b:back,path:q.subject||'',at:Date.now(),box:0,due:Date.now()+86400000});
-        n++;
+      _cardsRMW(cards=>{
+        // ★ FIX (Agent 11 PERF-6): O(N×M) cards.some(c=>c.f===front) inside errQs.forEach —
+        //    pre-compute a Set of existing fronts.
+        const frontSet=new Set(cards.map(c=>c.f));
+        errQs.forEach(q=>{
+          const front='Q: '+q.statement.slice(0,200);
+          if(frontSet.has(front)){dup++;return;}
+          const back='R: '+(q.options[q.correct]||'')+(q.explanation?('\n\n'+q.explanation):'');
+          cards.push({id:Date.now()+'-'+Math.random().toString(36).slice(2,7),f:front,b:back,path:q.subject||'',at:Date.now(),box:0,due:Date.now()+86400000});
+          frontSet.add(front);
+          n++;
+        });
+      }).then(()=>{
+        if(n)showToast(n+' flashcards criados'+(dup?' ('+dup+' já existiam)':''));
+        else showToast('Todos os flashcards já existiam ('+dup+')');
       });
-      lsSet(LS_FC,cards);
-      if(n)showToast(n+' flashcards criados'+(dup?' ('+dup+' já existiam)':''));
-      else showToast('Todos os flashcards já existiam ('+dup+')');
     };
   }
 
@@ -309,15 +340,16 @@
           // Task 8: errou → cria flashcard automaticamente
           if(!acertou){
             try{
-              const LS_FC='gdi-cards-v1';
-              const cards=lsGet(LS_FC,[]);
-              const front='Q: '+String(q.statement||'').slice(0,200);
-              // evita duplicar flashcard para a mesma questão
-              if(!cards.some(c=>c.f===front)){
+              // ★ FIX (Agent 5 R9 / Agent 14): route through _cardsRMW to serialize
+              //    concurrent flashcard writes (startSession rapid-fire miss).
+              // ★ FIX (Agent 11 PERF-6): O(N×M) cards.some(c=>c.f===front) — pre-compute Set.
+              _cardsRMW(cards=>{
+                const front='Q: '+String(q.statement||'').slice(0,200);
+                const frontSet=new Set(cards.map(c=>c.f));
+                if(frontSet.has(front)) return;
                 const back='R: '+(q.options[q.correct]||'')+(q.explanation?('\n\n'+q.explanation):'');
                 cards.push({id:Date.now()+'-'+Math.random().toString(36).slice(2,7),f:front,b:back,path:q.subject||'',at:Date.now(),box:0,due:Date.now()+86400000});
-                lsSet(LS_FC,cards);
-              }
+              });
             }catch(_){/* não bloqueia o fluxo */}
           }
           // marca visual
@@ -519,6 +551,11 @@
   }
 
   function startSimulado(box,queue,mins){
+    // ★ FIX (Agent 16 UIUX-11): clear any prior simulado timer before starting
+    //    a new one. Otherwise re-entering startSimulado (e.g. user clicks
+    //    'Iniciar simulado' twice) leaks the previous setInterval, which fires
+    //    finish() twice → duplicate simulado saved.
+    if(box.__simTimer){clearInterval(box.__simTimer);box.__simTimer=null;}
     let idx=0,answers=[],t0=Date.now();
     const deadline=Date.now()+mins*60000;
     function draw(){
@@ -634,6 +671,10 @@
       return;
     }
     // cronograma existe — mostra
+    // ★ FIX (Agent 10 Bug 24): defensive — if cron.plan was corrupted into a
+    //    non-array shape (or missing for legacy schemas), the .filter() below
+    //    would throw and break the tab. Coerce to [] first.
+    if(!Array.isArray(cron.plan)) cron.plan = [];
     const todayQ=todayStr();
     const hoje=cron.plan.filter(t=>t.date===todayQ);
     const futurasAll=cron.plan.filter(t=>t.date>todayQ);
@@ -695,7 +736,13 @@
     let items=[];
     qs.forEach(q=>{const s=srs[q.id];if(s){items.push({date:new Date(s.due).toISOString().slice(0,10),tipo:'questão',nome:q.subject,label:q.statement.slice(0,50)});}});
     srsFC.forEach(c=>{if(c.due){items.push({date:new Date(c.due).toISOString().slice(0,10),tipo:'flashcard',nome:'Flashcard',label:(c.f||'').slice(0,50)});}});
-    try{const d=GDIUser.dump();if(d&&d.resume){for(const k in d.resume){const r=d.resume[k];if(r.due){items.push({date:new Date(r.due).toISOString().slice(0,10),tipo:'aula',nome:'Retomar aula',label:k});}}}}catch(_){}
+    try{const d=GDIUser.dump();if(d&&d.resume){for(const k in d.resume){const r=d.resume[k];
+      // ★ FIX (Agent 10 Bug 25): GDIUser.resume entries use `at` (timestamp) and
+      //    `t` (title), NOT `due`. The `r.due` field never existed on resume
+      //    entries, so aulas were never scheduled on the calendar. Use `r.at`.
+      const dueTs = r.at || r.due || r.t;
+      if(dueTs){items.push({date:new Date(dueTs).toISOString().slice(0,10),tipo:'aula',nome:'Retomar aula',label:k});}
+    }}}catch(_){}
     // agrupa por data
     const byDate={};
     items.forEach(it=>{if(!byDate[it.date])byDate[it.date]=[];byDate[it.date].push(it);});
