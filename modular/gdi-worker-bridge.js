@@ -28,8 +28,8 @@
   // — mesmo proxy que o gdi-extras-loader.js usa. Consistência + cache controlada
   //   por CACHE_VERSION (sem CDN jsdelivr com cache stale).
   const WORKER_BASE = '/modular/';
-  const LIST_WORKER_URL  = WORKER_BASE + 'gdi-list-worker.js?v=' + (window.CACHE_VERSION || '99');
-  const PDF_WORKER_URL   = WORKER_BASE + 'meggy-pdf-worker.js?v=' + (window.CACHE_VERSION || '99');
+  const LIST_WORKER_URL  = WORKER_BASE + 'gdi-list-worker.js?v=' + (window.CACHE_VERSION || '100');
+  const PDF_WORKER_URL   = WORKER_BASE + 'meggy-pdf-worker.js?v=' + (window.CACHE_VERSION || '100');
 
   // ───────────────────────── LRU cache de listagem ─────────────────────────
   const LIST_TTL = 5 * 60 * 1000;        // 5 min (antes 45s)
@@ -46,7 +46,9 @@
   }
   function cacheSet(key, files){
     if (_listCache.size >= LIST_MAX) _listCache.delete(_listCache.keys().next().value);
-    _listCache.set(key, { at: Date.now(), files: files.slice() });
+    // ★ v1.0.98 FIX: guard null/non-array (Agent 18) — worker may resolve with null
+    // (e.g. {type:'done'} without files field) which would crash files.slice()
+    _listCache.set(key, { at: Date.now(), files: Array.isArray(files) ? files.slice() : [] });
   }
 
   // NÃO limpar em page:change — só invalidar quando o usuário pedir.
