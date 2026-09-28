@@ -142,6 +142,24 @@
     const qs=questions();
     const due=dueQ().length;
     const err=errQ().length;
+    // ★ FIX 20-6 #7 (Agent 6): pre-index questions by subject ONCE per render.
+    //    Previously drawSubjects() and drawList() each called questions() and
+    //    re-iterated all questions on every pagination/filter toggle:
+    //      • drawSubjects → forEach over all Qs (O(N)) + map by subject (O(N))
+    //      • drawList → all.filter(...) (O(N)) + reverse + slice + per-row render
+    //    On a 1000-question bank, toggling a subject pill = 3× full-array scans.
+    //    Now: _qBySubject is a Map<subject, Q[]>, _qAll is the source array.
+    //    drawSubjects reads map.keys() (already grouped), drawList reads
+    //    map.get(filter) (O(1) lookup) or _qAll when filter is null.
+    const _qAll = qs;
+    const _qBySubject = new Map();
+    for(let i=0; i<_qAll.length; i++){
+      const q = _qAll[i];
+      const s = q.subject || '—';
+      let bucket = _qBySubject.get(s);
+      if(!bucket){ bucket = []; _qBySubject.set(s, bucket); }
+      bucket.push(q);
+    }
     // ★ Hero state convidativo quando vazio / poucas questões
     const hero=qs.length<3?`<div class="gdi-dashboard-hero" style="background:linear-gradient(135deg,rgba(255,139,159,.10),rgba(93,222,218,.06));border:1px solid var(--ferreto-border-strong,#30363d);border-radius:16px;padding:24px 22px;margin-bottom:18px;">
         <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
@@ -176,13 +194,14 @@
     function drawSubjects(){
       const el=box.querySelector('#gdi-q-subjects');
       if(!el)return;
-      const all=questions();
-      if(!all.length){el.innerHTML='';return;}
-      const map={};
-      all.forEach(q=>{const s=q.subject||'—';map[s]=(map[s]||0)+1;});
-      const entries=Object.entries(map).sort((a,b)=>b[1]-a[1]);
-      let html=`<button class="gdi-mode-btn" data-s="" style="font-size:11px;padding:4px 10px;${_qFilterSubject===null?'background:var(--ferreto-grad);color:#fff;border:0;':''}">Todas (${all.length})</button>`;
-      entries.forEach(([s,n])=>{
+      // ★ FIX 20-6 #7: use pre-built index instead of re-reading questions()
+      if(!_qBySubject.size){el.innerHTML='';return;}
+      // Sort subjects by count desc — entries() already gives [subject, Q[]] pairs
+      const entries = Array.prototype.slice.call(_qBySubject.entries())
+        .sort(function(a,b){ return b[1].length - a[1].length; });
+      let html=`<button class="gdi-mode-btn" data-s="" style="font-size:11px;padding:4px 10px;${_qFilterSubject===null?'background:var(--ferreto-grad);color:#fff;border:0;':''}">Todas (${_qAll.length})</button>`;
+      entries.forEach(function(pair){
+        const s = pair[0], n = pair[1].length;
         const active=_qFilterSubject===s;
         html+=`<button class="gdi-mode-btn" data-s="${esc(s)}" style="font-size:11px;padding:4px 10px;${active?'background:var(--ferreto-grad);color:#fff;border:0;':''}">${esc(s)} (${n})</button>`;
       });
@@ -200,9 +219,9 @@
     // ★ PAGINAÇÃO: monta linhas em array, insere em lotes de QPAGE
     function drawList(){
       const list=box.querySelector('#gdi-q-list');
-      const all=questions();
-      if(!all.length){list.innerHTML='<div class="gdi-notes-empty">Nenhuma questão. Clique em "Gerar com Meggy" ou "Adicionar".</div>';return;}
-      const filtered=_qFilterSubject?all.filter(q=>(q.subject||'—')===_qFilterSubject):all;
+      // ★ FIX 20-6 #7: use pre-built index. O(1) lookup vs prior O(N) filter.
+      if(!_qAll.length){list.innerHTML='<div class="gdi-notes-empty">Nenhuma questão. Clique em "Gerar com Meggy" ou "Adicionar".</div>';return;}
+      const filtered = _qFilterSubject ? (_qBySubject.get(_qFilterSubject) || []) : _qAll;
       if(!filtered.length){list.innerHTML='<div class="gdi-notes-empty">Nenhuma questão nesta matéria.</div>';return;}
       const reversed=filtered.slice().reverse();
       // monta HTML de cada linha UMA vez em array
@@ -373,6 +392,75 @@
     draw();
   }
 
+  // ── Modal a11y helpers (★ FIX 20-6 #5 + #6 / Agent 6) ──
+  // bindModalA11y(overlay, opts) attaches:
+  //   • ESC keydown → close (calls opts.onClose, then overlay.remove())
+  //   • Tab/Shift+Tab focus trap (cycles between first & last focusable child)
+  //   • restores focus to opts.returnFocus element on close (best-effort)
+  // Returns a cleanup function that removes the keydown listener.
+  // Without these, the modals (openGen/openAddForm/openImport) violated WAI-ARIA
+  // dialog pattern: ESC didn't close, Tab could escape into background DOM, and
+  // keyboard users had no way to dismiss without finding the Cancel button.
+  const FOCUSABLE_SELECTOR = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+  function bindModalA11y(overlay, opts){
+    opts = opts || {};
+    const onClose = typeof opts.onClose === 'function' ? opts.onClose : function(){};
+    const returnFocus = opts.returnFocus || null;
+    let lastFocusedBeforeOpen = (typeof document !== 'undefined' && document.activeElement) || null;
+
+    function getFocusables(){
+      // querySelectorAll returns a static NodeList; convert to Array for easy indexing
+      const nodes = overlay.querySelectorAll(FOCUSABLE_SELECTOR);
+      return Array.prototype.slice.call(nodes).filter(function(el){
+        // filter out elements with zero size (display:none, etc.)
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 || rect.height > 0;
+      });
+    }
+
+    function handler(e){
+      if(e.key === 'Escape' || e.keyCode === 27){
+        e.preventDefault();
+        e.stopPropagation();
+        try{ onClose(); }catch(_){}
+        cleanup();
+        if(overlay.parentNode) overlay.remove();
+        if(returnFocus){ try{ returnFocus.focus(); }catch(_){} }
+        else if(lastFocusedBeforeOpen){ try{ lastFocusedBeforeOpen.focus(); }catch(_){} }
+        return;
+      }
+      if(e.key === 'Tab' || e.keyCode === 9){
+        const f = getFocusables();
+        if(!f.length) return;  // let the browser handle Tab naturally
+        const first = f[0], last = f[f.length - 1];
+        const active = (typeof document !== 'undefined' && document.activeElement) || null;
+        if(e.shiftKey){
+          // Shift+Tab on first → wrap to last
+          if(active === first || !overlay.contains(active)){
+            e.preventDefault();
+            try{ last.focus(); }catch(_){}
+          }
+        }else{
+          // Tab on last → wrap to first
+          if(active === last){
+            e.preventDefault();
+            try{ first.focus(); }catch(_){}
+          }
+        }
+      }
+    }
+    document.addEventListener('keydown', handler, true);
+    function cleanup(){
+      document.removeEventListener('keydown', handler, true);
+    }
+    // Auto-focus first focusable on next tick (lets DOM attach first)
+    setTimeout(function(){
+      const f = getFocusables();
+      if(f.length){ try{ f[0].focus(); }catch(_){} }
+    }, 50);
+    return cleanup;
+  }
+
   // ── Modal: gerar com ISA ──
   function openGen(parent,after){
     const aula=currentLesson();
@@ -391,6 +479,8 @@
         <button class="gdi-mode-btn" id="gdi-gen-x">Cancelar</button>
       </div></div>`;
     GDI_ROOT().appendChild(ov);
+    // ★ FIX 20-6 #5 + #6 (Agent 6): ESC closes; Tab focus-trap within modal.
+    bindModalA11y(ov, {});
     ov.querySelector('#gdi-gen-x').onclick=()=>ov.remove();
     ov.querySelector('#gdi-gen-go').onclick=async()=>{
       const tema=ov.querySelector('#gdi-gen-tema').value.trim();
@@ -430,6 +520,8 @@
         <button class="gdi-mode-btn" id="f-x">Cancelar</button>
       </div></div>`;
     GDI_ROOT().appendChild(ov);
+    // ★ FIX 20-6 #5 + #6 (Agent 6): ESC closes; Tab focus-trap within modal.
+    bindModalA11y(ov, {});
     const optsEl=ov.querySelector('#f-opts');
     const sel=ov.querySelector('#f-correct');
     for(let i=0;i<4;i++){
@@ -462,6 +554,8 @@
         <button class="gdi-mode-btn" id="imp-x">Cancelar</button>
       </div></div>`;
     GDI_ROOT().appendChild(ov);
+    // ★ FIX 20-6 #5 + #6 (Agent 6): ESC closes; Tab focus-trap within modal.
+    bindModalA11y(ov, {});
     ov.querySelector('#imp-x').onclick=()=>ov.remove();
     ov.querySelector('#imp-go').onclick=()=>{
       try{
@@ -551,6 +645,20 @@
   }
 
   function startSimulado(box,queue,mins){
+    // ★ FIX 20-6 #8 (Agent 6): empty-queue guard. The task spec mentioned
+    //    startQuizFromBank (which lives in meggy-questions.js, not this file),
+    //    but the equivalent function here (startSimulado) had the same hole:
+    //    if queue was empty, finish() would compute `Math.round(hits/total*100)`
+    //    = 0/0*100 = NaN% in the UI, and `saveSim(...)` would persist a
+    //    simulado with total:0. Now: bail early with a toast. This is
+    //    defensive — the #sim-go button is disabled when qs.length<5, but a
+    //    race (course filter selects 0 questions) could still pass an empty
+    //    queue. The pool<5 fallback at line ~520 re-uses qs, but a malicious
+    //    / scripted call could still get here.
+    if(!queue || !queue.length){
+      showToast('Sem questões para iniciar o simulado');
+      return;
+    }
     // ★ FIX (Agent 16 UIUX-11): clear any prior simulado timer before starting
     //    a new one. Otherwise re-entering startSimulado (e.g. user clicks
     //    'Iniciar simulado' twice) leaks the previous setInterval, which fires
