@@ -180,6 +180,13 @@
         overlay.remove();
       }
 
+      // ★ v1.0.100 FIX (BUG C-3): after closing modal, switch to "home" tab so user sees the course list
+      // Previously body was left empty because renderBody('addmateria') just opens the modal.
+      try{
+        const homeTab = document.querySelector('.gdi-central-tab[data-t="home"]');
+        if(homeTab) homeTab.click();
+      }catch(_){}
+
       // ★ 6) dispara batalhão em background (não-bloqueante)
       try{
         if(window.gdiIsaPdf && window.gdiIsaPdf.startBattalion){
@@ -765,8 +772,9 @@
     try{
       const S = window.__gdiStudy && window.__gdiStudy.state;
       const P = window.__gdiStudy && window.__gdiStudy.panel;
-      if(S && S.panel && S.panel.style.display==='flex' && S.tab && S.tab!=='home' && S.tab!=='addmateria'){
-        // só re-renderiza o body da aba atual
+      if(S && S.panel && S.panel.style.display==='flex' && S.tab && S.tab!=='addmateria'){
+        // ★ v1.0.100 FIX (BUG A-2): allow 'home' tab re-render (was blocked before)
+        //   Only skip 'addmateria' to avoid re-opening the modal.
         if(P && typeof P.renderBody === 'function') P.renderBody(S.tab);
       }
     }catch(_){}
@@ -949,9 +957,31 @@
       loadingEl.style.display='block';
       foldersEl.innerHTML='';
       currentInfoEl.style.display='none';
+      // ★ v1.0.100 FIX (BUG C-4): when navigating to '/', show drive list instead of fetching '/'
+      if(currentPath==='/'){
+        loadingEl.style.display='none';
+        if(window.drive_names && window.drive_names.length){
+          foldersEl.innerHTML='';
+          window.drive_names.forEach((dn,i)=>{
+            const card=document.createElement('div');
+            card.className='gdi-amc-folder-card';
+            card.dataset.p='/'+i+':';
+            card.dataset.n=dn;
+            card.style.cssText='padding:12px 14px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);border-radius:10px;cursor:pointer;transition:all .15s;';
+            card.innerHTML=`<div style="display:flex;align-items:center;gap:8px;"><i class="bi bi-hdd-stack-fill" style="color:var(--ferreto-primary,#ff8b9f);font-size:18px;flex:none;"></i><b style="color:var(--ferreto-text,#f0f6fc);font-size:13px;">${esc(dn)}</b><i class="bi bi-chevron-right" style="color:var(--ferreto-text-faint,#6b7488);font-size:12px;flex:none;margin-left:auto;"></i></div>`;
+            card.onmouseenter=()=>{card.style.borderColor='var(--ferreto-primary,#ff8b9f)';card.style.background='var(--ferreto-surface-3,rgba(255,255,255,.08))';};
+            card.onmouseleave=()=>{card.style.borderColor='var(--ferreto-border,#30363d)';card.style.background='var(--ferreto-surface-2,rgba(255,255,255,.04))';};
+            card.onclick=()=>navigate('/'+i+':/');
+            foldersEl.appendChild(card);
+          });
+        }else{
+          foldersEl.innerHTML='<p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;text-align:center;padding:20px;">Lista de drives indisponível. Recarregue a página.</p>';
+        }
+        return;
+      }
       try{
         // ★ ESTRATÉGIA: chama gdiListAllFiles (faz POST no path com paginação)
-        const pw=window.gdiGetPw?window.gdiGetPw():'';
+        const pw=window.gdiGetPw?window.gdiGetPw(currentPath):'';  // ★ v1.0.100 FIX: pass path arg (BUG C-1)
         let allFiles=[];
         if(window.gdiListAllFiles){
           try{
