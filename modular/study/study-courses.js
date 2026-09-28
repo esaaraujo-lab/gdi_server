@@ -1152,6 +1152,11 @@
         if(overlay&&overlay.parentNode){
           overlay.remove();
         }
+        // ★ v1.0.101 FIX (Agent 10 Bug 21): switch to home tab after closing modal
+        try{
+          const homeTab = document.querySelector('.gdi-central-tab[data-t="home"]');
+          if(homeTab) homeTab.click();
+        }catch(_){}
         // ★ BATALHÃO: dispara processamento em background (depois que modal já fechou)
         try{
           if(window.gdiIsaPdf && window.gdiIsaPdf.startBattalion){
