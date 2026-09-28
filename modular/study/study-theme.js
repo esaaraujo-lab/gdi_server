@@ -12,7 +12,14 @@
   if(window.__gdiStudyTheme) return;
   window.__gdiStudyTheme = true;
   window.__gdiStudy = window.__gdiStudy || {};
-  window.__gdiStudy.theme = { installed: true };
+  // ── Namespace exposure ──
+  window.__gdiStudy.theme = {
+    installed: true,
+    // ★ FIX 20-6 #15 (Agent 6): expose sanitizers so other modules can use
+    //    them when accepting user-provided theme/color values.
+    sanitizeThemeValue: _sanitizeThemeValue,
+    sanitizeHexColor: _sanitizeHexColor
+  };
 
   // ── Preserva guard original do monolito (gdi-study.js usava __gdiFerretoExtras) ──
   if(window.__gdiFerretoExtras) return;
@@ -178,8 +185,48 @@
   }
 
   // ── 4) Garante data-bs-theme em <html> p/ os tokens casarem ──
+  // ★ FIX 20-6 #15 (Agent 6): sanitize the theme value before setting it as
+  //    an HTML attribute. localStorage.getItem('gdi-theme') can hold any
+  //    string (an attacker with XSS write access, a buggy extension, or a
+  //    manual devtools edit could plant arbitrary content). Passing that
+  //    raw value to setAttribute('data-bs-theme', X) wouldn't directly
+  //    execute JS (attributes are not JS contexts), BUT:
+  //      • An attacker value like `dark" onclick="alert(1)` would be
+  //        double-quote-escaped by the browser (no XSS via attribute).
+  //      • However, an unknown theme value (e.g. 'auto', 'preferred') would
+  //        SILENTLY break CSS selectors like [data-bs-theme="dark"] / "light"
+  //        — the user would see no theme tokens applied, getting an
+  //        unstyled black-on-black page.
+  //    The sanitizer below restricts the value to the two known-good
+  //    literals ('dark' / 'light'), defaulting to 'dark' on anything else.
+  //
+  //    XSS in CSS color values: this file injects ZERO dynamic colors. All
+  //    colors are static hex/rgba literals in the template strings above
+  //    (lines 36-57). The _sanitizeHexColor() helper below is exported on
+  //    window.__gdiStudy.theme for other modules that DO accept user-provided
+  //    colors (e.g. study-tabs-legacy.js editSubject's color picker) — they
+  //    can use it to validate before injecting into style attributes.
+  function _sanitizeThemeValue(raw){
+    // Only allow the two canonical literals. Default to 'dark' on anything else.
+    const v = String(raw || '').toLowerCase().trim();
+    return (v === 'light') ? 'light' : 'dark';
+  }
+  // Hex color sanitizer — accepts #RGB, #RGBA, #RRGGBB, #RRGGBBAA, rgb()/rgba()
+  // with numeric components. Returns the value if it matches a safe pattern,
+  // or null if it doesn't (caller should fall back to a default).
+  // Used to prevent CSS injection via color values like `red; } .x { background: url(javascript:alert(1))`.
+  function _sanitizeHexColor(c){
+    if(typeof c !== 'string') return null;
+    const s = c.trim();
+    if(!s) return null;
+    // #RGB / #RGBA / #RRGGBB / #RRGGBBAA
+    if(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(s)) return s;
+    // rgb(r,g,b) / rgba(r,g,b,a) with 0-255 / 0-1 / percent components
+    if(/^rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(,\s*(0?\.\d+|\d{1,2}%|100%)\s*)?\)$/i.test(s)) return s;
+    return null;
+  }
   if(!document.documentElement.getAttribute('data-bs-theme')){
-    document.documentElement.setAttribute('data-bs-theme',localStorage.getItem('gdi-theme')||'dark');
+    document.documentElement.setAttribute('data-bs-theme', _sanitizeThemeValue(localStorage.getItem('gdi-theme')));
   }
 
   // ── 5) FIX modal serrilhada (belt-and-suspenders do CSS) ──
