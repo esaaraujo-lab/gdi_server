@@ -33,7 +33,7 @@
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
   // ★ v1.0.91: bump 92 → 93 (Shaka skin + Pomodoro sidebar + video-in-panel + PDF split + rest mode fix + OCR AI routing + parallel dispatch).
-  const CACHE_VERSION = '104';  // ★ v1.0.101: Fix /api/materials/meta field name + doAddCourseFromDrive home tab + questions.* null-guards
+  const CACHE_VERSION = '105';  // ★ v1.0.102: 100+ bug fixes from 20-agent review (security, race, CORS, subrequest, error handling, write chains, null guards, escHandler leaks, Bus.offGlobal)
   window.CACHE_VERSION = CACHE_VERSION;
 
   const MODULES = [
@@ -221,10 +221,32 @@
     return _bootstrapPromise;
   }
 
+  // ★ FIX Agent 7 Bug 7-9: `bootstrap()` é `async` e retorna `_bootstrapPromise`
+  // (uma IIFE async). A IIFE tem try/catch em torno de `loadCoreWithRetry()`
+  // (linha 180-189) e do loop de módulos (linha 200-209), MAS chamadas como
+  // `prefetchWorkers()` (linha 211) e `window.dispatchEvent(...)` (linha 218)
+  // NÃO estão dentro de try/catch — se qualquer uma lançar, a IIFE rejeita,
+  // `bootstrap()` rejeita, e como o caller não usa `.catch()`, vira unhandled
+  // rejection. O caminho DOMContentLoaded é pior: event listeners ignoram o
+  // valor de retorno, então a rejeição é garantidamente não-tratada.
+  // Agora both call sites usam `.catch()` para logar e engolir o erro.
+  function bootstrapSafe(){
+    try {
+      const p = bootstrap();
+      if (p && typeof p.catch === 'function') {
+        p.catch(e => console.error('[GDI Loader] bootstrap failed:', e && e.message || e));
+      }
+      return p;
+    } catch (e) {
+      console.error('[GDI Loader] bootstrap threw synchronously:', e && e.message || e);
+      return Promise.resolve();
+    }
+  }
+
   if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', bootstrap, {once:true});
+    document.addEventListener('DOMContentLoaded', bootstrapSafe, {once:true});
   }else{
-    bootstrap();
+    bootstrapSafe();
   }
 
   // gdiReloadExtras pode ser chamado manualmente, mas o guard impede re-carga
