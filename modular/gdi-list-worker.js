@@ -131,10 +131,7 @@ async function handleScan({ id, parentPath, subFolders, pw, initialItems }) {
 
 async function listOne(parentPath, folder, pw) {
   const fpath = parentPath + encodeURIComponent(folder.name) + '/';
-  let fpw = '';
-  if (typeof pw === 'function') fpw = pw(fpath);
-  else if (pw && typeof pw === 'object') fpw = pw[fpath] || '';
-  else if (typeof pw === 'string') fpw = pw;
+  const fpw = (typeof pw === 'function') ? pw(fpath) : (pw || '');
   // chamada direta à paginação interna (sem postMessage)
   const files = await listAllFilesInternal(fpath, fpw);
   return buildPlaylistFromFiles(files, fpath, folder.name);
@@ -176,10 +173,7 @@ async function handleProgress({ id, subFolders, parentPath, pw, isWatched }) {
   for (let k = 0; k < subFolders.length; k++) {
     const folder = subFolders[k];
     const fpath = parentPath + encodeURIComponent(folder.name) + '/';
-    let fpw = '';
-    if (typeof pw === 'function') fpw = pw(fpath);
-    else if (pw && typeof pw === 'object') fpw = pw[fpath] || '';
-    else if (typeof pw === 'string') fpw = pw;
+    const fpw = (typeof pw === 'function') ? pw(fpath) : (pw || '');
     const files = await listAllFilesInternal(fpath, fpw);
     self.postMessage({ type: 'progress', id, row: k, files, total: subFolders.length });
   }
