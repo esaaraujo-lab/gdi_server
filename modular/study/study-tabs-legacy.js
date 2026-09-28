@@ -74,6 +74,25 @@
   const saveCards=c=>lsSet(LS_CARDS,c);
   const dueCards=()=>cards().filter(c=>(c.due||0)<=Date.now());
 
+  // ★ FIX (Agent 14): serialize all gdi-cards-v1 read-modify-write cycles
+  //    through a local Promise chain. The three RMW sites in this module
+  //    (renderFlash delete, renderFlash add, studyFlash grade) each read
+  //    'gdi-cards-v1', mutate, write back. Without serialization, two
+  //    concurrent RMWs (e.g. user deletes a card while a study-grade is
+  //    pending) read the same snapshot and the second write loses the first.
+  let _localCardsChain = Promise.resolve();
+  function _cardsRMW(mutator){
+    _localCardsChain = _localCardsChain.then(async () => {
+      try{
+        const cur = lsGet(LS_CARDS, []);
+        if(!Array.isArray(cur)) return;
+        const next = mutator(cur);
+        if(next !== undefined) lsSet(LS_CARDS, next);
+      }catch(e){ console.warn('[study-tabs-legacy] _cardsRMW failed:', e && e.message); }
+    }).catch(()=>{});
+    return _localCardsChain;
+  }
+
   // ── Marathon helpers ──
   const marOn=()=>lsGet(LS_MAR,false)===true;
   const marIntro=()=>lsGet(LS_MARINTRO,true)!==false;
@@ -128,7 +147,10 @@
           </div>
           <button class="gdi-fc-card-del" title="Excluir"><i class="bi bi-x-lg"></i></button>`;
         card.onclick=(e)=>{if(e.target.closest('.gdi-fc-card-del'))return;card.classList.toggle('gdi-fc-flipped');};
-        card.querySelector('.gdi-fc-card-del').onclick=(e)=>{e.stopPropagation();saveCards(cards().filter(x=>x.id!==c.id));drawList();showToast('Cartão excluído');};
+        card.querySelector('.gdi-fc-card-del').onclick=(e)=>{e.stopPropagation();
+          // ★ FIX (Agent 14): route gdi-cards-v1 RMW through _cardsRMW
+          _cardsRMW(cur=>cur.filter(x=>x.id!==c.id)).then(()=>{drawList();showToast('Cartão excluído');});
+        };
         list.appendChild(card);
       });
     }
@@ -137,11 +159,13 @@
       const f=box.querySelector('#gdi-fc-f').value.trim();
       const b=box.querySelector('#gdi-fc-b').value.trim();
       if(!f||!b){showToast('Preencha frente e verso');return;}
-      const all=cards();
-      all.push({id:Date.now()+'-'+Math.random().toString(36).slice(2,7),f,b,path:currentAula||'',lesson:currentAula?realName(currentAula):'',at:Date.now(),box:0,due:Date.now()+86400000});
-      saveCards(all);
-      box.querySelector('#gdi-fc-f').value='';box.querySelector('#gdi-fc-b').value='';
-      drawList();showToast('Cart\u00e3o adicionado');
+      // ★ FIX (Agent 14): route gdi-cards-v1 RMW through _cardsRMW
+      _cardsRMW(all=>{
+        all.push({id:Date.now()+'-'+Math.random().toString(36).slice(2,7),f,b,path:currentAula||'',lesson:currentAula?realName(currentAula):'',at:Date.now(),box:0,due:Date.now()+86400000});
+      }).then(()=>{
+        box.querySelector('#gdi-fc-f').value='';box.querySelector('#gdi-fc-b').value='';
+        drawList();showToast('Cart\u00e3o adicionado');
+      });
     };
     box.querySelector('#gdi-fc-study').onclick=()=>studyFlash(box);
   }
@@ -202,17 +226,16 @@
     }
     function grade(g){
       const c=queue[i];
-      const all=cards();
-      const ix=all.findIndex(x=>x.id===c.id);
-      if(ix>=0){
-        const result=window.gdiGradeCard(all[ix],g);
-        all[ix].box=result.box;
-        all[ix].due=result.due;
-        all[ix].lastReview=result.lastReview;
-        saveCards(all);
-      }
-      if(g===3||g===4)ok++;
-      i++;draw();
+      // ★ FIX (Agent 14): route gdi-cards-v1 RMW through _cardsRMW
+      _cardsRMW(all=>{
+        const ix=all.findIndex(x=>x.id===c.id);
+        if(ix>=0){
+          const result=window.gdiGradeCard(all[ix],g);
+          all[ix].box=result.box;
+          all[ix].due=result.due;
+          all[ix].lastReview=result.lastReview;
+        }
+      }).then(()=>{ if(g===3||g===4)ok++; i++;draw(); });
     }
     draw();
   }
