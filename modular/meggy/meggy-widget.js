@@ -423,7 +423,7 @@
       if(action === 'resumir') prompt = `Gere um resumo${ctx}desta aula`;
       else if(action === 'questoes') prompt = `Crie 5 questões${ctx}sobre o tema desta aula`;
       else if(action === 'explicar') prompt = `Explique${ctx}o conceito principal desta aula`;
-      if(prompt){ input.value = prompt; send(); }
+      if(prompt){ input.value = prompt; await send(); }
     };
   });
 
@@ -701,6 +701,33 @@
     banner.__timer = setTimeout(() => { banner.style.display='none'; }, 8000);
   }
 
+  // ═══ FIX-MEGGY #13/#14/#15 (Agent 20 Bug 9/10/11): auth:change cleanup ═══
+  // When the user logs out (auth state → 'out'), drop all session-bound state:
+  //   • _browserSession / _serverEnabled / _serverProvider — these were probed
+  //     for the PREVIOUS user's account; keeping them would make the next user
+  //     see a stale "AI available" badge before the re-probe completes (and the
+  //     cached _browserSession could even point to the previous user's model).
+  //   • messages + sessionStorage('gdi-ai-chat') — chat history is per-user.
+  //   • _memDebounce — clear the pending updateMemory timer so it doesn't fire
+  //     AFTER logout and write to the (now-stale) memory key.
+  function destroySession(){
+    _browserSession=null;
+    _serverEnabled=null;
+    _serverProvider=null;
+    messages=[];
+    try{ sessionStorage.removeItem(STORE); }catch(_){}
+    if(_memDebounce){ clearTimeout(_memDebounce); _memDebounce=null; }
+    // also re-render the (now empty) chat history if the panel is open
+    try{ renderHistory(); }catch(_){}
+  }
+  if(typeof Bus !== 'undefined' && typeof Bus.onGlobal === 'function'){
+    Bus.onGlobal('auth:change', (state)=>{
+      if(state === 'out' || state === 'logout'){
+        try{ destroySession(); }catch(_){}
+      }
+    });
+  }
+
   // ── Namespace exports ──
   window.__gdiMeggy.widget = {
     open, close, toggle,
@@ -714,7 +741,9 @@
     // ★ Task 9 (Scanner Distribuído): shared materials bridge
     tryOpenSharedMaterial, displaySharedMaterial, addSharedHint,
     getCurrentLessonPath,
-    __gdiMeggySuggest
+    __gdiMeggySuggest,
+    // ★ FIX-MEGGY #13: explicit teardown hook (used when Bus is unavailable)
+    destroySession
   };
 
   // ── Aliases para compatibilidade (código externo espera estas globais) ──
