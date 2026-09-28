@@ -464,6 +464,15 @@ body.gdi-fv .gdi-player-wrap iframe{
     // antes de updateUI() no final do init(). Estava duplicado em 3 lugares.
     Bus.onGlobal('title:change',()=>setTimeout(refreshBase,30));
     function persist(){try{localStorage.setItem(SKEY,JSON.stringify({phase:st.phase,total:st.total,remain:st.remain,running:st.running,dots:st.dots,endAt:st.endAt}))}catch(e){}}
+    // ★ FIX Task 20-4 #11: persistência debounce 2s. Antes, persist() só
+    // rodava em state changes (start/pause/next/reset) — enquanto o timer
+    // corria 25min, s.remain NUNCA era salvo. Se o user fechasse a aba
+    // mid-pomodoro, o estado reloadado mostrava o remain do START (25:00)
+    // em vez do tempo real decorrido. Agora o interval 250ms chama
+    // maybePersist(), que throttle para 1 save a cada 2s — suficiente
+    // para sobreviver a crashes sem hammer localStorage (4 writes/min).
+    let _lastPomPersist=0;
+    function maybePersist(){const now=Date.now();if(now-_lastPomPersist>2000){_lastPomPersist=now;persist();}}
     (function(){const s=safeParse(localStorage.getItem(SKEY));if(!s)return;
       st.phase=s.phase||'work';st.dots=s.dots||0;st.total=s.total||st.total;
       st.remain=(s.remain!=null&&s.remain>0)?s.remain:st.total;st.running=false;st.endAt=0;})();
@@ -515,10 +524,13 @@ body.gdi-fv .gdi-player-wrap iframe{
         document.title=fmt(st.remain)+' '+emoji+' \u00b7 '+baseTitle;
       }}
     function startLoop(){clearInterval(timer);st.running=true;
+      _lastPomPersist=0;  // ★ Task 20-4 #11: força persist no 1o tick
       timer=setInterval(()=>{st.remain=Math.max(0,Math.round((st.endAt-Date.now())/1000));
         if(st.remain<=0){next();return;}
         if(st.remain<=10&&st.remain!==lastWarn){lastWarn=st.remain;beep(880+(10-st.remain)*20,.12,'square',.3);}
-        updateUI();},250);
+        updateUI();
+        maybePersist();  // ★ Task 20-4 #11: throttled para 1×/2s
+      },250);
       lastWarn=-1;updateUI();}
     function start(){st.endAt=Date.now()+st.remain*1000;persist();startLoop();}
     function pause(){clearInterval(timer);timer=null;st.running=false;
@@ -994,6 +1006,20 @@ body.gdi-fv .gdi-player-wrap iframe{
   // ★U.6: guard flag — o MutationObserver em #count disparava line() quando
   // a própria line() inseria #gdi-progress-line como sibling, criando um
   // loop de re-render. O flag corta o disparo durante a mutação.
+  //
+  // ★ VERIFIED Task 20-4 #12: o flag funciona corretamente. Ordem temporal:
+  //   1. line() seta __m14Mutating=true
+  //   2. line() muta el.innerHTML (síncrono — agenda microtask do observer)
+  //   3. line() schedules setTimeout(()=>{__m14Mutating=false;},0) (macrotask)
+  //   4. line() retorna
+  //   5. Microtask queue: MutationObserver callback dispara.
+  //      __m14Mutating===true → callback return early. ✓
+  //   6. Macrotask queue: setTimeout fires, __m14Mutating=false.
+  // Microtasks sempre rodam ANTES de macrotasks no event loop, então o
+  // callback sempre vê o flag true e pula. Sem loop. Observado: o observer
+  // em #count não dispara para mutações em #gdi-progress-line (sibling),
+  // então o flag é na verdade defesa em profundidade — não há loop real
+  // mesmo sem ele. ✓
   let __m14Mutating=false;
   // ★FIX (Task 8): busy guard — impede modProgress de rodar concorrentemente.
   // Antes: se schedule() disparasse runAll() 2× seguidas (DOMContentLoaded +
@@ -1142,6 +1168,19 @@ body.gdi-fv .gdi-player-wrap iframe{
   Bus.onGlobal('user:ready',()=>{try{line()}catch(_){}});
 })();
 
+// ★ VERIFIED Task 20-4 #13: gdiGetPw() audit em gdi-ui.js. Ambas as
+// chamadas passam o path:
+//   linha 1050 (worker): gdiListAllFiles(href, gdiGetPw(href))  ✓
+//   linha 1137 (course): gdiListAllFiles(base, gdiGetPw(base))  ✓
+// A stub `function gdiGetPw(){return''}` em app.min.js (linha 59) é
+// sobrescrita por `window.gdiGetPw=function(p){...}` em gdi-core.js
+// (M1, linha ~490), que é a implementação real (XOR + btoa). Em scripts
+// non-module, function declarations no top level viram propriedades de
+// window — então `window.gdiGetPw=...` substitui a stub. Calls
+// `gdiGetPw(href)` resolvem para a versão M1, recebendo `p`. ✓
+// Bug real (fora de escopo): study-panel.js:653 chama gdiGetPw() sem
+// path — pré-existente, precisa de patch em study-panel.js.
+
 // ═══ M16: PWA best-effort ═══
 (function(){
   try{
@@ -1235,16 +1274,28 @@ window.GDI_MODULES.push({name:'debug',init:function(){
       document.title=next;
     }catch(_){}
   }
+  // ★ FIX Task 20-4 #10: o MutationObserver em <title> era criado mas
+  // nunca armazenado nem desconectado. Em SPAs longas (muitas page:change),
+  // múltiplas instâncias podiam se acumular se bindTitle rodasse mais de
+  // uma vez (fallback do setTimeout se <title> não existisse no 1o disparo).
+  // Agora trackeamos a ref e desconectamos antes de re-observar.
+  let _titleObs=null;
   function bindTitle(){
     const el=document.querySelector('title');
     if(!el){setTimeout(bindTitle,400);return;}
-    new MutationObserver(apply).observe(el,{childList:true,characterData:true,subtree:true});
+    if(_titleObs){try{_titleObs.disconnect();}catch(_){}_titleObs=null;}
+    const obs=new MutationObserver(apply);
+    obs.observe(el,{childList:true,characterData:true,subtree:true});
+    _titleObs=obs;
   }
   bindTitle();
   // ★U.5: setInterval(apply,1500) removido — o MutationObserver em <title>
   // já dispara apply() quando o título muda, e Bus.onGlobal('title:change')
   // cobre mudanças externas. O intervalo era redundante.
-  Bus.onGlobal('page:change',apply);
+  // ★ Task 20-4 #10: page:change re-binda o observer — defensivo contra
+  // troca rara do <title> element (ex.: framework que reescreve <head>).
+  // bindTitle() desconecta o anterior antes de criar um novo.
+  Bus.onGlobal('page:change',()=>{bindTitle();apply();});
   Bus.onGlobal('title:change',apply);
   Bus.onGlobal('video:switched',()=>setTimeout(apply,150));
   Bus.onGlobal('media:ready',apply);
