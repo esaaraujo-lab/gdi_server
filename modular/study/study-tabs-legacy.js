@@ -50,6 +50,43 @@
   const dec=s=>{try{return decodeURIComponent(String(s||''))}catch(_){return String(s||'')}};
   const norm=p=>dec(String(p||'').split('?')[0].replace(/\/+$/,''));
   const stripExt=s=>String(s||'').replace(/\.[a-z0-9]{1,5}$/i,'').trim();
+
+  // ★ FIX 20-6 #12 (Agent 6): bindEscToModal(overlay, closeFn) — attaches a
+  //    keydown ESC listener that closes the modal cleanly (calls closeFn,
+  //    removes the overlay, and removes itself). Without this, the
+  //    editSubject/editTrail modals violated WAI-ARIA: ESC did nothing, and
+  //    keyboard users had to find the Cancel/X button to dismiss.
+  //    Returns a cleanup function that removes the listener (for use by the
+  //    modal's other close paths to avoid orphan listeners).
+  function bindEscToModal(overlay, closeFn){
+    const escHandler = function(e){
+      if(e.key === 'Escape' || e.keyCode === 27){
+        e.preventDefault();
+        e.stopPropagation();
+        try{ closeFn(); }catch(_){}
+        // closeFn is responsible for overlay.remove(); we just remove the listener.
+        document.removeEventListener('keydown', escHandler, true);
+      }
+    };
+    document.addEventListener('keydown', escHandler, true);
+    return function cleanup(){
+      document.removeEventListener('keydown', escHandler, true);
+    };
+  }
+
+  // ★ FIX 20-6 #13 (Agent 6): debounce(fn, ms) — used by renderSubjects'
+  //    search input to throttle O(N) re-filter+re-render work per keystroke.
+  //    Without debouncing, typing 5 chars fires 5 re-renders; each iterates
+  //    all subjects + all flashcards (countByName map) — wasteful for users
+  //    with 50+ subjects. 300ms is the standard a11y-recommended debounce.
+  function debounce(fn, ms){
+    let t = null;
+    return function(){
+      const args = arguments, self = this;
+      if(t) clearTimeout(t);
+      t = setTimeout(function(){ t = null; try{ fn.apply(self, args); }catch(_){} }, ms);
+    };
+  }
   const GW=/^(aula|aulas|v\u00eddeo|videos?|li[cç][aã]o|li[cç][oõ]es|licoes|lesson|class|modulo|m\u00f3dulo|module|parte|pt|cap|capitulo|ext|ep|live|arquivo|file)$/i;
   function isGeneric(n){
     n=stripExt(n).toLowerCase();if(!n)return true;
@@ -275,13 +312,43 @@
         </div>
         <button id="gdi-subj-add" class="gdi-btn gdi-btn-primary" style="font-size:12px;"><i class="bi bi-plus-lg"></i> Nova matéria</button>
       </div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+        <input id="gdi-subj-search" placeholder="Filtrar matérias por nome..." style="flex:1;min-width:200px;max-width:380px;background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);padding:8px 12px;font-size:13px;font-family:inherit;">
+        <span id="gdi-subj-search-count" style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;"></span>
+      </div>
       <div id="gdi-subj-list" style="display:flex;flex-direction:column;gap:8px;"></div>
     </div>`;
     const list=box.querySelector('#gdi-subj-list');
+    const searchInput=box.querySelector('#gdi-subj-search');
+    const searchCountEl=box.querySelector('#gdi-subj-search-count');
+    // ★ FIX 20-6 #13 (Agent 6): _subjFilter holds the current filter string.
+    //    drawList() reads it to filter subjects by name (case-insensitive).
+    //    The search input's input event is debounced 300ms via the debounce()
+    //    helper — without debouncing, each keystroke triggered a full re-render
+    //    (cardsArr read + countByName map + DOM rebuild). For users with 50+
+    //    subjects, typing 5 chars = 5 full re-renders in quick succession.
+    let _subjFilter = '';
     function drawList(){
       const all=window.gdiSubjects.get();
       if(!all.length){
         list.innerHTML='<div class="gdi-notes-empty" style="padding:40px;text-align:center;"><i class="bi bi-journal-text" style="font-size:36px;display:block;margin-bottom:10px;color:var(--ferreto-text-faint,#6b7488);"></i>Nenhuma matéria criada ainda.<br><span style="font-size:12px;">Clique em "Nova matéria" para começar.</span></div>';
+        if(searchCountEl)searchCountEl.textContent='';
+        return;
+      }
+      // ★ FIX 20-6 #13: apply filter BEFORE building countByName (cheaper if
+      //    filter narrows the set significantly). Filter is case-insensitive
+      //    substring match on subject.name. Empty filter shows all.
+      const filterLower = _subjFilter.toLowerCase().trim();
+      const filtered = filterLower
+        ? all.filter(function(s){ return s && s.name && String(s.name).toLowerCase().indexOf(filterLower) !== -1; })
+        : all;
+      if(searchCountEl){
+        searchCountEl.textContent = filterLower
+          ? (filtered.length + ' de ' + all.length + ' matérias')
+          : (all.length + (all.length === 1 ? ' matéria' : ' matérias'));
+      }
+      if(!filtered.length){
+        list.innerHTML='<div class="gdi-notes-empty" style="padding:30px;text-align:center;"><i class="bi bi-search" style="font-size:30px;display:block;margin-bottom:8px;color:var(--ferreto-text-faint,#6b7488);"></i>Nenhuma matéria corresponde a "'+escHtml(_subjFilter)+'".</div>';
         return;
       }
       const cardsArr=lsGet('gdi-cards-v1',[]);
@@ -291,7 +358,7 @@
         if(s)countByName[s]=(countByName[s]||0)+1;
       });
       list.innerHTML='';
-      all.forEach(s=>{
+      filtered.forEach(s=>{
         const count=countByName[s.name]||0;
         const el=document.createElement('div');
         el.className='gdi-note';
@@ -327,6 +394,14 @@
       });
     }
     drawList();
+    // ★ FIX 20-6 #13: debounced input listener — 300ms standard for search-as-you-type.
+    if(searchInput){
+      const debouncedFilter = debounce(function(){
+        _subjFilter = searchInput.value || '';
+        drawList();
+      }, 300);
+      searchInput.addEventListener('input', debouncedFilter);
+    }
     box.querySelector('#gdi-subj-add').onclick=()=>editSubject(null,box,drawList);
   }
   function editSubject(id,box,afterSave){
@@ -382,9 +457,13 @@
       selColor=b.dataset.cl;
     });
     const close=()=>overlay.remove();
-    overlay.querySelector('#gdi-subj-x').onclick=close;
-    overlay.querySelector('#gdi-subj-cancel').onclick=close;
-    overlay.onclick=(e)=>{if(e.target===overlay)close();};
+    // ★ FIX 20-6 #12 (Agent 6): ESC handler — close modal on Escape.
+    //    Also remove the listener when other close paths fire (X, Cancel,
+    //    backdrop click) so we don't leak listeners across opens.
+    const escCleanup = bindEscToModal(overlay, close);
+    overlay.querySelector('#gdi-subj-x').onclick=()=>{escCleanup();close();};
+    overlay.querySelector('#gdi-subj-cancel').onclick=()=>{escCleanup();close();};
+    overlay.onclick=(e)=>{if(e.target===overlay){escCleanup();close();}};
     overlay.querySelector('#gdi-subj-save').onclick=()=>{
       const name=overlay.querySelector('#gdi-subj-name').value.trim();
       if(!name){showToast('Digite o nome da matéria');return;}
@@ -395,6 +474,7 @@
         name,icon:selIcon,color:selColor,goal,notes,
         createdAt:existing?existing.createdAt:Date.now()
       });
+      escCleanup();
       close();
       showToast(existing?'Matéria atualizada':'Matéria criada!');
       if(afterSave)afterSave();
@@ -509,9 +589,13 @@
       selIcon=b.dataset.ic;
     });
     const close=()=>overlay.remove();
-    overlay.querySelector('#gdi-trail-x').onclick=close;
-    overlay.querySelector('#gdi-trail-cancel').onclick=close;
-    overlay.onclick=(e)=>{if(e.target===overlay)close();};
+    // ★ FIX 20-6 #12 (Agent 6): ESC handler — close modal on Escape.
+    //    Also remove the listener when other close paths fire (X, Cancel,
+    //    backdrop click) so we don't leak listeners across opens.
+    const escCleanup = bindEscToModal(overlay, close);
+    overlay.querySelector('#gdi-trail-x').onclick=()=>{escCleanup();close();};
+    overlay.querySelector('#gdi-trail-cancel').onclick=()=>{escCleanup();close();};
+    overlay.onclick=(e)=>{if(e.target===overlay){escCleanup();close();}};
     overlay.querySelector('#gdi-trail-save').onclick=()=>{
       const name=overlay.querySelector('#gdi-trail-name').value.trim();
       if(!name){showToast('Digite o nome da trilha');return;}
@@ -523,6 +607,7 @@
         courses:existing?existing.courses:[],
         createdAt:existing?existing.createdAt:Date.now()
       });
+      escCleanup();
       close();
       showToast(existing?'Trilha atualizada':'Trilha criada!');
       if(afterSave)afterSave();
