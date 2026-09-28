@@ -107,10 +107,6 @@
   let _qFilterSubject=null; // null = todas (closure-private; synced from window._qFilterSubject)
   let _qShown=0;            // quantas questões já estão renderizadas
   const QPAGE=20;
-  // ★ P1 FIX: filtros dropdown por curso/disciplina (Questões) + timer do simulado
-  let _qCourseFilter=null;     // null = Todos os cursos
-  let _qDisciplineFilter=null; // null = Todas as disciplinas
-  let _simuladoTimer=null;     // setInterval do simulado ativo (p/ limpar ao trocar aba)
   function renderQuestoes(box){
     // ★ v1.0.86 FIX (radar→questions filter bug): sync closure var from
     // window._qFilterSubject, which is written by renderRadar in
@@ -134,14 +130,6 @@
     _qShown=0; // reset ao entrar na aba
     box.innerHTML=`
       ${hero}
-      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-        <select id="gdi-q-course-filter" style="background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);font-size:12px;padding:6px 10px;">
-          <option value="">Todos os cursos</option>
-        </select>
-        <select id="gdi-q-discipline-filter" style="background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);font-size:12px;padding:6px 10px;">
-          <option value="">Todas as disciplinas</option>
-        </select>
-      </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
         <b style="color:var(--ferreto-text,#f0f6fc);">${qs.length} questões</b>
         ${due?`<span style="color:var(--ferreto-primary,#ff8b9f);font-size:12px;">${due} p/ revisar hoje</span>`:''}
@@ -156,186 +144,13 @@
         <button id="gdi-q-flasherr" class="gdi-mode-btn" style="font-size:12px;" ${err?'':'disabled'} title="Cria flashcards a partir das questões que você errou"><i class="bi bi-card-text"></i> Flashcards das erradas</button>
       </div>
       <div id="gdi-q-subjects" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;max-width:760px;"></div>
-      <div id="gdi-q-list" style="display:flex;flex-direction:column;gap:10px;max-width:760px;"></div>
-      <h4 class="gdi-q-section" style="margin-top:24px;">Questões da comunidade</h4>
-      <div id="gdi-q-shared" style="display:flex;flex-direction:column;gap:10px;max-width:760px;"></div>
+      <div id="gdi-q-list" style="display:flex;flex-direction:column;gap:8px;max-width:760px;"></div>
     `;
-    // ★ REVIEW-02 FIX: cascading dropdowns — when course changes, the discipline
-    // dropdown now re-populates with ONLY that course's disciplines (was static —
-    // showed ALL disciplines regardless of course selection, so picking a course
-    // left stale disciplines that yielded zero results). Also: course filter now
-    // uses exact match on q.course/q.path (was loose .includes() on subject).
-    function matchesCourse(q){
-      if(!_qCourseFilter)return true;
-      // exact match on explicit course/path fields; substring fallback on
-      // subject for legacy questions that never had a course field attached.
-      return (q.course&&q.course===_qCourseFilter)||
-             (q.path&&q.path===_qCourseFilter)||
-             (q.subject&&String(q.subject).includes(_qCourseFilter));
-    }
-    function populateDisciplines(){
-      const _discSel=box.querySelector('#gdi-q-discipline-filter');
-      if(!_discSel)return;
-      // sync from _qFilterSubject (radar/pills may have set it externally)
-      if(_qFilterSubject && _qDisciplineFilter !== _qFilterSubject){
-        _qDisciplineFilter=_qFilterSubject;
-      }
-      const prev=_qDisciplineFilter;
-      // build subject map from course-filtered pool
-      const _subjMap={};
-      questions().forEach(function(q){
-        if(!matchesCourse(q))return;
-        var s=q.subject||'—';
-        _subjMap[s]=(_subjMap[s]||0)+1;
-      });
-      // remove all options except the placeholder
-      while(_discSel.options.length>1)_discSel.remove(1);
-      Object.keys(_subjMap).sort().forEach(function(s){
-        var opt=document.createElement('option');
-        opt.value=s;opt.textContent=s+' ('+_subjMap[s]+')';
-        _discSel.appendChild(opt);
-      });
-      // restore selection if still present in the new pool
-      if(prev && _subjMap[prev]){_discSel.value=prev;}
-    }
-    // ★ P1 FIX: popula dropdowns de curso/disciplina (Questões)
-    try {
-      var _courses = (typeof window.collectCourses === 'function') ? window.collectCourses() : [];
-      var _courseSel = box.querySelector('#gdi-q-course-filter');
-      if(_courseSel && _courses.length) {
-        _courses.forEach(function(c) {
-          // extrai nome legível do curso (mesma lógica do renderSimulado)
-          var seg = String(c.key||'').split('/').filter(Boolean).slice(1).join('/');
-          var name = seg || c.key || c.name || c.coursePath || 'Curso';
-          try { name = decodeURIComponent(name); } catch(_) {}
-          var opt = document.createElement('option');
-          opt.value = name; opt.textContent = name;
-          if(_qCourseFilter === name) opt.selected = true;
-          _courseSel.appendChild(opt);
-        });
-        _courseSel.onchange = function() {
-          _qCourseFilter = _courseSel.value || null;
-          // ★ REVIEW-02: course changed → reset discipline filter (the previously
-          // selected discipline may not exist in the new course) and re-populate.
-          _qDisciplineFilter = null;
-          _qFilterSubject = null;
-          window._qFilterSubject = null;
-          populateDisciplines();
-          _qShown = 0;
-          drawSubjects();
-          drawList();
-          loadShared();
-        };
-      }
-      var _discSel = box.querySelector('#gdi-q-discipline-filter');
-      if(_discSel) {
-        // ★ REVIEW-02: initial population via shared helper (respects course filter)
-        populateDisciplines();
-        _discSel.onchange = function() {
-          _qDisciplineFilter = _discSel.value || null;
-          // sincroniza com as pills de subject (reutiliza lógica existente)
-          _qFilterSubject = _qDisciplineFilter;
-          window._qFilterSubject = _qFilterSubject;
-          _qShown = 0;
-          drawSubjects();
-          drawList();
-          loadShared();
-        };
-      }
-    }catch(_){}
-    // ★ REVIEW-02: card renderer — statement + alternatives + answer + show-answer
-    // toggle. Defined at renderQuestoes scope so both drawList and loadShared reuse it.
-    const rowHtmlFor=q=>{
-      const s=qSrs()[q.id];
-      const dueNow=!s||s.due<=Date.now();
-      const isShared=(q.source==='shared');
-      const correct=Number(q.correct)||0;
-      const opts=Array.isArray(q.options)?q.options:[];
-      const alternatives=opts.map((opt,i)=>{
-        const isCorrect=i===correct;
-        return `<div class="gdi-q-opt${isCorrect?' gdi-q-opt-correct':''}">
-          <span class="gdi-q-opt-letter">${String.fromCharCode(65+i)})</span>
-          <span class="gdi-q-opt-text">${esc(opt)}</span>
-          ${isCorrect?'<span class="gdi-q-opt-check" title="Alternativa correta"><i class="bi bi-check2-circle"></i></span>':''}
-        </div>`;
-      }).join('');
-      const expl=q.explanation?`<div class="gdi-q-expl"><b><i class="bi bi-lightbulb"></i> Explicação:</b> ${esc(q.explanation)}</div>`:'';
-      const srcBadge=isShared
-        ? `<span class="gdi-q-badge gdi-q-badge-shared" title="Questão compartilhada pela comunidade"><i class="bi bi-people"></i> comunidade</span>`
-        : `<span class="gdi-q-badge gdi-q-badge-src">${esc(q.source||'manual')}</span>`;
-      const courseSeg=(q.course||q.path)?String(q.course||q.path||'').split('/').filter(Boolean).slice(-1)[0]:'';
-      const courseLbl=courseSeg?`<span class="gdi-q-badge gdi-q-badge-course" title="Curso"><i class="bi bi-journal-text"></i> ${esc(courseSeg)}</span>`:'';
-      const srsBadge=!isShared?(s?`<span class="gdi-q-badge gdi-q-badge-srs" title="Caixa Leitner (SRS)">\uD83D\uDCE6 box ${s.box}</span>`:`<span class="gdi-q-badge gdi-q-badge-srs" title="Ainda não respondida">\u25CB nova</span>`):'';
-      const dueBadge=!isShared?(dueNow?`<span class="gdi-q-badge gdi-q-badge-due" title="Vencida para revisão hoje"><i class="bi bi-clock"></i> revisar hoje</span>`:`<span class="gdi-q-badge gdi-q-badge-future" title="Próxima revisão"><i class="bi bi-calendar3"></i> ${fmtDate(new Date(s.due).toISOString().slice(0,10))}</span>`):'';
-      return `<div class="gdi-q-card" data-qid="${esc(q.id)}">
-        <div class="gdi-q-card-head">
-          <div class="gdi-q-card-meta">
-            <b class="gdi-q-subj">${esc(q.subject||'—')}</b>
-            ${srcBadge}${courseLbl}${srsBadge}${dueBadge}
-          </div>
-          ${isShared?'':`<button class="gdi-note-del" data-del="${esc(q.id)}" title="Excluir questão"><i class="bi bi-x-lg"></i></button>`}
-        </div>
-        <div class="gdi-q-stmt">${esc(q.statement)}</div>
-        <div class="gdi-q-answer" hidden>
-          <div class="gdi-q-opts">${alternatives}</div>
-          ${expl}
-        </div>
-        <div class="gdi-q-card-foot">
-          <button class="gdi-mode-btn gdi-q-toggle" data-toggle="${esc(q.id)}"><i class="bi bi-eye"></i> Mostrar resposta</button>
-        </div>
-      </div>`;
-    };
-    // ★ REVIEW-02: event delegation for delete + show-answer toggle. Works after
-    // load-more append without rebinding (delegation lives on the container).
-    function wireCardActions(container){
-      if(!container)return;
-      container.onclick=(e)=>{
-        const delBtn=e.target.closest('[data-del]');
-        if(delBtn){
-          // ★ REVIEW-02 FIX: delete now requires confirmation (was instant —
-          //   accidental clicks silently destroyed questions + SRS history).
-          if(!confirm('Excluir esta questão? Esta ação não pode ser desfeita.'))return;
-          delQ(delBtn.dataset.del);drawSubjects();_qShown=0;drawList();return;
-        }
-        const togBtn=e.target.closest('[data-toggle]');
-        if(togBtn){
-          const card=togBtn.closest('.gdi-q-card');
-          if(!card)return;
-          const ans=card.querySelector('.gdi-q-answer');
-          if(!ans)return;
-          if(ans.hasAttribute('hidden')){ans.removeAttribute('hidden');togBtn.innerHTML='<i class="bi bi-eye-slash"></i> Ocultar resposta';}
-          else{ans.setAttribute('hidden','');togBtn.innerHTML='<i class="bi bi-eye"></i> Mostrar resposta';}
-        }
-      };
-    }
-    // ★ REVIEW-02: fetch + display shared/community questions (checklist item 9).
-    // Uses window.gdiIsaPdf.fetchSharedQuestions (same helper as renderSimulado).
-    async function loadShared(){
-      const el=box.querySelector('#gdi-q-shared');
-      if(!el)return;
-      if(!window.gdiIsaPdf||typeof window.gdiIsaPdf.fetchSharedQuestions!=='function'){el.innerHTML='';return;}
-      el.innerHTML='<div class="gdi-q-loading"><span class="gdi-q-spin"></span> Buscando questões da comunidade…</div>';
-      try{
-        const items=await window.gdiIsaPdf.fetchSharedQuestions(_qFilterSubject||null);
-        if(!items||!items.length){
-          el.innerHTML='<div class="gdi-notes-empty" style="font-size:12px;text-align:center;padding:14px;">Nenhuma questão da comunidade disponível ainda.</div>';
-          return;
-        }
-        const show=items.slice(0,20);
-        el.innerHTML=show.map(rowHtmlFor).join('')+(items.length>show.length?`<div class="gdi-notes-empty" style="font-size:11px;text-align:center;">+${items.length-show.length} questões da comunidade disponíveis no simulado.</div>`:'');
-        wireCardActions(el);
-      }catch(_){
-        el.innerHTML='<div class="gdi-notes-empty" style="font-size:12px;text-align:center;padding:14px;">Não foi possível carregar questões da comunidade agora.</div>';
-      }
-    }
     // ── Subject filter pills (Task 4) ──
     function drawSubjects(){
       const el=box.querySelector('#gdi-q-subjects');
       if(!el)return;
-      // ★ REVIEW-02 FIX: subject pills respect course filter (was showing ALL
-      //   subjects even when a course was selected — clicking them yielded
-      //   empty results). Uses same matchesCourse() helper as drawList.
-      const all=questions().filter(matchesCourse);
+      const all=questions();
       if(!all.length){el.innerHTML='';return;}
       const map={};
       all.forEach(q=>{const s=q.subject||'—';map[s]=(map[s]||0)+1;});
@@ -351,42 +166,32 @@
         if(!_qFilterSubject)_qFilterSubject=null;
         // ★ v1.0.86 FIX: write back to window so radar/other modules see the change
         window._qFilterSubject=_qFilterSubject;
-        // ★ P1 FIX: sincroniza dropdown de disciplina com a pill clicada
-        _qDisciplineFilter=_qFilterSubject;
-        try{var _ds=box.querySelector('#gdi-q-discipline-filter');if(_ds)_ds.value=_qFilterSubject||'';}catch(_){}
         drawSubjects();
         _qShown=0; // reset paginação ao trocar filtro
         drawList();
-        loadShared();
       });
     }
     // ★ PAGINAÇÃO: monta linhas em array, insere em lotes de QPAGE
     function drawList(){
       const list=box.querySelector('#gdi-q-list');
       const all=questions();
-      if(!all.length){
-        list.innerHTML=`<div class="gdi-notes-empty" style="text-align:center;padding:28px 12px;">
-          <div style="font-size:30px;margin-bottom:6px;">\uD83D\uDCED</div>
-          <b style="color:var(--ferreto-text,#f0f6fc);display:block;margin-bottom:4px;">Nenhuma questão ainda</b>
-          <span style="font-size:12px;">Clique em <b>Gerar com Meggy</b>, <b>Adicionar</b> ou <b>Importar JSON</b> para começar.</span>
-        </div>`;
-        return;
-      }
-      // ★ P1 FIX: aplica filtro por curso (dropdown) + subject (pills/dropdown disciplina)
-      // ★ REVIEW-02 FIX: course filter now uses exact match on q.course/q.path
-      //   (with substring fallback on q.subject for legacy questions without a
-      //   course field) — matchesCourse() shared with populateDisciplines/drawSubjects.
-      let filtered=all.filter(matchesCourse);
-      filtered=_qFilterSubject?filtered.filter(q=>(q.subject||'—')===_qFilterSubject):filtered;
-      if(!filtered.length){
-        list.innerHTML=`<div class="gdi-notes-empty" style="text-align:center;padding:24px 12px;">
-          <div style="font-size:26px;margin-bottom:6px;">\uD83D\uDD0D</div>
-          <b style="color:var(--ferreto-text,#f0f6fc);display:block;margin-bottom:4px;">Nenhuma questão com os filtros atuais</b>
-          <span style="font-size:12px;">Limpe os filtros ou adicione novas questões a esta disciplina/curso.</span>
-        </div>`;
-        return;
-      }
+      if(!all.length){list.innerHTML='<div class="gdi-notes-empty">Nenhuma questão. Clique em "Gerar com Meggy" ou "Adicionar".</div>';return;}
+      const filtered=_qFilterSubject?all.filter(q=>(q.subject||'—')===_qFilterSubject):all;
+      if(!filtered.length){list.innerHTML='<div class="gdi-notes-empty">Nenhuma questão nesta matéria.</div>';return;}
       const reversed=filtered.slice().reverse();
+      // monta HTML de cada linha UMA vez em array
+      const rowHtmlFor=q=>{
+        const s=qSrs()[q.id];
+        const dueNow=!s||s.due<=Date.now();
+        return `<div class="gdi-note" data-qid="${esc(q.id)}" style="display:flex;align-items:center;gap:10px;">
+          <span style="flex:1;min-width:0;">
+            <b style="color:var(--ferreto-text,#f0f6fc);">${esc(q.subject||'—')}</b> <span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">· ${q.source||'manual'} · box ${s?s.box:0}</span>
+            <div style="color:var(--ferreto-text,#e6edf3);font-size:13px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(q.statement.slice(0,90))}</div>
+          </span>
+          <span style="font-size:10px;color:${dueNow?'var(--ferreto-primary,#ff8b9f)':'var(--ferreto-text-muted,#8b949e)'};white-space:nowrap;">${dueNow?'hoje':fmtDate(new Date(s?s.due:Date.now()).toISOString().slice(0,10))}</span>
+          <button class="gdi-note-del" data-del="${esc(q.id)}" title="Excluir"><i class="bi bi-x-lg"></i></button>
+        </div>`;
+      };
       // render inicial: primeiras _qShown (ou QPAGE se _qShown==0)
       const initialCount=Math.min(_qShown||QPAGE,reversed.length);
       _qShown=initialCount;
@@ -397,8 +202,10 @@
         html+=`<button id="gdi-q-more" class="gdi-btn gdi-btn-ghost" style="align-self:flex-start;font-size:12px;">Carregar mais (${reversed.length-_qShown} restantes)</button>`;
       }
       list.innerHTML=html;
-      // ★ REVIEW-02: delegation handles delete + show-answer toggle (incl. appended cards)
-      wireCardActions(list);
+      // handler deletar (event delegation)
+      list.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{
+        delQ(b.dataset.del);drawSubjects();_qShown=0;drawList();
+      });
       // handler carregar mais — append via insertAdjacentHTML (não re-renderiza tudo)
       const moreBtn=list.querySelector('#gdi-q-more');
       if(moreBtn){
@@ -410,7 +217,9 @@
           next.forEach(q=>appendHtml+=rowHtmlFor(q));
           moreBtn.insertAdjacentHTML('beforebegin',appendHtml);
           _qShown+=next.length;
-          // delegation já cobre as novas linhas — sem rebind manual
+          // rebind deletar nas novas linhas
+          list.querySelectorAll('[data-del]').forEach(b=>{if(!b._qBound){b._qBound=true;b.onclick=()=>{delQ(b.dataset.del);drawSubjects();_qShown=0;drawList();};}});
+          // atualiza ou remove botão "Carregar mais"
           if(reversed.length>_qShown){
             moreBtn.textContent='Carregar mais ('+(reversed.length-_qShown)+' restantes)';
           }else{
@@ -421,7 +230,6 @@
     }
     drawSubjects();
     drawList();
-    loadShared();
 
     // ★ hero CTA
     const heroBtn=box.querySelector('#hero-gen');
@@ -482,7 +290,7 @@
           <span style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">✓ ${hits} ✗ ${misses}</span>
         </div>
         <div class="gdi-course" style="margin-bottom:14px;">
-          <b style="color:var(--ferreto-secondary,#ff8b9f);font-size:11px;display:block;margin-bottom:8px;">${esc(q.subject||'')}</b>
+          <b style="color:var(--ferreto-secondary,#7aa2ff);font-size:11px;display:block;margin-bottom:8px;">${esc(q.subject||'')}</b>
           <div style="color:var(--ferreto-text,#f0f6fc);font-size:14px;line-height:1.6;">${esc(q.statement)}</div>
         </div>
         <div id="gdi-q-opts" style="display:flex;flex-direction:column;gap:8px;"></div>
@@ -541,10 +349,6 @@
     ov.innerHTML=`<div class="gdi-central-box" style="max-width:520px;padding:24px;">
       <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 12px;"><i class="bi bi-stars" style="color:var(--ferreto-primary,#ff8b9f);"></i> Gerar questões com a Meggy 🐩</h3>
       <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0 0 14px;">A Meggy cria questões de concurso sobre o tema e salva no banco.</p>
-      <label style="display:block;font-size:12px;color:var(--ferreto-text-muted,#8b949e);margin-bottom:4px;">Curso (opcional):</label>
-      <select id="gdi-gen-course" style="width:100%;background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);padding:8px;font-size:13px;margin-bottom:12px;box-sizing:border-box;">
-        <option value="">— Sem curso —</option>
-      </select>
       <label style="display:block;font-size:12px;color:var(--ferreto-text-muted,#8b949e);margin-bottom:4px;">Tema:</label>
       <input id="gdi-gen-tema" value="${esc(aula)}" placeholder="Ex: Competência da Justiça do Trabalho" style="width:100%;background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);padding:10px;font-size:13px;margin-bottom:12px;box-sizing:border-box;">
       <label style="display:block;font-size:12px;color:var(--ferreto-text-muted,#8b949e);margin-bottom:4px;">Quantidade:</label>
@@ -555,20 +359,6 @@
         <button class="gdi-mode-btn" id="gdi-gen-x">Cancelar</button>
       </div></div>`;
     GDI_ROOT().appendChild(ov);
-    // ★ REVIEW-02: populate course dropdown (default to current filter) so
-    //   generated questions can be filtered by course afterwards.
-    try{
-      const cs=ov.querySelector('#gdi-gen-course');
-      const courses=(typeof window.collectCourses==='function')?window.collectCourses():[];
-      courses.forEach(c=>{
-        const seg=String(c.key||'').split('/').filter(Boolean).slice(1).join('/');
-        let n=seg||c.key||'Curso';
-        try{n=decodeURIComponent(n);}catch(_){}
-        const o=document.createElement('option');o.value=n;o.textContent=n;
-        if(_qCourseFilter===n)o.selected=true;
-        cs.appendChild(o);
-      });
-    }catch(_){}
     ov.querySelector('#gdi-gen-x').onclick=()=>ov.remove();
     ov.querySelector('#gdi-gen-go').onclick=async()=>{
       const tema=ov.querySelector('#gdi-gen-tema').value.trim();
@@ -579,10 +369,7 @@
       st.innerHTML='<i class="bi bi-hourglass-split"></i> Meggy gerando '+n+' questões sobre "'+esc(tema)+'"…';
       try{
         const arr=await gerarViaISA(tema,n);
-        // ★ REVIEW-02: attach course (default to current filter) so generated
-        //   questions are filterable by course afterwards.
-        const _genCourse=ov.querySelector('#gdi-gen-course').value||null;
-        arr.forEach(q=>addQ(Object.assign({},q,{course:_genCourse})));
+        arr.forEach(q=>addQ(q));
         st.innerHTML='<b style="color:#3fb950;">✓ '+arr.length+' questões criadas!</b>';
         showToast(arr.length+' questões adicionadas');
         setTimeout(()=>{ov.remove();after();},1200);
@@ -600,10 +387,6 @@
     const inp='background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);padding:8px;font-size:13px;width:100%;box-sizing:border-box;';
     ov.innerHTML=`<div class="gdi-central-box" style="max-width:600px;padding:24px;max-height:90vh;overflow-y:auto;">
       <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 14px;">Adicionar questão</h3>
-      <label style="display:block;font-size:12px;color:var(--ferreto-text-muted,#8b949e);margin-bottom:4px;">Curso (opcional):</label>
-      <select id="f-course" style="${inp}margin-bottom:10px;">
-        <option value="">— Sem curso —</option>
-      </select>
       <input id="f-subj" placeholder="Matéria/tema" style="${inp}margin-bottom:8px;">
       <textarea id="f-stmt" placeholder="Enunciado" style="${inp}min-height:80px;margin-bottom:8px;"></textarea>
       <div id="f-opts" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;"></div>
@@ -615,21 +398,6 @@
         <button class="gdi-mode-btn" id="f-x">Cancelar</button>
       </div></div>`;
     GDI_ROOT().appendChild(ov);
-    // ★ REVIEW-02 FIX: populate course dropdown so manual questions can be
-    //   filtered by course afterwards (was: course field never set on add —
-    //   manual questions were only findable via subject substring match).
-    try{
-      const courseSel=ov.querySelector('#f-course');
-      const courses=(typeof window.collectCourses==='function')?window.collectCourses():[];
-      courses.forEach(c=>{
-        const seg=String(c.key||'').split('/').filter(Boolean).slice(1).join('/');
-        let n=seg||c.key||'Curso';
-        try{n=decodeURIComponent(n);}catch(_){}
-        const o=document.createElement('option');o.value=n;o.textContent=n;
-        if(_qCourseFilter===n)o.selected=true;
-        courseSel.appendChild(o);
-      });
-    }catch(_){}
     const optsEl=ov.querySelector('#f-opts');
     const sel=ov.querySelector('#f-correct');
     for(let i=0;i<4;i++){
@@ -643,15 +411,7 @@
       if(opts.length<2){showToast('Preencha ao menos 2 alternativas');return;}
       const stmt=ov.querySelector('#f-stmt').value.trim();
       if(!stmt){showToast('Digite o enunciado');return;}
-      addQ({
-        subject:ov.querySelector('#f-subj').value.trim()||'Geral',
-        course:ov.querySelector('#f-course').value||null, // ★ REVIEW-02: attach course
-        statement:stmt,
-        options:opts,
-        correct:parseInt(sel.value,10),
-        explanation:ov.querySelector('#f-exp').value.trim(),
-        source:'manual'
-      });
+      addQ({subject:ov.querySelector('#f-subj').value.trim()||'Geral',statement:stmt,options:opts,correct:parseInt(sel.value,10),explanation:ov.querySelector('#f-exp').value.trim(),source:'manual'});
       showToast('Questão adicionada');ov.remove();after();
     };
   }
@@ -664,59 +424,19 @@
     ov.innerHTML=`<div class="gdi-central-box" style="max-width:620px;padding:24px;">
       <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 8px;">Importar questões (JSON)</h3>
       <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0 0 14px;">Cole um array: [{"statement":"...","options":["a","b","c","d"],"correct":0,"explanation":"...","subject":"..."}]</p>
-      <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <label class="gdi-mode-btn" for="imp-file" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-size:12px;margin:0;">
-          <i class="bi bi-file-earmark-arrow-up"></i> Escolher arquivo .json
-        </label>
-        <input id="imp-file" type="file" accept=".json,application/json" style="display:none;">
-        <span id="imp-file-name" style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;"></span>
-      </div>
       <textarea id="imp-txt" placeholder='[...]' style="${inp}min-height:160px;margin-bottom:14px;font-family:monospace;font-size:12px;"></textarea>
       <div style="display:flex;gap:8px;">
         <button class="gdi-btn gdi-btn-primary" id="imp-go">Importar</button>
         <button class="gdi-mode-btn" id="imp-x">Cancelar</button>
       </div></div>`;
     GDI_ROOT().appendChild(ov);
-    // ★ REVIEW-02 FIX: real file upload (was paste-only — button said "Importar
-    //   JSON" but there was no file picker; users had to open the file in an
-    //   editor, copy all, paste here). File content populates the textarea so
-    //   the user can review before importing.
-    const fileInp=ov.querySelector('#imp-file');
-    const fileNameLbl=ov.querySelector('#imp-file-name');
-    if(fileInp){
-      fileInp.onchange=()=>{
-        const f=fileInp.files&&fileInp.files[0];
-        if(!f)return;
-        fileNameLbl.textContent=f.name+' ('+Math.round(f.size/1024)+'KB)';
-        const reader=new FileReader();
-        reader.onload=()=>{ov.querySelector('#imp-txt').value=String(reader.result||'');};
-        reader.onerror=()=>showToast('Erro ao ler arquivo');
-        reader.readAsText(f);
-      };
-    }
     ov.querySelector('#imp-x').onclick=()=>ov.remove();
     ov.querySelector('#imp-go').onclick=()=>{
       try{
         const arr=JSON.parse(ov.querySelector('#imp-txt').value);
         if(!Array.isArray(arr))throw new Error('Não é array');
         let n=0;
-        // ★ REVIEW-02: attach current course filter so imported questions are
-        //   filterable; JSON items can override with their own `course` field.
-        const _impCourse=_qCourseFilter||null;
-        arr.forEach(q=>{
-          if(q.statement&&Array.isArray(q.options)){
-            addQ({
-              subject:q.subject||'Importado',
-              course:q.course||_impCourse,
-              statement:q.statement,
-              options:q.options,
-              correct:q.correct||0,
-              explanation:q.explanation||'',
-              source:'import'
-            });
-            n++;
-          }
-        });
+        arr.forEach(q=>{if(q.statement&&Array.isArray(q.options)){addQ({subject:q.subject||'Importado',statement:q.statement,options:q.options,correct:q.correct||0,explanation:q.explanation||'',source:'import'});n++;}});
         showToast(n+' questões importadas');ov.remove();after();
       }catch(e){showToast('JSON inválido: '+e.message);}
     };
@@ -724,8 +444,6 @@
 
   // ── Render: Simulado (C.2 — sem necessidade de paginação: histórico já capped em 20) ──
   function renderSimulado(box){
-    // ★ S2 FIX: limpa timer do simulado anterior ao (re)entrar na aba
-    if(_simuladoTimer){clearInterval(_simuladoTimer);_simuladoTimer=null;}
     const qs=questions();
     const sims=simus().slice().reverse();
     // lista cursos do aluno para filtrar questões por curso
@@ -766,9 +484,7 @@
         // filtra por curso (subject/path) quando selecionado
         let pool=qs;
         if(courseFilter){
-          // ★ S1 FIX: filtro por curso era frágil — só casava contra q.subject (nome da aula)
-          //   e q.path. Agora também confere q.course quando existe.
-          pool=qs.filter(q=>(q.course&&q.course.includes(courseFilter))||(q.subject&&q.subject.includes(courseFilter))||(q.path&&q.path.includes(courseFilter)));
+          pool=qs.filter(q=>(q.subject&&q.subject.includes(courseFilter))||(q.path&&q.path.includes(courseFilter)));
           if(pool.length<5){showToast('Poucas questões deste curso — usando todas');pool=qs;}
         }
         // tenta enriquecer com questões compartilhadas por outros alunos da mesma matéria
@@ -793,83 +509,13 @@
     const hist=box.querySelector('#sim-hist');
     if(!sims.length){hist.innerHTML='<div class="gdi-notes-empty">Nenhum simulado ainda.</div>';return;}
     sims.slice(0,20).forEach(s=>{
-      const pct=s.total?Math.round(s.hits/s.total*100):0;
+      const pct=Math.round(s.hits/s.total*100);
       const row=document.createElement('div');row.className='gdi-note';
-      row.style.alignItems='center';
       row.innerHTML=`<span style="flex:1;"><b style="color:var(--ferreto-text,#f0f6fc);">${esc(s.title)}</b> <span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">· ${new Date(s.date).toLocaleDateString('pt-BR')} · ${Math.floor(s.duration/60)}min</span></span>
         <span style="color:${pct>=60?'#3fb950':'#ff8b8b'};font-weight:600;font-size:13px;">${pct}%</span>
         <span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">${s.hits}/${s.total}</span>`;
-      // ★ REVIEW-03-SIMULADO-PRO (Review point #5): botão Revisar para
-      //   simulados com snapshot salvo. Abre a tela de revisão gabarito.
-      if(s.questions&&s.questions.length){
-        const reviewBtn=document.createElement('button');
-        reviewBtn.className='gdi-mode-btn';
-        reviewBtn.style.cssText='font-size:11px;padding:4px 10px;flex:none;';
-        reviewBtn.innerHTML='<i class="bi bi-list-check"></i> Revisar';
-        reviewBtn.onclick=()=>reviewSimulado(box,s);
-        row.appendChild(reviewBtn);
-      }
       hist.appendChild(row);
     });
-  }
-
-  // ── Review: revisão de um simulado finalizado (Review point #5) ──
-  // Mostra cada questão com a resposta escolhida + gabarito + explicação.
-  // Funciona apenas para simulados finalizados após este fix (snapshot em
-  // saveSim → questions[]). Simulados antigos (sem snapshot) continuam
-  // mostrando apenas stats no histórico.
-  function reviewSimulado(box,sim){
-    const pct=sim.total?Math.round(sim.hits/sim.total*100):0;
-    const dur=sim.duration||0;
-    const durStr=Math.floor(dur/60)+'min'+(dur%60?' '+(dur%60)+'s':'');
-    const itemsHtml=(sim.questions||[]).map((q,i)=>{
-      const picked=q.picked;
-      const skipped=q.skipped||picked===-1||picked===null||typeof picked==='undefined';
-      const acertou=!skipped&&picked===q.correct;
-      const opts=(q.options||[]).map((opt,oi)=>{
-        const isCorrect=oi===q.correct;
-        const isPicked=!skipped&&oi===picked;
-        let bg='rgba(255,255,255,.03)';
-        let border='rgba(255,255,255,.06)';
-        let icon='';
-        if(isCorrect){bg='rgba(63,185,80,.18)';border='rgba(63,185,80,.5)';icon='<i class="bi bi-check2-circle" style="color:#3fb950;"></i>';}
-        if(isPicked&&!isCorrect){bg='rgba(255,107,107,.18)';border='rgba(255,107,107,.5)';icon='<i class="bi bi-x-circle" style="color:#ff6b6b;"></i>';}
-        return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;background:${bg};border:1px solid ${border};font-size:13px;">
-          <b style="color:var(--ferreto-primary,#ff8b9f);min-width:18px;">${String.fromCharCode(65+oi)})</b>
-          <span style="flex:1;color:var(--ferreto-text,#e6edf3);">${esc(opt)}</span>
-          ${icon}
-        </div>`;
-      }).join('');
-      const fbColor=acertou?'#3fb950':(skipped?'#ffa940':'#ff6b6b');
-      const fbIcon=acertou?'✓':(skipped?'⏭':'✗');
-      const fbText=acertou?'Correto':(skipped?'Pulada':'Errado');
-      return `<div class="gdi-q-card" style="margin-bottom:10px;">
-        <div class="gdi-q-card-head">
-          <div class="gdi-q-card-meta">
-            <b class="gdi-q-subj">Q${i+1} · ${esc(q.subject||'—')}</b>
-            <span class="gdi-q-badge" style="background:${fbColor}22;color:${fbColor};border-color:${fbColor}44;">${fbIcon} ${fbText}</span>
-          </div>
-        </div>
-        <div class="gdi-q-stmt">${esc(q.statement)}</div>
-        <div class="gdi-q-opts">${opts}</div>
-        ${q.explanation?`<div class="gdi-q-expl"><b><i class="bi bi-lightbulb"></i> Explicação:</b> ${esc(q.explanation)}</div>`:''}
-      </div>`;
-    }).join('');
-    box.innerHTML=`<div style="max-width:760px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px;flex-wrap:wrap;">
-        <div>
-          <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 4px;">📋 Revisão do simulado</h3>
-          <span style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">${esc(sim.title)} · ${new Date(sim.date).toLocaleDateString('pt-BR')} · ${durStr}</span>
-        </div>
-        <div style="text-align:right;">
-          <div style="color:${pct>=60?'#3fb950':'#ff8b8b'};font-weight:700;font-size:22px;line-height:1;">${pct}%</div>
-          <div style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;margin-top:2px;">${sim.hits}/${sim.total} acertos</div>
-        </div>
-      </div>
-      ${itemsHtml||'<div class="gdi-notes-empty">Sem detalhes salvos para este simulado (finalize um simulado novo para revisar).</div>'}
-      <button class="gdi-btn gdi-btn-primary" id="sim-review-back" style="margin-top:14px;"><i class="bi bi-arrow-left"></i> Voltar</button>
-    </div>`;
-    box.querySelector('#sim-review-back').onclick=()=>renderSimulado(box);
   }
 
   function startSimulado(box,queue,mins){
@@ -884,85 +530,37 @@
       box.innerHTML=`<div style="max-width:760px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
           <span style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">Simulado · ${idx+1}/${queue.length}</span>
-          <span id="sim-timer" style="color:${left<60000?'#ff6b6b':'var(--ferreto-primary,#ff8b9f)'};font-weight:600;font-size:14px;font-variant-numeric:tabular-nums;">⏱ ${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}</span>
+          <span style="color:${left<60000?'#ff6b6b':'var(--ferreto-primary,#ff8b9f)'};font-weight:600;font-size:14px;font-variant-numeric:tabular-nums;">⏱ ${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}</span>
         </div>
         <div class="gdi-course" style="margin-bottom:14px;">
-          <b style="color:var(--ferreto-secondary,#ff8b9f);font-size:11px;display:block;margin-bottom:8px;">${esc(q.subject||'')}</b>
+          <b style="color:var(--ferreto-secondary,#7aa2ff);font-size:11px;display:block;margin-bottom:8px;">${esc(q.subject||'')}</b>
           <div style="color:var(--ferreto-text,#f0f6fc);font-size:14px;line-height:1.6;">${esc(q.statement)}</div>
         </div>
         <div id="sim-opts" style="display:flex;flex-direction:column;gap:8px;"></div>
-        <div id="sim-feedback" style="margin-top:14px;"></div>
         <div style="margin-top:14px;display:flex;gap:8px;">
           <button class="gdi-mode-btn" id="sim-skip">Pular</button>
           ${idx>0?'<button class="gdi-mode-btn" id="sim-prev">← Anterior</button>':''}
         </div>
       </div>`;
       const optsEl=box.querySelector('#sim-opts');
-      const prevAns=answers[idx];
-      // ★ REVIEW-01-SIMULADO FIX: o handler antigo só registrava a resposta e
-      //   aplicava um highlight quase invisível (rgba .12) — sem verde/vermelho,
-      //   sem explicação e sem botão "Próxima". O usuário clicava e "nada
-      //   acontecia". Agora espelha o padrão do renderQuestoes: revela
-      //   correto/errado, mostra a explicação e cria o botão Próxima.
-      //   O SRS continua sendo graduado apenas em finish() (não chamamos
-      //   gradeQ aqui para evitar dupla graduação).
-      const revealAnswer=(pickedIdx,optsArg)=>{
-        // ★ REVIEW-03-SIMULADO-PRO: handles skipped (pickedIdx===-1) so navigation
-        //   back to a skipped question shows "Pulada" instead of "Errado", and
-        //   disables the Pular button once revealed (prevents overwriting a real
-        //   answer if the user clicks Pular after answering).
-        const optsA=optsArg||{};
-        const skipped=!!optsA.skipped||pickedIdx===-1;
-        const acertou=!skipped&&pickedIdx===q.correct;
-        optsEl.querySelectorAll('button').forEach((bb,bi)=>{
-          bb.disabled=true;bb.style.cursor='default';bb.style.opacity='.7';
-          if(bi===q.correct)bb.style.background='rgba(63,185,80,.18)';
-          if(bi===pickedIdx&&!acertou&&!skipped)bb.style.background='rgba(255,107,107,.18)';
-        });
-        // disable "Pular" once revealed (so user can't overwrite a real answer)
-        const skipBtn=box.querySelector('#sim-skip');
-        if(skipBtn){skipBtn.disabled=true;skipBtn.style.opacity='.4';skipBtn.style.cursor='default';}
-        const fbColor=skipped?'#ffa940':(acertou?'#3fb950':'#ff6b6b');
-        const fbIcon=skipped?'⏭':(acertou?'✓':'✗');
-        const fbText=skipped?'Pulada (conta como errada)':(acertou?'Correto':'Errado');
-        const fb=box.querySelector('#sim-feedback');
-        fb.innerHTML=`<div class="gdi-course" style="border-left:3px solid ${fbColor};">
-          <b style="color:${fbColor};">${fbIcon} ${fbText}</b>
-          ${q.explanation?`<div style="color:var(--ferreto-text,#e6edf3);font-size:13px;margin-top:6px;line-height:1.5;">${esc(q.explanation)}</div>`:''}
-        </div>
-        <button class="gdi-btn gdi-btn-primary" id="sim-next" style="margin-top:12px;">${idx+1<queue.length?'Próxima →':'Ver resultado'}</button>`;
-        fb.querySelector('#sim-next').onclick=()=>{idx++;draw();};
-      };
+      const picked=answers[idx]?answers[idx].picked:-1;
       (q.options||[]).forEach((opt,i)=>{
         const b=document.createElement('button');
         b.className='gdi-note';b.style.cursor='pointer';b.style.textAlign='left';
+        if(i===picked)b.style.background='var(--ferreto-surface-3,rgba(255,255,255,.12))';
         b.innerHTML=`<span style="display:flex;align-items:center;gap:10px;"><b style="color:var(--ferreto-primary,#ff8b9f);">${String.fromCharCode(65+i)})</b> <span style="color:var(--ferreto-text,#e6edf3);">${esc(opt)}</span></span>`;
         b.onclick=()=>{
           answers[idx]={picked:i,correct:q.correct,id:q.id,acertou:i===q.correct};
-          revealAnswer(i);
+          optsEl.querySelectorAll('button').forEach((bb,bi)=>{bb.style.background=bi===i?'var(--ferreto-surface-3,rgba(255,255,255,.12))':'';});
         };
         optsEl.appendChild(b);
       });
-      // se voltou a uma questão já respondida (botão Anterior), reexibe o feedback
-      if(prevAns){revealAnswer(prevAns.picked,{skipped:!!prevAns.skipped});}
-      box.querySelector('#sim-skip').onclick=()=>{
-        // ★ REVIEW-03-SIMULADO-PRO (replaces S3): "Pular" agora salva a resposta
-        //   como {picked:-1, acertou:false, skipped:true}. finish() grada o SRS
-        //   (gradeQ(id,false) → box 0 / relearn) e o placar final conta como
-        //   errada. Não sobrescreve resposta já dada (ex.: navegar de volta e
-        //   clicar Pular acidentalmente).
-        if(!answers[idx]){
-          answers[idx]={picked:-1,correct:q.correct,id:q.id,acertou:false,skipped:true};
-        }
-        idx++;draw();
-      };
+      box.querySelector('#sim-skip').onclick=()=>{idx++;draw();};
       const prev=box.querySelector('#sim-prev');if(prev)prev.onclick=()=>{idx--;draw();};
     }
     function finish(){
       // ★ FIX: limpa timer imediatamente para evitar salvar simulado duplicado
       if(box.__simTimer){clearInterval(box.__simTimer);box.__simTimer=null;}
-      // ★ S2 FIX: sincroniza também a variável de módulo (_simuladoTimer)
-      if(_simuladoTimer){clearInterval(_simuladoTimer);_simuladoTimer=null;}
       const dur=Math.round((Date.now()-t0)/1000);
       let hits=0;
       answers.forEach(a=>{if(a){gradeQ(a.id,a.acertou);if(a.acertou)hits++;}});
@@ -974,54 +572,10 @@
         //    achievements OBJECT to "[object Object]" → parseInt → NaN →
         //    achievements "Primeiro simulado"/"5 simulados" NEVER unlocked.
         try{localStorage.setItem('gdi-simulados-count',String(lsGet('gdi-simulados-v1',[]).length+1));}catch(_){}
-        // ★ FIX: trigger achievement check immediately so "Primeiro simulado" /
-        //    "5 simulados" unlock right after finishing (previously only
-        //    evaluated on the next video-watch event in gdi-core.js, so the
-        //    badge stayed locked — and the Conquistas tab/home dashboard count
-        //    was stale — until the user watched another aula).
-        try{
-          if(window.gdiAchievements&&typeof window.gdiAchievements.checkAll==='function'){
-            const _d=(window.GDIUser&&window.GDIUser.dump)?(window.GDIUser.dump()||{}):{};
-            window.gdiAchievements.checkAll({
-              watched:Object.keys(_d.watched||{}).length,
-              streak:window._gdiStreakCache||0,
-              cardsStudied:parseInt(localStorage.getItem('gdi-cards-studied-count')||'0',10)||0,
-              simulados:parseInt(localStorage.getItem('gdi-simulados-count')||'0',10)||0,
-              goalMet:false,
-              cardsCreated:(JSON.parse(localStorage.getItem('gdi-cards-v1')||'[]')).length,
-              summaries:(JSON.parse(localStorage.getItem('gdi-isa-summaries-v1')||'[]')).length
-            });
-          }
-        }catch(_){}
-      // ★ REVIEW-03-SIMULADO-PRO: snapshot completo das questões + respostas
-      //   para revisão posterior (Review point #5). Sem isso, o histórico só
-      //   mostra stats — não dá pra revisar o que errou.
-      const questionsSnapshot=queue.map((qq,i)=>{
-        const a=answers[i];
-        return {
-          subject:qq.subject||'',
-          statement:String(qq.statement||''),
-          options:Array.isArray(qq.options)?qq.options:[],
-          correct:Number(qq.correct)||0,
-          explanation:String(qq.explanation||''),
-          picked:a?a.picked:-1,
-          skipped:!a||!!a.skipped
-        };
-      });
       // anti-duplicação: se já existe salvo neste segundo, pula
       const recent=simus().find(s=>s.date>Date.now()-2000);
       if(!recent){
-        saveSim([...simus(),{
-          id:uid(),
-          date:Date.now(),
-          title:'Simulado '+queue.length+'q',
-          duration:dur,
-          hits,
-          misses:total-hits,
-          total,
-          answers:answers.map(a=>a?{id:a.id,picked:a.picked,correct:a.correct,acertou:a.acertou,skipped:!!a.skipped}:null),
-          questions:questionsSnapshot
-        }]);
+        saveSim([...simus(),{id:uid(),date:Date.now(),title:'Simulado '+queue.length+'q',duration:dur,hits,misses:total-hits,total,answers:answers.map(a=>a?a.id:null)}]);
       }
       const pct=Math.round(hits/total*100);
       box.innerHTML=`<div style="text-align:center;padding:30px;">
@@ -1034,25 +588,9 @@
       box.querySelector('#sim-back').onclick=()=>renderSimulado(box);
     }
     draw();
-    // ★ REVIEW-03-SIMULADO-PRO (Review point #6): o setInterval anterior só
-    //   chamava finish() no fim do prazo — o display do timer ficava
-    //   CONGELADO entre perguntas (só atualizava no draw()). Agora ticka a
-    //   cada segundo e atualiza o #sim-timer em tempo real, como um
-    //   simulado profissional. Continua chamando finish() quando expira.
-    _simuladoTimer=setInterval(()=>{
-      const now=Date.now();
-      if(now>=deadline){clearInterval(_simuladoTimer);_simuladoTimer=null;finish();return;}
-      const left=deadline-now;
-      const mm=Math.floor(left/60000);
-      const ss=Math.floor((left%60000)/1000);
-      const timerEl=box.querySelector('#sim-timer');
-      if(timerEl){
-        timerEl.textContent='⏱ '+String(mm).padStart(2,'0')+':'+String(ss).padStart(2,'0');
-        if(left<60000)timerEl.style.color='#ff6b6b';
-      }
-    },1000);
-    // armazena timer p/ limpeza se trocar de aba (legado: mantém box.__simTimer p/ compat)
-    box.__simTimer=_simuladoTimer;
+    const timer=setInterval(()=>{if(Date.now()>=deadline){clearInterval(timer);finish();}},1000);
+    // armazena timer p/ limpeza se trocar de aba
+    box.__simTimer=timer;
   }
 
   // ── Render: Cronograma (C.4 — paginação nos itens futuros) ──
@@ -1084,10 +622,9 @@
         let ai=0;
         for(let d=0;d<days&&ai<aulas.length;d++){
           for(let k=0;k<perDay&&ai<aulas.length;k++,ai++){
-            // ★ FIX (REVIEW-04): add id + done field for CRUD support in renderCronograma
-            plan.push({id:uid(),date:addDays(todayStr(),d),aula:aulas[ai].name,path:aulas[ai].path,type:'estudo',done:false});
+            plan.push({date:addDays(todayStr(),d),aula:aulas[ai].name,path:aulas[ai].path,type:'estudo'});
             // agenda revisões 1,7,30 dias depois
-            [1,7,30].forEach(r=>{const rd=addDays(addDays(todayStr(),d),r);if(rd<=prova)plan.push({id:uid(),date:rd,aula:aulas[ai].name,path:aulas[ai].path,type:'revisão',done:false});});
+            [1,7,30].forEach(r=>{const rd=addDays(addDays(todayStr(),d),r);if(rd<=prova)plan.push({date:rd,aula:aulas[ai].name,path:aulas[ai].path,type:'revisão'});});
           }
         }
         lsSet(LS_CRON,{prova,perDay,gerado:Date.now(),plan});
@@ -1097,60 +634,13 @@
       return;
     }
     // cronograma existe — mostra
-    // ★ FIX (REVIEW-04): migra plan items legados p/ ter id + done (1x só)
-    let _needSave=false;
-    cron.plan.forEach(t=>{ if(!t){return;} if(!t.id){t.id=uid();_needSave=true;} if(typeof t.done!=='boolean'){t.done=false;_needSave=true;} });
-    if(_needSave)lsSet(LS_CRON,cron);
     const todayQ=todayStr();
-    const hoje=cron.plan.filter(t=>t&&t.date===todayQ);
-    const futurasAll=cron.plan.filter(t=>t&&t.date>todayQ);
+    const hoje=cron.plan.filter(t=>t.date===todayQ);
+    const futurasAll=cron.plan.filter(t=>t.date>todayQ);
     const diasRest=Math.max(0,Math.ceil((new Date(cron.prova+'T12:00:00')-new Date(todayQ+'T12:00:00'))/86400000));
-    // ★ FIX (REVIEW-04): progresso geral (X/Y concluídas)
-    const totalTasks=cron.plan.length;
-    const totalDone=cron.plan.filter(t=>t&&t.done).length;
-    const pctDone=totalTasks?Math.round(totalDone/totalTasks*100):0;
-    // ★ FIX (REVIEW-04): CRUD helpers — toggle done, delete, add custom task
-    const toggleDone=id=>{const c=lsGet(LS_CRON,null);if(!c||!Array.isArray(c.plan))return;const t=c.plan.find(x=>x.id===id);if(t){t.done=!t.done;lsSet(LS_CRON,c);renderCronograma(box);}};
-    const delTask=id=>{const c=lsGet(LS_CRON,null);if(!c||!Array.isArray(c.plan))return;c.plan=c.plan.filter(x=>x.id!==id);lsSet(LS_CRON,c);renderCronograma(box);};
-    const addTask=(date,aula,type)=>{const c=lsGet(LS_CRON,null);if(!c||!Array.isArray(c.plan))return;c.plan.push({id:uid(),date,aula,path:null,type:type||'estudo',done:false});lsSet(LS_CRON,c);renderCronograma(box);};
-    // ★ FIX (REV-05-CRONO-PRO): EDIT task — prompt for name + date.
-    //   Reviewers flagged "edit" as missing (only add/delete/toggle existed).
-    //   Using prompt() keeps the change minimal and consistent with the
-    //   manual-add form (no inline-edit state machine to maintain).
-    const editTask=id=>{
-      const c=lsGet(LS_CRON,null);
-      if(!c||!Array.isArray(c.plan))return;
-      const t=c.plan.find(x=>x.id===id);
-      if(!t)return;
-      const newName=(window.prompt('Editar conteúdo da tarefa:',t.aula)||'');
-      if(newName===null)return; // user cancelled
-      const trimmed=newName.trim();
-      if(!trimmed){showToast('Conteúdo não pode ficar vazio');return;}
-      const newDate=(window.prompt('Nova data (AAAA-MM-DD):',t.date)||'');
-      if(newDate===null)return; // user cancelled
-      t.aula=trimmed;
-      if(/^\d{4}-\d{2}-\d{2}$/.test(newDate))t.date=newDate;
-      else if(newDate.trim())showToast('Data inválida — mantida a anterior');
-      lsSet(LS_CRON,c);
-      showToast('Tarefa atualizada');
-      renderCronograma(box);
-    };
     // ★ PAGINAÇÃO C.4 — 15 itens por página nos futuros
     const CRON_PAGE=15;
     let cronPage=box.__cronPage||0;
-    // ★ FIX (REVIEW-04): row renderer compartilhado (hoje + futuras) com checkbox + edit + delete + done state
-    //   REV-05-CRONO-PRO: adicionado botão Editar (data-edit) ao lado do Excluir.
-    const rowHtml=(t,withDate)=>{
-      const icon=t.type==='revisão'?'🔄':'▶';
-      const iconColor=t.type==='revisão'?'var(--ferreto-secondary,#5ddeda)':'var(--ferreto-primary,#ff8b9f)';
-      const textStyle=t.done?'text-decoration:line-through;color:var(--ferreto-text-faint,#6b7488);':'color:var(--ferreto-text,#e6edf3);';
-      return `<div class="gdi-note" style="padding:6px 10px;align-items:center;${t.done?'opacity:.6;':''}">
-        <button class="gdi-cron-check" data-done="${esc(t.id)}" title="${t.done?'Desmarcar':'Concluir'}" style="background:none;border:1px solid var(--ferreto-border,#30363d);border-radius:50%;width:22px;height:22px;min-width:22px;cursor:pointer;color:${t.done?'#3fb950':'var(--ferreto-text-muted,#8b949e)'};font-size:13px;display:flex;align-items:center;justify-content:center;flex:none;padding:0;">${t.done?'✓':''}</button>
-        <span style="flex:1;font-size:12px;${textStyle}"><b style="color:${iconColor};">${icon}</b> ${esc(t.aula)}${withDate?` <span style=\"color:var(--ferreto-text-muted,#8b949e);font-size:11px;\">· ${fmtDate(t.date)} · ${t.type}</span>`:''}</span>
-        <button class="gdi-cron-edit" data-edit="${esc(t.id)}" title="Editar" style="background:none;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:11px;padding:4px 6px;flex:none;"><i class=\"bi bi-pencil\"></i></button>
-        <button class="gdi-cron-del" data-del="${esc(t.id)}" title="Excluir" style="background:none;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:11px;padding:4px 6px;flex:none;"><i class=\"bi bi-x-lg\"></i></button>
-      </div>`;
-    };
     function renderFuturas(){
       const totalPages=Math.max(1,Math.ceil(futurasAll.length/CRON_PAGE));
       if(cronPage>=totalPages)cronPage=totalPages-1;
@@ -1158,11 +648,7 @@
       const futuras=futurasAll.slice(cronPage*CRON_PAGE,(cronPage+1)*CRON_PAGE);
       const el=box.querySelector('#cr-futuras');
       if(!el)return;
-      el.innerHTML=futuras.length?futuras.map(t=>rowHtml(t,true)).join(''):'<div class="gdi-notes-empty">Sem tarefas futuras.</div>';
-      // ★ FIX (REVIEW-04): bind checkbox + delete nos itens futuros
-      el.querySelectorAll('[data-done]').forEach(b=>b.onclick=()=>toggleDone(b.dataset.done));
-      el.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editTask(b.dataset.edit));
-      el.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>delTask(b.dataset.del));
+      el.innerHTML=futuras.map(t=>`<div class="gdi-note" style="padding:6px 10px;"><span style="flex:1;color:var(--ferreto-text,#e6edf3);font-size:12px;">${esc(t.aula)}</span><span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">${fmtDate(t.date)} · ${t.type}</span></div>`).join('')||'<div class="gdi-notes-empty">Sem tarefas futuras.</div>';
       const pager=box.querySelector('#cr-pager');
       if(pager){
         if(totalPages>1){
@@ -1181,94 +667,20 @@
         }
       }
     }
-    // ★ FIX (REV-05-CRONO-PRO): 14-day timeline strip — quick visual scan of
-    //   upcoming load. Reviewers asked "Does it show a calendar or timeline?"
-    //   — previously only a flat list was rendered. Strip shows today + 13
-    //   days, with task counts per day, today highlighted, prova day marked.
-    const weekShort=['D','S','T','Q','Q','S','S'];
-    let timelineHtml='<div style="margin-bottom:18px;">'+
-      '<h4 style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px;">Próximos 14 dias · linha do tempo</h4>'+
-      '<div style="display:grid;grid-template-columns:repeat(14,1fr);gap:4px;">';
-    for(let i=0;i<14;i++){
-      const ds=addDays(todayQ,i);
-      const dayDate=new Date(ds+'T12:00:00');
-      const dayCount=cron.plan.filter(t=>t&&t.date===ds).length;
-      const doneCount=cron.plan.filter(t=>t&&t.date===ds&&t.done).length;
-      const isToday=i===0;
-      const isProva=ds===cron.prova;
-      const wd=weekShort[dayDate.getDay()];
-      const bg=isProva?'rgba(255,107,107,.12)':isToday?'rgba(255,139,159,.10)':'var(--ferreto-surface-2,rgba(255,255,255,.03))';
-      const bd=isProva?'1px solid rgba(255,107,107,.45)':isToday?'1px solid var(--ferreto-primary,#ff8b9f)':'1px solid var(--ferreto-border,#21262d)';
-      const numColor=isProva?'#ff6b6b':isToday?'var(--ferreto-primary,#ff8b9f)':'var(--ferreto-text,#e6edf3)';
-      const countColor=dayCount>0?(dayCount===doneCount?'#3fb950':'var(--ferreto-secondary,#5ddeda)'):'var(--ferreto-text-faint,#6b7488)';
-      const countTxt=dayCount>0?(doneCount+'/'+dayCount):'·';
-      timelineHtml+=`<div title="${fmtDate(ds)} · ${dayCount} tarefa(s)" style="text-align:center;padding:6px 2px;border-radius:6px;background:${bg};border:${bd};">`+
-        `<div style="font-size:9px;color:var(--ferreto-text-muted,#8b949e);text-transform:uppercase;">${wd}</div>`+
-        `<div style="font-size:13px;font-weight:700;color:${numColor};font-variant-numeric:tabular-nums;">${dayDate.getDate()}${isProva?'<span style=\"font-size:8px;\">★</span>':''}</div>`+
-        `<div style="font-size:9px;color:${countColor};font-variant-numeric:tabular-nums;">${countTxt}</div>`+
-        `</div>`;
-    }
-    timelineHtml+='</div></div>';
     box.innerHTML=`<div style="max-width:760px;">
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;">
         <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0;">📅 Prova em ${fmtDate(cron.prova)}</h3>
         <span style="color:var(--ferreto-primary,#ff8b9f);font-weight:600;">${diasRest} dias restantes</span>
         <button class="gdi-mode-btn" id="cr-reset" style="font-size:11px;margin-left:auto;"><i class="bi bi-arrow-clockwise"></i> Refazer</button>
       </div>
-      <div style="margin-bottom:14px;">
-        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ferreto-text-muted,#8b949e);margin-bottom:4px;">
-          <span>Progresso geral</span><span>${totalDone}/${totalTasks} tarefa${totalTasks===1?'':'s'} concluída${totalDone===1?'':'s'} (${pctDone}%)</span>
-        </div>
-        <div style="height:6px;background:var(--ferreto-surface-3,rgba(255,255,255,.08));border-radius:3px;overflow:hidden;">
-          <div style="height:100%;width:${pctDone}%;background:var(--ferreto-grad);border-radius:3px;transition:width .3s;"></div>
-        </div>
-      </div>
-      ${timelineHtml}
       ${hoje.length?`<div style="margin-bottom:18px;">
-        <h4 style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px;">Hoje (${hoje.length} tarefa${hoje.length===1?'':'s'})</h4>
-        <div id="cr-hoje" style="display:flex;flex-direction:column;gap:4px;">${hoje.map(t=>rowHtml(t,false)).join('')}</div>
+        <h4 style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px;">Hoje (${hoje.length} tarefas)</h4>
+        ${hoje.map(t=>`<div class="gdi-note"><span style="flex:1;"><b style="color:${t.type==='revisão'?'var(--ferreto-secondary,#5ddeda)':'var(--ferreto-primary,#ff8b9f)'};">${t.type==='revisão'?'🔄':'▶'}</b> ${esc(t.aula)}</span><span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">${t.type}</span></div>`).join('')}
       </div>`:'<p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin-bottom:18px;">Nada para hoje. 🎉</p>'}
       <h4 style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px;">Próximos dias</h4>
       <div id="cr-futuras" style="display:flex;flex-direction:column;gap:4px;"></div>
       <div id="cr-pager" style="margin-top:10px;text-align:center;"></div>
-      <div style="margin-top:24px;padding:14px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#21262d);border-radius:12px;">
-        <h4 style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 10px;">➕ Adicionar tarefa manual</h4>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
-          <div>
-            <label style="display:block;font-size:11px;color:var(--ferreto-text-muted,#8b949e);margin-bottom:3px;">Data</label>
-            <input id="cr-add-date" type="date" value="${todayQ}" style="background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);padding:6px 8px;font-size:12px;">
-          </div>
-          <div style="flex:1;min-width:200px;">
-            <label style="display:block;font-size:11px;color:var(--ferreto-text-muted,#8b949e);margin-bottom:3px;">Conteúdo/aula</label>
-            <input id="cr-add-name" type="text" placeholder="Ex.: Revisar Direito Constitucional" style="width:100%;background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);padding:6px 8px;font-size:12px;box-sizing:border-box;">
-          </div>
-          <div>
-            <label style="display:block;font-size:11px;color:var(--ferreto-text-muted,#8b949e);margin-bottom:3px;">Tipo</label>
-            <select id="cr-add-type" style="background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);padding:6px 8px;font-size:12px;">
-              <option value="estudo">▶ Estudo</option>
-              <option value="revisão">🔄 Revisão</option>
-            </select>
-          </div>
-          <button id="cr-add-btn" class="gdi-btn gdi-btn-primary" style="font-size:12px;"><i class="bi bi-plus-lg"></i> Adicionar</button>
-        </div>
-      </div>
     </div>`;
-    // ★ FIX (REVIEW-04 + REV-05-CRONO-PRO): bind handlers das tarefas de HOJE
-    //   (antes de renderFuturas p/ não tocar nos futuros). Inclui EDIT.
-    box.querySelectorAll('#cr-hoje [data-done]').forEach(b=>b.onclick=()=>toggleDone(b.dataset.done));
-    box.querySelectorAll('#cr-hoje [data-edit]').forEach(b=>b.onclick=()=>editTask(b.dataset.edit));
-    box.querySelectorAll('#cr-hoje [data-del]').forEach(b=>b.onclick=()=>delTask(b.dataset.del));
-    // bind add-task handler
-    const addBtn=box.querySelector('#cr-add-btn');
-    if(addBtn)addBtn.onclick=()=>{
-      const date=box.querySelector('#cr-add-date').value;
-      const aula=box.querySelector('#cr-add-name').value.trim();
-      const type=box.querySelector('#cr-add-type').value;
-      if(!date){showToast('Selecione uma data');return;}
-      if(!aula){showToast('Digite o conteúdo da tarefa');return;}
-      addTask(date,aula,type);
-      showToast('Tarefa adicionada ao cronograma');
-    };
     renderFuturas();
     box.querySelector('#cr-reset').onclick=()=>{lsSet(LS_CRON,null);box.__cronPage=0;renderCronograma(box);};
   }
@@ -1328,34 +740,6 @@
     .gdi-central-box textarea{font-family:inherit;resize:vertical;}
     .gdi-central-box textarea:focus,.gdi-central-box input:focus{outline:none;border-color:var(--ferreto-primary,#ff8b9f)!important;box-shadow:0 0 0 3px var(--ferreto-glow,rgba(255,139,159,.25))!important;}
     .gdi-central-box select{font-family:inherit;}
-    /* ★ REVIEW-02: question card UI — clean, professional, hover + answer reveal */
-    .gdi-q-card{background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#21262d);border-radius:12px;padding:14px 16px;transition:border-color .15s ease,box-shadow .15s ease,transform .15s ease;}
-    .gdi-q-card:hover{border-color:var(--ferreto-border-strong,#30363d);box-shadow:0 8px 24px -12px rgba(0,0,0,.55);transform:translateY(-1px);}
-    .gdi-q-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px;}
-    .gdi-q-card-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex:1;min-width:0;}
-    .gdi-q-subj{color:var(--ferreto-secondary,#ff8b9f);font-size:13px;font-family:var(--ferreto-font-display,'Poppins',sans-serif);}
-    .gdi-q-badge{display:inline-flex;align-items:center;gap:3px;font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(255,255,255,.06);color:var(--ferreto-text-muted,#8b949e);border:1px solid rgba(255,255,255,.06);white-space:nowrap;line-height:1.4;}
-    .gdi-q-badge-shared{background:rgba(93,222,218,.10);color:var(--ferreto-secondary,#5ddeda);border-color:rgba(93,222,218,.22);}
-    .gdi-q-badge-due{background:rgba(255,139,159,.12);color:var(--ferreto-primary,#ff8b9f);border-color:rgba(255,139,159,.26);}
-    .gdi-q-badge-future{color:var(--ferreto-text-faint,#6b7488);}
-    .gdi-q-stmt{color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.55;margin-bottom:10px;}
-    .gdi-q-answer{margin-top:4px;padding-top:10px;border-top:1px dashed var(--ferreto-border,#21262d);}
-    .gdi-q-opts{display:flex;flex-direction:column;gap:6px;margin-bottom:10px;}
-    .gdi-q-opt{display:flex;align-items:flex-start;gap:8px;padding:7px 10px;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);font-size:13px;color:var(--ferreto-text,#e6edf3);line-height:1.45;}
-    .gdi-q-opt-correct{background:rgba(63,185,80,.12);border-color:rgba(63,185,80,.38);}
-    .gdi-q-opt-letter{color:var(--ferreto-primary,#ff8b9f);font-weight:600;flex:none;}
-    .gdi-q-opt-correct .gdi-q-opt-letter{color:#3fb950;}
-    .gdi-q-opt-text{flex:1;}
-    .gdi-q-opt-check{color:#3fb950;flex:none;font-size:15px;line-height:1.3;}
-    .gdi-q-expl{font-size:12px;color:var(--ferreto-text,#e6edf3);line-height:1.55;background:rgba(255,255,255,.03);border-radius:8px;padding:8px 10px;border-left:3px solid var(--ferreto-secondary,#5ddeda);}
-    .gdi-q-expl b{color:var(--ferreto-secondary,#5ddeda);}
-    .gdi-q-card-foot{display:flex;gap:8px;}
-    .gdi-q-toggle{font-size:12px;}
-    .gdi-q-toggle:hover{color:var(--ferreto-primary,#ff8b9f)!important;border-color:rgba(255,139,159,.4)!important;}
-    .gdi-q-section{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ferreto-text-muted,#8b949e);font-weight:600;}
-    .gdi-q-loading{display:flex;align-items:center;gap:8px;color:var(--ferreto-text-muted,#8b949e);font-size:12px;padding:14px;}
-    .gdi-q-spin{width:14px;height:14px;border:2px solid rgba(255,255,255,.15);border-top-color:var(--ferreto-primary,#ff8b9f);border-radius:50%;display:inline-block;animation:gdi-q-spin .8s linear infinite;flex:none;}
-    @keyframes gdi-q-spin{to{transform:rotate(360deg);}}
     `;
     document.head.appendChild(s);
   }
