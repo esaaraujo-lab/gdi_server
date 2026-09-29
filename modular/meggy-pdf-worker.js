@@ -43,6 +43,14 @@ const OCR_TIMEOUT_MS = 30000;
 
 function ensurePdfjs() {
   if (pdfjsReady) return pdfjsReady;
+  // ★ FIX EXEC-7 Item 22-ext: ANTES, se importScripts falhasse (CDN blip, brief
+  // 502/503 no jsdelivr), o pdfjsReady ficava como uma Promise REJEITADA para
+  // sempre — toda chamada subsequente a ensurePdfjs() retornava a mesma Promise
+  // rejeitada, e o worker ficava permanentemente quebrado para PDF até ser
+  // terminado (auth:change → 'out'). Agora, .catch reseta pdfjsReady=null para
+  // que a próxima chamada re-tente o importScripts. Espelha o padrão do
+  // gdi-worker-bridge.js (item 2: null reset on failure). O throw re-propaga o
+  // erro para o caller (extractFromBuffer → self.onmessage → {type:'error'}).
   pdfjsReady = new Promise((resolve, reject) => {
     try {
       importScripts('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js');
@@ -56,17 +64,27 @@ function ensurePdfjs() {
     } catch (err) {
       reject(err);
     }
+  }).catch(err => {
+    pdfjsReady = null;
+    throw err;
   });
   return pdfjsReady;
 }
 
 function ensureTesseract() {
   if (tesseractReady) return tesseractReady;
+  // ★ FIX EXEC-7 Item 22-ext: mesmo padrão de reset do ensurePdfjs — se
+  // importScripts do Tesseract falhar, reseta tesseractReady=null para que a
+  // próxima chamada re-tente. Sem isso, um CDN blip no jsdelivr quebra o OCR
+  // permanentemente neste worker.
   tesseractReady = new Promise((resolve, reject) => {
     try {
       importScripts('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
       resolve(self.Tesseract);
     } catch (err) { reject(err); }
+  }).catch(err => {
+    tesseractReady = null;
+    throw err;
   });
   return tesseractReady;
 }
