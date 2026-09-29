@@ -532,7 +532,12 @@
         }
       }
     }catch(_){ /* folder-first read is best-effort */ }
-    if(isStale()) return;
+    // ★ CYCLE-10 (Agent 10): also bail when bodyEl was detached from the DOM
+    //   while we were awaiting fetches (user closed the panel mid-load).
+    //   isStale() only catches re-render races; it doesn't catch the panel-
+    //   closed case, which would otherwise write to a detached node (wasted
+    //   work + the lazy-load wiring below would query an empty DOM).
+    if(isStale() || !bodyEl.isConnected) return;
 
     // 1) localStorage resumos (rápido, síncrono)
     // ★ Fix 9 (Task 20-8): listIsaSummaries() may return null or a non-array
@@ -576,7 +581,7 @@
         }
       }
     }catch(_){ /* Drive indisponível — segue só com localStorage */ }
-    if(isStale()) return;
+    if(isStale() || !bodyEl.isConnected) return;
 
     // 3) Merge: folder-first (if found) > localStorage (conteúdo já carregado)
     //    > Drive central pool (dedup por lesson name case-insensitive)
@@ -607,7 +612,7 @@
     all.sort((a,b)=>(b.date||0)-(a.date||0));
 
     if(!all.length){
-      if(isStale()) return;
+      if(isStale() || !bodyEl.isConnected) return;
       bodyEl.innerHTML='<div class="gdi-empty-state"><span class="gdi-empty-state-icon">📋</span><h3>Nenhum resumo ainda</h3><p>Gere resumos assistindo às aulas e clicando no botão "Resumo" no painel de materiais.</p></div>';
       return;
     }
@@ -647,7 +652,8 @@
       html+='</div></div>';
     }
     html+='</div>';
-    if(isStale()) return;  // ★ FIX-MEGGY #9: abort before writing final HTML
+    // ★ CYCLE-10 (Agent 10): isConnected guard alongside isStale() — see note above.
+    if(isStale() || !bodyEl.isConnected) return;  // ★ FIX-MEGGY #9: abort before writing final HTML
     bodyEl.innerHTML=html;
 
     // 6) Helper: lazy-load conteúdo do Drive
