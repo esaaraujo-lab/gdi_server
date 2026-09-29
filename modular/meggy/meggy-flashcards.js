@@ -21,12 +21,31 @@
 // ═══════════════════════════════════════════════════════════════
 (function(){
   if(window.__gdiMeggyFlashcards)return;
-  window.__gdiMeggyFlashcards=true;
 
   window.__gdiMeggy = window.__gdiMeggy || {};
 
   // ── Late-bound namespace shortcuts ──
+  // ★ FIX-MEGGY (Task 20-7 #15 / H-35): null-guard window.__gdiMeggy.utils
+  //   BEFORE setting the IIFE guard. Previously the guard was set on the
+  //   line above unconditionally, then `const U = window.__gdiMeggy.utils`
+  //   ran, then `U.CONSTS.LS_SUBJECTS` — if utils failed to load (CDN
+  //   outage, eval error, wrong script-tag order), `U` was undefined and
+  //   `U.CONSTS` threw TypeError. That crashed the entire IIFE AFTER the
+  //   guard had been set, so the loader could never re-init the module on
+  //   a later Bus.onGlobal('modules:ready') retry pass — a hard brick
+  //   requiring page refresh.
+  //   Fix: bail WITHOUT setting the guard when utils is missing. The loader
+  //   gets another shot at calling this IIFE; if utils is still missing it
+  //   bails again, harmlessly. Once utils loads, the guard is set and the
+  //   module inits normally. Strictly safer than the prior pattern in the
+  //   normal case (utils loaded → behaviour identical: one extra typeof
+  //   check), and gracefully degrades in the edge case.
   const U = window.__gdiMeggy.utils;
+  if(!U || !U.CONSTS){
+    console.error('[Meggy] meggy-utils not loaded — aborting flashcards init (will retry on next loader pass)');
+    return;
+  }
+  window.__gdiMeggyFlashcards=true;
   const LS_SUBJECTS = U.CONSTS.LS_SUBJECTS;
   // ★ v1.0.99: serialize gdi-cards-v1 writes to prevent RMW races
   let _cardsWriteChain = Promise.resolve();
