@@ -28,8 +28,8 @@
   // — mesmo proxy que o gdi-extras-loader.js usa. Consistência + cache controlada
   //   por CACHE_VERSION (sem CDN jsdelivr com cache stale).
   const WORKER_BASE = '/modular/';
-  const LIST_WORKER_URL  = WORKER_BASE + 'gdi-list-worker.js?v=' + (window.CACHE_VERSION || '106');
-  const PDF_WORKER_URL   = WORKER_BASE + 'meggy-pdf-worker.js?v=' + (window.CACHE_VERSION || '106');
+  const LIST_WORKER_URL  = WORKER_BASE + 'gdi-list-worker.js?v=' + (window.CACHE_VERSION || '107');
+  const PDF_WORKER_URL   = WORKER_BASE + 'meggy-pdf-worker.js?v=' + (window.CACHE_VERSION || '107');
 
   // ───────────────────────── LRU cache de listagem ─────────────────────────
   const LIST_TTL = 5 * 60 * 1000;        // 5 min (antes 45s)
@@ -100,6 +100,15 @@
       console.warn('[gdi-worker-bridge] list worker promise rejected, resetting', e);
       _listWorker = null;
       return null;
+    }).then(w => {
+      // ★ FIX CYCLE-9 Item 2: if Worker creation failed, the inner try/catch
+      // returns null (promise RESOLVES to null) — the .catch() above only fires
+      // on REJECTION, so it never runs in the failure path. Without this .then(),
+      // _listWorker stays as a null-resolved promise FOREVER: every subsequent
+      // call sees a truthy promise, gets null, and falls back — no retry ever
+      // happens. Reset to null so the next call re-attempts Worker creation.
+      if (!w) _listWorker = null;
+      return w;
     });
     return _listWorker;
   }
@@ -136,6 +145,13 @@
       console.warn('[gdi-worker-bridge] pdf worker promise rejected, resetting', e);
       _pdfWorker = null;
       return null;
+    }).then(w => {
+      // ★ FIX CYCLE-9 Item 2: same as getListWorker — if Worker creation failed,
+      // the inner try/catch returns null (promise RESOLVES to null) and .catch()
+      // never fires. Without this, _pdfWorker stays as a null-resolved promise
+      // forever and the PDF worker is permanently broken until page reload.
+      if (!w) _pdfWorker = null;
+      return w;
     });
     return _pdfWorker;
   }
