@@ -39,6 +39,16 @@
   //    serialization, two concurrent RMWs (e.g. user answers wrong in quick
   //    succession) read the same snapshot and the second write loses the first
   //    one's new card. The chain guarantees each RMW sees the latest state.
+  // ★ CYCLE2-10 (Agent 10): ALWAYS persist after mutator runs. The previous
+  //    contract was "if mutator returns a non-undefined value, persist it;
+  //    otherwise skip persistence". But BOTH callers in this file mutate `cur`
+  //    in place (via cards.push) and DON'T return — so persistence was ALWAYS
+  //    skipped, and flashcards created on miss / via 'Flashcards das erradas'
+  //    were NEVER saved to localStorage (silent data loss). The fix: treat
+  //    `undefined` as "mutator mutated in place" and persist `cur`. Callers
+  //    that return a new array (e.g. cur.filter) still work — `next` is used
+  //    when defined. This mirrors the pattern in meggy-flashcards.js
+  //    addCardsBatch / saveNewCard (which explicitly call lsSet inside .then).
   let _localCardsChain = Promise.resolve();
   function _cardsRMW(mutator){
     _localCardsChain = _localCardsChain.then(async () => {
@@ -46,7 +56,11 @@
         const cur = lsGet('gdi-cards-v1', []);
         if(!Array.isArray(cur)) return;
         const next = mutator(cur);
-        if(next !== undefined) lsSet('gdi-cards-v1', next);
+        // ★ CYCLE2-10: persist `next` if mutator returned a value, otherwise
+        //    persist `cur` (mutator mutated in place). Either way, we ALWAYS
+        //    persist — the old `if(next !== undefined)` guard skipped
+        //    persistence for in-place mutators, silently losing writes.
+        lsSet('gdi-cards-v1', next !== undefined ? next : cur);
       }catch(e){ console.warn('[study-questions] _cardsRMW failed:', e && e.message); }
     }).catch(()=>{});
     return _localCardsChain;
@@ -103,7 +117,13 @@
       body:JSON.stringify({message:prompt,messages:[]})});
     // ★ FIX (Agent 6): check r.ok BEFORE r.json() — if /api/ai returns 500
     //    with an HTML error page, r.json() throws a confusing SyntaxError.
-    if(!r.ok) return null;
+    // ★ CYCLE2-10 (Agent 10): THROW on !r.ok instead of returning null. The
+    //    sole caller (openGen) does `const arr=await gerarViaISA(...)` then
+    //    `arr.forEach(...)` — returning null caused a TypeError ("Cannot read
+    //    property 'forEach' of null") which the caller's catch block showed
+    //    as a confusing error instead of the actual HTTP status. Throwing
+    //    lets the catch block display the real cause (HTTP 500/502/etc.).
+    if(!r.ok) throw new Error('HTTP '+r.status+' em /api/ai');
     const data=await r.json();
     if(!data.ok)throw new Error(data.error||'Meggy indisponível');
     // ★ parsing robusto: usa o helper compartilhado (window.__gdiParseJsonArray)
