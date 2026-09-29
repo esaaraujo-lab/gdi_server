@@ -138,7 +138,10 @@
       await fetch('/api/ai/cache',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({key:lessonKey,...data})});
       invalidate('isa:'+lessonKey);
-    }catch(_){}
+    }catch(e){
+      // ★ FIX CYCLE-9 Item 14: surface save failures (before: silent empty catch)
+      console.warn('[GDI Storage] isaCacheSet failed for', lessonKey, '—', e && e.message || e);
+    }
   }
 
   async function isaCacheList(){
@@ -228,7 +231,11 @@
       const d=await r.json();
       invalidate('batt:'+courseKey);
       return !!(d&&d.ok);
-    }catch(_){return false;}
+    }catch(e){
+      // ★ FIX CYCLE-9 Item 14: surface save failures (before: silent empty catch)
+      console.warn('[GDI Storage] startBattalion failed for', courseKey, '—', e && e.message || e);
+      return false;
+    }
   }
 
   async function saveMemory(fileName, markdown){
