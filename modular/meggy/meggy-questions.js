@@ -337,6 +337,13 @@
         }
       }catch(_){ /* best-effort */ }
     }
+    // ★ CYCLE-10 (Agent 10): bail if the user closed the M9 panel during the
+    //   long generateAll() await (10-30s) — startQuizFromBank would otherwise
+    //   render the quiz into a detached bodyEl (wasted work + the quiz button
+    //   wiring would silently no-op). Mirrors the isConnected guard added to
+    //   renderResumos() in meggy-summaries.js for the same async-after-await
+    //   pattern.
+    if(!bodyEl || !bodyEl.isConnected) return;
     startQuizFromBank(bodyEl,lesson);
   }
 
@@ -448,21 +455,35 @@
 
   // ── Inicia quiz com questões do banco (não respondidas) ──
   function startQuizFromBank(bodyEl,lesson){
+    // ★ CYCLE-10 (Agent 10): bail if the M9 panel was closed before this
+    //   synchronous render started (covers both the questions() tail call
+    //   and the recursive self-call after generateQuestions). Without this,
+    //   the bodyEl.innerHTML writes below would target a detached node.
+    if(!bodyEl || !bodyEl.isConnected) return;
     const all=U.lsGet(LQ,[]);
     const answered=getAnsweredIds();
     // ★ FIX-MEGGY #18 (Agent 11 PERF-6): O(N×M) answered.includes(q.id) in
     //   .filter() — build a Set once for O(1) lookup. With 500 answered IDs
     //   and 200 questions this was 100k comparisons; now ~700.
     const answeredSet = new Set(answered);
+    // ★ CYCLE-10 (Agent 10): pre-index bank by subject (single O(N) pass).
+    //   Previously this block ran `all.filter(q=>q.subject===lesson)` up to
+    //   THREE times (once for `pending`, again for the reset branch, again
+    //   for `lessonQIds` Set construction). Now we scan `all` once to build
+    //   `lessonQs`, then derive both `pending` (filter on answeredSet) and
+    //   `lessonQIds` (map to Set) from it. With N=200 questions this trims
+    //   ~400 extra comparisons per call; semantics identical (same subject
+    //   match, same Set membership test).
+    const lessonQs = all.filter(q=>q.subject===lesson);
     // questões desta matéria que ainda não foram respondidas
-    let pending=all.filter(q=>q.subject===lesson&&!answeredSet.has(q.id));
+    let pending = lessonQs.filter(q=>!answeredSet.has(q.id));
     // se não tem nenhuma não-respondida, pega todas desta matéria (reinicia ciclo)
     if(pending.length===0){
-      pending=all.filter(q=>q.subject===lesson);
+      pending = lessonQs;
       // limpa answered para esta matéria (reinicia)
       // ★ FIX-MEGGY #18 (cont.): build a Set of this lesson's question IDs
       //   so the .some() inner loop is O(1) per answered id.
-      const lessonQIds = new Set(all.filter(q=>q.subject===lesson).map(q=>q.id));
+      const lessonQIds = new Set(lessonQs.map(q=>q.id));
       const newAnswered=answered.filter(id=>!lessonQIds.has(id));
       try{localStorage.setItem(ANSWERED_KEY,JSON.stringify(newAnswered))}catch(_){}
     }
