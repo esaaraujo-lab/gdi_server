@@ -1,4 +1,8 @@
 // ═══════════════════════════════════════════════════════════════
+// ⚠️ LEGACY MONOLITH — not loaded by gdi-extras-loader.js since v1.0.86.
+// Served by worker.js /modular/ whitelist for backward compat only.
+// (Active replacement: modular/study/*.js — 8 modules. See gdi-extras-loader.js:54-62.)
+// ═══════════════════════════════════════════════════════════════
 // gdi-study.js — Área do Aluno + Estudo Ativo + Visual
 //
 // Módulos:
