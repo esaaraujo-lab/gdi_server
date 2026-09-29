@@ -240,12 +240,20 @@
     try{
       const r=await fetch('/api/ai/battalion/status?courseKey='+encodeURIComponent(courseKey),{cache:'no-store'});
       const d=await r.json();
-      return d;
-    }catch(e){
       // ★ Fix 12 (Task 20-8): differentiate network errors from "not
       //   processed yet" — both previously returned {ok:false,processed:false}.
       //   Callers can now check `reason==='network'` to retry vs. show a
       //   "Generate materials" CTA when reason==='not_processed'.
+      // ★ EXEC-5: normalize `reason` on the success path too — if the worker
+      //   returned {ok:false,processed:false} without a reason, tag it as
+      //   'not_processed' so callers don't need a defensive
+      //   `if(!d.reason) d.reason='not_processed'` of their own. Network
+      //   errors still arrive via the catch block with reason:'network'.
+      if(d && !d.ok && !d.processed && !d.reason){
+        d.reason = 'not_processed';
+      }
+      return d;
+    }catch(e){
       return {ok:false, processed:false, reason:'network', error:e&&e.message||'network error'};
     }
   }
@@ -326,6 +334,13 @@
       if(d && d.ok) return {ok:true, mode:'folder', file:d.file||null};
       return {ok:false, reason:(d && d.error) || 'unknown'};
     }catch(e){
+      // ★ EXEC-5: log so failures aren't completely silent — mirrors
+      //   loadQuestionsFromDisciplineFolder's catch in meggy-questions.js.
+      //   The caller (saveSharedSummary) treats this as best-effort and
+      //   falls back to the legacy centralized pool, but a missing
+      //   console.warn here would hide a misconfigured Drive folder or a
+      //   network blip from dev tools.
+      console.warn('[Meggy] saveSummaryToLessonFolder failed:', e && e.message || e);
       return {ok:false, reason:'network', error:e && e.message || String(e)};
     }
   }
@@ -349,6 +364,10 @@
       if(d && d.ok && typeof d.content === 'string') return {ok:true, content:d.content, file:d.file||null};
       return {ok:false, reason:(d && d.reason) || (d && d.error) || 'unknown'};
     }catch(e){
+      // ★ EXEC-5: same parity log as saveSummaryToLessonFolder above and
+      //   loadQuestionsFromDisciplineFolder in meggy-questions.js — without
+      //   this, a transient network failure mid-fetch would be invisible.
+      console.warn('[Meggy] loadSummaryFromLessonFolder failed:', e && e.message || e);
       return {ok:false, reason:'network', error:e && e.message || String(e)};
     }
   }
