@@ -135,6 +135,26 @@
   const showAddCourseModal = function(){ try{ return window.__gdiStudy.courses.showAddCourseModal.apply(this, arguments); }catch(e){ console.warn('[study-panel] showAddCourseModal failed:', e&&e.message); } };
   const openCourseDetail = function(){ try{ return window.__gdiStudy.courses.openCourseDetail.apply(this, arguments); }catch(e){ console.warn('[study-panel] openCourseDetail failed:', e&&e.message); } };
 
+  // ★ CYCLE-4 FIX B: safe wrapper for window.gdiCourseIdentity (defined in
+  //   gdi-core.js). renderDrives (line ~555) and renderHome (line ~781) both
+  //   call it WITHOUT a typeof check — if gdi-core.js fails to load (CDN
+  //   glitch, cache miss, etc.), both renders throw TypeError, which
+  //   propagates up through renderBody → renderPanel → openPanel's .then().
+  //   The .catch() in openPanel then RE-CALLS renderPanel, which throws
+  //   again — leaving the panel blank with no error surfaced to the user.
+  //   This wrapper returns a neutral {icon,color} fallback so renders
+  //   degrade gracefully instead of crashing.
+  const _DEFAULT_IDENT = { icon: '📁', color: '#5ddeda' };
+  const courseIdentity = function(courseKey, courseName){
+    try{
+      if(typeof window.gdiCourseIdentity === 'function'){
+        const r = window.gdiCourseIdentity(courseKey, courseName);
+        if(r && typeof r === 'object' && ('icon' in r) && ('color' in r)) return r;
+      }
+    }catch(e){ console.warn('[study-panel] gdiCourseIdentity failed:', e&&e.message); }
+    return _DEFAULT_IDENT;
+  };
+
   let playing=false,mark=0;
   document.addEventListener('play',e=>{if(e.target&&e.target.tagName==='VIDEO'){playing=true;mark=Date.now();}},true);
   document.addEventListener('pause',e=>{if(e.target&&e.target.tagName==='VIDEO'){playing=false;flushWatch();}},true);
@@ -282,6 +302,19 @@
       GDI_ROOT().appendChild(S.panel);
     }
     S.panel.style.display='flex';
+    // ★ CYCLE2-3 FIX A: reset 'collapsed' class on every open. The class is
+    //   added by openVideoInPanel/openPdfSplitInPanel to narrow the sidebar
+    //   (60px, icons only) while a video/PDF loads in the body. It is removed
+    //   by the tab-click handler and by restoreSidebarFromMediaView ("Voltar"
+    //   button). BUT if the user closes the panel while collapsed (Escape / 'c'
+    //   / 'X') and reopens later, closePanel did NOT remove the class. Then
+    //   renderPanel → renderBody(S.tab) replaces the "Abrindo vídeo…" body
+    //   with the tab content — but the panel is still 'collapsed'. The user
+    //   sees a cramped view (60px sidebar, no tab labels) with no "Voltar"
+    //   button to restore (the body that held it was replaced). Removing
+    //   'collapsed' here ensures every fresh open starts in the normal layout.
+    //   No-op if the class wasn't present (the common case).
+    try{ if(S.panel.classList.contains('collapsed')) S.panel.classList.remove('collapsed'); }catch(_){}
     // ★ uma única renderização: espera estado OU fallback em caso de erro
     // ★ FIX (Agent 16 UIUX-20): openPanel race — capture a token before the
     //   async ensureState() resolves; if the user closed the panel in the
@@ -448,7 +481,23 @@
     // limpa timer do simulado anterior se houver
     if(body.__simTimer){clearInterval(body.__simTimer);body.__simTimer=null;}
     // ★ FIX 1b (Task 14): RE-ADICIONADO handler da aba 'addmateria' (Task 13 havia removido por engano)
-    if(currentTab==='addmateria'){showAddCourseModal(body);return;}
+    // ★ CYCLE2-3 FIX C: add fallback HTML when the courses module isn't loaded.
+    //   All other 11 tab handlers (questoes/simulado/cronograma/resumos/provas/
+    //   redacao/radar) already show a clear "módulo não carregou" empty-state
+    //   when their dependency is missing. The addmateria handler was the only
+    //   one without a fallback — if study-courses.js fails to load, the late-
+    //   binding wrapper (showAddCourseModal, line 135) catches the TypeError
+    //   and returns undefined, leaving body.innerHTML untouched. The user saw
+    //   either a blank body or stale content from the previous tab. Now shows
+    //   a consistent empty-state matching the other handlers' pattern.
+    if(currentTab==='addmateria'){
+      if(window.__gdiStudy&&window.__gdiStudy.courses&&typeof window.__gdiStudy.courses.showAddCourseModal==='function'){
+        showAddCourseModal(body);
+      }else{
+        body.innerHTML='<div class="gdi-empty-state"><span class="gdi-empty-state-icon">📚</span><h3>Adicionar matéria indisponível</h3><p>O módulo de cursos não carregou. Tente recarregar a página.</p></div>';
+      }
+      return;
+    }
     if(currentTab==='home')renderHome(body);
     else if(currentTab==='drives')renderDrives(body);
     else if(currentTab==='questoes'){if(window.__gdiStudy&&window.__gdiStudy.questions&&typeof window.__gdiStudy.questions.renderQuestoes==='function')window.__gdiStudy.questions.renderQuestoes(body);else body.innerHTML='<div class="gdi-empty-state"><span class="gdi-empty-state-icon">📝</span><h3>Questões indisponíveis</h3><p>O módulo de questões não carregou. Tente recarregar a página.</p></div>';}
@@ -544,7 +593,12 @@
   }
   // ★ v1.0.73: renderDrives — mostra os 12 drives como cards navegáveis DENTRO do painel
   function renderDrives(box){
-    const drives = window.drive_names || [];
+    // ★ CYCLE-4 FIX D: defensive — drive_names SHOULD always be an array (set
+    //   by gdi-core.js from the server-rendered <script> tag), but if a
+    //   future change or a CDN glitch leaves it as a string/object, .map()
+    //   would throw TypeError and break the entire Drives tab. Coerce to [].
+    const _dn = window.drive_names;
+    const drives = Array.isArray(_dn) ? _dn : [];
     box.innerHTML = `
       <div style="margin-bottom:18px;">
         <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 4px;">☁️ Explorar Drives</h3>
@@ -552,7 +606,7 @@
       </div>
       <div id="gdi-drive-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;">
         ${drives.map((name, idx) => {
-          const ident = window.gdiCourseIdentity('/'+idx+':/', name);
+          const ident = courseIdentity('/'+idx+':/', name);
           return `<div data-gdi-drive-link="${idx}" style="padding:16px;border-radius:12px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);border-top:3px solid ${ident.color};transition:all .15s;cursor:pointer;" onmouseover="this.style.background='var(--ferreto-surface-3,rgba(255,255,255,.08))';this.style.borderColor='${ident.color}';" onmouseout="this.style.background='var(--ferreto-surface-2,rgba(255,255,255,.04))';this.style.borderColor='var(--ferreto-border,#30363d)';">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
               <span style="font-size:28px;flex:none;">${ident.icon}</span>
@@ -600,7 +654,7 @@
         const seg = segs[i];
         acc += '/' + seg;
         let displayName = seg;
-        if(/^\d+:$/.test(seg) && window.drive_names) displayName = window.drive_names[parseInt(seg)] || seg;
+        if(/^\d+:$/.test(seg) && Array.isArray(window.drive_names)) displayName = window.drive_names[parseInt(seg, 10)] || seg;
         try { displayName = decodeURIComponent(displayName); } catch(_) {}
         const isLast = i === segs.length - 1;
         bcHtml += '<span style="color:var(--ferreto-text-faint,#6b7488);font-size:11px;">/</span>';
@@ -778,7 +832,7 @@
           ${courses.slice(0,6).map(c=>{
             const name=cleanCourseName(c.key);
             const drive=driveNameOf(c.key);
-            const ident=window.gdiCourseIdentity(c.key, name);
+            const ident = courseIdentity(c.key, name);
             // ★ FIX 3 (Task 14): usa totalLessons (real) ao invés de c.lessons.size (visited paths)
             const total=c.totalLessons||c.lessons.size||0;
             const watched=c.watched||0;
@@ -937,10 +991,20 @@
       box.innerHTML='<div class="gdi-notes-empty">Sistema de conquistas indisponível.</div>';
       return;
     }
-    const unlocked=window.gdiAchievements.getUnlocked();
-    const defs=window.gdiAchievements.defs();
+    // ★ CYCLE2-3 FIX B: guard against null/undefined returns from
+    //   getUnlocked()/defs() and against total=0. Without these guards:
+    //   - If defs() returns null/undefined (misconfigured gdiAchievements),
+    //     `defs.length` throws TypeError → blank Achievements tab.
+    //   - If total=0 (empty defs array), pct = Math.round(0/0*100) = NaN →
+    //     "NaN% completo" text + invalid `width:NaN%` CSS (ignored by browser,
+    //     bar shows 0 width with no explanation).
+    //   - If unlocked is null, `unlocked.includes(d.id)` at line ~980 throws.
+    //   The `||[]` coercion matches the defensive style used elsewhere in
+    //   this file (e.g., drive_names → Array.isArray guard in renderDrives).
+    const unlocked=window.gdiAchievements.getUnlocked()||[];
+    const defs=window.gdiAchievements.defs()||[];
     const total=defs.length;
-    const pct=Math.round(unlocked.length/total*100);
+    const pct=total>0?Math.round(unlocked.length/total*100):0;
     box.innerHTML=`<div style="max-width:760px;">
       <div style="text-align:center;margin-bottom:20px;padding:20px;background:linear-gradient(135deg,rgba(255,139,159,.1),rgba(93,222,218,.06));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;">
         <div style="font-size:48px;margin-bottom:8px;">🏆</div>
@@ -964,6 +1028,15 @@
     </div>`;
   }
   async function renderStats(box){
+    // ★ CYCLE-4 FIX C: renderStats is async (awaits ensureState). If the user
+    //   switches tabs during the await, renderBody() is called for the new
+    //   tab and writes box.innerHTML. When this function resumes, the
+    //   final `box.innerHTML = ...` (line ~1040) would OVERWRITE the new
+    //   tab's content with stale stats HTML — a visible race condition
+    //   (user clicks "Início" mid-load, sees stats flash in over home).
+    //   Capture the tab at entry; after the await, if the user has navigated
+    //   away, abort silently (the new tab's render is already on screen).
+    const _tabAtStart = window.__gdiCurrentTab;
     let d=stateD();
     if(!d){
       box.innerHTML=`<div class="gdi-notes-empty" style="padding:40px;text-align:center;">
@@ -971,8 +1044,14 @@
         <div>Carregando estat\u00edsticas\u2026</div>
       </div>`;
       try{await ensureState();}catch(_){}
+      // ★ CYCLE-4 FIX C: abort if user switched tabs during the await.
+      //   Also re-check that box is still connected (defensive — renderBody
+      //   reuses the same #gdi-central-body element, so isConnected should
+      //   still be true, but the check is cheap).
+      if(window.__gdiCurrentTab !== _tabAtStart || !box.isConnected) return;
       d=stateD();
       if(!d){
+        if(window.__gdiCurrentTab !== _tabAtStart || !box.isConnected) return;
         box.innerHTML=`<div class="gdi-notes-empty" style="padding:40px;text-align:center;">
           <i class="bi bi-exclamation-circle" style="font-size:32px;color:var(--ferreto-text-muted,#8b949e);"></i>
           <div style="margin-top:8px;">N\u00e3o foi poss\u00edvel carregar suas estat\u00edsticas.<br><span style="font-size:11px;">Estude algumas aulas e tente novamente.</span></div>
@@ -1017,6 +1096,14 @@
     let srsDue=0;const now=Date.now();
     for(const k in(d.notes||{}))(d.notes[k]||[]).forEach(x=>{const e=d.srs&&d.srs[k+'|'+x.at];if((e?e.due:(x.at+86400000))<=now)srsDue++;});
     const totalH=Object.values(per).reduce((a,b)=>a+b,0)/3600;
+    // ★ CYCLE-4 FIX C (cont.): final guard before the big innerHTML write.
+    //   The synchronous section above (heat/top/per computation) runs without
+    //   await, so the only window for a tab switch was the earlier
+    //   `await ensureState()`. We re-check here anyway because the
+    //   computation loop (for...in over d.notes, d.history) can take
+    //   non-trivial time on large datasets, and a slow setTimeout-driven
+    //   tab switch could land between the await-resolve and this write.
+    if(window.__gdiCurrentTab !== _tabAtStart || !box.isConnected) return;
     box.innerHTML=`
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
         ${chip('\ud83d\udd25',streak+' dia'+(streak===1?'':'s')+' seguidos')}
@@ -1461,10 +1548,18 @@
   }
   // 1 retry inicial (substitui os 10 antigos)
   setTimeout(scheduleNavInject,300);
-  // 1 listener page:change (substitui os 2 antigos)
-  Bus.onGlobal('page:change',scheduleNavInject);
-  // 1 listener rows:appended
-  Bus.onGlobal('rows:appended',scheduleNavInject);
+  // ★ CYCLE-4 FIX A: guard Bus.onGlobal calls — `Bus` is a `const` in
+  //   app.min.js (not attached to window), so a bare `Bus` reference throws
+  //   ReferenceError if app.min.js hasn't loaded yet (or failed to load).
+  //   The rest of this file already uses `typeof Bus !== 'undefined'` (lines
+  //   119, 1585); these two calls were the only unguarded sites. Wrapping them
+  //   keeps the module from crashing silently if the load order shifts.
+  if(typeof Bus !== 'undefined' && typeof Bus.onGlobal === 'function'){
+    // 1 listener page:change (substitui os 2 antigos)
+    Bus.onGlobal('page:change',scheduleNavInject);
+    // 1 listener rows:appended
+    Bus.onGlobal('rows:appended',scheduleNavInject);
+  }
   // também registra como GDI_MODULE — o loader roda após a navbar estar pronta
   window.GDI_MODULES=window.GDI_MODULES||[];
   window.GDI_MODULES.push({name:'central-nav',init:function(){scheduleNavInject();}});
