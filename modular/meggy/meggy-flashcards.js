@@ -786,7 +786,16 @@
         // ★ FIX-MEGGY #1 (Agent 5 R8 / Agent 13 Bug 13-4): hoist cardCount
         //   so the achievement check (which runs synchronously after scheduling
         //   the chain) doesn't referenceError on `cards` (scoped to .then()).
+        // ★ CYCLE2-10 (Agent 10): READ cardCount synchronously from LS BEFORE
+        //   scheduling the chain. The previous code hoisted `let cardCount=0`
+        //   to the closure and assigned it INSIDE .then (`cardCount=cards.length`)
+        //   — but the achievement check below runs synchronously AFTER scheduling
+        //   the chain, so `cardCount` was ALWAYS 0 when read (the .then callback
+        //   hadn't run yet). gradeCard only mutates an existing card's box/due
+        //   (gdiGradeCard), so the count is identical before/after the async
+        //   chain — reading synchronously gives the actual count.
         let cardCount = 0;
+        try { cardCount = U.lsGet('gdi-cards-v1', []).length; } catch(_) {}
         _cardsWriteChain = _cardsWriteChain.then(() => {
           const cards=U.lsGet('gdi-cards-v1',[]);
           const ci=cards.findIndex(x=>x.id===c.id);
@@ -809,7 +818,8 @@
               console.warn('[Meggy] window.gdiGradeCard not available; SRS update skipped for card', c.id);
             }
           }
-          cardCount = cards.length;
+          // ★ CYCLE2-10: removed `cardCount = cards.length;` — see note above
+          //   (synchronous read before the chain gives the same value).
           // ★ FIX-MEGGY (Task 20-7 #8): invalidate pre-indexed cache after grade
           _invalidateCardsIndex();
         }).catch(e=>console.warn('[Meggy] gradeCard chain error:', e&&e.message));
@@ -918,20 +928,28 @@
         //   addCardsBatch with that behaviour. Build a Set of existing fronts
         //   for O(1) lookup.
         const existingFronts = new Set();
+        // ★ CYCLE-10 (Agent 10): also build an id-Set for O(1) id lookup.
+        //   Previously the id-based dedup used `existing.some(x=>x.id===c.id)`
+        //   (O(N) per incoming card) — with N=1000 existing cards and M=10
+        //   incoming, that was 10k comparisons per batch. The old comment
+        //   claimed "cheap Set lookup on a second Set" but the code never
+        //   built the second Set. Now we do, making BOTH dedup checks O(1).
+        const existingIds = new Set();
         for(const x of existing){
-          if(x && x.f) existingFronts.add(String(x.f));
+          if(!x) continue;
+          if(x.f) existingFronts.add(String(x.f));
+          if(x.id) existingIds.add(String(x.id));
         }
         let added = 0;
         for(const c of cardsArray){
           if(!c || !c.id) continue;
-          // id-based dedup (cheap Set lookup on a second Set)
-          // We skip building an id-Set because existing.some() below is
-          // called only when the front-text check passes (much rarer).
-          if(existing.some(x=>x.id===c.id)) continue;
-          // f-based dedup — prevents duplicate-content flashcards
+          // id-based dedup — O(1) Set lookup
+          if(existingIds.has(String(c.id))) continue;
+          // f-based dedup — prevents duplicate-content flashcards (O(1) Set lookup)
           const front = String(c.f||'');
           if(front && existingFronts.has(front)) continue;
           existing.push(c);
+          existingIds.add(String(c.id));
           if(front) existingFronts.add(front);
           added++;
         }
