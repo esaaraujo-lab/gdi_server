@@ -117,6 +117,17 @@
   //    'gdi-cards-v1', mutate, write back. Without serialization, two
   //    concurrent RMWs (e.g. user deletes a card while a study-grade is
   //    pending) read the same snapshot and the second write loses the first.
+  // ★ CYCLE2-10 (Agent 10): ALWAYS persist after mutator runs. The previous
+  //    contract was "if mutator returns a non-undefined value, persist it;
+  //    otherwise skip persistence". But 2 of 3 callers in this file (renderFlash
+  //    add + studyFlash grade) mutate `cur` in place (via all.push / property
+  //    writes) and DON'T return — so persistence was ALWAYS skipped for those
+  //    paths. Newly-added flashcards (renderFlash add) and SRS box/due updates
+  //    (studyFlash grade) were NEVER saved to localStorage (silent data loss).
+  //    The fix: treat `undefined` as "mutator mutated in place" and persist
+  //    `cur`. The 3rd caller (renderFlash delete) returns `cur.filter(...)` —
+  //    a new array — so `next` is used when defined. This mirrors the pattern
+  //    in meggy-flashcards.js addCardsBatch / saveNewCard.
   let _localCardsChain = Promise.resolve();
   function _cardsRMW(mutator){
     _localCardsChain = _localCardsChain.then(async () => {
@@ -124,7 +135,11 @@
         const cur = lsGet(LS_CARDS, []);
         if(!Array.isArray(cur)) return;
         const next = mutator(cur);
-        if(next !== undefined) lsSet(LS_CARDS, next);
+        // ★ CYCLE2-10: persist `next` if mutator returned a value, otherwise
+        //    persist `cur` (mutator mutated in place). Either way, we ALWAYS
+        //    persist — the old `if(next !== undefined)` guard skipped
+        //    persistence for in-place mutators, silently losing writes.
+        lsSet(LS_CARDS, next !== undefined ? next : cur);
       }catch(e){ console.warn('[study-tabs-legacy] _cardsRMW failed:', e && e.message); }
     }).catch(()=>{});
     return _localCardsChain;
