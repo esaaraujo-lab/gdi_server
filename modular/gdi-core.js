@@ -160,7 +160,20 @@ window.gdiModal = window.gdiModal || function(opts){
   return new Promise((resolve)=>{
     const {title='',message='',confirmText='Confirmar',cancelText='Cancelar',danger=false,input=null}=opts||{};
     // remove modais anteriores
-    document.querySelectorAll('.gdi-modal-overlay').forEach(m=>m.remove());
+    // ★ FIX CYCLE2-8 #1: antes, apenas removíamos o elemento overlay do
+    // DOM. Os keydown handlers (escHandler + tabHandler) do modal antigo
+    // ficavam presos no document (ESC/Tab disparava ambos os conjuntos
+    // de handlers), e a Promise do modal antigo ficava pendente para
+    // sempre (caller awaiting indefinidamente). Agora chamamos uma função
+    // de cleanup armazenada no overlay (__gdiModalCleanup) que remove os
+    // handlers E resolve a Promise com o valor de "cancelado" (false/
+    // null), antes de remover o elemento. Overlays de outros módulos
+    // (study-courses, meggy-summaries) não têm __gdiModalCleanup e são
+    // removidos como antes (comportamento inalterado).
+    document.querySelectorAll('.gdi-modal-overlay').forEach(m=>{
+      if(typeof m.__gdiModalCleanup==='function'){try{m.__gdiModalCleanup();}catch(_){}}
+      m.remove();
+    });
     const overlay=document.createElement('div');
     overlay.className='gdi-modal-overlay';
     overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:100002;display:flex;align-items:center;justify-content:center;padding:20px;animation:gdi-modal-fade .2s ease;';
@@ -197,11 +210,45 @@ window.gdiModal = window.gdiModal || function(opts){
     // intercepta Tab/Shift+Tab e mantém o foco dentro do overlay.
     const escHandlerRef={fn:null};
     const tabHandlerRef={fn:null};
+    // ★ FIX CYCLE-8 #1: focus restore. Antes, o modal focava no botão
+    // Confirm (ou input) ao abrir, mas ao fechar (X/Confirm/Cancel/
+    // backdrop/ESC) o foco ficava perdido no <body> — quebrando a
+    // navegação por teclado do usuário (ex.: ele estava num input de
+    // busca, abriu modal, fechou, e o foco sumia). Agora capturamos
+    // document.activeElement ANTES de addEventListener/appendChild
+    // (ainda no elemento previamente focado pelo usuário) e restauramos
+    // no close(). Guard `try/catch` porque alguns elementos antigos
+    // (ex.: <embed>, <object>) não implementam .focus() de forma segura.
+    const prevFocus=(document.activeElement && document.activeElement !== document.body)
+      ? document.activeElement : null;
+    // ★ FIX CYCLE2-8 #1: guard `closed` previne double-close (ex.: user
+    // clica X e pressiona ESC antes do overlay ser removido; ou um novo
+    // modal chama __gdiModalCleanup e depois o onclick antigo dispara).
+    let closed=false;
     const close=(result)=>{
+      if(closed)return;closed=true;
       if(escHandlerRef.fn){try{document.removeEventListener('keydown',escHandlerRef.fn);}catch(_){}escHandlerRef.fn=null;}
       if(tabHandlerRef.fn){try{document.removeEventListener('keydown',tabHandlerRef.fn);}catch(_){}tabHandlerRef.fn=null;}
       overlay.remove();
+      // ★ FIX CYCLE-8 #1: restaura o foco ao elemento que o usuário
+      // tinha focado antes de abrir o modal. Sem isso, leitores de tela
+      // e usuários de teclado perdiam o ponto de partida.
+      try{if(prevFocus && typeof prevFocus.focus==='function')prevFocus.focus();}catch(_){}
       resolve(result);
+    };
+    // ★ FIX CYCLE2-8 #1: cleanup para quando um novo modal supersede
+    // este. Remove os keydown handlers e resolve a Promise com o valor
+    // de "cancelado" (false/null) — o caller reage como se o usuário
+    // tivesse pressionado ESC. NÃO restaura o foco (o novo modal vai
+    // capturá-lo via setTimeout 50ms) nem remove o overlay (o forEach
+    // da linha 173 faz isso via m.remove()). O guard `closed` impede
+    // double-resolve (Promise.resolve é idempotente, mas o guard evita
+    // trabalho desnecessário e focus flicker).
+    overlay.__gdiModalCleanup=()=>{
+      if(closed)return;closed=true;
+      if(escHandlerRef.fn){try{document.removeEventListener('keydown',escHandlerRef.fn);}catch(_){}escHandlerRef.fn=null;}
+      if(tabHandlerRef.fn){try{document.removeEventListener('keydown',tabHandlerRef.fn);}catch(_){}tabHandlerRef.fn=null;}
+      try{resolve(input?null:false);}catch(_){}
     };
     overlay.querySelector('.gdi-modal-x').onclick=()=>close(input?null:false);
     overlay.querySelector('.gdi-modal-cancel').onclick=()=>close(input?null:false);
@@ -969,11 +1016,25 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       // ★C.3: busy-wait 40×200ms removido. Em vez disso, escuta o evento
       // Bus 'slots:ready' (emitido pelo app.min.js quando os slots são criados).
       // Fallback one-shot de 5s: se o evento não disparar, faz um retry.
-      // Bus não tem offGlobal — o listener vira no-op após o primeiro disparo
-      // (guard flag `done`).
+      // ★ FIX CYCLE2-8 #2: o comentário anterior dizia "Bus não tem
+      // offGlobal" — isso estava DESATUALIZADO. Bus.offGlobal foi adicionado
+      // pelo FIX Agent 20 (app.min.js linha 37). Antes deste fix, cada
+      // build() que chegasse neste path vazava +1 listener no array
+      // 'slots:ready' do Bus — eles viravam no-op após o 1o disparo (guard
+      // `done`) mas acumulavam para sempre no Map. Em sessões longas com
+      // muitas trocas de aula (cada uma chamando build()), dezenas de
+      // listeners mortos se acumulavam. Agora removemos o listener via
+      // offGlobal tanto no caminho do evento quanto no do timeout fallback.
       await new Promise(resolve=>{
         let done=false;
-        const onReady=()=>{if(!done){done=true;resolve();}};
+        const onReady=()=>{
+          if(done)return;
+          done=true;
+          if(typeof Bus!=='undefined'&&typeof Bus.offGlobal==='function'){
+            try{Bus.offGlobal('slots:ready',onReady);}catch(_){}
+          }
+          resolve();
+        };
         // ★ FIX 11 (Task 21): was `if(window.Bus&&typeof Bus.onGlobal==='function')` —
         // but Bus is declared with `const` in app.min.js, so `window.Bus` is undefined.
         // The check always failed, so the slots:ready listener was never registered and
@@ -982,7 +1043,14 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         if(typeof Bus !== 'undefined' && typeof Bus.onGlobal === 'function'){
           Bus.onGlobal('slots:ready',onReady);
         }
-        setTimeout(()=>{if(!done){done=true;resolve();}},5000);
+        setTimeout(()=>{
+          if(done)return;
+          done=true;
+          if(typeof Bus!=='undefined'&&typeof Bus.offGlobal==='function'){
+            try{Bus.offGlobal('slots:ready',onReady);}catch(_){}
+          }
+          resolve();
+        },5000);
       });
       if(myGen!==gen)return;
       panel=ensurePanel();
@@ -1229,27 +1297,38 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         bodyEl.innerHTML='';
       }
       tabsEl.querySelectorAll('.gdi-mat-tab').forEach(t=>{
-        t.addEventListener('click',async ()=>{
-          const m=t.dataset.mat;
-          if(m==='isa-summary'){
-            activateOnly(t);
-            if(window.gdiIsaPdf)try{await window.gdiIsaPdf.summary(items,bodyEl,base);}catch(e){showToast('Erro: '+e.message);}
-            else showToast('Módulo Meggy indisponível');
-          }else if(m==='isa-questions'){
-            activateOnly(t);
-            if(window.gdiIsaPdf)try{await window.gdiIsaPdf.questions(items,bodyEl,base);}catch(e){showToast('Erro: '+e.message);}
-            else showToast('Módulo Meggy indisponível');
-          }else if(m==='isa-mindmap'){
-            activateOnly(t);
-            if(window.gdiIsaPdf&&window.gdiIsaPdf.mindmap)try{await window.gdiIsaPdf.mindmap(items,bodyEl,base);}catch(e){showToast('Erro: '+e.message);}
-            else showToast('Módulo Meggy indisponível');
-          }else if(m==='isa-flashcards'){
-            activateOnly(t);
-            if(window.gdiIsaPdf&&window.gdiIsaPdf.flashcards)try{await window.gdiIsaPdf.flashcards(items,bodyEl,base);}catch(e){showToast('Erro: '+e.message);}
-            else showToast('Módulo Flashcards indisponível');
-          }else{
-            show(+m);
-          }
+        // ★ FIX CYCLE-8 #2: handler async sem .catch no topo. Antes,
+        // `async ()=>{...}` era passado direto ao addEventListener;
+        // qualquer throw síncrono (activateOnly/showToast) virava
+        // unhandled rejection silenciosa. Padrão IIFE + .catch garante
+        // captura + toast visível. Mantém o try/catch interno por
+        // granularidade (cada módulo Meggy tem sua própria mensagem).
+        t.addEventListener('click',()=>{
+          (async ()=>{
+            const m=t.dataset.mat;
+            if(m==='isa-summary'){
+              activateOnly(t);
+              if(window.gdiIsaPdf)try{await window.gdiIsaPdf.summary(items,bodyEl,base);}catch(e){showToast('Erro: '+e.message);}
+              else showToast('Módulo Meggy indisponível');
+            }else if(m==='isa-questions'){
+              activateOnly(t);
+              if(window.gdiIsaPdf)try{await window.gdiIsaPdf.questions(items,bodyEl,base);}catch(e){showToast('Erro: '+e.message);}
+              else showToast('Módulo Meggy indisponível');
+            }else if(m==='isa-mindmap'){
+              activateOnly(t);
+              if(window.gdiIsaPdf&&window.gdiIsaPdf.mindmap)try{await window.gdiIsaPdf.mindmap(items,bodyEl,base);}catch(e){showToast('Erro: '+e.message);}
+              else showToast('Módulo Meggy indisponível');
+            }else if(m==='isa-flashcards'){
+              activateOnly(t);
+              if(window.gdiIsaPdf&&window.gdiIsaPdf.flashcards)try{await window.gdiIsaPdf.flashcards(items,bodyEl,base);}catch(e){showToast('Erro: '+e.message);}
+              else showToast('Módulo Flashcards indisponível');
+            }else{
+              show(+m);
+            }
+          })().catch(e=>{
+            console.error('[M9 materials click]',e);
+            try{showToast('Erro: '+(e&&e.message||e));}catch(_){}
+          });
         });
       });
       show(0);
