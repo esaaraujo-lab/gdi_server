@@ -549,6 +549,14 @@
   }
 
   let busy=false;
+  // ★ CYCLE2-7: session-generation counter — incremented in destroySession()
+  //   so that any in-flight send() can detect that the session was torn down
+  //   during its await and bail out before mutating state. Without this, a
+  //   logout fired mid-fetch would let the resolving promise append the
+  //   previous user's AI response (or restore their input text) AFTER
+  //   destroySession cleared messages + sessionStorage — a cross-user
+  //   privacy leak (User B would see User A's last exchange on next open).
+  let _sessionGen = 0;
   async function send(){
     const txt=input.value.trim();
     if(!txt||busy)return;
@@ -558,6 +566,8 @@
     //   Previously, input.value='' ran BEFORE the async AI call — if the
     //   fetch failed, the user lost their text and had to retype it.
     const savedText = txt;
+    // ★ CYCLE2-7: capture session generation for race detection.
+    const myGen = _sessionGen;
     addMsg('user',txt);
     input.value='';  // clear only AFTER the user message is in history
     try {
@@ -585,15 +595,25 @@
         if(response)usedLocal=true;
       }catch(e){console.warn('[Meggy] IA do navegador falhou, caindo p/ servidor:',e);response=null;}
     }
+    // ★ CYCLE2-7: if auth:change fired during callBrowserAI's await, bail
+    //   out — the session was torn down (messages cleared, sessionStorage
+    //   removed). Don't append the response or restore input text for a
+    //   session that no longer exists (privacy: next user would see it).
+    if(_sessionGen !== myGen){ hideTyping(); return; }
     // 2) fallback servidor /api/ai
     if(!response){
       try{
         const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({message:txt,messages:hist})});
         const data=await r.json();
+        // ★ CYCLE2-7: same race guard after the server fetch await.
+        if(_sessionGen !== myGen){ hideTyping(); return; }
         hideTyping();
         if(data.ok&&data.response){response=data.response;}
         else{
+          // ★ CYCLE2-7: don't restore input text or show an error element
+          //   if the session was destroyed mid-fetch.
+          if(_sessionGen !== myGen){ return; }
           // ★ Fix 7: restore the user's text so they can retry / edit.
           input.value = savedText;
           const errEl=document.createElement('div');errEl.className='gdi-ai-err';
@@ -603,6 +623,8 @@
           return;
         }
       }catch(e){
+        // ★ CYCLE2-7: same race guard in the catch (fetch threw mid-flight).
+        if(_sessionGen !== myGen){ hideTyping(); return; }
         hideTyping();
         // ★ Fix 7: restore the user's text so they can retry / edit.
         input.value = savedText;
@@ -613,6 +635,9 @@
         return;
       }
     }
+    // ★ CYCLE2-7: final guard before state mutation (covers the browser-AI
+    //   success path which skips the server block above).
+    if(_sessionGen !== myGen){ hideTyping(); return; }
     hideTyping();
     addMsg('assistant',response);
     // ★ atualiza banco de memória com a interação
@@ -838,6 +863,9 @@
   //   • messages + sessionStorage('gdi-ai-chat') — chat history is per-user.
   //   • _memDebounce — clear the pending updateMemory timer so it doesn't fire
   //     AFTER logout and write to the (now-stale) memory key.
+  //   • window._meggyLastMem — throttle timestamp from the page:change listener
+  //     (CYCLE-7): if not reset, the next user's first updateMemory() would be
+  //     skipped by the 30s throttle (using the PREVIOUS user's last-fire time).
   function destroySession(){
     _browserSession=null;
     _serverEnabled=null;
@@ -845,6 +873,13 @@
     messages=[];
     try{ sessionStorage.removeItem(STORE); }catch(_){}
     if(_memDebounce){ clearTimeout(_memDebounce); _memDebounce=null; }
+    try{ window._meggyLastMem=0; }catch(_){}
+    // ★ CYCLE2-7: bump the session-generation counter so any in-flight
+    //   send() detects the teardown on its next await checkpoint and bails
+    //   out (see send() race guards). Must be bumped BEFORE renderHistory
+    //   so that even a send() resuming between these two lines sees the new
+    //   generation and exits before mutating the freshly-cleared body.
+    _sessionGen++;
     // also re-render the (now empty) chat history if the panel is open
     try{ renderHistory(); }catch(_){}
   }
