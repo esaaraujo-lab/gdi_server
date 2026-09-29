@@ -121,7 +121,8 @@
     const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){console.warn('[lsSet] failed for',k,':',e&&e.message);if(window.showToast)window.showToast('Armazenamento cheio — não foi possível salvar.')}};
 
     try{
-      const manual=lsGet(LS_MANUAL,[]);
+      let manual=lsGet(LS_MANUAL,[]);
+      if(!Array.isArray(manual))manual=[];  // ★ CYCLE-3 FIX: guard against corrupted localStorage
       // ★ FIX (Task 20-13 #6): compare normalized paths so legacy entries
       //   stored with a trailing slash (e.g. '/0:/Cursos/') still match a
       //   re-add attempt with the slash stripped (or vice-versa). low()
@@ -453,14 +454,26 @@
     // Walk each watched key's ancestor paths; increment count for every matching
     // course. The while-loop traverses lk → parent path (slice at last '/') → ...
     // until the string is exhausted. Depth is bounded by the path's component count.
+    // ★ CYCLE2-2 FIX: track incremented paths per watched key to prevent
+    //   double-counting when two manual entries share the same m.path (legacy/
+    //   raced data — alreadyExists at line 131 prevents NEW duplicates, but old
+    //   entries may persist). Previously, a duplicate-path course got its
+    //   watched count incremented once per array entry (so 2x for dupes). The
+    //   `incremented` Set ensures one increment per (watchedKey, coursePath)
+    //   pair — matching the original O(C×W) loop's intent. CYCLE-3 noted this
+    //   as "pre-existing, deferred"; fixing now since the fix is low-risk and
+    //   the task scope is "fix any bugs".
     for(const k in w){
       const lk = low(k);
       let path = lk;
+      const incremented = new Set();
       while(path){
         const arr = courseByLowPath.get(path);
         if(arr){
           for(let mi = 0; mi < arr.length; mi++){
             const mEntry = arr[mi];
+            if(incremented.has(mEntry.path)) continue;
+            incremented.add(mEntry.path);
             watchedCountByCourse.set(mEntry.path, watchedCountByCourse.get(mEntry.path) + 1);
           }
         }
@@ -545,7 +558,8 @@
   }
   function hideCourse(ck){
     return _queueHiddenWrite(() => {
-      const hidden=lsGet(LS_HIDDEN,[]);
+      let hidden=lsGet(LS_HIDDEN,[]);
+      if(!Array.isArray(hidden))hidden=[];  // ★ CYCLE-3 FIX: guard against corrupted localStorage
       if(!hidden.some(h=>low(h)===low(ck)))hidden.push(ck);
       // ★ v1.0.99: cap at 50 hidden entries
       if(hidden.length > 50) hidden.splice(0, hidden.length - 50);
@@ -556,13 +570,16 @@
   }
   function unhideCourse(ck){
     return _queueHiddenWrite(() => {
-      lsSet(LS_HIDDEN,lsGet(LS_HIDDEN,[]).filter(h=>low(h)!==low(ck)));
+      let hidden=lsGet(LS_HIDDEN,[]);
+      if(!Array.isArray(hidden))hidden=[];  // ★ CYCLE-3 FIX: guard against corrupted localStorage
+      lsSet(LS_HIDDEN,hidden.filter(h=>low(h)!==low(ck)));
       // ★ v1.0.103 FIX (Task 20-5 #9): emit courses:changed so caches invalidate.
       try{ if(typeof Bus!=='undefined' && Bus.emit) Bus.emit('courses:changed', {}); }catch(_){}
     });
   }
   function listHiddenCourses(){
-    return lsGet(LS_HIDDEN,[]);
+    const h=lsGet(LS_HIDDEN,[]);
+    return Array.isArray(h)?h:[];  // ★ CYCLE-3 FIX: guard against corrupted localStorage
   }
   const GW=/^(aula|aulas|v\u00eddeo|videos?|li[cç][aã]o|li[cç][oõ]es|licoes|lesson|class|modulo|m\u00f3dulo|module|parte|pt|cap|capitulo|ext|ep|live|arquivo|file)$/i;
   function isGeneric(n){
@@ -753,7 +770,7 @@
         const targets=await Promise.all(slice.map(c=>bestIn(c.key).catch(()=>null)));
         if(box.__filterGen!==__gen)return;  // ★ v1.0.98 FIX: stale — abort
         slice.forEach((c,i)=>renderCourseCard(grid,c,box,targets[i]));
-      })();
+      })().catch(e=>{console.warn('[renderCursos] card render failed:',e&&e.message);});  // ★ CYCLE2-2 FIX: catch fire-and-forget IIFE — renderCourseCard is sync and could throw on DOM bugs.
       // paginação
       if(totalPages>1){
         pagerEl.innerHTML=`<div style="display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;">
@@ -845,7 +862,7 @@
       }else if(isManual){
         applyTarget(null);
       }else{
-        bestIn(c.key).then(applyTarget);
+        bestIn(c.key).then(applyTarget).catch(()=>{});  // ★ CYCLE2-2 FIX: add .catch — bestIn shouldn't reject (exists() never does), but defensive against bugs in vCacheGet/bestInCache.set.
       }
 
       // botão remover
@@ -998,6 +1015,11 @@
     let currentPath='/';      // path atual do navegador
     let selectedPath=null;    // path selecionado pelo aluno
     let selectedName=null;
+    // ★ CYCLE-3 FIX: track PDF count of selected folder so the bottom "Salvar"
+    //   button can pass it to doAddCourseFromDrive. Previously, the save handler
+    //   always passed 0 — so the manual course entry was saved with pdfCount=0,
+    //   and the home tile showed "0 aulas" until the scanner found lessons.
+    let selectedPdfCount=0;
 
     // ── Tabs ──
     const tabDrive=overlay.querySelector('#tab-drive');
@@ -1014,6 +1036,7 @@
       if(currentMode !== m){
         selectedPath = null;
         selectedName = null;
+        selectedPdfCount = 0;  // ★ CYCLE-3 FIX: clear PDF count on mode switch
         // Also hide the "current folder info" box so it doesn't keep showing
         // the previous selection while the user re-navigates.
         try{
@@ -1124,6 +1147,17 @@
       // ★ v1.0.100 FIX (BUG C-4): when navigating to '/', show drive list instead of fetching '/'
       if(currentPath==='/'){
         loadingEl.style.display='none';
+        // ★ CYCLE2-2 FIX: clear stale selection when navigating back to root.
+        //   Previously, the early return here skipped the selection-update
+        //   block at ~line 1254, so a previously-selected folder persisted in
+        //   selectedPath/selectedName/selectedPdfCount and the save button kept
+        //   showing '✓ Adicionar "..."'. Clicking Salvar would then add the
+        //   stale course even though the user was viewing the drive list.
+        //   Now we mirror the drive-root else-branch (line ~1275) to reset.
+        selectedPath=null;
+        selectedName=null;
+        selectedPdfCount=0;
+        try{saveBtn.textContent='📂 Selecione uma pasta primeiro';}catch(_){}
         if(window.drive_names && window.drive_names.length){
           foldersEl.innerHTML='';
           window.drive_names.forEach((dn,i)=>{
@@ -1245,6 +1279,7 @@
           const courseName=decodeURIComponent(getDriveName(segs[segs.length-1]));
           selectedPath=currentPath;
           selectedName=courseName;
+          selectedPdfCount=totalPdfs;  // ★ CYCLE-3 FIX: track for save handler
           currentInfoEl.style.display='block';
           // ★ PATCH G: captura de clique no botão "Selecionar esta pasta"
           // agora é feita pelo listener anexado ao overlay (não mais no document).
@@ -1263,6 +1298,7 @@
         }else{
           selectedPath=null;
           selectedName=null;
+          selectedPdfCount=0;  // ★ CYCLE-3 FIX: clear on drive root
           currentInfoEl.style.display='none';
           saveBtn.textContent='📂 Selecione uma pasta primeiro';
         }
@@ -1283,7 +1319,8 @@
       coursePath = String(coursePath||'').replace(/\/+$/,'') || '/';
       try{
         const LS_MANUAL='gdi-manual-courses-v1';
-        const manual=lsGet(LS_MANUAL,[]);
+        let manual=lsGet(LS_MANUAL,[]);
+        if(!Array.isArray(manual))manual=[];  // ★ CYCLE-3 FIX: guard against corrupted localStorage
         // evita duplicar — compare normalized (low() strips trailing slash + lowercases)
         if(manual.some(c=>c&&low(c.path)===low(coursePath))){
           showToast('Curso "'+courseName+'" já está adicionado');
@@ -1341,6 +1378,37 @@
             console.warn('[AddCourse] gdiIsaPdf.startBattalion não disponível — batalhão não disparado');
           }
         }catch(e){console.warn('[Batalhão] falha:',e.message);}
+
+        // ★ CYCLE-3 FIX: start scanner (was missing — only battalion was started).
+        //   gdiAddCourseFromDrive (inline "Selecionar esta pasta" button) starts
+        //   both battalion AND scanner, but doAddCourseFromDrive (bottom "Salvar"
+        //   button) only started battalion. This caused the home tile's
+        //   "Escaneando..." progress to never appear when the user added a course
+        //   via the Salvar button. Now both code paths start the scanner.
+        try{
+          if(window.gdiCourseScanner && typeof window.gdiCourseScanner.startScan === 'function'){
+            window.gdiCourseScanner.startScan(coursePath, function(state, lessonsData){
+              try{
+                const tiles = document.querySelectorAll('[data-course-key]');
+                let tile = null;
+                for(let i=0; i<tiles.length; i++){
+                  if(tiles[i].dataset.courseKey === coursePath){ tile = tiles[i]; break; }
+                }
+                if(tile){
+                  const bar = tile.querySelector('.gdi-scan-progress');
+                  if(bar && state.totalFolders > 0){
+                    const pct = Math.round((state.scannedFolders||0)/state.totalFolders*100);
+                    bar.style.width = pct + '%';
+                  }
+                  const totalEl = tile.querySelector('[data-stat="total"]');
+                  if(totalEl && lessonsData && lessonsData.lessons){
+                    totalEl.textContent = lessonsData.lessons.length;
+                  }
+                }
+              }catch(_){}
+            });
+          }
+        }catch(e){console.warn('[Scanner] não iniciado:',e.message);}
       }catch(e){
         console.error('[AddCourse] erro fatal em doAddCourseFromDrive:',e);
         if(window.showToast)showToast('Erro ao adicionar curso: '+e.message);
@@ -1390,8 +1458,14 @@
         }
       }catch(_){}
     };
-    overlay.querySelector('#gdi-amc-x').onclick=close;
-    overlay.querySelector('#gdi-amc-cancel').onclick=close;
+    // ★ CYCLE2-2 FIX: guard querySelector results before .onclick (defensive —
+    //   matches the pattern used in openCourseDetail at lines 1912-1992; these
+    //   elements are hardcoded in the template so always exist, but a future
+    //   template edit shouldn't crash the whole modal setup).
+    const _amcX = overlay.querySelector('#gdi-amc-x');
+    if(_amcX) _amcX.onclick=close;
+    const _amcCancel = overlay.querySelector('#gdi-amc-cancel');
+    if(_amcCancel) _amcCancel.onclick=close;
     overlay.onclick=(e)=>{if(e.target===overlay)close();};
 
     // ★ PATCH G: listener de clique no botão "Selecionar esta pasta" anexado ao OVERLAY
@@ -1497,15 +1571,16 @@
             showToast('Navegue até uma pasta e clique em "Selecionar esta pasta"');
             return;
           }
-          await doAddCourseFromDrive(selectedPath, selectedName, 0);
+          await doAddCourseFromDrive(selectedPath, selectedName, selectedPdfCount||0);  // ★ CYCLE-3 FIX: pass actual PDF count
         }else{
           // modo manual
           const name=overlay.querySelector('#gdi-amc-name').value.trim();
           if(!name){showToast('Digite o nome do curso');return;}
-          const goal=parseInt(overlay.querySelector('#gdi-amc-goal').value)||60;
+          const goal=parseInt(overlay.querySelector('#gdi-amc-goal').value,10)||60;  // ★ CYCLE-3 FIX: add radix 10
           const notes=overlay.querySelector('#gdi-amc-notes').value.trim();
           const LS_MANUAL='gdi-manual-courses-v1';
-          const manual=lsGet(LS_MANUAL,[]);
+          let manual=lsGet(LS_MANUAL,[]);
+          if(!Array.isArray(manual))manual=[];  // ★ CYCLE-3 FIX: guard against corrupted localStorage
           const courseId='mc-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
           const coursePath='/0:/'+encodeURIComponent(name);
           manual.push({
@@ -1624,7 +1699,9 @@
         <button id="gdi-restore-all" class="gdi-btn gdi-btn-primary" style="font-size:12px;"><i class="bi bi-arrow-counterclockwise"></i> Restaurar todos</button>
       </div>
     </div>`;
-    box.querySelector('#gdi-hidden-back').onclick=()=>{try{renderCursos(box).catch(()=>{});}catch(_){}};
+    // ★ CYCLE2-2 FIX: guard querySelector before .onclick (defensive).
+    const _hiddenBack = box.querySelector('#gdi-hidden-back');
+    if(_hiddenBack) _hiddenBack.onclick=()=>{try{renderCursos(box).catch(()=>{});}catch(_){}};
     box.querySelectorAll('.gdi-restore-one').forEach(b=>{
       b.onclick=async ()=>{
         // ★ v1.0.103 FIX (Task 20-5 #10): await unhideCourse so the write
@@ -1634,7 +1711,9 @@
         showHiddenCoursesModal(box);
       };
     });
-    box.querySelector('#gdi-restore-all').onclick=async ()=>{
+    // ★ CYCLE2-2 FIX: guard querySelector before .onclick (defensive).
+    const _restoreAll = box.querySelector('#gdi-restore-all');
+    if(_restoreAll) _restoreAll.onclick=async ()=>{
       const ok=await window.gdiModal({
         title:'Restaurar todos',
         message:'Restaurar todos os '+hidden.length+' cursos?',
@@ -1907,7 +1986,8 @@
           await hideCourse(c.key);
         }
         // 2. Remove do localStorage
-        const manual=lsGet(LS_MANUAL_RM,[]);
+        let manual=lsGet(LS_MANUAL_RM,[]);
+        if(!Array.isArray(manual))manual=[];  // ★ CYCLE-3 FIX: guard against corrupted localStorage
         const next=manual.filter(m=>!m || m.path!==c.key);
         lsSet(LS_MANUAL_RM,next);
         // 3. Remove do servidor (segunda camada — impede syncCoursesFromDrive de re-adicionar)
