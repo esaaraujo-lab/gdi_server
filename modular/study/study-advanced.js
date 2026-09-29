@@ -33,14 +33,37 @@
       body:JSON.stringify({message:prompt,messages:[]})});
     // ★ FIX (Agent 6): check r.ok BEFORE r.json() — if /api/ai returns 500
     //    with an HTML error page, r.json() throws a confusing SyntaxError.
-    if(!r.ok) return null;
+    // ★ CYCLE2-10 (Agent 10): THROW on !r.ok instead of returning null. Both
+    //    callers (analyzeProva line ~193, renderRedacao line ~360) do
+    //    `const resp=await callMeggy(...)` then `resp.match(...)` — returning
+    //    null caused a TypeError ("Cannot read property 'match' of null")
+    //    which the caller's catch block showed as a confusing error instead
+    //    of the actual HTTP status. Throwing lets the catch block display
+    //    the real cause (HTTP 500/502/etc.).
+    if(!r.ok) throw new Error('HTTP '+r.status+' em /api/ai');
     const data=await r.json();
     if(!data.ok)throw new Error(data.error||'Meggy indisponível');
     return data.response||'';
   }
 
   function renderMd(txt){
-    if(window.marked){try{return window.gdiSanitize?window.gdiSanitize(marked.parse(txt)):marked.parse(txt);}catch(_){}}
+    // ★ CYCLE2-10 (Agent 10): XSS hardening — match meggy-utils.js renderMd
+    //    pattern. The previous code returned RAW marked.parse(txt) output
+    //    when gdiSanitize was unavailable (CDN outage, module load order
+    //    issue, etc.). Since `txt` comes from AI responses (callMeggy) and
+    //    saved LS data (corrections), a prompt-injection or stored-XSS
+    //    payload could inject arbitrary HTML. Now: when gdiSanitize is
+    //    missing, fall back to ESCAPED text (same as meggy-utils.js). This
+    //    loses Markdown formatting in the rare no-sanitizer case, but
+    //    eliminates the XSS vector. Behavior is identical when gdiSanitize
+    //    IS available (the normal case).
+    if(window.marked){
+      try{
+        const html=marked.parse(txt);
+        if(window.gdiSanitize){try{return window.gdiSanitize(html);}catch(_){}}
+        return esc(txt).replace(/\n/g,'<br>');
+      }catch(_){}
+    }
     return esc(txt).replace(/\n/g,'<br>');
   }
 
@@ -413,7 +436,14 @@
     const cron=lsGet('gdi-cronograma-v1',null);
     const aulasMenosEstudadas=[];
     if(cron&&Array.isArray(cron.plan)){
-      cron.plan.forEach(t=>{if(t&&t.name&&t.type==='study')aulasMenosEstudadas.push(t.name);});
+      // ★ CYCLE2-10 (Agent 10): fix field names to match renderCronograma in
+      //    study-questions.js. The previous code checked `t.name` and
+      //    `t.type==='study'` (English), but renderCronograma saves
+      //    `t.aula` (Portuguese for "lesson") and `t.type==='estudo'`
+      //    (Portuguese for "study"). The mismatch meant this filter NEVER
+      //    matched any task — the "Aulas menos estudadas" banner in the
+      //    Mapa de Fracos was permanently empty (feature broken).
+      cron.plan.forEach(t=>{if(t&&t.aula&&t.type==='estudo')aulasMenosEstudadas.push(t.aula);});
     }
     // ★ FIX 20-6 #11 (Agent 6): the previous `const trails=window.gdiTrails?window.gdiTrails.get():[];`
     //    declaration was flagged as a dead variable (its only usage was inside
