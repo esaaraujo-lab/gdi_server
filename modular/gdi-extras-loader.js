@@ -33,7 +33,7 @@
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
   // ★ v1.0.91: bump 92 → 93 (Shaka skin + Pomodoro sidebar + video-in-panel + PDF split + rest mode fix + OCR AI routing + parallel dispatch).
-  const CACHE_VERSION = '106';  // ★ v1.0.103: 144+ bug fixes from 20-agent deep review (security hardening, race conditions, CORS, subrequest limits, error handling, type coercion, backward compat, performance O(N²)→Set, state leak cleanup, UI/UX accessibility, legacy monolith fixes, docs)
+  const CACHE_VERSION = '107';  // ★ v1.0.103: 144+ bug fixes from 20-agent deep review (security hardening, race conditions, CORS, subrequest limits, error handling, type coercion, backward compat, performance O(N²)→Set, state leak cleanup, UI/UX accessibility, legacy monolith fixes, docs)
   window.CACHE_VERSION = CACHE_VERSION;
 
   const MODULES = [
@@ -185,6 +185,16 @@
       while (typeof Bus === 'undefined') {
         if (Date.now() - _busWaitT0 > 10000) {
           console.error('[GDI Loader] TIMEOUT esperando Bus — app.min.js não carregou?');
+          // ★ FIX CYCLE2-9: clear _bootstrapPromise so a future bootstrap() call
+          // (e.g. user-triggered gdiReloadExtras, or a "retry" button) can re-attempt
+          // the load if Bus becomes available later. WITHOUT this, the dedupe guard
+          // at the top of bootstrap() sees a truthy (resolved-to-undefined) promise
+          // and returns it forever — every subsequent call silently resolves to
+          // undefined and the loader is permanently dead until page refresh.
+          // Mirrors the pattern already used by the core-load-failure path below
+          // (which clears _bootstrapPromise inside loadCoreWithRetry before
+          // returning false, then the IIFE returns at `if (!coreOk) return;`).
+          _bootstrapPromise = null;
           return;
         }
         await new Promise(r => setTimeout(r, 20));
