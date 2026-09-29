@@ -2015,6 +2015,22 @@
         try{ if(typeof Bus!=='undefined' && Bus.emit) Bus.emit('courses:changed', {}); }catch(_){}
         showToast('Curso removido');
         renderCursos(box).catch(()=>{});
+        // ★ EXEC-3 FIX (#16): click home tab after removing — mirrors the
+        //   pattern in gdiAddCourseFromDrive (line 215) and doAddCourseFromDrive
+        //   (line 1367). Without this, renderCursos(box) above replaces the
+        //   detail view with the cursos LIST, but the 'cursos' tab no longer
+        //   exists in the sidebar (removed at study-panel.js line 363-368). The
+        //   sidebar still shows the previously-active tab (e.g. 'home' from
+        //   which the user opened the detail), but the body shows a list view
+        //   with no matching tab indicator — confusing UX. Clicking the home
+        //   tab calls renderBody('home') → renderHome(box), showing the
+        //   dashboard with the remaining course tiles (the removed one gone).
+        //   The renderCursos call above is a defensive fallback in case the
+        //   home tab is not found (e.g. panel not yet rendered).
+        try{
+          const homeTab = document.querySelector('.gdi-central-tab[data-t="home"]');
+          if(homeTab) homeTab.click();
+        }catch(_){}
       }catch(e){
         showToast('Erro ao remover: '+(e&&e.message||e));
       }
