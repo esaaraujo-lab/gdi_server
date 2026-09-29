@@ -291,7 +291,13 @@
             totalLessons: allLessons.length,
             scannedBy: d.scannedBy || null,
             source: state.source,
-            cached: isCached
+            cached: isCached,
+            // ★ CYCLE2-5 Fix #1: propagate worker's `truncated` flag (set on the cache-hit
+            //   path when the distributed read hit READ_HARD_LIMIT=14 or MAX_FOLDERS=500
+            //   and didn't process all folders — see worker.js line ~4449). Without this,
+            //   the UI would think all lessons are present even though some folders weren't
+            //   read, silently hiding lessons for large courses (>14 folders).
+            truncated: !!d.truncated
           };
           setLessons(courseKey, doneData);
           // Best-effort save to Drive (cross-student legacy fallback)
@@ -736,8 +742,17 @@
         const LS_HIDDEN = 'gdi-hidden-courses-v1';
         const hidden = JSON.parse(localStorage.getItem(LS_HIDDEN) || '[]');
         if(Array.isArray(hidden) && hidden.length > 0){
-          const manualPaths = new Set(cleaned.map(m => m && (m.path || m.courseKey)).filter(Boolean));
-          const prunedHidden = hidden.filter(h => manualPaths.has(h));
+          // ★ CYCLE2-5 Fix #2: normalize paths before comparison (matches _normPath in
+          //   syncCoursesFromDrive above AND low/norm in study-courses.js hideCourse).
+          //   Without this, a hidden entry with a trailing slash or different case
+          //   (legacy data from before normalization was added) would be pruned even
+          //   though the course is still in manual — causing the course to reappear on
+          //   the next sync (defeating the user's "hide" action). Normalization strips
+          //   query string + trailing slashes + lowercases (same as low() in
+          //   study-courses.js line 44).
+          const _normHidden = p => String(p||'').split('?')[0].replace(/\/+$/,'').toLowerCase();
+          const manualPaths = new Set(cleaned.map(m => m && _normHidden(m.path || m.courseKey)).filter(Boolean));
+          const prunedHidden = hidden.filter(h => manualPaths.has(_normHidden(h)));
           if(prunedHidden.length !== hidden.length){
             localStorage.setItem(LS_HIDDEN, JSON.stringify(prunedHidden));
             console.log('[Cleanup] pruned', hidden.length - prunedHidden.length, 'orphan hidden entries');
