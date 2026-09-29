@@ -352,7 +352,30 @@
     return true;
   }
   function _markFailedDownload(url){
-    if(url) _failedDownloadURLs.set(url, Date.now());
+    if(!url) return;
+    // ★ CYCLE-6 FIX (Agent 6): cap _failedDownloadURLs to prevent unbounded
+    //   growth. Entries expire after _FAILED_DOWNLOAD_TTL but are only
+    //   evicted lazily (when _isFailedDownload is called for that exact
+    //   URL). In a long-lived session navigating many lessons, expired
+    //   entries accumulate without bound. When the Map exceeds the cap,
+    //   opportunistically sweep expired entries; if still over cap, drop
+    //   oldest by timestamp (FIFO fallback — entries are short-lived so
+    //   FIFO ≈ LRU here).
+    if(_failedDownloadURLs.size >= 200){
+      const now = Date.now();
+      for(const [k, ts] of _failedDownloadURLs){
+        if(now - ts > _FAILED_DOWNLOAD_TTL) _failedDownloadURLs.delete(k);
+      }
+      if(_failedDownloadURLs.size >= 200){
+        // Still over cap — drop oldest by timestamp
+        let oldestKey=null, oldestTs=Infinity;
+        for(const [k, ts] of _failedDownloadURLs){
+          if(ts < oldestTs){ oldestTs = ts; oldestKey = k; }
+        }
+        if(oldestKey) _failedDownloadURLs.delete(oldestKey);
+      }
+    }
+    _failedDownloadURLs.set(url, Date.now());
   }
 
   // ★ v87-FIX-MEGGY-MODULES BUG 4: robust cache lookup that probes multiple
@@ -543,18 +566,27 @@
   const _inflight={};
   function _chainCacheEvict(){
     const keys=Object.keys(_chainCache);
-    if(keys.length>_chainCacheMax){
-      // remove o mais antigo (primeiro inserido — aproximação LRU)
-      // ★ FIX-MEGGY #6 (Agent 5 R5): skip in-flight keys during eviction —
-      //   if we delete a key whose _inflight promise is still running, the
-      //   IIFE continues mutating an orphaned object (it holds a reference),
-      //   but later `return _chainCache[key]` returns undefined and crashes
-      //   the caller.
-      for(let i=0;i<keys.length;i++){
-        if(_inflight[keys[i]]) continue; // still running — don't evict
-        delete _chainCache[keys[i]];
-        break;
-      }
+    if(keys.length<=_chainCacheMax) return;
+    // ★ CYCLE-6 FIX (Agent 6): evict in a LOOP until size <= _chainCacheMax.
+    //   The previous single-eviction-per-call logic only removed ONE key
+    //   per call, so a temporary overshoot (e.g., 7 concurrent in-flight
+    //   generateAll calls all adding their keys before any resolves) left
+    //   the cache stuck at the overshoot size forever — subsequent single
+    //   evictions only kept pace with new adds, never shrinking back down
+    //   to _chainCacheMax. The Map's insertion order reflects LRU position
+    //   (the hit path does delete + re-set to move keys to MRU), so iterating
+    //   from index 0 evicts the LRU entries first.
+    // ★ FIX-MEGGY #6 (Agent 5 R5): skip in-flight keys during eviction —
+    //   if we delete a key whose _inflight promise is still running, the
+    //   IIFE continues mutating an orphaned object (it holds a reference),
+    //   but later `return _chainCache[key]` returns undefined and crashes
+    //   the caller.
+    const need = keys.length - _chainCacheMax;
+    let evicted = 0;
+    for(let i=0; i<keys.length && evicted<need; i++){
+      if(_inflight[keys[i]]) continue; // still running — don't evict
+      delete _chainCache[keys[i]];
+      evicted++;
     }
   }
 
@@ -824,7 +856,21 @@
 
     // salva TUDO no Drive em um único POST (resumo + pílulas + questões)
     try{
-      await fetch('/api/ai/cache',{method:'POST',headers:{'Content-Type':'application/json'},
+      // ★ CYCLE2-6 FIX (Agent 6 re-review): use GRANULAR_AVAILABLE to pick
+      //   the endpoint, consistent with cacheSave(). Before, this POST was
+      //   hardcoded to /api/ai/cache — if the granular endpoints are ever
+      //   implemented server-side, cacheGet would read from /api/ai/summaries
+      //   but this POST would write to /api/ai/cache, causing silent cache
+      //   corruption (writes and reads go to different endpoints → cache
+      //   miss → redundant regeneration on every visit). Currently latent
+      //   (granular probe always returns false since the server never
+      //   registered /api/ai/summaries), but the fix makes the code
+      //   consistent and future-proof. GRANULAR_AVAILABLE is cached for
+      //   5min, so the second call here (the first was in cacheGetRobust
+      //   at line 647) returns immediately.
+      const _gPost = await GRANULAR_AVAILABLE();
+      const _postEndpoint = _gPost ? '/api/ai/summaries' : '/api/ai/cache';
+      await fetch(_postEndpoint,{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
           key:U.lessonKey(),
           summary:_chainCache[key].summary||null,
@@ -873,7 +919,16 @@
     if(key) delete _chainCache[key];
     // limpa cache do Drive (★FIX: também limpa mindmap, antes ficava preso)
     try{
-      await fetch('/api/ai/cache',{method:'POST',headers:{'Content-Type':'application/json'},
+      // ★ CYCLE2-6 FIX (Agent 6 re-review): use GRANULAR_AVAILABLE to pick
+      //   the endpoint, consistent with cacheSave() and generateAll's POST.
+      //   Before, this clear POST was hardcoded to /api/ai/cache — if the
+      //   granular endpoints are ever implemented server-side, the clear
+      //   would go to /api/ai/cache while cacheGet reads from /api/ai/summaries,
+      //   so the stale entry would survive regenerate and the user would see
+      //   the old summary/pílulas/questões instead of freshly-regenerated ones.
+      const _gClear = await GRANULAR_AVAILABLE();
+      const _clearEndpoint = _gClear ? '/api/ai/summaries' : '/api/ai/cache';
+      await fetch(_clearEndpoint,{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({key,summary:null,questions:null,mindmap:null,lessonName:lesson})});
     }catch(e){
       // ★ FIX 20-14 #E (cont.): same console.warn alignment as generateAll above.
@@ -1066,6 +1121,52 @@
     }catch(_){ return false; }
   }
 
+  // ═══ CYCLE-6 FIX (Agent 6): auth:change cleanup ═══
+  // When the user logs out (auth state → 'out'/'logout'), drop all
+  // session-bound in-memory state from this module:
+  //   • _chainCache — holds per-lesson summaries/mindmaps/questions from
+  //     the PREVIOUS user's lessons; keeping them would let the next user
+  //     see stale content for those lessons (cache hit → no regeneration).
+  //   • _inflight — per-key in-flight promise map. Deleting entries does
+  //     NOT cancel the running IIFEs (JS has no promise cancellation), but
+  //     it forces a fresh generateAll call for the same key to start a new
+  //     IIFE instead of dedup-joining the stale one. The stale IIFE's
+  //     `finally { delete _inflight[key]; }` is a no-op (already deleted).
+  //   • _failedDownloadURLs — per-URL TTL Map of failed Drive downloads;
+  //     URLs are user-scoped (Drive paths include user-specific folder IDs).
+  // _qWriteChain / _sumWriteChain are NOT reset — they have no user data
+  // (they just serialize localStorage writes; localStorage itself is
+  // per-tab and the data inside is keyed by user only via Drive POSTs).
+  // GRANULAR_AVAILABLE is NOT reset — it probes the worker (shared infra),
+  // not user state.
+  // NOTE (known limitation): a stale generateAll IIFE that started before
+  //   logout may still complete and write to _chainCache[key] AFTER we
+  //   cleared it. The new user would see those stale partial writes until
+  //   they navigate to that lesson (which triggers a fresh generateAll
+  //   cache-miss → server fetch). Accepted in v1.0.103 (Wave 1) per
+  //   worklog Task 20-7 item 17; full fix would require a session-gen
+  //   counter checked at every _chainCache[key] write — deferred.
+  function _clearChainCacheAndInflight(){
+    try{
+      // Preserve object reference (exported on window.__gdiMeggy.cache._chainCache
+      // and _inflight for diagnostics); just delete all keys.
+      for(const k in _chainCache){
+        if(Object.prototype.hasOwnProperty.call(_chainCache, k)) delete _chainCache[k];
+      }
+      for(const k in _inflight){
+        if(Object.prototype.hasOwnProperty.call(_inflight, k)) delete _inflight[k];
+      }
+      _failedDownloadURLs.clear();
+    }catch(_){}
+  }
+  if(typeof Bus !== 'undefined' && typeof Bus.onGlobal === 'function'){
+    Bus.onGlobal('auth:change', (state)=>{
+      if(state === 'out' || state === 'logout'){
+        try{ _clearChainCacheAndInflight(); }catch(_){}
+      }
+    });
+  }
+
   // ── Namespace exports ──
   window.__gdiMeggy.cache = {
     generateAll, regenerate,
@@ -1079,7 +1180,9 @@
     downloadAsPdf, copySummary,
     autoCreateFlashcards,
     // Expose shared state for diagnostics / future modules
-    _chainCache, _inflight, _qWriteChain
+    _chainCache, _inflight, _qWriteChain,
+    // ★ CYCLE-6: expose teardown hook for testing / explicit cleanup
+    _clearChainCacheAndInflight
   };
 
   // ── Aliases para compatibilidade (gdiIsaPdf.* assemblado em meggy-summaries.js) ──
