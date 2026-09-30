@@ -176,7 +176,7 @@
         }));
       }
       return [];
-    }catch(e){console.warn('[Meggy Summaries] fetchSharedQuestions failed:', e&&e.message);return [];}
+    }catch(_){return [];}
   }
 
   // ── Salvar MD da redação corrigida no Drive do aluno ──
@@ -230,7 +230,7 @@
       const r=await fetch('/api/ai/battalion',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       const d=await r.json();
       return !!(d&&d.ok);
-    }catch(e){console.warn('[Meggy Summaries] startBattalion failed:', e&&e.message);return false;}
+    }catch(_){return false;}
     finally {
       _battalionRunning.delete(courseKey);
     }
@@ -240,20 +240,12 @@
     try{
       const r=await fetch('/api/ai/battalion/status?courseKey='+encodeURIComponent(courseKey),{cache:'no-store'});
       const d=await r.json();
+      return d;
+    }catch(e){
       // ★ Fix 12 (Task 20-8): differentiate network errors from "not
       //   processed yet" — both previously returned {ok:false,processed:false}.
       //   Callers can now check `reason==='network'` to retry vs. show a
       //   "Generate materials" CTA when reason==='not_processed'.
-      // ★ EXEC-5: normalize `reason` on the success path too — if the worker
-      //   returned {ok:false,processed:false} without a reason, tag it as
-      //   'not_processed' so callers don't need a defensive
-      //   `if(!d.reason) d.reason='not_processed'` of their own. Network
-      //   errors still arrive via the catch block with reason:'network'.
-      if(d && !d.ok && !d.processed && !d.reason){
-        d.reason = 'not_processed';
-      }
-      return d;
-    }catch(e){
       return {ok:false, processed:false, reason:'network', error:e&&e.message||'network error'};
     }
   }
@@ -286,7 +278,7 @@
       const p = window.location.pathname || '';
       // Lesson URLs look like "/11:/TJ SP Escrevente/Módulo 1/Português/Aula 1.pdf"
       if(/^\/\d+:\//.test(p) && p.length > 4) return p;
-    }catch(e){console.warn('[Meggy Summaries] _deriveLessonPath failed:', e&&e.message);}
+    }catch(_){}
     return '';
   }
 
@@ -305,7 +297,7 @@
           return String(j.name || j.username || j.email).split('@')[0];
         }
       }
-    }catch(e){console.warn('[Meggy Summaries] _currentUsername failed:', e&&e.message);}
+    }catch(_){}
     return 'meggy';
   }
 
@@ -334,13 +326,6 @@
       if(d && d.ok) return {ok:true, mode:'folder', file:d.file||null};
       return {ok:false, reason:(d && d.error) || 'unknown'};
     }catch(e){
-      // ★ EXEC-5: log so failures aren't completely silent — mirrors
-      //   loadQuestionsFromDisciplineFolder's catch in meggy-questions.js.
-      //   The caller (saveSharedSummary) treats this as best-effort and
-      //   falls back to the legacy centralized pool, but a missing
-      //   console.warn here would hide a misconfigured Drive folder or a
-      //   network blip from dev tools.
-      console.warn('[Meggy] saveSummaryToLessonFolder failed:', e && e.message || e);
       return {ok:false, reason:'network', error:e && e.message || String(e)};
     }
   }
@@ -364,10 +349,6 @@
       if(d && d.ok && typeof d.content === 'string') return {ok:true, content:d.content, file:d.file||null};
       return {ok:false, reason:(d && d.reason) || (d && d.error) || 'unknown'};
     }catch(e){
-      // ★ EXEC-5: same parity log as saveSummaryToLessonFolder above and
-      //   loadQuestionsFromDisciplineFolder in meggy-questions.js — without
-      //   this, a transient network failure mid-fetch would be invisible.
-      console.warn('[Meggy] loadSummaryFromLessonFolder failed:', e && e.message || e);
       return {ok:false, reason:'network', error:e && e.message || String(e)};
     }
   }
@@ -388,7 +369,7 @@
         try{
           await fetch('/api/ai/shared-summaries',{method:'POST',headers:{'Content-Type':'application/json'},
             body:JSON.stringify({lessonName,summary,questions:questions||null})});
-        }catch(e){console.warn('[Meggy Summaries] legacy shared-summaries pool (post-folder-success) failed:', e&&e.message);/* legacy pool is best-effort */}
+        }catch(_){/* legacy pool is best-effort */}
         return;
       }
       console.warn('[Meggy] saveSummaryToLessonFolder failed ('+folderRes.reason+') — falling back to legacy shared-summaries pool');
@@ -397,7 +378,7 @@
     try{
       await fetch('/api/ai/shared-summaries',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({lessonName,summary,questions:questions||null})});
-    }catch(e){console.warn('[Meggy Summaries] legacy shared-summaries fallback failed:', e&&e.message);/* não bloqueia */}
+    }catch(_){/* não bloqueia */}
   }
 
   // ── Buscar resumos compartilhados de outros usuários ──
@@ -429,14 +410,14 @@
           // reason === 'not_found' || 'http_404' → fall through to legacy
         }
       }
-    }catch(e){ console.warn('[Meggy Summaries] fetchSharedSummaries folder-first read failed:', e&&e.message); /* fall through to legacy */ }
+    }catch(_){ /* fall through to legacy */ }
     // 2) Legacy fallback: centralized shared-summaries endpoint.
     try{
       const url='/api/ai/shared-summaries'+(lessonFilter?'?lesson='+encodeURIComponent(lessonFilter):'');
       const r=await fetch(url,{cache:'no-store'});
       const d=await r.json();
       return (d&&d.ok&&Array.isArray(d.summaries))?d.summaries:[];
-    }catch(e){console.warn('[Meggy Summaries] fetchSharedSummaries legacy GET failed:', e&&e.message);return [];}
+    }catch(_){return [];}
   }
 
   function _summaryModal(lesson, markdownText){
@@ -446,26 +427,12 @@
     //   each replacement modal leaks its keydown listener on document.
     document.querySelectorAll('.gdi-resumo-modal').forEach(m=>{
       if(m._escHandler){
-        try{ document.removeEventListener('keydown', m._escHandler); }catch(e){console.warn('[Meggy Summaries] removeEventListener (escHandler cleanup) failed:', e&&e.message);}
-      }
-      // ★ H-37 (Task P12-5): also clean up the focus-trap handler + restore focus.
-      if(m._trapHandler){
-        try{ m.removeEventListener('keydown', m._trapHandler); }catch(e){console.warn('[Meggy Summaries] removeEventListener (trapHandler cleanup) failed:', e&&e.message);}
-      }
-      if(m._prevFocus && typeof m._prevFocus.focus === 'function'){
-        try{ m._prevFocus.focus(); }catch(e){console.warn('[Meggy Summaries] restore focus (cleanup) failed:', e&&e.message);}
+        try{ document.removeEventListener('keydown', m._escHandler); }catch(_){}
       }
       m.remove();
     });
     const overlay=document.createElement('div');
     overlay.className='gdi-resumo-modal';
-    // ★ H-37 (Task P12-5): a11y — save the previously focused element so we can
-    //   restore focus on close (keyboard / screen-reader users return to the
-    //   "Ver" button that opened the modal instead of being dropped at the
-    //   page top). Without this, blind users lose their place in the Resumos
-    //   list every time they preview a summary.
-    const _previouslyFocused = document.activeElement;
-    overlay._prevFocus = _previouslyFocused;
     // ★ Fix 8 (Task 20-8): use a HIGHER z-index than gdiModal (100002) so
     //   this modal can stack on top when called from inside another modal
     //   (e.g. opening a summary preview from the Resumos tab, which is
@@ -480,21 +447,17 @@
         const z = parseInt(m.style && m.style.zIndex, 10);
         if(!isNaN(z) && z >= _z) _z = z + 1;
       });
-    } catch(e){ console.warn('[Meggy Summaries] _summaryModal z-index stack computation failed:', e&&e.message); /* fall back to 100010 */ }
+    } catch(_){ /* fall back to 100010 */ }
     overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(4px);z-index:'+_z+';display:flex;align-items:center;justify-content:center;padding:20px;animation:gdi-modal-fade .2s ease;';
     const html=U.renderMd(markdownText);
-    // ★ H-37: generate a unique ID for aria-labelledby so multiple stacked
-    //   modals don't collide (the cleanup above removes older modals, but
-    //   a sibling gdiModal could still be in the DOM with its own title).
-    const titleId = 'gdi-resumo-title-' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
-    overlay.innerHTML=`<div role="dialog" aria-modal="true" aria-labelledby="${titleId}" style="background:var(--ferreto-bg-2,#0d1119);border:1px solid var(--ferreto-border,#21262d);border-radius:14px;max-width:780px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.6);">
+    overlay.innerHTML=`<div style="background:var(--ferreto-bg-2,#0d1119);border:1px solid var(--ferreto-border,#21262d);border-radius:14px;max-width:780px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.6);">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--ferreto-border,#21262d);gap:10px;">
-        <b id="${titleId}" style="color:var(--ferreto-text,#f0f6fc);font-size:15px;font-family:var(--ferreto-font-display,'Poppins',sans-serif);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">${U.esc(lesson)}</b>
-        <button class="gdi-resumo-x" aria-label="Fechar resumo" style="background:transparent;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:18px;padding:4px 8px;border-radius:6px;flex:none;">✕</button>
+        <b style="color:var(--ferreto-text,#f0f6fc);font-size:15px;font-family:var(--ferreto-font-display,'Poppins',sans-serif);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">${U.esc(lesson)}</b>
+        <button class="gdi-resumo-x" style="background:transparent;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:18px;padding:4px 8px;border-radius:6px;flex:none;">✕</button>
       </div>
-      <div class="gdi-resumo-content" tabindex="-1" style="padding:20px;overflow-y:auto;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.65;">${html}</div>
+      <div class="gdi-resumo-content" style="padding:20px;overflow-y:auto;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.65;">${html}</div>
       <div style="display:flex;gap:8px;justify-content:flex-end;padding:10px 18px;border-top:1px solid var(--ferreto-border,#21262d);flex-wrap:wrap;">
-        <button class="gdi-resumo-pdf gdi-mode-btn" style="font-size:13px;"><i class="bi bi-download" aria-hidden="true"></i> Baixar PDF</button>
+        <button class="gdi-resumo-pdf gdi-mode-btn" style="font-size:13px;"><i class="bi bi-download"></i> Baixar PDF</button>
         <button class="gdi-resumo-close gdi-mode-btn" style="font-size:13px;">Fechar</button>
       </div>
     </div>`;
@@ -511,82 +474,26 @@
     //    so that a replacement modal can remove it (see cleanup at top).
     const escHandler=(e)=>{if(e.key==='Escape')close();};
     overlay._escHandler = escHandler;
-    // ★ H-37 (Task P12-5): focus trap — Tab/Shift+Tab wraps between first and
-    //   last focusable elements inside the modal. Without this, Tab escapes to
-    //   the underlying page (which is hidden behind the modal but still
-    //   tabbable), breaking keyboard navigation and trapping screen-reader
-    //   users outside the dialog.
-    const _getFocusable=()=>{
-      try{
-        return Array.from(overlay.querySelectorAll(
-          'button, [tabindex]:not([tabindex="-1"]), a[href], input, textarea, select'
-        )).filter(el=>{
-          if(el.disabled) return false;
-          if(el.getAttribute('aria-hidden') === 'true') return false;
-          try{ return el.offsetParent !== null; }catch(e){ console.warn('[Meggy Summaries] _summaryModal offsetParent visibility check failed:', e&&e.message); return false; }
-        });
-      }catch(e){ console.warn('[Meggy Summaries] _summaryModal _getFocusable failed (returning []):', e&&e.message); return []; }
-    };
-    const trapHandler=(e)=>{
-      if(e.key !== 'Tab') return;
-      const focusable = _getFocusable();
-      if(!focusable.length) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const active = document.activeElement;
-      if(e.shiftKey){
-        if(active === first || !overlay.contains(active)){
-          e.preventDefault();
-          try{ last.focus(); }catch(err){console.warn('[Meggy Summaries] _summaryModal focus trap (last.focus) failed:', err&&err.message);}
-        }
-      } else {
-        if(active === last || !overlay.contains(active)){
-          e.preventDefault();
-          try{ first.focus(); }catch(err){console.warn('[Meggy Summaries] _summaryModal focus trap (first.focus) failed:', err&&err.message);}
-        }
-      }
-    };
-    overlay._trapHandler = trapHandler;
     const close=()=>{
       document.removeEventListener('keydown',escHandler);
-      overlay.removeEventListener('keydown',trapHandler);
       overlay.remove();
-      // ★ H-37: restore focus to the element that opened the modal.
-      if(_previouslyFocused && typeof _previouslyFocused.focus === 'function'){
-        try{ _previouslyFocused.focus(); }catch(e){console.warn('[Meggy Summaries] restore focus (close) failed:', e&&e.message);}
-      }
     };
     overlay.querySelector('.gdi-resumo-x').onclick=close;
     overlay.querySelector('.gdi-resumo-close').onclick=close;
     overlay.querySelector('.gdi-resumo-pdf').onclick=()=>window.__gdiMeggy.cache.downloadAsPdf(lesson,markdownText);
     overlay.onclick=(e)=>{if(e.target===overlay)close();};
     document.addEventListener('keydown',escHandler);
-    overlay.addEventListener('keydown',trapHandler);
-    // ★ H-37: move focus into the modal on open (close button is the safest
-    //   initial target — Enter activates it (dismiss) and Tab moves forward
-    //   to the PDF button). Wrap in setTimeout(0) so the browser fires the
-    //   focus event AFTER the modal is in the DOM and visible.
-    setTimeout(()=>{
-      const xBtn = overlay.querySelector('.gdi-resumo-x');
-      if(xBtn){ try{ xBtn.focus(); }catch(e){console.warn('[Meggy Summaries] initial focus (x button) failed:', e&&e.message);} }
-    },0);
   }
 
-  // ★ FIX 4 (Task 23): renderResumos agora é ASYNC e lê resumos de QUATRO fontes:
+  // ★ FIX 4 (Task 23): renderResumos agora é ASYNC e lê resumos de DUAS fontes:
   //   1) localStorage (listIsaSummaries) — rápido, offline-first
   //   2) Google Drive (.meggy.ai/resumos/) via GDIStorage.listMaterials
-  //   3) ★ H-14 (Task P12-5): shared pool (/api/ai/shared-summaries) — reverse
-  //      sync so cross-user shared summaries (saved by other students via
-  //      saveSharedSummary) appear in the Resumos tab. Previously the sync was
-  //      one-way (local → Drive), so Drive-side additions from peers were
-  //      invisible to the localStorage-backed list.
-  //   4) Lesson folder (loadSummaryFromLessonFolder — Task 7 folder-first)
   // Antes só lia localStorage — então resumos gerados pelo batalhão em outro
   // dispositivo (ou após limpar localStorage) não apareciam. Agora mergeia os
-  // quatro, dedup por lesson+date, e mostra um badge "Drive" / "Pasta da aula"
-  // / "Compartilhado" nos itens conforme a origem. O conteúdo dos itens do
-  // Drive é lazy-loaded (fetch do downloadUrl) apenas quando o aluno clica em
-  // "Ver" ou "PDF" — não baixa todos os resumos de uma vez (seria pesado).
+  // dois, dedup por lesson+date, e mostra um badge "Drive" nos itens que só
+  // existem no Drive. O conteúdo dos itens do Drive é lazy-loaded (fetch do
+  // downloadUrl) apenas quando o aluno clica em "Ver" ou "PDF" — não baixa
+  // todos os resumos de uma vez (seria pesado).
   async function renderResumos(bodyEl){
     if(!bodyEl)return;
     // ★ FIX-MEGGY #9 (Agent 5 R7): generation token — abort early if the user
@@ -624,7 +531,7 @@
           }
         }
       }
-    }catch(e){ console.warn('[Meggy Summaries] renderResumos folder-first read failed:', e&&e.message); /* folder-first read is best-effort */ }
+    }catch(_){ /* folder-first read is best-effort */ }
     // ★ CYCLE-10 (Agent 10): also bail when bodyEl was detached from the DOM
     //   while we were awaiting fetches (user closed the panel mid-load).
     //   isStale() only catches re-render races; it doesn't catch the panel-
@@ -641,7 +548,7 @@
     try {
       const ls = window.gdiIsaPdf ? window.gdiIsaPdf.listIsaSummaries() : [];
       if (Array.isArray(ls)) localSummaries = ls;
-    } catch(e) { console.warn('[Meggy Summaries] renderResumos listIsaSummaries failed:', e&&e.message); localSummaries = []; }
+    } catch(_) { localSummaries = []; }
 
     // 2) Drive resumos (.meggy.ai/resumos/) — best-effort, não bloqueia
     let driveSummaries = [];
@@ -673,41 +580,11 @@
             });
         }
       }
-    }catch(e){ console.warn('[Meggy Summaries] renderResumos Drive listMaterials failed:', e&&e.message); /* Drive indisponível — segue só com localStorage */ }
-    if(isStale() || !bodyEl.isConnected) return;
-
-    // 2.5) ★ H-14 (Task P12-5): shared pool resumos (/api/ai/shared-summaries).
-    //      Cross-user summaries saved via saveSharedSummary() by OTHER students.
-    //      Best-effort, non-blocking — if the endpoint is unavailable or the
-    //      user isn't authenticated, we just get an empty list and proceed.
-    //      The server returns the full summary content inline (no lazy-load
-    //      needed), so we surface a preview directly in the card.
-    let sharedSummaries = [];
-    try{
-      const shared = await fetchSharedSummaries('');  // '' = no filter → all
-      if(Array.isArray(shared)){
-        sharedSummaries = shared
-          .filter(it => it && (it.lessonName || it.lesson) && (it.summary || ''))
-          .map((it, idx) => ({
-            id: 'shared-'+(it.lessonName||it.lesson)+'-'+(it.date||idx)+'-'+idx,
-            lesson: String(it.lessonName || it.lesson || 'Compartilhado'),
-            summary: String(it.summary || ''),
-            path: '',
-            subject: 'Compartilhado',
-            date: it.date ? Number(it.date) : Date.now(),
-            _shared: true,
-            _author: it.author || ''
-          }));
-      }
-    }catch(e){ console.warn('[Meggy Summaries] renderResumos shared-pool fetch failed:', e&&e.message); /* shared pool indisponível — segue com as demais fontes */ }
+    }catch(_){ /* Drive indisponível — segue só com localStorage */ }
     if(isStale() || !bodyEl.isConnected) return;
 
     // 3) Merge: folder-first (if found) > localStorage (conteúdo já carregado)
-    //    > Drive central pool > shared pool (dedup por lesson name
-    //    case-insensitive). The order matters: folder-first wins because it's
-    //    the most relevant (current lesson), then localStorage (offline), then
-    //    Drive (own user's cloud), then shared (cross-user — lowest priority
-    //    since the user didn't author it).
+    //    > Drive central pool (dedup por lesson name case-insensitive)
     const seenLesson = new Set();
     const all = [];
     if(folderSummary){
@@ -723,14 +600,6 @@
       }
     }
     for(const r of driveSummaries){
-      if(!r)continue;
-      const k = String(r.lesson||'').toLowerCase();
-      if(!seenLesson.has(k)){
-        seenLesson.add(k);
-        all.push(r);
-      }
-    }
-    for(const r of sharedSummaries){
       if(!r)continue;
       const k = String(r.lesson||'').toLowerCase();
       if(!seenLesson.has(k)){
@@ -764,22 +633,19 @@
         const date = r.date ? new Date(r.date).toLocaleDateString('pt-BR') : '';
         const driveBadge = r._drive ? '<span style="color:#5ddeda;font-size:10px;margin-left:6px;flex:none;"><i class="bi bi-cloud-fill"></i> Drive</span>' : '';
         const folderBadge = r._folder ? '<span style="color:#3fb950;font-size:10px;margin-left:6px;flex:none;"><i class="bi bi-folder2-open"></i> Pasta da aula</span>' : '';
-        // ★ H-14 (Task P12-5): badge for cross-user shared summaries. Shows the
-        //   author (if known) so the student knows who shared it.
-        const sharedBadge = r._shared ? '<span style="color:#a78bfa;font-size:10px;margin-left:6px;flex:none;"><i class="bi bi-people-fill"></i> Compartilhado'+(r._author?(' por '+U.esc(String(r._author).split('@')[0])):'')+'</span>' : '';
         const previewHtml = r._drive
           ? '<i style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;font-style:italic;">Resumo salvo no Drive — clique em "Ver" para carregar o conteúdo.</i>'
           : U.esc(preview)+(r.summary && r.summary.length>150?'…':'');
         html+=`<div class="gdi-resumo-card" data-id="${U.esc(r.id)}" style="background:var(--ferreto-surface-2,rgba(255,255,255,.05));border:1px solid var(--ferreto-border,#21262d);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-            <span style="color:var(--ferreto-text,#f0f6fc);font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">${U.esc(r.lesson||'Aula')}${driveBadge}${folderBadge}${sharedBadge}</span>
+            <span style="color:var(--ferreto-text,#f0f6fc);font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">${U.esc(r.lesson||'Aula')}${driveBadge}${folderBadge}</span>
             <span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;flex:none;">${date}</span>
           </div>
           <div style="color:var(--ferreto-text-muted,#8b949e);font-size:12.5px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${previewHtml}</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
             <button class="gdi-btn gdi-btn-ghost gdi-resumo-view" data-id="${U.esc(r.id)}" style="font-size:12px;padding:5px 10px;"><i class="bi bi-eye"></i> Ver</button>
             <button class="gdi-btn gdi-btn-ghost gdi-resumo-pdf" data-id="${U.esc(r.id)}" style="font-size:12px;padding:5px 10px;"><i class="bi bi-download"></i> PDF</button>
-            ${(!r._drive && !r._folder && !r._shared)?`<button class="gdi-btn gdi-btn-ghost gdi-resumo-del" data-id="${U.esc(r.id)}" style="font-size:12px;padding:5px 10px;color:#ff6b6b;" title="Deletar"><i class="bi bi-trash"></i></button>`:''}
+            ${(!r._drive && !r._folder)?`<button class="gdi-btn gdi-btn-ghost gdi-resumo-del" data-id="${U.esc(r.id)}" style="font-size:12px;padding:5px 10px;color:#ff6b6b;" title="Deletar"><i class="bi bi-trash"></i></button>`:''}
           </div>
         </div>`;
       });
