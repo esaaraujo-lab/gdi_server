@@ -34,40 +34,6 @@
   const LS_SUM = U.CONSTS.LS_SUM;
   const LQ = U.CONSTS.LQ;
 
-  // ═══════════════════════════════════════════════════════════════
-  // ★ P12-4 #9 (H-25 retry helpers): transient-HTTP retry utilities.
-  //   429 = rate-limited, 503 = service unavailable. Both are transient —
-  //   a single network blip should NOT fail a cacheSave or abort a
-  //   cacheGetRobust. Retry policy: 1 retry, 2s delay (per task spec).
-  //   _retryTransientOnce(fn, label) — runs fn() once; if it throws an
-  //   error whose message matches /HTTP 429|HTTP 503/ OR is a network
-  //   error (offline/DNS), wait 2s and retry once. Non-transient errors
-  //   (4xx other than 429, 5xx other than 503) are thrown immediately.
-  //   The retry's result/error is propagated to the caller (no second retry).
-  // ═══════════════════════════════════════════════════════════════
-  function _isTransientStatus(s){
-    return s === 429 || s === 503;
-  }
-  function _isTransientError(e){
-    if(!e) return false;
-    const m = String(e.message || e);
-    // cacheGet/cacheSave throw 'cacheGet: ... HTTP 429' / 'cacheGet: server error HTTP 503'
-    // on transient statuses. Network errors (fetch threw) are also retried once
-    // — they're typically offline/CORS/DNS blips that resolve within 2s.
-    return /HTTP\s*429\b/.test(m) || /HTTP\s*503\b/.test(m)
-      || /network error/i.test(m) || /Failed to fetch/i.test(m);
-  }
-  async function _retryTransientOnce(fn, label){
-    try{
-      return await fn();
-    }catch(e){
-      if(!_isTransientError(e)) throw e;
-      console.warn('[Meggy] ' + (label||'op') + ' transient error (will retry once after 2s):', e && e.message);
-      await new Promise(r => setTimeout(r, 2000));
-      return fn(); // 2nd attempt — its result/error propagates to caller
-    }
-  }
-
   // ── Question bank integration (replicates M23 addQ on LS) ──
   function addQ(obj){
     // ★ v1.0.99: route through _qWriteChain to prevent RMW race + cap at 2000
@@ -133,7 +99,7 @@
         // /7:/Curso/Materia/Aula → curso = seg[1], materia = seg[2] (se houver)
         derivedCourse='/'+seg.slice(0,2).join('/')+'/';
         if(seg.length>=3){
-          try{derivedSubject=decodeURIComponent(seg[2]);}catch(e){console.warn('[Meggy] saveIsaSummary decodeURIComponent fallback (non-fatal):', e&&e.message);derivedSubject=seg[2];}
+          try{derivedSubject=decodeURIComponent(seg[2]);}catch(_){derivedSubject=seg[2];}
         }
       }
     }
@@ -206,10 +172,9 @@
     try{
       await navigator.clipboard.writeText(text);
       showToast('Resumo copiado para a área de transferência');
-    }catch(e){
-      console.warn('[Meggy] copySummary clipboard API failed, falling back to execCommand:', e&&e.message);
+    }catch(_){
       const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();
-      try{document.execCommand('copy');showToast('Resumo copiado');}catch(e2){console.warn('[Meggy] copySummary execCommand fallback failed:', e2&&e2.message);showToast('Não foi possível copiar');}
+      try{document.execCommand('copy');showToast('Resumo copiado');}catch(_){showToast('Não foi possível copiar');}
       ta.remove();
     }
   }
@@ -311,7 +276,7 @@
       try{
         const r=await fetch('/api/ai/summaries?probe=1',{method:'HEAD'});
         _checked=r.ok;
-      }catch(e){console.warn('[Meggy] GRANULAR_AVAILABLE probe failed (non-fatal, fallback to unified cache):', e&&e.message);_checked=false;}
+      }catch(_){_checked=false;}
       _checkedAt=Date.now();
       return _checked;
     };
@@ -347,13 +312,8 @@
       // Network error (fetch threw — DNS, CORS, offline, etc.)
       throw new Error('cacheGet: network error: ' + (e && e.message || e));
     }
-    if(!r.ok && (r.status === 429 || r.status >= 500)){
-      // ★ P12-4 #9 (H-25): treat 429 (rate-limit) and 5xx as transient server errors.
-      //   Previously only 5xx threw — 429 silently returned null (treated as a
-      //   cache miss), causing redundant regeneration under rate-limit. Now 429
-      //   also throws, so cacheGetRobust's _retryTransientOnce wrapper can catch
-      //   it and retry once after 2s. Other 4xx (404, 403) still return null
-      //   (legitimate miss). See _isTransientError for the message pattern.
+    if(!r.ok && r.status >= 500){
+      // Server error — distinguish from miss
       throw new Error('cacheGet: server error HTTP ' + r.status);
     }
     if(!r.ok){
@@ -444,11 +404,7 @@
     // (1) primary key
     let primary = null;
     try{
-      // ★ P12-4 #9 (H-25): retry once on transient (429, 503, network) errors.
-      //   cacheGet throws on 5xx and 429 (per H-25 fix above) — the wrapper
-      //   catches transient ones and retries after 2s. Non-transient throws
-      //   (genuine 5xx like 500/502/504) still propagate to the outer catch.
-      primary = await _retryTransientOnce(() => cacheGet(), 'cacheGet primary');
+      primary = await cacheGet();
     }catch(e){
       _lastNetErr = e;
       console.warn('[Meggy] cacheGet primary failed (will try alternates):', e && e.message);
@@ -465,8 +421,7 @@
       const pdfKey = p.replace(/\.[a-z0-9]+$/i, '.pdf');
       if(pdfKey && pdfKey !== p){
         try{
-          // ★ P12-4 #9 (H-25): retry once on transient (429, 503, network) errors.
-          const hit2 = await _retryTransientOnce(() => cacheGet(pdfKey), 'cacheGet PDF-key');
+          const hit2 = await cacheGet(pdfKey);
           if(hit2){
             console.info('[Meggy] cache hit via PDF-extension key:', pdfKey);
             return hit2;
@@ -488,7 +443,7 @@
         if(seg.length >= 2){
           const coursePath = '/' + seg.slice(0,2).join('/') + '/';
           let lessonName = '';
-          try{ lessonName = (typeof U.realLessonName === 'function') ? (U.realLessonName('') || '') : ''; }catch(e){ console.warn('[Meggy] cacheGetRobust realLessonName fallback (non-fatal):', e&&e.message); lessonName = ''; }
+          try{ lessonName = (typeof U.realLessonName === 'function') ? (U.realLessonName('') || '') : ''; }catch(_){ lessonName = ''; }
           if(lessonName){
             const base = lessonName.toLowerCase().replace(/\.[a-z0-9]+$/i,'').trim();
             if(base){
@@ -584,24 +539,8 @@
       // ★ tenta endpoint granular primeiro; senão, cache unificado
       const granular=await GRANULAR_AVAILABLE();
       const endpoint=granular?'/api/ai/summaries':'/api/ai/cache';
-      // ★ P12-4 #9 (H-25): retry once on transient (429, 503, network) errors.
-      //   The fetch is wrapped in _retryTransientOnce — a 429 (rate-limit during
-      //   a generateAll burst) or 503 (worker restarting) triggers a 2s delay
-      //   and one retry. Non-transient errors still fall through to the catch
-      //   below (logged + non-blocking, same as before).
-      const _doFetch = () => fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},
+      await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({key:U.lessonKey(),summary,questions,mindmap:mindmapToSave,lessonName})});
-      // Note: fetch() resolves for ANY HTTP status (including 5xx); we need to
-      // convert 429/503 responses to throws so _retryTransientOnce can catch
-      // them. Wrap the fetch + status check together.
-      await _retryTransientOnce(async () => {
-        const r = await _doFetch();
-        if(!r.ok && _isTransientStatus(r.status)){
-          throw new Error('cacheSave: transient HTTP ' + r.status);
-        }
-        // Other non-OK statuses (e.g. 401, 404) are silently ignored here —
-        // cacheSave is best-effort and the caller doesn't need to know.
-      }, 'cacheSave POST');
     }catch(e){
       // ★ FIX-MEGGY (Task 20-7 #3): log instead of silently swallowing —
       //   the original `catch(_){}` hid Drive cache failures, making cache
@@ -683,7 +622,7 @@
     if(_seg.length>=2){
       _coursePath='/'+_seg.slice(0,2).join('/')+'/';
       if(_seg.length>=3){
-        try{_subject=decodeURIComponent(_seg[2]);}catch(e){console.warn('[Meggy] generateAll decodeURIComponent fallback (non-fatal):', e&&e.message);_subject=_seg[2];}
+        try{_subject=decodeURIComponent(_seg[2]);}catch(_){_subject=_seg[2];}
       }
     }
     // se já tem tudo no cache em memória, pula
@@ -756,7 +695,7 @@
     let itemsToRead = items;
     if(items && items.length > 1){
       let lessonName = '';
-      try{ lessonName = (typeof U.realLessonName === 'function') ? (U.realLessonName('') || '') : ''; }catch(e){ console.warn('[Meggy] generateAll realLessonName fallback (non-fatal):', e&&e.message); lessonName=''; }
+      try{ lessonName = (typeof U.realLessonName === 'function') ? (U.realLessonName('') || '') : ''; }catch(_){ lessonName=''; }
       if(lessonName){
         const _base = lessonName.toLowerCase().replace(/\.[a-z0-9]+$/i,'').trim();
         if(_base){
@@ -973,12 +912,7 @@
     //    results into the NEW (empty) _chainCache, repopulating it and
     //    defeating the regenerate.
     if(_inflight && _inflight[key]){
-      // ★ P12-4 #6 (H-21): log instead of silent swallow. The in-flight
-      //   generateAll may reject (PDF extraction failure, AI API timeout,
-      //   etc.) — we still await it so the new generateAll sees a clean
-      //   state, but log the rejection reason so transient outages don't
-      //   hide silently. The fallback (proceed with regenerate) is unchanged.
-      try { await _inflight[key]; }catch(e){ console.warn('[Meggy] regenerate: prior in-flight generateAll rejected (non-fatal, proceeding):', e&&e.message); }
+      try { await _inflight[key]; } catch(_){}
     }
     // limpa cache em memória
     // ★ v1.0.84: only wipe current key, not all lessons (preserves in-flight generateAll for other lessons)
@@ -1064,7 +998,7 @@
         h |= 0;
       }
       return 'c' + Math.abs(h).toString(36);
-    }catch(e){ console.warn('[Meggy] deriveCourseHash failed (non-fatal, returning empty hash):', e&&e.message); return ''; }
+    }catch(_){ return ''; }
   }
 
   // materialAuthorFromFileName: extracts the author (username) from the
@@ -1079,7 +1013,7 @@
       const i = base.indexOf('_');
       if(i <= 0) return '';
       return base.slice(0, i);
-    }catch(e){ console.warn('[Meggy] materialAuthorFromFileName failed (non-fatal, returning empty author):', e&&e.message); return ''; }
+    }catch(_){ return ''; }
   }
 
   // cacheGetMeta: returns the metadata entry for a lesson+materialType.
@@ -1097,17 +1031,10 @@
           return entry;
         }
       }
-    }catch(e){ console.warn('[Meggy] cacheGetMeta localStorage read failed (non-fatal, falling through to server):', e&&e.message); }
+    }catch(_){}
     // (2) Optional server-side metadata endpoint (Agent 1 may or may not
     //     implement). If absent (404), we fall through silently — discovery
     //     happens via loadMaterialFromFolder (no fileName).
-    // ★ P12-4 #8 (H-23): differentiate reason='network' (fetch threw) vs
-    //   reason='not_found' (HTTP 404) vs reason='server' (5xx) in the warn
-    //   message. Caller still gets null on any failure (backward compat —
-    //   callers like meggy-widget.js tryOpenSharedMaterial wrap us in
-    //   try/catch and treat any error as null). The richer log message lets
-    //   operators distinguish "endpoint not implemented" (404, expected)
-    //   from "server down" (network/5xx, requires investigation).
     try{
       const r = await fetch('/api/materials/meta?lessonPath=' + encodeURIComponent(lessonPath) + '&materialType=' + encodeURIComponent(materialType), {cache:'no-store'});
       if(r.ok){
@@ -1118,15 +1045,8 @@
           // New metadata-only entry
           if(d.entry.file) return d.entry;
         }
-      }else if(r.status === 404){
-        // Endpoint not implemented or no entry — expected, log at info level.
-        console.info('[Meggy] cacheGetMeta server miss (reason=not_found, HTTP 404) — falling through to loadMaterialFromFolder');
-      }else if(r.status >= 500){
-        console.warn('[Meggy] cacheGetMeta server error (reason=server, HTTP '+r.status+') — falling through');
-      }else{
-        console.warn('[Meggy] cacheGetMeta client error (reason=client, HTTP '+r.status+') — falling through');
       }
-    }catch(e){ console.warn('[Meggy] cacheGetMeta network error (reason=network, fetch threw) — falling through:', e&&e.message); }
+    }catch(_){}
     return null;
   }
 
@@ -1143,7 +1063,7 @@
       courseHash: courseHash || deriveCourseHash(lessonPath)
     };
     // localStorage mirror (fast hit on next read)
-    try{ localStorage.setItem(_metaLsKey(lessonPath, materialType), JSON.stringify(entry)); }catch(e){ console.warn('[Meggy] cacheSaveMeta localStorage.setItem failed (non-fatal, server-side still attempted):', e&&e.message); }
+    try{ localStorage.setItem(_metaLsKey(lessonPath, materialType), JSON.stringify(entry)); }catch(_){}
     // Server-side metadata (optional; silent fail if endpoint absent)
     try{
       await fetch('/api/materials/meta', {
@@ -1151,21 +1071,21 @@
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify(entry)
       });
-    }catch(e){ console.warn('[Meggy] cacheSaveMeta POST failed (non-fatal, endpoint may be absent):', e&&e.message); }
+    }catch(_){}
     return entry;
   }
 
   // invalidateCacheMeta: clears a stale entry (file deleted from Drive, etc.)
   async function invalidateCacheMeta(lessonPath, materialType){
     if(!lessonPath || !materialType) return;
-    try{ localStorage.removeItem(_metaLsKey(lessonPath, materialType)); }catch(e){ console.warn('[Meggy] invalidateCacheMeta localStorage.removeItem failed (non-fatal):', e&&e.message); }
+    try{ localStorage.removeItem(_metaLsKey(lessonPath, materialType)); }catch(_){}
     try{
       await fetch('/api/materials/meta', {
         method:'DELETE',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify({lessonPath, materialType})
       });
-    }catch(e){ console.warn('[Meggy] invalidateCacheMeta DELETE failed (non-fatal, endpoint may be absent):', e&&e.message); }
+    }catch(_){}
   }
 
   // loadMaterialFromFolder: fetches content for a specific file in the
@@ -1173,60 +1093,32 @@
   // of that type in the folder (cross-student discovery). Returns:
   //   - { content, file, author } on success
   //   - null on miss / error
-  // ★ P12-4 #8 (H-23): differentiate reason='network' (fetch threw) vs
-  //   reason='not_found' (HTTP 404) vs reason='server' (5xx) in the warn
-  //   message. The return contract (null on any failure) is unchanged —
-  //   callers like meggy-widget.js wrap us in try/catch and treat any error
-  //   as null. The richer log message lets operators distinguish "file
-  //   doesn't exist" (404, expected) from "Drive outage" (network/5xx).
   async function loadMaterialFromFolder(lessonPath, materialType, fileName){
     if(!lessonPath || !materialType) return null;
     try{
       let url = '/api/materials/load-from-folder?lessonPath=' + encodeURIComponent(lessonPath) + '&materialType=' + encodeURIComponent(materialType);
       if(fileName) url += '&fileName=' + encodeURIComponent(fileName);
       const r = await fetch(url, {cache:'no-store'});
-      if(!r.ok){
-        if(r.status === 404){
-          console.info('[Meggy] loadMaterialFromFolder miss (reason=not_found, HTTP 404):', lessonPath, materialType);
-        }else if(r.status >= 500){
-          console.warn('[Meggy] loadMaterialFromFolder server error (reason=server, HTTP '+r.status+'):', lessonPath, materialType);
-        }else{
-          console.warn('[Meggy] loadMaterialFromFolder client error (reason=client, HTTP '+r.status+'):', lessonPath, materialType);
-        }
-        return null;
-      }
+      if(!r.ok) return null;
       const d = await r.json();
       if(!d || !d.ok) return null;
       const content = (typeof d.content === 'string') ? d.content : (d.content == null ? '' : String(d.content));
       const actualFile = d.file || fileName || '';
       const author = materialAuthorFromFileName(actualFile);
       return { content, file: actualFile, author };
-    }catch(e){ console.warn('[Meggy] loadMaterialFromFolder network error (reason=network, fetch threw):', lessonPath, materialType, e&&e.message); return null; }
+    }catch(_){ return null; }
   }
 
   // materialExistsInFolder: HEAD-style check. Use this BEFORE AI generation
   // to skip regeneration if material already exists in the lesson folder.
-  // ★ P12-4 #8 (H-23): differentiate reason='network' vs 'not_found' vs 'server'
-  //   in the warn message. The return contract (false on any failure) is
-  //   unchanged — callers treat any failure as "doesn't exist, proceed with
-  //   generation". The richer log message lets operators see why.
   async function materialExistsInFolder(lessonPath, materialType, fileName){
     if(!lessonPath || !materialType || !fileName) return false;
     try{
       const r = await fetch('/api/materials/check-exists?lessonPath=' + encodeURIComponent(lessonPath) + '&materialType=' + encodeURIComponent(materialType) + '&fileName=' + encodeURIComponent(fileName));
-      if(!r.ok){
-        if(r.status === 404){
-          console.info('[Meggy] materialExistsInFolder miss (reason=not_found, HTTP 404):', lessonPath, materialType, fileName);
-        }else if(r.status >= 500){
-          console.warn('[Meggy] materialExistsInFolder server error (reason=server, HTTP '+r.status+'):', lessonPath, materialType, fileName);
-        }else{
-          console.warn('[Meggy] materialExistsInFolder client error (reason=client, HTTP '+r.status+'):', lessonPath, materialType, fileName);
-        }
-        return false;
-      }
+      if(!r.ok) return false;
       const d = await r.json();
       return !!(d && d.ok && d.exists === true);
-    }catch(e){ console.warn('[Meggy] materialExistsInFolder network error (reason=network, fetch threw):', lessonPath, materialType, fileName, e&&e.message); return false; }
+    }catch(_){ return false; }
   }
 
   // ═══ CYCLE-6 FIX (Agent 6): auth:change cleanup ═══
@@ -1265,12 +1157,12 @@
         if(Object.prototype.hasOwnProperty.call(_inflight, k)) delete _inflight[k];
       }
       _failedDownloadURLs.clear();
-    }catch(e){ console.warn('[Meggy] _clearChainCacheAndInflight failed (non-fatal, partial cleanup may have occurred):', e&&e.message); }
+    }catch(_){}
   }
   if(typeof Bus !== 'undefined' && typeof Bus.onGlobal === 'function'){
     Bus.onGlobal('auth:change', (state)=>{
       if(state === 'out' || state === 'logout'){
-        try{ _clearChainCacheAndInflight(); }catch(e){ console.warn('[Meggy] auth:change cleanup failed (non-fatal):', e&&e.message); }
+        try{ _clearChainCacheAndInflight(); }catch(_){}
       }
     });
   }
