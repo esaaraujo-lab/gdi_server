@@ -710,20 +710,28 @@
       });
       // ★ v1.0.108: Ao clicar num vídeo/PDF no Explorar Drives, navega para a página clássica do index.
       // NÃO abre dentro do painel da Área do Aluno. O painel fecha e a página principal carrega o player.
+      // ★ v1.0.110 FIX BUG #1: append ?a=view so the worker (worker.js ~line 2750) serves
+      // the SPA HTML shell (player page) instead of triggering a direct file download.
+      // Without ?a=view, the worker's routing sees a bare file path with no `a` query
+      // param AND no trailing slash → falls into the download() branch → browser downloads
+      // the .mp4/.pdf instead of opening the player. Same pattern already used for
+      // non-video files at line ~697 (`fp + '?a=view'`).
       browser.querySelectorAll('[data-gdi-media]').forEach(el => {
         el.onmouseenter = () => { el.style.background = 'var(--ferreto-surface-3,rgba(255,255,255,.08))'; el.style.borderColor = 'var(--ferreto-secondary,#5ddeda)'; };
         el.onmouseleave = () => { el.style.background = 'var(--ferreto-surface-2,rgba(255,255,255,.04))'; el.style.borderColor = 'var(--ferreto-border,#30363d)'; };
         el.onclick = () => {
-          const url = el.dataset.url;
+          const rawUrl = el.dataset.url || '';
           const name = el.dataset.name;
           const type = el.dataset.gdiMedia;
+          // ★ v1.0.110: append ?a=view (or &a=view if URL already has a query string)
+          const viewUrl = rawUrl + (rawUrl.indexOf('?') >= 0 ? '&' : '?') + 'a=view';
           // ★ v1.0.108: Fecha o painel da Área do Aluno e navega para a URL do vídeo/PDF
           // na página principal (index clássico com player completo).
           try{ closePanel(); }catch(_){}
           try{
-            window.location.href = url;
+            window.location.href = viewUrl;
           }catch(_){
-            try{ window.history.pushState({}, '', url); if(typeof window.render === 'function') window.render(url); }catch(__){}
+            try{ window.history.pushState({}, '', viewUrl); if(typeof window.render === 'function') window.render(viewUrl); }catch(__){}
           }
         };
       });
