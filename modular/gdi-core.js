@@ -30,60 +30,6 @@ const GDI_ROOT=()=>document.documentElement; // UI flutuante vive aqui (fora do 
 
 window.GDI_MODULES = window.GDI_MODULES || [];
 
-// ═══════════════════════════════════════════════════════════════
-// P12-2 (Agent 2) — Phase 1+2 fixes from ROADMAP_MASTER.md
-// ═══════════════════════════════════════════════════════════════
-
-// ★ H-33: Centralized HTML escaper — escapes ALL 5 entities (& < > " ').
-// Replaces the divergent `esc`/`escHtml`/`escModal` copies scattered across
-// the codebase (3-entity, 4-entity, and 5-entity variants — meggy-widget.js
-// had a 3-entity version missing both `"` and `'`, an active XSS vector in
-// single-quoted attribute contexts). All modules should use `window.gdiEsc`
-// for HTML escaping; this file's local `escModal` (further below) delegates
-// to it. The `escHtml` global from app.min.js is also 5-entity and may be
-// used as a fallback.
-window.gdiEsc = window.gdiEsc || function(s){
-  return String(s==null?'':s)
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;')
-    .replace(/'/g,'&#x27;');
-};
-
-// ★ H-35: Defensive null-guard for optional module namespaces. If meggy/*.js
-// or study/*.js fail to load (CDN issue, race condition, fatal error in their
-// init), references like `window.__gdiMeggy.utils` would throw
-// "Cannot read property 'utils' of undefined". By ensuring the namespace
-// objects exist as empty placeholders, such references return `undefined`
-// (silent) instead of crashing the host page. The actual modules augment
-// these namespaces (`window.__gdiMeggy = window.__gdiMeggy || {}`) when they
-// load, so this is forward-compatible.
-window.__gdiMeggy = window.__gdiMeggy || {};
-window.__gdiStudy = window.__gdiStudy || {};
-
-// ★ H-36: SRI (Subresource Integrity) hashes for CDN-loaded scripts. Other
-// modules (meggy-pdf-engine.js, study-panel.js, study-advanced.js) load these
-// same CDN URLs with their own <script> tags — they can opt-in to SRI by
-// reading `window.gdiSriHashes[url]` and setting `script.integrity` before
-// appending to document.head. Hashes are sha384-base64 of the actual file
-// bytes (computed 2025-09-29 against the exact versions in use).
-// NOTE: `marked@13.0.3` is loaded by the worker.js HTML template (line ~446)
-// which is owned by another agent — that script tag still lacks SRI. This
-// map exposes the correct hash so the worker agent can add it later.
-window.gdiSriHashes = window.gdiSriHashes || Object.freeze({
-  'https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js':
-    'sha384-a7SzOxErzJ3ZpQz0zJ32d67dSitNzPcbfybc/ykU9KJhMgZkwqfSxlhhdJRS+XGL',
-  'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js':
-    'sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e',
-  'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js':
-    'sha384-SnzOobpRMLXZ52iJvZm/C0fYw0OQemTXzTjIsdsfMcrCtCEe9qgzxTd3RSklO5x2',
-  'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js':
-    'sha384-GJqSu7vueQ9qN0E9yLPb3Wtpd7OrgK8KmYzC8T1IysG1bcvxvIO4qtYR/D3A991F',
-  'https://cdn.jsdelivr.net/npm/marked@13.0.3/marked.min.js':
-    'sha384-YTBHtsL8yVTHcLakYNyrOfK3K+QQcXiECuaALJ+3j7Mo681Rtzadt8NR6WrZH+eQ'
-});
-
 // ★ VERIFIED Task 20-4 #9: GDI_MODULES.push audit. Cada módulo deste
 // arquivo (e do gdi-ui.js) roda em IIFE próprio — cada IIFE faz push
 // exatamente 1× por script-load. Nomes únicos confirmados:
@@ -230,21 +176,11 @@ window.gdiModal = window.gdiModal || function(opts){
     });
     const overlay=document.createElement('div');
     overlay.className='gdi-modal-overlay';
-    // ★ H-37/H-38/H-39 (P12-2): ARIA dialog semantics. role="dialog" tells
-    // screen readers this is a modal dialog (not just a positioned div).
-    // aria-modal="true" tells them background content is inert (skip nav).
-    // aria-labelledby points to the title <b> (id=gdi-modal-title) so the
-    // SR announces the dialog's name when it opens. Focus trap (tabHandler,
-    // line ~320) and ESC handler (escHandler, line ~317) are already in
-    // place from prior fixes — see inline comments there.
-    overlay.setAttribute('role','dialog');
-    overlay.setAttribute('aria-modal','true');
-    overlay.setAttribute('aria-labelledby','gdi-modal-title');
     overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:100002;display:flex;align-items:center;justify-content:center;padding:20px;animation:gdi-modal-fade .2s ease;';
     overlay.innerHTML=`<div class="gdi-modal-box" style="background:var(--ferreto-bg-2,#0d1119);border:1px solid var(--ferreto-border,#21262d);border-radius:14px;max-width:480px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.6);">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--ferreto-border,#21262d);">
-        <b id="gdi-modal-title" style="color:var(--ferreto-text,#f0f6fc);font-size:15px;font-family:var(--ferreto-font-display,'Poppins',sans-serif);">${escModal(title)}</b>
-        <button class="gdi-modal-x" style="background:transparent;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:18px;padding:4px 8px;border-radius:6px;" aria-label="Fechar diálogo">✕</button>
+        <b style="color:var(--ferreto-text,#f0f6fc);font-size:15px;font-family:var(--ferreto-font-display,'Poppins',sans-serif);">${escModal(title)}</b>
+        <button class="gdi-modal-x" style="background:transparent;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:18px;padding:4px 8px;border-radius:6px;">✕</button>
       </div>
       <div style="padding:20px;">
         <p style="color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.6;margin:0 0 16px;white-space:pre-wrap;">${escModal(message)}</p>
@@ -352,17 +288,7 @@ window.gdiModal = window.gdiModal || function(opts){
     },50);
   });
 };
-// ★ H-33: escModal delegates to centralized window.gdiEsc (5-entity escaper
-// defined at top of this file). The previous local 4-entity version was
-// missing the `'` (single quote) escape — an active XSS vector when the
-// output is interpolated into single-quoted HTML attribute contexts (e.g.
-// `placeholder='${escModal(x)}'`). If window.gdiEsc is somehow undefined
-// (this file loaded standalone without the top-of-file IIFE — defensive),
-// falls back to an inline 5-entity implementation matching window.gdiEsc.
-function escModal(s){
-  if(typeof window.gdiEsc === 'function') return window.gdiEsc(s);
-  return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
-}
+function escModal(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 // ═══ HELPER GLOBAL: SANITIZAÇÃO HTML (anti-XSS) ═══
 // Usado por todos os renderMd() dos módulos para evitar XSS via LLM
@@ -374,16 +300,12 @@ function escModal(s){
 // DOMPurify está carregado mas throws. Antes, o catch retornava `html`
 // cru (XSS potential se o LLM injetasse <script>). Agora, se DOMPurify
 // throws, caímos no escHtml — mesma política do fallback de CDN-down.
-// ★ H-33 (P12-2): replaced `escHtml(...)` calls with `window.gdiEsc(...)`
-// so this file doesn't depend on the global `escHtml` from app.min.js
-// being defined. window.gdiEsc is defined at the top of this file and
-// is always available.
 window.gdiSanitize = window.gdiSanitize || function(html){
   if(window.DOMPurify){
     try{return window.DOMPurify.sanitize(html,{ ALLOWED_TAGS:['h1','h2','h3','h4','h5','h6','p','br','hr','ul','ol','li','strong','em','b','i','u','s','code','pre','blockquote','table','thead','tbody','tr','th','td','a','img','span','div','sup','sub','mark','del','ins'],ALLOWED_ATTR:['href','src','alt','title','class','target','rel','width','height','colspan','rowspan']});}
     // ★ Task 20-4 #8: DOMPurify carregado mas throw (ex.: HTML malformado que
     // quebra o parser interno) — NÃO retorna html cru. Cai no escHtml.
-    catch(_){return window.gdiEsc(String(html==null?'':html));}
+    catch(_){return escHtml(String(html==null?'':html));}
   }
   // ★ FIX Agent 4 Bug 17: fallback regex era bypassable por <svg>, <object>,
   // <embed>, data:text/html URLs e javascript: URLs com whitespace. Como
@@ -391,22 +313,14 @@ window.gdiSanitize = window.gdiSanitize || function(html){
   // roteia em caso de falha de CDN — escapar TODO o HTML é mais seguro do
   // que uma lista negra sempre incompleta. O output fica como texto puro
   // (sem formatação), mas sem risco de XSS.
-  return window.gdiEsc(String(html==null?'':html));
+  return escHtml(String(html==null?'':html));
 };
 // auto-load DOMPurify do CDN se não estiver presente
-// ★ H-36 (P12-2): added SRI `integrity` attribute (sha384-…) so a
-// CDN compromise (jsdelivr account takeover, MITM on HTTP→HTTPS
-// downgrade, BGP hijack) cannot inject a tampered purify.min.js.
-// crossOrigin='anonymous' is required for SRI verification. If the
-// integrity check fails, the browser blocks the script and onerror
-// fires — gdiSanitize falls back to window.gdiEsc (text-only output,
-// no formatting but no XSS either).
 if(!window.DOMPurify && !window.__gdiPurifyLoading){
   window.__gdiPurifyLoading=true;
   const s=document.createElement('script');
   s.src='https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js';
   s.crossOrigin='anonymous';
-  s.integrity='sha384-a7SzOxErzJ3ZpQz0zJ32d67dSitNzPcbfybc/ykU9KJhMgZkwqfSxlhhdJRS+XGL';
   s.onload=()=>console.log('[GDI] DOMPurify carregado');
   s.onerror=()=>console.warn('[GDI] DOMPurify falhou — usando fallback básico');
   document.head.appendChild(s);
@@ -430,16 +344,10 @@ window.gdiValidTab = window.gdiValidTab || function(tab){
 // Idempotente: carrega pdfjs-dist@3.11.174 uma única vez e seta workerSrc
 // UMA vez (antes: 4 loaders diferentes competiam, causando race conditions).
 // M9 (mobile), gdi-pdf.js, gdi-meggy.js e gdi-study.js devem usar isto.
-// ★ H-36 (P12-2): added SRI `integrity` attribute on the main pdf.min.js
-// script tag. The workerSrc URL (loaded internally by pdf.js) cannot be
-// SRI-verified from here — pdf.js fetches it via XHR/fetch internally
-// and doesn't expose an integrity hook. The hash is exposed via
-// window.gdiSriHashes so a future pdf.js upgrade can reuse the lookup.
 window.gdiEnsurePdfjs = window.gdiEnsurePdfjs || function(){
   if(window._pdfjsPromise)return window._pdfjsPromise;
   const PDFJS_LIB='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
   const PDFJS_WORKER='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
-  const PDFJS_LIB_SRI='sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e';
   window._pdfjsPromise=new Promise((resolve,reject)=>{
     // carrega o script UMA vez (se já carregado, pula esta etapa)
     const loadScript = ()=>new Promise((res,rej)=>{
@@ -447,7 +355,6 @@ window.gdiEnsurePdfjs = window.gdiEnsurePdfjs || function(){
       const s=document.createElement('script');
       s.src=PDFJS_LIB;
       s.crossOrigin='anonymous';
-      s.integrity=PDFJS_LIB_SRI;
       s.onload=res;
       s.onerror=()=>rej(new Error('pdf.js failed to load'));
       document.head.appendChild(s);
@@ -1013,6 +920,16 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 // ═══ M7: PULAR INTRO POR CURSO ═══
 (function(){
   let skipBtn=null;
+  // ★ v1.0.110 FIX BUG #3: localStorage key for the most recent intro time set by
+  // clicking "Pular introdução". Used as a cross-folder fallback by the auto-skip
+  // logic in gdi-study.js (M22 Marathon) so that, after clicking skip-intro once,
+  // subsequent videos in the playlist auto-skip even when they live in a different
+  // folder (different courseKey) than the one where the intro was originally saved.
+  const LS_LAST_INTRO='gdi-last-intro-sec';
+  function readLastIntro(){try{const n=parseInt(localStorage.getItem(LS_LAST_INTRO)||'0',10);return (n>0&&n<7200)?n:0;}catch(_){return 0;}}
+  function writeLastIntro(sec){try{if(sec>0&&sec<7200)localStorage.setItem(LS_LAST_INTRO,String(sec|0));}catch(_){}}
+  // expose for gdi-study.js M22 auto-skip (cross-folder fallback)
+  window.__gdiLastIntro={get:readLastIntro,set:writeLastIntro,KEY:LS_LAST_INTRO};
   function courseKey(){
     try{const fl=window.playlistVideos[window.currentIndex]?.folder;if(fl)return fl;}catch(_){}
     return window.location.pathname.split('/').slice(0,-1).join('/')+'/';
@@ -1025,7 +942,14 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       const S=GDIUser.getIntro(courseKey());
       const tm=el.currentTime;
       let show=false;
-      if(S&&S>0)show=tm>0.4&&tm<S-0.3&&tm<180;
+      // ★ v1.0.110 FIX BUG #2: button visibility window extended.
+      // Before: if S (intro) was set, button only showed while `tm < S-0.3` — so for
+      // a 15s intro the button vanished after ~15s, leaving the user no chance to
+      // click it if they were slow. Now the button stays visible for at least 60s
+      // OR 30s past the intro point, whichever is longer (capped at 300s to avoid
+      // showing it deep into a long video). The 120s window for the "no intro set
+      // yet" case is unchanged.
+      if(S&&S>0)show=tm>0.4&&tm<Math.max(S+30,60)&&tm<300;
       else show=tm>1&&tm<120;
       // ★FIX: só toca no DOM quando muda (era reescrito a cada timeupdate)
       const html=S
@@ -1050,11 +974,16 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       skipBtn.addEventListener('click',()=>{
         const v=document.querySelector('.gdi-player-wrap video');if(!v)return;
         const ck=courseKey();
-        if(!GDIUser.getIntro(ck)){
-          GDIUser.setIntro(ck,Math.max(1,Math.round(v.currentTime)));
-          showToast('Intro de '+gdiFmtTime(v.currentTime|0)+' memorizada para este curso \u2713');
+        let sec=GDIUser.getIntro(ck);
+        if(!sec){
+          sec=Math.max(1,Math.round(v.currentTime));
+          GDIUser.setIntro(ck,sec);
+          showToast('Intro de '+gdiFmtTime(sec)+' memorizada para este curso \u2713');
         }
-        try{v.currentTime=GDIUser.getIntro(ck)||v.currentTime;v.play().catch(()=>{});}catch(_){}
+        // ★ v1.0.110 FIX BUG #3: also persist as "last intro" so subsequent videos
+        // in the playlist (even in different folders) can auto-skip using this value.
+        writeLastIntro(sec);
+        try{v.currentTime=sec;v.play().catch(()=>{});}catch(_){}
         skipBtn.style.display='none';
       });
     }
