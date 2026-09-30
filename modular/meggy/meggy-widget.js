@@ -26,9 +26,17 @@
 // ═══════════════════════════════════════════════════════════════
 (function(){
   if(window.__gdiMeggyWidget)return;
-  window.__gdiMeggyWidget=true;
-
+  // ★ H-35 (Task P12-5): null-guard — if utils isn't loaded yet, bail WITHOUT
+  //   setting the guard flag so the loader can re-inject and retry. Without
+  //   this guard, a load-order hiccup (utils.js blocked/errored) would throw
+  //   "Cannot read property 'CONSTS' of undefined" AND set the guard flag,
+  //   permanently bricking the widget chain until a full page reload.
   window.__gdiMeggy = window.__gdiMeggy || {};
+  if(!window.__gdiMeggy.utils || !window.__gdiMeggy.utils.CONSTS){
+    console.warn('[Meggy Widget] utils not yet loaded — deferring init (guard flag NOT set; will retry on next inject).');
+    return;
+  }
+  window.__gdiMeggyWidget=true;
 
   // ── Constants (read from utils.CONSTS — single source of truth) ──
   const U = window.__gdiMeggy.utils;
@@ -111,7 +119,7 @@
   }
 
   let messages=[];
-  try{messages=JSON.parse(sessionStorage.getItem(STORE))||[];}catch(_){}
+  try{messages=JSON.parse(sessionStorage.getItem(STORE))||[];}catch(e){console.warn('[Meggy Widget] sessionStorage chat history parse failed:', e&&e.message);}
 
   // ★ Fix 4 (Task 20-8): VERIFIED — the in-memory cap (50, applied in
   //   addMsg() BEFORE save() is called) runs first, so save() always sees a
@@ -119,7 +127,7 @@
   //   caps are applied BEFORE JSON.stringify + sessionStorage.setItem, so the
   //   stored blob never exceeds 20 entries even if addMsg() is called in a
   //   tight loop.
-  function save(){try{sessionStorage.setItem(STORE,JSON.stringify(messages.slice(-20)));}catch(_){}}
+  function save(){try{sessionStorage.setItem(STORE,JSON.stringify(messages.slice(-20)));}catch(e){console.warn('[Meggy Widget] sessionStorage save failed (chat cap):', e&&e.message);}}
 
   // ── Local renderMd + esc (kept duplicated per study §8.9 rec (a) — first pass) ──
   function renderMd(txt){
@@ -127,13 +135,18 @@
       try{
         const html=marked.parse(txt);
         // ★ FIX: nunca retorna HTML não sanitizado — fallback escapa
-        if(window.gdiSanitize){try{return window.gdiSanitize(html);}catch(_){}}
+        if(window.gdiSanitize){try{return window.gdiSanitize(html);}catch(e){console.warn('[Meggy Widget] gdiSanitize failed (renderMd fallback to esc):', e&&e.message);}}
         return esc(txt).replace(/\n/g,'<br>');
-      }catch(_){}
+      }catch(e){console.warn('[Meggy Widget] marked.parse failed (renderMd fallback to plain):', e&&e.message);}
     }
     return txt.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
   }
-  function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  // ★ H-33 (Task P12-5): prefer centralized window.gdiEsc (5-entity canonical:
+  //   & < > " ') over the local 3-entity copy (& < >) when available. The
+  //   local copy remains as a fallback so the widget still works if gdi-core.js
+  //   hasn't loaded yet (or its gdiEsc export isn't defined).
+  function _localEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  function esc(s){return (window.gdiEsc || _localEsc)(s);}
 
   // ── Detecção da IA do navegador ──
   // Chrome 127+ com "Prompt API for Gemini Nano" habilitado expõe
@@ -159,7 +172,7 @@
         if(caps&&caps.available==='after-download'){_browserAIState='download';return 'download';}
         _browserAIState='no';return 'no';
       }
-    }catch(_){}
+    }catch(e){console.warn('[Meggy Widget] detectBrowserAI capabilities() failed:', e&&e.message);}
     _browserAIState='no';return 'no';
   }
 
@@ -194,6 +207,62 @@
     return out||null;
   }
 
+  // ★ H-24 + H-41 (Task P12-5): typed server-AI call wrapper.
+  //   Replaces the inline fetch in send() with a structured helper that:
+  //   • Adds a 45s AbortController timeout (H-41) — previously the chat fetch
+  //     could hang forever if the worker was unresponsive (BUGHUNT-v69 #5).
+  //   • Differentiates 401 (auth) / 429 (rate) / 5xx (server) on the HTTP
+  //     response (H-24) — previously all non-ok responses were collapsed into
+  //     a single "Meggy indisponível" error with no way to retry differently
+  //     for rate-limit vs. auth failure.
+  //   • Returns {ok:true, response:"..."} on success, or
+  //     {ok:false, status, reason:'auth'|'rate'|'server'|'network'|'timeout'|'app', error}
+  //     on failure (instead of null — gives callers actionable signal).
+  async function callServerAI(payload, opts){
+    opts = opts || {};
+    const timeoutMs = opts.timeoutMs || 45000;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try{
+      const r = await fetch('/api/ai', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+      // ★ H-24: differentiate 401/429/5xx before parsing JSON.
+      if(!r.ok){
+        let reason = 'server';
+        if(r.status === 401 || r.status === 403) reason = 'auth';
+        else if(r.status === 429) reason = 'rate';
+        else if(r.status >= 500) reason = 'server';
+        else if(r.status >= 400) reason = 'client';
+        console.warn('[Meggy Widget] /api/ai HTTP '+r.status+' ('+reason+')');
+        return {ok:false, status:r.status, reason};
+      }
+      let data;
+      try{ data = await r.json(); }
+      catch(e){
+        console.warn('[Meggy Widget] /api/ai JSON parse failed:', e && e.message);
+        return {ok:false, status:r.status, reason:'server', error:'invalid JSON'};
+      }
+      if(!data || !data.ok){
+        // Server-side rejection (e.g. AI provider down, no API key configured).
+        return {ok:false, status:r.status, reason:'app', error:(data && data.error) || 'Meggy indisponível'};
+      }
+      return {ok:true, response:data.response || ''};
+    }catch(e){
+      if(e && e.name === 'AbortError'){
+        console.warn('[Meggy Widget] /api/ai timed out after '+timeoutMs+'ms');
+        return {ok:false, status:0, reason:'timeout', error:'request timed out'};
+      }
+      console.warn('[Meggy Widget] /api/ai network error:', e && e.message);
+      return {ok:false, status:0, reason:'network', error:e && e.message || 'network error'};
+    }finally{
+      clearTimeout(timer);
+    }
+  }
+
   function updateStatus(){
     const dot=panel.querySelector('.gdi-ai-dot');
     const st=panel.querySelector('.gdi-ai-status');
@@ -208,7 +277,7 @@
   // UI no <html> (fora do body) — sobrevive a trocas de página
   const root=GDI_ROOT();
   const fab=document.createElement('button');
-  fab.id='gdi-ai-fab';fab.title='Meggy';
+  fab.id='gdi-ai-fab';fab.title='Meggy';fab.setAttribute('aria-label','Abrir Meggy — poodle tutora de estudos');
   // ★ v1.0.85: FAB usa foto real da Meggy (PNG transparente, flood-fill bg removal — olhos/nariz preservados).
   // object-fit:cover preenche o círculo; alt vazio para não mostrar texto overlay.
   // ★ v1.0.98: fallback '99' (CACHE_VERSION atual).
@@ -224,9 +293,9 @@
         <div class="gdi-ai-name">${MEGGY_NAME}<span class="gdi-ai-tag">${MEGGY_TAG}</span></div>
         <div class="gdi-ai-status"><span class="gdi-ai-dot"></span> verificando…</div>
       </div>
-      <button id="gdi-ai-close" title="Fechar"><i class="bi bi-x-lg"></i></button>
+      <button id="gdi-ai-close" title="Fechar" aria-label="Fechar painel da Meggy"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
     </div>
-    <div id="gdi-ai-body"></div>
+    <div id="gdi-ai-body" aria-live="polite" aria-label="Mensagens da Meggy"></div>
     <div class="gdi-ai-provider"></div>
     <div class="gdi-ai-quick-actions" style="display:flex;gap:6px;padding:8px 12px;border-top:1px solid var(--ferreto-border,rgba(255,255,255,.09));">
       <button class="gdi-ai-quick" data-action="resumir" style="flex:1;padding:6px 8px;border:1px solid var(--ferreto-border,#30363d);border-radius:8px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));color:var(--ferreto-text,#e6edf3);font-size:11px;cursor:pointer;">💬 Resumir</button>
@@ -235,7 +304,7 @@
     </div>
     <div id="gdi-ai-input-wrap">
       <input id="gdi-ai-input" type="text" placeholder="Pergunte à Meggy 🐩 sobre a aula, peça um resumo..." autocomplete="off">
-      <button id="gdi-ai-send" title="Enviar"><i class="bi bi-send-fill"></i></button>
+      <button id="gdi-ai-send" title="Enviar" aria-label="Enviar mensagem para a Meggy"><i class="bi bi-send-fill" aria-hidden="true"></i></button>
     </div>`;
   root.appendChild(panel);
 
@@ -282,7 +351,8 @@
         if(q.explanation) md += `> 💡 ${q.explanation}\n\n`;
       });
       return md.trim();
-    }catch(_){
+    }catch(e){
+      console.warn('[Meggy Widget] _renderQuestoesAsMarkdown JSON.parse failed (returning raw):', e&&e.message);
       return content; // not JSON — return as-is
     }
   }
@@ -342,7 +412,7 @@
 
     // (1) Check the metadata cache
     let entry = null;
-    try{ entry = await cache.cacheGetMeta(lessonPath, materialType); }catch(_){ entry = null; }
+    try{ entry = await cache.cacheGetMeta(lessonPath, materialType); }catch(e){ console.warn('[Meggy Widget] cacheGetMeta failed:', e&&e.message); entry = null; }
 
     // (2) Legacy entry with `content` field — use directly (backward compat)
     if(entry && typeof entry.content !== 'undefined' && entry.content){
@@ -354,14 +424,14 @@
     // (3) New metadata-only entry — fetch content from lesson folder
     if(entry && entry.file){
       if(typeof cache.loadMaterialFromFolder !== 'function'){
-        try{ cache.invalidateCacheMeta && cache.invalidateCacheMeta(lessonPath, materialType); }catch(_){}
+        try{ cache.invalidateCacheMeta && cache.invalidateCacheMeta(lessonPath, materialType); }catch(e){console.warn('[Meggy Widget] invalidateCacheMeta failed:', e&&e.message);}
         return false;
       }
       let loaded = null;
-      try{ loaded = await cache.loadMaterialFromFolder(lessonPath, materialType, entry.file); }catch(_){ loaded = null; }
+      try{ loaded = await cache.loadMaterialFromFolder(lessonPath, materialType, entry.file); }catch(e){ console.warn('[Meggy Widget] loadMaterialFromFolder (file) failed:', e&&e.message); loaded = null; }
       if(!loaded || !loaded.content){
         // Fetch failed (file deleted from Drive, etc.) — invalidate cache entry
-        try{ cache.invalidateCacheMeta && cache.invalidateCacheMeta(lessonPath, materialType); }catch(_){}
+        try{ cache.invalidateCacheMeta && cache.invalidateCacheMeta(lessonPath, materialType); }catch(e){console.warn('[Meggy Widget] invalidateCacheMeta failed:', e&&e.message);}
         console.info('[Meggy] shared material fetch failed — invalidating cache meta for', materialType);
         return false;
       }
@@ -373,7 +443,7 @@
     //     Server picks any shared file of this type in the lesson folder.
     if(!entry && typeof cache.loadMaterialFromFolder === 'function'){
       let discovered = null;
-      try{ discovered = await cache.loadMaterialFromFolder(lessonPath, materialType, ''); }catch(_){ discovered = null; }
+      try{ discovered = await cache.loadMaterialFromFolder(lessonPath, materialType, ''); }catch(e){ console.warn('[Meggy Widget] loadMaterialFromFolder (discovery) failed:', e&&e.message); discovered = null; }
       if(discovered && discovered.content){
         // Register metadata so the next read is fast (skip discovery round-trip)
         try{
@@ -381,7 +451,7 @@
             const ch = (typeof cache.deriveCourseHash === 'function') ? cache.deriveCourseHash(lessonPath) : '';
             cache.cacheSaveMeta(lessonPath, materialType, discovered.file, ch);
           }
-        }catch(_){}
+        }catch(e){console.warn('[Meggy Widget] cacheSaveMeta (post-discovery) failed:', e&&e.message);}
         try{ displaySharedMaterial(materialType, discovered.content, discovered.author || '', lessonName); return true; }
         catch(e){ console.warn('[Meggy] displaySharedMaterial (discovered) failed:', e && e.message || e); return false; }
       }
@@ -422,7 +492,7 @@
           const seg = p.split('/').filter(Boolean).pop() || '';
           lessonName = decodeURIComponent(seg);
         }
-      } catch(_){}
+      } catch(e){ console.warn('[Meggy Widget] lessonName extraction failed:', e&&e.message); }
 
       // ★ Task 9: check shared materials cache FIRST. If a shared material
       //    exists in the lesson folder, display it directly — no AI regen.
@@ -502,8 +572,8 @@
   // ── BANCO DE MEMÓRIA da Meggy ──
   // A Meggy mantém um perfil do aluno e aprende com as interações.
   // Persistido em localStorage + enviado como contexto nas conversas.
-  const _meggyLsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
-  const _meggyLsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
+  const _meggyLsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){console.warn('[Meggy Widget] _meggyLsGet failed (returning default):', e&&e.message);return d}};
+  const _meggyLsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){console.warn('[Meggy Widget] _meggyLsSet failed (localStorage write):', e&&e.message);}};
   function loadMemory(){
     return _meggyLsGet(MEMORY_KEY,{interactions:0,topics:[],weaknesses:[],preferences:{},lastLessons:[]});
   }
@@ -534,7 +604,7 @@
         .filter(([,v])=>v.total>=2&&(v.correct/v.total)<0.5)
         .map(([k,v])=>({subject:k,acc:Math.round(v.correct/v.total*100)}))
         .slice(0,5);
-    }catch(_){}
+    }catch(e){console.warn('[Meggy Widget] updateMemory weaknesses calc failed:', e&&e.message);}
     saveMemory(mem);
     return mem;
   }
@@ -575,7 +645,7 @@
     //   skip the local-AI path just because the probe hasn't completed yet
     //   (e.g. user opens the panel and types within the first ~100ms of
     //   page load). probeBrowserAI() returns the cached probe promise.
-    try{ await probeBrowserAI(); }catch(_){}
+    try{ await probeBrowserAI(); }catch(e){console.warn('[Meggy Widget] probeBrowserAI pre-send failed:', e&&e.message);}
 
     showTyping();
 
@@ -602,34 +672,33 @@
     if(_sessionGen !== myGen){ hideTyping(); return; }
     // 2) fallback servidor /api/ai
     if(!response){
-      try{
-        const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({message:txt,messages:hist})});
-        const data=await r.json();
-        // ★ CYCLE2-7: same race guard after the server fetch await.
-        if(_sessionGen !== myGen){ hideTyping(); return; }
-        hideTyping();
-        if(data.ok&&data.response){response=data.response;}
-        else{
-          // ★ CYCLE2-7: don't restore input text or show an error element
-          //   if the session was destroyed mid-fetch.
-          if(_sessionGen !== myGen){ return; }
-          // ★ Fix 7: restore the user's text so they can retry / edit.
-          input.value = savedText;
-          const errEl=document.createElement('div');errEl.className='gdi-ai-err';
-          errEl.textContent=data.error||'Não consegui responder agora. Tente novamente.';
-          body.appendChild(errEl);body.scrollTop=body.scrollHeight;
-          setTimeout(()=>errEl.remove(),5000);
-          return;
-        }
-      }catch(e){
-        // ★ CYCLE2-7: same race guard in the catch (fetch threw mid-flight).
-        if(_sessionGen !== myGen){ hideTyping(); return; }
-        hideTyping();
+      // ★ H-24 + H-41 (Task P12-5): use callServerAI — typed status response
+      //   (auth/rate/server/network/timeout/app) + 45s AbortController. Previously
+      //   the inline fetch could hang forever (BUGHUNT-v69 #5) and all non-ok
+      //   responses collapsed into one generic "Meggy indisponível" message.
+      const aiRes = await callServerAI({message:txt, messages:hist});
+      // ★ CYCLE2-7: same race guard after the server fetch await.
+      if(_sessionGen !== myGen){ hideTyping(); return; }
+      hideTyping();
+      if(aiRes.ok && aiRes.response){
+        response = aiRes.response;
+      } else {
+        // ★ CYCLE2-7: don't restore input text or show an error element
+        //   if the session was destroyed mid-fetch.
+        if(_sessionGen !== myGen){ return; }
         // ★ Fix 7: restore the user's text so they can retry / edit.
         input.value = savedText;
+        // ★ H-24: surface the reason to the user so they know whether to wait,
+        //   re-login, or just retry.
+        let errMsg = 'Não consegui responder agora. Tente novamente.';
+        if(aiRes.reason === 'auth') errMsg = 'Sessão expirada — faça login novamente para usar a Meggy.';
+        else if(aiRes.reason === 'rate') errMsg = 'Muitas requisições. Aguarde alguns segundos e tente de novo.';
+        else if(aiRes.reason === 'timeout') errMsg = 'O servidor demorou demais. Tente novamente.';
+        else if(aiRes.reason === 'network') errMsg = 'Erro de conexão. Verifique sua internet.';
+        else if(aiRes.reason === 'server') errMsg = 'Servidor indisponível. Tente novamente em alguns instantes.';
+        else if(aiRes.error) errMsg = aiRes.error;
         const errEl=document.createElement('div');errEl.className='gdi-ai-err';
-        errEl.textContent='Erro de conexão. Verifique sua internet.';
+        errEl.textContent = errMsg;
         body.appendChild(errEl);body.scrollTop=body.scrollHeight;
         setTimeout(()=>errEl.remove(),5000);
         return;
@@ -646,7 +715,7 @@
     } finally {
       busy=false;
       sendBtn.disabled=false;
-      try{ input.focus(); }catch(_){}
+      try{ input.focus(); }catch(e){console.warn('[Meggy Widget] input.focus (send finally) failed:', e&&e.message);}
     }
   }
 
@@ -667,9 +736,9 @@
         if(el.getAttribute('aria-hidden') === 'true') return false;
         // offsetParent is null for fixed/hidden elements; the input itself
         // is always reachable when the panel is open.
-        try{ return el.offsetParent !== null || el === input; }catch(_){ return false; }
+        try{ return el.offsetParent !== null || el === input; }catch(e){ console.warn('[Meggy Widget] offsetParent visibility check failed:', e&&e.message); return false; }
       });
-    }catch(_){ return []; }
+    }catch(e){ console.warn('[Meggy Widget] _getPanelFocusable failed (returning []):', e&&e.message); return []; }
   }
 
   function toggle(){
@@ -678,7 +747,7 @@
       // ★ Fix 2: save focus BEFORE opening so we can restore it on close.
       _previouslyFocused = document.activeElement;
       panel.classList.add('open');
-      try{sessionStorage.setItem('gdi-meggy-open','1');}catch(_){}
+      try{sessionStorage.setItem('gdi-meggy-open','1');}catch(e){console.warn('[Meggy Widget] sessionStorage setItem(gdi-meggy-open,1) failed:', e&&e.message);}
       badge.classList.remove('show');
       renderHistory();
       updateStatus();
@@ -690,15 +759,15 @@
       setTimeout(()=>{
         const cur = document.activeElement;
         if(cur === opener || cur === document.body || cur === null){
-          try{ input.focus(); }catch(_){}
+          try{ input.focus(); }catch(e){console.warn('[Meggy Widget] input.focus (toggle open) failed:', e&&e.message);}
         }
       },100);
     } else {
       panel.classList.remove('open');
-      try{sessionStorage.setItem('gdi-meggy-open','0');}catch(_){}
+      try{sessionStorage.setItem('gdi-meggy-open','0');}catch(e){console.warn('[Meggy Widget] sessionStorage setItem(gdi-meggy-open,0) failed:', e&&e.message);}
       // ★ Fix 2: restore focus to the element that was focused before opening.
       if(_previouslyFocused && typeof _previouslyFocused.focus === 'function'){
-        try{ _previouslyFocused.focus(); }catch(_){}
+        try{ _previouslyFocused.focus(); }catch(e){console.warn('[Meggy Widget] _previouslyFocused.focus failed:', e&&e.message);}
       }
       _previouslyFocused = null;
     }
@@ -730,12 +799,12 @@
     if(e.shiftKey){
       if(active === first || !panel.contains(active)){
         e.preventDefault();
-        try{ last.focus(); }catch(_){}
+        try{ last.focus(); }catch(e){console.warn('[Meggy Widget] last.focus (focus trap) failed:', e&&e.message);}
       }
     } else {
       if(active === last || !panel.contains(active)){
         e.preventDefault();
-        try{ first.focus(); }catch(_){}
+        try{ first.focus(); }catch(e){console.warn('[Meggy Widget] first.focus (focus trap) failed:', e&&e.message);}
       }
     }
   });
@@ -767,7 +836,7 @@
     if(sessionStorage.getItem('gdi-meggy-open')==='1'){
       setTimeout(()=>{panel.classList.add('open');renderHistory();updateStatus();},500);
     }
-  }catch(_){}
+  }catch(e){console.warn('[Meggy Widget] restore-open-state failed:', e&&e.message);}
 
   // ── Ativação condicional ──
   // O botão 💖 só aparece se houver IA disponível: (1) IA do navegador
@@ -780,7 +849,7 @@
   let _serverEnabled=null; // null=desconhecido, true/false
   let _serverProvider=null;
   function checkServerStatus(){
-    return fetch('/api/ai/status',{cache:'no-store'}).then(r=>r.ok?r.json():{enabled:false}).then(d=>{ _serverEnabled=!!(d&&d.enabled); _serverProvider=(d&&d.provider)||null; return _serverEnabled; }).catch(()=>{ _serverEnabled=false; return false; });
+    return fetch('/api/ai/status',{cache:'no-store'}).then(r=>r.ok?r.json():{enabled:false}).then(d=>{ _serverEnabled=!!(d&&d.enabled); _serverProvider=(d&&d.provider)||null; return _serverEnabled; }).catch(e=>{ console.warn('[Meggy Widget] checkServerStatus failed:', e&&e.message); _serverEnabled=false; return false; });
   }
   function serverLabel(){
     if(_serverProvider==='nvidia-nim')return {name:'NVIDIA NIM',label:'NVIDIA NIM <b>(LLaMA · /api/ai)</b>'};
@@ -798,9 +867,11 @@
   let _browserAIProbePromise = null;
   function probeBrowserAI(){
     if(!_browserAIProbePromise){
-      _browserAIProbePromise = detectBrowserAI().catch(()=>{
-        // detectBrowserAI sets _browserAIState='no' on any failure path,
-        // so nothing to do here — just swallow to keep the promise resolved.
+      _browserAIProbePromise = detectBrowserAI().catch(e=>{
+        // detectBrowserAI sets _browserAIState='no' on any failure path, so
+        // nothing functional to do here — but log so a half-broken Chrome
+        // Prompt API flag doesn't fail invisibly.
+        console.warn('[Meggy Widget] detectBrowserAI probe failed (state→no):', e && e.message);
       });
     }
     return _browserAIProbePromise;
@@ -871,9 +942,9 @@
     _serverEnabled=null;
     _serverProvider=null;
     messages=[];
-    try{ sessionStorage.removeItem(STORE); }catch(_){}
+    try{ sessionStorage.removeItem(STORE); }catch(e){console.warn('[Meggy Widget] sessionStorage.removeItem(STORE) failed:', e&&e.message);}
     if(_memDebounce){ clearTimeout(_memDebounce); _memDebounce=null; }
-    try{ window._meggyLastMem=0; }catch(_){}
+    try{ window._meggyLastMem=0; }catch(e){console.warn('[Meggy Widget] window._meggyLastMem reset failed:', e&&e.message);}
     // ★ CYCLE2-7: bump the session-generation counter so any in-flight
     //   send() detects the teardown on its next await checkpoint and bails
     //   out (see send() race guards). Must be bumped BEFORE renderHistory
@@ -881,12 +952,12 @@
     //   generation and exits before mutating the freshly-cleared body.
     _sessionGen++;
     // also re-render the (now empty) chat history if the panel is open
-    try{ renderHistory(); }catch(_){}
+    try{ renderHistory(); }catch(e){console.warn('[Meggy Widget] renderHistory (post-destroy) failed:', e&&e.message);}
   }
   if(typeof Bus !== 'undefined' && typeof Bus.onGlobal === 'function'){
     Bus.onGlobal('auth:change', (state)=>{
       if(state === 'out' || state === 'logout'){
-        try{ destroySession(); }catch(_){}
+        try{ destroySession(); }catch(e){console.warn('[Meggy Widget] destroySession failed:', e&&e.message);}
       }
     });
   }
@@ -900,6 +971,7 @@
     hideWidget, showWidget,
     checkServerStatus, serverLabel,
     detectBrowserAI, getBrowserSession, callBrowserAI,
+    callServerAI,
     loadMemory, saveMemory, updateMemory, buildMemoryContext,
     // ★ Task 9 (Scanner Distribuído): shared materials bridge
     tryOpenSharedMaterial, displaySharedMaterial, addSharedHint,
