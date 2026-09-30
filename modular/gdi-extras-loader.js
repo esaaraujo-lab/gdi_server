@@ -33,7 +33,7 @@
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
   // ★ v1.0.91: bump 92 → 93 (Shaka skin + Pomodoro sidebar + video-in-panel + PDF split + rest mode fix + OCR AI routing + parallel dispatch).
-  const CACHE_VERSION = '116';  // ★ v1.0.103: 144+ bug fixes from 20-agent deep review (security hardening, race conditions, CORS, subrequest limits, error handling, type coercion, backward compat, performance O(N²)→Set, state leak cleanup, UI/UX accessibility, legacy monolith fixes, docs)
+  const CACHE_VERSION = '117';  // ★ v1.0.114: Fix 3 student-area bugs — (1) Explorar Drives video click downloaded instead of opening player (missing ?a=view); (2) Skip-intro button disappeared after ~15s when intro was short (visibility window extended to max(S+30, 60)); (3) Auto-skip intro on subsequent playlist videos across folders (last-intro fallback + no longer requires Modo Maratona).
   window.CACHE_VERSION = CACHE_VERSION;
 
   const MODULES = [
