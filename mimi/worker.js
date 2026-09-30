@@ -1027,7 +1027,7 @@ body{background:#090a0f;color:#f3f4f6;font-family:'Plus Jakarta Sans',sans-serif
 </div>
 </div>
 <script>
-const P=${JSON.stringify(perfumes)};
+const P=${JSON.stringify(PERFUMES)};
 let cart=[],cat='all';
 const CATS={all:'Todas',BRAND:'💎 Brand 25ml',AFEER:'🌙 Afeer Árabe',DECANTE:'🧪 Decantes 5ml',FEMININO:'👑 Feminino',MASCULINO:'⚡ Masculino',UNISSEX:'✨ Unissex'};
 function fmt(v){return v.toFixed(2).replace('.',',')}
