@@ -1,8 +1,4 @@
 // ═══════════════════════════════════════════════════════════════
-// ⚠️ LEGACY MONOLITH — not loaded by gdi-extras-loader.js since v1.0.86.
-// Served by worker.js /modular/ whitelist for backward compat only.
-// (Active replacement: modular/meggy/*.js — 7 modules. See gdi-extras-loader.js:46-53.)
-// ═══════════════════════════════════════════════════════════════
 // gdi-meggy.js — M9-ISA (Meggy IA) + M-AI (widget chat)
 // 
 // REFACTORED (Task 4-c):
