@@ -37,50 +37,16 @@
   window.__gdiStudyCourses = true;
   window.__gdiStudy = window.__gdiStudy || {};
 
-  // ── H-11 (P12-3 / Agent 3): shared write chain for RMW on gdi-manual-courses-v1 ──
-  // ★ Serialize read-modify-write operations on gdi-manual-courses-v1 (and
-  //    gdi-hidden-courses-v1) across modules. The chain lives on
-  //    window.__gdiStudy so both scanner (loads first) and study-courses.js
-  //    (loads second) contribute to the SAME ordering. Without this, the
-  //    4+ RMW sites in this file (gdiAddCourseFromDrive, doAddCourseFromDrive,
-  //    manual save, remove handler) plus syncCoursesFromDrive +
-  //    cleanupOrphanCourses in scanner could race and lose entries — the
-  //    well-known localStorage RMW race that previously caused duplicate
-  //    course tiles and lost hide/unhide state. Also exposed on the namespace
-  //    for downstream modules (study-panel.js, study-questions.js) to await.
-  window.__gdiStudy._manualWriteChain = window.__gdiStudy._manualWriteChain || Promise.resolve();
-  function _queueManualWrite(fn){
-    // Resolve-order: chain waits for the previous write, then runs fn.
-    // Errors are swallowed at the chain level (so a failed write doesn't
-    // break subsequent writes) but propagated to the caller (so the caller
-    // can react to its own write failing).
-    const result = window.__gdiStudy._manualWriteChain.then(function(){ return fn(); });
-    window.__gdiStudy._manualWriteChain = result.catch(function(e){
-      console.warn('[manualWriteChain] error:', e && e.message);
-    });
-    return result;
-  }
-
   const LS_CARDS='gdi-cards-v1',LS_GOAL='gdi-goal-min',LS_WATCH='gdi-watch-v1',LS_MAR='gdi-marathon',LS_MARINTRO='gdi-marathon-intro',LS_HIDDEN='gdi-hidden-courses-v1';
   const log=(...a)=>{try{console.log('[GDI M22]',...a)}catch(_){}};
   const dec=s=>{try{return decodeURIComponent(String(s||''))}catch(_){return String(s||'')}};
   const norm=p=>dec(String(p||'').split('?')[0].replace(/\/+$/,''));
   const low=p=>norm(p).toLowerCase();
   const stripExt=s=>String(s||'').replace(/\.[a-z0-9]{1,5}$/i,'').trim();
-  const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){console.warn('[M22] lsGet: JSON parse error for key',JSON.stringify(k),'— returning default. Error:',e&&e.message);return d}};
+  const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
   const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){console.warn('[lsSet] failed for',k,':',e&&e.message);if(window.showToast)window.showToast('Armazenamento cheio — não foi possível salvar.')}};
-  // ★ H-33 (P12-3 / Agent 3): delegate to window.gdiEsc (centralized by
-  //    Agent 2) when available, then window.escHtml (app.min.js global),
-  //    then a local fallback. Agent 2's window.gdiEsc is the canonical XSS
-  //    escape for the codebase; using it here ensures this module gets any
-  //    future security fixes (e.g., stricter attribute-context escaping)
-  //    without per-module code changes. The fallback chain preserves
-  //    behavior if Agent 2 hasn't shipped yet.
-  const esc=s=>{try{
-    if(typeof window.gdiEsc==='function') return window.gdiEsc(s);
-    if(window.escHtml) return window.escHtml(s);
-    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
-  }catch(_){return String(s||'');}};
+  // ★ FIX: esc local para o M22 (Área do Aluno) — usa escHtml global do app.min.js quando disponível
+  const esc=s=>{try{return window.escHtml?window.escHtml(s):String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');}catch(_){return String(s||'');}};
   const fmtMin=m=>{m=Math.round(m);return m>=60?Math.floor(m/60)+'h'+String(m%60).padStart(2,'0'):m+'min'};
   const dayKey=t=>{const d=new Date(t||Date.now());return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
   const dateBr=t=>new Date(t).toLocaleDateString('pt-BR');
@@ -155,40 +121,33 @@
     const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){console.warn('[lsSet] failed for',k,':',e&&e.message);if(window.showToast)window.showToast('Armazenamento cheio — não foi possível salvar.')}};
 
     try{
-      // ★ H-11 (P12-3 / Agent 3): serialize the RMW on gdi-manual-courses-v1
-      //    through the shared _manualWriteChain so concurrent RMW calls
-      //    (syncCoursesFromDrive, cleanupOrphanCourses, doAddCourseFromDrive,
-      //    remove handler) can't race with this one.
-      const alreadyExists = await _queueManualWrite(function(){
-        let manual=lsGet(LS_MANUAL,[]);
-        if(!Array.isArray(manual))manual=[];  // ★ CYCLE-3 FIX: guard against corrupted localStorage
-        // ★ FIX (Task 20-13 #6): compare normalized paths so legacy entries
-        //   stored with a trailing slash (e.g. '/0:/Cursos/') still match a
-        //   re-add attempt with the slash stripped (or vice-versa). low()
-        //   normalizes + lowercases — sufficient for equality check.
-        const _normCmp = p => low(p);
-        const exists=manual.some(c=>c&&_normCmp(c.path)===_normCmp(coursePath));
+      let manual=lsGet(LS_MANUAL,[]);
+      if(!Array.isArray(manual))manual=[];  // ★ CYCLE-3 FIX: guard against corrupted localStorage
+      // ★ FIX (Task 20-13 #6): compare normalized paths so legacy entries
+      //   stored with a trailing slash (e.g. '/0:/Cursos/') still match a
+      //   re-add attempt with the slash stripped (or vice-versa). low()
+      //   normalizes + lowercases — sufficient for equality check.
+      const _normCmp = p => low(p);
+      const alreadyExists=manual.some(c=>c&&_normCmp(c.path)===_normCmp(coursePath));
 
-        if(!exists){
-          // ★ 1) SALVA no localStorage — aparece imediatamente na lista do aluno
-          // ★ FIX 4 (Task 14): agora também persiste pdfCount, para que colectCourses()
-          //    possa exibir totalLessons real (não mais c.lessons.size = paths visitados).
-          const courseId='mc-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
-          manual.push({
-            id:courseId,name:courseName,icon:'📁',color:'#5ddeda',
-            goal:60,notes:'',createdAt:Date.now(),
-            manual:true,path:coursePath,courseKey:coursePath,
-            pdfCount:pdfCount||0  // ★ FIX 4: total real de aulas (Drive scan)
-          });
-          lsSet(LS_MANUAL,manual);
-          // ★ v1.0.103 FIX (Task 20-5 #9): emit courses:changed so caches
-          //   (bestInCache in study-courses.js, _ccCache in study-panel.js)
-          //   are invalidated. Without this, the home tile's "Continuar" button
-          //   could show stale data after adding a course.
-          try{ if(typeof Bus!=='undefined' && Bus.emit) Bus.emit('courses:changed', {}); }catch(_){}
-        }
-        return exists;
-      });
+      if(!alreadyExists){
+        // ★ 1) SALVA no localStorage — aparece imediatamente na lista do aluno
+        // ★ FIX 4 (Task 14): agora também persiste pdfCount, para que colectCourses()
+        //    possa exibir totalLessons real (não mais c.lessons.size = paths visitados).
+        const courseId='mc-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
+        manual.push({
+          id:courseId,name:courseName,icon:'📁',color:'#5ddeda',
+          goal:60,notes:'',createdAt:Date.now(),
+          manual:true,path:coursePath,courseKey:coursePath,
+          pdfCount:pdfCount||0  // ★ FIX 4: total real de aulas (Drive scan)
+        });
+        lsSet(LS_MANUAL,manual);
+        // ★ v1.0.103 FIX (Task 20-5 #9): emit courses:changed so caches
+        //   (bestInCache in study-courses.js, _ccCache in study-panel.js)
+        //   are invalidated. Without this, the home tile's "Continuar" button
+        //   could show stale data after adding a course.
+        try{ if(typeof Bus!=='undefined' && Bus.emit) Bus.emit('courses:changed', {}); }catch(_){}
+      }
 
       // ★ 2) POST /api/courses/add — salva em general_courses.json no Drive (compartilhado)
       // Não-bloqueante: se falhar, mostra warning mas continua o fluxo
@@ -427,24 +386,7 @@
     return(window.drive_names&&m&&window.drive_names[+m[1]])||'';
   }
   // ★ v1.0.76: courseIdentity moved to gdi-core.js as window.gdiCourseIdentity (CDN cache fix)
-  //
-  // ★ Performance (P12-3 / Agent 3): 5s TTL memoization for collectCourses.
-  //    collectCourses is called on every renderHome + renderCursos +
-  //    openCourseDetail, and each call iterates manual courses + watched keys
-  //    + scanner state. For a student with 30 courses × 500 watched keys, this
-  //    is ~1,530 ops per call (already optimized from O(C×W)=15,000 by the
-  //    pre-bucketing Map below). With 5s TTL, rapid sequential calls (e.g.,
-  //    renderHome followed by openCourseDetail) hit the cache instead of
-  //    recomputing. Invalidated on courses:changed (add/remove/hide/unhide/
-  //    sync) and watched:changed (video mark/unmark) Bus events — see the
-  //    Bus.onGlobal block below. Matches the existing _ccCache pattern in
-  //    study-panel.js (same TTL, same invalidation events).
-  const _ccCache = { t: 0, val: null };
   function collectCourses(){
-    // ★ Performance (P12-3): return cached value if fresh (within 5s).
-    if(_ccCache.val && Date.now() - _ccCache.t < 5000){
-      return _ccCache.val;
-    }
     const d=stateD()||{};
     // ★ cursos ocultos pelo usuário (não aparecem na lista de cursos)
     // ★ v1.0.103 FIX (Task 20-18 #5): convert `hidden` array → Set<string> (lowercased)
@@ -597,17 +539,6 @@
 
     return [...map.values()].sort((a,b)=>b.lastAt-a.lastAt);
   }
-  // ★ Performance (P12-3 / Agent 3): wrap collectCourses to populate the
-  //    _ccCache on every fresh computation. The wrapper preserves the
-  //    function's sync API (returns the array directly) and is transparent
-  //    to callers. Invalidated by the Bus.onGlobal handlers below.
-  const _collectCoursesUncached = collectCourses;
-  collectCourses = function(){
-    const result = _collectCoursesUncached.apply(this, arguments);
-    _ccCache.val = result;
-    _ccCache.t = Date.now();
-    return result;
-  };
   window.collectCourses = collectCourses;
   // ★ helpers para ocultar/restaurar cursos
   // ★ v1.0.103 FIX (Task 20-5 #10): serialize writes to LS_HIDDEN via a Promise
@@ -730,14 +661,12 @@
   //   (lines 478, 485, 615, 1213, 1429, 1559, 1844); these onGlobal calls were
   //   the only unguarded Bus references.
   if(typeof Bus !== 'undefined' && Bus && typeof Bus.onGlobal === 'function'){
-    Bus.onGlobal('watched:changed',()=>{bestInCache.clear(); _ccCache.val=null; _ccCache.t=0;});
+    Bus.onGlobal('watched:changed',()=>{bestInCache.clear();});
     // ★ v1.0.103 FIX (Task 20-5 #9): also clear bestInCache on courses:changed
     //   (hide/unhide/remove/add). Previously, removing a course kept stale
     //   bestIn cache for that courseKey, so the next renderCursos call could
     //   show a "Continuar: <ghost lesson>" button pointing to a removed course.
-    // ★ Performance (P12-3 / Agent 3): also invalidate _ccCache so the next
-    //   collectCourses call recomputes from fresh localStorage data.
-    Bus.onGlobal('courses:changed',()=>{bestInCache.clear(); _ccCache.val=null; _ccCache.t=0;});
+    Bus.onGlobal('courses:changed',()=>{bestInCache.clear();});
   }
 
   // ★ Otimização: limpa nome do curso (remove paths crus, underscores, etc)
@@ -1005,27 +934,16 @@
   };
   // ★ Modal para adicionar curso manualmente
   function showAddCourseModal(box){
-    // ★ H-33 (P12-3 / Agent 3): delegate to window.gdiEsc (centralized by Agent 2)
-    //    when available, then window.escHtml (app.min.js global), then a local
-    //    fallback. The fallback chain preserves behavior if Agent 2 hasn't
-    //    shipped yet.
-    const esc=s=>{try{
-      if(typeof window.gdiEsc==='function') return window.gdiEsc(s);
-      if(window.escHtml) return window.escHtml(s);
-      return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
-    }catch(_){return String(s||'');}};
+    // ★ FIX local: garante esc() disponível mesmo se o escopo externo não tiver
+    const esc=window.escHtml||(s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;'));
     const colors=['#ff8b9f','#5ddeda','#c026d3','#3fb950','#ffd43b','#7aa2ff','#ff6b6b','#a78bfa'];
     const icons=['⚖️','📐','📚','🎯','🧮','📖','🔬','💼','🌍','🏛️','⚙️','🎵'];
     const overlay=document.createElement('div');
     overlay.className='gdi-modal-overlay';
     overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:100002;display:flex;align-items:center;justify-content:center;padding:20px;';
-    // ★ H-37 (P12-3 / Agent 3): add role="dialog" + aria-modal="true" +
-    //    aria-labelledby on the inner modal box so screen readers announce it
-    //    as a dialog. The ESC handler + focus trap are wired below after
-    //    `close` is defined. Mirrors the gdiModal pattern in gdi-core.js.
-    overlay.innerHTML=`<div role="dialog" aria-modal="true" aria-labelledby="gdi-amc-title" style="background:var(--ferreto-bg-2,#0d1119);border:1px solid var(--ferreto-border,#21262d);border-radius:14px;max-width:680px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.6);">
+    overlay.innerHTML=`<div style="background:var(--ferreto-bg-2,#0d1119);border:1px solid var(--ferreto-border,#21262d);border-radius:14px;max-width:680px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.6);">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--ferreto-border,#21262d);">
-        <b id="gdi-amc-title" style="color:var(--ferreto-text,#f0f6fc);font-size:15px;font-family:var(--ferreto-font-display,'Poppins',sans-serif);"><i class="bi bi-folder-plus"></i> Adicionar curso</b>
+        <b style="color:var(--ferreto-text,#f0f6fc);font-size:15px;font-family:var(--ferreto-font-display,'Poppins',sans-serif);"><i class="bi bi-folder-plus"></i> Adicionar curso</b>
         <button id="gdi-amc-x" style="background:transparent;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:18px;padding:4px 8px;border-radius:6px;">✕</button>
       </div>
       <!-- Tabs: Navegar Drive | Manual -->
@@ -1401,35 +1319,26 @@
       coursePath = String(coursePath||'').replace(/\/+$/,'') || '/';
       try{
         const LS_MANUAL='gdi-manual-courses-v1';
-        // ★ H-11 (P12-3 / Agent 3): serialize the RMW through _manualWriteChain.
-        //    If the course already exists, return early (mirrors the original
-        //    early-return semantics).
-        const alreadyExists = await _queueManualWrite(function(){
-          let manual=lsGet(LS_MANUAL,[]);
-          if(!Array.isArray(manual))manual=[];  // ★ CYCLE-3 FIX: guard against corrupted localStorage
-          // evita duplicar — compare normalized (low() strips trailing slash + lowercases)
-          if(manual.some(c=>c&&low(c.path)===low(coursePath))){
-            return true;
-          }
-          const courseId='mc-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
-          manual.push({
-            id:courseId,name:courseName,icon:'📁',color:'#5ddeda',
-            goal:60,notes:'',createdAt:Date.now(),
-            manual:true,path:coursePath,courseKey:coursePath,
-            // ★ v1.0.103 FIX (Task 20-5 #8): unify schema with gdiAddCourseFromDrive
-            //   (line 122) — add pdfCount so collectCourses() reads the same
-            //   totalLessons field regardless of which code path saved the course.
-            pdfCount:pdfCount||0
-          });
-          lsSet(LS_MANUAL,manual);
-          // ★ v1.0.103 FIX (Task 20-5 #9): emit courses:changed to invalidate caches.
-          try{ if(typeof Bus!=='undefined' && Bus.emit) Bus.emit('courses:changed', {}); }catch(_){}
-          return false;
-        });
-        if(alreadyExists){
+        let manual=lsGet(LS_MANUAL,[]);
+        if(!Array.isArray(manual))manual=[];  // ★ CYCLE-3 FIX: guard against corrupted localStorage
+        // evita duplicar — compare normalized (low() strips trailing slash + lowercases)
+        if(manual.some(c=>c&&low(c.path)===low(coursePath))){
           showToast('Curso "'+courseName+'" já está adicionado');
           return;
         }
+        const courseId='mc-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
+        manual.push({
+          id:courseId,name:courseName,icon:'📁',color:'#5ddeda',
+          goal:60,notes:'',createdAt:Date.now(),
+          manual:true,path:coursePath,courseKey:coursePath,
+          // ★ v1.0.103 FIX (Task 20-5 #8): unify schema with gdiAddCourseFromDrive
+          //   (line 122) — add pdfCount so collectCourses() reads the same
+          //   totalLessons field regardless of which code path saved the course.
+          pdfCount:pdfCount||0
+        });
+        lsSet(LS_MANUAL,manual);
+        // ★ v1.0.103 FIX (Task 20-5 #9): emit courses:changed to invalidate caches.
+        try{ if(typeof Bus!=='undefined' && Bus.emit) Bus.emit('courses:changed', {}); }catch(_){}
         // ★ FIX: salva também no Drive via /api/courses/add (para persistir entre sessões/logouts)
         try{
           const r=await fetch('/api/courses/add',{
@@ -1535,9 +1444,6 @@
     // If the modal was opened from a button (e.g. "Adicionar curso" on home/cursos),
     // 'addmateria' is NOT active in the sidebar → we leave everything alone.
     const close=()=>{
-      // ★ H-37 (P12-3): tear down the ESC + Tab focus-trap listeners before
-      //    removing the overlay, so they don't leak on subsequent re-opens.
-      if(_a11yCleanup){ try{ _a11yCleanup(); }catch(_){} _a11yCleanup = null; }
       if(overlay&&overlay.parentNode)overlay.remove();
       try{
         const panelEl = box.closest ? box.closest('#gdi-central') : null;
@@ -1551,63 +1457,7 @@
           }
         }
       }catch(_){}
-      // ★ H-37 (P12-3): restore focus to the element that had focus before the
-      //    modal opened. Mirrors gdiModal's pattern in gdi-core.js (cycle-8 #1).
-      try{ if(_returnFocus && typeof _returnFocus.focus==='function') _returnFocus.focus(); }catch(_){}
     };
-    // ★ H-37 (P12-3 / Agent 3): capture the previously-focused element BEFORE
-    //    any focus moves (auto-focus happens in _bindA11y below). Used by
-    //    close() to restore focus when the modal closes (X / Cancel / backdrop /
-    //    ESC / save).
-    const _returnFocus = (document.activeElement && document.activeElement !== document.body)
-      ? document.activeElement : null;
-    let _a11yCleanup = null;
-    // ★ H-37 (P12-3 / Agent 3): bind ESC handler + Tab/Shift+Tab focus trap.
-    //    Mirrors the bindModalA11y pattern from study-questions.js (Agent 6) and
-    //    the gdiModal pattern in gdi-core.js. Without these, keyboard users had
-    //    no way to dismiss the modal without finding the Cancel button, and Tab
-    //    could escape into background DOM (navbar, etc.) — breaking WAI-ARIA
-    //    dialog semantics.
-    (function _bindA11y(){
-      const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
-      function getFocusables(){
-        const nodes = overlay.querySelectorAll(FOCUSABLE);
-        return Array.prototype.slice.call(nodes).filter(function(el){
-          // Filter out zero-size / display:none elements.
-          try{ return el.offsetParent !== null || el === document.activeElement; }catch(_){ return false; }
-        });
-      }
-      function handler(e){
-        if(e.key === 'Escape' || e.keyCode === 27){
-          e.preventDefault();
-          e.stopPropagation();
-          try{ close(); }catch(_){}
-          return;
-        }
-        if(e.key === 'Tab' || e.keyCode === 9){
-          const f = getFocusables();
-          if(!f.length) return;  // let browser handle Tab naturally
-          const first = f[0], last = f[f.length - 1];
-          const ae = document.activeElement;
-          if(e.shiftKey){
-            // Shift+Tab on first (or outside overlay) → wrap to last
-            if(ae === first || !overlay.contains(ae)){ e.preventDefault(); try{ last.focus(); }catch(_){} }
-          }else{
-            // Tab on last (or outside overlay) → wrap to first
-            if(ae === last || !overlay.contains(ae)){ e.preventDefault(); try{ first.focus(); }catch(_){} }
-          }
-        }
-      }
-      document.addEventListener('keydown', handler, true);
-      _a11yCleanup = function(){
-        try{ document.removeEventListener('keydown', handler, true); }catch(_){}
-      };
-      // Auto-focus first focusable on next tick (lets DOM attach first).
-      setTimeout(function(){
-        const f = getFocusables();
-        if(f.length){ try{ f[0].focus(); }catch(_){} }
-      }, 50);
-    })();
     // ★ CYCLE2-2 FIX: guard querySelector results before .onclick (defensive —
     //   matches the pattern used in openCourseDetail at lines 1912-1992; these
     //   elements are hardcoded in the template so always exist, but a future
@@ -1729,23 +1579,20 @@
           const goal=parseInt(overlay.querySelector('#gdi-amc-goal').value,10)||60;  // ★ CYCLE-3 FIX: add radix 10
           const notes=overlay.querySelector('#gdi-amc-notes').value.trim();
           const LS_MANUAL='gdi-manual-courses-v1';
+          let manual=lsGet(LS_MANUAL,[]);
+          if(!Array.isArray(manual))manual=[];  // ★ CYCLE-3 FIX: guard against corrupted localStorage
+          const courseId='mc-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
           const coursePath='/0:/'+encodeURIComponent(name);
-          // ★ H-11 (P12-3 / Agent 3): serialize the RMW through _manualWriteChain.
-          await _queueManualWrite(function(){
-            let manual=lsGet(LS_MANUAL,[]);
-            if(!Array.isArray(manual))manual=[];  // ★ CYCLE-3 FIX: guard against corrupted localStorage
-            const courseId='mc-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
-            manual.push({
-              id:courseId,name,icon:selectedIcon,color:selectedColor,
-              goal,notes,createdAt:Date.now(),
-              manual:true,path:coursePath,courseKey:coursePath,
-              // ★ v1.0.103 FIX (Task 20-5 #8): unify schema — manual add also has pdfCount=0
-              pdfCount:0
-            });
-            lsSet(LS_MANUAL,manual);
-            // ★ v1.0.103 FIX (Task 20-5 #9): emit courses:changed to invalidate caches.
-            try{ if(typeof Bus!=='undefined' && Bus.emit) Bus.emit('courses:changed', {}); }catch(_){}
+          manual.push({
+            id:courseId,name,icon:selectedIcon,color:selectedColor,
+            goal,notes,createdAt:Date.now(),
+            manual:true,path:coursePath,courseKey:coursePath,
+            // ★ v1.0.103 FIX (Task 20-5 #8): unify schema — manual add also has pdfCount=0
+            pdfCount:0
           });
+          lsSet(LS_MANUAL,manual);
+          // ★ v1.0.103 FIX (Task 20-5 #9): emit courses:changed to invalidate caches.
+          try{ if(typeof Bus!=='undefined' && Bus.emit) Bus.emit('courses:changed', {}); }catch(_){}
           if(overlay&&overlay.parentNode)overlay.remove();
           // ★ FIX (Agent 10 Bug 22): mirror v1.0.101 fix for doAddCourseFromDrive —
           //    after closing the manual-add modal, click the 'home' tab so the
@@ -2139,14 +1986,10 @@
           await hideCourse(c.key);
         }
         // 2. Remove do localStorage
-        // ★ H-11 (P12-3 / Agent 3): serialize the RMW through _manualWriteChain
-        //    so concurrent RMW calls can't race with this one.
-        await _queueManualWrite(function(){
-          let manual=lsGet(LS_MANUAL_RM,[]);
-          if(!Array.isArray(manual))manual=[];  // ★ CYCLE-3 FIX: guard against corrupted localStorage
-          const next=manual.filter(m=>!m || m.path!==c.key);
-          lsSet(LS_MANUAL_RM,next);
-        });
+        let manual=lsGet(LS_MANUAL_RM,[]);
+        if(!Array.isArray(manual))manual=[];  // ★ CYCLE-3 FIX: guard against corrupted localStorage
+        const next=manual.filter(m=>!m || m.path!==c.key);
+        lsSet(LS_MANUAL_RM,next);
         // 3. Remove do servidor (segunda camada — impede syncCoursesFromDrive de re-adicionar)
         try{
           await fetch('/api/courses/remove', {
@@ -2172,22 +2015,6 @@
         try{ if(typeof Bus!=='undefined' && Bus.emit) Bus.emit('courses:changed', {}); }catch(_){}
         showToast('Curso removido');
         renderCursos(box).catch(()=>{});
-        // ★ EXEC-3 FIX (#16): click home tab after removing — mirrors the
-        //   pattern in gdiAddCourseFromDrive (line 215) and doAddCourseFromDrive
-        //   (line 1367). Without this, renderCursos(box) above replaces the
-        //   detail view with the cursos LIST, but the 'cursos' tab no longer
-        //   exists in the sidebar (removed at study-panel.js line 363-368). The
-        //   sidebar still shows the previously-active tab (e.g. 'home' from
-        //   which the user opened the detail), but the body shows a list view
-        //   with no matching tab indicator — confusing UX. Clicking the home
-        //   tab calls renderBody('home') → renderHome(box), showing the
-        //   dashboard with the remaining course tiles (the removed one gone).
-        //   The renderCursos call above is a defensive fallback in case the
-        //   home tab is not found (e.g. panel not yet rendered).
-        try{
-          const homeTab = document.querySelector('.gdi-central-tab[data-t="home"]');
-          if(homeTab) homeTab.click();
-        }catch(_){}
       }catch(e){
         showToast('Erro ao remover: '+(e&&e.message||e));
       }
@@ -2379,15 +2206,7 @@
     dayKey: dayKey,
     dateBr: dateBr,
     // Constants
-    LS_HIDDEN: LS_HIDDEN,
-    // ★ H-11 (P12-3 / Agent 3): expose the write chain + queue helper so
-    //    downstream modules (study-panel.js, study-questions.js) can await
-    //    pending writes to gdi-manual-courses-v1 before reading, mirroring
-    //    the pattern used by autoScanPending/resumeInterruptedScans in
-    //    study-scanner.js. Also exposes the collectCourses cache invalidator
-    //    for callers that mutate userstate directly (rare; mostly GDIUser).
-    _queueManualWrite: _queueManualWrite,
-    invalidateCollectCoursesCache: function(){ _ccCache.val = null; _ccCache.t = 0; }
+    LS_HIDDEN: LS_HIDDEN
   };
 
   // ── Backward-compat aliases (preserved from monolith) ──
