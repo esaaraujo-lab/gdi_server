@@ -181,6 +181,40 @@
 #gdi-notes-list::-webkit-scrollbar,#gdi-debug-log::-webkit-scrollbar{width:8px;}
 #gdi-notes-list::-webkit-scrollbar-thumb,#gdi-debug-log::-webkit-scrollbar-thumb{background:var(--ferreto-surface-3);border-radius:20px;}
 
+/* ★ FIX P12-8 (A11y): prefers-reduced-motion — disable non-essential motion.
+   Per WCAG 2.1 SC 2.3.3 (Animation from Interactions) and the CSS-Tricks /
+   Smashing Magazine standard pattern, when the user has set the OS-level
+   "reduce motion" preference, we zero out animation/transition durations
+   site-wide. This covers:
+     • gdi-pom-pulse (Pomodoro FAB warning pulse)
+     • ferroto-fade (stall overlay fade-in, study-player-guard.js)
+     • gdi-scan-spin (loading spinner, study-advanced.js)
+     • card-flip transitions (gdi-fc-card-inner rotateY)
+     • progress-bar width transitions (renderRadar)
+     • tab hover translateY (gdi-mat-tab)
+     • modal fade-in/out (Bootstrap .fade)
+   The duration is set to 0.01ms (not 0) so transitionend / animationend
+   events still fire — handlers depending on those events continue to work,
+   they just complete instantly. iteration-count:1 stops infinite pulses.
+   Selector is \`body *\` (not \`*\`) to skip the <html> element itself, which
+   some browsers use for top-level scroll behavior — we want scroll-behavior
+   reset separately. */
+@media (prefers-reduced-motion: reduce){
+  body *, body *::before, body *::after{
+    animation-duration:0.01ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:0.01ms !important;
+    scroll-behavior:auto !important;
+  }
+  /* Explicitly kill the named keyframe animations used in this theme —
+     iteration-count:1 + duration:0.01ms already neutralizes them, but
+     this is belt-and-suspenders for older browsers that don't honor
+     duration:0.01ms on infinite animations. */
+  .gdi-pom-fab.warning{animation:none !important;}
+  .gdi-stall-overlay{animation:none !important;}
+  .gdi-spinner{animation:none !important;}
+}
+
 `;document.head.appendChild(s);
   }
 
