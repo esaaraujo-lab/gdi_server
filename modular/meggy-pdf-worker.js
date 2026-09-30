@@ -43,14 +43,6 @@ const OCR_TIMEOUT_MS = 30000;
 
 function ensurePdfjs() {
   if (pdfjsReady) return pdfjsReady;
-  // ★ FIX EXEC-7 Item 22-ext: ANTES, se importScripts falhasse (CDN blip, brief
-  // 502/503 no jsdelivr), o pdfjsReady ficava como uma Promise REJEITADA para
-  // sempre — toda chamada subsequente a ensurePdfjs() retornava a mesma Promise
-  // rejeitada, e o worker ficava permanentemente quebrado para PDF até ser
-  // terminado (auth:change → 'out'). Agora, .catch reseta pdfjsReady=null para
-  // que a próxima chamada re-tente o importScripts. Espelha o padrão do
-  // gdi-worker-bridge.js (item 2: null reset on failure). O throw re-propaga o
-  // erro para o caller (extractFromBuffer → self.onmessage → {type:'error'}).
   pdfjsReady = new Promise((resolve, reject) => {
     try {
       importScripts('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js');
@@ -64,27 +56,17 @@ function ensurePdfjs() {
     } catch (err) {
       reject(err);
     }
-  }).catch(err => {
-    pdfjsReady = null;
-    throw err;
   });
   return pdfjsReady;
 }
 
 function ensureTesseract() {
   if (tesseractReady) return tesseractReady;
-  // ★ FIX EXEC-7 Item 22-ext: mesmo padrão de reset do ensurePdfjs — se
-  // importScripts do Tesseract falhar, reseta tesseractReady=null para que a
-  // próxima chamada re-tente. Sem isso, um CDN blip no jsdelivr quebra o OCR
-  // permanentemente neste worker.
   tesseractReady = new Promise((resolve, reject) => {
     try {
       importScripts('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
       resolve(self.Tesseract);
     } catch (err) { reject(err); }
-  }).catch(err => {
-    tesseractReady = null;
-    throw err;
   });
   return tesseractReady;
 }
@@ -165,18 +147,18 @@ async function extractFromBuffer({ id, buf, maxPages, maxChars, tryOcr }) {
             pageText = ocrText;
             usedOcr = true;
           }
-        } catch (e) { /* OCR falhou — mantém texto vazio */ console.warn('[meggy-pdf-worker] OCR page',i,'failed (non-critical):',e&&e.message||e); }
+        } catch (_) { /* OCR falhou — mantém texto vazio */ }
       }
 
       text += pageText + '\n\n';
-      try { pg.cleanup(); } catch(e){console.warn('[meggy-pdf-worker] pg.cleanup failed page',i,':',e&&e.message||e);}
+      try { pg.cleanup(); } catch (_) {}
       if (text.length > MAX) { text = text.slice(0, MAX); break; }
     }
 
     self.postMessage({ type: 'done', id, text, pages: n, usedOcr });
   } finally {
     // Garante que o PDFDocumentProxy seja destruído mesmo em falhas parciais.
-    if (doc) { try { doc.destroy(); } catch(e){console.warn('[meggy-pdf-worker] doc.destroy failed in finally:',e&&e.message||e);} }
+    if (doc) { try { doc.destroy(); } catch (_) {} }
   }
 }
 
@@ -198,7 +180,7 @@ async function ocrPage(lib, page) {
   try {
     const blob = await canvas.convertToBlob({ type: 'image/png' });
     imageInput = await blob.arrayBuffer();
-  } catch(e){console.warn('[meggy-pdf-worker] canvas.convertToBlob failed, passing canvas directly:',e&&e.message||e); /* mantém canvas */ }
+  } catch (_) { /* mantém canvas */ }
   // ★ FIX Task 20-9 Item 15: Tesseract.recognize sem timeout pode demorar
   // minutos em páginas densas (scans de livros, alta resolução). Race com
   // timeout de OCR_TIMEOUT_MS (30s): se exceder, rejeita e o caller (try/catch
