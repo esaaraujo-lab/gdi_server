@@ -1,8 +1,4 @@
 // ═══════════════════════════════════════════════════════════════
-// ⚠️ LEGACY MONOLITH — not loaded by gdi-extras-loader.js since v1.0.86.
-// Served by worker.js /modular/ whitelist for backward compat only.
-// (Active replacement: modular/study/*.js — 8 modules. See gdi-extras-loader.js:54-62.)
-// ═══════════════════════════════════════════════════════════════
 // gdi-study.js — Área do Aluno + Estudo Ativo + Visual
 //
 // Módulos:
@@ -1237,10 +1233,26 @@
       showToast('Maratona: todas as aulas \u00e0 frente j\u00e1 foram assistidas \u2713');
     });
     const tryIntro=()=>{
-      if(!marOn()||!marIntro())return;
+      // ★ v1.0.110 FIX BUG #3: auto-skip no longer requires Modo Maratona (marOn).
+      // After the user clicks "Pular introdução" once (M7), the intro time is
+      // persisted both per-folder (GDIUser.intro[courseKey]) AND as a global
+      // "last intro" (window.__gdiLastIntro / localStorage 'gdi-last-intro-sec').
+      // On every subsequent video in the playlist — same folder OR a different
+      // folder — we auto-skip using the per-folder intro if available, falling
+      // back to the last-set intro otherwise. The marIntro() toggle (default ON)
+      // remains the user-facing kill-switch for auto-skip.
+      if(!marIntro())return;
       try{
-        const S=window.GDIUser&&GDIUser.getIntro&&GDIUser.getIntro(marCourseKey());
-        if(S&&S>0&&el.currentTime<S-1&&el.currentTime<300)el.currentTime=S;
+        let S=window.GDIUser&&GDIUser.getIntro&&GDIUser.getIntro(marCourseKey());
+        if((!S||S<=0)&&window.__gdiLastIntro&&typeof window.__gdiLastIntro.get==='function'){
+          // cross-folder fallback: use the most recent intro time set by clicking
+          // "Pular introdução" on any video in any folder.
+          const last=window.__gdiLastIntro.get();
+          if(last>0)S=last;
+        }
+        if(S&&S>0&&el.currentTime<S-1&&el.currentTime<300){
+          el.currentTime=S;
+        }
       }catch(_){}
     };
     el.addEventListener('loadedmetadata',()=>setTimeout(tryIntro,300));
