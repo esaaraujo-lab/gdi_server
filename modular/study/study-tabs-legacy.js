@@ -45,21 +45,11 @@
   }
 
   // ── Local utils (mirror M22 closure utils; small enough to duplicate) ──
-  // ★ FIX P12-8 (H-21/H-22): log lsGet/lsSet/dec failures with key + cause.
-  const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){console.warn('[study-tabs-legacy] lsGet failed for key "'+k+'":',e&&e.message);return d}};
-  const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){console.warn('[study-tabs-legacy] lsSet failed for key "'+k+'":',e&&e.message)}};
-  const dec=s=>{try{return decodeURIComponent(String(s||''))}catch(e){console.warn('[study-tabs-legacy] decodeURIComponent failed for "'+s+'":',e&&e.message);return String(s||'')}};
+  const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
+  const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
+  const dec=s=>{try{return decodeURIComponent(String(s||''))}catch(_){return String(s||'')}};
   const norm=p=>dec(String(p||'').split('?')[0].replace(/\/+$/,''));
   const stripExt=s=>String(s||'').replace(/\.[a-z0-9]{1,5}$/i,'').trim();
-  // ★ FIX P12-8 (H-33): this file uses the global `escHtml` (5-entity escape
-  //    from core/app.min.js, the canonical version per PLAN_DEAD_CODE §471).
-  //    There's no local `esc` to replace. To support the planned window.gdiEsc
-  //    centralization (CQ-6.1, Agent 13), expose escHtml as window.gdiEsc when
-  //    missing — so other modules that look for window.gdiEsc get the canonical
-  //    5-entity escaper instead of falling back to a 4-entity local copy.
-  if(!window.gdiEsc && typeof escHtml === 'function'){
-    window.gdiEsc = escHtml;
-  }
 
   // ★ FIX 20-6 #12 (Agent 6): bindEscToModal(overlay, closeFn) — attaches a
   //    keydown ESC listener that closes the modal cleanly (calls closeFn,
@@ -73,7 +63,7 @@
       if(e.key === 'Escape' || e.keyCode === 27){
         e.preventDefault();
         e.stopPropagation();
-        try{ closeFn(); }catch(e){console.warn('[study-tabs-legacy] bindEscToModal closeFn failed:',e&&e.message);}
+        try{ closeFn(); }catch(_){}
         // closeFn is responsible for overlay.remove(); we just remove the listener.
         document.removeEventListener('keydown', escHandler, true);
       }
@@ -94,7 +84,7 @@
     return function(){
       const args = arguments, self = this;
       if(t) clearTimeout(t);
-      t = setTimeout(function(){ t = null; try{ fn.apply(self, args); }catch(e){console.warn('[study-tabs-legacy] debounced fn failed:',e&&e.message);} }, ms);
+      t = setTimeout(function(){ t = null; try{ fn.apply(self, args); }catch(_){} }, ms);
     };
   }
   const GW=/^(aula|aulas|v\u00eddeo|videos?|li[cç][aã]o|li[cç][oõ]es|licoes|lesson|class|modulo|m\u00f3dulo|module|parte|pt|cap|capitulo|ext|ep|live|arquivo|file)$/i;
@@ -151,7 +141,7 @@
         //    persistence for in-place mutators, silently losing writes.
         lsSet(LS_CARDS, next !== undefined ? next : cur);
       }catch(e){ console.warn('[study-tabs-legacy] _cardsRMW failed:', e && e.message); }
-    }).catch(function(e){console.warn('[study-tabs-legacy] _cardsRMW chain rejected:',e&&e.message);});
+    }).catch(()=>{});
     return _localCardsChain;
   }
 
