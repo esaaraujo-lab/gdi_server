@@ -66,12 +66,12 @@
     $("#content").html(f);
 
     // ★ Seta o nome do arquivo para o M9 auto-selecionar a aba correta
-    try { window.__gdiAutoSelectMaterial = i; } catch(_) {}
+    try { window.__gdiAutoSelectMaterial = i; } catch(e){console.warn('[gdi-pdf] __gdiAutoSelectMaterial set failed:',e&&e.message||e);}
 
     // ★ Avisa os módulos (gdi-ui M10, gdi-core M9) que os slots estão prontos.
     // M9 vai listar os materiais da pasta e auto-selecionar a aba do arquivo clicado.
     // M10 vai injetar os botões de modo (mas ocultará Dividido/Foco-na-aula por causa do data-material-page).
-    try { Bus.emit('slots:ready'); } catch(_) {}
+    try { Bus.emit('slots:ready'); } catch(e){console.warn('[gdi-pdf] Bus.emit slots:ready failed:',e&&e.message||e);}
 
     // ★ Aplica modo "foco no material" (gdi-fm) — esconde o left, mostra só o painel M9.
     // Tenta aplicar imediatamente e também após 200ms (fallback caso M10 ainda não tenha injetado os botões).
@@ -97,7 +97,7 @@
         if (grid) grid.style.setProperty('grid-template-columns', '1fr', 'important');
         const left = document.querySelector('.gdi-study-left');
         if (left) left.style.setProperty('display', 'none', 'important');
-      } catch(_) {}
+      } catch(e){console.warn('[gdi-pdf] applyFm failed:',e&&e.message||e);}
     };
     applyFm();
     setTimeout(applyFm, 200);
