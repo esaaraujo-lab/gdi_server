@@ -79,9 +79,9 @@
             const cur=v.currentTime;
             v.load();
             v.play().catch(function(){});
-            const onCanPlay=function(){try{if(cur>0)v.currentTime=cur;}catch(e){console.warn('[GDI Player-Guard] restore currentTime failed:',e&&e.message);}v.removeEventListener('loadedmetadata',onCanPlay);};
+            const onCanPlay=function(){try{if(cur>0)v.currentTime=cur;}catch(_){}v.removeEventListener('loadedmetadata',onCanPlay);};
             v.addEventListener('loadedmetadata',onCanPlay,{once:true});
-          }catch(e){console.warn('[GDI Player-Guard] retry load/play failed:',e&&e.message);}
+          }catch(_){}
           st.lastAt=Date.now();st.lastT=0;
           arm();
         }else{
@@ -109,7 +109,7 @@
       wrap.appendChild(st.overlay);
       st.overlay.querySelector('[data-act="reload"]').addEventListener('click',function(){
         clearOverlay();st.retryUsed=false;st.lastAt=Date.now();st.lastT=0;
-        try{v.load();v.play().catch(function(){});}catch(e){console.warn('[GDI Player-Guard] reload action failed:',e&&e.message);}
+        try{v.load();v.play().catch(function(){});}catch(_){}
         arm();
       });
       st.overlay.querySelector('[data-act="wait"]').addEventListener('click',function(){
@@ -148,7 +148,7 @@
     v.addEventListener('pause',function(){clearTimer();});
     v.addEventListener('error',function(){
       console.error('[GDI Player-Guard] erro de mídia',v.error);
-      if(!st.retryUsed){st.retryUsed=true;try{v.load();v.play().catch(function(){});}catch(e){console.warn('[GDI Player-Guard] error-event retry failed:',e&&e.message);}arm();}
+      if(!st.retryUsed){st.retryUsed=true;try{v.load();v.play().catch(function(){});}catch(_){}arm();}
       else{showOverlay();}
     });
     v.addEventListener('ended',function(){clearTimer();clearOverlay();
@@ -179,7 +179,7 @@
         if(st.hintTimer){clearTimeout(st.hintTimer);st.hintTimer=null;}
         if(st.overlay){st.overlay.remove();st.overlay=null;}
         if(st.hint){st.hint.remove();st.hint=null;}
-      }catch(e){console.warn('[GDI Player-Guard] _clearAllGuards entry cleanup failed:',e&&e.message);}
+      }catch(_){}
     });
     // Don't delete from the Set — the video element might still be in the
     // DOM (e.g., SPA route that reuses the same <video>). The 'ended'
@@ -203,7 +203,7 @@
     // ★ FIX 20-6 #14 (Agent 6): clear all active guards' timers on page:change.
     //    See _clearAllGuards() docstring above for the leak this prevents.
     Bus.onGlobal('page:change', function(){
-      try{ _clearAllGuards(); }catch(e){console.warn('[GDI Player-Guard] page:change _clearAllGuards failed:',e&&e.message);}
+      try{ _clearAllGuards(); }catch(_){}
     });
   }
 
@@ -211,6 +211,6 @@
     try{
       const v=document.querySelector('.gdi-player-wrap video');
       if(v)attach(v);
-    }catch(e){console.warn('[GDI Player-Guard] GDI_MODULES init failed:',e&&e.message);}
+    }catch(_){}
   }});
 })();
