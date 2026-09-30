@@ -28,18 +28,9 @@
   window.__gdiStudy = window.__gdiStudy || {};
 
   const LQ='gdi-questions-v1',LS_SRS='gdi-q-srs-v1',LS_SIM='gdi-simulados-v1',LS_CRON='gdi-cronograma-v1',LS_ERR='gdi-caderno-erros-v1';
-  // ★ FIX P12-8 (H-33): prefer the centralized window.gdiEsc when available
-  //    (planned by CQ-6.1). Falls back to the local 4-entity esc otherwise,
-  //    preserving the existing behavior verbatim when the global helper is
-  //    absent (e.g. before gdi-core.js is upgraded by Agent 13).
-  const esc=window.gdiEsc||(s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'));
-  // ★ FIX P12-8 (H-21/H-22): log every lsGet/lsSet failure with key + cause.
-  //    localStorage failures in private-mode browsers used to be silent —
-  //    now they surface to the console so debugging quota/availability
-  //    issues is possible. Returns defaults / no-ops still, so behavior is
-  //    preserved.
-  const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){console.warn('[study-questions] lsGet failed for key "'+k+'":',e&&e.message);return d}};
-  const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){console.warn('[study-questions] lsSet failed for key "'+k+'":',e&&e.message)}};
+  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
+  const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
 
   // ★ FIX (Agent 5 R9 / Agent 14): serialize all gdi-cards-v1 read-modify-write
   //    cycles through a local Promise chain. The flashcard-creation paths in
@@ -71,11 +62,11 @@
         //    persistence for in-place mutators, silently losing writes.
         lsSet('gdi-cards-v1', next !== undefined ? next : cur);
       }catch(e){ console.warn('[study-questions] _cardsRMW failed:', e && e.message); }
-    }).catch(function(e){console.warn('[study-questions] _cardsRMW chain rejected:',e&&e.message);});
+    }).catch(()=>{});
     return _localCardsChain;
   }
   const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
-  const fmtDate=ds=>{try{return new Date(ds+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})}catch(e){console.warn('[study-questions] fmtDate failed for "'+ds+'":',e&&e.message);return ds}};
+  const fmtDate=ds=>{try{return new Date(ds+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})}catch(_){return ds}};
   const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
   // ★ Fisher-Yates shuffle (substitui o biased Math.random()-.5 sort)
   function fisherYates(arr){const a=[...arr];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
@@ -398,7 +389,7 @@
                 const back='R: '+(q.options[q.correct]||'')+(q.explanation?('\n\n'+q.explanation):'');
                 cards.push({id:Date.now()+'-'+Math.random().toString(36).slice(2,7),f:front,b:back,path:q.subject||'',at:Date.now(),box:0,due:Date.now()+86400000});
               });
-            }catch(e){console.warn('[study-questions] startSession auto-flashcard failed:',e&&e.message);/* não bloqueia o fluxo */}
+            }catch(_){/* não bloqueia o fluxo */}
           }
           // marca visual
           optsEl.querySelectorAll('button').forEach((bb,bi)=>{
@@ -451,11 +442,11 @@
       if(e.key === 'Escape' || e.keyCode === 27){
         e.preventDefault();
         e.stopPropagation();
-        try{ onClose(); }catch(e){console.warn('[study-questions] bindModalA11y onClose failed:',e&&e.message);}
+        try{ onClose(); }catch(_){}
         cleanup();
         if(overlay.parentNode) overlay.remove();
-        if(returnFocus){ try{ returnFocus.focus(); }catch(e){console.warn('[study-questions] returnFocus.focus failed:',e&&e.message);} }
-        else if(lastFocusedBeforeOpen){ try{ lastFocusedBeforeOpen.focus(); }catch(e){console.warn('[study-questions] restoreFocus failed:',e&&e.message);} }
+        if(returnFocus){ try{ returnFocus.focus(); }catch(_){} }
+        else if(lastFocusedBeforeOpen){ try{ lastFocusedBeforeOpen.focus(); }catch(_){} }
         return;
       }
       if(e.key === 'Tab' || e.keyCode === 9){
@@ -467,13 +458,13 @@
           // Shift+Tab on first → wrap to last
           if(active === first || !overlay.contains(active)){
             e.preventDefault();
-            try{ last.focus(); }catch(e){console.warn('[study-questions] focus-trap wrap-to-last failed:',e&&e.message);}
+            try{ last.focus(); }catch(_){}
           }
         }else{
           // Tab on last → wrap to first
           if(active === last){
             e.preventDefault();
-            try{ first.focus(); }catch(e){console.warn('[study-questions] focus-trap wrap-to-first failed:',e&&e.message);}
+            try{ first.focus(); }catch(_){}
           }
         }
       }
@@ -485,7 +476,7 @@
     // Auto-focus first focusable on next tick (lets DOM attach first)
     setTimeout(function(){
       const f = getFocusables();
-      if(f.length){ try{ f[0].focus(); }catch(e){console.warn('[study-questions] initial focus failed:',e&&e.message);} }
+      if(f.length){ try{ f[0].focus(); }catch(_){} }
     }, 50);
     return cleanup;
   }
@@ -495,7 +486,7 @@
     const aula=currentLesson();
     const ov=document.createElement('div');
     ov.style.cssText='position:fixed;inset:0;z-index:10002;background:rgba(5,7,10,.8);display:flex;align-items:center;justify-content:center;padding:16px;';
-    ov.innerHTML=`<div class="gdi-central-box" role="dialog" aria-modal="true" aria-label="Gerar questões com a Meggy" style="max-width:520px;padding:24px;">
+    ov.innerHTML=`<div class="gdi-central-box" style="max-width:520px;padding:24px;">
       <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 12px;"><i class="bi bi-stars" style="color:var(--ferreto-primary,#ff8b9f);"></i> Gerar questões com a Meggy 🐩</h3>
       <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0 0 14px;">A Meggy cria questões de concurso sobre o tema e salva no banco.</p>
       <label style="display:block;font-size:12px;color:var(--ferreto-text-muted,#8b949e);margin-bottom:4px;">Tema:</label>
@@ -536,7 +527,7 @@
     const ov=document.createElement('div');
     ov.style.cssText='position:fixed;inset:0;z-index:10002;background:rgba(5,7,10,.8);display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto;';
     const inp='background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);padding:8px;font-size:13px;width:100%;box-sizing:border-box;';
-    ov.innerHTML=`<div class="gdi-central-box" role="dialog" aria-modal="true" aria-label="Adicionar questão" style="max-width:600px;padding:24px;max-height:90vh;overflow-y:auto;">
+    ov.innerHTML=`<div class="gdi-central-box" style="max-width:600px;padding:24px;max-height:90vh;overflow-y:auto;">
       <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 14px;">Adicionar questão</h3>
       <input id="f-subj" placeholder="Matéria/tema" style="${inp}margin-bottom:8px;">
       <textarea id="f-stmt" placeholder="Enunciado" style="${inp}min-height:80px;margin-bottom:8px;"></textarea>
@@ -574,7 +565,7 @@
     const ov=document.createElement('div');
     ov.style.cssText='position:fixed;inset:0;z-index:10002;background:rgba(5,7,10,.8);display:flex;align-items:center;justify-content:center;padding:16px;';
     const inp='background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);padding:8px;font-size:13px;width:100%;box-sizing:border-box;';
-    ov.innerHTML=`<div class="gdi-central-box" role="dialog" aria-modal="true" aria-label="Importar questões (JSON)" style="max-width:620px;padding:24px;">
+    ov.innerHTML=`<div class="gdi-central-box" style="max-width:620px;padding:24px;">
       <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 8px;">Importar questões (JSON)</h3>
       <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0 0 14px;">Cole um array: [{"statement":"...","options":["a","b","c","d"],"correct":0,"explanation":"...","subject":"..."}]</p>
       <textarea id="imp-txt" placeholder='[...]' style="${inp}min-height:160px;margin-bottom:14px;font-family:monospace;font-size:12px;"></textarea>
@@ -593,7 +584,7 @@
         let n=0;
         arr.forEach(q=>{if(q.statement&&Array.isArray(q.options)){addQ({subject:q.subject||'Importado',statement:q.statement,options:q.options,correct:q.correct||0,explanation:q.explanation||'',source:'import'});n++;}});
         showToast(n+' questões importadas');ov.remove();after();
-      }catch(e){console.warn('[study-questions] openImport JSON.parse failed:',e&&e.message);showToast('JSON inválido: '+e.message);}
+      }catch(e){showToast('JSON inválido: '+e.message);}
     };
   }
 
@@ -607,7 +598,7 @@
     const courseNames=courses.map(c=>{
       const seg=c.key.split('/').filter(Boolean).slice(1).join('/');
       let n=seg||c.key;
-      try{n=decodeURIComponent(n);}catch(e){console.warn('[study-questions] decodeURIComponent failed for course name "'+n+'":',e&&e.message);}
+      try{n=decodeURIComponent(n);}catch(_){}
       return n;
     });
     box.innerHTML=`
@@ -651,7 +642,7 @@
             }
             const shuffled=fisherYates(pool).slice(0,n);
             startSimulado(box,shuffled,mins);
-          }).catch(function(e){console.warn('[study-questions] fetchSharedQuestions fallback to local pool:',e&&e.message);
+          }).catch(()=>{
             const shuffled=fisherYates(pool).slice(0,n);
             startSimulado(box,shuffled,mins);
           });
@@ -745,7 +736,7 @@
         //    `window.gdiAchievements || count` which coerced the truthy
         //    achievements OBJECT to "[object Object]" → parseInt → NaN →
         //    achievements "Primeiro simulado"/"5 simulados" NEVER unlocked.
-        try{localStorage.setItem('gdi-simulados-count',String(lsGet('gdi-simulados-v1',[]).length+1));}catch(e){console.warn('[study-questions] simulados-count update failed:',e&&e.message);}
+        try{localStorage.setItem('gdi-simulados-count',String(lsGet('gdi-simulados-v1',[]).length+1));}catch(_){}
       // anti-duplicação: se já existe salvo neste segundo, pula
       const recent=simus().find(s=>s.date>Date.now()-2000);
       if(!recent){
@@ -787,7 +778,7 @@
         const perDay=parseInt(box.querySelector('#cr-perday').value,10)||2;
         // pega aulas do histórico (GDIUser.history) ou da playlist atual
         let aulas=[];
-        try{const d=GDIUser.dump();if(d&&d.history)aulas=d.history.map(h=>({path:h.path,name:h.name}));}catch(e){console.warn('[study-questions] renderCronograma GDIUser.dump failed:',e&&e.message);}
+        try{const d=GDIUser.dump();if(d&&d.history)aulas=d.history.map(h=>({path:h.path,name:h.name}));}catch(_){}
         // se não houver, usa a playlist atual
         if(!aulas.length&&window.playlistVideos){aulas=window.playlistVideos.map(v=>({path:v.pageUrl,name:v.name}));}
         if(!aulas.length){showToast('Estude algumas aulas primeiro para o cronograma');return;}
@@ -879,7 +870,7 @@
       //    entries, so aulas were never scheduled on the calendar. Use `r.at`.
       const dueTs = r.at || r.due || r.t;
       if(dueTs){items.push({date:new Date(dueTs).toISOString().slice(0,10),tipo:'aula',nome:'Retomar aula',label:k});}
-    }}}catch(e){console.warn('[study-questions] renderRevisoes GDIUser.dump failed:',e&&e.message);}
+    }}}catch(_){}
     // agrupa por data
     const byDate={};
     items.forEach(it=>{if(!byDate[it.date])byDate[it.date]=[];byDate[it.date].push(it);});
