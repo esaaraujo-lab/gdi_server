@@ -194,29 +194,6 @@
     if(_goalIntervalId !== null){ clearInterval(_goalIntervalId); _goalIntervalId = null; }
   }
   _startWatchIntervals();
-
-  // ★ P12-4 #2 (H-40 a11y): patch the toast container with aria-live="polite"
-  //   + role="status" so screen readers announce toasts ("Curso adicionado!",
-  //   "Erro ao salvar", etc.). The container is created by app.min.js
-  //   (<div id="gdi-toast-container"></div>, app.min.js:132) without any ARIA
-  //   live-region attributes — SR users currently get no notification when
-  //   toasts appear. We patch it defensively (idempotent): if the element
-  //   doesn't exist yet, retry on the next panel open via _ensureToastA11y().
-  //   No-op if already patched (the attributes are simply re-set).
-  function _ensureToastA11y(){
-    try{
-      const c = document.getElementById('gdi-toast-container');
-      if(!c) return false;
-      if(c.getAttribute('aria-live') !== 'polite') c.setAttribute('aria-live', 'polite');
-      if(c.getAttribute('role') !== 'status') c.setAttribute('role', 'status');
-      if(c.getAttribute('aria-atomic') !== 'false') c.setAttribute('aria-atomic', 'false');
-      return true;
-    }catch(e){ console.warn('[study-panel] _ensureToastA11y failed:', e && e.message); return false; }
-  }
-  // Try once at module load (container is in app.min.js static HTML).
-  try{ _ensureToastA11y(); }catch(e){ console.warn('[study-panel] toast a11y init failed:', e && e.message); }
-  // Also try on every panel open (in case the container was created lazily
-  //   after this module loaded, or app.min.js loaded late).
   const todayMin=()=>Math.round((lsGet(LS_WATCH,{})[dayKey()]||0)/60);
   const goalMin=()=>Math.max(10,Math.min(480,parseInt(lsGet(LS_GOAL,60),10)||60));
   function updateGoalChip(){
@@ -318,10 +295,6 @@
     // ★ v1.0.103 FIX (Task 20-5 #3): ensure intervals are running (closePanel
     //   may have stopped them when no home-card was visible).
     _startWatchIntervals();
-    // ★ P12-4 #2 (H-40 a11y): patch toast container with aria-live="polite"
-    //   on every panel open (idempotent — no-op if already patched; inits
-    //   the container if app.min.js loaded after this module).
-    try{ _ensureToastA11y(); }catch(e){ console.warn('[study-panel] toast a11y retry failed:', e && e.message); }
     if(t)S.tab=t;
     if(!S.panel){
       S.panel=document.createElement('div');S.panel.id='gdi-central';
@@ -419,18 +392,14 @@
   ];
 
   // ★ monta a sidebar 1x (HTML estático — só badges dinâmicos)
-  // ★ P12-4 #5 (A11y): added role="navigation" + aria-label on <aside> and
-  //   aria-label on each tab button. The visible <span>${t.label}</span> is
-  //   hidden in the mobile/collapsed sidebar (CSS .gdi-central-tab span{display:none}),
-  //   so without aria-label the buttons are announced as empty by screen readers.
   function renderSidebarHTML(dueCount){
-    return `<aside class="gdi-central-sidebar" role="navigation" aria-label="Navegação da Área do Aluno">
+    return `<aside class="gdi-central-sidebar">
       ${TAB_GROUPS.map(group=>`
         <div class="gdi-central-sidebar-group">
           ${group.label?`<div class="gdi-central-sidebar-label">${group.label}</div>`:''}
           ${group.tabs.map(t=>`
-            <button class="gdi-central-tab" data-t="${t.id}" aria-label="${t.label}">
-              <i class="bi ${t.icon}" aria-hidden="true"></i>
+            <button class="gdi-central-tab" data-t="${t.id}">
+              <i class="bi ${t.icon}"></i>
               <span>${t.label}</span>
               ${t.badge?`<span class="gdi-tab-badge">${t.badge}</span>`:''}
             </button>
@@ -439,10 +408,10 @@
       `).join('')}
       <div class="gdi-pomodoro-sidebar" style="padding:12px;border-top:1px solid var(--ferreto-border,#30363d);margin-top:auto;">
         <div style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">🍅 Pomodoro</div>
-        <div id="gdi-pomo-time" style="font-size:24px;font-weight:700;color:var(--ferreto-text,#e6edf3);text-align:center;margin-bottom:8px;" aria-live="off">25:00</div>
+        <div id="gdi-pomo-time" style="font-size:24px;font-weight:700;color:var(--ferreto-text,#e6edf3);text-align:center;margin-bottom:8px;">25:00</div>
         <div style="display:flex;gap:4px;justify-content:center;">
-          <button id="gdi-pomo-start" aria-label="Iniciar ou pausar Pomodoro" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);border:0;border-radius:6px;padding:4px 12px;color:#fff;font-size:11px;cursor:pointer;">▶</button>
-          <button id="gdi-pomo-reset" aria-label="Reiniciar Pomodoro" style="background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);border-radius:6px;padding:4px 8px;color:var(--ferreto-text,#e6edf3);font-size:11px;cursor:pointer;">↺</button>
+          <button id="gdi-pomo-start" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);border:0;border-radius:6px;padding:4px 12px;color:#fff;font-size:11px;cursor:pointer;">▶</button>
+          <button id="gdi-pomo-reset" style="background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);border-radius:6px;padding:4px 8px;color:var(--ferreto-text,#e6edf3);font-size:11px;cursor:pointer;">↺</button>
         </div>
         <div id="gdi-pomo-phase" style="font-size:10px;color:var(--ferreto-text-muted,#8b949e);text-align:center;margin-top:4px;">Foco</div>
       </div>
@@ -471,8 +440,8 @@
         </span>`:''}
       </div>
       <input id="gdi-goal-set" type="number" min="10" max="480" value="${g}" title="Meta diária (minutos)" style="width:56px;background:var(--ferreto-surface-2,rgba(255,255,255,.07));border:1px solid var(--ferreto-border,#30363d);border-radius:6px;color:var(--ferreto-text,#f0f6fc);text-align:center;padding:5px;font-size:12px;flex-shrink:0;">
-      <button id="gdi-central-meggy" title="Meggy" aria-label="Abrir Meggy" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);border:0;border-radius:10px;padding:6px 12px;cursor:pointer;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px;flex-shrink:0;"><span style="font-size:16px;" aria-hidden="true">🐩</span> Meggy</button>
-      <button id="gdi-central-x" title="Fechar (Esc)" aria-label="Fechar Área do Aluno">✕</button>
+      <button id="gdi-central-meggy" title="Meggy" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);border:0;border-radius:10px;padding:6px 12px;cursor:pointer;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px;flex-shrink:0;"><span style="font-size:16px;">🐩</span> Meggy</button>
+      <button id="gdi-central-x" title="Fechar (Esc)">✕</button>
     </div>`;
   }
 
@@ -739,7 +708,8 @@
         el.onmouseleave = () => { el.style.background = 'var(--ferreto-surface-2,rgba(255,255,255,.04))'; el.style.borderColor = 'var(--ferreto-border,#30363d)'; };
         el.onclick = () => browseDriveInPanel(box, el.dataset.path, el.dataset.name);
       });
-      // ★ v91: bind video/PDF inline cards — abrem DENTRO do painel (sidebar colapsa)
+      // ★ v1.0.108: Ao clicar num vídeo/PDF no Explorar Drives, navega para a página clássica do index.
+      // NÃO abre dentro do painel da Área do Aluno. O painel fecha e a página principal carrega o player.
       browser.querySelectorAll('[data-gdi-media]').forEach(el => {
         el.onmouseenter = () => { el.style.background = 'var(--ferreto-surface-3,rgba(255,255,255,.08))'; el.style.borderColor = 'var(--ferreto-secondary,#5ddeda)'; };
         el.onmouseleave = () => { el.style.background = 'var(--ferreto-surface-2,rgba(255,255,255,.04))'; el.style.borderColor = 'var(--ferreto-border,#30363d)'; };
@@ -747,8 +717,14 @@
           const url = el.dataset.url;
           const name = el.dataset.name;
           const type = el.dataset.gdiMedia;
-          if(type === 'video') openVideoInPanel(url, name);
-          else if(type === 'pdf') openPdfSplitInPanel(url, name);
+          // ★ v1.0.108: Fecha o painel da Área do Aluno e navega para a URL do vídeo/PDF
+          // na página principal (index clássico com player completo).
+          try{ closePanel(); }catch(_){}
+          try{
+            window.location.href = url;
+          }catch(_){
+            try{ window.history.pushState({}, '', url); if(typeof window.render === 'function') window.render(url); }catch(__){}
+          }
         };
       });
       browser.querySelectorAll('.gdi-drive-bc-btn').forEach(el => {
