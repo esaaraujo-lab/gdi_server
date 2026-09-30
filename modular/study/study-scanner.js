@@ -37,6 +37,51 @@
   // ── Preserve original monolith guard for any caller probing the old global ──
   if(window.gdiCourseScanner) return;
 
+  // ── H-12 (P12-3 / Agent 3): shared write chain for RMW on gdi-manual-courses-v1 ──
+  // ★ Serialize read-modify-write operations on gdi-manual-courses-v1 (and
+  //    gdi-hidden-courses-v1) across modules. The chain lives on
+  //    window.__gdiStudy so both scanner (loads first) and study-courses.js
+  //    (loads second) contribute to the SAME ordering. Without this,
+  //    syncCoursesFromDrive's mergeDriveCourses RMW could race with
+  //    cleanupOrphanCourses, hideCourse/unhideCourse, or gdiAddCourseFromDrive's
+  //    push — losing entries (the well-known localStorage RMW race). Readers
+  //    (autoScanPending, resumeInterruptedScans) await the chain before reading
+  //    so they don't observe a half-written array.
+  window.__gdiStudy._manualWriteChain = window.__gdiStudy._manualWriteChain || Promise.resolve();
+  function _queueManualWrite(fn){
+    // Resolve-order: chain waits for the previous write, then runs fn.
+    // Errors are swallowed at the chain level (so a failed write doesn't
+    // break subsequent writes) but propagated to the caller (so the caller
+    // can react to its own write failing).
+    const result = window.__gdiStudy._manualWriteChain.then(function(){ return fn(); });
+    window.__gdiStudy._manualWriteChain = result.catch(function(e){
+      console.warn('[manualWriteChain] error:', e && e.message);
+    });
+    return result;
+  }
+
+  // ── H-18 (P12-3 / Agent 3): lsGet that WARNS on JSON parse errors ──
+  // ★ Previously every inline `JSON.parse(localStorage.getItem(k) || '[]')`
+  //    silently caught SyntaxError and returned the default — a corrupted
+  //    gdi-manual-courses-v1 entry would silently look like '[]', causing
+  //    syncCoursesFromDrive to re-add every course (duplicates) and
+  //    cleanupOrphanCourses to silently drop everything. Now we log the
+  //    key, error message, and a truncated raw-value preview for diagnostics.
+  function lsGet(k, d){
+    try{
+      const v = localStorage.getItem(k);
+      if(v == null) return d;
+      return JSON.parse(v);
+    }catch(e){
+      let preview = '';
+      try{ preview = String(localStorage.getItem(k) || '').slice(0, 200); }catch(_){}
+      console.warn('[Scanner] lsGet: JSON parse error for key', JSON.stringify(k),
+        '— returning default. Error:', e && e.message,
+        '| Raw value (truncated):', preview);
+      return d;
+    }
+  }
+
   const LS_SCAN_PREFIX    = 'gdi-course-scan-';     // scanner state per course
   const LS_LESSONS_PREFIX = 'gdi-course-lessons-';  // lessons cache per course
   const SCAN_PAUSE_MS     = 500;                    // pause between subfolders
@@ -54,7 +99,14 @@
   const _inflightScans = new Set();
 
   function getScanState(courseKey){
-    try{const v=localStorage.getItem(LS_SCAN_PREFIX+courseKey);return v?JSON.parse(v):null}catch(_){return null}
+    // ★ H-18 (P12-3): log parse errors instead of silently returning null.
+    try{
+      const v = localStorage.getItem(LS_SCAN_PREFIX+courseKey);
+      return v ? JSON.parse(v) : null;
+    }catch(e){
+      console.warn('[Scanner] getScanState: JSON parse error for', courseKey, ':', e && e.message);
+      return null;
+    }
   }
   function setScanState(courseKey, state){
     try{
@@ -79,10 +131,14 @@
 
   // ── Lessons cache (per course) ──
   function getLessons(courseKey){
+    // ★ H-18 (P12-3): log parse errors instead of silently returning default.
     try{
-      const v=localStorage.getItem(LS_LESSONS_PREFIX+courseKey);
-      return v?JSON.parse(v):{lessons:[],scanned:false,totalFolders:0,totalLessons:0};
-    }catch(_){return {lessons:[],scanned:false,totalFolders:0,totalLessons:0}}
+      const v = localStorage.getItem(LS_LESSONS_PREFIX+courseKey);
+      return v ? JSON.parse(v) : {lessons:[],scanned:false,totalFolders:0,totalLessons:0};
+    }catch(e){
+      console.warn('[Scanner] getLessons: JSON parse error for', courseKey, ':', e && e.message);
+      return {lessons:[],scanned:false,totalFolders:0,totalLessons:0};
+    }
   }
   // ★ v1.0.99: evict oldest lesson caches when localStorage is full
   function _evictOldestLessons(){
@@ -102,7 +158,59 @@
         try{localStorage.removeItem(keys[i].key+'__at');}catch(_){}
       }
       console.log('[Scanner] evicted', evictCount, 'oldest lesson caches');
+      // ★ H-17 (P12-3 / Agent 3): also evict oversized flashcards from
+      //    gdi-cards-v1 (byte-size cap). Called here so quota-triggered
+      //    eviction frees as much space as possible in one pass.
+      try{ _evictCardsByByteSize(); }catch(_){}
     }catch(_){}
+  }
+
+  // ★ H-17 (P12-3 / Agent 3): byte-size eviction for gdi-cards-v1 (flashcards).
+  //    The previous eviction was count-based only (setLessons caps at 500
+  //    lessons per course; _evictOldestLessons evicts 25% of lesson caches on
+  //    quota). But gdi-cards-v1 (the shared flashcards store, written by
+  //    gdi-meggy.js and historically by gdi-study.js) has NO size cap — a user
+  //    who generated thousands of flashcards could fill localStorage. This
+  //    function trims the oldest cards (by createdAt or __at, then insertion
+  //    order) when total serialized size exceeds 500KB. Called from
+  //    _evictOldestLessons (quota-triggered) and exposed on the scanner
+  //    namespace for manual/console invocation.
+  const LS_CARDS_KEY = 'gdi-cards-v1';
+  const LS_CARDS_MAX_BYTES = 500000;
+  function _evictCardsByByteSize(){
+    try{
+      const raw = localStorage.getItem(LS_CARDS_KEY);
+      if(!raw) return 0;
+      if(raw.length <= LS_CARDS_MAX_BYTES) return 0;
+      let cards;
+      try{ cards = JSON.parse(raw); }catch(_){ return 0; }  // can't parse — leave alone
+      if(!Array.isArray(cards) || !cards.length) return 0;
+      // Sort oldest-first: by createdAt (or __at fallback), then by array index
+      // (insertion order) for ties. Cards without a timestamp sort first (oldest).
+      const annotated = cards.map(function(c, i){
+        return { c: c, t: (c && (c.createdAt || c.__at)) || 0, i: i };
+      });
+      annotated.sort(function(a, b){ return (a.t - b.t) || (a.i - b.i); });
+      let trimmed = annotated.map(function(x){ return x.c; });
+      let removed = 0;
+      // Keep at least 1 card (never empty the deck via auto-eviction).
+      while(trimmed.length > 1 && JSON.stringify(trimmed).length > LS_CARDS_MAX_BYTES){
+        trimmed.shift();
+        removed++;
+      }
+      if(removed > 0){
+        try{
+          const serialized = JSON.stringify(trimmed);
+          localStorage.setItem(LS_CARDS_KEY, serialized);
+          console.log('[Scanner] _evictCardsByByteSize: evicted', removed,
+            'oldest flashcards from gdi-cards-v1 (was', raw.length,
+            'bytes, now', serialized.length, 'bytes)');
+        }catch(e){
+          console.warn('[Scanner] _evictCardsByByteSize: write failed:', e && e.message);
+        }
+      }
+      return removed;
+    }catch(_){ return 0; }
   }
   function setLessons(courseKey, data){
     try{
@@ -111,6 +219,14 @@
         data = Object.assign({}, data, {lessons: data.lessons.slice(0, 500), truncated: true});
       }
       localStorage.setItem(LS_LESSONS_PREFIX+courseKey, JSON.stringify(data));
+      // ★ Performance (P12-3 / Agent 3): also update the __at timestamp so
+      //    _evictOldestLessons has accurate eviction ordering. Previously
+      //    ONLY setScanState wrote __at, so a lessons write without a
+      //    corresponding setScanState (e.g., a future caller using setLessons
+      //    directly via the public namespace) would leave __at stale — and
+      //    the next eviction cycle would evict the just-written lessons as
+      //    "oldest" (at=0). Now both writers keep __at fresh.
+      try{localStorage.setItem(LS_LESSONS_PREFIX+courseKey+'__at', String(Date.now()));}catch(_){}
     }catch(e){
       console.warn('[Scanner] setLessons quota error for', courseKey, ':', e && e.message);
       _evictOldestLessons();
@@ -476,28 +592,38 @@
   //   Agora, qualquer 'scanning' residual ao recarregar a página é tratado
   //   como travado: limpa e reinicia.
   function resumeInterruptedScans(){
-    try{
-      const manual = JSON.parse(localStorage.getItem('gdi-manual-courses-v1') || '[]');
-      if(!Array.isArray(manual)) return;
-      for(const m of manual){
-        if(!m || !m.path) continue;
-        const state = getScanState(m.path);
-        if(state && state.status === 'scanning'){
-          // ★ FIX 20-6 #2 (Agent 6): skip if a scan for this course is already
-          //    in-flight (e.g., user:ready fired twice and the first scan is
-          //    still running). Without this guard, resumeInterruptedScans would
-          //    clear the in-flight scan's state and startScan would re-fire
-          //    scanCourse, doubling the load on the worker.
-          if(_inflightScans.has(m.path)){
-            console.log('[Scanner] resume skipped — scan já em andamento (in-flight):', m.path);
-            continue;
+    // ★ H-12 (P12-3 / Agent 3): wait for any pending write to
+    //    gdi-manual-courses-v1 to complete before reading, to avoid reading
+    //    stale data mid-RMW (e.g., syncCoursesFromDrive or cleanupOrphanCourses
+    //    is in the middle of a write). The await is non-blocking because the
+    //    chain is a resolved Promise when no writes are pending.
+    const run = function(){
+      try{
+        // ★ H-18: use lsGet (logs parse errors instead of silent fallback).
+        const manual = lsGet('gdi-manual-courses-v1', []);
+        if(!Array.isArray(manual)) return;
+        for(const m of manual){
+          if(!m || !m.path) continue;
+          const state = getScanState(m.path);
+          if(state && state.status === 'scanning'){
+            // ★ FIX 20-6 #2 (Agent 6): skip if a scan for this course is already
+            //    in-flight (e.g., user:ready fired twice and the first scan is
+            //    still running). Without this guard, resumeInterruptedScans would
+            //    clear the in-flight scan's state and startScan would re-fire
+            //    scanCourse, doubling the load on the worker.
+            if(_inflightScans.has(m.path)){
+              console.log('[Scanner] resume skipped — scan já em andamento (in-flight):', m.path);
+              continue;
+            }
+            console.log('[Scanner] scan preso detectado — limpando e reiniciando:', m.path);
+            clearScanState(m.path);
+            startScan(m.path, null);
           }
-          console.log('[Scanner] scan preso detectado — limpando e reiniciando:', m.path);
-          clearScanState(m.path);
-          startScan(m.path, null);
         }
-      }
-    }catch(_){}
+      }catch(_){}
+    };
+    // Await the chain, then run. Returns a Promise (callers fire-and-forget).
+    return window.__gdiStudy._manualWriteChain.then(run).catch(function(){});
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -536,7 +662,8 @@
       return p || '/';
     };
     const mergeDriveCourses = function(){
-      const local = JSON.parse(localStorage.getItem(LS_MANUAL) || '[]');
+      // ★ H-18 (P12-3): use lsGet (logs parse errors instead of silent fallback).
+      const local = lsGet(LS_MANUAL, []);
       if(!Array.isArray(local)) throw new Error('localStorage not an array');
       // ★ FIX (Task 20-13 #6): build localPaths with normalized paths so the
       //   has() check below catches duplicates regardless of trailing slash.
@@ -544,7 +671,7 @@
       // ★ v1.0.97: carrega hidden list — cursos aqui NUNCA devem ser re-adicionados
       // ★ FIX (Task 20-13 #6): normalize hidden paths too so a hidden course
       //   is skipped even if the server returns it with a different trailing slash.
-      const hiddenList = JSON.parse(localStorage.getItem(LS_HIDDEN) || '[]');
+      const hiddenList = lsGet(LS_HIDDEN, []);
       const hiddenSet = new Set((Array.isArray(hiddenList) ? hiddenList : []).map(h => _normPath(h)));
       let added = 0;
       for(const dc of d.courses){
@@ -604,7 +731,10 @@
       if(!d || !d.ok || !Array.isArray(d.courses)){ console.warn('[syncCoursesFromDrive] bad shape'); return; }
       let added;
       try {
-        added = mergeDriveCourses();
+        // ★ H-12 (P12-3): serialize RMW through _queueManualWrite so concurrent
+        //    RMW calls (cleanupOrphanCourses, hideCourse/unhideCourse,
+        //    add/remove in study-courses.js) can't race with this one.
+        added = await _queueManualWrite(function(){ return mergeDriveCourses(); });
       } catch(e) {
         // ★ FIX (Agent 14 Bug 11): do NOT retry on QuotaExceededError — the
         //    retry re-reads localStorage (same data) and re-writes the SAME
@@ -619,7 +749,7 @@
         }
         console.warn('[syncCoursesFromDrive] race detectada, re-lendo:', e && e.message);
         try {
-          added = mergeDriveCourses();
+          added = await _queueManualWrite(function(){ return mergeDriveCourses(); });
         } catch(_){
           return;
         }
@@ -662,46 +792,55 @@
   function autoScanPending(){
     if(_autoScanRunning) return;
     _autoScanRunning = true;
-    try{
-      const manual = JSON.parse(localStorage.getItem('gdi-manual-courses-v1') || '[]');
-      if(!Array.isArray(manual) || !manual.length){ _autoScanRunning = false; return; }
+    // ★ H-12 (P12-3 / Agent 3): wait for any pending write to
+    //    gdi-manual-courses-v1 to complete before reading, to avoid reading
+    //    stale data mid-RMW. The chain is a resolved Promise when no writes
+    //    are pending, so the common case (no concurrent write) is non-blocking.
+    const run = function(){
+      try{
+        // ★ H-18: use lsGet (logs parse errors instead of silent fallback).
+        const manual = lsGet('gdi-manual-courses-v1', []);
+        if(!Array.isArray(manual) || !manual.length){ _autoScanRunning = false; return; }
 
-      // Find first course that needs scanning (no state OR not done/scanning)
-      for(const c of manual){
-        if(!c || !c.path) continue;
-        // Skip drive-root paths (they're not real courses — Task 16 / FIX 3)
-        // ★ v1.0.78: fixed regex to match /0:/ and /0:/ (with leading slash)
-        if(/^\/\d+:\/?$/.test(c.path)) continue;
-        const sp = getScanProgress(c.path);
-        if(!sp || (sp.status !== 'done' && sp.status !== 'scanning')){
-          console.log('[Scanner] auto-scan iniciando para:', c.name || c.path);
-          startScan(c.path, function(state, lessonsData){
-            // Re-render home if it's the active tab
-            if(state.status === 'done' || state.status === 'error'){
-              console.log('[Scanner] auto-scan concluído:', c.name, '-',
-                (lessonsData ? lessonsData.lessons.length : 0), 'aulas');
-              try{
-                const body = document.getElementById('gdi-central-body');
-                if(body && window.__gdiCurrentTab === 'home'){
-                  // ★ v1.0.86 FIX (modular): renderHome moved to study-panel.js.
-                  // Use late binding via namespace; tolerate panel module not
-                  // yet loaded (typeof check + namespace path check).
-                  const panel = window.__gdiStudy && window.__gdiStudy.panel;
-                  if(panel && typeof panel.renderHome === 'function'){
-                    try{ panel.renderHome(body); }catch(_){}
-                  } else if(typeof window.renderHome === 'function'){
-                    // Fallback to alias if panel namespace not yet ready
-                    try{ window.renderHome(body); }catch(_){}
+        // Find first course that needs scanning (no state OR not done/scanning)
+        for(const c of manual){
+          if(!c || !c.path) continue;
+          // Skip drive-root paths (they're not real courses — Task 16 / FIX 3)
+          // ★ v1.0.78: fixed regex to match /0:/ and /0:/ (with leading slash)
+          if(/^\/\d+:\/?$/.test(c.path)) continue;
+          const sp = getScanProgress(c.path);
+          if(!sp || (sp.status !== 'done' && sp.status !== 'scanning')){
+            console.log('[Scanner] auto-scan iniciando para:', c.name || c.path);
+            startScan(c.path, function(state, lessonsData){
+              // Re-render home if it's the active tab
+              if(state.status === 'done' || state.status === 'error'){
+                console.log('[Scanner] auto-scan concluído:', c.name, '-',
+                  (lessonsData ? lessonsData.lessons.length : 0), 'aulas');
+                try{
+                  const body = document.getElementById('gdi-central-body');
+                  if(body && window.__gdiCurrentTab === 'home'){
+                    // ★ v1.0.86 FIX (modular): renderHome moved to study-panel.js.
+                    // Use late binding via namespace; tolerate panel module not
+                    // yet loaded (typeof check + namespace path check).
+                    const panel = window.__gdiStudy && window.__gdiStudy.panel;
+                    if(panel && typeof panel.renderHome === 'function'){
+                      try{ panel.renderHome(body); }catch(_){}
+                    } else if(typeof window.renderHome === 'function'){
+                      // Fallback to alias if panel namespace not yet ready
+                      try{ window.renderHome(body); }catch(_){}
+                    }
                   }
-                }
-              }catch(_){}
-            }
-          });
-          break;  // only 1 at a time
+                }catch(_){}
+              }
+            });
+            break;  // only 1 at a time
+          }
         }
-      }
-    }catch(_){}
-    _autoScanRunning = false;
+      }catch(_){}
+      _autoScanRunning = false;
+    };
+    // Await the chain, then run. Returns a Promise (callers fire-and-forget).
+    return window.__gdiStudy._manualWriteChain.then(run).catch(function(){});
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -715,52 +854,60 @@
   // Returns the number of removed entries.
   // ─────────────────────────────────────────────────────────────
   function cleanupOrphanCourses(){
-    try{
-      const manual = JSON.parse(localStorage.getItem('gdi-manual-courses-v1') || '[]');
-      if(!Array.isArray(manual)) return 0;
-
-      const original = manual.length;
-      const cleaned = manual.filter(c => {
-        if(!c || !c.path) return false;
-        // Remove drive roots (e.g., /0:/, /4:/)
-        if(/^\d+:\/$/.test(c.path)) return false;
-        // Remove if path is just /<drive>:/ (no subfolder)
-        const segs = c.path.split('/').filter(Boolean);
-        if(segs.length < 2) return false;
-        // Remove if no name
-        if(!c.name || !c.name.trim()) return false;
-        return true;
-      });
-
-      if(cleaned.length !== original){
-        localStorage.setItem('gdi-manual-courses-v1', JSON.stringify(cleaned));
-        console.log('[Cleanup] removidos', original - cleaned.length,
-          'cursos órfãos. Restam:', cleaned.length);
-      }
-      // ★ v1.0.99: prune hidden list — remove entries not in manual courses (orphaned hidden entries)
+    // ★ H-12 (P12-3 / Agent 3): serialize RMW through _queueManualWrite so
+    //    concurrent readers (autoScanPending, resumeInterruptedScans) await
+    //    the chain and see consistent state. Returns a Promise<number>
+    //    (callers fire-and-forget; console helper preserves this).
+    return _queueManualWrite(function(){
       try{
-        const LS_HIDDEN = 'gdi-hidden-courses-v1';
-        const hidden = JSON.parse(localStorage.getItem(LS_HIDDEN) || '[]');
-        if(Array.isArray(hidden) && hidden.length > 0){
-          // ★ CYCLE2-5 Fix #2: normalize paths before comparison (matches _normPath in
-          //   syncCoursesFromDrive above AND low/norm in study-courses.js hideCourse).
-          //   Without this, a hidden entry with a trailing slash or different case
-          //   (legacy data from before normalization was added) would be pruned even
-          //   though the course is still in manual — causing the course to reappear on
-          //   the next sync (defeating the user's "hide" action). Normalization strips
-          //   query string + trailing slashes + lowercases (same as low() in
-          //   study-courses.js line 44).
-          const _normHidden = p => String(p||'').split('?')[0].replace(/\/+$/,'').toLowerCase();
-          const manualPaths = new Set(cleaned.map(m => m && _normHidden(m.path || m.courseKey)).filter(Boolean));
-          const prunedHidden = hidden.filter(h => manualPaths.has(_normHidden(h)));
-          if(prunedHidden.length !== hidden.length){
-            localStorage.setItem(LS_HIDDEN, JSON.stringify(prunedHidden));
-            console.log('[Cleanup] pruned', hidden.length - prunedHidden.length, 'orphan hidden entries');
-          }
+        // ★ H-18: use lsGet (logs parse errors instead of silent fallback).
+        const manual = lsGet('gdi-manual-courses-v1', []);
+        if(!Array.isArray(manual)) return 0;
+
+        const original = manual.length;
+        const cleaned = manual.filter(c => {
+          if(!c || !c.path) return false;
+          // Remove drive roots (e.g., /0:/, /4:/)
+          if(/^\d+:\/$/.test(c.path)) return false;
+          // Remove if path is just /<drive>:/ (no subfolder)
+          const segs = c.path.split('/').filter(Boolean);
+          if(segs.length < 2) return false;
+          // Remove if no name
+          if(!c.name || !c.name.trim()) return false;
+          return true;
+        });
+
+        if(cleaned.length !== original){
+          localStorage.setItem('gdi-manual-courses-v1', JSON.stringify(cleaned));
+          console.log('[Cleanup] removidos', original - cleaned.length,
+            'cursos órfãos. Restam:', cleaned.length);
         }
-      }catch(_){}
-      return original - cleaned.length;
-    }catch(_){ return 0; }
+        // ★ v1.0.99: prune hidden list — remove entries not in manual courses (orphaned hidden entries)
+        try{
+          const LS_HIDDEN = 'gdi-hidden-courses-v1';
+          // ★ H-18: use lsGet (logs parse errors).
+          const hidden = lsGet(LS_HIDDEN, []);
+          if(Array.isArray(hidden) && hidden.length > 0){
+            // ★ CYCLE2-5 Fix #2: normalize paths before comparison (matches _normPath in
+            //   syncCoursesFromDrive above AND low/norm in study-courses.js hideCourse).
+            //   Without this, a hidden entry with a trailing slash or different case
+            //   (legacy data from before normalization was added) would be pruned even
+            //   though the course is still in manual — causing the course to reappear on
+            //   the next sync (defeating the user's "hide" action). Normalization strips
+            //   query string + trailing slashes + lowercases (same as low() in
+            //   study-courses.js line 44).
+            const _normHidden = p => String(p||'').split('?')[0].replace(/\/+$/,'').toLowerCase();
+            const manualPaths = new Set(cleaned.map(m => m && _normHidden(m.path || m.courseKey)).filter(Boolean));
+            const prunedHidden = hidden.filter(h => manualPaths.has(_normHidden(h)));
+            if(prunedHidden.length !== hidden.length){
+              localStorage.setItem(LS_HIDDEN, JSON.stringify(prunedHidden));
+              console.log('[Cleanup] pruned', hidden.length - prunedHidden.length, 'orphan hidden entries');
+            }
+          }
+        }catch(_){}
+        return original - cleaned.length;
+      }catch(_){ return 0; }
+    });
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -831,6 +978,10 @@
     SCAN_MAX_DEPTH: SCAN_MAX_DEPTH,
     MAX_POLLS: 50,
     POLL_INTERVAL: 600,
+    // ★ H-17 (P12-3 / Agent 3): byte-size eviction for gdi-cards-v1.
+    evictCardsByByteSize: _evictCardsByByteSize,
+    LS_CARDS_KEY: LS_CARDS_KEY,
+    LS_CARDS_MAX_BYTES: LS_CARDS_MAX_BYTES,
     version: '1.2'
   };
 
@@ -858,6 +1009,8 @@
     SCAN_MAX_DEPTH,
     MAX_POLLS: 50,
     POLL_INTERVAL: 600,
+    // ★ H-17 (P12-3): also exposed on legacy alias.
+    evictCardsByByteSize: _evictCardsByByteSize,
     version: '1.2'
   };
   // Per task spec: ALSO export window.gdiSyncCoursesFromDrive and window.autoScanPending
