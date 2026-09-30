@@ -28,12 +28,10 @@
   // — mesmo proxy que o gdi-extras-loader.js usa. Consistência + cache controlada
   //   por CACHE_VERSION (sem CDN jsdelivr com cache stale).
   const WORKER_BASE = '/modular/';
-  const LIST_WORKER_URL  = WORKER_BASE + 'gdi-list-worker.js?v=' + (window.CACHE_VERSION || '110');
-  const PDF_WORKER_URL   = WORKER_BASE + 'meggy-pdf-worker.js?v=' + (window.CACHE_VERSION || '110');
+  const LIST_WORKER_URL  = WORKER_BASE + 'gdi-list-worker.js?v=' + (window.CACHE_VERSION || '111');
+  const PDF_WORKER_URL   = WORKER_BASE + 'meggy-pdf-worker.js?v=' + (window.CACHE_VERSION || '111');
 
   // ───────────────────────── LRU cache de listagem ─────────────────────────
-  // ★ H-21/H-22 audit (P12-7): all silent catch(_){} / .catch(()=>{}) replaced
-  // with console.warn diagnostics — no functional change, just observability.
   const LIST_TTL = 5 * 60 * 1000;        // 5 min (antes 45s)
   const LIST_MAX = 50;                   // LRU cap (antes era Map sem cap)
   const _listCache = new Map();
@@ -51,33 +49,6 @@
     // ★ v1.0.98 FIX: guard null/non-array (Agent 18) — worker may resolve with null
     // (e.g. {type:'done'} without files field) which would crash files.slice()
     _listCache.set(key, { at: Date.now(), files: Array.isArray(files) ? files.slice() : [] });
-  }
-
-  // ───────────────────────── H-30: folder-ID cache (5min TTL) ─────────────────────────
-  // Caches path → folderId so the worker can skip Drive path-resolution
-  // (N sequential GETs per /0:/a/b/c) on subsequent calls for the same path.
-  // The cache is populated by `folderIdSet` (called when the worker reports
-  // the resolved folderId — a future worker upgrade) and consumed via
-  // `folderIdGet` (passed as an optional `folderId` field in the `list`
-  // postMessage; current workers ignore unknown fields, so this is non-
-  // breaking today and ready for the worker-side wiring). Cleared on
-  // page:change and auth:change alongside _listCache, plus on `folder:added`
-  // / `folder:removed` Bus events (per ROADMAP H-30 / PLAN-4 P4).
-  const FOLDER_ID_TTL = 5 * 60 * 1000;   // 5 min
-  const _folderIdCache = new Map();
-  function folderIdGet(path){
-    if (!path) return null;
-    const ent = _folderIdCache.get(path);
-    if (!ent) return null;
-    if (Date.now() - ent.at > FOLDER_ID_TTL) { _folderIdCache.delete(path); return null; }
-    return ent.id;
-  }
-  function folderIdSet(path, id){
-    if (!path || id == null) return;
-    _folderIdCache.set(path, { at: Date.now(), id });
-  }
-  function folderIdCacheClear(){
-    _folderIdCache.clear();
   }
 
   // ★ FIX Task 20-9 Item 1: clear list cache on page:change to prevent stale
@@ -115,7 +86,7 @@
         w.onmessage = onListMessage;
         w.onerror = (e) => {
           console.warn('[gdi-worker-bridge] list worker error', e);
-          for (const [id, p] of _listPending) { try { p.reject(new Error('worker error')); } catch(e){ console.warn('[Bridge] pending list reject failed:', e && e.message); } }
+          for (const [id, p] of _listPending) { try { p.reject(new Error('worker error')); } catch(_){} }
           _listPending.clear();
           _listWorker = null;
           URL.revokeObjectURL(blobUrl);
@@ -160,7 +131,7 @@
         w.onmessage = onPdfMessage;
         w.onerror = (e) => {
           console.warn('[gdi-worker-bridge] pdf worker error', e);
-          for (const [id, p] of _pdfPending) { try { p.reject(new Error('worker error')); } catch(e){ console.warn('[Bridge] pending pdf reject failed:', e && e.message); } }
+          for (const [id, p] of _pdfPending) { try { p.reject(new Error('worker error')); } catch(_){} }
           _pdfPending.clear();
           _pdfWorker = null;
           URL.revokeObjectURL(blobUrl);
@@ -198,11 +169,11 @@
         if (!Array.isArray(p.accum)) p.accum = [];
         for (let i = 0; i < msg.files.length; i++) p.accum.push(msg.files[i]);
       }
-      if (p.onPage) try { p.onPage(p.accum ? p.accum.slice() : [], msg.cursor, msg.total); } catch(e){ console.warn('[Bridge] onPage (page) callback threw:', e && e.message); }
+      if (p.onPage) try { p.onPage(p.accum ? p.accum.slice() : [], msg.cursor, msg.total); } catch(_){}
     } else if (msg.type === 'scanPage') {
       // scan: o worker ainda envia `collected` acumulado (custo bounded pelo
       // throttle de 200ms — ver comentário no worker). Repassamos direto.
-      if (p.onPage) try { p.onPage(msg.files || msg.collected, msg.cursor, msg.total); } catch(e){ console.warn('[Bridge] onPage (scanPage) callback threw:', e && e.message); }
+      if (p.onPage) try { p.onPage(msg.files || msg.collected, msg.cursor, msg.total); } catch(_){}
     } else if (msg.type === 'done' || msg.type === 'scanDone') {
       _listPending.delete(msg.id);
       // Para `done` (handleList), o worker envia `files: out` (acumulado completo).
@@ -211,7 +182,7 @@
       const final = msg.files || msg.collected || (p.accum ? p.accum.slice() : []);
       p.resolve(final);
     } else if (msg.type === 'progress') {
-      if (p.onProgress) try { p.onProgress(msg); } catch(e){ console.warn('[Bridge] onProgress (list) callback threw:', e && e.message); }
+      if (p.onProgress) try { p.onProgress(msg); } catch(_){}
     } else if (msg.type === 'error') {
       _listPending.delete(msg.id);
       p.reject(new Error(msg.message));
@@ -223,7 +194,7 @@
     const p = _pdfPending.get(msg.id);
     if (!p) return;
     if (msg.type === 'progress' || msg.type === 'ocr') {
-      if (p.onProgress) try { p.onProgress(msg); } catch(e){ console.warn('[Bridge] onProgress (pdf) callback threw:', e && e.message); }
+      if (p.onProgress) try { p.onProgress(msg); } catch(_){}
     } else if (msg.type === 'done') {
       _pdfPending.delete(msg.id);
       p.resolve(msg.text);
@@ -254,20 +225,12 @@
       : null;
   }
 
-  // ★ H-25 (P12-7): the actual implementation lives in `_gdiListAllFilesOnce`.
-  // `window.gdiListAllFiles` is now a thin wrapper that retries once (2s delay)
-  // when the underlying call rejects with a transient 429/503 error. The retry
-  // is applied OUTSIDE the cache-hit fast-path (cache hits return
-  // Promise.resolve synchronously and never reach the .catch). The wrapper
-  // also passes the cached folderId (H-30) into the worker postMessage so a
-  // future worker upgrade can skip path resolution; today's worker ignores
-  // the extra field, so this is non-breaking.
-  function _gdiListAllFilesOnce(path, pw, onPage){
+  window.gdiListAllFiles = function(path, pw, onPage){
     // 1) cache hit?
     const cacheKey = path + '|' + (pw || '');
     const cached = cacheGet(cacheKey);
     if (cached) {
-      if (onPage) try { onPage(cached.slice(), undefined, undefined); } catch(e){ console.warn('[Bridge] onPage (cache hit) callback threw:', e && e.message); }
+      if (onPage) try { onPage(cached.slice(), undefined, undefined); } catch(_){}
       return Promise.resolve(cached);
     }
     // 2) worker com timeout + fallback direto
@@ -292,11 +255,7 @@
           if (path && path.charAt(0) === '/' && !path.startsWith('//')) {
             absPath = self.location.origin + path;
           }
-          // ★ H-30 (P12-7): include cached folderId so a future worker upgrade
-          // can skip Drive path-resolution. Current worker ignores unknown
-          // fields in the message, so this is non-breaking today.
-          const folderId = folderIdGet(path);
-          w.postMessage({ type: 'list', id, path: absPath, pw: pw || '', folderId: folderId || undefined });
+          w.postMessage({ type: 'list', id, path: absPath, pw: pw || '' });
         }).then(files => { cacheSet(cacheKey, files); return files; })
           .catch(err => {
             _listPending.delete(id);
@@ -309,30 +268,10 @@
     // Fallback: worker não disponível (null ou não-Promise)
     const origFn = getOrigListAllFiles();
     return origFn ? origFn(path, pw, onPage).then(files => { cacheSet(cacheKey, files); return files; }) : Promise.resolve([]);
-  }
-
-  window.gdiListAllFiles = function(path, pw, onPage){
-    // ★ H-25 (P12-7): retry once on transient 429/503 errors with 2s delay.
-    // The error message from the worker / origFn is inspected for the HTTP
-    // status pattern (worker wraps Drive API errors as `Error('HTTP 429')`/
-    // `Error('HTTP 503')`; origFn follows the same convention). Cache hits
-    // short-circuit before this wrapper's .catch, so retry only fires on
-    // genuine network/Drive transient failures.
-    const result = _gdiListAllFilesOnce(path, pw, onPage);
-    if (!result || typeof result.then !== 'function') return result;
-    return result.catch(err => {
-      const msg = (err && (err.message || String(err))) || '';
-      if (/\b429\b|\b503\b/.test(msg)) {
-        console.warn('[Bridge] listAllFiles transient error (429/503), retrying in 2s:', msg);
-        return new Promise(res => setTimeout(res, 2000))
-          .then(() => _gdiListAllFilesOnce(path, pw, onPage));
-      }
-      throw err;
-    });
   };
   // Tag the patched function so getOrigListAllFiles() can skip it if some other
   // module captures `window.gdiListAllFiles` AFTER us (avoid infinite recursion).
-  try { window.gdiListAllFiles._isPatched = true; } catch(e){ console.warn('[Bridge] failed to tag _isPatched:', e && e.message); }
+  try { window.gdiListAllFiles._isPatched = true; } catch(_){}
   // Expose our captured original under the sentinel so later bridges/modules
   // can find the true pre-patch implementation even if they capture us first.
   if (typeof _origListAllFiles === 'function' && !window.__gdiOrigListAllFiles) {
@@ -362,7 +301,7 @@
         resolve,
         reject,
         onPage: (collected, cursor, total) => {
-          if (onProgress) try { onProgress(collected, cursor, total); } catch(e){ console.warn('[Bridge] onProgress (scan) callback threw:', e && e.message); }
+          if (onProgress) try { onProgress(collected, cursor, total); } catch(_){}
         }
       });
       // Nota: pwGetter é uma função — não passa pelo postMessage.
@@ -374,7 +313,7 @@
         pwResolved = {};
         for (const f of subFolders) {
           const fp = parentPath + encodeURIComponent(f.name) + '/';
-          try { pwResolved[fp] = pwGetter(fp); } catch(e){ console.warn('[Bridge] pwGetter failed for', fp, ':', e && e.message); pwResolved[fp] = ''; }
+          try { pwResolved[fp] = pwGetter(fp); } catch(_){ pwResolved[fp] = ''; }
         }
       }
       // ★ FIX (Task 20b): URL absoluta pro Worker
@@ -470,15 +409,12 @@
     Bus.onGlobal('page:change', () => {
       // destroi o PDF atual ao navegar (evita leak de PDFDocumentProxy)
       if (typeof window.gdiPdfCleanup === 'function') {
-        try { window.gdiPdfCleanup(); } catch(e){ console.warn('[Bridge] gdiPdfCleanup failed:', e && e.message); }
+        try { window.gdiPdfCleanup(); } catch(_){}
       }
       // ★ FIX Task 20-9 Item 1: clear list cache on page navigation so the
       // user never sees stale Drive folder listings from a previously-visited
       // path (LRU + TTL alone don't guarantee freshness across navigations).
-      // ★ H-30 (P12-7): also clear folder-ID cache — folder IDs may be stale
-      // after navigation if the user moved/renamed a folder in another tab.
-      try { _listCache.clear(); } catch(e){ console.warn('[Bridge] _listCache.clear failed:', e && e.message); }
-      try { folderIdCacheClear(); } catch(e){ console.warn('[Bridge] folderIdCacheClear failed:', e && e.message); }
+      try { _listCache.clear(); } catch(_){}
     });
 
     // ★ FIX Agent 20 Bug 6 + Bug 7: Web Workers e caches NÃO são limpos em logout.
@@ -492,54 +428,34 @@
       try {
         // Termina os workers (lista + PDF) sem bloquear o listener.
         if (window.gdiWorkerBridge && typeof window.gdiWorkerBridge.terminateAll === 'function') {
-          Promise.resolve(window.gdiWorkerBridge.terminateAll()).catch(e=>console.warn('[Bridge] terminateAll on logout rejected:', e && e.message));
+          Promise.resolve(window.gdiWorkerBridge.terminateAll()).catch(()=>{});
         }
-      } catch(e){ console.warn('[Bridge] terminateAll on logout failed:', e && e.message); }
+      } catch(_){}
       try {
         // Limpa o cache in-memory de listagem (LRU 50 / TTL 5min).
         if (window.gdiWorkerBridge && typeof window.gdiWorkerBridge.listCacheClear === 'function') {
           window.gdiWorkerBridge.listCacheClear();
         }
-      } catch(e){ console.warn('[Bridge] listCacheClear on logout failed:', e && e.message); }
-      // ★ H-30 (P12-7): clear folder-ID cache on logout — folder IDs are
-      // per-user (different Drive accounts = different folder IDs for the
-      // same path) and must not leak across user switches.
-      try { folderIdCacheClear(); } catch(e){ console.warn('[Bridge] folderIdCacheClear on logout failed:', e && e.message); }
+      } catch(_){}
     });
-
-    // ★ H-30 (P12-7): invalidate folder-ID cache when folders are added or
-    // removed (the resolved folderId for a path can change if a sibling
-    // folder is deleted and the path is re-resolved). The list cache is
-    // also invalidated via listCacheInvalidate by the same callers, but the
-    // folder-ID cache needs its own listener since it's keyed by path alone
-    // (no password component). These events are no-ops if no emitter fires
-    // them — purely defense-in-depth.
-    try {
-      if (typeof Bus.onGlobal === 'function') {
-        Bus.onGlobal('folder:added', () => { try { folderIdCacheClear(); } catch(e){ console.warn('[Bridge] folder:added folderIdCacheClear failed:', e && e.message); } });
-        Bus.onGlobal('folder:removed', () => { try { folderIdCacheClear(); } catch(e){ console.warn('[Bridge] folder:removed folderIdCacheClear failed:', e && e.message); } });
-      }
-    } catch(e){ console.warn('[Bridge] failed to register folder:added/removed listeners:', e && e.message); }
   } else {
     // ★ Fallback: se Bus não estiver disponível, expõe cleanup() para chamada
     // manual pelo fluxo de logout (mesmo efeito do listener acima).
     window.gdiWorkerBridgeCleanup = function(){
       try {
         if (window.gdiWorkerBridge && typeof window.gdiWorkerBridge.terminateAll === 'function') {
-          Promise.resolve(window.gdiWorkerBridge.terminateAll()).catch(e=>console.warn('[Bridge] cleanup terminateAll rejected:', e && e.message));
+          Promise.resolve(window.gdiWorkerBridge.terminateAll()).catch(()=>{});
         }
         if (window.gdiWorkerBridge && typeof window.gdiWorkerBridge.listCacheClear === 'function') {
           window.gdiWorkerBridge.listCacheClear();
         }
-        // ★ H-30 (P12-7): also clear folder-ID cache on manual cleanup call.
-        try { folderIdCacheClear(); } catch(e){ console.warn('[Bridge] cleanup folderIdCacheClear failed:', e && e.message); }
-      } catch(e){ console.warn('[Bridge] gdiWorkerBridgeCleanup failed:', e && e.message); }
+      } catch(_){}
     };
   }
 
   // ───────────────────────── API pública de diagnóstico ─────────────────────────
   window.gdiWorkerBridge = {
-    version: '1.1',  // ★ H-30 (P12-7): bumped 1.0 → 1.1 (added folderIdCache* API)
+    version: '1.0',
     listCacheSize: () => _listCache.size,
     listCacheClear: () => _listCache.clear(),
     listCacheInvalidate: (path) => {
@@ -552,20 +468,7 @@
       for (const k of Array.from(_listCache.keys())) {
         if (k.indexOf(prefix) === 0) _listCache.delete(k);
       }
-      // ★ H-30 (P12-7): also drop the folder-ID entry for this path — a
-      // folder reorganization invalidates the cached Drive folderId.
-      try { if (path) _folderIdCache.delete(path); } catch(e){ console.warn('[Bridge] listCacheInvalidate folderId delete failed:', e && e.message); }
     },
-    // ★ H-30 (P12-7): public folder-ID cache API — read/write/clear/size.
-    // Used by future worker-upgrade wiring (the worker reports the resolved
-    // folderId in its `done` message; the bridge caches it here and passes
-    // it back on subsequent `list` calls to skip Drive path-resolution).
-    // Today the cache is populated only by external callers via `folderIdSet`
-    // (e.g. tests, debug tooling) — the worker doesn't yet report folderId.
-    folderIdCacheSize:  () => _folderIdCache.size,
-    folderIdCacheClear: () => folderIdCacheClear(),
-    folderIdCacheGet:   (path) => folderIdGet(path),
-    folderIdCacheSet:   (path, id) => folderIdSet(path, id),
     pendingListJobs: () => _listPending.size,
     pendingPdfJobs:  () => _pdfPending.size,
     terminateAll: async () => {
@@ -575,13 +478,13 @@
       // Now we await the Promise first; if the worker exists, terminate it properly.
       try {
         const listW = _listWorker ? await _listWorker : null;
-        if (listW) { try { listW.terminate(); } catch(e){ console.warn('[Bridge] listW.terminate failed:', e && e.message); } }
-      } catch(e){ console.warn('[Bridge] terminateAll listW await failed:', e && e.message); }
+        if (listW) { try { listW.terminate(); } catch(_){} }
+      } catch(_){}
       _listWorker = null;
       try {
         const pdfW = _pdfWorker ? await _pdfWorker : null;
-        if (pdfW) { try { pdfW.terminate(); } catch(e){ console.warn('[Bridge] pdfW.terminate failed:', e && e.message); } }
-      } catch(e){ console.warn('[Bridge] terminateAll pdfW await failed:', e && e.message); }
+        if (pdfW) { try { pdfW.terminate(); } catch(_){} }
+      } catch(_){}
       _pdfWorker = null;
     }
   };
