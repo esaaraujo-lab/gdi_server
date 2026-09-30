@@ -15,21 +15,10 @@
 // Depends on: nothing (lowest layer)
 // ═══════════════════════════════════════════════════════════════
 (function(){
-  // ★ H-35 (P12-9): null-guard at IIFE top for window.__gdiMeggy.utils.
-  //    If a prior invocation already installed `window.__gdiMeggy.utils`
-  //    (or the namespace itself is in an inconsistent state — e.g. another
-  //    meggy-* module threw mid-init), bail out instead of overwriting with
-  //    a partial utils object. The legacy `window.__gdiMeggyUtils` boolean
-  //    guard below stays for backwards compat (older loaders check it).
-  window.__gdiMeggy = window.__gdiMeggy || {};
-  if(window.__gdiMeggy && window.__gdiMeggy.utils){
-    // Already initialized — re-running this IIFE would clobber the existing
-    // utils (and any per-call state added by other modules). Bail.
-    console.log('[GDI Extras] meggy-utils já inicializado — skip');
-    return;
-  }
   if(window.__gdiMeggyUtils)return;
   window.__gdiMeggyUtils=true;
+
+  window.__gdiMeggy = window.__gdiMeggy || {};
 
   // ── Constants ──
   const LS_SUM='gdi-isa-summaries-v1';
@@ -64,11 +53,8 @@
   //    compatibility with older browsers. The entity is also valid in text
   //    content (renders as '), so existing text-context callers are unaffected.
   const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-  // ★ H-21/H-22 (P12-9): silent catches → console.warn so localStorage
-  //    quota / Safari private-mode failures surface in devtools instead of
-  //    silently degrading (e.g. user can't tell why their summaries vanished).
-  const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){console.warn('[meggy-utils] lsGet failed for',k,':',e&&e.message||e);return d}};
-  const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){console.warn('[meggy-utils] lsSet failed for',k,':',e&&e.message||e)}};
+  const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
+  const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
   const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 
   // ── Robust JSON array parser ──
@@ -92,7 +78,7 @@
     try{
       const arr=JSON.parse(txt);
       if(Array.isArray(arr))return arr;
-    }catch(e){/* expected — fall through to strategy 4. Don't spam console for the common parse-fail path. */}
+    }catch(_){}
     // 4) tenta consertar problemas comuns: vírgulas finais e aspas
     //    não-escapadas dentro de strings (heurística simples)
     try{
@@ -103,7 +89,7 @@
         .replace(/\t/g,' ');
       const arr=JSON.parse(fixed);
       if(Array.isArray(arr))return arr;
-    }catch(e){/* expected — fall through to strategy 5. Don't spam console. */}
+    }catch(_){}
     // 5) tenta parsing item-a-item: encontra cada {...} no texto e
     //    monta o array (LLM às vezes retorna uma lista de objetos sem
     //    os colchetes externos, ou com comentários no meio)
@@ -118,10 +104,10 @@
         try{
           const obj=JSON.parse(frag);
           if(obj&&typeof obj==='object'&&!Array.isArray(obj))items.push(obj);
-        }catch(e){/* per-fragment parse fail is expected (LLM garbage); skip silently. */}
+        }catch(_){}
       }
       if(items.length)return items;
-    }catch(e){console.warn('[meggy-utils] parseJsonArray item-by-item strategy failed:',e&&e.message||e);}
+    }catch(_){}
     // 6) falhou tudo — inclui mensagem curta (sem o conteúdo bruto,
     //    que pode incluir dados do usuário/AI — FIX-MEGGY #21 EDGE-16).
     const err=new Error('Resposta não é JSON array válido (falhou em todas as estratégias de parsing).');
@@ -136,9 +122,9 @@
       try{
         const html=marked.parse(txt);
         // ★ FIX: se gdiSanitize não carregou (CDL caiu, etc.), NÃO retorna HTML cru
-        if(window.gdiSanitize){try{return window.gdiSanitize(html);}catch(e){console.warn('[meggy-utils] gdiSanitize failed, falling back to esc(<br>):',e&&e.message||e);}}
+        if(window.gdiSanitize){try{return window.gdiSanitize(html);}catch(_){}}
         return esc(txt).replace(/\n/g,'<br>');
-      }catch(e){console.warn('[meggy-utils] marked.parse failed, falling back to plain esc:',e&&e.message||e);}
+      }catch(_){}
     }
     return esc(txt).replace(/\n/g,'<br>');
   }
@@ -212,45 +198,20 @@
         // tenta origName também
         if(v&&v.origName&&v.origName!=='video.mp4'&&v.origName.length>3)return v.origName;
       }
-    }catch(e){console.warn('[meggy-utils] realLessonName playlist lookup failed:',e&&e.message||e);}
+    }catch(_){}
     const h=document.querySelector('.gdi-file-header-name');
     if(h&&h.textContent&&h.textContent.trim().length>3)return h.textContent.trim();
     return fallback||'Aula';
   }
 
   // ── ISA call (POST /api/ai) ──
-  // ★ H-24 (P12-9): differentiate 401/429/5xx from generic non-OK. Returning
-  //    null on every !r.ok made it impossible for callers to:
-  //      • show "Sessão expirada" on 401 (and redirect to /login)
-  //      • throttle on 429 (Retry-After header)
-  //      • distinguish "service down" (500) from "session expired" (401)
-  //    Now returns `{ok:false, status, reason}` so callers can branch. Callers
-  //    that previously checked `result === null` still work (falsy), but
-  //    callers that want more context can read `result.status` and `result.reason`.
-  //    The `data.ok===false` path (HTTP 200 with `{ok:false,error}` body) still
-  //    throws as before.
   async function callIsa(prompt){
-    let r;
-    try{
-      r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({message:prompt,messages:[]})});
-    }catch(networkErr){
-      // Network failure / CORS / DNS — caller can retry or show offline toast.
-      console.warn('[meggy-utils] callIsa network error:',networkErr&&networkErr.message||networkErr);
-      return {ok:false,status:0,reason:'network'};
-    }
+    const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({message:prompt,messages:[]})});
     // ★ FIX-MEGGY #19 (Agent 6): check r.ok before parsing — without this, a
     //   404/500 response with HTML body throws a confusing SyntaxError on
     //   r.json() instead of a clear error message.
-    if(!r.ok){
-      // H-24: differentiate the three caller-actionable statuses.
-      let reason='http';
-      if(r.status===401)reason='auth';        // session expired → caller redirects
-      else if(r.status===429)reason='rate';   // rate limit → caller backs off
-      else if(r.status>=500)reason='server';  // server error → caller may retry
-      console.warn('[meggy-utils] callIsa non-OK:',r.status,'(',reason,')');
-      return {ok:false,status:r.status,reason:reason};
-    }
+    if(!r.ok) return null;
     const data=await r.json();
     if(!data.ok)throw new Error(data.error||'Meggy indisponível');
     return data.response||'';
@@ -318,19 +279,6 @@
       MEGGY_NAME, MEGGY_AVATAR, MEGGY_TAG, ISA_SYS
     }
   };
-
-  // ★ H-33 (P12-9): export esc() as window.gdiEsc so other modules can use
-  //    the canonical 5-entity escaper (& < > " '). Previously esc() was only
-  //    reachable via window.__gdiMeggy.utils.esc — too long for new consumers
-  //    to discover, and several modules (study-advanced.js, study-questions.js)
-  //    ship divergent 4-entity escapers (missing the &#39; entity, leaking on
-  //    single-quoted attributes). The canonical name `window.gdiEsc` is the
-  //    migration target per CQ-6.1 (Agent 13 roadmap).
-  //    Idempotent: don't overwrite if another module already installed a
-  //    (presumably equivalent) escaper.
-  if(!window.gdiEsc){
-    window.gdiEsc=esc;
-  }
 
   // ── Aliases para compatibilidade (código externo espera estas globais) ──
   // __gdiParseJsonArray — chamado por gdi-study.js:75-76
