@@ -165,18 +165,18 @@ async function extractFromBuffer({ id, buf, maxPages, maxChars, tryOcr }) {
             pageText = ocrText;
             usedOcr = true;
           }
-        } catch (_) { /* OCR falhou — mantém texto vazio */ }
+        } catch (e) { /* OCR falhou — mantém texto vazio */ console.warn('[meggy-pdf-worker] OCR page',i,'failed (non-critical):',e&&e.message||e); }
       }
 
       text += pageText + '\n\n';
-      try { pg.cleanup(); } catch (_) {}
+      try { pg.cleanup(); } catch(e){console.warn('[meggy-pdf-worker] pg.cleanup failed page',i,':',e&&e.message||e);}
       if (text.length > MAX) { text = text.slice(0, MAX); break; }
     }
 
     self.postMessage({ type: 'done', id, text, pages: n, usedOcr });
   } finally {
     // Garante que o PDFDocumentProxy seja destruído mesmo em falhas parciais.
-    if (doc) { try { doc.destroy(); } catch (_) {} }
+    if (doc) { try { doc.destroy(); } catch(e){console.warn('[meggy-pdf-worker] doc.destroy failed in finally:',e&&e.message||e);} }
   }
 }
 
@@ -198,7 +198,7 @@ async function ocrPage(lib, page) {
   try {
     const blob = await canvas.convertToBlob({ type: 'image/png' });
     imageInput = await blob.arrayBuffer();
-  } catch (_) { /* mantém canvas */ }
+  } catch(e){console.warn('[meggy-pdf-worker] canvas.convertToBlob failed, passing canvas directly:',e&&e.message||e); /* mantém canvas */ }
   // ★ FIX Task 20-9 Item 15: Tesseract.recognize sem timeout pode demorar
   // minutos em páginas densas (scans de livros, alta resolução). Race com
   // timeout de OCR_TIMEOUT_MS (30s): se exceder, rejeita e o caller (try/catch
