@@ -23,26 +23,74 @@
   window.__gdiStudyAdvanced = true;
   window.__gdiStudy = window.__gdiStudy || {};
 
-  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
-  const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
+  // ★ FIX P12-8 (H-33): prefer the centralized window.gdiEsc when available
+  //    (planned by CQ-6.1). Falls back to the local 4-entity esc otherwise.
+  const esc=window.gdiEsc||(s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'));
+  // ★ FIX P12-8 (H-21/H-22): log lsGet/lsSet failures with key + cause.
+  const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){console.warn('[study-advanced] lsGet failed for key "'+k+'":',e&&e.message);return d}};
+  const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){console.warn('[study-advanced] lsSet failed for key "'+k+'":',e&&e.message)}};
   const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+
+  // ★ FIX P12-8 (H-24): callMeggy now throws TYPED errors so callers can
+  //    differentiate 401/429/5xx/other. Error subclasses are emulated via a
+  //    helper that sets .name / .code on a plain Error — keeps the file
+  //    `class`-free and lets `e instanceof Error` continue to work for all
+  //    existing `catch(e){...e.message...}` call sites. Callers that want
+  //    to branch on the error type can check `e.name === 'AuthError'` etc.
+  //    Roadmap ref: H-24 / E15 — typed errors (AuthError, RateLimitError,
+  //    ServerError, UpstreamError).
+  function _makeTypedError(name, msg, status){
+    const e = new Error(msg);
+    e.name = name;
+    e.code = name;
+    if(status) e.status = status;
+    return e;
+  }
+  function _classifyHttpError(status){
+    if(status === 401 || status === 403) return 'AuthError';
+    if(status === 429) return 'RateLimitError';
+    if(status >= 500) return 'ServerError';
+    return 'UpstreamError';
+  }
 
   async function callMeggy(prompt){
     const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({message:prompt,messages:[]})});
     // ★ FIX (Agent 6): check r.ok BEFORE r.json() — if /api/ai returns 500
     //    with an HTML error page, r.json() throws a confusing SyntaxError.
-    // ★ CYCLE2-10 (Agent 10): THROW on !r.ok instead of returning null. Both
-    //    callers (analyzeProva line ~193, renderRedacao line ~360) do
-    //    `const resp=await callMeggy(...)` then `resp.match(...)` — returning
-    //    null caused a TypeError ("Cannot read property 'match' of null")
-    //    which the caller's catch block showed as a confusing error instead
-    //    of the actual HTTP status. Throwing lets the catch block display
-    //    the real cause (HTTP 500/502/etc.).
-    if(!r.ok) throw new Error('HTTP '+r.status+' em /api/ai');
-    const data=await r.json();
-    if(!data.ok)throw new Error(data.error||'Meggy indisponível');
+    // ★ CYCLE2-10 (Agent 10): THROW on !r.ok instead of returning null.
+    // ★ FIX P12-8 (H-24): throw a TYPED error so callers can branch on
+    //    AuthError / RateLimitError / ServerError / UpstreamError. The
+    //    message still starts with the HTTP status (so existing UIs that
+    //    just display e.message are unchanged), but e.name / e.code /
+    //    e.status are now set for callers that want richer handling
+    //    (e.g. show a login prompt on AuthError, a retry-after hint on
+    //    RateLimitError, a generic retry on ServerError).
+    if(!r.ok){
+      const typeName = _classifyHttpError(r.status);
+      const hint = r.status===401||r.status===403?' (autenticação necessária)':
+                   r.status===429?' (rate limit — aguarde e tente novamente)':
+                   r.status>=500?' (servidor indisponível)':'';
+      throw _makeTypedError(typeName, 'HTTP '+r.status+' em /api/ai'+hint, r.status);
+    }
+    let data;
+    try{ data=await r.json(); }
+    catch(e){
+      // JSON parse failure on a 2xx response — usually an HTML error page
+      // or truncated response from a CDN/proxy. Surface as UpstreamError.
+      throw _makeTypedError('UpstreamError', 'Resposta não-JSON de /api/ai: '+(e&&e.message), r.status);
+    }
+    if(!data.ok){
+      // The worker's /api/ai handler returns {ok:false, error:'...'} for
+      // upstream AI provider errors. These are typically UpstreamError
+      // (ZHIPU_API_KEY missing, AI provider 5xx, etc.). If the worker
+      // surfaces an HTTP status inside data.error (e.g. "429 rate limited"),
+      // try to classify it.
+      const msg = data.error || 'Meggy indisponível';
+      const m = /\b(40[13]|429|5\d\d)\b/.exec(msg);
+      const typeName = m ? _classifyHttpError(parseInt(m[1],10)) : 'UpstreamError';
+      throw _makeTypedError(typeName, msg, m?parseInt(m[1],10):undefined);
+    }
     return data.response||'';
   }
 
@@ -60,9 +108,9 @@
     if(window.marked){
       try{
         const html=marked.parse(txt);
-        if(window.gdiSanitize){try{return window.gdiSanitize(html);}catch(_){}}
+        if(window.gdiSanitize){try{return window.gdiSanitize(html);}catch(e){console.warn('[study-advanced] gdiSanitize failed:',e&&e.message);}}
         return esc(txt).replace(/\n/g,'<br>');
-      }catch(_){}
+      }catch(e){console.warn('[study-advanced] marked.parse failed:',e&&e.message);}
     }
     return esc(txt).replace(/\n/g,'<br>');
   }
@@ -100,9 +148,9 @@
       if(pagerEl){
         if(totalPages>1){
           pagerEl.innerHTML=`<div style="display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;">
-            <button class="gdi-mode-btn" id="provas-prev" style="font-size:11px;padding:5px 10px;" ${currentPage===0?'disabled':''}><i class="bi bi-chevron-left"></i> Anterior</button>
+            <button class="gdi-mode-btn" id="provas-prev" aria-label="Página anterior de planos" style="font-size:11px;padding:5px 10px;" ${currentPage===0?'disabled':''}><i class="bi bi-chevron-left"></i> Anterior</button>
             <span style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">Página ${currentPage+1} de ${totalPages}</span>
-            <button class="gdi-mode-btn" id="provas-next" style="font-size:11px;padding:5px 10px;" ${currentPage===totalPages-1?'disabled':''}>Próxima <i class="bi bi-chevron-right"></i></button>
+            <button class="gdi-mode-btn" id="provas-next" aria-label="Próxima página de planos" style="font-size:11px;padding:5px 10px;" ${currentPage===totalPages-1?'disabled':''}>Próxima <i class="bi bi-chevron-right"></i></button>
           </div>
           <div style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;margin-top:6px;">Mostrando ${slice.length} de ${plans.length} plano(s)</div>`;
           const prev=pagerEl.querySelector('#provas-prev');
@@ -223,7 +271,9 @@
       }catch(e){
         status.innerHTML='<div class="gdi-ai-err">Erro: '+esc(e.message)+'</div>';
       }finally{
-        try{ if(doc) doc.destroy(); }catch(_){}
+        // ★ v1.0.84: wrap doc lifecycle in try/finally so doc.destroy() runs
+        //    even if getPage/getTextContent throws (prevents PDFDocumentProxy leak).
+        try{ if(doc) doc.destroy(); }catch(e){console.warn('[study-advanced] pdf doc.destroy failed:',e&&e.message);}
       }
     }catch(e){
       status.innerHTML='<div class="gdi-ai-err">Erro: '+esc(e.message)+'</div>';
@@ -395,7 +445,7 @@
           }else{
             showToast('Redação corrigida! Nota: '+score);
           }
-        }catch(_){showToast('Redação corrigida! Nota: '+score);}
+        }catch(e){console.warn('[study-advanced] saveEssayMD failed (non-blocking):',e&&e.message);showToast('Redação corrigida! Nota: '+score);}
         status.innerHTML='';
         result.innerHTML=`<div class="gdi-isa-summary-body" style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;padding:20px;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.8;margin-top:14px;">
           ${renderMd(resp)}
@@ -522,7 +572,7 @@
           //    renderQuestoes (in study-questions.js) picks it up when
           //    next called. The closure var _qFilterSubject in M23 was
           //    never reachable from this IIFE — window.* is the bridge.
-          setTimeout(()=>{try{window._qFilterSubject=subj;}catch(_){}},200);
+          setTimeout(()=>{try{window._qFilterSubject=subj;}catch(e){console.warn('[study-advanced] renderRadar set window._qFilterSubject failed:',e&&e.message);}},200);
         }
       };
     });
