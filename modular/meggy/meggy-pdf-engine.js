@@ -44,7 +44,7 @@
             try{
               window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
               window.pdfjsLib._gdiWorkerSrcSet=true;
-            }catch(e){console.warn('[meggy-pdf-engine] pdfjsLib workerSrc set failed (already loaded):',e&&e.message||e);}
+            }catch(_){}
           }
           return resolve(window.pdfjsLib);
         }
@@ -56,7 +56,7 @@
             try{
               window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
               window.pdfjsLib._gdiWorkerSrcSet=true;
-            }catch(e){console.warn('[meggy-pdf-engine] pdfjsLib workerSrc set failed (onload):',e&&e.message||e);}
+            }catch(_){}
             resolve(window.pdfjsLib);
           }else{
             window._pdfjsPromise=null; // ★ v91 FIX: allow retry on next call
@@ -299,7 +299,7 @@
     let resp;
     const fetchOpts=[{credentials:'same-origin'},{credentials:'include'},{credentials:'omit'}];
     for(const opts of fetchOpts){
-      try{resp=await fetch(url,opts);if(resp.ok)break;}catch(e){console.warn('[meggy-pdf-engine] extractTextFile fetch failed for',url,'with',opts.credentials,'mode:',e&&e.message||e);}
+      try{resp=await fetch(url,opts);if(resp.ok)break;}catch(_){}
     }
     if(!resp||!resp.ok)throw new Error('HTTP '+(resp?resp.status:'fetch')+' ao baixar arquivo de texto');
     const txt=await resp.text();
@@ -405,8 +405,7 @@
         let tc;
         try{
           tc=await pg.getTextContent({normalizeWhitespace:true,disableCombineTextItems:false,includeMarkedContent:true});
-        }catch(e){
-          console.warn('[meggy-pdf-engine] getTextContent with opts failed page',i,', retrying plain:',e&&e.message||e);
+        }catch(_){
           tc=await pg.getTextContent(); // fallback sem opções
         }
 
@@ -427,7 +426,7 @@
           try{
             const tc2=await pg.getTextContent();
             pageText=tc2.items.map(x=>(x.str||'')+(x.hasEOL?'\n':' ')).join('');
-          }catch(e){console.warn('[meggy-pdf-engine] plain getTextContent retry failed page',i,':',e&&e.message||e);}
+          }catch(_){}
         }
 
         txt+=pageText+'\n\n';
@@ -449,7 +448,7 @@
             }
             if(txt.length>10000)break;
           }
-        }catch(e){console.warn('[meggy-pdf-engine] annotations fallback failed:',e&&e.message||e);}
+        }catch(_){}
       }
 
       // ★★ FALLBACK OCR (Tesseract.js) — para PDFs escaneados (só imagens) ★★
@@ -505,8 +504,7 @@
       }
       return result;
     } finally {
-      // ★ H-21 (P12-9): log destroy failure (rare, but a leak warning beats silent).
-      try { if(doc) doc.destroy(); } catch(e){console.warn('[meggy-pdf-engine] doc.destroy failed in finally:',e&&e.message||e);}
+      try { if(doc) doc.destroy(); } catch(_){}
     }
     })(); // end _work IIFE
 
@@ -515,9 +513,7 @@
     //    leak a setTimeout arm that fires after success (no-op reject on a
     //    resolved Promise is harmless, but cleaner to clear).
     return Promise.race([_work, _timeout]).finally(function(){
-      // ★ H-21 (P12-9): clearTimeout is safe even if already fired, but log
-      //    if it somehow throws (very rare).
-      if(_t){ try{ clearTimeout(_t); }catch(e){console.warn('[meggy-pdf-engine] clearTimeout failed in race finally:',e&&e.message||e);} _t=null; }
+      if(_t){ try{ clearTimeout(_t); }catch(_){} _t=null; }
     });
   }
 
