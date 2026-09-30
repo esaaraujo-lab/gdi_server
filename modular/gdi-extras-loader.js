@@ -33,15 +33,9 @@
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
   // ★ v1.0.91: bump 92 → 93 (Shaka skin + Pomodoro sidebar + video-in-panel + PDF split + rest mode fix + OCR AI routing + parallel dispatch).
-  const CACHE_VERSION = '110';  // ★ v1.0.103: 144+ bug fixes from 20-agent deep review (security hardening, race conditions, CORS, subrequest limits, error handling, type coercion, backward compat, performance O(N²)→Set, state leak cleanup, UI/UX accessibility, legacy monolith fixes, docs)
+  const CACHE_VERSION = '111';  // ★ v1.0.103: 144+ bug fixes from 20-agent deep review (security hardening, race conditions, CORS, subrequest limits, error handling, type coercion, backward compat, performance O(N²)→Set, state leak cleanup, UI/UX accessibility, legacy monolith fixes, docs)
   window.CACHE_VERSION = CACHE_VERSION;
 
-  // ★ H-28 (P12-7): MODULES is a documentation-only manifest of all available
-  // modules. The actual load order is defined below by CORE_CHAIN, MEGGY_CHAIN,
-  // and STUDY_CHAIN (kept in sync with this list). References to the legacy
-  // monoliths `gdi-meggy.js` / `gdi-study.js` have been removed — they are
-  // dead code (not loaded since v1.0.75) and listing them here was a stale
-  // documentation footgun (callers might assume they could be re-added).
   const MODULES = [
     // 1. Core (mantém)
     'gdi-core.js',
@@ -49,7 +43,7 @@
     'storage.js',
     'gdi-pdf.js',
     'gdi-ui.js',
-    // 2. Meggy modularizado (7 módulos em modular/meggy/)
+    // 2. Meggy modularizado (7 módulos em modular/meggy/) — substitui gdi-meggy.js
     'meggy/meggy-utils.js',          // 1o — helpers + CSS + constants
     'meggy/meggy-pdf-engine.js',     // PDF.js + OCR
     'meggy/meggy-cache.js',          // generateAll + _chainCache/_inflight
@@ -57,7 +51,7 @@
     'meggy/meggy-flashcards.js',     // flashcards
     'meggy/meggy-summaries.js',      // summary/mindmap + battalion + ASSEMBLA gdiIsaPdf
     'meggy/meggy-widget.js',         // FAB + chat panel + __gdiMeggySuggest
-    // 3. Study modularizado (8 módulos em modular/study/)
+    // 3. Study modularizado (8 módulos em modular/study/) — substitui gdi-study.js
     'study/study-theme.js',          // 1o — CSS BlackTie
     'study/study-scanner.js',        // scanner incremental
     'study/study-courses.js',        // courses + add modal
@@ -107,10 +101,7 @@
         link.href = moduleUrl(w);   // = '/modular/' + w + '?v=' + CACHE_VERSION
         link.as = 'script';
         document.head.appendChild(link);
-      } catch(e) {
-        // ★ H-21 (P12-7): was `catch(_) {}` — silent failure hid DOM/CDN issues.
-        console.warn('[GDI Loader] prefetchWorkers failed for', w, '—', e && e.message || e);
-      }
+      } catch(_) {}
     });
   }
 
@@ -128,7 +119,7 @@
       }
     }
     _bootstrapPromise = null;
-    try { (window.showToast || function(m){console.error(m);})('Falha ao carregar módulos. Recarregue a página.'); } catch(e){ console.warn('[GDI Loader] showToast on core-load failure threw:', e && e.message || e); }
+    try { (window.showToast || function(m){console.error(m);})('Falha ao carregar módulos. Recarregue a página.'); } catch(_){}
     return false;
   }
 
@@ -194,42 +185,6 @@
       while (typeof Bus === 'undefined') {
         if (Date.now() - _busWaitT0 > 10000) {
           console.error('[GDI Loader] TIMEOUT esperando Bus — app.min.js não carregou?');
-          // ★ H-34 (P12-7): instead of bailing silently and leaving the user
-          // staring at a blank page (or a half-rendered shell with no modules),
-          // show a visible error message in document.body explaining what
-          // happened and offering a reload button. The overlay is appended
-          // (not replaces) so any partially-loaded UI stays accessible below
-          // it; z-index 99999 ensures it covers everything. The message is
-          // Portuguese to match the rest of the UI. If DOM manipulation
-          // itself fails (e.g. document.body not yet parsed), we still log to
-          // console.error as before — no regression.
-          try {
-            const overlay = document.createElement('div');
-            overlay.id = 'gdi-loader-timeout-overlay';
-            overlay.setAttribute('role', 'alert');
-            overlay.setAttribute('aria-live', 'assertive');
-            overlay.style.cssText = [
-              'position:fixed','top:0','left:0','right:0','bottom:0',
-              'background:rgba(255,255,255,0.97)','color:#222',
-              'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif',
-              'padding:32px','z-index:99999','display:flex',
-              'flex-direction:column','align-items:center','justify-content:center',
-              'text-align:center','line-height:1.5'
-            ].join(';');
-            overlay.innerHTML =
-              '<div style="max-width:520px;">' +
-              '<h2 style="color:#c00;margin:0 0 16px 0;font-size:22px;">Não foi possível carregar o aplicativo.</h2>' +
-              '<p style="margin:0 0 8px 0;font-size:16px;">O módulo principal (<code>app.min.js</code>) não respondeu em 10 segundos.</p>' +
-              '<p style="margin:0 0 24px 0;font-size:14px;color:#666;">Isso pode ser uma falha temporária de conexão ou um problema no servidor.</p>' +
-              '<button type="button" onclick="location.reload()" style="' +
-              'background:#c00;color:#fff;border:none;border-radius:6px;padding:12px 24px;' +
-              'font-size:16px;cursor:pointer;font-weight:600;">Recarregar página</button>' +
-              '<p style="margin:24px 0 0 0;font-size:12px;color:#999;">Se o problema persistir, verifique sua conexão ou tente novamente em alguns minutos.</p>' +
-              '</div>';
-            (document.body || document.documentElement).appendChild(overlay);
-          } catch(e) {
-            console.warn('[GDI Loader] failed to show timeout overlay:', e && e.message || e);
-          }
           // ★ FIX CYCLE2-9: clear _bootstrapPromise so a future bootstrap() call
           // (e.g. user-triggered gdiReloadExtras, or a "retry" button) can re-attempt
           // the load if Bus becomes available later. WITHOUT this, the dedupe guard
@@ -352,7 +307,7 @@
 
       _bootstrapped = true;  // ★ marca como carregado — qualquer chamada futura retorna imediatamente
 
-      try{ window.dispatchEvent(new CustomEvent('gdi-extras-ready')); }catch(e){ console.warn('[GDI Loader] gdi-extras-ready dispatch failed:', e && e.message || e); }
+      try{ window.dispatchEvent(new CustomEvent('gdi-extras-ready')); }catch(_){}
     })();
 
     return _bootstrapPromise;
