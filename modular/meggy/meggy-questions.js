@@ -18,14 +18,36 @@
 // ═══════════════════════════════════════════════════════════════
 (function(){
   if(window.__gdiMeggyQuestions)return;
-  window.__gdiMeggyQuestions=true;
 
   window.__gdiMeggy = window.__gdiMeggy || {};
 
   // ── Late-bound namespace shortcuts ──
+  // ★ H-35 (Task P12-6): null-guard window.__gdiMeggy.utils BEFORE setting
+  //   the IIFE guard. Mirrors the meggy-flashcards.js pattern (Task 20-7
+  //   #15 / EXEC-6). If utils failed to load (CDN outage, eval error, wrong
+  //   script-tag order), `U` is undefined and `U.CONSTS` throws TypeError,
+  //   crashing the entire IIFE AFTER the guard had been set — blocking
+  //   retry on a later loader pass. Bail WITHOUT setting the guard when
+  //   utils is missing so the loader gets another shot at calling this
+  //   IIFE; once utils loads, the guard is set and the module inits
+  //   normally. Strictly safer than the prior pattern in the normal case
+  //   (one extra typeof check, behaviour identical when utils is loaded).
   const U = window.__gdiMeggy.utils;
+  if(!U || !U.CONSTS){
+    console.error('[Meggy] meggy-utils not loaded — aborting questions init (will retry on next loader pass)');
+    return;
+  }
+  window.__gdiMeggyQuestions=true;
   const LQ = U.CONSTS.LQ;
   const ANSWERED_KEY = U.CONSTS.ANSWERED_KEY;
+
+  // ★ H-33 (Task P12-6): prefer the centralized window.gdiEsc when available;
+  //   fall back to U.esc (meggy-utils.js — same 5-entity set incl. &#39;)
+  //   for module-load-order edge cases. Late-bound so a future stricter
+  //   gdiEsc (e.g. DOMPurify-based) is picked up automatically. The helper
+  //   text below uses `U.esc)` (closing paren) so the MultiEdit replace_all
+  //   of `esc(` does not recurse into this definition.
+  function esc(s){ return (window.gdiEsc || U.esc)(s); }
 
   // Extrai questões que já existem dentro do PDF (lista de exercícios)
   function extractQuestionsFromText(text){
@@ -41,8 +63,8 @@
   }
 
   // ── Track answered questions (evita repetir) ──
-  function getAnsweredIds(){try{return JSON.parse(localStorage.getItem(ANSWERED_KEY)||'[]')}catch(_){return []}}
-  function markAnswered(id){const arr=getAnsweredIds();if(!arr.includes(id)){arr.push(id);if(arr.length>500)arr.shift();try{localStorage.setItem(ANSWERED_KEY,JSON.stringify(arr))}catch(_){}}}
+  function getAnsweredIds(){try{return JSON.parse(localStorage.getItem(ANSWERED_KEY)||'[]')}catch(e){console.warn('[Meggy Q] getAnsweredIds JSON.parse failed:', e&&e.message||e); return []}}
+  function markAnswered(id){const arr=getAnsweredIds();if(!arr.includes(id)){arr.push(id);if(arr.length>500)arr.shift();try{localStorage.setItem(ANSWERED_KEY,JSON.stringify(arr))}catch(e){console.warn('[Meggy Q] markAnswered localStorage.setItem failed:', e&&e.message||e)}}}
 
   // ═══════════════════════════════════════════════════════════════
   // ★ TASK 7 (Scanner Distribuído) — folder-first save/load helpers
@@ -72,7 +94,7 @@
       if(seg.length < 3) return ''; // need at least driveIdx:/courseName/discipline/
       // Drop the last segment (the lesson file); the rest is the discipline path.
       return '/' + seg.slice(0, -1).join('/') + '/';
-    }catch(_){ return ''; }
+    }catch(e){ console.warn('[Meggy Q] _deriveDisciplinePath failed:', e&&e.message||e); return ''; }
   }
 
   // Best-effort: course name = segment 1 after driveIdx (e.g. "TJ SP Escrevente").
@@ -80,7 +102,7 @@
     try{
       const seg = (window.location.pathname || '').split('/').filter(Boolean);
       if(seg.length >= 2) return decodeURIComponent(seg[1]);
-    }catch(_){}
+    }catch(e){console.warn('[Meggy Q] _deriveCourseName failed:', e&&e.message||e)}
     return '';
   }
 
@@ -95,7 +117,7 @@
     try{
       const seg = (window.location.pathname || '').split('/').filter(Boolean);
       if(seg.length >= 3) return decodeURIComponent(seg[seg.length - 2]);
-    }catch(_){}
+    }catch(e){console.warn('[Meggy Q] _deriveDisciplineName failed:', e&&e.message||e)}
     return '';
   }
 
@@ -113,7 +135,7 @@
           return String(j.name || j.username || j.email).split('@')[0];
         }
       }
-    }catch(_){}
+    }catch(e){console.warn('[Meggy Q] _currentUsername failed:', e&&e.message||e)}
     return 'meggy';
   }
 
@@ -179,7 +201,7 @@
           try{
             const parsed = JSON.parse(d.content);
             qs = Array.isArray(parsed.questions) ? parsed.questions : (Array.isArray(parsed) ? parsed : []);
-          }catch(_){ qs = []; }
+          }catch(e){ console.warn('[Meggy Q] loadQuestionsFromDisciplineFolder content JSON.parse failed:', e&&e.message||e); qs = []; }
         }else if(Array.isArray(d.content)) qs = d.content;
         return {ok:true, questions: qs, file:d.file||null};
       }
@@ -242,11 +264,12 @@
           + 'border-top-color:var(--ferreto-primary,#ff8b9f);'
           + 'border-radius:50%;animation:gdi-scan-spin 1s linear infinite;"></div>'
         + '<p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin:0;">'
-          + U.esc(text) + '</p>'
+          + esc(text) + '</p>'
         + '</div>';
-    } catch(_) {
+    } catch(e) {
+      console.warn('[Meggy Q] _setLoadingWithSpinner HTML construction failed:', e&&e.message||e);
       // Fall back to the text-only loader if our HTML construction fails.
-      try { U.setLoading(bodyEl, text); } catch(__){}
+      try { U.setLoading(bodyEl, text); } catch(e2){console.warn('[Meggy Q] _setLoadingWithSpinner fallback setLoading failed:', e2&&e2.message||e2)}
     }
   }
 
@@ -282,7 +305,7 @@
           }
         }
       }
-    }catch(_){ /* folder-first load is best-effort */ }
+    }catch(e){console.warn('[Meggy Q] folder-first load failed (best-effort, non-blocking):', e&&e.message||e)}
 
     try{
       await window.__gdiMeggy.cache.generateAll(items,lesson,'questions',(p)=>{
@@ -335,7 +358,7 @@
             _currentUsername()
           ).catch(e=>console.warn('[Meggy] saveQuestionsToDisciplineFolder (cached bank) failed:', e && e.message || e));
         }
-      }catch(_){ /* best-effort */ }
+      }catch(e){console.warn('[Meggy Q] saveQuestionsToDisciplineFolder (cached bank) sync failed (best-effort):', e&&e.message||e)}
     }
     // ★ CYCLE-10 (Agent 10): bail if the user closed the M9 panel during the
     //   long generateAll() await (10-30s) — startQuizFromBank would otherwise
@@ -354,6 +377,39 @@
   //   reset the cursor to 0 so question generation restarts from the first
   //   PDF instead of resuming at a stale offset from the previous lesson.
   let _gdiPdfCursorLesson = null;
+
+  // ★ H-24 (Task P12-6): differentiated callIsa wrapper. meggy-utils.js
+  //   (FIX-MEGGY #19 + H-24) returns {ok:false, status, reason} on HTTP /
+  //   network failures instead of throwing — only HTTP 200 with
+  //   data.ok===false throws. Callers expected a thrown Error with .message
+  //   (the original generateQuestions catch surfaces e.message to the UI).
+  //   This helper normalizes both failure modes into a thrown Error with a
+  //   PT-BR message tailored to the reason code, so the user sees actionable
+  //   feedback instead of "Meggy indisponível: [object Object]".
+  //   reason codes (mirrors meggy-utils.js callIsa switch):
+  //     auth(401)    — session expired → caller redirects/reloads
+  //     rate(429)    — rate limit → caller backs off
+  //     server(5xx)  — server error → caller may retry
+  //     network(0)   — fetch failed → caller checks connectivity
+  //     http(other)  — other non-OK HTTP status
+  function _callIsaChecked(prompt){
+    return U.callIsa(prompt).then(function(resp){
+      if(typeof resp === 'string') return resp; // success — plain text response
+      // resp is {ok:false, status, reason} from callIsa's non-throw path.
+      var r = resp && resp.reason;
+      var msg;
+      if(r === 'auth')         msg = 'Sessão expirada — recarregue a página e tente novamente.';
+      else if(r === 'rate')    msg = 'Limite de requisições atingido — aguarde ~30s e tente novamente.';
+      else if(r === 'server')  msg = 'Servidor Meggy indisponível (HTTP '+(resp&&resp.status||'?')+') — tente novamente.';
+      else if(r === 'network') msg = 'Falha de rede — verifique sua conexão e tente novamente.';
+      else                     msg = 'Meggy indisponível (HTTP '+(resp&&resp.status||'?')+').';
+      var err = new Error(msg);
+      err.reason = r;
+      err.status = resp && resp.status;
+      throw err;
+    });
+  }
+
   async function generateQuestions(items,bodyEl,lesson){
     if(!items||!items.length)return false;
     // ★ Fix 13: reset cursor on lesson change.
@@ -369,7 +425,7 @@
     //   (the "Gerar mais 5 questões" flow). Both flows have 5-15s AI
     //   generation windows where a static text message looks like a frozen
     //   page. Now consistent with questions().
-    _setLoadingWithSpinner(bodyEl,'Extraindo texto do PDF: '+U.esc(pdfItem.name||'material')+'…');
+    _setLoadingWithSpinner(bodyEl,'Extraindo texto do PDF: '+esc(pdfItem.name||'material')+'…');
     let text;
     const extractPdfText = window.__gdiMeggy.pdf.extractPdfText; // late-bind
     try{
@@ -380,7 +436,7 @@
         try{
           text=await extractPdfText(next.url);
           if(text&&text.trim().length>=50)break;
-        }catch(_){}
+        }catch(e){console.warn('[Meggy Q] extractPdfText retry failed:', e&&e.message||e)}
       }
       if(!text||text.trim().length<50){U.setError(bodyEl,'Falha ao extrair texto.');return false;}
     }
@@ -389,7 +445,15 @@
     _setLoadingWithSpinner(bodyEl,'Meggy está criando questões…');
     let resp;
     try{
-      resp=await U.callIsa('Baseado neste material, gere 5 questões de concurso público em JSON array. Misture:\n- 3 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"explanation":"..."}\n- 2 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"explanation":"..."}\nSem comentários, só JSON:\n\n'+text.slice(0,15000));
+      // ★ H-24 (Task P12-6): use _callIsaChecked wrapper so HTTP/network
+      //   failures (which callIsa now returns as {ok:false,status,reason}
+      //   instead of throwing — see meggy-utils.js FIX-MEGGY #19 + H-24) are
+      //   normalized into a thrown Error with a PT-BR message tailored to
+      //   the reason code (auth/rate/server/network). The previous direct
+      //   `await U.callIsa(...)` would silently return the {ok:false,...}
+      //   object on 401/429/5xx, then `U.parseJsonArray(resp)` would fail
+      //   with a confusing 'Resposta não é JSON array válido' message.
+      resp=await _callIsaChecked('Baseado neste material, gere 5 questões de concurso público em JSON array. Misture:\n- 3 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"explanation":"..."}\n- 2 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"explanation":"..."}\nSem comentários, só JSON:\n\n'+text.slice(0,15000));
     }catch(e){U.setError(bodyEl,'Meggy indisponível: '+e.message);return false;}
     let arr;
     try{arr=U.parseJsonArray(resp);}catch(e){U.setError(bodyEl,'Meggy retornou formato inválido: '+e.message);return false;}
@@ -444,7 +508,7 @@
             _currentUsername()
           ).catch(e=>console.warn('[Meggy] saveQuestionsToDisciplineFolder (generated bank) failed:', e && e.message || e));
         }
-      }catch(_){ /* best-effort */ }
+      }catch(e){console.warn('[Meggy Q] saveQuestionsToDisciplineFolder (generated bank) sync failed (best-effort):', e&&e.message||e)}
     }
     // ★ FIX-MEGGY #16 (Agent 6): guard showToast — module loads before
     //   gdi-ui.js defines window.showToast on some pages, which would throw
@@ -485,13 +549,13 @@
       //   so the .some() inner loop is O(1) per answered id.
       const lessonQIds = new Set(lessonQs.map(q=>q.id));
       const newAnswered=answered.filter(id=>!lessonQIds.has(id));
-      try{localStorage.setItem(ANSWERED_KEY,JSON.stringify(newAnswered))}catch(_){}
+      try{localStorage.setItem(ANSWERED_KEY,JSON.stringify(newAnswered))}catch(e){console.warn('[Meggy Q] startQuizFromBank answered-reset localStorage.setItem failed:', e&&e.message||e)}
     }
     if(pending.length===0){
       bodyEl.innerHTML=`<div class="gdi-mat-isa-result" style="text-align:center;padding:30px;">
         <div style="font-size:48px;">📝</div>
         <h3 style="color:var(--ferreto-primary,#ff8b9f);font-family:var(--ferreto-font-display,'Poppins',sans-serif);">Nenhuma questão disponível ainda</h3>
-        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin-top:8px;">Matéria: <b style="color:var(--ferreto-text,#e6edf3);">${U.esc(lesson)}</b></p>
+        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin-top:8px;">Matéria: <b style="color:var(--ferreto-text,#e6edf3);">${esc(lesson)}</b></p>
         <button id="gdi-q-gen-more" class="gdi-btn gdi-btn-primary" style="margin-top:14px;"><i class="bi bi-stars"></i> Gerar 5 questões com Meggy</button>
       </div>`;
       bodyEl.querySelector('#gdi-q-gen-more').onclick=async()=>{
@@ -531,7 +595,7 @@
           <div style="font-size:48px;">${pct>=60?'🎉':'📚'}</div>
           <h3 style="color:var(--ferreto-primary,#ff8b9f);font-family:var(--ferreto-font-display,'Poppins',sans-serif);">Batch concluído!</h3>
           <p style="color:var(--ferreto-text,#e6edf3);font-size:16px;margin-top:8px;"><b style="color:${pct>=60?'#3fb950':'#ff8b8b'};">${hits}/${total}</b> · ${pct}% acerto</p>
-          <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">Matéria: ${U.esc(lesson)}</p>
+          <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">Matéria: ${esc(lesson)}</p>
           <div style="display:flex;gap:8px;justify-content:center;margin-top:18px;flex-wrap:wrap;">
             <button id="gdi-q-more" class="gdi-btn gdi-btn-primary"><i class="bi bi-stars"></i> Gerar mais 5 questões</button>
             <button id="gdi-q-next-batch" class="gdi-mode-btn"><i class="bi bi-arrow-right"></i> Próximo batch</button>
@@ -552,17 +616,17 @@
       const optCount=isTF?2:(q.options?.length||4);
       bodyEl.innerHTML=`<div class="gdi-mat-isa-result" style="max-width:760px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-shrink:0;">
-          <span style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">${U.esc(lesson)} · ${idx+1}/${queue.length}</span>
-          <span style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">✓ ${hits} ✗ ${misses}</span>
+          <span aria-live="polite" aria-atomic="true" style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">${esc(lesson)} · ${idx+1}/${queue.length}</span>
+          <span aria-live="polite" aria-atomic="true" style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">✓ ${hits} ✗ ${misses}</span>
         </div>
         <div class="gdi-course" style="margin-bottom:14px;">
           <b style="color:var(--ferreto-secondary,#5ddeda);font-size:11px;display:block;margin-bottom:8px;">${isTF?'CEBRASPE — Certo ou Errado':'Múltipla Escolha'}</b>
-          <div style="color:var(--ferreto-text,#f0f6fc);font-size:14px;line-height:1.7;">${U.esc(q.statement)}</div>
+          <div style="color:var(--ferreto-text,#f0f6fc);font-size:14px;line-height:1.7;">${esc(q.statement)}</div>
         </div>
         <div id="gdi-q-opts" style="display:flex;flex-direction:column;gap:8px;"></div>
         <div id="gdi-q-feedback" style="margin-top:14px;"></div>
         <div style="display:flex;justify-content:flex-end;padding-top:14px;margin-top:10px;border-top:1px solid var(--ferreto-border,#21262d);">
-          <button id="gdi-q-skip" title="Pular para próxima questão" style="width:48px;height:48px;border-radius:50%;border:0;cursor:pointer;background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px -4px rgba(255,139,159,.5);transition:transform .15s;"><i class="bi bi-arrow-right"></i></button>
+          <button id="gdi-q-skip" title="Pular para próxima questão" aria-label="Pular para a próxima questão" style="width:48px;height:48px;border-radius:50%;border:0;cursor:pointer;background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px -4px rgba(255,139,159,.5);transition:transform .15s;"><i class="bi bi-arrow-right"></i></button>
         </div>
       </div>`;
       // ★ seta fixa para pular questão (mesmo sem responder)
@@ -588,7 +652,11 @@
         const b=document.createElement('button');
         b.className='gdi-note';b.style.cursor='pointer';b.style.textAlign='left';
         const letter=isTF?'':String.fromCharCode(65+i)+') ';
-        b.innerHTML=`<span style="display:flex;align-items:center;gap:10px;"><b style="color:var(--ferreto-primary,#ff8b9f);">${letter}</b> <span style="color:var(--ferreto-text,#e6edf3);">${U.esc(opt)}</span></span>`;
+        // ★ A11y (Task P12-6): aria-label so screen readers announce the
+        //   option letter + content. TF options get "Certo"/"Errado"; MC
+        //   options get "A"/"B"/"C"/"D" + the option text.
+        b.setAttribute('aria-label', (isTF ? (i===0?'Opção Certo':'Opção Errado') : ('Opção '+String.fromCharCode(65+i))) + ': ' + opt);
+        b.innerHTML=`<span style="display:flex;align-items:center;gap:10px;"><b style="color:var(--ferreto-primary,#ff8b9f);">${letter}</b> <span style="color:var(--ferreto-text,#e6edf3);">${esc(opt)}</span></span>`;
         b.onclick=()=>{
           const acertou=i===q.correct;
           if(acertou)hits++;else misses++;
@@ -603,7 +671,7 @@
           const fb=bodyEl.querySelector('#gdi-q-feedback');
           fb.innerHTML=`<div class="gdi-course" style="border-left:3px solid ${acertou?'#3fb950':'#ff6b6b'};">
             <b style="color:${acertou?'#3fb950':'#ff6b6b'};">${acertou?'✓ Correto':'✗ Errado'}</b>
-            ${q.explanation?`<div style="color:var(--ferreto-text,#e6edf3);font-size:13px;margin-top:6px;line-height:1.5;">${U.esc(q.explanation)}</div>`:''}
+            ${q.explanation?`<div style="color:var(--ferreto-text,#e6edf3);font-size:13px;margin-top:6px;line-height:1.5;">${esc(q.explanation)}</div>`:''}
           </div>
           <button class="gdi-btn gdi-btn-primary" id="gdi-q-next" style="margin-top:12px;">${idx+1<queue.length?'Próxima →':'Ver resultado'}</button>`;
           fb.querySelector('#gdi-q-next').onclick=()=>{idx++;draw();};
