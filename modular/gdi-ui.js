@@ -135,7 +135,7 @@ body.gdi-fv .gdi-player-wrap iframe{
       done=GDIUser.isWatched(key);
       if(!done&&window.gdiNormKey)done=GDIUser.isWatched(gdiNormKey(key));
       if(!done)done=GDIUser.isWatched(window.location.pathname);
-    }catch(e){console.warn('[gdi-ui M10] isDone GDIUser.isWatched failed:',e&&e.message||e);}
+    }catch(_){}
     return done;
   }
   function updBtn(){
@@ -218,7 +218,7 @@ body.gdi-fv .gdi-player-wrap iframe{
     function setMode(m){
       document.body.classList.toggle('gdi-fv',m==='fv');
       document.body.classList.toggle('gdi-fm',m==='fm');
-      try{localStorage.setItem('gdi-study-mode',m)}catch(e){console.warn('[gdi-ui M10] localStorage.setItem gdi-study-mode failed:',e&&e.message||e);}
+      try{localStorage.setItem('gdi-study-mode',m)}catch(_){}
       slot.querySelectorAll('.gdi-mode-btn[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===m));
       applyLayout(m);
       if(m!=='fv')setTimeout(zoom,60);
@@ -226,7 +226,7 @@ body.gdi-fv .gdi-player-wrap iframe{
     slot.querySelectorAll('.gdi-mode-btn[data-mode]').forEach(b=>{
       b.addEventListener('click',()=>setMode(b.dataset.mode));
     });
-    let saved='split';try{saved=localStorage.getItem('gdi-study-mode')||'split'}catch(e){console.warn('[gdi-ui M10] localStorage.getItem gdi-study-mode failed:',e&&e.message||e);}
+    let saved='split';try{saved=localStorage.getItem('gdi-study-mode')||'split'}catch(_){}
     setMode(['fv','fm','split'].includes(saved)?saved:'split');
     const wb=document.getElementById('gdi-watched-btn');
     if(wb&&!wb.dataset.b){
@@ -284,7 +284,7 @@ body.gdi-fv .gdi-player-wrap iframe{
     // single source of truth — on page:change/video:switched we re-enable
     // the overlay if this flag is set. Only user input (mousemove/keydown/
     // mousedown/touchstart) clears it (see exitSleep below).
-    try{localStorage.setItem('gdi-rest-mode','1');}catch(e){console.warn('[gdi-ui M11] localStorage.setItem gdi-rest-mode failed:',e&&e.message||e);}
+    try{localStorage.setItem('gdi-rest-mode','1');}catch(_){}
   }
   function exitSleep(){
     if(!sleeping)return;
@@ -301,7 +301,7 @@ body.gdi-fv .gdi-player-wrap iframe{
     // also clear it, since the user navigated away from a media page.
     // The previous "video ended → exitSleep" binding was REMOVED (see
     // bindOnce below) precisely so auto-advance doesn't clear the flag.
-    try{localStorage.removeItem('gdi-rest-mode');}catch(e){console.warn('[gdi-ui M11] localStorage.removeItem gdi-rest-mode failed:',e&&e.message||e);}
+    try{localStorage.removeItem('gdi-rest-mode');}catch(_){}
   }
   function syncFs(){
     ensureEls();
@@ -359,10 +359,10 @@ body.gdi-fv .gdi-player-wrap iframe{
               if(localStorage.getItem('gdi-rest-mode')==='1'&&!sleeping){
                 ensureEls();enterSleep();
               }
-            }catch(e){console.warn('[gdi-ui M11] _maybeRestoreSleep inner failed:',e&&e.message||e);}
+            }catch(_){}
           },500);
         }
-      }catch(e){console.warn('[gdi-ui M11] _maybeRestoreSleep outer failed:',e&&e.message||e);}
+      }catch(_){}
     };
     Bus.onGlobal('video:switched',_maybeRestoreSleep);
     Bus.onGlobal('page:change',_maybeRestoreSleep);
@@ -376,7 +376,7 @@ body.gdi-fv .gdi-player-wrap iframe{
     // catches the case where the page:change event fired BEFORE bindOnce
     // registered its listener (race between render() emitting page:change
     // and the module loader calling init()).
-    try{if(window.__gdiSleepMaybeRestore)window.__gdiSleepMaybeRestore();}catch(e){console.warn('[gdi-ui M11] __gdiSleepMaybeRestore call failed:',e&&e.message||e);}
+    try{if(window.__gdiSleepMaybeRestore)window.__gdiSleepMaybeRestore();}catch(_){}
   }});
   console.log('[GDI M11] v3.2 descanso registrado');
 })();
@@ -463,7 +463,7 @@ body.gdi-fv .gdi-player-wrap iframe{
     // ★ FIX UIUX-21: handler de page:change consolidado — ver bloco único
     // antes de updateUI() no final do init(). Estava duplicado em 3 lugares.
     Bus.onGlobal('title:change',()=>setTimeout(refreshBase,30));
-    function persist(){try{localStorage.setItem(SKEY,JSON.stringify({phase:st.phase,total:st.total,remain:st.remain,running:st.running,dots:st.dots,endAt:st.endAt}))}catch(e){console.warn('[gdi-ui M12] persist localStorage.setItem failed:',e&&e.message||e);}}
+    function persist(){try{localStorage.setItem(SKEY,JSON.stringify({phase:st.phase,total:st.total,remain:st.remain,running:st.running,dots:st.dots,endAt:st.endAt}))}catch(e){}}
     // ★ FIX Task 20-4 #11: persistência debounce 2s. Antes, persist() só
     // rodava em state changes (start/pause/next/reset) — enquanto o timer
     // corria 25min, s.remain NUNCA era salvo. Se o user fechasse a aba
@@ -485,13 +485,13 @@ body.gdi-fv .gdi-player-wrap iframe{
         o.type=type;o.frequency.value=f;
         g.gain.setValueAtTime(vol,actx.currentTime);
         g.gain.exponentialRampToValueAtTime(.0001,actx.currentTime+dur);
-        o.start();o.stop(actx.currentTime+dur);}catch(e){console.warn('[gdi-ui M12] beep failed:',e&&e.message||e);}}
+        o.start();o.stop(actx.currentTime+dur);}catch(e){}}
     function alarm(isBreak){const notes=isBreak?[660,880,1100]:[1100,880,660];
       notes.forEach((f,i)=>setTimeout(()=>beep(f,.4,'sine',.5),i*300));
       setTimeout(()=>notes.forEach((f,i)=>setTimeout(()=>beep(f,.3,'sine',.35),i*280)),1100);}
     function flash(c){flashEl.style.background=c;flashEl.style.opacity='.4';setTimeout(()=>{flashEl.style.opacity='0'},600);}
     function notify(t,b){if(!('Notification' in window))return;
-      if(Notification.permission==='granted'){try{new Notification(t,{body:b})}catch(e){console.warn('[gdi-ui M12] Notification failed:',e&&e.message||e);}}
+      if(Notification.permission==='granted'){try{new Notification(t,{body:b})}catch(e){}}
       else if(Notification.permission==='default')Notification.requestPermission();}
     function info(){
       if(st.phase==='work')return{label:'🍅 Foco',c:'var(--ferreto-primary,#ff8b9f)',fl:'rgba(255,139,159,.2)'};
@@ -582,7 +582,7 @@ body.gdi-fv .gdi-player-wrap iframe{
             cfg.short=clamp(parseInt($id('gdi-pom-c-short').value)||5,1,30);
             cfg.long=clamp(parseInt($id('gdi-pom-c-long').value)||15,1,60);
             cfg.sessions=clamp(parseInt($id('gdi-pom-c-sess').value)||4,1,10);
-            try{localStorage.setItem(CKEY,JSON.stringify(cfg));}catch(e){console.warn('[gdi-ui M12] cfg localStorage.setItem failed:',e&&e.message||e);showToast('Erro ao salvar config');}
+            try{localStorage.setItem(CKEY,JSON.stringify(cfg));}catch(_){showToast('Erro ao salvar config');}
             if($id('gdi-pom-c-work'))$id('gdi-pom-c-work').value=cfg.work;
             if($id('gdi-pom-c-short'))$id('gdi-pom-c-short').value=cfg.short;
             if($id('gdi-pom-c-long'))$id('gdi-pom-c-long').value=cfg.long;
@@ -592,7 +592,7 @@ body.gdi-fv .gdi-player-wrap iframe{
         }
       });
       const autoChk=$id('gdi-pom-c-auto');
-      if(autoChk&&!autoChk.__pomBound){autoChk.__pomBound=true;autoChk.addEventListener('change',e=>{cfg.autoStart=e.target.checked;try{localStorage.setItem(CKEY,JSON.stringify(cfg));}catch(e2){console.warn('[gdi-ui M12] autoChk localStorage.setItem failed:',e2&&e2.message||e2);}});}
+      if(autoChk&&!autoChk.__pomBound){autoChk.__pomBound=true;autoChk.addEventListener('change',e=>{cfg.autoStart=e.target.checked;try{localStorage.setItem(CKEY,JSON.stringify(cfg));}catch(_){}});}
     }
     // binda imediatamente + após injetar
     setTimeout(bindPomClicks,50);
@@ -619,7 +619,7 @@ body.gdi-fv .gdi-player-wrap iframe{
   if(window.__GDI_M13__)return;
   window.__GDI_M13__=true;
   const DBG=true;
-  const log=(...a)=>{if(DBG)try{console.log('[GDI M13]',...a)}catch(e){/* console.log itself threw (rare — embedded webview with broken console). Don't recurse via console.warn; swallow silently. */}};
+  const log=(...a)=>{if(DBG)try{console.log('[GDI M13]',...a)}catch(_){}};
   function stripExt(s){return String(s||'').replace(/\.[a-z0-9]{1,5}$/i,'').trim()}
   const GENERIC_WORDS=/^(aula|aulas|v\u00eddeo|videos?|li[cç][aã]o|li[cç][oõ]es|lesson|lessons|class|classes|modulo|m\u00f3dulo|module|modulos|m\u00f3dulos|modules|parte|partes|pt|cap|caps|capitulo|cap\u00edtulo|ext|ep|eps|episodio|epis\u00f3dio|live|revisao|revis\u00e3o|arquivo|file)$/i;
   function isGenericName(raw){
@@ -663,11 +663,11 @@ body.gdi-fv .gdi-player-wrap iframe{
   function stateD(){
     try{
       if(window.GDIUser&&GDIUser.loaded()){const d=GDIUser.dump();if(d)return d;}
-    }catch(e){console.warn('[gdi-ui M13] stateD GDIUser.loaded().dump() failed:',e&&e.message||e);}
+    }catch(_){}
     if(rescue)return rescue;
     try{
       if(window.GDIUser){const d=GDIUser.dump();if(d&&Object.keys(d).length)return d;}
-    }catch(e){console.warn('[gdi-ui M13] stateD GDIUser.dump() fallback failed:',e&&e.message||e);}
+    }catch(_){}
     return null;
   }
   function getResumeOf(d,key){
@@ -675,25 +675,25 @@ body.gdi-fv .gdi-player-wrap iframe{
       if(window.GDIUser&&GDIUser.loaded()&&typeof GDIUser.getResume==='function'){
         const r=GDIUser.getResume(key);if(r)return r;
       }
-    }catch(e){console.warn('[gdi-ui M13] getResumeOf GDIUser.getResume failed:',e&&e.message||e);}
+    }catch(_){}
     return (d&&d.resume&&d.resume[key])||null;
   }
   function resumeKeyFor(path){
     const p=String(path||'');
     if(p.indexOf('/fallback?')===0){
-      try{return '/fallback::'+(new URLSearchParams(p.split('?')[1]||'').get('id')||'')}catch(e){console.warn('[gdi-ui M13] resumeKeyFor /fallback parse failed:',e&&e.message||e);return ''}
+      try{return '/fallback::'+(new URLSearchParams(p.split('?')[1]||'').get('id')||'')}catch(_){return ''}
     }
     return p.split('?')[0];
   }
   function normPath(p){
-    try{return decodeURIComponent(String(p||'').split('?')[0].replace(/\/+$/,''))}catch(e){console.warn('[gdi-ui M13] normPath decodeURIComponent failed:',e&&e.message||e);return String(p||'').split('?')[0].replace(/\/+$/,'')}
+    try{return decodeURIComponent(String(p||'').split('?')[0].replace(/\/+$/,''))}catch(_){return String(p||'').split('?')[0].replace(/\/+$/,'')}
   }
   function low(p){return normPath(p).toLowerCase()}
   function okPath(x){
     try{
       if(typeof window.gdiOkPath!=='function')return true;
       return !!window.gdiOkPath(x);
-    }catch(e){console.warn('[gdi-ui M13] okPath gdiOkPath failed:',e&&e.message||e);return true}
+    }catch(_){return true}
   }
   function subtreePrefix(){
     const cur=low(window.location.pathname);
@@ -724,7 +724,7 @@ body.gdi-fv .gdi-player-wrap iframe{
         const loc=(r.headers.get('location')||'')+' '+(r.url||'');
         if(/login/i.test(loc)){showToast('Sess\u00e3o expirada \u2014 entre para retomar');location.href='/login';return;}
       }
-    }catch(e){console.warn('[gdi-ui M13] safeGo HEAD fetch failed for',href,':',e&&e.message||e);}
+    }catch(_){}
     location.href=href;
   }
   function nameInfo(target){
@@ -780,75 +780,22 @@ body.gdi-fv .gdi-player-wrap iframe{
       });
     }
     due.sort((a,b)=>a.due-b.due);
-    // ★ H-38 (P12-9): accessibility — make the SRS modal a proper dialog.
-    //   • role="dialog" + aria-modal="true" → screen readers announce modal
-    //   • aria-labelledby="gdi-srs-title" → SR reads the dialog heading
-    //   • ESC key handler → keyboard users can dismiss without finding the X
-    //   • Focus trap (Tab/Shift+Tab cycle inside the dialog) → keyboard users
-    //     don't end up tabbing into background content that's inert under the
-    //     overlay.
-    //   • Focus restore on close → return focus to the triggering button so
-    //     keyboard users resume where they were.
-    const _trigger=document.activeElement;  // capture BEFORE the overlay takes focus
     const ov=document.createElement('div');ov.id='gdi-srs-panel';
-    ov.setAttribute('role','dialog');
-    ov.setAttribute('aria-modal','true');
-    ov.setAttribute('aria-labelledby','gdi-srs-title');
     ov.style.cssText='position:fixed;inset:0;z-index:10002;background:rgba(5,7,10,.82);display:flex;align-items:center;justify-content:center;padding:20px;';
     GDI_ROOT().appendChild(ov);
-    // ESC handler — installed once per srsOpen invocation, removed on close.
-    const _escHandler=(ev)=>{
-      if(ev.key==='Escape'||ev.keyCode===27){
-        ev.preventDefault();
-        ev.stopPropagation();
-        _closeSrs();
-      }
-    };
-    // Focus trap — Tab/Shift+Tab cycles within the dialog.
-    const _focusTrap=(ev)=>{
-      if(ev.key!=='Tab'&&ev.keyCode!==9)return;
-      const focusables=ov.querySelectorAll('button,a[href],input,select,textarea,[tabindex]:not([tabindex="-1"])');
-      if(!focusables.length)return;
-      const first=focusables[0];
-      const last=focusables[focusables.length-1];
-      if(ev.shiftKey){
-        if(document.activeElement===first||!ov.contains(document.activeElement)){
-          ev.preventDefault();last.focus();
-        }
-      }else{
-        if(document.activeElement===last||!ov.contains(document.activeElement)){
-          ev.preventDefault();first.focus();
-        }
-      }
-    };
-    document.addEventListener('keydown',_escHandler,true);
-    document.addEventListener('keydown',_focusTrap,true);
-    function _closeSrs(){
-      document.removeEventListener('keydown',_escHandler,true);
-      document.removeEventListener('keydown',_focusTrap,true);
-      ov.remove();
-      // Restore focus to the trigger button (or whatever had focus before).
-      try{if(_trigger&&typeof _trigger.focus==='function')_trigger.focus();}catch(e){console.warn('[gdi-ui M13] srsOpen focus restore failed:',e&&e.message||e);}
-    }
-    // Close handler also wired to the overlay backdrop click.
-    ov.addEventListener('click',(ev)=>{
-      if(ev.target===ov)_closeSrs();
-    });
     let idx=0;
     function render(){
       if(idx>=due.length){
-        ov.innerHTML='<div style="background:var(--ferreto-surface,#161b22);border:1px solid var(--ferreto-border,#30363d);border-radius:16px;padding:34px;max-width:480px;text-align:center;color:var(--ferreto-text,#e6edf3);font-family:system-ui;"><div style="font-size:40px;">\ud83c\udf89</div><h3 id="gdi-srs-title" style="margin:8px 0">Revis\u00e3o conclu\u00edda!</h3><p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px">As anota\u00e7\u00f5es voltam em 1, 7 e 30 dias at\u00e9 ficarem graduadas.</p><br><button class="gdi-mode-btn" id="gdi-srs-close">Fechar</button></div>';
-        document.getElementById('gdi-srs-close').addEventListener('click',_closeSrs);
-        // Move focus into the dialog (close button).
-        setTimeout(()=>{try{document.getElementById('gdi-srs-close').focus();}catch(e){console.warn('[gdi-ui M13] srsOpen close-btn focus failed:',e&&e.message||e);}},0);
+        ov.innerHTML='<div style="background:var(--ferreto-surface,#161b22);border:1px solid var(--ferreto-border,#30363d);border-radius:16px;padding:34px;max-width:480px;text-align:center;color:var(--ferreto-text,#e6edf3);font-family:system-ui;"><div style="font-size:40px;">\ud83c\udf89</div><h3 style="margin:8px 0">Revis\u00e3o conclu\u00edda!</h3><p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px">As anota\u00e7\u00f5es voltam em 1, 7 e 30 dias at\u00e9 ficarem graduadas.</p><br><button class="gdi-mode-btn" id="gdi-srs-close">Fechar</button></div>';
+        document.getElementById('gdi-srs-close').addEventListener('click',()=>ov.remove());
         return;
       }
       const n=due[idx];
-      let lbl='Aula';try{lbl=decodeURIComponent(String(n.key).split('?')[0].split('/').filter(Boolean).pop()||'Aula').replace(/\.[a-z0-9]+$/i,'')}catch(e){console.warn('[gdi-ui M13] srsOpen lbl decodeURIComponent failed:',e&&e.message||e);}
+      let lbl='Aula';try{lbl=decodeURIComponent(String(n.key).split('?')[0].split('/').filter(Boolean).pop()||'Aula').replace(/\.[a-z0-9]+$/i,'')}catch(_){}
       ov.innerHTML=`<div style="background:var(--ferreto-surface,#161b22);border:1px solid var(--ferreto-border,#30363d);border-radius:16px;padding:22px;max-width:540px;width:100%;color:var(--ferreto-text,#e6edf3);font-family:system-ui;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-          <span id="gdi-srs-title" style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);text-transform:uppercase;">\ud83e\uddd0 Revis\u00e3o ${idx+1} de ${due.length}</span>
-          <button class="gdi-mode-btn" id="gdi-srs-close" style="padding:2px 8px;font-size:11px;" aria-label="Fechar revis\u00e3o">\u2715</button>
+          <span style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);text-transform:uppercase;">\ud83e\uddd0 Revis\u00e3o ${idx+1} de ${due.length}</span>
+          <button class="gdi-mode-btn" id="gdi-srs-close" style="padding:2px 8px;font-size:11px;">\u2715</button>
         </div>
         <div style="font-size:12px;color:var(--ferreto-secondary,#7aa2ff);margin-bottom:4px;">${escHtml(realNameOf(n.key))}${n.t!=null?' \u00b7 '+gdiFmtTime(n.t):''}</div>
         <div style="font-size:15px;line-height:1.5;margin-bottom:16px;">${escHtml(n.text)}</div>
@@ -857,12 +804,10 @@ body.gdi-fv .gdi-player-wrap iframe{
           <button id="gdi-srs-again" class="gdi-mode-btn"><i class="bi bi-arrow-repeat"></i> N\u00e3o lembrei</button>
           <a class="gdi-mode-btn" data-gdi-go href="${escHtml(playerHref(n.key))}"><i class="bi bi-play-fill"></i> Abrir aula</a>
         </div></div>`;
-      document.getElementById('gdi-srs-close').addEventListener('click',_closeSrs);
-      document.getElementById('gdi-srs-good').addEventListener('click',()=>{try{GDIUser.srsGrade(n.id,true)}catch(e){console.warn('[gdi-ui M13] srsGrade(true) failed:',e&&e.message||e);}idx++;render();});
-      document.getElementById('gdi-srs-again').addEventListener('click',()=>{try{GDIUser.srsGrade(n.id,false)}catch(e){console.warn('[gdi-ui M13] srsGrade(false) failed:',e&&e.message||e);}idx++;render();});
+      document.getElementById('gdi-srs-close').addEventListener('click',()=>ov.remove());
+      document.getElementById('gdi-srs-good').addEventListener('click',()=>{try{GDIUser.srsGrade(n.id,true)}catch(_){}idx++;render();});
+      document.getElementById('gdi-srs-again').addEventListener('click',()=>{try{GDIUser.srsGrade(n.id,false)}catch(_){}idx++;render();});
       ov.querySelectorAll('[data-gdi-go]').forEach(a=>a.addEventListener('click',safeGo));
-      // Move focus into the dialog (primary action) on each render.
-      setTimeout(()=>{try{document.getElementById('gdi-srs-good').focus();}catch(e){console.warn('[gdi-ui M13] srsOpen good-btn focus failed:',e&&e.message||e);}},0);
     }
     render();
   }
@@ -1103,7 +1048,7 @@ body.gdi-fv .gdi-player-wrap iframe{
         const href=row.getAttribute('href')||'';
         if(!href||href.startsWith('/fallback'))continue;
         let files;
-        try{files=await gdiListAllFiles(href,gdiGetPw(href));}catch(e){console.warn('[gdi-ui M14] gdiListAllFiles failed for',href,':',e&&e.message||e);continue;}
+        try{files=await gdiListAllFiles(href,gdiGetPw(href));}catch(_){continue;}
         if(!document.body.contains(row))continue;
         let total=0,done=0;
         // ★FIX (Task 8): cap síncrono em 800 iterações para evitar jank em
@@ -1117,7 +1062,7 @@ body.gdi-fv .gdi-player-wrap iframe{
           if(/\.part-/i.test(f.name))continue;
           const bytes=Number(f.size)||0;if(bytes>0&&bytes<1024*1024)continue;
           total++;
-          try{if(GDIUser.isWatched(href+encodeURIComponent(f.name)))done++;}catch(e){console.warn('[gdi-ui M14] isWatched per-file failed (modProgress):',e&&e.message||e);}
+          try{if(GDIUser.isWatched(href+encodeURIComponent(f.name)))done++;}catch(_){}
         }
         if(total>0&&document.body.contains(row)){
           const pct=Math.round(done/total*100);
@@ -1149,7 +1094,7 @@ body.gdi-fv .gdi-player-wrap iframe{
       const href=a.getAttribute('href')||'';
       if(href.startsWith('/fallback'))return;
       total++;
-      let w=false;try{w=GDIUser.isWatched(href.split('?')[0])}catch(e){console.warn('[gdi-ui M14] isWatched line() failed:',e&&e.message||e);}
+      let w=false;try{w=GDIUser.isWatched(href.split('?')[0])}catch(_){}
       if(w)done++;else if(!firstTodo)firstTodo=href;
     });
     const hasFolders=!!document.querySelector('#list a.gdi-row .gdi-row-icon i.bi-folder-fill');
@@ -1197,7 +1142,7 @@ body.gdi-fv .gdi-player-wrap iframe{
           if(/\.part-/i.test(f.name))continue;
           const bytes=Number(f.size)||0;if(bytes>0&&bytes<1024*1024)continue;
           total++;
-          try{if(GDIUser.isWatched(base+encodeURIComponent(f.name)))done++;}catch(e){console.warn('[gdi-ui M14] isWatched per-file failed (course):',e&&e.message||e);}
+          try{if(GDIUser.isWatched(base+encodeURIComponent(f.name)))done++;}catch(_){}
         }
       }
       const line=document.getElementById('gdi-progress-line');
@@ -1206,21 +1151,21 @@ body.gdi-fv .gdi-player-wrap iframe{
         line.insertAdjacentHTML('beforeend',`<span style="color:var(--ferreto-text,#e6edf3);"><i class="bi bi-mortarboard-fill" style="color:#3fb950;"></i> Curso: <b>${done}/${total}</b> aulas (${pct}%)</span>`);
         if(btn)btn.remove();
       }
-    }catch(e){console.warn('[gdi-ui M14] course progress calculation failed:',e&&e.message||e);showToast('N\u00e3o foi poss\u00edvel calcular o progresso do curso');}
+    }catch(_){showToast('N\u00e3o foi poss\u00edvel calcular o progresso do curso');}
     finally{busy=false;}
   }
   window.GDI_MODULES.push({name:'progress',init:function(){
     const c=document.getElementById('count');
     if(c&&!c.__m14){c.__m14=true;
       // ★FIX: desconecta o observer da página anterior (vazamento por página)
-      if(window.__gdiM14obs){try{window.__gdiM14obs.disconnect()}catch(e){console.warn('[gdi-ui M14] __gdiM14obs.disconnect failed:',e&&e.message||e);}}
+      if(window.__gdiM14obs){try{window.__gdiM14obs.disconnect()}catch(_){}}
       // ★U.6: callback pula se __m14Mutating — evita feedback loop.
       const obs=new MutationObserver(()=>{if(!__m14Mutating)line();});
       obs.observe(c,{childList:true,characterData:true,subtree:true});
       window.__gdiM14obs=obs;}
     line();modProgress();
   }});
-  Bus.onGlobal('user:ready',()=>{try{line()}catch(e){console.warn('[gdi-ui M14] line() on user:ready failed:',e&&e.message||e);}});
+  Bus.onGlobal('user:ready',()=>{try{line()}catch(_){}});
 })();
 
 // ★ VERIFIED Task 20-4 #13: gdiGetPw() audit em gdi-ui.js. Ambas as
@@ -1246,7 +1191,7 @@ body.gdi-fv .gdi-player-wrap iframe{
       l.href=URL.createObjectURL(new Blob([JSON.stringify(MAN)],{type:'application/manifest+json'}));
       document.head.appendChild(l);
     }
-  }catch(e){console.warn('[gdi-ui M16] PWA manifest injection failed (non-critical):',e&&e.message||e);}
+  }catch(_){}
   if('serviceWorker' in navigator&&location.protocol==='https:'){
     navigator.serviceWorker.register('/gdi-sw.js',{scope:'/'})
       .then(()=>console.log('[GDI PWA] offline ativo'))
@@ -1278,14 +1223,14 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     </div></div>
   <div id="gdi-debug-log" class="collapsed"></div>`;
   GDI_ROOT().appendChild(wrap);
-  try{GDIDebug.attach()}catch(e){console.warn('[gdi-ui M18] GDIDebug.attach failed:',e&&e.message||e);}
+  try{GDIDebug.attach()}catch(_){}
 }});
 
 // ═══ M19: TÍTULO LIMPO DA ABA ═══
 (function(){
   const MAX=64;
   const POMO=/^\d\d:\d\d\s+[^\s\u00b7]+\s+\u00b7\s+/;
-  const dec=s=>{try{return decodeURIComponent(String(s||''))}catch(e){console.warn('[gdi-ui M19] dec decodeURIComponent failed:',e&&e.message||e);return String(s||'')}};
+  const dec=s=>{try{return decodeURIComponent(String(s||''))}catch(_){return String(s||'')}};
   const clean=s=>dec(s).replace(/\s+/g,' ').trim();
   function segs(p){return clean(String(p||'').split('?')[0]).split('/').filter(Boolean)}
   function build(name,parent){
@@ -1303,7 +1248,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
         const ps=segs(m.pageUrl||'');
         return build(clean(m.name||m.origName||''),ps.length>=2?ps[ps.length-2]:'');
       }
-    }catch(e){console.warn('[gdi-ui M19] fromPlaylist failed:',e&&e.message||e);}
+    }catch(_){}
     return null;
   }
   function fromUrl(){
@@ -1327,7 +1272,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
       const next=fromPlaylist()||fromUrl();
       if(!next||next===cur)return;
       document.title=next;
-    }catch(e){console.warn('[gdi-ui M19] apply failed:',e&&e.message||e);}
+    }catch(_){}
   }
   // ★ FIX Task 20-4 #10: o MutationObserver em <title> era criado mas
   // nunca armazenado nem desconectado. Em SPAs longas (muitas page:change),
@@ -1338,7 +1283,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   function bindTitle(){
     const el=document.querySelector('title');
     if(!el){setTimeout(bindTitle,400);return;}
-    if(_titleObs){try{_titleObs.disconnect();}catch(e){console.warn('[gdi-ui M19] _titleObs.disconnect failed:',e&&e.message||e);}_titleObs=null;}
+    if(_titleObs){try{_titleObs.disconnect();}catch(_){}_titleObs=null;}
     const obs=new MutationObserver(apply);
     obs.observe(el,{childList:true,characterData:true,subtree:true});
     _titleObs=obs;
@@ -1370,28 +1315,28 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   const LS_OPEN='gdi-playlist-open',LS_HIDE='gdi-hide-watched';
   const PL_PAGE=100,PL_MAX=3000;  // ★U.1: página de 100, teto absoluto 3000
   let _plVisibleCount=0;  // ★U.1: quantos itens estão no DOM agora
-  const norm=p=>{try{return decodeURIComponent(String(p||'').split('?')[0])}catch(e){console.warn('[gdi-ui M20] norm decodeURIComponent failed:',e&&e.message||e);return String(p||'').split('?')[0]}};
+  const norm=p=>{try{return decodeURIComponent(String(p||'').split('?')[0])}catch(_){return String(p||'').split('?')[0]}};
   window.gdiNormKey=norm;
   window.gdiVideoKey=function(){
     try{const pv=window.playlistVideos,ci=window.currentIndex;
       if(pv&&typeof ci==='number'&&ci>=0&&pv[ci]&&pv[ci].pageUrl)return pv[ci].pageUrl.split('?')[0];
-    }catch(e){console.warn('[gdi-ui M20] gdiVideoKey failed:',e&&e.message||e);}
+    }catch(_){}
     return window.location.pathname;
   };
   window.gdiMarkVideo=function(){
-    try{GDIUser.markWatched(norm(window.gdiVideoKey()))}catch(e){console.warn('[gdi-ui M20] gdiMarkVideo norm() failed:',e&&e.message||e);}
-    try{GDIUser.markWatched(window.location.pathname)}catch(e){console.warn('[gdi-ui M20] gdiMarkVideo pathname failed:',e&&e.message||e);}
+    try{GDIUser.markWatched(norm(window.gdiVideoKey()))}catch(_){}
+    try{GDIUser.markWatched(window.location.pathname)}catch(_){}
     Bus.emit('watched:changed');
   };
   window.gdiUnmarkVideo=function(){
     [window.gdiVideoKey(),window.location.pathname].forEach(k=>{
-      try{GDIUser.unmarkWatched(k);GDIUser.unmarkWatched(norm(k))}catch(e){console.warn('[gdi-ui M20] gdiUnmarkVideo failed for',k,':',e&&e.message||e);}
+      try{GDIUser.unmarkWatched(k);GDIUser.unmarkWatched(norm(k))}catch(_){}
     });
     Bus.emit('watched:changed');
   };
   function isW(m){
     const raw=(m.pageUrl||'').split('?')[0];
-    try{return GDIUser.isWatched(raw)||GDIUser.isWatched(norm(raw))}catch(e){console.warn('[gdi-ui M20] isW GDIUser.isWatched failed:',e&&e.message||e);return false}
+    try{return GDIUser.isWatched(raw)||GDIUser.isWatched(norm(raw))}catch(_){return false}
   }
   function items(){return window.playlistVideos||[]}
   function cur(){const i=window.currentIndex;return(typeof i==='number'&&i>=0)?i:-1}
@@ -1400,9 +1345,9 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     const i=cur();if(i<0)return;const m=items()[i];if(!m)return;
     const raw=(m.pageUrl||'').split('?')[0];
     let a=false,b=false,c=false;
-    try{a=GDIUser.isWatched(raw);b=GDIUser.isWatched(norm(raw));c=GDIUser.isWatched(window.location.pathname)}catch(e){console.warn('[gdi-ui M20] healKeys isWatched failed:',e&&e.message||e);}
+    try{a=GDIUser.isWatched(raw);b=GDIUser.isWatched(norm(raw));c=GDIUser.isWatched(window.location.pathname)}catch(_){}
     try{if((a||b)&&!c)GDIUser.markWatched(window.location.pathname);
-        if(c&&!(a||b))GDIUser.markWatched(norm(raw));}catch(e){console.warn('[gdi-ui M20] healKeys markWatched failed:',e&&e.message||e);}
+        if(c&&!(a||b))GDIUser.markWatched(norm(raw));}catch(_){}
   }
   // ★U.1: helper — renderiza um intervalo [fromIdx, toIdx) da playlist
   function _renderPlaylistRange(pv,fromIdx,toIdx,ci){
@@ -1422,7 +1367,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   }
   function _scrollToCurrent(list,ci){
     if(items()[ci]){const el=list.querySelector('.gdi-playlist-item[data-idx="'+ci+'"]');
-      if(el)try{el.scrollIntoView({block:'nearest'})}catch(e){console.warn('[gdi-ui M20] scrollIntoView failed:',e&&e.message||e);}}
+      if(el)try{el.scrollIntoView({block:'nearest'})}catch(_){}}
   }
   function _attachLoadMore(list,pv){
     // ★U.1: se ainda há itens além do visível (ou além do PL_MAX), mostra o botão
@@ -1480,7 +1425,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   function syncWatchedBtn(){
     const wb=document.getElementById('gdi-watched-btn');if(!wb)return;
     let done=false;
-    try{done=GDIUser.isWatched(window.gdiVideoKey())||GDIUser.isWatched(norm(window.gdiVideoKey()))||GDIUser.isWatched(window.location.pathname)}catch(e){console.warn('[gdi-ui M20] syncWatchedBtn isWatched failed:',e&&e.message||e);}
+    try{done=GDIUser.isWatched(window.gdiVideoKey())||GDIUser.isWatched(norm(window.gdiVideoKey()))||GDIUser.isWatched(window.location.pathname)}catch(_){}
     wb.classList.toggle('done',done);
     wb.innerHTML=done?'<i class="bi bi-eye-fill"></i><span>Assistida \u2713</span>':'<i class="bi bi-eye"></i><span>Assistido</span>';
   }
@@ -1528,11 +1473,11 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     const setOpen=v=>{
       body.style.display=v?'block':'none';
       chev.className='bi bi-chevron-'+(v?'up':'down');
-      try{localStorage.setItem(LS_OPEN,v?'1':'0')}catch(e){console.warn('[gdi-ui M20] localStorage.setItem LS_OPEN failed:',e&&e.message||e);}
+      try{localStorage.setItem(LS_OPEN,v?'1':'0')}catch(_){}
     };
     // ★FIX: por padrão a playlist fica RECOLHIDA (só o header visível),
     // como no bloco único. Usuário expande clicando no header.
-    let open=false;try{open=localStorage.getItem(LS_OPEN)==='1'}catch(e){console.warn('[gdi-ui M20] localStorage.getItem LS_OPEN failed:',e&&e.message||e);}
+    let open=false;try{open=localStorage.getItem(LS_OPEN)==='1'}catch(_){}
     setOpen(open);
     wrap.querySelector('#gdi-pl-toggle').addEventListener('click',()=>setOpen(body.style.display==='none'));
     const fBtn=wrap.querySelector('#gdi-pl-filter');
@@ -1541,12 +1486,12 @@ window.GDI_MODULES.push({name:'debug',init:function(){
       fBtn.innerHTML='<i class="bi bi-funnel'+(on?'-fill':'')+'"></i>';};
     fBtn.addEventListener('click',()=>{
       const on=localStorage.getItem(LS_HIDE)==='1';
-      try{localStorage.setItem(LS_HIDE,on?'0':'1');}catch(e){console.warn('[gdi-ui M20] localStorage.setItem LS_HIDE failed:',e&&e.message||e);}
+      try{localStorage.setItem(LS_HIDE,on?'0':'1');}catch(_){}
       fSync();renderItems();});
     fSync();
     wrap.querySelector('#gdi-pl-reload').addEventListener('click',()=>{
-      try{localStorage.removeItem('gdi-xpl::'+(window.location.host||'')+'::'+parentPath())}catch(e){console.warn('[gdi-ui M20] localStorage.removeItem gdi-xpl failed:',e&&e.message||e);}
-      try{Object.keys(sessionStorage).forEach(k=>{if(k.indexOf('gdi-pljson-probe')===0)sessionStorage.removeItem(k)})}catch(e){console.warn('[gdi-ui M20] sessionStorage cleanup gdi-pljson-probe failed:',e&&e.message||e);}
+      try{localStorage.removeItem('gdi-xpl::'+(window.location.host||'')+'::'+parentPath())}catch(_){}
+      try{Object.keys(sessionStorage).forEach(k=>{if(k.indexOf('gdi-pljson-probe')===0)sessionStorage.removeItem(k)})}catch(_){}
       showToast('Cache apagado \u2014 reescaneando\u2026');
       setTimeout(()=>location.reload(),600);
     });
@@ -1588,97 +1533,12 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   // antigo sem o emit), faz um refreshAll() para garantir.
   setTimeout(()=>{
     if(!_plReadyFired){
-      try{ensureUI();refreshAll();}catch(e){console.warn('[gdi-ui M20] fallback ensureUI/refreshAll failed:',e&&e.message||e);}
+      try{ensureUI();refreshAll();}catch(_){}
     }
   },3000);
   Bus.onGlobal('watched:changed',()=>setTimeout(refreshAll,30));
   Bus.onGlobal('video:switched',()=>setTimeout(refreshAll,120));
   Bus.onGlobal('user:ready',()=>setTimeout(refreshAll,60));
-})();
-
-// ═══ M21: A11Y ENHANCEMENTS — H-40 (P12-9) ═══
-// ★ H-40 (P12-9): two accessibility enhancements that can't live in app.min.js
-//    (out of this agent's scope) but can be layered in from gdi-ui.js:
-//
-//    1) Toast container: app.min.js:557 `showToast()` creates
-//       `#gdi-toast-container` on first call WITHOUT aria-live/role. Without
-//       aria-live, screen-reader users get NO announcement when a toast
-//       appears (e.g. "Aula marcada como assistida ✓" is invisible to them).
-//       We can't modify showToast directly, so we patch the container
-//       idempotently: on init and on every page:change, find the container
-//       (or pre-create it) and set `role="status"` + `aria-live="polite"`.
-//       The `polite` politeness setting avoids interrupting the user mid-task
-//       (assertive would be jarring for non-critical UI feedback).
-//
-//    2) Icon-only buttons: gdi-ui.js (and other modules) ship many buttons
-//       whose only visible child is a Bootstrap-Icons `<i class="bi bi-...">`
-//       and which carry a `title` attribute (visible tooltip on hover, but
-//       NOT announced by SRs). For each such button, copy `title` →
-//       `aria-label` so SR users hear the same label that sighted users see
-//       on hover. We skip buttons that already have an `aria-label`, that
-//       have visible text content, or that are inside the playlist list
-//       (which is rendered in a tight loop — those items have their own
-//       `title` and would be redundant).
-(function(){
-  if(window.__gdiA11yBound)return;
-  window.__gdiA11yBound=true;
-  // Pre-create the toast container with a11y attrs BEFORE showToast ever
-  // runs. When showToast finally runs, it'll find the existing container
-  // (its check `e=document.getElementById("gdi-toast-container")` returns
-  // our pre-created one) and skip its own creation branch.
-  function ensureToastA11y(){
-    let c=document.getElementById('gdi-toast-container');
-    if(!c){
-      c=document.createElement('div');
-      c.id='gdi-toast-container';
-      document.body.appendChild(c);
-    }
-    if(c.getAttribute('role')!=='status')c.setAttribute('role','status');
-    if(!c.getAttribute('aria-live'))c.setAttribute('aria-live','polite');
-    if(!c.getAttribute('aria-atomic'))c.setAttribute('aria-atomic','true');
-  }
-  // Decorate icon-only buttons with aria-label (from title).
-  function decorateIconButtons(root){
-    const scope=root||document.body;
-    if(!scope||!scope.querySelectorAll)return;
-    // Selector: button or role=button, with title, without aria-label, and
-    // without visible text content (innerText strips icon ligatures).
-    const candidates=scope.querySelectorAll('button[title]:not([aria-label]),[role="button"][title]:not([aria-label])');
-    candidates.forEach(btn=>{
-      // Skip if there's visible text (e.g. "Dividido" — the title is just a
-      // tooltip augmenting the visible label; SR already reads the text).
-      // Use textContent+innerText to be robust against Bootstrap icon ligatures.
-      const text=(btn.textContent||'').trim();
-      if(text.length>0&&text.length<=80)return;
-      // Skip if the only visible content is an `<i>` with no text — that's the
-      // icon-only case we want to label.
-      const title=btn.getAttribute('title')||'';
-      if(!title)return;
-      btn.setAttribute('aria-label',title);
-    });
-  }
-  function runAll(){
-    try{ensureToastA11y();}catch(e){console.warn('[gdi-ui M21] ensureToastA11y failed:',e&&e.message||e);}
-    try{decorateIconButtons(document.body);}catch(e){console.warn('[gdi-ui M21] decorateIconButtons failed:',e&&e.message||e);}
-  }
-  // Run on DOMContentLoaded (or now if already loaded) + on every page:change.
-  if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded',runAll);
-  }else{
-    runAll();
-  }
-  // Re-run after each page:change (new buttons may have been injected) and
-  // after a short delay (module init may inject more on init()). The 600ms
-  // delay covers the worst-case setTimeout chain in M10/M11/M12 (5×300ms).
-  if(window.Bus&&typeof Bus.onGlobal==='function'){
-    Bus.onGlobal('page:change',()=>{runAll();setTimeout(runAll,600);});
-  }
-  // Also re-run when media:ready fires (some icon buttons are bound to the
-  // player area which is rendered when media loads).
-  if(window.Bus&&typeof Bus.onGlobal==='function'){
-    Bus.onGlobal('media:ready',()=>setTimeout(runAll,200));
-  }
-  console.log('[GDI M21] A11Y enhancements (toast aria-live + icon-btn aria-label) ativo');
 })();
 
 // ═══════════════════════════════════════════════════════════════
