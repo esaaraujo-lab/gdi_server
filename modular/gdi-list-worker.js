@@ -182,16 +182,7 @@ async function handleScan({ id, parentPath, subFolders, pw, initialItems }) {
     if (vids && vids.length) collected.push(...vids);
     inFlight--;
     pump();
-  }).catch((e) => {
-    // ★ H-21 (P12-9): silent .catch(() => {...}) swallowed per-subfolder fetch
-    //    errors (auth/404/timeout/network) — caller saw "scanDone" with no
-    //    indication that N subfolders had failed. Log with folder name so
-    //    the devtools console shows which subfolders failed (without spamming
-    //    the user — these are still best-effort, and the scan continues).
-    console.warn('[gdi-list-worker] listOne failed for subfolder',folder&&(folder.name||'?'),':',e&&e.message||e);
-    inFlight--;
-    pump();
-  });
+  }).catch(() => { inFlight--; pump(); });
 
   function pump() {
     while (inFlight < MAX_CONCURRENCY && i < subFolders.length) {
