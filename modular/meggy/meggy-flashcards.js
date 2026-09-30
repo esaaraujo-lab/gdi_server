@@ -21,42 +21,15 @@
 // ═══════════════════════════════════════════════════════════════
 (function(){
   if(window.__gdiMeggyFlashcards)return;
+  window.__gdiMeggyFlashcards=true;
 
   window.__gdiMeggy = window.__gdiMeggy || {};
 
   // ── Late-bound namespace shortcuts ──
-  // ★ FIX-MEGGY (Task 20-7 #15 / H-35): null-guard window.__gdiMeggy.utils
-  //   BEFORE setting the IIFE guard. Previously the guard was set on the
-  //   line above unconditionally, then `const U = window.__gdiMeggy.utils`
-  //   ran, then `U.CONSTS.LS_SUBJECTS` — if utils failed to load (CDN
-  //   outage, eval error, wrong script-tag order), `U` was undefined and
-  //   `U.CONSTS` threw TypeError. That crashed the entire IIFE AFTER the
-  //   guard had been set, so the loader could never re-init the module on
-  //   a later Bus.onGlobal('modules:ready') retry pass — a hard brick
-  //   requiring page refresh.
-  //   Fix: bail WITHOUT setting the guard when utils is missing. The loader
-  //   gets another shot at calling this IIFE; if utils is still missing it
-  //   bails again, harmlessly. Once utils loads, the guard is set and the
-  //   module inits normally. Strictly safer than the prior pattern in the
-  //   normal case (utils loaded → behaviour identical: one extra typeof
-  //   check), and gracefully degrades in the edge case.
   const U = window.__gdiMeggy.utils;
-  if(!U || !U.CONSTS){
-    console.error('[Meggy] meggy-utils not loaded — aborting flashcards init (will retry on next loader pass)');
-    return;
-  }
-  window.__gdiMeggyFlashcards=true;
   const LS_SUBJECTS = U.CONSTS.LS_SUBJECTS;
   // ★ v1.0.99: serialize gdi-cards-v1 writes to prevent RMW races
   let _cardsWriteChain = Promise.resolve();
-
-  // ★ H-33 (Task P12-6): prefer the centralized window.gdiEsc when available;
-  //   fall back to U.esc (meggy-utils.js — same 5-entity set incl. &#39;)
-  //   for module-load-order edge cases. Late-bound so a future stricter
-  //   gdiEsc (e.g. DOMPurify-based) is picked up automatically. The helper
-  //   text below uses `U.esc)` (closing paren) so the MultiEdit replace_all
-  //   of `esc(` does not recurse into this definition.
-  function esc(s){ return (window.gdiEsc || U.esc)(s); }
 
   // ★ FIX-MEGGY (Task 20-7 #8): pre-indexed cache of gdi-cards-v1 grouped by
   //   discipline→theme. Avoids re-reading localStorage + re-running the O(N)
@@ -68,28 +41,6 @@
   //   _getCardsIndex() references it lazily (at call time, not at declaration).
   let _cardsIndexCache = null;
   function _invalidateCardsIndex(){ _cardsIndexCache = null; }
-
-  // ★ H-17 (Task P12-6): byte-size eviction. The 1000-card count cap
-  //   (FIX-MEGGY Task 20-7 #9) protects against pathological insert
-  //   patterns but NOT against a few cards with very long f/b text
-  //   (500-char cap × 1000 cards × JSON overhead ≈ 1.2MB, dangerously
-  //   close to the 5MB localStorage per-origin quota — combined with
-  //   other LS keys it can blow the quota). Trim oldest 25% when the
-  //   serialized size exceeds 500KB. "Oldest" = first 25% of the array
-  //   (cards are appended in chronological insertion order at every
-  //   write site; manual reordering is not supported). The 1000-card
-  //   count cap remains — eviction is a secondary size-based safety net.
-  const _FC_BYTES_MAX = 500 * 1024; // 500KB
-  function _maybeEvictCardsByBytes(cards){
-    if(!Array.isArray(cards) || cards.length === 0) return cards;
-    let size;
-    try { size = JSON.stringify(cards).length; } catch(e) { return cards; }
-    if(size <= _FC_BYTES_MAX) return cards;
-    const trimCount = Math.max(1, Math.ceil(cards.length * 0.25));
-    const trimmed = cards.slice(trimCount);
-    console.warn('[Meggy FC] gdi-cards-v1 byte-size eviction: trimmed '+trimCount+' oldest cards ('+ (size/1024).toFixed(1) +'KB → '+(JSON.stringify(trimmed).length/1024).toFixed(1)+'KB)');
-    return trimmed;
-  }
   function _getCardsIndex(){
     if(_cardsIndexCache) return _cardsIndexCache;
     const allCards = U.lsGet('gdi-cards-v1', []);
@@ -114,7 +65,7 @@
   function _fcPageCleanup(){
     _activeFcSessions.forEach(bodyEl => {
       if(bodyEl && bodyEl.__fcKeyCleanup){
-        try{ bodyEl.__fcKeyCleanup(); }catch(e){console.warn('[Meggy FC] _fcPageCleanup __fcKeyCleanup failed:', e&&e.message||e)}
+        try{ bodyEl.__fcKeyCleanup(); }catch(_){}
         bodyEl.__fcKeyCleanup = null;
       }
     });
@@ -134,49 +85,25 @@
   //   One observer is shared by all sessions for efficiency — its callback
   //   scans _activeFcSessions and evicts any bodyEl whose isConnected is
   //   false. Created lazily on first session start.
-  // ★ H-32 (Task P12-6): scope to bodyEl's closest stable ancestor (the M9
-  //   panel container — `#gdi-slot-right`, parent of `#gdi-mat-body`) instead
-  //   of `document.body`. The previous `document.body childList+subtree:true`
-  //   config fired the callback on EVERY DOM mutation in the entire page
-  //   (scroll pagination, toast renders, central-panel innerHTML, etc.) —
-  //   hundreds of calls/sec under load (PLAN_PERFORMANCE §6.1). The scoped
-  //   target only fires when bodyEl's siblings or bodyEl itself is added/
-  //   removed — which is the only case we care about (panel close / M9 swap).
-  //   Per-session re-targeting: when a new session starts, if its bodyEl's
-  //   parent differs from the currently-observed target, disconnect and re-
-  //   observe. Falls back to `#gdi-slot-right` then `document.body` if the
-  //   parent is unavailable (e.g. session started before M9 panel mounted).
   let _fcCloseObserver = null;
-  let _fcCloseObserverTarget = null;
-  function _ensureFcCloseObserver(bodyEl){
-    if(typeof MutationObserver === 'undefined') return;
-    // Resolve the closest stable ancestor to observe. Prefer bodyEl.parentNode
-    // (e.g. #gdi-slot-right when bodyEl is #gdi-mat-body), then fall back.
-    var target = bodyEl && bodyEl.parentNode;
-    if(!target) target = document.getElementById('gdi-slot-right') || document.body;
-    // If we already have an observer on the same target, no-op.
-    if(_fcCloseObserver && _fcCloseObserverTarget === target) return;
-    if(!_fcCloseObserver){
-      _fcCloseObserver = new MutationObserver(function(){
-        // Snapshot to avoid mutation during iteration
-        const toClean = [];
-        _activeFcSessions.forEach(function(sBodyEl){
-          if(sBodyEl && !sBodyEl.isConnected) toClean.push(sBodyEl);
-        });
-        toClean.forEach(function(sBodyEl){
-          if(sBodyEl.__fcKeyCleanup){
-            try{ sBodyEl.__fcKeyCleanup(); }catch(e){console.warn('[Meggy FC] _fcCloseObserver __fcKeyCleanup failed:', e&&e.message||e)}
-            sBodyEl.__fcKeyCleanup = null;
-          }
-          _activeFcSessions.delete(sBodyEl);
-        });
+  function _ensureFcCloseObserver(){
+    if(_fcCloseObserver || typeof MutationObserver === 'undefined') return;
+    _fcCloseObserver = new MutationObserver(function(){
+      // Snapshot to avoid mutation during iteration
+      const toClean = [];
+      _activeFcSessions.forEach(bodyEl => {
+        if(bodyEl && !bodyEl.isConnected) toClean.push(bodyEl);
       });
-    } else {
-      _fcCloseObserver.disconnect();
-    }
-    // childList+subtree on the scoped target catches panel-close removals.
-    _fcCloseObserver.observe(target, {childList:true, subtree:true});
-    _fcCloseObserverTarget = target;
+      toClean.forEach(bodyEl => {
+        if(bodyEl.__fcKeyCleanup){
+          try{ bodyEl.__fcKeyCleanup(); }catch(_){}
+          bodyEl.__fcKeyCleanup = null;
+        }
+        _activeFcSessions.delete(bodyEl);
+      });
+    });
+    // childList+subtree on document.body catches panel-close removals.
+    _fcCloseObserver.observe(document.body, {childList:true, subtree:true});
   }
 
   // ── CSS — Flashcards library + session styles (separate from M9-ISA styles) ──
@@ -304,7 +231,7 @@
           discipline=segs[1];
           theme='Geral';
         }
-      }catch(e){console.warn('[Meggy FC] extractDisciplineTheme path parse failed:', e&&e.message||e)}
+      }catch(_){}
     }
     // fallback: heurística no lessonName ("Disciplina - Tema" ou só "Tema")
     if(discipline==='Geral'&&lessonName&&lessonName.length>3){
@@ -322,7 +249,7 @@
     }
     return{discipline,theme};
   }
-  function normPath(p){try{return decodeURIComponent(String(p||''))}catch(e){console.warn('[Meggy FC] normPath decodeURIComponent failed:', e&&e.message||e); return String(p||'')}}
+  function normPath(p){try{return decodeURIComponent(String(p||''))}catch(_){return String(p||'')}}
   function stripExt(s){return String(s||'').replace(/\.[a-z0-9]{1,5}$/i,'').trim()};
 
   // ★ Sistema de Matérias manuais (substitui heurística quando aplicável)
@@ -420,10 +347,7 @@
           const cards = U.lsGet('gdi-cards-v1', []);
           cards.push({id:U.uid(), f, b, due:Date.now()+86400000, box:0, src:'manual:'+lesson, path:urlPath, lesson:lesson, createdAt:Date.now()});
           if(cards.length > 1000) cards.splice(0, cards.length - 1000);
-          // ★ H-17 (Task P12-6): byte-size eviction — trim oldest 25% if serialized
-          //   size exceeds 500KB. Secondary safety net on top of the 1000-card cap.
-          const _evicted = _maybeEvictCardsByBytes(cards);
-          U.lsSet('gdi-cards-v1', _evicted);
+          U.lsSet('gdi-cards-v1', cards);
           // ★ FIX-MEGGY (Task 20-7 #8): invalidate pre-indexed cache after write
           _invalidateCardsIndex();
         }).catch(e=>console.warn('[Meggy] addCard chain error:', e&&e.message));
@@ -483,7 +407,7 @@
         <div class="gdi-fc-disc-head" data-disc-idx="${di}">
           <i class="bi bi-chevron-down gdi-fc-chevron gdi-fc-rotated"></i>
           <i class="bi bi-folder-fill gdi-fc-disc-icon"></i>
-          <b class="gdi-fc-disc-name">${esc(disc)}</b>
+          <b class="gdi-fc-disc-name">${U.esc(disc)}</b>
           <span class="gdi-fc-disc-meta">${discCount} cards · ${themeKeys.length} tema${themeKeys.length>1?'s':''}${discDue?` · <b class="gdi-fc-due">${discDue} p/ revisar</b>`:''}</span>
         </div>
         <div class="gdi-fc-disc-body" style="display:none;"></div>`;
@@ -499,9 +423,9 @@
           <div class="gdi-fc-theme-head" data-disc-idx="${di}" data-theme-idx="${ti}">
             <i class="bi bi-chevron-down gdi-fc-chevron gdi-fc-rotated"></i>
             <i class="bi bi-bookmark-fill gdi-fc-theme-icon"></i>
-            <b class="gdi-fc-theme-name">${esc(theme)}</b>
+            <b class="gdi-fc-theme-name">${U.esc(theme)}</b>
             <span class="gdi-fc-theme-meta">${cardsT.length} cards${dueT?` · <b class="gdi-fc-due">${dueT} p/ revisar</b>`:''}</span>
-            <button class="gdi-mode-btn gdi-fc-theme-study" data-disc-idx="${di}" data-theme-idx="${ti}" title="Estudar este tema" aria-label="Estudar este tema">
+            <button class="gdi-mode-btn gdi-fc-theme-study" data-disc-idx="${di}" data-theme-idx="${ti}" title="Estudar este tema">
               <i class="bi bi-play-fill"></i>
             </button>
           </div>
@@ -637,10 +561,7 @@
         const cards = U.lsGet('gdi-cards-v1', []);
         cards.push(cardData);
         if(cards.length > 1000) cards.splice(0, cards.length - 1000);
-        // ★ H-17 (Task P12-6): byte-size eviction — trim oldest 25% if serialized
-        //   size exceeds 500KB. Secondary safety net on top of the 1000-card cap.
-        const _evicted = _maybeEvictCardsByBytes(cards);
-        U.lsSet('gdi-cards-v1', _evicted);
+        U.lsSet('gdi-cards-v1', cards);
         // ★ FIX-MEGGY (Task 20-7 #8): invalidate pre-indexed cache after write
         _invalidateCardsIndex();
       }).catch(e=>console.warn('[Meggy] saveNewCard chain error:', e&&e.message));
@@ -688,20 +609,20 @@
       body.innerHTML = `
         <div class="gdi-fc-grid">
           ${slice.map(c=>`
-            <div class="gdi-fc-card" data-card-id="${esc(c.id)}" role="button" tabindex="0" aria-label="Flashcard: clique para virar e ver a resposta">
+            <div class="gdi-fc-card" data-card-id="${U.esc(c.id)}">
               <div class="gdi-fc-card-inner">
                 <div class="gdi-fc-card-face gdi-fc-card-front">
                   <div class="gdi-fc-card-label"><i class="bi bi-question-circle"></i> PERGUNTA</div>
-                  <div class="gdi-fc-card-text">${esc(String(c.f).slice(0,300))}</div>
+                  <div class="gdi-fc-card-text">${U.esc(String(c.f).slice(0,300))}</div>
                   <div class="gdi-fc-card-hint"><i class="bi bi-arrow-repeat"></i> clique para virar</div>
                 </div>
                 <div class="gdi-fc-card-face gdi-fc-card-back">
                   <div class="gdi-fc-card-label"><i class="bi bi-check-circle"></i> RESPOSTA</div>
-                  <div class="gdi-fc-card-text">${esc(String(c.b).slice(0,400))}</div>
+                  <div class="gdi-fc-card-text">${U.esc(String(c.b).slice(0,400))}</div>
                   <div class="gdi-fc-card-hint"><i class="bi bi-arrow-repeat"></i> clique para voltar</div>
                 </div>
               </div>
-              <button class="gdi-fc-card-del" data-card-id="${esc(c.id)}" title="Excluir" aria-label="Excluir flashcard">
+              <button class="gdi-fc-card-del" data-card-id="${U.esc(c.id)}" title="Excluir">
                 <i class="bi bi-x-lg"></i>
               </button>
             </div>
@@ -731,12 +652,7 @@
           // ★ v1.0.99: route through _cardsWriteChain
           _cardsWriteChain = _cardsWriteChain.then(() => {
             const cards2 = U.lsGet('gdi-cards-v1', []);
-            const _remaining = cards2.filter(x=>x.id !== id);
-            // ★ H-17 (Task P12-6): byte-size eviction — trim oldest 25% if serialized
-            //   size exceeds 500KB. No-op for typical deletes, but applied for
-            //   consistency with the other write sites.
-            const _evicted = _maybeEvictCardsByBytes(_remaining);
-            U.lsSet('gdi-cards-v1', _evicted);
+            U.lsSet('gdi-cards-v1', cards2.filter(x=>x.id !== id));
             // ★ FIX-MEGGY (Task 20-7 #8): invalidate pre-indexed cache after delete
             _invalidateCardsIndex();
           }).catch(e=>console.warn('[Meggy] deleteCard chain error:', e&&e.message));
@@ -785,7 +701,7 @@
           <div style="font-size:48px;">${pct>=60?'🎉':'📚'}</div>
           <h3 style="color:var(--ferreto-primary,#ff8b9f);font-family:var(--ferreto-font-display,'Poppins',sans-serif);">Sessão concluída!</h3>
           <p style="color:var(--ferreto-text,#e6edf3);font-size:16px;margin-top:8px;"><b style="color:${pct>=60?'#3fb950':'#ff8b8b'};">${hits}/${queue.length}</b> · ${pct}% acerto</p>
-          <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin-top:4px;">${esc(lesson)}</p>
+          <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin-top:4px;">${U.esc(lesson)}</p>
           <button id="gdi-fc-back-list" class="gdi-btn gdi-btn-primary" style="margin-top:14px;"><i class="bi bi-arrow-left"></i> Voltar aos flashcards</button>
         </div>`;
         const back=bodyEl.querySelector('#gdi-fc-back-list');
@@ -795,20 +711,20 @@
       const c=queue[idx];
       bodyEl.innerHTML=`<div class="gdi-fc-session">
         <div class="gdi-fc-session-head">
-          <span>${esc(lesson)} · ${idx+1}/${queue.length}</span>
+          <span>${U.esc(lesson)} · ${idx+1}/${queue.length}</span>
           <span>✓ ${hits} ✗ ${misses}</span>
         </div>
         <div class="gdi-fc-session-stage">
-          <div class="gdi-fc-card gdi-fc-card-large" id="gdi-fc-card" role="button" tabindex="0" aria-label="Flashcard: clique para virar e ver a resposta">
+          <div class="gdi-fc-card gdi-fc-card-large" id="gdi-fc-card">
             <div class="gdi-fc-card-inner">
               <div class="gdi-fc-card-face gdi-fc-card-front">
                 <div class="gdi-fc-card-label"><i class="bi bi-question-circle"></i> PERGUNTA</div>
-                <div class="gdi-fc-card-text">${esc(c.f)}</div>
+                <div class="gdi-fc-card-text">${U.esc(c.f)}</div>
                 <div class="gdi-fc-card-hint"><i class="bi bi-arrow-repeat"></i> clique para virar</div>
               </div>
               <div class="gdi-fc-card-face gdi-fc-card-back">
                 <div class="gdi-fc-card-label"><i class="bi bi-check-circle"></i> RESPOSTA</div>
-                <div class="gdi-fc-card-text">${esc(c.b)}</div>
+                <div class="gdi-fc-card-text">${U.esc(c.b)}</div>
                 <div class="gdi-fc-card-hint"><i class="bi bi-arrow-repeat"></i> clique para voltar</div>
               </div>
             </div>
@@ -817,16 +733,16 @@
         <div id="gdi-fc-grade" class="gdi-fc-session-grade" style="display:none;">
           <p>Como foi?</p>
           <div class="gdi-fc-grade-btns">
-            <button id="gdi-fc-again" class="gdi-mode-btn gdi-fc-btn-again" title="Não sabia (1)" aria-label="Não sabia — repete amanhã">
+            <button id="gdi-fc-again" class="gdi-mode-btn gdi-fc-btn-again" title="Não sabia (1)">
               <i class="bi bi-arrow-counterclockwise"></i> Não sabia<br><small>+1d</small>
             </button>
-            <button id="gdi-fc-hard" class="gdi-mode-btn gdi-fc-btn-hard" title="Quase (2)" aria-label="Quase — repete em 3 dias">
+            <button id="gdi-fc-hard" class="gdi-mode-btn gdi-fc-btn-hard" title="Quase (2)">
               <i class="bi bi-dash-circle"></i> Quase<br><small>+3d</small>
             </button>
-            <button id="gdi-fc-good" class="gdi-btn gdi-btn-primary gdi-fc-btn-good" title="Sabia (3)" aria-label="Sabia — repete em ${window.gdiSrsIntervals?window.gdiSrsIntervals[1]:3} dias">
+            <button id="gdi-fc-good" class="gdi-btn gdi-btn-primary gdi-fc-btn-good" title="Sabia (3)">
               <i class="bi bi-check-circle"></i> Sabia<br><small>+${window.gdiSrsIntervals?window.gdiSrsIntervals[1]:3}d</small>
             </button>
-            <button id="gdi-fc-easy" class="gdi-mode-btn gdi-fc-btn-easy" title="Fácil (4)" aria-label="Fácil — repete em ${Math.round((window.gdiSrsIntervals?window.gdiSrsIntervals[2]:7)*1.5)} dias">
+            <button id="gdi-fc-easy" class="gdi-mode-btn gdi-fc-btn-easy" title="Fácil (4)">
               <i class="bi bi-stars"></i> Fácil<br><small>+${Math.round((window.gdiSrsIntervals?window.gdiSrsIntervals[2]:7)*1.5)}d</small>
             </button>
           </div>
@@ -845,7 +761,7 @@
              the library). No code change needed — this comment is the
              audit per Task 20-7 #14. -->
         <div class="gdi-fc-session-foot">
-          <button id="gdi-fc-skip" title="Pular" aria-label="Pular para o próximo flashcard" class="gdi-fc-skip-btn"><i class="bi bi-arrow-right"></i></button>
+          <button id="gdi-fc-skip" title="Pular" class="gdi-fc-skip-btn"><i class="bi bi-arrow-right"></i></button>
         </div>
       </div>`;
       // vira o card ao clicar
@@ -879,7 +795,7 @@
         //   (gdiGradeCard), so the count is identical before/after the async
         //   chain — reading synchronously gives the actual count.
         let cardCount = 0;
-        try { cardCount = U.lsGet('gdi-cards-v1', []).length; } catch(e) { console.warn('[Meggy FC] gradeCard cardCount read failed:', e&&e.message||e); }
+        try { cardCount = U.lsGet('gdi-cards-v1', []).length; } catch(_) {}
         _cardsWriteChain = _cardsWriteChain.then(() => {
           const cards=U.lsGet('gdi-cards-v1',[]);
           const ci=cards.findIndex(x=>x.id===c.id);
@@ -897,11 +813,7 @@
               cards[ci].box=result.box;
               cards[ci].due=result.due;
               cards[ci].lastReview=result.lastReview;
-              // ★ H-17 (Task P12-6): byte-size eviction — trim oldest 25% if serialized
-              //   size exceeds 500KB. No-op for typical grades (size unchanged), but
-              //   applied for consistency with the other write sites.
-              const _evicted = _maybeEvictCardsByBytes(cards);
-              U.lsSet('gdi-cards-v1', _evicted);
+              U.lsSet('gdi-cards-v1',cards);
             }else{
               console.warn('[Meggy] window.gdiGradeCard not available; SRS update skipped for card', c.id);
             }
@@ -922,7 +834,7 @@
           if(window.gdiAchievements){
             window.gdiAchievements.checkAll({cardsStudied:n,cardsCreated:cardCount});
           }
-        }catch(e){console.warn('[Meggy FC] gradeCard studied-count update failed:', e&&e.message||e)}
+        }catch(_){}
         idx++;draw();
       };
       bodyEl.querySelector('#gdi-fc-again').onclick=()=>gradeCard(1);
@@ -971,7 +883,7 @@
     //   closed (X button / ESC) without finishing the session. The page:change
     //   cleanup only fires on navigation, not on panel close — without this,
     //   the bodyEl + its keydown listener leak until the next page change.
-    _ensureFcCloseObserver(bodyEl);
+    _ensureFcCloseObserver();
     draw();
     // cleanup final quando sessão terminar (idx>=queue.length)
     const _origDraw=draw;
@@ -1049,12 +961,7 @@
           if(c){ c.f = String(c.f||'').slice(0,500); c.b = String(c.b||'').slice(0,500); }
         }
         if(existing.length > 1000) existing.splice(0, existing.length - 1000);
-        // ★ H-17 (Task P12-6): byte-size eviction — trim oldest 25% if serialized
-        //   size exceeds 500KB. Secondary safety net on top of the 1000-card cap.
-        //   addCardsBatch is the biggest growth risk (autoCreateFlashcards can
-        //   add 10+ cards at once from a single lesson's questions).
-        const _evicted = _maybeEvictCardsByBytes(existing);
-        U.lsSet('gdi-cards-v1', _evicted);
+        U.lsSet('gdi-cards-v1', existing);
         // ★ FIX-MEGGY (Task 20-7 #8): invalidate pre-indexed cache after batch add
         _invalidateCardsIndex();
         if(added < cardsArray.length){
