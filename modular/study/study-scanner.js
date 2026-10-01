@@ -542,81 +542,78 @@
   // silently clobber the first → courses lost. Now we (a) wrap RMW in
   // try/catch with one retry, and (b) dedup by `key`/`id`/`path` right
   // before writing so concurrent writes can't introduce duplicates.
-  // ★ v1.0.97 FIX: respeita hidden list local (gdi-hidden-courses-v1) — se o user
-  // removeu um curso, ele NÃO deve ser re-adicionado pelo sync mesmo se o servidor
-  // ainda o retornar (race entre sync e remove, ou remove ainda não propagou).
+  // ★ v1.0.116: syncCoursesFromDrive agora faz REPLACE (não mais merge).
+  // O Drive é a source of truth — o arquivo per-user (<username>.courses.json)
+  // contém a lista autoritativa de cursos do usuário. localStorage agora é só
+  // um cache write-through: a cada sync, substituímos o localStorage pelo que
+  // veio do Drive. Cursos que existiam só no localStorage (adicionados antes
+  // do v1.0.116 e nunca sincronizados) são migrados pra o Drive via
+  // POST /api/courses/add antes do REPLACE.
   async function syncCoursesFromDrive(){
     const LS_MANUAL = 'gdi-manual-courses-v1';
-    const LS_HIDDEN = 'gdi-hidden-courses-v1';  // ★ v1.0.97
-    let d;  // populated by fetch below; referenced by mergeDriveCourses closure
-    // ★ FIX (Task 20-13 #6): local path normalizer — strip trailing slashes
-    //   so '/0:/Cursos' and '/0:/Cursos/' are treated as the same course.
-    //   Matches the normalization added to gdiAddCourseFromDrive /
-    //   doAddCourseFromDrive in study-courses.js. Without this, sync could
-    //   re-add a course that was already in localStorage (or hidden) just
-    //   because the server returned a path with a trailing slash and the
-    //   local copy didn't (or vice-versa).
+    let d;
     const _normPath = function(p){
       p = String(p||'').replace(/\/+$/,'');
       return p || '/';
     };
-    const mergeDriveCourses = function(){
+
+    // ★ v1.0.116 MIGRATION: antes de REPLACE, migramos cursos que existem SÓ no
+    // localStorage (nunca foram pro Drive). Marcados com um Set de paths que o
+    // Drive já retornou — qualquer curso local cujo path NÃO está no Set é
+    // migrado via POST /api/courses/add. Isso garante que cursos adicionados
+    // em versões anteriores (quando add não sincronizava com o Drive) não sejam
+    // perdidos no primeiro REPLACE.
+    const migrateLocalOnlyCourses = async function(drivePaths){
       const local = JSON.parse(localStorage.getItem(LS_MANUAL) || '[]');
-      if(!Array.isArray(local)) throw new Error('localStorage not an array');
-      // ★ FIX (Task 20-13 #6): build localPaths with normalized paths so the
-      //   has() check below catches duplicates regardless of trailing slash.
-      const localPaths = new Set(local.map(c => c && _normPath(c.path)));
-      // ★ v1.0.97: carrega hidden list — cursos aqui NUNCA devem ser re-adicionados
-      // ★ FIX (Task 20-13 #6): normalize hidden paths too so a hidden course
-      //   is skipped even if the server returns it with a different trailing slash.
-      const hiddenList = JSON.parse(localStorage.getItem(LS_HIDDEN) || '[]');
-      const hiddenSet = new Set((Array.isArray(hiddenList) ? hiddenList : []).map(h => _normPath(h)));
-      let added = 0;
-      for(const dc of d.courses){
-        const dcPath = _normPath(dc && dc.coursePath);
-        if(dc && dc.coursePath && !localPaths.has(dcPath)){
-          // ★ v1.0.97: pula se foi hidden localmente (normalized comparison)
-          if(hiddenSet.has(dcPath)){
-            continue;
-          }
-          local.push({
-            id:'mc-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),
-            name:dc.courseName||'Curso', icon:'📁', color:'#5ddeda', goal:60, notes:'',
-            createdAt:dc.addedAt||Date.now(), manual:true, path:dcPath,
-            courseKey:dcPath, pdfCount:dc.pdfCount||0
-          });
-          localPaths.add(dcPath);
-          added++;
-        }
-      }
-      // Dedup pass — resilient against concurrent writes that may have
-      // inserted the same course between our read and our write.
-      // ★ FIX (Task 20-13 #6): dedup by NORMALIZED path (not id) so legacy
-      //   entries with trailing slashes are merged into one. Previously, two
-      //   entries for the same course (one with '/', one without) had different
-      //   ids and both survived dedup — leading to duplicate tiles.
-      const seen = new Set();
-      const deduped = [];
+      if(!Array.isArray(local)) return 0;
+      const driveSet = new Set(drivePaths.map(_normPath));
+      let migrated = 0;
       for(const c of local){
-        if(!c) continue;
-        // Prefer normalized path as the dedup key; fall back to id only if
-        // path is missing (shouldn't happen for manual courses, but defensive).
-        const k = _normPath(c.path) || c.id;
-        if(k){
-          if(seen.has(k)) continue;
-          seen.add(k);
+        if(!c || !c.path) continue;
+        const lp = _normPath(c.path);
+        if(!driveSet.has(lp)){
+          // curso existe só no localStorage — migrar pro Drive
+          try{
+            const r = await fetch('/api/courses/add', {
+              method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({
+                coursePath: lp,
+                courseName: c.name || '',
+                pdfCount: c.pdfCount || 0,
+                icon: c.icon || '',
+                color: c.color || ''
+              })
+            });
+            if(r.ok){
+              migrated++;
+              driveSet.add(lp);  // não migrar de novo
+            }
+          }catch(_){}
         }
-        deduped.push(c);
       }
-      localStorage.setItem(LS_MANUAL, JSON.stringify(deduped));
-      return added;
+      return migrated;
     };
-    // ★ FIX 20-6 #4 (Agent 6): AbortController with 15s timeout. Previously
-    //    the fetch to /api/courses/list had no timeout — if the worker was
-    //    slow/unresponsive (e.g., cold isolate, network blackhole), this
-    //    function would hang indefinitely, blocking the entire user:ready
-    //    chain (autoScanPending only runs after syncCoursesFromDrive resolves
-    //    via .finally()). 15s is generous for a simple list endpoint.
+
+    // ★ v1.0.116: REPLACE localStorage com a lista do Drive (source of truth).
+    const replaceLocalWithDrive = function(){
+      const driveCourses = (d && Array.isArray(d.courses)) ? d.courses : [];
+      const mapped = driveCourses.map(dc => ({
+        id:'mc-'+Date.now()+'-'+Math.random().toString(36).slice(2,9),
+        name: dc.courseName || 'Curso',
+        icon: dc.icon || '📁',
+        color: dc.color || '#5ddeda',
+        goal: 60, notes:'',
+        createdAt: dc.addedAt || Date.now(),
+        manual: true,
+        path: _normPath(dc.coursePath),
+        courseKey: _normPath(dc.coursePath),
+        pdfCount: dc.pdfCount || 0
+      }));
+      localStorage.setItem(LS_MANUAL, JSON.stringify(mapped));
+      return mapped.length;
+    };
+
     const SYNC_COURSES_TIMEOUT_MS = 15000;
     const controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
     const timeoutId = controller ? setTimeout(()=>{ try{ controller.abort(); }catch(_){} }, SYNC_COURSES_TIMEOUT_MS) : null;
@@ -627,59 +624,53 @@
       if(!r.ok){ console.warn('[syncCoursesFromDrive] HTTP', r.status); return; }
       d = await r.json();
       if(!d || !d.ok || !Array.isArray(d.courses)){ console.warn('[syncCoursesFromDrive] bad shape'); return; }
-      let added;
+
+      // ★ v1.0.116: migra cursos que existem só no localStorage (one-time).
+      const drivePaths = d.courses.map(c => _normPath(c && c.coursePath));
+      let migrated = 0;
+      try{
+        migrated = await migrateLocalOnlyCourses(drivePaths);
+        if(migrated > 0){
+          console.log('[GDI v1.0.116] migrados '+migrated+' cursos do localStorage pro Drive');
+          // re-fetch para incluir os migrados
+          const r2 = await fetch('/api/courses/list', fetchOpts);
+          if(r2.ok){
+            const d2 = await r2.json();
+            if(d2 && d2.ok && Array.isArray(d2.courses)) d = d2;
+          }
+        }
+      }catch(e){ console.warn('[syncCoursesFromDrive] migration error:', e && e.message); }
+
+      // ★ v1.0.116: REPLACE localStorage com a lista do Drive.
+      let count = 0;
       try {
-        added = mergeDriveCourses();
+        count = replaceLocalWithDrive();
       } catch(e) {
-        // ★ FIX (Agent 14 Bug 11): do NOT retry on QuotaExceededError — the
-        //    retry re-reads localStorage (same data) and re-writes the SAME
-        //    payload, which will fail with quota again. The retry is futile
-        //    and only delays the inevitable. Just bail out.
         const isQuota = e && (e.name === 'QuotaExceededError' ||
           /quota/i.test(e.message || '') ||
           (typeof DOMException !== 'undefined' && e instanceof DOMException && e.name === 'QuotaExceededError'));
         if(isQuota){
-          console.warn('[syncCoursesFromDrive] QuotaExceededError — aborting merge (no retry):', e && e.message);
+          console.warn('[syncCoursesFromDrive] QuotaExceededError — aborting REPLACE:', e && e.message);
           return 0;
         }
         console.warn('[syncCoursesFromDrive] race detectada, re-lendo:', e && e.message);
-        try {
-          added = mergeDriveCourses();
-        } catch(_){
-          return;
-        }
+        try { count = replaceLocalWithDrive(); } catch(_){ return; }
       }
-      if(added > 0){
-        console.log('[GDI M22] syncCoursesFromDrive: ' + added + ' cursos recuperados do Drive');
-        // ★ FIX (Task 20-13 #7): emit courses:changed so downstream caches
-        //   invalidate. Without this, the memoized collectCourses() in
-        //   study-panel.js (_ccCache, 5s TTL) returns the STALE pre-sync array
-        //   when renderHome's .then() callback fires after sync completes —
-        //   the user would NOT see the freshly-restored course tiles until
-        //   the 5s TTL expired. Similarly, bestInCache (60s TTL) in
-        //   study-courses.js would hold stale entries. The Bus.emit pattern
-        //   matches hideCourse/unhideCourse/addCourse/removeCourse in
-        //   study-courses.js. Guarded with typeof Bus !== 'undefined' since
-        //   the scanner may load before app.min.js defines Bus in edge cases
-        //   (though per load order it shouldn't).
+      if(count > 0 || migrated > 0){
+        console.log('[GDI v1.0.116] syncCoursesFromDrive: '+count+' cursos carregados do Drive (Drive = source of truth)');
         try{
           if(typeof Bus !== 'undefined' && Bus && typeof Bus.emit === 'function'){
-            Bus.emit('courses:changed', {source:'syncCoursesFromDrive', added:added});
+            Bus.emit('courses:changed', {source:'syncCoursesFromDrive', count, migrated});
           }
         }catch(_){}
       }
     }catch(e){
-      // ★ FIX 20-6 #4 (Agent 6): distinguish AbortError (timeout) from network errors
-      //    for diagnostic purposes. Either way, sync is best-effort and failure
-      //    is non-fatal (autoScanPending still runs from .finally()).
       if(e && (e.name === 'AbortError' || /aborted/i.test(e.message||''))){
         console.warn('[syncCoursesFromDrive] timeout após', SYNC_COURSES_TIMEOUT_MS+'ms — abortado');
       }else{
         console.warn('[syncCoursesFromDrive] error:', e && e.message);
       }
     }finally{
-      // ★ FIX 20-6 #4 (Agent 6): always clear the timeout, even on success,
-      //    to prevent the timer from firing on an already-completed request.
       if(timeoutId) clearTimeout(timeoutId);
     }
   }
