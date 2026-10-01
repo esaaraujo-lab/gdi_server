@@ -308,6 +308,31 @@
           }catch(_){}
           // ALWAYS call onProgress after each iteration so UI updates.
           if(onProgress) try{ onProgress(state, doneData); }catch(_){}
+
+          // ★ v1.0.115 FIX BUG (matemagicando not scanned): auto-rescan when a scan
+          // completes with 0 lessons. This is a CLIENT-SIDE safety net complementing
+          // the worker.js fix (which now refuses to cache scanComplete:true on empty
+          // results). For users with a STALE cache from BEFORE v1.0.115, the worker
+          // still has the old `scanComplete:true, lessons:[]` dotfile on Drive — the
+          // worker fix bypasses it (falls through to fresh scan), but if the fresh
+          // scan ALSO returns 0 (e.g., the very first batch found only empty module
+          // folders), we trigger a rescan to force a full rebuild. The rescan clears
+          // the stale dotfiles on Drive, so the NEXT scanCourse() starts from scratch.
+          // One-shot per course per session (guarded by _autoRescanned set) to avoid
+          // infinite loops on genuinely-empty folders.
+          if(allLessons.length === 0 && !state._autoRescanned){
+            state._autoRescanned = true;
+            setScanState(courseKey, state);
+            try{
+              console.warn('[GDI Scanner] scan done with 0 lessons — auto-rescanning:', courseKey);
+              const ok = await rescanCourse(courseKey);
+              if(ok){
+                // Re-run the scan ONCE after rescan clears the dotfiles.
+                // Use a short delay so the worker's rescan write propagates.
+                setTimeout(()=>{ try{ scanCourse(courseKey, onProgress); }catch(_){} }, 1500);
+              }
+            }catch(_){}
+          }
           return state;
         }
 
