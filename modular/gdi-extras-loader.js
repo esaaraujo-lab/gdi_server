@@ -33,7 +33,7 @@
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
   // ★ v1.0.91: bump 92 → 93 (Shaka skin + Pomodoro sidebar + video-in-panel + PDF split + rest mode fix + OCR AI routing + parallel dispatch).
-  const CACHE_VERSION = '117';  // ★ v1.0.114: Fix 3 student-area bugs — (1) Explorar Drives video click downloaded instead of opening player (missing ?a=view); (2) Skip-intro button disappeared after ~15s when intro was short (visibility window extended to max(S+30, 60)); (3) Auto-skip intro on subsequent playlist videos across folders (last-intro fallback + no longer requires Modo Maratona).
+  const CACHE_VERSION = '118';  // ★ v1.0.115: Fix scanner cache-stale bug — courses showed "0 aulas" forever due to stale `scanComplete:true, lessons:[]` cache from transient Drive errors. Worker now requires lessons.length > 0 for cache-hit + refuses to write scanComplete:true on empty results; study-scanner.js auto-triggers rescan on 0-lesson completion.
   window.CACHE_VERSION = CACHE_VERSION;
 
   const MODULES = [
