@@ -33,7 +33,7 @@
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
   // ★ v1.0.91: bump 92 → 93 (Shaka skin + Pomodoro sidebar + video-in-panel + PDF split + rest mode fix + OCR AI routing + parallel dispatch).
-  const CACHE_VERSION = '119';  // ★ v1.0.116: Cursos PER-USER no Drive — <username>.courses.json substitui general_courses.json compartilhado. syncCoursesFromDrive faz REPLACE (Drive = source of truth). Add/remove/write-through no arquivo per-user. Migração one-time de localStorage → Drive.
+  const CACHE_VERSION = '120';  // ★ v1.0.117: Fix 403 ao clicar curso (pasta redirect) + Fix 0 aulas em todos cursos (gate legacy fallback + mirror .gdi-course.json para shared drives read-only + vnd.google-apps.video detection).
   window.CACHE_VERSION = CACHE_VERSION;
 
   const MODULES = [
