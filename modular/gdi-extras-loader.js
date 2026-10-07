@@ -33,7 +33,7 @@
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
   // ★ v1.0.91: bump 92 → 93 (Shaka skin + Pomodoro sidebar + video-in-panel + PDF split + rest mode fix + OCR AI routing + parallel dispatch).
-  const CACHE_VERSION = '126';  // ★ v1.0.119: Fix loader — study-insights.js estava faltando na STUDY_CHAIN (só estava no MODULES array principal, mas a chain manual não tinha). Agora carrega antes do study-panel.js.
+  const CACHE_VERSION = '127';  // ★ v1.0.119: Fix loader — study-insights.js estava faltando na STUDY_CHAIN (só estava no MODULES array principal, mas a chain manual não tinha). Agora carrega antes do study-panel.js.
   window.CACHE_VERSION = CACHE_VERSION;
 
   const MODULES = [
@@ -61,6 +61,7 @@
     'study/study-player-guard.js',   // video stall watchdog
     'study/study-insights.js',       // ★ v1.0.118: Dashboard + Meggy Coach
     'study/study-plan.js',           // ★ v1.0.139: Plano de estudo adaptativo
+    'study/study-notifications.js',  // ★ v1.0.140: Notificações + busca nas notas
     'gdi-player-enhancer.js',        // ★ v1.0.138: Speed memory + keyboard shortcuts + resume prompt
     'study/study-panel.js'           // LAST — shell + home + drives + nav
   ];
@@ -262,6 +263,7 @@
         'study/study-player-guard.js',
         'study/study-insights.js',
         'study/study-plan.js',
+        'study/study-notifications.js',
         'study/study-panel.js'
       ];
 
