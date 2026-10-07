@@ -75,6 +75,8 @@
     //    otherwise _evictOldestLessons still sees an orphan 'at' marker for a
     //    cleared course, breaking eviction ordering.
     try{localStorage.removeItem(LS_LESSONS_PREFIX+courseKey+'__at')}catch(_){}
+    // ★ v1.0.131: limpa pending do localStorage (scan resumido via cliente)
+    try{localStorage.removeItem('gdi-scan-pending-'+courseKey)}catch(_){}
   }
 
   // ── Lessons cache (per course) ──
@@ -239,11 +241,20 @@
     let lastD       = null;  // last successful response (used in catch)
 
     try{
+      // ★ v1.0.131: guarda pending do último poll no localStorage para resumir o scan
+      // sem depender do .gdi-course.json no Drive (que falha em shared drives read-only).
+      const LS_PENDING_PREFIX = 'gdi-scan-pending-';
       while(pollCount < MAX_POLLS){
+        // ★ v1.0.131: lê pending do localStorage e envia no body
+        const savedPending = (() => {
+          try { return JSON.parse(localStorage.getItem(LS_PENDING_PREFIX + courseKey) || 'null'); }
+          catch(_) { return null; }
+        })();
+
         const r = await fetch('/api/courses/scan-progress', {
           method:'POST',
           headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({coursePath: courseKey})
+          body: JSON.stringify({coursePath: courseKey, pending: savedPending || undefined})
         });
         if(!r.ok) throw new Error('HTTP '+r.status);
         const d = await r.json().catch(()=>null);
@@ -251,6 +262,16 @@
         lastD = d;
 
         allLessons = d.lessons || [];
+
+        // ★ v1.0.131: guarda pending retornado pelo servidor no localStorage.
+        // Próximo poll vai enviar esse pending no body para o servidor resumir.
+        try{
+          if(Array.isArray(d.pending) && d.pending.length > 0){
+            localStorage.setItem(LS_PENDING_PREFIX + courseKey, JSON.stringify(d.pending));
+          }else{
+            localStorage.removeItem(LS_PENDING_PREFIX + courseKey);
+          }
+        }catch(_){}
 
         // ★ v1.0.96: distributed scan fields (additive, no breaking changes)
         //   scannedCount = number of folders with valid dotfiles (from server)
@@ -278,6 +299,8 @@
         const isDone   = isCached || d.status === 'done' || d.pendingFolders === 0;
 
         if(isDone){
+          // ★ v1.0.131: limpa pending do localStorage (scan completou)
+          try{localStorage.removeItem(LS_PENDING_PREFIX + courseKey);}catch(_){}
           state.status         = 'done';
           state.scannedCount   = state.totalFolders;
           state.scannedFolders = state.totalFolders;
