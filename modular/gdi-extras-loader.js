@@ -33,7 +33,7 @@
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
   // ★ v1.0.91: bump 92 → 93 (Shaka skin + Pomodoro sidebar + video-in-panel + PDF split + rest mode fix + OCR AI routing + parallel dispatch).
-  const CACHE_VERSION = '121';  // ★ v1.0.118: BIG UPDATE — Dashboard de progresso + Meggy Coach. Novo módulo study-insights.js com analytics (minutos/dia, streak, heatmap, matérias) + IA Coach que analisa dados do aluno e dá recomendações personalizadas.
+  const CACHE_VERSION = '122';  // ★ v1.0.119: Fix loader — study-insights.js estava faltando na STUDY_CHAIN (só estava no MODULES array principal, mas a chain manual não tinha). Agora carrega antes do study-panel.js.
   window.CACHE_VERSION = CACHE_VERSION;
 
   const MODULES = [
@@ -258,6 +258,7 @@
         'study/study-advanced.js',
         'study/study-tabs-legacy.js',
         'study/study-player-guard.js',
+        'study/study-insights.js',
         'study/study-panel.js'
       ];
 
