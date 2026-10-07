@@ -851,6 +851,8 @@
 
       <div id="gdi-insights-container" style="margin-bottom:20px;"></div>
 
+      <div id="gdi-notes-search-container" style="margin-bottom:20px;"></div>
+
       ${courses.length?`
       <div>
         <b style="color:var(--ferreto-text,#f0f6fc);font-size:14px;display:block;margin-bottom:10px;">Continue de onde parou</b>
@@ -918,6 +920,14 @@
       const insightsEl=box.querySelector('#gdi-insights-container');
       if(insightsEl && window.__gdiStudy && window.__gdiStudy.insights && typeof window.__gdiStudy.insights.renderAll==='function'){
         window.__gdiStudy.insights.renderAll(insightsEl);
+      }
+    }catch(_){}
+
+    // ★ v1.0.140: renderiza busca de notas
+    try{
+      const notesEl=box.querySelector('#gdi-notes-search-container');
+      if(notesEl && window.__gdiStudy && window.__gdiStudy.notifications && typeof window.__gdiStudy.notifications.renderSearchUI==='function'){
+        window.__gdiStudy.notifications.renderSearchUI(notesEl);
       }
     }catch(_){}
 
