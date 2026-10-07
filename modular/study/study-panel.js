@@ -371,6 +371,7 @@
   const TAB_GROUPS=[
     {label:null,tabs:[
       {id:'home',icon:'bi-house-door',label:'Início'},
+      {id:'plano',icon:'bi-calendar-check',label:'Plano'},
       {id:'drives',icon:'bi-cloud-arrow-down',label:'Explorar Drives'}
     ]},
     {label:'Praticar',tabs:[
@@ -499,6 +500,14 @@
       return;
     }
     if(currentTab==='home')renderHome(body);
+    else if(currentTab==='plano'){
+      // ★ v1.0.139: Plano de estudo adaptativo
+      if(window.__gdiStudy&&window.__gdiStudy.plan&&typeof window.__gdiStudy.plan.renderAll==='function'){
+        window.__gdiStudy.plan.renderAll(body);
+      }else{
+        body.innerHTML='<div class="gdi-empty-state"><span class="gdi-empty-state-icon">🎯</span><h3>Plano indisponível</h3><p>O módulo de plano não carregou. Tente recarregar a página.</p></div>';
+      }
+    }
     else if(currentTab==='drives')renderDrives(body);
     else if(currentTab==='questoes'){if(window.__gdiStudy&&window.__gdiStudy.questions&&typeof window.__gdiStudy.questions.renderQuestoes==='function')window.__gdiStudy.questions.renderQuestoes(body);else body.innerHTML='<div class="gdi-empty-state"><span class="gdi-empty-state-icon">📝</span><h3>Questões indisponíveis</h3><p>O módulo de questões não carregou. Tente recarregar a página.</p></div>';}
     else if(currentTab==='simulado'){if(window.__gdiStudy&&window.__gdiStudy.questions&&typeof window.__gdiStudy.questions.renderSimulado==='function')window.__gdiStudy.questions.renderSimulado(body);else body.innerHTML='<div class="gdi-empty-state"><span class="gdi-empty-state-icon">⏱️</span><h3>Simulado indisponível</h3><p>O módulo de questões não carregou.</p></div>';}
