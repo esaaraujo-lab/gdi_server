@@ -94,6 +94,7 @@
 .gdi-ai-typing span{width:7px;height:7px;border-radius:50%;background:var(--ferreto-text-muted,#9aa4b8);animation:gdi-ai-typ 1.2s ease infinite;}
 .gdi-ai-typing span:nth-child(2){animation-delay:.2s;} .gdi-ai-typing span:nth-child(3){animation-delay:.4s;}
 @keyframes gdi-ai-typ{0%,60%,100%{opacity:.3;transform:translateY(0);}30%{opacity:1;transform:translateY(-4px);}}
+@keyframes gdi-blink{0%,100%{opacity:1;}50%{opacity:0;}}
 #gdi-ai-input-wrap{display:flex;gap:8px;padding:12px;border-top:1px solid var(--ferreto-border,rgba(255,255,255,.09));background:var(--ferreto-surface-2,rgba(255,255,255,.045));}
 #gdi-ai-input{flex:1;background:var(--ferreto-surface-3,rgba(255,255,255,.08));border:1px solid var(--ferreto-border,rgba(255,255,255,.09));
   border-radius:999px;padding:10px 14px;color:var(--ferreto-text,#f3f5fa);font-size:13.5px;outline:none;font-family:inherit;transition:.15s;}
@@ -600,33 +601,95 @@
     //   removed). Don't append the response or restore input text for a
     //   session that no longer exists (privacy: next user would see it).
     if(_sessionGen !== myGen){ hideTyping(); return; }
-    // 2) fallback servidor /api/ai
+    // 2) fallback servidor /api/ai/stream (STREAMING — texto aparece aos poucos)
     if(!response){
       try{
-        const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
+        // ★ v1.0.141: Usa streaming endpoint. Texto aparece aos poucos como ChatGPT.
+        const r=await fetch('/api/ai/stream',{method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({message:txt,messages:hist})});
-        const data=await r.json();
-        // ★ CYCLE2-7: same race guard after the server fetch await.
         if(_sessionGen !== myGen){ hideTyping(); return; }
-        hideTyping();
-        if(data.ok&&data.response){response=data.response;}
-        else{
-          // ★ CYCLE2-7: don't restore input text or show an error element
-          //   if the session was destroyed mid-fetch.
+
+        if(!r.ok){
+          hideTyping();
           if(_sessionGen !== myGen){ return; }
-          // ★ Fix 7: restore the user's text so they can retry / edit.
           input.value = savedText;
           const errEl=document.createElement('div');errEl.className='gdi-ai-err';
-          errEl.textContent=data.error||'Não consegui responder agora. Tente novamente.';
+          errEl.textContent='Não consegui responder agora. Tente novamente.';
           body.appendChild(errEl);body.scrollTop=body.scrollHeight;
           setTimeout(()=>errEl.remove(),5000);
           return;
         }
+
+        // ★ v1.0.141: Cria o bubble VAZIO e vai preenchendo aos poucos
+        hideTyping();
+        if(_sessionGen !== myGen){ return; }
+        const streamEl=document.createElement('div');
+        streamEl.className='gdi-ai-msg assistant';
+        const bubble=document.createElement('div');
+        bubble.className='gdi-ai-bubble';
+        // cursor piscando enquanto recebe
+        const cursor=document.createElement('span');
+        cursor.className='gdi-stream-cursor';
+        cursor.style.cssText='display:inline-block;width:8px;height:14px;background:var(--ferreto-primary,#ff8b9f);margin-left:2px;animation:gdi-blink 1s steps(2) infinite;vertical-align:text-bottom;';
+        bubble.appendChild(cursor);
+        streamEl.appendChild(bubble);
+        body.appendChild(streamEl);
+        body.scrollTop=body.scrollHeight;
+
+        let fullText='';
+        const reader=r.body.getReader();
+        const decoder=new TextDecoder();
+        let sseBuffer='';
+
+        while(true){
+          const {done,value}=await reader.read();
+          if(done)break;
+          sseBuffer+=decoder.decode(value,{stream:true});
+          const lines=sseBuffer.split('\n');
+          sseBuffer=lines.pop()||'';
+          for(const line of lines){
+            if(!line.startsWith('data: '))continue;
+            const data=line.slice(6).trim();
+            if(data==='[DONE]')continue;
+            try{
+              const parsed=JSON.parse(data);
+              if(parsed.text){
+                fullText+=parsed.text;
+                // Atualiza o bubble — re-renderiza Markdown a cada chunk
+                // (simples: usa textContent com quebras de linha, re-renderiza Markdown no final)
+                cursor.remove();
+                bubble.innerHTML=renderMd(fullText);
+                bubble.appendChild(cursor);
+                body.scrollTop=body.scrollHeight;
+              }
+              if(parsed.error){
+                cursor.remove();
+                bubble.innerHTML='<span style="color:#ff8b8b;">'+esc(parsed.error)+'</span>';
+              }
+            }catch(_){}
+          }
+        }
+
+        // Stream terminou — remove cursor e finaliza
+        cursor.remove();
+        if(_sessionGen !== myGen){ return; }
+        if(fullText){
+          // Re-renderiza Markdown final (com formatação completa)
+          bubble.innerHTML=renderMd(fullText);
+          // Adiciona ao histórico de mensagens
+          addMsg('assistant',fullText);
+          // Remove o bubble temporário (addMsg já adicionou um novo)
+          streamEl.remove();
+          // ★ atualiza banco de memória
+          updateMemory(undefined,{question:txt,response:fullText});
+        }else{
+          bubble.innerHTML='<span style="color:#ff8b8b;">Resposta vazia. Tente novamente.</span>';
+        }
+        body.scrollTop=body.scrollHeight;
+        return;
       }catch(e){
-        // ★ CYCLE2-7: same race guard in the catch (fetch threw mid-flight).
         if(_sessionGen !== myGen){ hideTyping(); return; }
         hideTyping();
-        // ★ Fix 7: restore the user's text so they can retry / edit.
         input.value = savedText;
         const errEl=document.createElement('div');errEl.className='gdi-ai-err';
         errEl.textContent='Erro de conexão. Verifique sua internet.';
