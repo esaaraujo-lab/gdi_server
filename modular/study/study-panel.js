@@ -840,6 +840,8 @@
         </div>
       </div>
 
+      <div id="gdi-insights-container" style="margin-bottom:20px;"></div>
+
       ${courses.length?`
       <div>
         <b style="color:var(--ferreto-text,#f0f6fc);font-size:14px;display:block;margin-bottom:10px;">Continue de onde parou</b>
@@ -901,6 +903,14 @@
         </div>
       </div>`:''}
     `;
+
+    // ★ v1.0.118: renderiza Dashboard + Meggy Coach no container de insights
+    try{
+      const insightsEl=box.querySelector('#gdi-insights-container');
+      if(insightsEl && window.__gdiStudy && window.__gdiStudy.insights && typeof window.__gdiStudy.insights.renderAll==='function'){
+        window.__gdiStudy.insights.renderAll(insightsEl);
+      }
+    }catch(_){}
 
     // bind quick actions (todas apontam para abas que ainda existem)
     box.querySelectorAll('[data-action]').forEach(el=>{
