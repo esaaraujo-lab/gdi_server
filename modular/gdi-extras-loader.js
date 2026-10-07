@@ -33,7 +33,7 @@
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
   // ★ v1.0.91: bump 92 → 93 (Shaka skin + Pomodoro sidebar + video-in-panel + PDF split + rest mode fix + OCR AI routing + parallel dispatch).
-  const CACHE_VERSION = '120';  // ★ v1.0.117: Fix 403 ao clicar curso (pasta redirect) + Fix 0 aulas em todos cursos (gate legacy fallback + mirror .gdi-course.json para shared drives read-only + vnd.google-apps.video detection).
+  const CACHE_VERSION = '121';  // ★ v1.0.118: BIG UPDATE — Dashboard de progresso + Meggy Coach. Novo módulo study-insights.js com analytics (minutos/dia, streak, heatmap, matérias) + IA Coach que analisa dados do aluno e dá recomendações personalizadas.
   window.CACHE_VERSION = CACHE_VERSION;
 
   const MODULES = [
@@ -59,6 +59,7 @@
     'study/study-advanced.js',       // provas/redação/radar
     'study/study-tabs-legacy.js',    // stubs antigos
     'study/study-player-guard.js',   // video stall watchdog
+    'study/study-insights.js',       // ★ v1.0.118: Dashboard + Meggy Coach
     'study/study-panel.js'           // LAST — shell + home + drives + nav
   ];
 
