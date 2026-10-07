@@ -261,7 +261,24 @@
         if(!d || !d.ok) throw new Error((d && d.error) || 'scan falhou');
         lastD = d;
 
-        allLessons = d.lessons || [];
+        // ★ v1.0.137: ACUMULA lessons entre polls (servidor retorna apenas do batch atual).
+        // Antes: allLessons = d.lessons || [] — sobrescrevia, perdendo aulas de polls anteriores.
+        // Agora: merge deduplicando por path.
+        const newLessons = d.lessons || [];
+        if(pollCount === 0){
+          allLessons = newLessons.slice();
+        }else{
+          const existingPaths = new Set(allLessons.map(l => (l.path||l.name||'')));
+          for(const lesson of newLessons){
+            const key = lesson.path || lesson.name || '';
+            if(key && !existingPaths.has(key)){
+              allLessons.push(lesson);
+              existingPaths.add(key);
+            }else if(!key){
+              allLessons.push(lesson);
+            }
+          }
+        }
 
         // ★ v1.0.131: guarda pending retornado pelo servidor no localStorage.
         // Próximo poll vai enviar esse pending no body para o servidor resumir.
