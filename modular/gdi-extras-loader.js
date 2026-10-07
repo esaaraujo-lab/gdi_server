@@ -33,7 +33,7 @@
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
   // ★ v1.0.91: bump 92 → 93 (Shaka skin + Pomodoro sidebar + video-in-panel + PDF split + rest mode fix + OCR AI routing + parallel dispatch).
-  const CACHE_VERSION = '124';  // ★ v1.0.119: Fix loader — study-insights.js estava faltando na STUDY_CHAIN (só estava no MODULES array principal, mas a chain manual não tinha). Agora carrega antes do study-panel.js.
+  const CACHE_VERSION = '125';  // ★ v1.0.119: Fix loader — study-insights.js estava faltando na STUDY_CHAIN (só estava no MODULES array principal, mas a chain manual não tinha). Agora carrega antes do study-panel.js.
   window.CACHE_VERSION = CACHE_VERSION;
 
   const MODULES = [
@@ -60,6 +60,7 @@
     'study/study-tabs-legacy.js',    // stubs antigos
     'study/study-player-guard.js',   // video stall watchdog
     'study/study-insights.js',       // ★ v1.0.118: Dashboard + Meggy Coach
+    'gdi-player-enhancer.js',        // ★ v1.0.138: Speed memory + keyboard shortcuts + resume prompt
     'study/study-panel.js'           // LAST — shell + home + drives + nav
   ];
 
@@ -240,7 +241,7 @@
       // carregando os módulos restantes. Antes já era assim no for-loop sequencial;
       // agora o mesmo comportamento é preservado nas chains paralelas via
       // `loadChain` que nunca rejeita (sempre resuelve com {ok, fail} counts).
-      const CORE_CHAIN = ['gdi-worker-bridge.js', 'storage.js', 'gdi-pdf.js', 'gdi-ui.js'];
+      const CORE_CHAIN = ['gdi-worker-bridge.js', 'storage.js', 'gdi-pdf.js', 'gdi-ui.js', 'gdi-player-enhancer.js'];
       const MEGGY_CHAIN = [
         'meggy/meggy-utils.js',
         'meggy/meggy-pdf-engine.js',
