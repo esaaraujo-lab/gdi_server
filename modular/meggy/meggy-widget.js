@@ -655,10 +655,12 @@
               const parsed=JSON.parse(data);
               if(parsed.text){
                 fullText+=parsed.text;
-                // Atualiza o bubble — re-renderiza Markdown a cada chunk
-                // (simples: usa textContent com quebras de linha, re-renderiza Markdown no final)
+                // ★ v1.0.141: Usa textContent durante streaming (Markdown parcial quebra renderMd).
+                // Só renderiza Markdown no final quando o stream completa.
                 cursor.remove();
-                bubble.innerHTML=renderMd(fullText);
+                // Escapa HTML e preserva quebras de linha
+                const safe=fullText.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+                bubble.innerHTML=safe;
                 bubble.appendChild(cursor);
                 body.scrollTop=body.scrollHeight;
               }
