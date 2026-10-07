@@ -1475,9 +1475,8 @@ window.GDI_MODULES.push({name:'debug',init:function(){
       chev.className='bi bi-chevron-'+(v?'up':'down');
       try{localStorage.setItem(LS_OPEN,v?'1':'0')}catch(_){}
     };
-    // ★ v1.0.142: por padrão a playlist fica ABERTA (antes era recolhida).
-    // Alunos não percebiam que podiam clicar para expandir e não viam as próximas aulas.
-    let open=true;try{open=localStorage.getItem(LS_OPEN)!=='0'}catch(_){}
+    // Playlist fechada por padrão (user request v1.0.143)
+    let open=false;try{open=localStorage.getItem(LS_OPEN)==='1'}catch(_){}
     setOpen(open);
     wrap.querySelector('#gdi-pl-toggle').addEventListener('click',()=>setOpen(body.style.display==='none'));
     const fBtn=wrap.querySelector('#gdi-pl-filter');
