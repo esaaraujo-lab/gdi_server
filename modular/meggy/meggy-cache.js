@@ -686,6 +686,42 @@
     let allText='';
     const pdfTexts=[];
     const pdfErrors=[]; // ★ coleta erros por PDF para diagnóstico
+
+    // ★ v1.0.143: Busca transcrições .md na pasta da aula ANTES dos PDFs.
+    // Se encontrar .md com conteúdo, usa como source text (muito mais rápido que PDF).
+    // Prioridade: .md (transcrição) > PDF (material)
+    try{
+      const _lessonPath=window.location.pathname||'';
+      if(_lessonPath && typeof window.gdiListAllFiles==='function'){
+        const _allFiles=await window.gdiListAllFiles(_lessonPath, window.gdiGetPw?window.gdiGetPw(_lessonPath):'');
+        if(Array.isArray(_allFiles)){
+          const _mdFiles=_allFiles.filter(f=>f && f.name && /\.md$/i.test(f.name));
+          if(_mdFiles.length>0){
+            console.info('[Meggy] v1.0.143: Encontradas '+_mdFiles.length+' transcrições .md — usando como source text');
+            const extractTextFile=window.__gdiMeggy.pdf.extractTextFile;
+            const mdResults=await Promise.allSettled(_mdFiles.map(async f=>{
+              const _url=_lessonPath.endsWith('/')?_lessonPath+encodeURIComponent(f.name):_lessonPath+'/'+encodeURIComponent(f.name);
+              const txt=await extractTextFile(_url);
+              return {name:f.name,text:txt};
+            }));
+            let mdText='';
+            mdResults.forEach(r=>{
+              if(r.status==='fulfilled'&&r.value&&r.value.text&&r.value.text.trim().length>50){
+                mdText+=(mdText?'\n\n---\n\n':'')+r.value.text;
+                pdfTexts.push({name:r.value.name,text:r.value.text});
+              }
+            });
+            if(mdText&&mdText.trim().length>=50){
+              allText=mdText;
+              console.info('[Meggy] v1.0.143: Transcrição .md carregada ('+mdText.length+' chars) — pulando extração de PDF');
+            }
+          }
+        }
+      }
+    }catch(e){console.warn('[Meggy] v1.0.143: Falha ao buscar .md (continuando com PDFs):',e&&e.message);}
+
+    // Se não achou .md (ou achou mas era vazio), extrai dos PDFs
+    if(!allText||allText.trim().length<50){
     // ★ v87-FIX-MEGGY-MODULES BUG 6 (defense in depth): when multiple PDFs
     //    are passed in, prefer the one(s) whose filename matches the current
     //    lesson (realLessonName). This is the SECOND layer of defense after
@@ -756,6 +792,7 @@
       }
       throw new Error(detail);
     }
+    } // fim do if(!allText) — PDF extraction block
     _chainCache[key].allText=allText;
     _chainCache[key].pdfTexts=pdfTexts;
 
