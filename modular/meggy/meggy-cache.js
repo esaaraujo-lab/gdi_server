@@ -691,16 +691,19 @@
     // Se encontrar .md com conteúdo, usa como source text (muito mais rápido que PDF).
     // Prioridade: .md (transcrição) > PDF (material)
     try{
-      const _lessonPath=window.location.pathname||'';
-      if(_lessonPath && typeof window.gdiListAllFiles==='function'){
+      const _rawPath=window.location.pathname||'';
+      // ★ v1.0.144: garantir que o path termina com '/' para o worker reconhecer como folder listing.
+      // Sem a barra, o worker serve a SPA HTML (não JSON) → "invalid JSON response" error.
+      const _lessonPath=_rawPath.endsWith('/')?_rawPath:_rawPath+'/';
+      if(_lessonPath && _lessonPath !== '/' && typeof window.gdiListAllFiles==='function'){
         const _allFiles=await window.gdiListAllFiles(_lessonPath, window.gdiGetPw?window.gdiGetPw(_lessonPath):'');
-        if(Array.isArray(_allFiles)){
+        if(Array.isArray(_allFiles) && _allFiles.length>0){
           const _mdFiles=_allFiles.filter(f=>f && f.name && /\.md$/i.test(f.name));
           if(_mdFiles.length>0){
             console.info('[Meggy] v1.0.143: Encontradas '+_mdFiles.length+' transcrições .md — usando como source text');
             const extractTextFile=window.__gdiMeggy.pdf.extractTextFile;
             const mdResults=await Promise.allSettled(_mdFiles.map(async f=>{
-              const _url=_lessonPath.endsWith('/')?_lessonPath+encodeURIComponent(f.name):_lessonPath+'/'+encodeURIComponent(f.name);
+              const _url=_lessonPath+encodeURIComponent(f.name);
               const txt=await extractTextFile(_url);
               return {name:f.name,text:txt};
             }));
