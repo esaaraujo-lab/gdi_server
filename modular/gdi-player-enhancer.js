@@ -129,18 +129,25 @@
     if(!video||video.__gdiResumePrompt)return;
     video.__gdiResumePrompt=true;
 
-    // Pega o tempo salvo do GDIUser (resume state)
-    let resumeData=null;
-    try{
-      if(window.GDIUser&&typeof window.GDIUser.getResume==='function'){
-        const key=window.location.pathname;
-        resumeData=window.GDIUser.getResume(key);
-      }
-    }catch(_){}
+    // ★ v1.0.142: GDIUser pode não estar pronto ainda. Tentar com retry.
+    function tryShowResume(attempt){
+      if(attempt>10)return; // max 10 tentativas (10s total)
 
-    if(!resumeData||!resumeData.t||resumeData.t<10)return;
-    // Não mostra se o vídeo é menor que o tempo salvo (já terminou)
-    video.addEventListener('loadedmetadata',()=>{
+      let resumeData=null;
+      try{
+        if(window.GDIUser&&typeof window.GDIUser.getResume==='function'){
+          const key=window.location.pathname;
+          resumeData=window.GDIUser.getResume(key);
+        }
+      }catch(_){}
+
+      if(!resumeData||!resumeData.t||resumeData.t<10){
+        // GDIUser não está pronto ou não tem resume — tenta de novo em 1s
+        setTimeout(()=>tryShowResume(attempt+1),1000);
+        return;
+      }
+
+      // Não mostra se o vídeo é menor que o tempo salvo (já terminou)
       if(video.duration&&resumeData.t>=video.duration-5)return;
       if(video.duration&&resumeData.t<10)return;
 
@@ -171,7 +178,10 @@
 
       // Auto-remove após 10s
       setTimeout(()=>{if(prompt.parentElement)prompt.remove();},10000);
-    });
+    }
+
+    // Inicia as tentativas
+    tryShowResume(0);
   }
 
   // ═══ INICIALIZAÇÃO ═══
