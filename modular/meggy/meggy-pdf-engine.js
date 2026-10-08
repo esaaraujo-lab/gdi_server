@@ -395,7 +395,7 @@
       // ★ v87-FIX-MEGGY-MODULES BUG 5: raise page cap 100 -> 500 so Meggy
       //    reads the entirety of large PDFs (user: "deve ler a totalidade
       //    de paginas dos pdfs, para gerar os resumos").
-      const n=Math.min(doc.numPages,500);
+      const n=Math.min(doc.numPages,30); // ★ v1.0.152: 500→30 pages
       let txt='';
 
       for(let i=1;i<=n;i++){
@@ -432,7 +432,7 @@
         txt+=pageText+'\n\n';
         // ★ v87-FIX-MEGGY-MODULES BUG 5: raise per-extraction char cap
         //    50000 -> 200000 so we keep ~4x more text before bailing.
-        if(txt.length>200000)break;
+        if(txt.length>50000)break; // ★ v1.0.152: 200K→50K
       }
 
       // ★ fallback: tenta extrair de annotations/form fields
@@ -460,7 +460,7 @@
       txt=txt.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim();
       // ★ v87-FIX-MEGGY-MODULES BUG 5: keep 200000 chars of final text
       //    (was 50000). 200K chars ≈ 50K tokens — fits modern 128K-context LLMs.
-      const result=txt.slice(0,200000);
+      const result=txt.slice(0,50000); // ★ v1.0.152: 200K→50K
       if(!result||result.length<50){
         // ★ Erro descritivo: PDF provavelmente é escaneado (só imagens)
         // e o OCR também falhou ou não retornou texto útil
