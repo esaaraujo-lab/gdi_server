@@ -777,9 +777,12 @@
         //   - exige ## títulos + ### subtítulos + EXEMPLOS práticos + pegadinhas
         //   - seções ## Pegadinhas de Prova e ## Resumo Rápido ao final
         //   - usa até 40000 chars do material (era 20000)
-        // ★ v87-FIX-MEGGY-MODULES BUG 5: raise summary prompt cap 40000 -> 150000.
-        //    150K chars ≈ 37K tokens (PT ~4 chars/token), fits modern 128K-context LLMs.
-        fn:()=>U.callIsaKeyed('Você é um professor especialista em concursos públicos. Leia TODO o material abaixo e crie um RESUMO PROFUNDO E DETALHADO em Markdown.\n\nREQUISITOS:\n- Mínimo 2000 caracteres (NÃO seja breve)\n- Estruture com ## títulos e ### subtítulos\n- Para CADA tópico: explique o conceito, dê EXEMPLOS práticos, e destaque pegadinhas de prova\n- Use **negrito** para palavras-chave e dispositivos legais\n- Use listas com marcadores para enumerações\n- Inclua uma seção ## Pegadinhas de Prova no final\n- Inclua uma seção ## Resumo Rápido com 5-10 bullets dos pontos mais importantes\n\nNÃO omita nenhum tema. Seja PROFUNDO, não conciso.\n\nMaterial:\n'+allText.slice(0,150000),0)
+        // ★ v1.0.156 FIX: resumo cap 150000 -> 80000. CF Workers free rejeita
+        //    body > 100KB com 403. JSON {message:150K chars} = ~150KB → 403 → callIsa
+        //    retorna null → "não conseguiu gerar o resumo". Pílulas (80K) funcionavam,
+        //    resumo (150K) falhava. Reduzido para 80K (mesmo das pílulas). O worker.js
+        //    agora aceita até 80K (userMsg slice 30K → 80K no v1.0.156).
+        fn:()=>U.callIsaKeyed('Você é um professor especialista em concursos públicos. Leia TODO o material abaixo e crie um RESUMO PROFUNDO E DETALHADO em Markdown.\n\nREQUISITOS:\n- Mínimo 2000 caracteres (NÃO seja breve)\n- Estruture com ## títulos e ### subtítulos\n- Para CADA tópico: explique o conceito, dê EXEMPLOS práticos, e destaque pegadinhas de prova\n- Use **negrito** para palavras-chave e dispositivos legais\n- Use listas com marcadores para enumerações\n- Inclua uma seção ## Pegadinhas de Prova no final\n- Inclua uma seção ## Resumo Rápido com 5-10 bullets dos pontos mais importantes\n\nNÃO omita nenhum tema. Seja PROFUNDO, não conciso.\n\nMaterial:\n'+allText.slice(0,80000),0)
           .then(r=>{if(r&&r.trim()){_chainCache[key].summary=r;saveIsaSummary(lesson,r,_coursePath,_subject);}})
           .catch(e=>console.warn('[Meggy] resumo falhou',e.message))
       });
