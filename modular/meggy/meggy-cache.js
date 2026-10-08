@@ -791,12 +791,11 @@
       }
     });
     if(!allText||allText.trim().length<50){
-      // ★ v1.0.152: Se não conseguiu extrair texto do PDF, usa nome da aula como contexto.
-      // Antes isso era um throw que quebrava tudo. Agora usa fallback e continua.
-      console.warn('[Meggy] v1.0.152: PDF sem texto — usando nome da aula como contexto para IA');
+      // ★ v1.0.152: Fallback — se não conseguiu extrair texto, usa nome da aula.
+      console.warn('[Meggy] v1.0.152: PDF sem texto — usando nome da aula como contexto');
       const _ln = (typeof U.realLessonName === 'function') ? (U.realLessonName('') || '') : '';
-      allText = 'Aula: ' + _ln + '\n\n(O material desta aula não pôde ser extraído automaticamente. Gere um resumo detalhado sobre este tema baseado no nome da aula.)';
-      // Pula o throw — continua para a geração com o nome da aula
+      allText = 'Aula: ' + _ln + '. Gere um resumo detalhado sobre este tema.';
+      // Não faz throw — continua para a geração com allText = nome da aula
       if(false){
       if(pdfErrors.length){
         detail+=' Erros por arquivo:\n';
