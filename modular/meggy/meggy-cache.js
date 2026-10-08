@@ -690,16 +690,15 @@
     const pdfTexts=[];
     const pdfErrors=[]; // ★ coleta erros por PDF para diagnóstico
 
-    // ★ v1.0.145: Busca transcrições .md APENAS se não tem PDFs (items vazio).
-    // Antes, o .md search chamava gdiListAllFiles (30+ segundos) ANTES da extração
-    // de PDF, bloqueando tudo. Agora: se M9 já encontrou PDFs, usa direto.
-    // Só busca .md se items é vazio (pasta sem PDF mas com transcrições).
-    if(!items || items.length === 0){
+    // ★ v1.0.146: Busca transcrições .md SEMPRE (com timeout de 15s).
+    // Prioridade: .md (transcrição) > PDF (material).
+    // v1.0.145 quebrou ao colocar guard if(!items) — pulava .md quando tinha PDF.
+    // Agora busca .md primeiro COM timeout. Se achar .md com conteúdo, usa e pula PDF.
+    // Se não achar ou timeout, cai pra extração de PDF normalmente.
     try{
       const _rawPath=window.location.pathname||'';
       const _lessonPath=_rawPath.endsWith('/')?_rawPath:_rawPath+'/';
       if(_lessonPath && _lessonPath !== '/' && typeof window.gdiListAllFiles==='function'){
-        // Timeout de 15s — se gdiListAllFiles demorar mais, desiste e vai pro PDF
         const _timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 15000));
         const _allFiles = await Promise.race([
           window.gdiListAllFiles(_lessonPath, window.gdiGetPw?window.gdiGetPw(_lessonPath):''),
@@ -708,7 +707,7 @@
         if(Array.isArray(_allFiles) && _allFiles.length>0){
           const _mdFiles=_allFiles.filter(f=>f && f.name && /\.md$/i.test(f.name));
           if(_mdFiles.length>0){
-            console.info('[Meggy] v1.0.145: Encontradas '+_mdFiles.length+' transcrições .md — usando como source text');
+            console.info('[Meggy] v1.0.146: Encontradas '+_mdFiles.length+' transcrições .md — usando como source text');
             const extractTextFile=window.__gdiMeggy.pdf.extractTextFile;
             const mdResults=await Promise.allSettled(_mdFiles.map(async f=>{
               const _url=_lessonPath+encodeURIComponent(f.name);
@@ -724,13 +723,12 @@
             });
             if(mdText&&mdText.trim().length>=50){
               allText=mdText;
-              console.info('[Meggy] v1.0.145: Transcrição .md carregada ('+mdText.length+' chars) — pulando extração de PDF');
+              console.info('[Meggy] v1.0.146: Transcrição .md carregada ('+mdText.length+' chars) — pulando extração de PDF');
             }
           }
         }
       }
-    }catch(e){console.warn('[Meggy] v1.0.145: Falha ao buscar .md (continuando com PDFs):',e&&e.message);}
-    } // fim do if(!items || items.length === 0)
+    }catch(e){console.warn('[Meggy] v1.0.146: Falha ao buscar .md (continuando com PDFs):',e&&e.message);}
 
     // Se não achou .md (ou achou mas era vazio), extrai dos PDFs
     if(!allText||allText.trim().length<50){
