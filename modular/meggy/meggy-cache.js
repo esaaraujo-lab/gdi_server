@@ -690,20 +690,25 @@
     const pdfTexts=[];
     const pdfErrors=[]; // ★ coleta erros por PDF para diagnóstico
 
-    // ★ v1.0.143: Busca transcrições .md na pasta da aula ANTES dos PDFs.
-    // Se encontrar .md com conteúdo, usa como source text (muito mais rápido que PDF).
-    // Prioridade: .md (transcrição) > PDF (material)
+    // ★ v1.0.145: Busca transcrições .md APENAS se não tem PDFs (items vazio).
+    // Antes, o .md search chamava gdiListAllFiles (30+ segundos) ANTES da extração
+    // de PDF, bloqueando tudo. Agora: se M9 já encontrou PDFs, usa direto.
+    // Só busca .md se items é vazio (pasta sem PDF mas com transcrições).
+    if(!items || items.length === 0){
     try{
       const _rawPath=window.location.pathname||'';
-      // ★ v1.0.144: garantir que o path termina com '/' para o worker reconhecer como folder listing.
-      // Sem a barra, o worker serve a SPA HTML (não JSON) → "invalid JSON response" error.
       const _lessonPath=_rawPath.endsWith('/')?_rawPath:_rawPath+'/';
       if(_lessonPath && _lessonPath !== '/' && typeof window.gdiListAllFiles==='function'){
-        const _allFiles=await window.gdiListAllFiles(_lessonPath, window.gdiGetPw?window.gdiGetPw(_lessonPath):'');
+        // Timeout de 15s — se gdiListAllFiles demorar mais, desiste e vai pro PDF
+        const _timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 15000));
+        const _allFiles = await Promise.race([
+          window.gdiListAllFiles(_lessonPath, window.gdiGetPw?window.gdiGetPw(_lessonPath):''),
+          _timeoutPromise
+        ]);
         if(Array.isArray(_allFiles) && _allFiles.length>0){
           const _mdFiles=_allFiles.filter(f=>f && f.name && /\.md$/i.test(f.name));
           if(_mdFiles.length>0){
-            console.info('[Meggy] v1.0.143: Encontradas '+_mdFiles.length+' transcrições .md — usando como source text');
+            console.info('[Meggy] v1.0.145: Encontradas '+_mdFiles.length+' transcrições .md — usando como source text');
             const extractTextFile=window.__gdiMeggy.pdf.extractTextFile;
             const mdResults=await Promise.allSettled(_mdFiles.map(async f=>{
               const _url=_lessonPath+encodeURIComponent(f.name);
@@ -719,12 +724,13 @@
             });
             if(mdText&&mdText.trim().length>=50){
               allText=mdText;
-              console.info('[Meggy] v1.0.143: Transcrição .md carregada ('+mdText.length+' chars) — pulando extração de PDF');
+              console.info('[Meggy] v1.0.145: Transcrição .md carregada ('+mdText.length+' chars) — pulando extração de PDF');
             }
           }
         }
       }
-    }catch(e){console.warn('[Meggy] v1.0.143: Falha ao buscar .md (continuando com PDFs):',e&&e.message);}
+    }catch(e){console.warn('[Meggy] v1.0.145: Falha ao buscar .md (continuando com PDFs):',e&&e.message);}
+    } // fim do if(!items || items.length === 0)
 
     // Se não achou .md (ou achou mas era vazio), extrai dos PDFs
     if(!allText||allText.trim().length<50){
