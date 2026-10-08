@@ -324,7 +324,10 @@
     try{
       d = await r.json();
     }catch(e){
-      throw new Error('cacheGet: invalid JSON response: ' + (e && e.message || e));
+      // ★ v1.0.144: Se a resposta não é JSON (ex: HTML do cache do CF), trata como cache miss.
+      // Antes isso era um throw que quebrava a página inteira. Agora retorna null silenciosamente.
+      console.warn('[Meggy] cacheGet: resposta não-JSON (provavelmente HTML do cache CF), tratando como miss');
+      return null;
     }
     return (d && d.ok && d.cached) ? d.cached : null;
   }
