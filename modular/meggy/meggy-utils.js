@@ -206,19 +206,58 @@
 
   // ── ISA call (POST /api/ai) ──
   async function callIsa(prompt){
-    const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({message:prompt,messages:[]})});
-    if(!r.ok) return null;
-    let data;
+    // ★ v1.0.146: Tenta /api/ai primeiro. Se falhar (502 ou null), tenta /api/ai/stream.
+    // O /api/ai usa racing de 14 modelos (muitos 410/404). O /api/ai/stream usa
+    // z-ai/glm-5.3 diretamente (confirmado ativo). Fallback garante que a IA sempre responda.
+    
+    // Tentativa 1: /api/ai
     try{
-      data=await r.json();
+      const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({message:prompt,messages:[]})});
+      if(r.ok){
+        let data;
+        try{data=await r.json();}catch(e){data=null;}
+        if(data&&data.ok&&data.response){
+          return data.response;
+        }
+      }
+    }catch(e){/* continua pro fallback */}
+    
+    // Tentativa 2: /api/ai/stream (streaming — lê até terminar)
+    console.info('[Meggy] callIsa: /api/ai falhou, tentando /api/ai/stream...');
+    try{
+      const r2=await fetch('/api/ai/stream',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({message:prompt,messages:[]})});
+      if(r2.ok&&r2.body){
+        const reader=r2.body.getReader();
+        const decoder=new TextDecoder();
+        let buffer='';
+        let fullText='';
+        while(true){
+          const {done,value}=await reader.read();
+          if(done)break;
+          buffer+=decoder.decode(value,{stream:true});
+          const lines=buffer.split('\n');
+          buffer=lines.pop()||'';
+          for(const line of lines){
+            if(!line.startsWith('data: '))continue;
+            const d=line.slice(6).trim();
+            if(d==='[DONE]')continue;
+            try{
+              const parsed=JSON.parse(d);
+              if(parsed.text)fullText+=parsed.text;
+            }catch(_){}
+          }
+        }
+        if(fullText&&fullText.trim().length>10){
+          return fullText;
+        }
+      }
     }catch(e){
-      // ★ v1.0.146: se a resposta é HTML (não JSON), retorna null em vez de crashar
-      console.warn('[Meggy] callIsa: resposta não-JSON, ignorando');
-      return null;
+      console.warn('[Meggy] callIsa: /api/ai/stream também falhou:',e.message);
     }
-    if(!data.ok)throw new Error(data.error||'Meggy indisponível');
-    return data.response||'';
+    
+    return null;
   }
   // callIsa para tarefas paralelas — SEM header customizado (evita CORS)
   // O worker já faz round-robin entre as chaves NVIDIA automaticamente.
