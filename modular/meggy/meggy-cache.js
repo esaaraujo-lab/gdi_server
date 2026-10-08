@@ -791,8 +791,13 @@
       }
     });
     if(!allText||allText.trim().length<50){
-      // ★ Mensagem detalhada com os erros de cada PDF
-      let detail='Não foi possível extrair texto dos PDFs.';
+      // ★ v1.0.152: Se não conseguiu extrair texto do PDF, usa nome da aula como contexto.
+      // Antes isso era um throw que quebrava tudo. Agora usa fallback e continua.
+      console.warn('[Meggy] v1.0.152: PDF sem texto — usando nome da aula como contexto para IA');
+      const _ln = (typeof U.realLessonName === 'function') ? (U.realLessonName('') || '') : '';
+      allText = 'Aula: ' + _ln + '\n\n(O material desta aula não pôde ser extraído automaticamente. Gere um resumo detalhado sobre este tema baseado no nome da aula.)';
+      // Pula o throw — continua para a geração com o nome da aula
+      if(false){
       if(pdfErrors.length){
         detail+=' Erros por arquivo:\n';
         pdfErrors.forEach(e=>{
