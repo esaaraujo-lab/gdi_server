@@ -206,25 +206,11 @@
 
   // ── ISA call (POST /api/ai) ──
   async function callIsa(prompt){
-    // ★ v1.0.146: Tenta /api/ai primeiro. Se falhar (502 ou null), tenta /api/ai/stream.
-    // O /api/ai usa racing de 14 modelos (muitos 410/404). O /api/ai/stream usa
-    // z-ai/glm-5.3 diretamente (confirmado ativo). Fallback garante que a IA sempre responda.
-    
-    // Tentativa 1: /api/ai
-    try{
-      const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({message:prompt,messages:[]})});
-      if(r.ok){
-        let data;
-        try{data=await r.json();}catch(e){data=null;}
-        if(data&&data.ok&&data.response){
-          return data.response;
-        }
-      }
-    }catch(e){/* continua pro fallback */}
-    
-    // Tentativa 2: /api/ai/stream (streaming — lê até terminar)
-    console.info('[Meggy] callIsa: /api/ai falhou, tentando /api/ai/stream...');
+    // ★ v1.0.146: USA /api/ai/stream DIRETAMENTE (pula /api/ai que falha com 502).
+    // O /api/ai usa racing de 14 modelos NVIDIA (muitos 410/404) → sempre falha.
+    // O /api/ai/stream usa z-ai/glm-5.3 diretamente (confirmado ativo e rápido).
+    // Antes tentava /api/ai primeiro → desperdiçava 20s esperando 502 antes do fallback.
+    // /api/ai/stream DIRETAMENTE (sem tentar /api/ai antes)
     try{
       const r2=await fetch('/api/ai/stream',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({message:prompt,messages:[]})});
