@@ -1,0 +1,21 @@
+name = "mimi-mimos"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = ".vercel/output/static"
+
+[vars]
+# Non-sensitive config (Pix key and merchant info come from D1 pixConfig)
+MERCHANT_NAME = "FABIANA ARAUJO"
+MERCHANT_CITY = "SAO PAULO"
+WHATSAPP_NUMBER = "5511958546078"
+
+# Admin auth (SHA-256 hash — not reversible)
+# To change password: echo -n "SALT + YOUR_PASSWORD" | sha256sum
+ADMIN_SALT = "mimi_mimos_2026_luxury_parfumerie_salt_x9k"
+ADMIN_PASS_HASH = "80d6e227beaa8e47b15965e737bc6d01f36578c7f482de31ff1675409f9ce4a1"
+
+# Cloudflare D1 Database
+[[d1_databases]]
+binding = "DB"
+database_name = "mimi_db"
+database_id = "598d9e00-92ba-4c6c-81b6-dc4a0a534e2e"
