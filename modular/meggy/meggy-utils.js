@@ -206,11 +206,20 @@
 
   // ── ISA call (POST /api/ai) ──
   async function callIsa(prompt){
-    // ★ v1.0.146: USA /api/ai/stream DIRETAMENTE (pula /api/ai que falha com 502).
-    // O /api/ai usa racing de 14 modelos NVIDIA (muitos 410/404) → sempre falha.
-    // O /api/ai/stream usa z-ai/glm-5.3 diretamente (confirmado ativo e rápido).
-    // Antes tentava /api/ai primeiro → desperdiçava 20s esperando 502 antes do fallback.
-    // /api/ai/stream DIRETAMENTE (sem tentar /api/ai antes)
+    // ★ v1.0.153: Tenta /api/ai PRIMEIRO (handleAi do v117 funciona).
+    // Se falhar (502/null), tenta /api/ai/stream (NVIDIA direto).
+    try{
+      const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({message:prompt,messages:[]})});
+      if(r.ok){
+        let data;
+        try{data=await r.json();}catch(e){data=null;}
+        if(data&&data.ok&&data.response){
+          return data.response;
+        }
+      }
+    }catch(e){/* fallback */}
+    // Fallback: /api/ai/stream
     try{
       const r2=await fetch('/api/ai/stream',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({message:prompt,messages:[]})});
@@ -229,25 +238,15 @@
             if(!line.startsWith('data: '))continue;
             const d=line.slice(6).trim();
             if(d==='[DONE]')continue;
-            try{
-              const parsed=JSON.parse(d);
-              if(parsed.text)fullText+=parsed.text;
-            }catch(_){}
+            try{const p=JSON.parse(d);if(p.text)fullText+=p.text;}catch(_){}
           }
         }
-        if(fullText&&fullText.trim().length>10){
-          return fullText;
-        }
+        if(fullText&&fullText.trim().length>10)return fullText;
       }
-    }catch(e){
-      console.warn('[Meggy] callIsa: /api/ai/stream também falhou:',e.message);
-    }
-    
+    }catch(e){console.warn('[Meggy] callIsa stream falhou:',e.message);}
     return null;
   }
-  // callIsa para tarefas paralelas — SEM header customizado (evita CORS)
-  // O worker já faz round-robin entre as chaves NVIDIA automaticamente.
-  // Requisições paralelas naturalmente usam chaves diferentes.
+
   async function callIsaKeyed(prompt,keyHint){
     return callIsa(prompt);
   }
