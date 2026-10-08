@@ -810,7 +810,11 @@
         if(hasPdfjs)detail+='• O PDF pode estar corrompido ou criptografado.\n';
         if(!hasHttp&&!hasScanned&&!hasPdfjs)detail+='• Tente abrir o PDF no navegador para confirmar que carrega normalmente.\n';
       }
-      throw new Error(detail);
+      // ★ v1.0.151: Se não conseguiu extrair texto do PDF (escaneado/OCR falhou),
+      // usa o nome da aula como contexto mínimo para a IA gerar um resumo.
+      console.warn('[Meggy] v1.0.151: PDF sem texto extraível — usando nome da aula como contexto');
+      const _lessonName = (typeof U.realLessonName === 'function') ? (U.realLessonName('') || '') : '';
+      allText = 'Aula: ' + _lessonName + '\n\n(O PDF desta aula é escaneado e não foi possível extrair texto. Gere um resumo baseado no tema da aula.)';
     }
     } // fim do if(!allText) — PDF extraction block
     _chainCache[key].allText=allText;
