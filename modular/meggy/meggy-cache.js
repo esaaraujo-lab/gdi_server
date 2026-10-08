@@ -738,7 +738,17 @@
     //    the gdi-core.js M9 panel filter — if items slip through here (e.g.
     //    from regenerate() or another caller), we still keep only the
     //    lesson-matching PDFs so Meggy doesn't mix content from 5 lessons.
-    let itemsToRead = items;
+    // ★ v1.0.148: Filtra PDFs que são resumos antigos de IA (resumo_ia.pdf).
+    // Esses PDFs são escaneados (só imagens) e fazem o OCR travar por 5+ minutos.
+    // Não são material de aula — são resumos gerados anteriormente pela Meggy.
+    let itemsToRead = (items||[]).filter(it => {
+      const nm = (it && it.name || '').toLowerCase();
+      if (nm.includes('resumo_ia') || nm.includes('resumo de ia') || nm.includes('resumo-de-ia')) {
+        console.info('[Meggy] v1.0.148: Pulando PDF de resumo de IA:', it.name);
+        return false;
+      }
+      return true;
+    });
     if(items && items.length > 1){
       let lessonName = '';
       try{ lessonName = (typeof U.realLessonName === 'function') ? (U.realLessonName('') || '') : ''; }catch(_){ lessonName=''; }
