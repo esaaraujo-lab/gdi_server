@@ -560,7 +560,7 @@
   // Cache em memória para evitar regenerar na mesma sessão
   let _chainCache={};
   // ★ Sprint 6: LRU no _chainCache (limita a 5 aulas em memória)
-  const _chainCacheMax=5;
+  const _chainCacheMax=10;  // ★ FASE 0: era 5 — bump para 10 reduz Drive reads em sessões longas (aluno navegando entre 6+ aulas). Memória: ~5KB/entry × 10 = 50KB (negligenciável).
   // ★ v80-FIX-MEGGY BUG 5: per-key in-flight promise map. Concurrent calls
   //    to generateAll (e.g. user clicks Resumo then Questões fast) share the
   //    same in-flight promise — avoids duplicate PDF extraction + API calls.
@@ -777,12 +777,13 @@
         //   - exige ## títulos + ### subtítulos + EXEMPLOS práticos + pegadinhas
         //   - seções ## Pegadinhas de Prova e ## Resumo Rápido ao final
         //   - usa até 40000 chars do material (era 20000)
-        // ★ v1.0.156 FIX: resumo cap 150000 -> 80000. CF Workers free rejeita
-        //    body > 100KB com 403. JSON {message:150K chars} = ~150KB → 403 → callIsa
-        //    retorna null → "não conseguiu gerar o resumo". Pílulas (80K) funcionavam,
-        //    resumo (150K) falhava. Reduzido para 80K (mesmo das pílulas). O worker.js
-        //    agora aceita até 80K (userMsg slice 30K → 80K no v1.0.156).
-        fn:()=>U.callIsaKeyed('Você é um professor especialista em concursos públicos. Leia TODO o material abaixo e crie um RESUMO PROFUNDO E DETALHADO em Markdown.\n\nREQUISITOS:\n- Mínimo 2000 caracteres (NÃO seja breve)\n- Estruture com ## títulos e ### subtítulos\n- Para CADA tópico: explique o conceito, dê EXEMPLOS práticos, e destaque pegadinhas de prova\n- Use **negrito** para palavras-chave e dispositivos legais\n- Use listas com marcadores para enumerações\n- Inclua uma seção ## Pegadinhas de Prova no final\n- Inclua uma seção ## Resumo Rápido com 5-10 bullets dos pontos mais importantes\n\nNÃO omita nenhum tema. Seja PROFUNDO, não conciso.\n\nMaterial:\n'+allText.slice(0,80000),0)
+        // ★ v1.0.158 FASE 0 bug #2: resumo cap restaurado 80000 -> 150000.
+        //    A redução para 80K no v1.0.156 foi baseada em diagnóstico ERRADO: pensava-se
+        //    que CF Workers free rejeitava body >100KB com 403. Na verdade, CF aceita
+        //    100MB (erro seria 413, não 403). O 403 vinha de upstream (NVIDIA/handleAi).
+        //    Agora que o handleAi racing tem fallback callUnifiedAi (v1.0.146+), o 403
+        //    não ocorre mais. Resumo volta a ser PROFUNDO (150K chars ≈ 37K tokens).
+        fn:()=>U.callIsaKeyed('Você é um professor especialista em concursos públicos. Leia TODO o material abaixo e crie um RESUMO PROFUNDO E DETALHADO em Markdown.\n\nREQUISITOS:\n- Mínimo 2000 caracteres (NÃO seja breve)\n- Estruture com ## títulos e ### subtítulos\n- Para CADA tópico: explique o conceito, dê EXEMPLOS práticos, e destaque pegadinhas de prova\n- Use **negrito** para palavras-chave e dispositivos legais\n- Use listas com marcadores para enumerações\n- Inclua uma seção ## Pegadinhas de Prova no final\n- Inclua uma seção ## Resumo Rápido com 5-10 bullets dos pontos mais importantes\n\nNÃO omita nenhum tema. Seja PROFUNDO, não conciso.\n\nMaterial:\n'+allText.slice(0,150000),0)
           .then(r=>{if(r&&r.trim()){_chainCache[key].summary=r;saveIsaSummary(lesson,r,_coursePath,_subject);}})
           .catch(e=>console.warn('[Meggy] resumo falhou',e.message))
       });
