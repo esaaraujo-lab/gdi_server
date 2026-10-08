@@ -324,9 +324,7 @@
     try{
       d = await r.json();
     }catch(e){
-      // ★ v1.0.144: Se a resposta não é JSON (ex: HTML do cache do CF), trata como cache miss.
-      // Antes isso era um throw que quebrava a página inteira. Agora retorna null silenciosamente.
-      console.warn('[Meggy] cacheGet: resposta não-JSON (provavelmente HTML do cache CF), tratando como miss');
+      console.warn('[Meggy] cacheGet: resposta não-JSON, tratando como miss');
       return null;
     }
     return (d && d.ok && d.cached) ? d.cached : null;
@@ -689,64 +687,15 @@
     let allText='';
     const pdfTexts=[];
     const pdfErrors=[]; // ★ coleta erros por PDF para diagnóstico
-
-    // ★ v1.0.146: Busca transcrições .md SEMPRE (com timeout de 15s).
-    // Prioridade: .md (transcrição) > PDF (material).
-    // v1.0.145 quebrou ao colocar guard if(!items) — pulava .md quando tinha PDF.
-    // Agora busca .md primeiro COM timeout. Se achar .md com conteúdo, usa e pula PDF.
-    // Se não achar ou timeout, cai pra extração de PDF normalmente.
-    try{
-      const _rawPath=window.location.pathname||'';
-      const _lessonPath=_rawPath.endsWith('/')?_rawPath:_rawPath+'/';
-      if(_lessonPath && _lessonPath !== '/' && typeof window.gdiListAllFiles==='function'){
-        const _timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 15000));
-        const _allFiles = await Promise.race([
-          window.gdiListAllFiles(_lessonPath, window.gdiGetPw?window.gdiGetPw(_lessonPath):''),
-          _timeoutPromise
-        ]);
-        if(Array.isArray(_allFiles) && _allFiles.length>0){
-          const _mdFiles=_allFiles.filter(f=>f && f.name && /\.md$/i.test(f.name));
-          if(_mdFiles.length>0){
-            console.info('[Meggy] v1.0.146: Encontradas '+_mdFiles.length+' transcrições .md — usando como source text');
-            const extractTextFile=window.__gdiMeggy.pdf.extractTextFile;
-            const mdResults=await Promise.allSettled(_mdFiles.map(async f=>{
-              const _url=_lessonPath+encodeURIComponent(f.name);
-              const txt=await extractTextFile(_url);
-              return {name:f.name,text:txt};
-            }));
-            let mdText='';
-            mdResults.forEach(r=>{
-              if(r.status==='fulfilled'&&r.value&&r.value.text&&r.value.text.trim().length>50){
-                mdText+=(mdText?'\n\n---\n\n':'')+r.value.text;
-                pdfTexts.push({name:r.value.name,text:r.value.text});
-              }
-            });
-            if(mdText&&mdText.trim().length>=50){
-              allText=mdText;
-              console.info('[Meggy] v1.0.146: Transcrição .md carregada ('+mdText.length+' chars) — pulando extração de PDF');
-            }
-          }
-        }
-      }
-    }catch(e){console.warn('[Meggy] v1.0.146: Falha ao buscar .md (continuando com PDFs):',e&&e.message);}
-
-    // Se não achou .md (ou achou mas era vazio), extrai dos PDFs
-    if(!allText||allText.trim().length<50){
     // ★ v87-FIX-MEGGY-MODULES BUG 6 (defense in depth): when multiple PDFs
     //    are passed in, prefer the one(s) whose filename matches the current
     //    lesson (realLessonName). This is the SECOND layer of defense after
     //    the gdi-core.js M9 panel filter — if items slip through here (e.g.
     //    from regenerate() or another caller), we still keep only the
     //    lesson-matching PDFs so Meggy doesn't mix content from 5 lessons.
-    // ★ v1.0.148: Filtra PDFs que são resumos antigos de IA (resumo_ia.pdf).
-    // Esses PDFs são escaneados (só imagens) e fazem o OCR travar por 5+ minutos.
-    // Não são material de aula — são resumos gerados anteriormente pela Meggy.
     let itemsToRead = (items||[]).filter(it => {
       const nm = (it && it.name || '').toLowerCase();
-      if (nm.includes('resumo_ia') || nm.includes('resumo de ia') || nm.includes('resumo-de-ia')) {
-        console.info('[Meggy] v1.0.148: Pulando PDF de resumo de IA:', it.name);
-        return false;
-      }
+      if (nm.includes('resumo_ia')) { console.info('[Meggy] Pulando PDF de resumo de IA:', it.name); return false; }
       return true;
     });
     if(items && items.length > 1){
@@ -791,12 +740,8 @@
       }
     });
     if(!allText||allText.trim().length<50){
-      // ★ v1.0.152: Fallback — se não conseguiu extrair texto, usa nome da aula.
-      console.warn('[Meggy] v1.0.152: PDF sem texto — usando nome da aula como contexto');
-      const _ln = (typeof U.realLessonName === 'function') ? (U.realLessonName('') || '') : '';
-      allText = 'Aula: ' + _ln + '. Gere um resumo detalhado sobre este tema.';
-      // Não faz throw — continua para a geração com allText = nome da aula
-      if(false){
+      // ★ Mensagem detalhada com os erros de cada PDF
+      let detail='Não foi possível extrair texto dos PDFs.';
       if(pdfErrors.length){
         detail+=' Erros por arquivo:\n';
         pdfErrors.forEach(e=>{
@@ -814,13 +759,8 @@
         if(hasPdfjs)detail+='• O PDF pode estar corrompido ou criptografado.\n';
         if(!hasHttp&&!hasScanned&&!hasPdfjs)detail+='• Tente abrir o PDF no navegador para confirmar que carrega normalmente.\n';
       }
-      // ★ v1.0.151: Se não conseguiu extrair texto do PDF (escaneado/OCR falhou),
-      // usa o nome da aula como contexto mínimo para a IA gerar um resumo.
-      console.warn('[Meggy] v1.0.151: PDF sem texto extraível — usando nome da aula como contexto');
-      const _lessonName = (typeof U.realLessonName === 'function') ? (U.realLessonName('') || '') : '';
-      allText = 'Aula: ' + _lessonName + '\n\n(O PDF desta aula é escaneado e não foi possível extrair texto. Gere um resumo baseado no tema da aula.)';
+      throw new Error(detail);
     }
-    } // fim do if(!allText) — PDF extraction block
     _chainCache[key].allText=allText;
     _chainCache[key].pdfTexts=pdfTexts;
 
@@ -905,12 +845,12 @@
       });
     }
 
-    // ★ v1.0.146: EXECUTA TAREFAS SEQUENCIALMENTE (não paralelo).
-    // Antes usava Promise.allSettled (paralelo) que excedia o limite de subrequests
-    // do CF Workers quando cada callIsa faz fetch para NVIDIA. Sequencial garante
-    // que cada chamada complete antes da próxima começar.
-    for(const task of allTasks){
-      try{ await task.fn(); }catch(e){ console.warn('[Meggy] task falhou:', e.message); }
+    // ★ EXECUTA TODAS AS TAREFAS AO MESMO TEMPO (paralelismo)
+    // Se OpenRouter estiver configurado no worker, cada callIsa automaticamente
+    // dispara 3 modelos free em paralelo (race) — primeiro a responder vence.
+    // Isso significa que resumo+pílulas+questões(N PDFs) = 2+N tarefas × 3 modelos = race máximo.
+    if(allTasks.length>0){
+      await Promise.allSettled(allTasks.map(t=>t.fn()));
     }
 
     // finaliza: flashcards + salva no Drive
