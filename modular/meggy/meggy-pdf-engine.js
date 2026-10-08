@@ -452,42 +452,8 @@
       }
 
       // ★ v1.0.152: OCR DESATIVADO — Tesseract bloqueia a thread por 5+ min.
-      // Se o PDF não tem texto selecionável, pula direto para o fallback (nome da aula).
-      // O fallback no meggy-cache.js usa o nome da aula como contexto para a IA.
-      if(false && (!txt.trim()||txt.trim().length<50)){
-      if(!txt.trim()||txt.trim().length<50){
-        const ocrMaxPages=Math.min(doc.numPages,15);
-        if(progressCb)progressCb({phase:'ocr-init',page:0,total:ocrMaxPages,engine:useAiOcr?'ai-then-tesseract':'tesseract'});
-        try{
-          let ocrTxt='';
-          for(let i=1;i<=ocrMaxPages;i++){
-            if(progressCb)progressCb({phase:'ocr-page',page:i,total:ocrMaxPages,progress:0,engine:useAiOcr?'ai-then-tesseract':'tesseract'});
-            let pageTxt='';
-            try{
-              pageTxt=await ocrPdfPage(pdfjs,doc,i,(pNum,pTotal,p)=>{
-                if(progressCb)progressCb({phase:'ocr-page',page:pNum,total:pTotal,progress:p,engine:useAiOcr?'ai-then-tesseract':'tesseract'});
-              },{useAiOcr:useAiOcr});
-            }catch(ocrErr){
-              console.warn('[Meggy] OCR falhou na página',i,'(não crítico):',ocrErr.message);
-              pageTxt='';
-            }
-            ocrTxt+=pageTxt+'\n\n';
-            // ★ v87-FIX-MEGGY-MODULES BUG 5: raise OCR per-extraction cap
-            //    50000 -> 200000 to match text-extraction limit.
-            if(ocrTxt.length>200000)break;
-          }
-          if(ocrTxt.trim().length>50){
-            // sucesso! OCR extraiu texto
-            // (doc.destroy() agora tratado pelo finally — v80-FIX-MEGGY BUG 2)
-            if(progressCb)progressCb({phase:'ocr-done',chars:ocrTxt.length,engine:useAiOcr?'ai-then-tesseract':'tesseract'});
-            // ★ v87-FIX-MEGGY-MODULES BUG 5: OCR also keeps up to 200K chars
-            return ocrTxt.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim().slice(0,200000);
-          }
-        }catch(ocrErr){
-          console.warn('[Meggy] OCR falhou:',ocrErr.message);
-          // continua para o erro descritivo abaixo
-        }
-      }
+      // Se o PDF não tem texto selecionável, retorna vazio e o meggy-cache.js
+      // usa o nome da aula como fallback para a IA gerar o resumo.
 
       // (doc.destroy() agora tratado pelo finally — v80-FIX-MEGGY BUG 2)
       // limpa texto: remove espaços excessivos, decodifica entidades
