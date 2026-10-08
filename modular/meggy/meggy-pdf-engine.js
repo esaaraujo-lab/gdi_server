@@ -341,7 +341,7 @@
     //    in the background and its finally block fires when it eventually
     //    settles. This prevents the PDFDocumentProxy leak that FIX-MEGGY
     //    #22 (Agent 7) explicitly guarded against.
-    const EXTRACT_TIMEOUT_MS=180000; // ★ v1.0.146: 60s→180s — PDFs grandes precisam de mais tempo
+    const EXTRACT_TIMEOUT_MS=60000; // ★ v1.0.146: 60s→180s — PDFs grandes precisam de mais tempo
     let _t=null;
     const _timeout=new Promise(function(_,reject){
       _t=setTimeout(function(){
