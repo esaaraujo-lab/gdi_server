@@ -1,0 +1,6 @@
+var scriptUrl = 'httpswww.youtube.comsplayerf2999a12www-widgetapi.vflsetwww-widgetapi.js';try{var ttPolicy=window.trustedTypes.createPolicy(youtube-widget-api,{createScriptURLfunction(x){return x}});scriptUrl=ttPolicy.createScriptURL(scriptUrl)}catch(e){}var YT;if(!window[YT])YT={loading0,loaded0};var YTConfig;if(!window[YTConfig])YTConfig={hosthttpswww.youtube.com};
+if(!YT.loading){YT.loading=1;(function(){var l=[];YT.ready=function(f){if(YT.loaded)f();else l.push(f)};window.onYTReady=function(){YT.loaded=1;var i=0;for(;il.length;i++)try{l[i]()}catch(e){}};YT.setConfig=function(c){var k;for(k in c)if(c.hasOwnProperty(k))YTConfig[k]=c[k]};var a=document.createElement(script);a.type=textjavascript;a.id=www-widgetapi-script;a.src=scriptUrl;a.async=true;var c=document.currentScript;if(c){var n=c.noncec.getAttribute(nonce);if(n)a.setAttribute(nonce,
+n)}var b=document.getElementsByTagName(script)[0];b.parentNode.insertBefore(a,b)})()};
+
+quero adicionar a lista de players o plyer do yt ao app.min, para isso preciso que vc inclua na lista de players o player no app.min junto ao plyer jsplayer e os demais
+Analizar o player do yt baixar entender e servir sempre a versão mais nova fazendo tocar o  video  no player do yt. se muda a versao o codigo busca sempre a versão mais nova em httpswww.youtube.complayer_api
