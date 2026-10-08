@@ -208,11 +208,15 @@
   async function callIsa(prompt){
     const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({message:prompt,messages:[]})});
-    // ★ FIX-MEGGY #19 (Agent 6): check r.ok before parsing — without this, a
-    //   404/500 response with HTML body throws a confusing SyntaxError on
-    //   r.json() instead of a clear error message.
     if(!r.ok) return null;
-    const data=await r.json();
+    let data;
+    try{
+      data=await r.json();
+    }catch(e){
+      // ★ v1.0.146: se a resposta é HTML (não JSON), retorna null em vez de crashar
+      console.warn('[Meggy] callIsa: resposta não-JSON, ignorando');
+      return null;
+    }
     if(!data.ok)throw new Error(data.error||'Meggy indisponível');
     return data.response||'';
   }
