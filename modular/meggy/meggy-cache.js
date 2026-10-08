@@ -887,12 +887,12 @@
       });
     }
 
-    // ★ EXECUTA TODAS AS TAREFAS AO MESMO TEMPO (paralelismo)
-    // Se OpenRouter estiver configurado no worker, cada callIsa automaticamente
-    // dispara 3 modelos free em paralelo (race) — primeiro a responder vence.
-    // Isso significa que resumo+pílulas+questões(N PDFs) = 2+N tarefas × 3 modelos = race máximo.
-    if(allTasks.length>0){
-      await Promise.allSettled(allTasks.map(t=>t.fn()));
+    // ★ v1.0.146: EXECUTA TAREFAS SEQUENCIALMENTE (não paralelo).
+    // Antes usava Promise.allSettled (paralelo) que excedia o limite de subrequests
+    // do CF Workers quando cada callIsa faz fetch para NVIDIA. Sequencial garante
+    // que cada chamada complete antes da próxima começar.
+    for(const task of allTasks){
+      try{ await task.fn(); }catch(e){ console.warn('[Meggy] task falhou:', e.message); }
     }
 
     // finaliza: flashcards + salva no Drive
