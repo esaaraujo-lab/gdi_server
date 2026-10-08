@@ -451,12 +451,10 @@
         }catch(_){}
       }
 
-      // ★★ FALLBACK OCR (Tesseract.js) — para PDFs escaneados (só imagens) ★★
-      // Se pdf.js extraiu menos de 50 chars, é provável que o PDF seja escaneado.
-      // Renderizamos cada página como imagem e rodamos OCR em português.
-      // ★ Limita a 15 páginas no OCR (~3-6 min no total). Para PDFs maiores,
-      // as primeiras 15 páginas já dão contexto suficiente para a Meggy gerar
-      // resumo + questões + pílulas úteis.
+      // ★ v1.0.152: OCR DESATIVADO — Tesseract bloqueia a thread por 5+ min.
+      // Se o PDF não tem texto selecionável, pula direto para o fallback (nome da aula).
+      // O fallback no meggy-cache.js usa o nome da aula como contexto para a IA.
+      if(false && (!txt.trim()||txt.trim().length<50)){
       if(!txt.trim()||txt.trim().length<50){
         const ocrMaxPages=Math.min(doc.numPages,15);
         if(progressCb)progressCb({phase:'ocr-init',page:0,total:ocrMaxPages,engine:useAiOcr?'ai-then-tesseract':'tesseract'});
