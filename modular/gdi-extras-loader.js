@@ -33,7 +33,7 @@
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
   // ★ v1.0.91: bump 92 → 93 (Shaka skin + Pomodoro sidebar + video-in-panel + PDF split + rest mode fix + OCR AI routing + parallel dispatch).
-  const CACHE_VERSION = '146';  // ★ v1.0.156: meggy-cache.js fix resumo cap 150K→80K (CF Workers 403 body too large).
+  const CACHE_VERSION = '147';  // ★ v1.0.157: FASE 1 KV migration dual-write + FASE 0 fix POST /api/ai/summaries handler. Client-side meggy-cache.js unchanged (API contract identical).
   window.CACHE_VERSION = CACHE_VERSION;
 
   const MODULES = [
