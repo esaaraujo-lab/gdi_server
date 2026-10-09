@@ -937,6 +937,17 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   Bus.onGlobal('media:ready',({type,el})=>{
     if(type!=='video'||!el||el.__m7)return;
     el.__m7=true;
+    // ★ v1.0.182: auto-hide skip intro button after 15s (independent of video time).
+    // User requested: "deixar o btn pular intro por até 15s e depois deixar ele sumir sozinho"
+    let _introHideTimer=null;
+    const _startHideTimer=()=>{
+      if(_introHideTimer)clearTimeout(_introHideTimer);
+      _introHideTimer=setTimeout(()=>{
+        if(skipBtn&&document.body.contains(skipBtn)&&skipBtn.style.display==='block'){
+          skipBtn.style.display='none';
+        }
+      },15000); // 15 segundos
+    };
     const upd=()=>{
       if(!skipBtn||!document.body.contains(skipBtn))return;
       const S=GDIUser.getIntro(courseKey());
@@ -957,7 +968,11 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         :'<i class="bi bi-skip-forward-fill"></i> Pular introdu\u00e7\u00e3o';
       if(skipBtn.innerHTML!==html)skipBtn.innerHTML=html;
       const disp=show?'block':'none';
-      if(skipBtn.style.display!==disp)skipBtn.style.display=disp;
+      if(skipBtn.style.display!==disp){
+        skipBtn.style.display=disp;
+        // ★ v1.0.182: iniciar timer de 15s quando botão aparece
+        if(disp==='block')_startHideTimer();
+      }
     };
     el.addEventListener('timeupdate',upd);
     el.addEventListener('seeked',()=>setTimeout(upd,80));
