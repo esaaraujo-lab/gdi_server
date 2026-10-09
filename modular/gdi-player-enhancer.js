@@ -189,7 +189,9 @@
     if(!video)return;
     setupSpeedMemory(video);
     setupKeyboardShortcuts(video);
-    showResumePrompt(video);
+    // ★ v1.0.183: showResumePrompt REMOVIDO — o toast do app.min.js (showResumeToast) é a UI canônica.
+    // Antes, ambos apareciam simultaneamente (overlay + toast), confundindo o usuário.
+    // showResumePrompt(video);
   }
 
   // Observa quando um <video> aparece no DOM
