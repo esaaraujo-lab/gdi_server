@@ -407,7 +407,8 @@
           `).join('')}
         </div>
       `).join('')}
-      <div class="gdi-pomodoro-sidebar" style="padding:12px;border-top:1px solid var(--ferreto-border,#30363d);margin-top:auto;">
+      <div class="gdi-pomodoro-sidebar" style="display:none;padding:12px;border-top:1px solid var(--ferreto-border,#30363d);margin-top:auto;" data-v10183-hidden="1">
+        <!-- ★ v1.0.183: Pomodoro sidebar oculto — usar o Pomodoro da navbar (M12) que é mais completo. -->
         <div style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">🍅 Pomodoro</div>
         <div id="gdi-pomo-time" style="font-size:24px;font-weight:700;color:var(--ferreto-text,#e6edf3);text-align:center;margin-bottom:8px;">25:00</div>
         <div style="display:flex;gap:4px;justify-content:center;">
