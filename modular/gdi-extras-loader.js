@@ -33,7 +33,7 @@
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
   // ★ v1.0.91: bump 92 → 93 (Shaka skin + Pomodoro sidebar + video-in-panel + PDF split + rest mode fix + OCR AI routing + parallel dispatch).
-  const CACHE_VERSION = '148';  // ★ v1.0.158 FASE 0: restaura resumo 150K + memoiza fileId + _chainCacheMax 10.
+  const CACHE_VERSION = '149';  // ★ v1.0.182: fix modo descanso persiste entre aulas + pular intro auto-hide 15s.
   window.CACHE_VERSION = CACHE_VERSION;
 
   const MODULES = [
