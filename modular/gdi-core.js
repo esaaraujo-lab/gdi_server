@@ -940,9 +940,11 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     // ★ v1.0.182: auto-hide skip intro button after 15s (independent of video time).
     // User requested: "deixar o btn pular intro por até 15s e depois deixar ele sumir sozinho"
     let _introHideTimer=null;
+    let _introHiddenByTimer=false;  // flag: timer escondeu o botão, não re-exibir até trocar vídeo
     const _startHideTimer=()=>{
       if(_introHideTimer)clearTimeout(_introHideTimer);
       _introHideTimer=setTimeout(()=>{
+        _introHiddenByTimer=true;
         if(skipBtn&&document.body.contains(skipBtn)&&skipBtn.style.display==='block'){
           skipBtn.style.display='none';
         }
@@ -950,19 +952,17 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     };
     const upd=()=>{
       if(!skipBtn||!document.body.contains(skipBtn))return;
+      // ★ v1.0.182: se o timer de 15s já escondeu o botão, não re-exibir
+      // (mesmo se video time ainda está na janela de visibilidade)
+      if(_introHiddenByTimer){
+        if(skipBtn.style.display!=='none')skipBtn.style.display='none';
+        return;
+      }
       const S=GDIUser.getIntro(courseKey());
       const tm=el.currentTime;
       let show=false;
-      // ★ v1.0.110 FIX BUG #2: button visibility window extended.
-      // Before: if S (intro) was set, button only showed while `tm < S-0.3` — so for
-      // a 15s intro the button vanished after ~15s, leaving the user no chance to
-      // click it if they were slow. Now the button stays visible for at least 60s
-      // OR 30s past the intro point, whichever is longer (capped at 300s to avoid
-      // showing it deep into a long video). The 120s window for the "no intro set
-      // yet" case is unchanged.
       if(S&&S>0)show=tm>0.4&&tm<Math.max(S+30,60)&&tm<300;
       else show=tm>1&&tm<120;
-      // ★FIX: só toca no DOM quando muda (era reescrito a cada timeupdate)
       const html=S
         ?'<i class="bi bi-skip-forward-fill"></i> Pular introdu\u00e7\u00e3o ('+gdiFmtTime(S)+')'
         :'<i class="bi bi-skip-forward-fill"></i> Pular introdu\u00e7\u00e3o';
@@ -970,13 +970,15 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       const disp=show?'block':'none';
       if(skipBtn.style.display!==disp){
         skipBtn.style.display=disp;
-        // ★ v1.0.182: iniciar timer de 15s quando botão aparece
+        // ★ v1.0.182: iniciar timer de 15s quando botão aparece pela 1ª vez
         if(disp==='block')_startHideTimer();
       }
     };
     el.addEventListener('timeupdate',upd);
     el.addEventListener('seeked',()=>setTimeout(upd,80));
     el.addEventListener('play',upd);
+    // ★ v1.0.182: resetar flag quando vídeo troca (loadedmetadata = novo vídeo)
+    el.addEventListener('loadedmetadata',()=>{_introHiddenByTimer=false;if(_introHideTimer)clearTimeout(_introHideTimer);});
   });
   window.GDI_MODULES.push({name:'skip-intro',init:function(){
     const wrap=document.querySelector('.gdi-player-wrap');
