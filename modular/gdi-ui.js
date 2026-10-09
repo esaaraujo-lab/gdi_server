@@ -318,7 +318,12 @@ body.gdi-fv .gdi-player-wrap iframe{
     if(btn.parentElement!==host)host.appendChild(btn);
     if(overlay.parentElement!==host)host.appendChild(overlay);
     btn.style.display=(video&&!fsOk)?'none':'flex';
-    if(sleeping&&video&&!fsOk)exitSleep();
+    // ★ v1.0.182 FIX: NÃO chamar exitSleep() quando vídeo existe mas !fsOk.
+    // Antes, esta linha quebrava o modo descanso durante troca de aulas da playlist
+    // (quando o vídeo recarrega e fullscreen pode mudar temporariamente).
+    // O modo descanso só deve ser desativado por input do usuário (mousemove/keydown/click)
+    // ou quando não há mídia (linha 311). Persistência via localStorage garante que
+    // o overlay volte após a troca.
   }
   function bindOnce(){
     if(bound)return;bound=true;
