@@ -49,4 +49,16 @@
     <color name="accent_yellow">#FAB005</color>
     <color name="accent_red">#FF6B6B</color>
     <color name="accent_teal">#4ECDC4</color>
+
+    <!-- v1.8.0 — Tile accents (Netflix/Disney inspired) -->
+    <color name="tile_bg">#FF0F1218</color>
+    <color name="tile_bg_focused">#FF161B22</color>
+    <color name="tile_scrim_top">#66000000</color>
+    <color name="tile_scrim_bottom">#F00D0E12</color>
+    <color name="tile_focus_ring">#FFFF8B9F</color>
+    <color name="tile_focus_halo">#33FF8B9F</color>
+    <color name="tile_title">#FFFFFFFF</color>
+    <color name="tile_subtitle">#FFC0C4D0</color>
+    <color name="hero_pink_accent">#FFFF8B9F</color>
+    <color name="header_scrim">#F00D0E12</color>
 </resources>
