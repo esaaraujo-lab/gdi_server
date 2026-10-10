@@ -4,18 +4,27 @@ import android.content.res.Resources
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
+import android.view.animation.AnimationUtils
 import androidx.recyclerview.widget.RecyclerView
+import com.meggy.app.R
 import com.meggy.app.data.DriveItem
 import com.meggy.app.data.colorFromString
 import com.meggy.app.databinding.ItemDriveCardBinding
 
 /**
- * Horizontal-rail adapter for the 12 root drives.
+ * Horizontal-rail adapter for the 12 root drives (v1.8.0).
  *
- * Each card is 160dp wide with a 170dp tall gradient thumbnail whose hue is derived
- * from the drive name (so each drive has a distinct colour identity, matching the
- * web preview). TV focus scales the card by 1.05× to mimic the Netflix hover effect.
+ * Each card is a 150dp × 210dp poster-style tile with a per-drive
+ * gradient derived from the drive name hash, big emoji icon, and the
+ * drive name overlaid on a bottom scrim.
+ *
+ * Animations
+ * ----------
+ *  • [tile_appear] staggered fade-in + slide-up on first bind.
+ *  • Focus change — scale 1.0 ↔ 1.06, elevation 0 ↔ 16dp, pink halo
+ *    ring toggled.
  */
 class DriveRailAdapter(
     private val drives: List<DriveItem>,
@@ -31,11 +40,17 @@ class DriveRailAdapter(
             binding.root.isFocusable = true
             binding.root.isFocusableInTouchMode = true
             binding.root.setOnFocusChangeListener { _, hasFocus ->
-                val scale = if (hasFocus) 1.05f else 1f
-                binding.root.scaleX = scale
-                binding.root.scaleY = scale
-                binding.root.z = if (hasFocus) 8f else 0f
+                animateFocus(hasFocus)
             }
+        }
+
+        fun animateFocus(hasFocus: Boolean) {
+            val scale = if (hasFocus) 1.06f else 1f
+            binding.driveCardRoot.animate().scaleX(scale).scaleY(scale)
+                .setDuration(180)
+                .start()
+            binding.driveCardRoot.cardElevation = if (hasFocus) 16f else 0f
+            binding.driveFocusRing.visibility = if (hasFocus) View.VISIBLE else View.INVISIBLE
         }
     }
 
@@ -51,19 +66,23 @@ class DriveRailAdapter(
             driveName.text = drive.name
             // Per-drive gradient background derived from the drive name hash.
             val baseColor = colorFromString(drive.name)
-            driveIcon.background = driveCardDrawable(holder.itemView.resources, baseColor)
+            driveBg.background = driveGradientDrawable(holder.itemView.resources, baseColor)
         }
+        // Staggered appear animation
+        val anim = AnimationUtils.loadAnimation(holder.itemView.context, R.anim.tile_appear)
+        anim.startOffset = (position % 12) * 40L
+        holder.binding.root.startAnimation(anim)
     }
 
     override fun getItemCount(): Int = drives.size
 
-    private fun driveCardDrawable(res: Resources, baseColor: Int): GradientDrawable {
+    private fun driveGradientDrawable(res: Resources, baseColor: Int): GradientDrawable {
         val r = Color.red(baseColor)
         val g = Color.green(baseColor)
         val b = Color.blue(baseColor)
-        val start = Color.argb(0x33, r, g, b)
-        val end = Color.parseColor("#1a1a2e")
-        val cornerPx = (10 * res.displayMetrics.density)
+        val start = Color.argb(0x59, r, g, b)
+        val end = Color.parseColor("#FF0F1218")
+        val cornerPx = (16 * res.displayMetrics.density)
         return GradientDrawable(
             GradientDrawable.Orientation.TL_BR,
             intArrayOf(start, end)
