@@ -16,13 +16,6 @@ import org.json.JSONObject
 
 /**
  * One of the 12 hardcoded root drives shown on the home screen.
- *
- * Drives 0..1 have known root Google Drive IDs (so we can list their top-level folder
- * without first asking the server). Drives 2..11 are addressed by index — the worker
- * resolves the underlying Drive folder transparently.
- *
- * v1.5.0: [icon] now carries the emoji string rendered on the card (was a category
- * slug like "trt"/"courses" before).
  */
 data class DriveItem(
     val index: Int,
@@ -31,11 +24,6 @@ data class DriveItem(
     val icon: String = "📁"
 ) {
     companion object {
-        /**
-         * The 12 hardcoded root drives, in the exact order the worker expects.
-         * Index 0 and 1 have known root folder IDs that the worker.js API recognises.
-         * Indices 2..11 use the drive index as the path segment (e.g. POST /2:/).
-         */
         val ALL: List<DriveItem> = listOf(
             DriveItem(0,  "RETA FINAL TRTs",                "18pNVx52TY5ImVTTEyxp30oEQJCnKgzL7", "⚖️"),
             DriveItem(1,  "CURSOS - PLATAFORMAS COMPLETAS", "1lZo5wBhqC44yEySqX6rjyzBuJEEvGPs7", "📚"),
@@ -57,17 +45,6 @@ data class DriveItem(
 
 /**
  * A file or folder returned by POST /<driveIdx>:/.
- *
- * `link` is null for folders (folders are not downloadable). For files, prepend
- * [com.meggy.app.MeggyApp.BASE_URL] to obtain the full streaming URL.
- *
- * v1.2.0 additions:
- *  • [folderLabel] — short folder name used to disambiguate entries in a
- *    cross-folder playlist (e.g. "001 - PODERES DA ADMINISTRAÇÃO"). Null for
- *    same-folder playlists where every entry shares the same folder.
- *  • [folderPath] — full folder path ("/0:/PF.../Bloco I/DirAdmin/001 - .../")
- *    used as the resume-key prefix. Null when the item came straight from a
- *    folder listing (BrowseActivity fills it in when building the playlist).
  */
 data class FileItem(
     val name: String,
@@ -119,6 +96,21 @@ data class FileItem(
             )
         }
 
+        /** v2.0.0: serializes a FileItem back to JSON for SharedPreferences storage. */
+        fun toJson(item: FileItem): JSONObject {
+            val o = JSONObject()
+            o.put("name", item.name)
+            o.put("mimeType", item.mimeType)
+            o.put("id", item.id)
+            o.put("driveId", item.driveId ?: JSONObject.NULL)
+            o.put("link", item.link ?: JSONObject.NULL)
+            o.put("size", item.size)
+            o.put("modifiedTime", item.modifiedTime ?: JSONObject.NULL)
+            item.folderLabel?.let { o.put("folderLabel", it) }
+            item.folderPath?.let { o.put("folderPath", it) }
+            return o
+        }
+
         fun parseList(arr: JSONArray?): List<FileItem> {
             if (arr == null) return emptyList()
             val out = ArrayList<FileItem>(arr.length())
@@ -130,11 +122,6 @@ data class FileItem(
 
 // ──────────────────────────── Folder listing response ────────────────────────────
 
-/**
- * Response envelope for POST /<driveIdx>:/.
- *
- * The worker returns `{ "nextPageToken": null, "curPageIndex": 0, "data": { "files": [...] } }`.
- */
 data class FolderListing(
     val files: List<FileItem>,
     val nextPageToken: String?,
@@ -155,10 +142,6 @@ data class FolderListing(
 
 // ──────────────────────────── Login ────────────────────────────
 
-/**
- * Result of a login attempt. On success, `sessionCookie` is the raw value
- * (without the `session=` prefix) extracted from the Set-Cookie header.
- */
 sealed class LoginResult {
     data class Success(val sessionCookie: String, val username: String) : LoginResult()
     data class Failure(val reason: String) : LoginResult()
@@ -166,9 +149,6 @@ sealed class LoginResult {
 
 // ──────────────────────────── User courses ────────────────────────────
 
-/**
- * One enrolled course returned by GET /api/courses/list.
- */
 data class CourseItem(
     val coursePath: String,
     val courseName: String
@@ -191,12 +171,82 @@ data class CourseItem(
     }
 }
 
-// ──────────────────────────── v1.5.0 colour helpers ────────────────────────────
+// ──────────────────────────── v2.0.0: Hero rotation ────────────────────────────
 
 /**
- * 12-colour palette mirroring the web preview's `colorFromString` palette.
- * Used to give every drive/course/file card a visually distinct gradient.
+ * One hero banner entry — a curated "destaque" course from any drive.
+ * Rotated by HomeActivity.HeroRotator every 8s with crossfade.
  */
+data class HeroItem(
+    val title: String,
+    val subtitle: String,
+    val badge: String,            // e.g. "🐕 DESTAQUE DA SEMANA"
+    val drivePath: String,        // BrowseActivity drivePath
+    val driveName: String,        // displayed in browse
+    val icon: String,             // emoji shown in hero corner
+    val colorHint: String? = null // optional colorFromString hint
+) {
+    companion object {
+        /**
+         * Curated list of destaques spanning multiple drives. Picked 1-2
+         * per major drive so the rotation surfaces content from across
+         * the whole library, not just the first drive.
+         */
+        val ALL: List<HeroItem> = listOf(
+            HeroItem(
+                title = "PF — Agente da Polícia Federal",
+                subtitle = "Preparatório completo. 45 aulas em vídeo HD.",
+                badge = "🐕 DESTAQUE DA SEMANA",
+                drivePath = "/0:/",
+                driveName = "RETA FINAL TRTs",
+                icon = "⚖️"
+            ),
+            HeroItem(
+                title = "Tribunais — Completo",
+                subtitle = "Material atualizado para 2026. Aulas + PDFs.",
+                badge = "⚖️ EM ALTA",
+                drivePath = "/9:/",
+                driveName = "TUDO DE TRIBUNAIS",
+                icon = "⚖️"
+            ),
+            HeroItem(
+                title = "Alfacon 2026",
+                subtitle = "Cursos completos da plataforma Alfacon.",
+                badge = "🎓 NOVIDADE",
+                drivePath = "/10:/",
+                driveName = "ALFACON 2026",
+                icon = "🎓"
+            ),
+            HeroItem(
+                title = "Preparatório OAB",
+                subtitle = "Tudo para a 1ª e 2ª fase da OAB.",
+                badge = "🛡️ DESTAQUE",
+                drivePath = "/11:/",
+                driveName = "PREPARATÓRIO OAB",
+                icon = "🛡️"
+            ),
+            HeroItem(
+                title = "Vestibulares — Plataformas",
+                subtitle = "Aulas de major vestibulares do país.",
+                badge = "🎯 DESTAQUE",
+                drivePath = "/2:/",
+                driveName = "VESTIBULARES PLATAFORMAS",
+                icon = "🎯"
+            ),
+            HeroItem(
+                title = "Saúde e Medicina",
+                subtitle = "Residências, especializações e atualizações.",
+                badge = "⚕️ DESTAQUE",
+                drivePath = "/8:/",
+                driveName = "SAÚDE E MEDICINA",
+                icon = "⚕️"
+            )
+        )
+    }
+}
+
+// ──────────────────────────── v1.5.0 colour helpers ────────────────────────────
+
 private val STRING_COLOR_PALETTE: IntArray = intArrayOf(
     0xFFFF6B6B.toInt(),
     0xFF4ECDC4.toInt(),
@@ -212,11 +262,6 @@ private val STRING_COLOR_PALETTE: IntArray = intArrayOf(
     0xFFDDA0DD.toInt()
 )
 
-/**
- * Returns a stable ARGB colour int (opaque) for the given string by hashing it
- * and picking from [STRING_COLOR_PALETTE]. Matches the JS web preview's
- * `colorFromString` so cards look identical across web/native.
- */
 fun colorFromString(str: String): Int {
     var hash = 0
     for (c in str) hash = c.code + ((hash shl 5) - hash)
