@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="200dp"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:layout_marginEnd="12dp"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    android:clickable="true"
+    android:foreground="?attr/selectableItemBackground">
+
+    <!-- Thumbnail -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="110dp">
+
+        <View android:id="@+id/card_bg"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/card_gradient_pink" />
+
+        <TextView android:id="@+id/card_icon"
+            android:layout_width="match_parent" android:layout_height="match_parent"
+            android:gravity="center" android:textSize="36sp" />
+
+        <!-- Progress bar track -->
+        <View android:layout_width="match_parent" android:layout_height="3dp"
+            android:layout_gravity="bottom" android:background="#33333355" />
+        <!-- Progress bar fill -->
+        <View android:id="@+id/progress_bar"
+            android:layout_width="70dp" android:layout_height="3dp"
+            android:layout_gravity="bottom|start"
+            android:background="@drawable/progress_gradient" />
+
+        <!-- Watched checkmark -->
+        <TextView android:id="@+id/watched_badge"
+            android:layout_width="20dp" android:layout_height="20dp"
+            android:layout_gravity="top|end" android:layout_margin="6dp"
+            android:background="@drawable/badge_watched" android:gravity="center"
+            android:text="✓" android:textColor="#FFFFFF" android:textSize="11sp"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <!-- Title -->
+    <TextView android:id="@+id/card_title"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:textColor="#E6EDF3" android:textSize="13sp" android:textStyle="bold"
+        android:layout_marginTop="8dp" android:maxLines="2" android:ellipsize="end" />
+
+    <!-- Subtitle -->
+    <TextView android:id="@+id/card_subtitle"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:textColor="#8B949E" android:textSize="11sp"
+        android:layout_marginTop="2dp" android:maxLines="1" android:ellipsize="end" />
+
+    <!-- Continue badge -->
+    <TextView android:id="@+id/continue_badge"
+        android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_marginTop="4dp" android:paddingHorizontal="8dp" android:paddingVertical="2dp"
+        android:background="@drawable/badge_resume" android:text="▶ continuar"
+        android:textColor="#FF8B9F" android:textSize="10sp" android:visibility="gone" />
+</LinearLayout>
