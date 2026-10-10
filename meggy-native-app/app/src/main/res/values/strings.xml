@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Meggy</string>
+    <string name="app_subtitle">Plataforma de Estudos</string>
+
+    <!-- Login -->
+    <string name="login_welcome">Bem-vindo de volta</string>
+    <string name="login_username_hint">Usuário</string>
+    <string name="login_password_hint">Senha</string>
+    <string name="login_button">Entrar</string>
+    <string name="login_loading">Entrando…</string>
+
+    <!-- Home -->
+    <string name="home_title">Meggy</string>
+    <string name="home_logout">Sair</string>
+    <string name="home_my_courses">Meus Cursos</string>
+
+    <!-- Browse -->
+    <string name="browse_loading">Carregando…</string>
+    <string name="browse_empty">Pasta vazia.</string>
+    <string name="browse_retry">Tentar novamente</string>
+
+    <!-- Player -->
+    <string name="player_speed">Velocidade</string>
+
+    <!-- Misc -->
+    <string name="ok">OK</string>
+    <string name="cancel">Cancelar</string>
+</resources>
