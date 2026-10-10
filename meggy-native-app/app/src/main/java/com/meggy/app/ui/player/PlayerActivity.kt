@@ -4,8 +4,6 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
-import android.view.animation.AlphaAnimation
-import android.view.animation.Animation
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -39,18 +37,18 @@ class PlayerActivity : AppCompatActivity() {
     private var playlistVisible = false
     private var saveJob: Job? = null
 
-    // ★ v1.2.1: Modo descanso (tela preta)
+    // ★ v1.3.0: Modo descanso (tela preta) — com botão DEDICADO
     private var sleepMode = false
     private var sleepOverlay: View? = null
 
-    // ★ v1.2.1: Auto-hide controls
+    // ★ v1.3.0: Auto-hide controls
     private val handler = Handler(Looper.getMainLooper())
     private var controlsVisible = true
-    private val CONTROLS_HIDE_DELAY = 4000L // 4 segundos
+    private val CONTROLS_HIDE_DELAY = 4000L
 
-    // ★ v1.2.1: Velocidade rotativa (0.75→1→1.25→1.5→1.75→2→0.75)
+    // ★ v1.3.0: Velocidade rotativa (0.75→1→1.25→1.5→1.75→2→0.75)
     private val speeds = floatArrayOf(0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
-    private var speedIndex = 1 // começa em 1.0x
+    private var speedIndex = 1
 
     private val hideControlsRunnable = Runnable { hideControls() }
 
@@ -64,10 +62,12 @@ class PlayerActivity : AppCompatActivity() {
         binding = ActivityPlayerBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // ★ v1.2.1: Criar overlay preto para modo descanso
+        // ★ v1.3.0: Criar overlay preto para modo descanso (FULLSCREEN, fica por cima de TUDO)
         sleepOverlay = View(this).apply {
             setBackgroundColor(android.graphics.Color.BLACK)
             visibility = View.GONE
+            isFocusable = true
+            isClickable = true
             setOnClickListener { exitSleepMode() }
             layoutParams = android.widget.FrameLayout.LayoutParams(
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
@@ -99,15 +99,16 @@ class PlayerActivity : AppCompatActivity() {
         binding.prevButton.setOnClickListener { playPrev() }
         binding.nextButton.setOnClickListener { playNext() }
 
-        // ★ v1.2.1: Toggle modo descanso ao clicar na tela (long click)
-        binding.playerView.setOnLongClickListener {
+        // ★ v1.3.0: Botão DEDICADO de modo descanso (🌙 moon icon)
+        binding.sleepButton.setOnClickListener {
             toggleSleepMode()
-            true
         }
 
-        // ★ v1.2.1: Click simples na tela → mostra/oculta controles
+        // ★ v1.3.0: Click na tela → mostra/esconde controles
         binding.playerView.setOnClickListener {
-            if (!controlsVisible) {
+            if (sleepMode) {
+                exitSleepMode()
+            } else if (!controlsVisible) {
                 showControls()
             } else {
                 hideControls()
@@ -116,12 +117,10 @@ class PlayerActivity : AppCompatActivity() {
 
         setupPlaylistSidebar()
         updateNavButtons()
-
-        // ★ v1.2.1: Auto-hide controles após 4s
         scheduleAutoHide()
     }
 
-    // ──────────── v1.2.1: MODO DESCANSO ────────────
+    // ──────────── v1.3.0: MODO DESCANSO ────────────
 
     private fun toggleSleepMode() {
         if (sleepMode) exitSleepMode() else enterSleepMode()
@@ -130,8 +129,9 @@ class PlayerActivity : AppCompatActivity() {
     private fun enterSleepMode() {
         sleepMode = true
         sleepOverlay?.visibility = View.VISIBLE
+        sleepOverlay?.bringToFront()
         hideControls()
-        Snackbar.make(binding.root, "🌙 Modo descanso ativo — toque para sair", Snackbar.LENGTH_SHORT).show()
+        Snackbar.make(binding.root, "🌙 Modo descanso — toque na tela para sair", Snackbar.LENGTH_SHORT).show()
     }
 
     private fun exitSleepMode() {
@@ -141,33 +141,34 @@ class PlayerActivity : AppCompatActivity() {
         showControls()
     }
 
-    // ★ v1.2.1: Modo descanso persiste entre vídeos (não resetar ao trocar)
-    // sleepMode não é resetado em playItem() — permanece true se ativado
+    // ★ v1.3.0: sleepMode NÃO é resetado em playItem() — PERMANECE entre vídeos
 
-    // ──────────── v1.2.1: AUTO-HIDE CONTROLES ────────────
+    // ──────────── v1.3.0: AUTO-HIDE CONTROLES ────────────
 
     private fun showControls() {
+        if (sleepMode) return
         controlsVisible = true
         binding.titleLabel.animate().alpha(1f).setDuration(200).start()
         binding.speedButton.animate().alpha(1f).setDuration(200).start()
         binding.prevButton.animate().alpha(if (PlaylistManager.hasPrev()) 1f else 0.35f).setDuration(200).start()
         binding.nextButton.animate().alpha(if (PlaylistManager.hasNext()) 1f else 0.35f).setDuration(200).start()
         binding.playlistButton.animate().alpha(1f).setDuration(200).start()
-        // Mostrar controles do ExoPlayer
+        binding.sleepButton.animate().alpha(1f).setDuration(200).start()
         binding.playerView.useController = true
         binding.playerView.showController()
         scheduleAutoHide()
     }
 
     private fun hideControls() {
-        if (sleepMode) return // no modo descanso, controles ficam escondidos
+        if (sleepMode) return
         controlsVisible = false
-        if (!playlistVisible) { // não esconder se playlist aberta
+        if (!playlistVisible) {
             binding.titleLabel.animate().alpha(0f).setDuration(200).start()
             binding.speedButton.animate().alpha(0f).setDuration(200).start()
             binding.prevButton.animate().alpha(0f).setDuration(200).start()
             binding.nextButton.animate().alpha(0f).setDuration(200).start()
             binding.playlistButton.animate().alpha(0f).setDuration(200).start()
+            binding.sleepButton.animate().alpha(0f).setDuration(200).start()
             binding.playerView.hideController()
         }
     }
@@ -177,23 +178,27 @@ class PlayerActivity : AppCompatActivity() {
         handler.postDelayed(hideControlsRunnable, CONTROLS_HIDE_DELAY)
     }
 
-    // ──────────── v1.2.1: VELOCIDADE ROTATIVA ────────────
+    // ──────────── v1.3.0: VELOCIDADE ROTATIVA ────────────
 
     private fun cycleSpeed() {
         val p = player ?: return
-        // Avançar para próxima velocidade (rotativo: 2x → volta para 0.75x)
         speedIndex = (speedIndex + 1) % speeds.size
         val next = speeds[speedIndex]
         p.playbackParameters = PlaybackParameters(next)
         binding.speedButton.text = "${formatSpeed(next)}x"
-        // Mostrar controles ao mudar velocidade
         showControls()
     }
 
     private fun formatSpeed(s: Float): String {
-        return if (s == 1.0f || s == 2.0f) "${s.toInt()}.0"
-        else if (s == 1.25f || s == 1.75f) "${s}"
-        else "${s}"
+        return when (s) {
+            1.0f -> "1.0"
+            2.0f -> "2.0"
+            0.75f -> "0.75"
+            1.25f -> "1.25"
+            1.5f -> "1.5"
+            1.75f -> "1.75"
+            else -> "$s"
+        }
     }
 
     // ──────────── playlist sidebar ────────────
@@ -257,7 +262,7 @@ class PlayerActivity : AppCompatActivity() {
 
         val cookie = SessionManager.get(this).sessionCookie
         val httpFactory = DefaultHttpDataSource.Factory()
-            .setUserAgent("MeggyNative/1.2.1 (Android)")
+            .setUserAgent("MeggyNative/1.3 (Android)")
             .setAllowCrossProtocolRedirects(true)
             .setDefaultRequestProperties(
                 if (!cookie.isNullOrBlank()) mapOf("Cookie" to "session=$cookie") else emptyMap()
@@ -287,9 +292,10 @@ class PlayerActivity : AppCompatActivity() {
         player = exo
         binding.playerView.player = exo
 
-        // ★ v1.2.1: Se modo descanso estava ativo, manter tela preta
+        // ★ v1.3.0: Se modo descanso estava ativo, MANTER tela preta ao trocar de vídeo
         if (sleepMode) {
             sleepOverlay?.visibility = View.VISIBLE
+            sleepOverlay?.bringToFront()
             hideControls()
         }
 
@@ -313,7 +319,7 @@ class PlayerActivity : AppCompatActivity() {
         initialisePlayer()
         playlistAdapter?.updateCurrent(PlaylistManager.index())
         updateNavButtons()
-        // ★ v1.2.1: Reset velocidade para 1x ao trocar de vídeo
+        // Reset velocidade para 1x ao trocar de vídeo
         speedIndex = 1
         player?.playbackParameters = PlaybackParameters(1.0f)
         binding.speedButton.text = "1.0x"
@@ -360,8 +366,6 @@ class PlayerActivity : AppCompatActivity() {
         p.release()
         player = null
     }
-
-    // ──────────── resume helpers ────────────
 
     private fun resumeFor(item: FileItem?, url: String): Long {
         val fp = item?.folderPath
