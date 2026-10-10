@@ -1,38 +1,29 @@
-<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Meggy brand -->
-    <color name="meggy_pink">#FFFF8B9F</color>
-    <color name="meggy_pink_dark">#FFE0657F</color>
-    <color name="meggy_purple">#FFC026D3</color>
-    <color name="meggy_purple_deep">#FF7B1FA2</color>
-    <color name="meggy_teal">#FF5DDEDA</color>
-
-    <!-- Material 3 dark palette -->
-    <color name="md_background">#FF0D0E12</color>
-    <color name="md_surface">#FF16181F</color>
-    <color name="md_surface_variant">#FF232634</color>
-    <color name="md_surface_container">#FF1B1E27</color>
-    <color name="md_outline">#FF3A3F4F</color>
-    <color name="md_outline_variant">#FF2A2E3A</color>
-
-    <color name="md_on_background">#FFEAEAF0</color>
-    <color name="md_on_surface">#FFEAEAF0</color>
-    <color name="md_on_surface_variant">#FFC0C4D0</color>
-
-    <color name="md_primary">#FFFF8B9F</color>
-    <color name="md_on_primary">#FF1A0A0F</color>
-    <color name="md_primary_container">#FF7B1FA2</color>
-    <color name="md_on_primary_container">#FFFFEAF1</color>
-
-    <color name="md_secondary">#FFC026D3</color>
-    <color name="md_on_secondary">#FF1A0A1F</color>
-    <color name="md_secondary_container">#FF5A1B6E</color>
-    <color name="md_on_secondary_container">#FFFBD7FF</color>
-
-    <color name="md_error">#FFCF6679</color>
-    <color name="md_on_error">#FF600014</color>
-
-    <!-- Status bar -->
-    <color name="black_overlay">#AA000000</color>
-    <color name="white_overlay">#66FFFFFF</color>
+    <color name="meggy_pink">#FF8B9F</color>
+    <color name="meggy_purple">#C026D3</color>
+    <color name="meggy_purple_dark">#7B1FA2</color>
+    
+    <!-- Dark theme -->
+    <color name="bg_primary">#0D1117</color>
+    <color name="bg_surface">#161B22</color>
+    <color name="bg_surface_light">#1E2230</color>
+    <color name="bg_card">#1A1F2E</color>
+    <color name="border_subtle">#21262D</color>
+    <color name="border_default">#30363D</color>
+    
+    <!-- Text -->
+    <color name="text_primary">#E6EDF3</color>
+    <color name="text_secondary">#8B949E</color>
+    <color name="text_muted">#484F58</color>
+    
+    <!-- Accents -->
+    <color name="accent_green">#3FB950</color>
+    <color name="accent_yellow">#FAB005</color>
+    <color name="accent_red">#FF6B6B</color>
+    <color name="accent_teal">#4ECDC4</color>
+    
+    <!-- Legacy -->
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
 </resources>
