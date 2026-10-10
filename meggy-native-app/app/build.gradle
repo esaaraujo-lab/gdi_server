@@ -18,8 +18,8 @@ android {
         applicationId "com.meggy.app"
         minSdk 21
         targetSdk 34
-        versionCode 14
-        versionName "1.4.0"
+        versionCode 15
+        versionName "1.5.0"
     }
 
     // ★ v1.4.0: Signing config com keystore FIXA (mesma em todos os builds)
@@ -61,6 +61,7 @@ android {
     }
     buildFeatures {
         viewBinding true
+        buildConfig true
     }
 }
 
