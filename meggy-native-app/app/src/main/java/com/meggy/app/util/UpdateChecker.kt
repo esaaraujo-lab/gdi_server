@@ -18,8 +18,27 @@ import java.io.File
 object UpdateChecker {
 
     private const val GITHUB_API = "https://api.github.com/repos/esaaraujo-lab/gdi_server/releases/latest"
+    private const val PREFS_NAME = "meggy_update"
+    private const val KEY_INSTALLED_VERSION = "installed_version"
 
+    /**
+     * v1.7.0: Verifica se há nova versão AO ABRIR O APP.
+     * Compara versionName (ex: "1.6.3" vs "1.7.0").
+     * Se for a MESMA versão, não faz nada.
+     * Se for versão NOVA, baixa e instala.
+     */
     fun checkForUpdate(context: Context, currentVersion: String) {
+        // Limpar versão (remover prefixos)
+        val localVersion = currentVersion.replace("native-v", "").replace("v", "").trim()
+        
+        // Verificar se já instalamos esta versão (evita loop de reinstalação)
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val lastInstalled = prefs.getString(KEY_INSTALLED_VERSION, "") ?: ""
+        if (localVersion == lastInstalled) {
+            // Já verificamos e é a mesma versão — não fazer nada
+            return
+        }
+
         Thread {
             try {
                 val client = OkHttpClient.Builder().build()
@@ -34,9 +53,16 @@ object UpdateChecker {
                 val json = JSONObject(body)
                 val tagName = json.optString("tag_name", "")
                 
-                val remoteVersion = tagName.replace("native-v", "").replace("v", "")
-                val localVersion = currentVersion.replace("native-v", "").replace("v", "")
+                // Extrair versão remota do tag (ex: "native-v1.7.0" → "1.7.0")
+                val remoteVersion = tagName.replace("native-v", "").replace("v", "").trim()
                 
+                // ★ v1.7.0: Se for a MESMA versão, NÃO fazer nada
+                if (remoteVersion == localVersion) {
+                    prefs.edit().putString(KEY_INSTALLED_VERSION, localVersion).apply()
+                    return@Thread
+                }
+                
+                // Se versão remota é MAIOR, baixar e instalar
                 if (remoteVersion.isNotEmpty() && isNewer(remoteVersion, localVersion)) {
                     val assets = json.optJSONArray("assets") ?: return@Thread
                     var apkUrl: String? = null
@@ -51,10 +77,13 @@ object UpdateChecker {
                     if (apkUrl != null) {
                         val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
                         mainHandler.post {
-                            Toast.makeText(context, "🌙 Nova versão $remoteVersion! Baixando...", Toast.LENGTH_LONG).show()
+                            Toast.makeText(context, "🐾 Atualizando para v$remoteVersion...", Toast.LENGTH_LONG).show()
                         }
-                        downloadAndInstall(context, apkUrl, "meggy-$remoteVersion.apk")
+                        downloadAndInstall(context, apkUrl, "meggy-$remoteVersion.apk", remoteVersion, prefs)
                     }
+                } else {
+                    // Versão local é igual ou maior — marcar como instalada
+                    prefs.edit().putString(KEY_INSTALLED_VERSION, localVersion).apply()
                 }
             } catch (e: Exception) {
                 // Silencioso
@@ -71,13 +100,16 @@ object UpdateChecker {
             if (rv > lv) return true
             if (rv < lv) return false
         }
-        return false
+        return false // São iguais — não é "mais nova"
     }
 
-    private fun downloadAndInstall(context: Context, url: String, fileName: String) {
+    private fun downloadAndInstall(
+        context: Context, url: String, fileName: String,
+        remoteVersion: String, prefs: android.content.SharedPreferences
+    ) {
         try {
             val request = DownloadManager.Request(Uri.parse(url)).apply {
-                setTitle("Meggy — Atualização")
+                setTitle("Meggy — Atualização v$remoteVersion")
                 setDescription("Baixando nova versão do app...")
                 setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
                 setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, fileName)
@@ -93,6 +125,8 @@ object UpdateChecker {
                         val file = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
                         if (file.exists()) {
                             installApk(context, file)
+                            // Marcar como instalada para não repetir
+                            prefs.edit().putString(KEY_INSTALLED_VERSION, remoteVersion).apply()
                         }
                         try { context.unregisterReceiver(this) } catch (_: Exception) {}
                     }
@@ -112,7 +146,6 @@ object UpdateChecker {
         }
     }
 
-    // ★ v1.6.3: Instalação robusta via FileProvider + grantUriPermission
     private fun installApk(context: Context, file: File) {
         try {
             val apkUri = FileProvider.getUriForFile(
@@ -126,8 +159,6 @@ object UpdateChecker {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
             }
             
-            // ★ v1.6.3: grantUriPermission para o package installer
-            // Em vez de queryIntentActivities, grant para todos que resolvem
             val resInfo = context.packageManager.queryIntentActivities(installIntent, 0)
             for (ri in resInfo) {
                 context.grantUriPermission(
@@ -139,7 +170,6 @@ object UpdateChecker {
             
             context.startActivity(installIntent)
         } catch (e: Exception) {
-            // Fallback: tentar sem FileProvider (para Android < 7)
             try {
                 @Suppress("DEPRECATION")
                 val installIntent = Intent(Intent.ACTION_VIEW).apply {
