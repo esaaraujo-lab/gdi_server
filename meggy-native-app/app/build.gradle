@@ -18,8 +18,9 @@ android {
         applicationId "com.meggy.app"
         minSdk 21
         targetSdk 34
-        versionCode 18
-        versionName "1.7.0"
+        // ★ v1.8.0: Netflix/Disney inspired animated tiles + dynamic version footer
+        versionCode 19
+        versionName "1.8.0"
     }
 
     // ★ v1.4.0: Signing config com keystore FIXA (mesma em todos os builds)
