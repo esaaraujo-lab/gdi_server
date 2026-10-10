@@ -9,7 +9,6 @@ import com.meggy.app.databinding.ActivitySettingsBinding
 import com.meggy.app.ui.home.HomeActivity
 import com.meggy.app.ui.login.LoginActivity
 import com.meggy.app.ui.mylist.MyListActivity
-import com.meggy.app.ui.player.PlayerActivity
 import com.meggy.app.ui.search.SearchActivity
 import com.meggy.app.util.PlaylistManager
 import com.meggy.app.util.SessionManager
@@ -17,12 +16,10 @@ import com.meggy.app.util.SessionManager
 /**
  * v2.0.0 — Settings screen.
  *
- * Lets the user configure:
- *  • Default playback speed (0.75 / 1.0 / 1.25 / 1.5 / 1.75 / 2.0)
- *  • Auto-play next video toggle
- *  • Default sleep timer (0 / 15 / 30 / 45 / 60 min)
- *
- * Plus account actions (logout) and about info (version + acknowledgements).
+ * v2.0.2: BottomNav no longer calls finish() on tab switch — the target
+ * activity is declared with launchMode="singleTask" in the manifest, so
+ * startActivity() brings the existing instance to front and clears
+ * activities above it.
  */
 class SettingsActivity : AppCompatActivity() {
 
@@ -44,21 +41,24 @@ class SettingsActivity : AppCompatActivity() {
                 R.id.nav_settings -> true
                 R.id.nav_home -> {
                     startActivity(Intent(this, HomeActivity::class.java))
-                    overridePendingTransition(0, 0); finish(); true
+                    overridePendingTransition(0, 0)
+                    // v2.0.2: NO finish() — singleTask handles back-stack cleanup.
+                    true
                 }
                 R.id.nav_search -> {
                     startActivity(Intent(this, SearchActivity::class.java))
-                    overridePendingTransition(0, 0); finish(); true
+                    overridePendingTransition(0, 0)
+                    true
                 }
                 R.id.nav_mylist -> {
                     startActivity(Intent(this, MyListActivity::class.java))
-                    overridePendingTransition(0, 0); finish(); true
+                    overridePendingTransition(0, 0)
+                    true
                 }
                 else -> false
             }
         }
 
-        // Load current settings
         val sm = SessionManager.get(this)
         val currentSpeed = sm.defaultSpeed
         speedIdx = speeds.indexOfFirst { it == currentSpeed }.coerceAtLeast(0)
@@ -68,7 +68,6 @@ class SettingsActivity : AppCompatActivity() {
         updateSleepLabel()
         binding.switchAutoplay.isChecked = sm.autoplayNext
 
-        // Speed buttons
         binding.btnSpeedDown.setOnClickListener {
             speedIdx = (speedIdx - 1 + speeds.size) % speeds.size
             sm.defaultSpeed = speeds[speedIdx]
@@ -80,7 +79,6 @@ class SettingsActivity : AppCompatActivity() {
             updateSpeedLabel()
         }
 
-        // Sleep buttons
         binding.btnSleepDown.setOnClickListener {
             sleepIdx = (sleepIdx - 1 + sleepOptions.size) % sleepOptions.size
             sm.defaultSleepTimerMin = sleepOptions[sleepIdx]
@@ -92,15 +90,12 @@ class SettingsActivity : AppCompatActivity() {
             updateSleepLabel()
         }
 
-        // Autoplay toggle
         binding.switchAutoplay.setOnCheckedChangeListener { _, isChecked ->
             sm.autoplayNext = isChecked
         }
 
-        // Logout
         binding.btnLogout.setOnClickListener { logout() }
 
-        // About
         binding.aboutText.text = buildString {
             append("🐩 Meggy · v${BuildConfig.VERSION_NAME}\n")
             append("Build ${BuildConfig.VERSION_CODE}\n\n")
@@ -109,6 +104,12 @@ class SettingsActivity : AppCompatActivity() {
             append("Tecnologias: Kotlin, Media3, Material 3.\n")
             append("© 2026 Meggy · educa.eu.org")
         }
+    }
+
+    // v2.0.2: Restore the correct nav highlight when brought back to front.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        binding.bottomNav.selectedItemId = R.id.nav_settings
     }
 
     private fun updateSpeedLabel() {
@@ -120,6 +121,11 @@ class SettingsActivity : AppCompatActivity() {
         binding.sleepValue.text = if (min == 0) "Off" else "${min}min"
     }
 
+    /**
+     * v2.0.2 — Logout clears the session and routes to LoginActivity with
+     * CLEAR_TASK so the entire back stack is wiped. The user can never
+     * press back to return to Settings/Home after logging out.
+     */
     private fun logout() {
         SessionManager.get(this).clearSession()
         PlaylistManager.clear()
