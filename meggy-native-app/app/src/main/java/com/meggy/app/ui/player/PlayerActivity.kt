@@ -1,5 +1,6 @@
-import android.os.Build
 package com.meggy.app.ui.player
+
+import android.os.Build
 
 import android.os.Bundle
 import android.os.Handler
