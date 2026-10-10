@@ -279,11 +279,11 @@ class PlayerActivity : AppCompatActivity() {
         return SessionManager.get(this).getResumePosition(url)
     }
 
-    private fun saveResumeFor(item: FileItem, url: String, positionMs: Long) {
+    private fun saveResumeFor(item: FileItem, url: String?, positionMs: Long) {
         val fp = item.folderPath
         if (!fp.isNullOrBlank() && !item.name.isBlank()) {
             SessionManager.get(this).saveResume(fp, item.name, positionMs)
-        } else {
+        } else if (url != null) {
             SessionManager.get(this).saveResumePosition(url, positionMs)
         }
     }
@@ -294,8 +294,13 @@ class PlayerActivity : AppCompatActivity() {
         if (!fp.isNullOrBlank() && !item.name.isBlank()) {
             SessionManager.get(this).clearResume(fp, item.name)
             SessionManager.get(this).markWatched(fp, item.name)
-        } else if (currentUrl != null) {
-            SessionManager.get(this).clearResumePosition(currentUrl!!)
+        } else {
+            // No folderPath → fall back to per-URL resume. Capture into a local
+            // val so Kotlin can smart-cast the (mutable) currentUrl to non-null.
+            val url = currentUrl
+            if (url != null) {
+                SessionManager.get(this).clearResumePosition(url)
+            }
         }
     }
 
