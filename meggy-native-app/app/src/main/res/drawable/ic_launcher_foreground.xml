@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Meggy launcher icon foreground — a stylised poodle silhouette drawn as a
+    vector path on a transparent background. The background gradient is supplied
+    separately by ic_launcher_background.xml.
+
+    The path approximates a sitting poodle facing right, with the characteristic
+    puff-ball tail, ear, and top-knot. Dimensions: 108x108dp viewport with the
+    inner 72x72dp safe area used by the silhouette.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Top-knot (puff above the head) -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M54,18 m-7,0 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0 z" />
+
+    <!-- Head puff -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M48,32 m-11,0 a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 z" />
+
+    <!-- Ear (left flap) -->
+    <path
+        android:fillColor="#FFE0E0E0"
+        android:pathData="M37,30 C32,30 28,34 28,40 C28,46 32,50 38,50 C38,44 38,38 37,30 Z" />
+
+    <!-- Body (rounded torso) -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M52,42 C42,42 36,50 36,60 C36,72 44,80 56,80 L72,80 C82,80 88,72 88,62 C88,52 80,46 70,46 C66,42 60,42 56,42 Z" />
+
+    <!-- Front legs -->
+    <path
+        android:fillColor="#FFE0E0E0"
+        android:pathData="M48,72 L48,86 Q48,90 52,90 L56,90 Q60,90 60,86 L60,72 Z" />
+    <path
+        android:fillColor="#FFE0E0E0"
+        android:pathData="M66,72 L66,86 Q66,90 70,90 L74,90 Q78,90 78,86 L78,72 Z" />
+
+    <!-- Tail puff (classic poodle pom-pom) -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M86,52 m-7,0 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0 z" />
+
+    <!-- Eye -->
+    <path
+        android:fillColor="#FF1A0A1F"
+        android:pathData="M50,32 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0 z" />
+
+    <!-- Nose -->
+    <path
+        android:fillColor="#FF1A0A1F"
+        android:pathData="M42,40 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0 z" />
+</vector>
