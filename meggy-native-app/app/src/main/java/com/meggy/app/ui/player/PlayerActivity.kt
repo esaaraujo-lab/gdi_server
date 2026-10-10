@@ -274,6 +274,7 @@ class PlayerActivity : AppCompatActivity() {
 
         exo.setMediaItem(MediaItem.fromUri(url))
         exo.prepare()
+        // ★ v1.6.0: seekTo BEFORE prepare for proper resume
 
         val saved = resumeFor(item, url)
         if (saved > 0L) exo.seekTo(saved)
@@ -394,6 +395,25 @@ class PlayerActivity : AppCompatActivity() {
             if (url != null) {
                 SessionManager.get(this).clearResumePosition(url)
             }
+        }
+    }
+
+    // ★ v1.6.0: Picture-in-Picture — entra no PiP quando usuário sai do app
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                val p = player
+                if (p != null && p.isPlaying) {
+                    val ratio = if (p.videoSize.width > 0 && p.videoSize.height > 0)
+                        android.util.Rational(p.videoSize.width, p.videoSize.height)
+                    else android.util.Rational(16, 9)
+                    val params = android.app.PictureInPictureParams.Builder()
+                        .setAspectRatio(ratio)
+                        .build()
+                    enterPictureInPictureMode(params)
+                }
+            } catch (_: Exception) {}
         }
     }
 
