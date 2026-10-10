@@ -29,8 +29,8 @@ class HomeActivity : AppCompatActivity() {
         
         val adapter = DriveAdapter { drive ->
             val intent = Intent(this, BrowseActivity::class.java)
-            intent.putExtra("driveIdx", drive.index)
-            intent.putExtra("folderId", drive.rootFolderId ?: "")
+            // ★ v1.0.7 FIX: passar o PATH do drive (ex: /0:/) em vez de folderId
+            intent.putExtra("drivePath", "/${drive.index}:/")
             intent.putExtra("folderName", drive.name)
             startActivity(intent)
         }
