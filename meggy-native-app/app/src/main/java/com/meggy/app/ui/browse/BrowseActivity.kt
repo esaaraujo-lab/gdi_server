@@ -16,6 +16,7 @@ import com.meggy.app.MeggyApp
 import com.meggy.app.data.ApiService
 import com.meggy.app.data.FileItem
 import com.meggy.app.databinding.ActivityBrowseBinding
+import com.meggy.app.ui.login.LoginActivity
 import com.meggy.app.ui.player.PlayerActivity
 import com.meggy.app.util.CrossFolderPlaylist
 import com.meggy.app.util.PlaylistManager
@@ -49,31 +50,21 @@ class BrowseActivity : AppCompatActivity() {
         val spanCount = calculateSpanCount()
         val layoutManager = GridLayoutManager(this, spanCount)
         binding.recycler.layoutManager = layoutManager
-        // v1.8.0: gutter so focused-scaled tiles don't clip against neighbours.
         binding.recycler.addItemDecoration(GridGutterDecoration(10))
 
-        // ★ v1.6.0: Wire retry button
         binding.retryButton?.setOnClickListener { loadFolder() }
 
         loadFolder()
     }
 
-    /**
-     * v1.8.0 — Builds a "Meggy › drive › folder › subfolder" breadcrumb
-     * with pink chevrons between segments. The full path is split on
-     * '/' and the drive index segment (e.g. "0:") is replaced with the
-     * drive name for readability.
-     */
     private fun buildBreadcrumb(path: String, displayName: String): CharSequence {
         val pinkColor = ForegroundColorSpan(0xFFFF8B9F.toInt())
         val grayColor = ForegroundColorSpan(0xFF8B949E.toInt())
         val sb = SpannableStringBuilder()
         sb.append("Meggy", grayColor, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        // Split the path and rebuild readable segments
         val segments = path.trim('/').split('/').filter { it.isNotBlank() }
         for (seg in segments) {
             sb.append("  ›  ", pinkColor, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            // For drive index segment "N:" → show drive name instead
             val label = if (seg.matches(Regex("^\\d+:$"))) displayName else seg
             sb.append(label, grayColor, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
@@ -95,6 +86,31 @@ class BrowseActivity : AppCompatActivity() {
             val files = withContext(Dispatchers.IO) { api.listFolder(currentPath) }
             binding.loadingView.visibility = View.GONE
 
+            // ★ v2.0.2: Detect expired session.
+            //
+            // ApiService.listFolder returns null in TWO cases:
+            //   (a) network/IO error
+            //   (b) the server responded with an HTML login redirect because
+            //       the session cookie expired.
+            //
+            // We can't distinguish (a) from (b) without inspecting the response
+            // code, but the practical fix is the same for the user: if the
+            // session is still flagged as "logged in" locally AND we got null,
+            // treat it as an expired session → clear it and bounce to Login.
+            // If the session was already cleared (e.g. by another activity),
+            // also bounce to Login.
+            if (files == null) {
+                val sm = SessionManager.get(this@BrowseActivity)
+                if (sm.isLoggedIn) {
+                    // Session was thought to be valid but the server rejected it.
+                    // Clear it so SplashActivity routes to Login next time.
+                    sm.clearSession()
+                    PlaylistManager.clear()
+                }
+                bounceToLogin()
+                return@launch
+            }
+
             val adapter = FileAdapter(
                 onFolder = { file -> openFolder(file) },
                 onFile = { file -> openFile(file) }
@@ -102,7 +118,7 @@ class BrowseActivity : AppCompatActivity() {
             fileAdapter = adapter
             binding.recycler.adapter = adapter
 
-            if (files.isNullOrEmpty()) {
+            if (files.isEmpty()) {
                 binding.errorState?.visibility = View.VISIBLE
                 binding.emptyState.visibility = View.VISIBLE
                 adapter.submitList(emptyList())
@@ -116,6 +132,17 @@ class BrowseActivity : AppCompatActivity() {
                 adapter.setResumeAndWatched(resumed, watched)
             }
         }
+    }
+
+    /**
+     * v2.0.2 — Routes to LoginActivity with CLEAR_TASK so the entire back
+     * stack is wiped. Used when an expired session is detected.
+     */
+    private fun bounceToLogin() {
+        val intent = Intent(this, LoginActivity::class.java)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        startActivity(intent)
+        finish()
     }
 
     private fun openFolder(file: FileItem) {
@@ -137,17 +164,14 @@ class BrowseActivity : AppCompatActivity() {
         val fullUrl = MeggyApp.BASE_URL + link
 
         if (file.isVideo || file.isAudio) {
-            // ★ v1.5.1: Same-folder playlist first
             val allFiles = fileAdapter?.currentList ?: emptyList()
             val playableItems = allFiles.filter { (it.isVideo || it.isAudio) && !it.link.isNullOrEmpty() }
             val playIndex = playableItems.indexOfFirst { it.id == file.id }
 
             if (playableItems.size > 1 && playIndex >= 0) {
-                // Multiple videos in same folder → use as playlist
                 PlaylistManager.setPlaylist(playableItems, playIndex, this)
                 launchPlayer(fullUrl, file.name, currentPath)
             } else {
-                // ★ v1.5.1: Single video → try cross-folder playlist
                 lifecycleScope.launch {
                     binding.loadingView.visibility = View.VISIBLE
                     val result = withContext(Dispatchers.IO) {
@@ -156,10 +180,8 @@ class BrowseActivity : AppCompatActivity() {
                     binding.loadingView.visibility = View.GONE
 
                     if (result.items.size > 1) {
-                        // Cross-folder playlist found
                         PlaylistManager.setPlaylist(result.items, result.startIndex, this@BrowseActivity)
                     } else if (playableItems.isNotEmpty() && playIndex >= 0) {
-                        // Fallback: single-item playlist
                         PlaylistManager.setPlaylist(playableItems, playIndex, this@BrowseActivity)
                     }
 
@@ -188,11 +210,6 @@ class BrowseActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
-    /**
-     * v1.8.0 — Grid gutter decoration: 10dp gap between tiles + 6dp top
-     * padding so the first row doesn't touch the breadcrumb. Keeps the
-     * grid airy and gives the focus halo room to breathe.
-     */
     private class GridGutterDecoration(private val gutterDp: Int) : RecyclerView.ItemDecoration() {
         override fun getItemOffsets(
             outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State
