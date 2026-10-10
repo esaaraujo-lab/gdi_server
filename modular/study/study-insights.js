@@ -53,13 +53,83 @@
     }
     try{
       const r=await fetch('/api/analytics/summary',{credentials:'same-origin'});
-      if(!r.ok)return null;
-      const d=await r.json();
-      if(!d||!d.ok)return null;
-      _analyticsCache=d;
-      _analyticsCacheAt=Date.now();
-      return d;
-    }catch(_){return null;}
+      if(r.ok){
+        const d=await r.json();
+        if(d&&d.ok&&d.data){
+          // ★ v1.0.184 PLANO C: mapear server data.data → client-expected data.analytics
+          // Server retorna: {todayMinutes, weekMinutes, streak, heatmap, subjects, srs:{due,total}, watchedCount}
+          // Client espera: {todayMinutes, weekMinutes, streak, heatmap, subjects[{name,watched}], srsDue, srsTotal, goalMinutes, goalProgress, watchedToday, watchedThisWeek, bestStreak, lastActivity}
+          const s=d.data;
+          const goalMinutes=parseInt(localStorage.getItem('gdi-goal-min')||'120',10);
+          const goalProgress=goalMinutes>0?Math.min(100,Math.round((s.todayMinutes||0)/goalMinutes*100)):0;
+          d.analytics={
+            todayMinutes:s.todayMinutes||0,
+            weekMinutes:s.weekMinutes||0,
+            streak:s.streak||0,
+            bestStreak:s.streak||0,  // server não calcula bestStreak ainda
+            heatmap:s.heatmap||{},
+            subjects:(s.subjects||[]).map(sub=>({name:sub.name,watched:sub.count})),
+            srsDue:(s.srs&&s.srs.due)||0,
+            srsTotal:(s.srs&&s.srs.total)||0,
+            watchedCount:s.watchedCount||0,
+            watchedToday:0,  // server não calcula por dia
+            watchedThisWeek:0,
+            goalMinutes,
+            goalProgress,
+            lastActivity:s.historyCount>0?Date.now():0
+          };
+          _analyticsCache=d;
+          _analyticsCacheAt=Date.now();
+          return d;
+        }
+      }
+    }catch(_){}
+    // ★ v1.0.184 PLANO C: client-side fallback — computar de GDIUser se servidor falhar
+    try{
+      if(window.GDIUser&&typeof window.GDIUser.dump==='function'){
+        const dump=GDIUser.dump();
+        const watched=dump.watched||{};
+        const history=dump.history||[];
+        const srs=dump.srs||{};
+        const now=Date.now();
+        const todayStart=new Date();todayStart.setHours(0,0,0,0);
+        const todayMs=todayStart.getTime();
+        const weekAgo=now-7*24*60*60*1000;
+        let todayMinutes=0,weekMinutes=0;
+        const heatmap={};
+        for(const h of history){
+          if(!h||!h.at)continue;
+          const mins=h.minutes||h.duration||0;
+          if(h.at>=todayMs)todayMinutes+=mins;
+          if(h.at>=weekAgo)weekMinutes+=mins;
+          const d2=new Date(h.at);
+          const key=d2.getFullYear()+'-'+String(d2.getMonth()+1).padStart(2,'0')+'-'+String(d2.getDate()).padStart(2,'0');
+          heatmap[key]=(heatmap[key]||0)+1;
+        }
+        let streak=0;
+        let cd=new Date();
+        while(true){
+          const k=cd.getFullYear()+'-'+String(cd.getMonth()+1).padStart(2,'0')+'-'+String(cd.getDate()).padStart(2,'0');
+          if(heatmap[k]&&heatmap[k]>0){streak++;cd.setDate(cd.getDate()-1);}else break;
+        }
+        let srsDue=0,srsTotal=0;
+        for(const qid in srs){srsTotal++;if(srs[qid]&&srs[qid].due&&srs[qid].due<=now)srsDue++;}
+        const subjectMap={};
+        for(const path in watched){const parts=path.split('/');if(parts.length>=3){const s2=decodeURIComponent(parts[2]||'');if(s2)subjectMap[s2]=(subjectMap[s2]||0)+1;}}
+        const subjects=Object.entries(subjectMap).map(([name,count])=>({name,watched:count})).sort((a,b)=>b.watched-a.watched).slice(0,10);
+        const goalMinutes=parseInt(localStorage.getItem('gdi-goal-min')||'120',10);
+        const goalProgress=goalMinutes>0?Math.min(100,Math.round(todayMinutes/goalMinutes*100)):0;
+        const fallback={ok:true,analytics:{
+          todayMinutes:Math.round(todayMinutes),weekMinutes:Math.round(weekMinutes),streak,bestStreak:streak,
+          heatmap,subjects,srsDue,srsTotal,watchedCount:Object.keys(watched).length,
+          watchedToday:0,watchedThisWeek:0,goalMinutes,goalProgress,lastActivity:history.length>0?history[history.length-1].at||0:0
+        },source:'client-fallback'};
+        _analyticsCache=fallback;
+        _analyticsCacheAt=Date.now();
+        return fallback;
+      }
+    }catch(_){}
+    return null;
   }
 
   async function fetchCoach(force){
@@ -82,7 +152,47 @@
       _coachCache=d;
       _coachCacheAt=Date.now();
       return d;
-    }catch(_){return null;}
+    }catch(_){}
+    // ★ v1.0.184 PLANO C: client-side fallback — gerar conselho rule-based localmente
+    try{
+      const analytics=await fetchAnalytics();
+      if(analytics&&analytics.analytics){
+        const a=analytics.analytics;
+        let insight='',foco='',acoes=[],dica='';
+        if(a.watchedCount===0){
+          insight='Você ainda não assistiu nenhuma aula. Que tal começar hoje? 🐩';
+          foco='Escolha sua primeira aula e dê o primeiro passo!';
+          acoes=['Abra um curso na Área do Aluno','Assista a primeira aula completa','Crie seu primeiro flashcard'];
+          dica='Pequenos passos levam a grandes resultados. Comece com 25 minutos de foco! 🍅';
+        }else if(a.streak===0){
+          insight='Você tem '+a.watchedCount+' aulas assistidas, mas seu streak parou. Vamos retomar? 🔥';
+          foco='Retomar o streak — assista 1 aula hoje!';
+          acoes=['Assista 1 aula completa hoje','Revise seus flashcards vencidos ('+a.srsDue+')','Marque 25 min de Pomodoro'];
+          dica='Streak é construído um dia de cada vez. Hoje é o dia de recomeçar! ✨';
+        }else if(a.srsDue>10){
+          insight='Streak de '+a.streak+' dias! 🔥 Mas você tem '+a.srsDue+' flashcards vencidos. Não deixe acumular!';
+          foco='Resolver flashcards vencidos ('+a.srsDue+')';
+          acoes=['Estude '+Math.min(a.srsDue,20)+' flashcards agora','Assista 1 aula nova','Mantenha o streak ('+a.streak+' dias)'];
+          dica='Revisão espaçada é a chave da memória de longo prazo. Não pule o SRS! 🃏';
+        }else if(a.todayMinutes<30){
+          insight='Streak de '+a.streak+' dias! 🔥 Mas hoje você só estudou '+Math.round(a.todayMinutes)+' min. Bora aumentar!';
+          foco=a.subjects.length?a.subjects[0].name:'Estudar mais 30 minutos hoje';
+          acoes=['Assista mais 1 aula completa','Faça 10 flashcards','Estude por mais 25 min (Pomodoro)'];
+          dica='Cada minuto conta. 25 min de foco e você já cumpre sua meta! 🍅';
+        }else{
+          insight='Excelente! '+Math.round(a.todayMinutes)+' minutos hoje, streak de '+a.streak+' dias. Você está mandando bem! 🐩✨';
+          foco=a.subjects.length?'Continuar focando em '+a.subjects[0].name:'Manter o ritmo';
+          acoes=['Mantenha o streak ('+a.streak+' dias)','Resolva '+a.srsDue+' flashcards vencidos','Planeje amanhã no Plano de Estudo'];
+          dica='Consistência vence intensidade. Pequenos passos diários > maratonas esporádicas! 💪';
+        }
+        const markdown='## Insight\n'+insight+'\n\n### Seus números\n- '+a.watchedCount+' aulas assistidas\n- '+a.streak+' dias de streak 🔥\n- '+Math.round(a.todayMinutes)+' min hoje\n- '+a.srsDue+' flashcards vencidos\n\n### Foco da semana\n'+foco+'\n\n### 3 ações\n'+acoes.map((x,i)=>(i+1)+'. '+x).join('\n')+'\n\n### Dica da Meggy\n'+dica;
+        const fallback={ok:true,markdown,generatedAt:Date.now(),source:'client-fallback'};
+        _coachCache=fallback;
+        _coachCacheAt=Date.now();
+        return fallback;
+      }
+    }catch(_){}
+    return null;
   }
 
   function invalidateCache(){
