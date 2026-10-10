@@ -24,17 +24,20 @@ jobs:
 
       - name: Build APK (release)
         working-directory: meggy-app
-        run: gradle assembleRelease --no-daemon
+        run: gradle assembleRelease --no-daemon --no-build-cache
+
+      - name: Find APK
+        run: find meggy-app -name "*.apk" -type f
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: meggy-native-apk
-          path: meggy-app/app/build/outputs/apk/release/app-release.apk
+          path: meggy-app/app/build/outputs/apk/release/*.apk
 
       - name: Release
         if: startsWith(github.ref, 'refs/tags/meggy-v')
         uses: softprops/action-gh-release@v2
         with:
-          files: meggy-app/app/build/outputs/apk/release/app-release.apk
+          files: meggy-app/app/build/outputs/apk/release/*.apk
           generate_release_notes: true
