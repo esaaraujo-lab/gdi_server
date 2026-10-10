@@ -24,13 +24,10 @@ import com.meggy.app.MeggyApp
 /**
  * v2.0.0 — Search screen.
  *
- * Searches across three sources simultaneously:
- *  • The 12 hardcoded drives (by name).
- *  • The user's favorites (FileItem list from SessionManager).
- *  • The user's recents (folder/video pairs from SessionManager).
- *
- * Results are displayed as Netflix-style tiles using FileAdapter.
- * Tapping a drive opens BrowseActivity; tapping a file opens PlayerActivity.
+ * v2.0.2: BottomNav no longer calls finish() on tab switch — the target
+ * activity is declared with launchMode="singleTask" in the manifest, so
+ * startActivity() brings the existing instance to front and clears
+ * activities above it. This keeps the back stack clean.
  */
 class SearchActivity : AppCompatActivity() {
 
@@ -49,15 +46,19 @@ class SearchActivity : AppCompatActivity() {
                 R.id.nav_search -> true
                 R.id.nav_home -> {
                     startActivity(Intent(this, HomeActivity::class.java))
-                    overridePendingTransition(0, 0); finish(); true
+                    overridePendingTransition(0, 0)
+                    // v2.0.2: NO finish() — singleTask handles back-stack cleanup.
+                    true
                 }
                 R.id.nav_mylist -> {
                     startActivity(Intent(this, MyListActivity::class.java))
-                    overridePendingTransition(0, 0); finish(); true
+                    overridePendingTransition(0, 0)
+                    true
                 }
                 R.id.nav_settings -> {
                     startActivity(Intent(this, SettingsActivity::class.java))
-                    overridePendingTransition(0, 0); finish(); true
+                    overridePendingTransition(0, 0)
+                    true
                 }
                 else -> false
             }
@@ -80,8 +81,13 @@ class SearchActivity : AppCompatActivity() {
             override fun afterTextChanged(s: Editable?) { search(s?.toString().orEmpty()) }
         })
 
-        // Initial state: show all drives as default results
         search("")
+    }
+
+    // v2.0.2: Restore the correct nav highlight when brought back to front.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        binding.bottomNav.selectedItemId = R.id.nav_search
     }
 
     private fun search(query: String) {
@@ -89,23 +95,19 @@ class SearchActivity : AppCompatActivity() {
         val sm = SessionManager.get(this)
         val results = mutableListOf<SearchResult>()
 
-        // 1. Drives matching the query
         val drives = if (q.isBlank()) DriveItem.ALL
             else DriveItem.ALL.filter { it.name.contains(q, ignoreCase = true) }
         drives.forEach { results.add(SearchResult.Drive(it)) }
 
-        // 2. Favorites matching the query
         val favorites = sm.getFavorites()
         val favFilter = if (q.isBlank()) favorites
             else favorites.filter { it.name.contains(q, ignoreCase = true) }
         favFilter.forEach { results.add(SearchResult.File(it)) }
 
-        // 3. Recents matching the query
         val recents = sm.getRecents()
         val recFilter = if (q.isBlank()) recents
             else recents.filter { it.videoName.contains(q, ignoreCase = true) }
         recFilter.forEach { r ->
-            // Synthesize a FileItem so the adapter can render it
             val fake = FileItem(
                 name = r.videoName,
                 mimeType = "video/mp4",
@@ -142,7 +144,6 @@ class SearchActivity : AppCompatActivity() {
     private fun openFile(file: FileItem) {
         val link = file.link
         if (link.isNullOrEmpty()) {
-            // Recent without link → open BrowseActivity in the folder
             val intent = Intent(this, BrowseActivity::class.java)
             intent.putExtra("drivePath", file.folderPath ?: "/")
             intent.putExtra("folderName", file.folderLabel ?: file.folderPath ?: "Browse")
