@@ -6,15 +6,22 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * PlaylistManager — v1.1.0
+ * PlaylistManager — v1.2.0
  *
- * Holds the current playback queue (the list of videos in the folder the user
- * opened) plus the index of the video currently playing. Persists to
- * SharedPreferences so the queue survives activity recreation / process death.
+ * Holds the current playback queue plus the index of the video currently
+ * playing. Persists to SharedPreferences so the queue survives activity
+ * recreation / process death.
  *
- * BrowseActivity calls [setPlaylist] with every video in the current folder
- * (in display order) right before launching PlayerActivity. PlayerActivity then
- * calls [loadPlaylist] and uses [getNext] / [getPrev] / [setIndex] to navigate.
+ * v1.2.0 additions:
+ *  • Each item now carries an optional `folderLabel` (short subfolder name,
+ *    shown in the playlist sidebar to disambiguate cross-folder entries) and
+ *    `folderPath` (full path, used by PlayerActivity to key per-(folder, video)
+ *    resume positions). Both are serialised into the persisted JSON.
+ *
+ * BrowseActivity calls [setPlaylist] (with either a same-folder list or the
+ * output of [CrossFolderPlaylist.build]) right before launching
+ * PlayerActivity. PlayerActivity then calls [loadPlaylist] and uses
+ * [getNext] / [getPrev] / [setIndex] to navigate.
  *
  * Serialization uses org.json only — no Gson dependency.
  */
@@ -58,7 +65,12 @@ object PlaylistManager {
                         driveId = null,
                         link = linkStr.ifEmpty { null },
                         size = o.optLong("size", 0L),
-                        modifiedTime = null
+                        modifiedTime = null,
+                        // v1.2.0: restore disambiguation + resume-key fields
+                        folderLabel = if (o.has("folderLabel") && !o.isNull("folderLabel"))
+                            o.getString("folderLabel") else null,
+                        folderPath = if (o.has("folderPath") && !o.isNull("folderPath"))
+                            o.getString("folderPath") else null
                     )
                 )
             }
@@ -77,8 +89,11 @@ object PlaylistManager {
                 put("name", item.name)
                 put("mimeType", item.mimeType)
                 put("id", item.id)
-                put("link", item.link ?: "")
+                put("link", item.link ?: JSONObject.NULL)
                 put("size", item.size)
+                // v1.2.0: persist disambiguation + resume-key fields
+                put("folderLabel", item.folderLabel ?: JSONObject.NULL)
+                put("folderPath", item.folderPath ?: JSONObject.NULL)
             })
         }
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
