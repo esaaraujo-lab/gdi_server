@@ -54,17 +54,14 @@ class BrowseActivity : AppCompatActivity() {
         return if (screenWidthDp >= 900) 5 else if (screenWidthDp >= 600) 4 else 2
     }
 
-        // ★ v1.6.0: Wire retry button
-        binding.retryButton?.setOnClickListener { loadFolder() }
-
     private fun loadFolder() {
         binding.loadingView.visibility = View.VISIBLE
-        binding.emptyState.visibility = View.GONE
+        binding.errorState?.visibility = View.GONE
+            binding.emptyState.visibility = View.GONE
 
         lifecycleScope.launch {
             val files = withContext(Dispatchers.IO) { api.listFolder(currentPath) }
             binding.loadingView.visibility = View.GONE
-            binding.errorState.visibility = View.GONE
 
             val adapter = FileAdapter(
                 onFolder = { file -> openFolder(file) },
@@ -74,7 +71,8 @@ class BrowseActivity : AppCompatActivity() {
             binding.recycler.adapter = adapter
 
             if (files.isNullOrEmpty()) {
-                binding.errorState.visibility = View.VISIBLE
+                binding.errorState?.visibility = View.VISIBLE
+                binding.emptyState.visibility = View.VISIBLE
                 adapter.submitList(emptyList())
             } else {
                 adapter.submitList(files)
@@ -124,7 +122,6 @@ class BrowseActivity : AppCompatActivity() {
                         CrossFolderPlaylist.build(currentPath, file, api)
                     }
                     binding.loadingView.visibility = View.GONE
-            binding.errorState.visibility = View.GONE
 
                     if (result.items.size > 1) {
                         // Cross-folder playlist found
