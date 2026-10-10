@@ -1,37 +1,66 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  v1.8.0 — Home screen.
+
+  Changes vs v1.7.0:
+  • Footer TextView now has id=footer_version (was hardcoded "v1.5.0").
+    HomeActivity sets it programmatically from BuildConfig.VERSION_NAME.
+  • Top nav bar uses bg_primary + subtle 1dp pink divider line.
+  • Hero banner refined: badge, 32sp title, 14sp subtitle, primary
+    "▶ Assistir" button + secondary "Saiba mais" ghost button.
+  • Rails keep their Netflix-style horizontal scroll.
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0D1117"
+    android:background="@color/bg_primary"
     android:orientation="vertical">
 
     <!-- Top Nav -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="56dp"
+        android:layout_height="60dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:paddingHorizontal="20dp"
-        android:background="#0D1117">
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="🐩" android:textSize="24sp" />
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="Meggy" android:textSize="22sp" android:textStyle="bold"
-            android:textColor="#FF8B9F" android:layout_marginStart="8dp" />
-        <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+        android:background="@color/bg_primary">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🐩"
+            android:textSize="26sp" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Meggy"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="@color/meggy_pink"
+            android:layout_marginStart="8dp"
+            android:letterSpacing="0.02" />
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
         <TextView
             android:id="@+id/top_sair"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Sair"
-            android:textColor="#8B949E"
+            android:textColor="@color/text_secondary"
             android:textSize="13sp"
-            android:padding="8dp"
+            android:padding="10dp"
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:clickable="true"
             android:foreground="?attr/selectableItemBackground" />
     </LinearLayout>
+
+    <!-- 1dp pink divider under nav -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#22FF8B9F" />
 
     <!-- Scrollable content -->
     <androidx.core.widget.NestedScrollView
@@ -48,30 +77,77 @@
             <!-- Hero Banner -->
             <FrameLayout
                 android:layout_width="match_parent"
-                android:layout_height="280dp">
-                <View android:layout_width="match_parent" android:layout_height="match_parent"
+                android:layout_height="300dp">
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
                     android:background="@drawable/hero_gradient" />
+
+                <!-- Bottom scrim so hero text reads well -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="140dp"
+                    android:layout_gravity="bottom"
+                    android:background="@drawable/tile_overlay_bottom" />
+
                 <LinearLayout
-                    android:layout_width="match_parent" android:layout_height="match_parent"
-                    android:orientation="vertical" android:padding="32dp"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical"
+                    android:padding="32dp"
                     android:gravity="center_vertical">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                        android:text="🐕 DESTAQUE DA SEMANA" android:textColor="#FF8B9F"
-                        android:textSize="13sp" android:textStyle="bold" android:layout_marginBottom="8dp" />
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                        android:text="PF - Agente da Polícia Federal" android:textColor="#FFFFFF"
-                        android:textSize="28sp" android:textStyle="bold" android:layout_marginBottom="12dp" />
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                        android:text="Preparatório completo. 45 aulas em vídeo HD." android:textColor="#8B949E"
-                        android:textSize="14sp" android:layout_marginBottom="20dp" />
-                    <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content"
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🐕 DESTAQUE DA SEMANA"
+                        android:textColor="@color/meggy_pink"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.18"
+                        android:layout_marginBottom="10dp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="PF — Agente da Polícia Federal"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="30sp"
+                        android:textStyle="bold"
+                        android:shadowColor="#80000000"
+                        android:shadowDx="0"
+                        android:shadowDy="2"
+                        android:shadowRadius="6"
+                        android:layout_marginBottom="12dp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Preparatório completo. 45 aulas em vídeo HD."
+                        android:textColor="#B5C0CC"
+                        android:textSize="14sp"
+                        android:layout_marginBottom="22dp" />
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:orientation="horizontal">
-                        <Button android:id="@+id/hero_play" android:layout_width="wrap_content"
-                            android:layout_height="wrap_content" android:text="▶ Assistir"
-                            android:background="#FFFFFF" android:textColor="#000000"
-                            android:paddingHorizontal="28dp" android:paddingVertical="10dp"
+
+                        <Button
+                            android:id="@+id/hero_play"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="▶  Assistir"
+                            android:background="#FFFFFFFF"
+                            android:textColor="#FF000000"
+                            android:paddingHorizontal="30dp"
+                            android:paddingVertical="11dp"
                             android:textAllCaps="false"
-                            android:focusable="true" android:focusableInTouchMode="true"
+                            android:textSize="15sp"
+                            android:textStyle="bold"
+                            android:stateListAnimator="@null"
+                            android:focusable="true"
+                            android:focusableInTouchMode="true"
                             android:clickable="true" />
                     </LinearLayout>
                 </LinearLayout>
@@ -80,31 +156,53 @@
             <!-- Continue Assistindo rail -->
             <TextView
                 android:id="@+id/label_continue"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="Continue assistindo" android:textColor="#E6EDF3"
-                android:textSize="18sp" android:textStyle="bold"
-                android:paddingHorizontal="24dp" android:paddingTop="24dp" android:paddingBottom="12dp" />
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Continue assistindo"
+                android:textColor="@color/text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:paddingHorizontal="24dp"
+                android:paddingTop="26dp"
+                android:paddingBottom="12dp" />
+
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/rail_continue"
-                android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:clipToPadding="false" android:paddingHorizontal="20dp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clipToPadding="false"
+                android:paddingHorizontal="20dp"
                 android:nestedScrollingEnabled="false" />
 
             <!-- Drives rail -->
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="Explorar drives" android:textColor="#E6EDF3"
-                android:textSize="18sp" android:textStyle="bold"
-                android:paddingHorizontal="24dp" android:paddingTop="24dp" android:paddingBottom="12dp" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Explorar drives"
+                android:textColor="@color/text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:paddingHorizontal="24dp"
+                android:paddingTop="30dp"
+                android:paddingBottom="12dp" />
+
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/rail_drives"
-                android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:clipToPadding="false" android:paddingHorizontal="20dp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clipToPadding="false"
+                android:paddingHorizontal="20dp"
+                android:paddingBottom="8dp"
                 android:nestedScrollingEnabled="false" />
 
-            <!-- Footer -->
-            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="🐩 Meggy · v1.5.0" android:textColor="#484F58"
-                android:textSize="12sp" android:gravity="center"
+            <!-- Footer (dynamic version set in HomeActivity) -->
+            <TextView
+                android:id="@+id/footer_version"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text_muted"
+                android:textSize="12sp"
+                android:gravity="center"
                 android:paddingVertical="32dp" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
