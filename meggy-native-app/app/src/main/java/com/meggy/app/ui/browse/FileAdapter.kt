@@ -15,20 +15,26 @@ import com.meggy.app.databinding.ItemFileBinding
  * Click handling is delegated to two callbacks: [onFolder] for folders and
  * [onFile] for downloadable files.
  *
- * v1.1.0: supports a "continuar de onde parou" badge — call [setLastWatched]
- * with the name of the video the user last played in this folder and the
- * matching card will show a pink "▶ continuar" pill.
+ * v1.2.0: supports two badges per video card —
+ *  • "▶ continuar" pill on videos that have a non-zero resume position in the
+ *    current folder (set via [setResumeAndWatched]).
+ *  • "✓" checkmark on videos previously watched to the end.
  */
 class FileAdapter(
     private val onFolder: (FileItem) -> Unit,
     private val onFile: (FileItem) -> Unit
 ) : ListAdapter<FileItem, FileAdapter.VH>(DIFF) {
 
-    private var lastWatchedName: String? = null
+    private var resumedNames: Set<String> = emptySet()
+    private var watchedNames: Set<String> = emptySet()
 
-    /** Highlights the video whose name matches [name] with a resume badge. */
-    fun setLastWatched(name: String?) {
-        lastWatchedName = name
+    /**
+     * Feeds the two badge sets for the current folder and refreshes every row.
+     * Call this right after [submitList].
+     */
+    fun setResumeAndWatched(resumed: Set<String>, watched: Set<String>) {
+        resumedNames = resumed
+        watchedNames = watched
         if (itemCount > 0) notifyItemRangeChanged(0, itemCount)
     }
 
@@ -66,9 +72,12 @@ class FileAdapter(
                 item.isPdf    -> "\uD83D\uDCC4"   // 📄
                 else          -> "\uD83D\uDCC4"   // 📄
             }
-            // v1.1.0: resume badge
-            val showBadge = item.isVideo && item.name == lastWatchedName
-            lastWatchedBadge.visibility = if (showBadge) View.VISIBLE else View.GONE
+            // v1.2.0: "continuar" badge on videos with a resume position.
+            val showResume = item.isVideo && item.name in resumedNames
+            lastWatchedBadge.visibility = if (showResume) View.VISIBLE else View.GONE
+            // v1.2.0: watched checkmark on videos watched to the end.
+            val showWatched = item.isVideo && item.name in watchedNames
+            watchedCheck.visibility = if (showWatched) View.VISIBLE else View.GONE
         }
     }
 
