@@ -56,6 +56,14 @@ data class DriveItem(
  *
  * `link` is null for folders (folders are not downloadable). For files, prepend
  * [com.meggy.app.MeggyApp.BASE_URL] to obtain the full streaming URL.
+ *
+ * v1.2.0 additions:
+ *  • [folderLabel] — short folder name used to disambiguate entries in a
+ *    cross-folder playlist (e.g. "001 - PODERES DA ADMINISTRAÇÃO"). Null for
+ *    same-folder playlists where every entry shares the same folder.
+ *  • [folderPath] — full folder path ("/0:/PF.../Bloco I/DirAdmin/001 - .../")
+ *    used as the resume-key prefix. Null when the item came straight from a
+ *    folder listing (BrowseActivity fills it in when building the playlist).
  */
 data class FileItem(
     val name: String,
@@ -64,7 +72,9 @@ data class FileItem(
     val driveId: String?,
     val link: String?,
     val size: Long,
-    val modifiedTime: String?
+    val modifiedTime: String?,
+    val folderLabel: String? = null,
+    val folderPath: String? = null
 ) {
     val isFolder: Boolean get() = mimeType == "application/vnd.google-apps.folder"
     val isVideo: Boolean
