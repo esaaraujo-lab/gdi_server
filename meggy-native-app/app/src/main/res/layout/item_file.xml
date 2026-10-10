@@ -47,15 +47,38 @@
             android:layout_weight="1"
             android:orientation="vertical">
 
-            <TextView
-                android:id="@+id/file_name"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textColor="#E6EDF3"
-                android:textSize="14sp"
-                android:textStyle="bold"
-                android:maxLines="2"
-                android:ellipsize="end" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/file_name"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textColor="#E6EDF3"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:maxLines="2"
+                    android:ellipsize="end" />
+
+                <!-- v1.2.0: watched checkmark -->
+                <TextView
+                    android:id="@+id/watched_check"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/badge_watched"
+                    android:paddingHorizontal="7dp"
+                    android:paddingVertical="2dp"
+                    android:text="\u2713"
+                    android:textColor="#5DDEDA"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/file_meta"
@@ -67,7 +90,7 @@
                 android:maxLines="1"
                 android:ellipsize="end" />
 
-            <!-- v1.1.0: "continuar de onde parou" badge -->
+            <!-- v1.1.0+: "continuar de onde parou" badge -->
             <TextView
                 android:id="@+id/last_watched_badge"
                 android:layout_width="wrap_content"
