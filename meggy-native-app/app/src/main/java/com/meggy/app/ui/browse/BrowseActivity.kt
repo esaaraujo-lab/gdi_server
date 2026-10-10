@@ -28,7 +28,6 @@ class BrowseActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         api = ApiService(this)
-        // ★ v1.0.7 FIX: receber drivePath (ex: /0:/) em vez de folderId
         currentPath = intent.getStringExtra("drivePath") ?: "/"
         folderName = intent.getStringExtra("folderName") ?: "Browse"
 
@@ -52,7 +51,6 @@ class BrowseActivity : AppCompatActivity() {
         binding.emptyState.visibility = View.GONE
         
         lifecycleScope.launch {
-            // ★ v1.0.7 FIX: passar o PATH COMPLETO para ApiService
             val files = withContext(Dispatchers.IO) { api.listFolder(currentPath) }
             binding.loadingView.visibility = View.GONE
 
@@ -72,9 +70,15 @@ class BrowseActivity : AppCompatActivity() {
     }
 
     private fun openFolder(file: FileItem) {
-        // ★ v1.0.7 FIX: append folder name ao path atual e URL-encode
-        val encodedName = java.net.URLEncoder.encode(file.name, "UTF-8")
-        val newPath = if (currentPath.endsWith("/")) "$currentPath$encodedName/" else "$currentPath/$encodedName/"
+        // ★ v1.0.8 FIX: NÃO usar URLEncoder (produz + em vez de %20).
+        // OkHttp's HttpUrl.parse() faz o encoding correto (%20 para espaços).
+        // Antes: URLEncoder.encode("PF - Policial") → "PF+-+Policial" → pasta não encontrada!
+        // Agora: file.name direto → OkHttp encode → "PF%20-%20Policial" → funciona!
+        val newPath = if (currentPath.endsWith("/")) {
+            "$currentPath${file.name}/"
+        } else {
+            "$currentPath/${file.name}/"
+        }
         
         val intent = Intent(this, BrowseActivity::class.java)
         intent.putExtra("drivePath", newPath)
