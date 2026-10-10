@@ -73,6 +73,28 @@
             android:shadowDy="1"
             android:shadowRadius="4" />
 
+        <!-- v1.2.0: prev button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/prev_button"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="48dp"
+            android:text="\u23EE"
+            android:textColor="@android:color/white"
+            app:cornerRadius="16dp" />
+
+        <!-- v1.2.0: next button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/next_button"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="48dp"
+            android:text="\u23ED"
+            android:textColor="@android:color/white"
+            app:cornerRadius="16dp" />
+
         <com.google.android.material.button.MaterialButton
             android:id="@+id/speed_button"
             style="@style/Widget.Material3.Button.TextButton"
