@@ -16,6 +16,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.snackbar.Snackbar
 import com.meggy.app.MeggyApp
+import com.meggy.app.data.FileItem
 import com.meggy.app.databinding.ActivityPlayerBinding
 import com.meggy.app.util.PlaylistManager
 import com.meggy.app.util.SessionManager
@@ -24,22 +25,29 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * PlayerActivity — v1.1.0
+ * PlayerActivity — v1.2.0
  *
- * Changes since v1.0.9:
- *  • Auto-plays the next video in the folder when the current one ends
- *    (see [PlaylistManager]).
- *  • Lateral playlist sidebar (toggle with the ☰ button) — mirrors the web
- *    platform UX. Tapping an entry jumps to it.
- *  • Clears the resume position when a video finishes naturally so re-opening
- *    it doesn't immediately skip to the next.
+ * Changes since v1.1.0:
+ *  • Per-(folder, video) resume position via SessionManager.saveResume /
+ *    getResume / clearResume — keyed `"resume_<folderPath>::<videoName>"` so
+ *    the cross-folder playlist (where every file is named "video.mp4") keeps
+ *    independent resume positions per lesson.
+ *  • "Watched" flag set on natural end (STATE_ENDED) so BrowseActivity can show
+ *    a ✓ checkmark on finished lessons.
+ *  • Prev / next buttons in the top bar (in addition to the ☰ sidebar).
+ *  • Tracks the currently-playing [FileItem] (with folderPath) so resume keys
+ *    stay correct when auto-advancing across folders.
+ *
+ * Retained from v1.1.0: auto-play next on STATE_ENDED, lateral playlist
+ * sidebar, 0.5×–2.0× speed cycle, immersive fullscreen, cookie-injected
+ * DefaultHttpDataSource.
  */
 class PlayerActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityPlayerBinding
     private var player: ExoPlayer? = null
+    private var currentItem: FileItem? = null
     private var currentUrl: String? = null
-    private var currentTitle: String? = null
 
     private var playlistAdapter: PlaylistAdapter? = null
     private var playlistVisible = false
@@ -58,24 +66,43 @@ class PlayerActivity : AppCompatActivity() {
         // Reload the persisted playlist (set by BrowseActivity before launch).
         PlaylistManager.loadPlaylist(this)
 
-        currentUrl = intent.getStringExtra(EXTRA_URL)
-        currentTitle = intent.getStringExtra(EXTRA_TITLE)
-
-        // If launched without an explicit URL (e.g. recreated), fall back to the
-        // playlist's current entry.
-        if (currentUrl.isNullOrBlank()) {
-            val item = PlaylistManager.getCurrent()
-            if (item != null && !item.link.isNullOrEmpty()) {
-                currentUrl = MeggyApp.BASE_URL + item.link
-                currentTitle = item.name
+        // Resolve the item to play: prefer the playlist's current entry, fall
+        // back to the EXTRA_* ints passed by BrowseActivity.
+        var item = PlaylistManager.getCurrent()
+        if (item == null || item.link.isNullOrEmpty()) {
+            val url = intent.getStringExtra(EXTRA_URL)
+            val title = intent.getStringExtra(EXTRA_TITLE) ?: "Reproduzindo"
+            val folderPath = intent.getStringExtra(EXTRA_FOLDER_PATH)
+            if (!url.isNullOrBlank()) {
+                item = FileItem(
+                    name = title,
+                    mimeType = "video/mp4",
+                    id = "",
+                    driveId = null,
+                    link = url.removePrefix(MeggyApp.BASE_URL),
+                    size = 0L,
+                    modifiedTime = null,
+                    folderLabel = null,
+                    folderPath = folderPath
+                )
             }
         }
+        currentItem = item
 
-        binding.titleLabel.text = currentTitle ?: "Reproduzindo"
+        binding.titleLabel.text = displayTitle(item)
         binding.speedButton.setOnClickListener { cycleSpeed() }
         binding.playlistButton.setOnClickListener { togglePlaylist() }
+        binding.prevButton.setOnClickListener { playPrev() }
+        binding.nextButton.setOnClickListener { playNext() }
 
         setupPlaylistSidebar()
+        updateNavButtons()
+    }
+
+    private fun displayTitle(item: FileItem?): String {
+        if (item == null) return "Reproduzindo"
+        val label = item.folderLabel
+        return if (!label.isNullOrBlank()) "${item.name}  ·  $label" else item.name
     }
 
     // ──────────── playlist sidebar ────────────
@@ -89,9 +116,7 @@ class PlayerActivity : AppCompatActivity() {
         playlistAdapter = PlaylistAdapter(items, PlaylistManager.index()) { position ->
             val item = items.getOrNull(position) ?: return@PlaylistAdapter
             PlaylistManager.setIndex(position)
-            if (!item.link.isNullOrEmpty()) {
-                playVideo(MeggyApp.BASE_URL + item.link, item.name)
-            }
+            playItem(item)
             hidePlaylist()
         }
         binding.playlistRecycler.layoutManager = LinearLayoutManager(this)
@@ -123,16 +148,19 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun initialisePlayer() {
-        val url = currentUrl
+        val item = currentItem
+        val link = item?.link
+        val url = if (!link.isNullOrEmpty()) MeggyApp.BASE_URL + link else intent.getStringExtra(EXTRA_URL)
         if (url.isNullOrBlank()) {
             Snackbar.make(binding.root, "URL de playback ausente.", Snackbar.LENGTH_LONG).show()
             finish()
             return
         }
+        currentUrl = url
 
         val cookie = SessionManager.get(this).sessionCookie
         val httpFactory = DefaultHttpDataSource.Factory()
-            .setUserAgent("MeggyNative/1.1 (Android)")
+            .setUserAgent("MeggyNative/1.2 (Android)")
             .setAllowCrossProtocolRedirects(true)
             .setDefaultRequestProperties(
                 if (!cookie.isNullOrBlank()) mapOf("Cookie" to "session=$cookie") else emptyMap()
@@ -145,18 +173,18 @@ class PlayerActivity : AppCompatActivity() {
         exo.setMediaItem(MediaItem.fromUri(url))
         exo.prepare()
 
-        val saved = SessionManager.get(this).getResumePosition(url)
+        // v1.2.0: seek to the per-(folder, video) resume position.
+        val saved = resumeFor(item, url)
         if (saved > 0L) exo.seekTo(saved)
 
         exo.playWhenReady = true
 
-        // v1.1.0: auto-play next when the current video ends.
+        // v1.2.0: auto-play next + clear/mark watched on natural end.
         exo.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_ENDED) {
-                    // Clear the resume position so re-opening this file doesn't
-                    // immediately skip to the next one.
-                    currentUrl?.let { SessionManager.get(this@PlayerActivity).clearResumePosition(it) }
+                    // Mark watched + clear resume so re-opening doesn't skip.
+                    markEnded(item)
                     // Post to avoid releasing the player from inside its own callback.
                     binding.root.post { playNext() }
                 }
@@ -172,38 +200,48 @@ class PlayerActivity : AppCompatActivity() {
             while (true) {
                 delay(2_000)
                 val p = player ?: break
-                val u = currentUrl ?: break
+                val it = currentItem ?: break
                 if (p.playbackState == Player.STATE_READY && p.isPlaying) {
-                    SessionManager.get(this@PlayerActivity).saveResumePosition(u, p.currentPosition)
+                    saveResumeFor(it, currentUrl, p.currentPosition)
                 }
             }
         }
     }
 
-    /** Swap the current video for a new one (used by next / prev / sidebar tap). */
-    private fun playVideo(url: String, title: String) {
+    /** Swap the current video for a new one (next / prev / sidebar tap). */
+    private fun playItem(item: FileItem) {
         releasePlayer()
-        currentUrl = url
-        currentTitle = title
-        binding.titleLabel.text = title
+        currentItem = item
+        binding.titleLabel.text = displayTitle(item)
         initialisePlayer()
         playlistAdapter?.updateCurrent(PlaylistManager.index())
+        updateNavButtons()
     }
 
     private fun playNext() {
         val next = PlaylistManager.getNext()
         if (next == null || next.link.isNullOrEmpty()) {
             Snackbar.make(binding.root, "Fim da playlist", Snackbar.LENGTH_LONG).show()
+            updateNavButtons()
             return
         }
-        playVideo(MeggyApp.BASE_URL + next.link, next.name)
+        playItem(next)
     }
 
-    @Suppress("unused") // reserved for a future prev-button; sidebar covers navigation today
     private fun playPrev() {
-        val prev = PlaylistManager.getPrev() ?: return
-        if (prev.link.isNullOrEmpty()) return
-        playVideo(MeggyApp.BASE_URL + prev.link, prev.name)
+        val prev = PlaylistManager.getPrev()
+        if (prev == null || prev.link.isNullOrEmpty()) {
+            updateNavButtons()
+            return
+        }
+        playItem(prev)
+    }
+
+    private fun updateNavButtons() {
+        binding.prevButton.isEnabled = PlaylistManager.hasPrev()
+        binding.prevButton.alpha = if (PlaylistManager.hasPrev()) 1f else 0.35f
+        binding.nextButton.isEnabled = PlaylistManager.hasNext()
+        binding.nextButton.alpha = if (PlaylistManager.hasNext()) 1f else 0.35f
     }
 
     private fun releasePlayer() {
@@ -211,8 +249,10 @@ class PlayerActivity : AppCompatActivity() {
         saveJob = null
         val p = player ?: return
         try {
-            currentUrl?.let { url ->
-                SessionManager.get(this).saveResumePosition(url, p.currentPosition)
+            val it = currentItem
+            val url = currentUrl
+            if (it != null && url != null) {
+                saveResumeFor(it, url, p.currentPosition)
             }
         } catch (_: Exception) {}
         p.release()
@@ -229,8 +269,39 @@ class PlayerActivity : AppCompatActivity() {
         binding.speedButton.text = "${next}x"
     }
 
+    // ──────────── resume helpers (per-(folder, video) with URL fallback) ────────────
+
+    private fun resumeFor(item: FileItem?, url: String): Long {
+        val fp = item?.folderPath
+        if (!fp.isNullOrBlank() && !item.name.isBlank()) {
+            return SessionManager.get(this).getResume(fp, item.name)
+        }
+        return SessionManager.get(this).getResumePosition(url)
+    }
+
+    private fun saveResumeFor(item: FileItem, url: String, positionMs: Long) {
+        val fp = item.folderPath
+        if (!fp.isNullOrBlank() && !item.name.isBlank()) {
+            SessionManager.get(this).saveResume(fp, item.name, positionMs)
+        } else {
+            SessionManager.get(this).saveResumePosition(url, positionMs)
+        }
+    }
+
+    /** Called when the current item finishes naturally: mark watched + clear resume. */
+    private fun markEnded(item: FileItem?) {
+        val fp = item?.folderPath
+        if (!fp.isNullOrBlank() && !item.name.isBlank()) {
+            SessionManager.get(this).clearResume(fp, item.name)
+            SessionManager.get(this).markWatched(fp, item.name)
+        } else if (currentUrl != null) {
+            SessionManager.get(this).clearResumePosition(currentUrl!!)
+        }
+    }
+
     companion object {
         const val EXTRA_URL = "playback_url"
         const val EXTRA_TITLE = "playback_title"
+        const val EXTRA_FOLDER_PATH = "playback_folder_path"
     }
 }
