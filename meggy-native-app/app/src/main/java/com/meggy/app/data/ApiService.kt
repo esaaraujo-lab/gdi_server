@@ -1,17 +1,17 @@
 package com.meggy.app.data
 
+import android.content.Context
 import com.meggy.app.MeggyApp
+import com.meggy.app.util.SessionManager
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.IOException
 
-class ApiService {
+class ApiService(private val context: Context) {
     
-    companion object {
-        private const val TAG = "ApiService"
-    }
+    private val sessionManager get() = SessionManager.get(context)
     
     suspend fun login(username: String, password: String): Boolean {
         val formBody = "username=${java.net.URLEncoder.encode(username, "UTF-8")}" +
@@ -24,14 +24,13 @@ class ApiService {
         
         return try {
             val response = MeggyApp.okHttpClient.newCall(request).execute()
-            // 302 = success (redirect after login)
             if (response.code == 302 || response.code == 200) {
-                // Extract Set-Cookie header
                 val cookies = response.headers("Set-Cookie")
                 for (cookie in cookies) {
                     if (cookie.startsWith("session=")) {
                         val sessionValue = cookie.substringAfter("session=").substringBefore(";")
-                        SessionManager.saveSession(sessionValue)
+                        sessionManager.sessionCookie = sessionValue
+                        sessionManager.username = username
                         return true
                     }
                 }
@@ -54,7 +53,7 @@ class ApiService {
         val request = Request.Builder()
             .url("${MeggyApp.BASE_URL}/$driveIdx:/")
             .post(jsonBody.toRequestBody("application/json".toMediaTypeOrNull()))
-            .header("Cookie", "session=${SessionManager.getSession()}")
+            .header("Cookie", "session=${sessionManager.sessionCookie ?: ""}")
             .build()
         
         return try {
@@ -87,7 +86,7 @@ class ApiService {
     suspend fun listCourses(): List<CourseItem>? {
         val request = Request.Builder()
             .url("${MeggyApp.BASE_URL}/api/courses/list")
-            .header("Cookie", "session=${SessionManager.getSession()}")
+            .header("Cookie", "session=${sessionManager.sessionCookie ?: ""}")
             .build()
         
         return try {
