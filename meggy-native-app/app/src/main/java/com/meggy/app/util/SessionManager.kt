@@ -106,12 +106,21 @@ class SessionManager private constructor(context: Context) {
 
     /** Records the name of the last video opened from [folderPath]. */
     fun saveLastWatched(folderPath: String, videoName: String) {
+        prefs.edit().putString("last_watch_folder", folderPath).putString("last_watch_video", videoName).apply()
         prefs.edit().putString("last_$folderPath", videoName).apply()
     }
 
     /** Returns the name of the last video opened from [folderPath], or null. */
     fun getLastWatched(folderPath: String): String? {
         return prefs.getString("last_$folderPath", null)
+    }
+
+    // ★ v1.4.0: Para "Continuar de onde parou" na home
+    fun getLastWatchedFolder(): String? {
+        return prefs.getString("last_watch_folder", null)
+    }
+    fun getLastWatchedVideoName(): String? {
+        return prefs.getString("last_watch_video", null)
     }
 
     companion object {
