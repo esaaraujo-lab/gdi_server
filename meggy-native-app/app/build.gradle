@@ -18,13 +18,12 @@ android {
         applicationId "com.meggy.app"
         minSdk 21
         targetSdk 34
-        // ★ v1.8.0: Netflix/Disney inspired animated tiles + dynamic version footer
-        versionCode 19
-        versionName "1.8.0"
+        // ★ v2.0.0: Bottom Nav (4 tabs) + Hero rotativo + Search/MyList/Settings + Player gestures
+        versionCode 20
+        versionName "2.0.0"
     }
 
     // ★ v1.4.0: Signing config com keystore FIXA (mesma em todos os builds)
-    // Isso permite auto-update: Android aceita instalar versão nova sobre a antiga
     signingConfigs {
         release {
             if (keystoreFile.exists()) {
@@ -33,7 +32,6 @@ android {
                 keyAlias keystoreProperties['keyAlias']
                 keyPassword keystoreProperties['keyPassword']
             } else {
-                // Fallback: debug keystore (gerado pelo workflow)
                 storeFile file("${System.getProperty('user.home')}/.android/debug.keystore")
                 storePassword 'android'
                 keyAlias 'androiddebugkey'
