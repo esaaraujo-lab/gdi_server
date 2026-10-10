@@ -12,11 +12,43 @@
         app:resize_mode="fit"
         app:use_controller="true"
         app:show_buffering="when_playing"
-        
         app:animation_enabled="true"
         app:surface_type="surface_view" />
 
-    <!-- Top gradient + title overlay -->
+    <!-- Playlist sidebar (right side). Hidden by default; toggled by ☰ button. -->
+    <FrameLayout
+        android:id="@+id/playlist_container"
+        android:layout_width="320dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="end"
+        android:background="#E6000000"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/playlist_header"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="64dp"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="12dp"
+            android:text="Playlist"
+            android:textColor="#E6EDF3"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/playlist_recycler"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_marginTop="112dp"
+            android:layout_marginBottom="16dp"
+            android:clipToPadding="false"
+            android:paddingHorizontal="8dp"
+            android:scrollbars="vertical"
+            android:scrollbarFadeDuration="0" />
+    </FrameLayout>
+
+    <!-- Top gradient + title overlay (rendered last so it stays on top & tappable). -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -51,6 +83,16 @@
             android:textColor="@android:color/white"
             app:strokeColor="@android:color/white"
             app:strokeWidth="1dp"
+            app:cornerRadius="16dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/playlist_button"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="48dp"
+            android:text="\u2630"
+            android:textColor="@android:color/white"
             app:cornerRadius="16dp" />
     </LinearLayout>
 
