@@ -2,6 +2,7 @@ package com.meggy.app.ui.home
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.GridLayoutManager
 import com.meggy.app.BuildConfig
@@ -26,9 +27,30 @@ class HomeActivity : AppCompatActivity() {
             return
         }
 
-        // ★ v1.3.0: Verificar atualizações do GitHub
+        // ★ v1.4.0: Verificar atualizações
         UpdateChecker.checkForUpdate(this, BuildConfig.VERSION_NAME)
 
+        // ★ v1.4.0: Mostrar "Continuar de onde parou"
+        val sm = SessionManager.get(this)
+        val lastFolder = sm.getLastWatchedFolder()
+        val lastVideo = sm.getLastWatchedVideoName()
+        
+        if (!lastFolder.isNullOrBlank() && !lastVideo.isNullOrBlank()) {
+            binding.continueCard.visibility = View.VISIBLE
+            binding.continueTitle.text = lastVideo
+            binding.continueSubtitle.text = lastFolder
+            binding.continueCard.setOnClickListener {
+                // Navegar para a pasta do último vídeo
+                val intent = Intent(this, BrowseActivity::class.java)
+                intent.putExtra("drivePath", lastFolder)
+                intent.putExtra("folderName", lastFolder.substringAfterLast("/").ifEmpty { "Continuar" })
+                startActivity(intent)
+            }
+        } else {
+            binding.continueCard.visibility = View.GONE
+        }
+
+        // Grid de drives
         val spanCount = calculateSpanCount()
         binding.recycler.layoutManager = GridLayoutManager(this, spanCount)
 
