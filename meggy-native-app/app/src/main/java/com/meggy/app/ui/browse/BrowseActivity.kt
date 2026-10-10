@@ -13,16 +13,27 @@ import com.meggy.app.data.FileItem
 import com.meggy.app.databinding.ActivityBrowseBinding
 import com.meggy.app.ui.player.PlayerActivity
 import com.meggy.app.util.PlaylistManager
+import com.meggy.app.util.SessionManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/**
+ * Netflix-style browse grid (v1.5.0).
+ *
+ * Each entry is rendered as a Netflix-style card (gradient background derived
+ * from the file name, ✓ watched badge, ▶ continuar badge, pink→purple progress
+ * bar on videos) via [FileAdapter] + [com.meggy.app.databinding.ItemRailCardBinding].
+ *
+ * Breadcrumb and folder navigation behaviour is unchanged from v1.4.0.
+ */
 class BrowseActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityBrowseBinding
     private lateinit var api: ApiService
     private var currentPath: String = "/"
     private var folderName: String = "Browse"
+    private var fileAdapter: FileAdapter? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,7 +62,7 @@ class BrowseActivity : AppCompatActivity() {
     private fun loadFolder() {
         binding.loadingView.visibility = View.VISIBLE
         binding.emptyState.visibility = View.GONE
-        
+
         lifecycleScope.launch {
             val files = withContext(Dispatchers.IO) { api.listFolder(currentPath) }
             binding.loadingView.visibility = View.GONE
@@ -60,13 +71,21 @@ class BrowseActivity : AppCompatActivity() {
                 onFolder = { file -> openFolder(file) },
                 onFile = { file -> openFile(file) }
             )
+            fileAdapter = adapter
             binding.recycler.adapter = adapter
-            
+
             if (files.isNullOrEmpty()) {
                 binding.emptyState.visibility = View.VISIBLE
                 adapter.submitList(emptyList())
             } else {
                 adapter.submitList(files)
+                // Apply resume + watched badges for the current folder.
+                val sm = SessionManager.get(this@BrowseActivity)
+                val resumed = files.filter { it.isVideo && sm.hasResume(currentPath, it.name) }
+                    .map { it.name }.toSet()
+                val watched = files.filter { it.isVideo && sm.isWatched(currentPath, it.name) }
+                    .map { it.name }.toSet()
+                adapter.setResumeAndWatched(resumed, watched)
             }
         }
     }
@@ -77,7 +96,7 @@ class BrowseActivity : AppCompatActivity() {
         } else {
             "$currentPath/${file.name}/"
         }
-        
+
         val intent = Intent(this, BrowseActivity::class.java)
         intent.putExtra("drivePath", newPath)
         intent.putExtra("folderName", file.name)
@@ -87,46 +106,40 @@ class BrowseActivity : AppCompatActivity() {
     private fun openFile(file: FileItem) {
         val link = file.link
         if (link.isNullOrEmpty()) return
-        
+
         val fullUrl = MeggyApp.BASE_URL + link
-        
+
         if (file.isVideo || file.isAudio) {
-            // ★ v1.4.0: Vídeos e áudios abrem no PlayerActivity (ExoPlayer toca ambos)
-            // Build playlist from same folder (videos + audios)
-            val allFiles = (binding.recycler.adapter as? FileAdapter)?.currentList ?: emptyList()
+            val allFiles = fileAdapter?.currentList ?: emptyList()
             val playableItems = allFiles.filter { (it.isVideo || it.isAudio) && !it.link.isNullOrEmpty() }
             val playIndex = playableItems.indexOfFirst { it.id == file.id }
-            
+
             if (playableItems.isNotEmpty() && playIndex >= 0) {
                 PlaylistManager.setPlaylist(playableItems, playIndex, this)
             }
-            
+
             val intent = Intent(this, PlayerActivity::class.java)
             intent.putExtra(PlayerActivity.EXTRA_URL, fullUrl)
             intent.putExtra(PlayerActivity.EXTRA_TITLE, file.name)
             intent.putExtra(PlayerActivity.EXTRA_FOLDER_PATH, currentPath)
-            // ★ v1.4.0: Salvar último assistido para "Continuar" na home
-            com.meggy.app.util.SessionManager.get(this).saveLastWatched(currentPath, file.name)
+            SessionManager.get(this).saveLastWatched(currentPath, file.name)
             startActivity(intent)
         } else if (file.isPdf) {
-            // ★ v1.4.0: PDFs abrem no navegador (Android tem leitor de PDF nativo via intent)
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(fullUrl))
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             try {
                 startActivity(intent)
             } catch (e: Exception) {
-                // Se não tem app de PDF, abrir no navegador
                 val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(fullUrl))
                 startActivity(browserIntent)
             }
         } else {
-            // Outros arquivos: tentar abrir via intent
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(fullUrl))
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             try {
                 startActivity(intent)
             } catch (e: Exception) {
-                // Ignorar se não consegue abrir
+                // Ignore if no app can handle it.
             }
         }
     }
