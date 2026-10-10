@@ -80,9 +80,10 @@ class BrowseActivity : AppCompatActivity() {
     }
 
     private fun openFile(file: FileItem) {
-        if (file.link.isNotEmpty()) {
+        val link = file.link
+        if (!link.isNullOrEmpty()) {
             val intent = Intent(this, PlayerActivity::class.java)
-            intent.putExtra("url", MeggyApp.BASE_URL + file.link)
+            intent.putExtra("url", MeggyApp.BASE_URL + link)
             intent.putExtra("title", file.name)
             startActivity(intent)
         }
