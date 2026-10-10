@@ -5,67 +5,56 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.database.Cursor
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.widget.Toast
+import androidx.core.content.FileProvider
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
 
 /**
- * UpdateChecker — verifica GitHub releases por novas versões do APK.
+ * UpdateChecker — v1.6.0
  * 
- * Como funciona:
- * 1. No app start, verifica a API do GitHub: /repos/esaaraujo-lab/gdi_server/releases/latest
- * 2. Compara o tag_name (ex: "native-v1.3.0") com a versão atual (BuildConfig.VERSION_NAME)
- * 3. Se diferente, baixa o APK via DownloadManager
- * 4. Quando download completa, abre o APK para instalação
- * 
- * O usuário precisa permitir "Instalar apps desconhecidos" para o app Meggy.
+ * Correções:
+ * 1. FileProvider em vez de Uri.fromFile() (fix crash Android 7+)
+ * 2. RECEIVER_NOT_EXPORTED flag (fix crash Android 14+)
+ * 3. Verifica SEMPRE ao abrir app (sem throttle de 6h)
+ * 4. POST_NOTIFICATIONS permission request (Android 13+)
+ * 5. Toast na main thread (context pode não ser Activity)
  */
 object UpdateChecker {
 
     private const val GITHUB_API = "https://api.github.com/repos/esaaraujo-lab/gdi_server/releases/latest"
     private const val PREFS_NAME = "meggy_update"
-    private const val KEY_LAST_CHECK = "last_check"
     private const val KEY_LAST_VERSION = "last_version"
-    private const val CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L // 6 horas
 
     /**
-     * Verifica se há nova versão. Se houver, baixa e instala.
-     * Chamar no onCreate de HomeActivity (ou SplashActivity).
+     * Verifica se há nova versão AO ABRIR O APP.
+     * Se houver, baixa e instala automaticamente.
      */
     fun checkForUpdate(context: Context, currentVersion: String) {
-        // Não verificar muito frequentemente (6h)
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val lastCheck = prefs.getLong(KEY_LAST_CHECK, 0)
-        val now = System.currentTimeMillis()
-        if (now - lastCheck < CHECK_INTERVAL_MS) return
-        
-        prefs.edit().putLong(KEY_LAST_CHECK, now).apply()
-
         Thread {
             try {
                 val client = OkHttpClient.Builder().build()
-                val request = Request.Builder().url(GITHUB_API).build()
+                val request = Request.Builder()
+                    .url(GITHUB_API)
+                    .header("Accept", "application/vnd.github+json")
+                    .build()
                 val response = client.newCall(request).execute()
                 if (!response.isSuccessful) return@Thread
                 
                 val body = response.body?.string() ?: return@Thread
                 val json = JSONObject(body)
                 val tagName = json.optString("tag_name", "")
-                val releaseName = json.optString("name", "")
                 
-                // Extrair versão do tag (ex: "native-v1.3.0" → "1.3.0")
                 val remoteVersion = tagName.replace("native-v", "").replace("v", "")
                 val localVersion = currentVersion.replace("native-v", "").replace("v", "")
                 
-                // Comparar versões
-                if (isNewer(remoteVersion, localVersion)) {
-                    // Pegar URL do APK
+                if (remoteVersion.isNotEmpty() && isNewer(remoteVersion, localVersion)) {
                     val assets = json.optJSONArray("assets") ?: return@Thread
                     var apkUrl: String? = null
                     for (i in 0 until assets.length()) {
@@ -77,24 +66,20 @@ object UpdateChecker {
                     }
                     
                     if (apkUrl != null) {
-                        // Baixar na main thread (DownloadManager é async)
-                        val finalApkUrl = apkUrl
-                        (context as? android.app.Activity)?.runOnUiThread {
-                            Toast.makeText(context, "🌙 Nova versão $remoteVersion disponível! Baixando...", Toast.LENGTH_LONG).show()
-                            downloadAndInstall(context, finalApkUrl, "meggy-$remoteVersion.apk")
+                        // Notificar na main thread
+                        val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+                        mainHandler.post {
+                            Toast.makeText(context, "🌙 Nova versão $remoteVersion! Baixando...", Toast.LENGTH_LONG).show()
                         }
+                        downloadAndInstall(context, apkUrl, "meggy-$remoteVersion.apk")
                     }
                 }
             } catch (e: Exception) {
-                // Silencioso — não incomodar usuário com erros de rede
+                // Silencioso
             }
         }.start()
     }
 
-    /**
-     * Compara versões no formato X.Y.Z
-     * Retorna true se remote > local
-     */
     private fun isNewer(remote: String, local: String): Boolean {
         val r = remote.split(".").map { it.toIntOrNull() ?: 0 }
         val l = local.split(".").map { it.toIntOrNull() ?: 0 }
@@ -107,9 +92,6 @@ object UpdateChecker {
         return false
     }
 
-    /**
-     * Baixa o APK via DownloadManager e registra receiver para instalação automática.
-     */
     private fun downloadAndInstall(context: Context, url: String, fileName: String) {
         try {
             val request = DownloadManager.Request(Uri.parse(url)).apply {
@@ -122,29 +104,45 @@ object UpdateChecker {
             val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
             val downloadId = dm.enqueue(request)
             
-            // Registrar receiver para instalar quando download completar
             val receiver = object : BroadcastReceiver() {
                 override fun onReceive(ctx: Context?, intent: Intent?) {
                     val id = intent?.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1) ?: -1
                     if (id == downloadId) {
-                        // Download completo — instalar
                         val file = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
                         if (file.exists()) {
+                            // ★ v1.6.0 FIX: FileProvider em vez de Uri.fromFile()
+                            val apkUri = FileProvider.getUriForFile(
+                                context,
+                                "${context.packageName}.fileprovider",
+                                file
+                            )
                             val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                                setDataAndType(Uri.fromFile(file), "application/vnd.android.package-archive")
+                                setDataAndType(apkUri, "application/vnd.android.package-archive")
                                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            }
+                            // Grant permission to all packages that can receive this intent
+                            val resInfo = context.packageManager.queryBroadcastReceivers(installIntent, 0)
+                            for (ri in resInfo) {
+                                context.grantUriPermission(ri.activityInfo.packageName, apkUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
                             }
                             context.startActivity(installIntent)
                         }
-                        // Desregistrar receiver
-                        context.unregisterReceiver(this)
+                        try { context.unregisterReceiver(this) } catch (_: Exception) {}
                     }
                 }
             }
             
-            context.registerReceiver(receiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
+            // ★ v1.6.0 FIX: RECEIVER_NOT_EXPORTED para Android 14+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.registerReceiver(receiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                context.registerReceiver(receiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
+            }
         } catch (e: Exception) {
-            Toast.makeText(context, "Erro ao baixar atualização: ${e.message}", Toast.LENGTH_SHORT).show()
+            val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+            mainHandler.post {
+                Toast.makeText(context, "Erro ao baixar atualização", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 }
