@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    TV banner — 320x180dp (the Android TV banner spec).
+    Gradient background with the poodle emoji + "Meggy" wordmark.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+
+    <path
+        android:fillColor="@color/meggy_pink"
+        android:pathData="M0,0 H320 V180 H0 Z" />
+
+    <path
+        android:fillColor="@color/meggy_purple_deep"
+        android:pathData="M0,0 H320 V180 H0 Z" />
+
+    <path
+        android:fillColor="@color/meggy_pink"
+        android:pathData="M0,0 L320,0 L320,180 Z" />
+
+    <!-- Poodle silhouette (simplified) -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M90,60 m-14,0 a14,14 0 1,0 28,0 a14,14 0 1,0 -28,0 z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M88,82 C72,82 60,96 60,114 C60,134 78,148 102,148 L140,148 C160,148 174,134 174,114 C174,96 162,82 144,82 C136,72 110,72 96,74 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M180,98 m-12,0 a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0 z" />
+
+    <!-- Wordmark -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M210,80 H230 V88 H236 V96 H230 V120 H220 V96 H210 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M240,80 H250 V120 H240 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M260,80 L274,120 L264,120 L262,112 L252,112 L250,120 L240,120 L254,80 Z M256,96 L254,104 L258,104 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M280,80 H300 V88 H290 V96 H298 V104 H290 V120 H280 Z" />
+</vector>
