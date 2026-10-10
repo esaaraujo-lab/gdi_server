@@ -4,10 +4,10 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="6dp"
-    app:cardCornerRadius="20dp"
-    app:cardElevation="2dp"
-    app:cardBackgroundColor="@color/md_surface_container"
+    android:layout_margin="5dp"
+    app:cardCornerRadius="16dp"
+    app:cardElevation="4dp"
+    app:cardBackgroundColor="#1E2230"
     app:strokeWidth="0dp"
     android:focusable="true"
     android:focusableInTouchMode="true"
@@ -19,24 +19,33 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:gravity="center"
-        android:padding="16dp">
+        android:padding="20dp"
+        android:minHeight="120dp">
 
-        <TextView
-            android:id="@+id/drive_icon"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
-            android:gravity="center"
-            android:textSize="32sp"
-            android:background="@drawable/circle_thumb"
-            android:text="📁" />
+        <FrameLayout
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:layout_marginBottom="10dp">
+
+            <View
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:background="@drawable/icon_bg_gradient" />
+
+            <TextView
+                android:id="@+id/drive_icon"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:gravity="center"
+                android:textSize="32sp" />
+        </FrameLayout>
 
         <TextView
             android:id="@+id/drive_name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
             android:gravity="center"
-            android:textColor="@color/md_on_surface"
+            android:textColor="#E6EDF3"
             android:textSize="13sp"
             android:textStyle="bold"
             android:maxLines="2"
