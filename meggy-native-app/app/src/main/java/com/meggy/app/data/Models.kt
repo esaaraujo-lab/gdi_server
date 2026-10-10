@@ -77,6 +77,9 @@ data class FileItem(
     val folderPath: String? = null
 ) {
     val isFolder: Boolean get() = mimeType == "application/vnd.google-apps.folder"
+    val isAudio: Boolean
+        get() = mimeType.startsWith("audio/") || name.endsWith(".mp3", true) || name.endsWith(".m4a", true) || name.endsWith(".aac", true) || name.endsWith(".ogg", true) || name.endsWith(".wav", true) || name.endsWith(".flac", true)
+
     val isVideo: Boolean
         get() = mimeType.startsWith("video/") ||
                 name.endsWith(".mp4", true) ||
