@@ -7,11 +7,16 @@ import android.content.SharedPreferences
  * SessionManager — persists the worker.js `session` cookie (an opaque encrypted
  * string returned by POST /login) in SharedPreferences.
  *
- * Also persists:
- *  • per-file video resume positions (key = file download link, value = ms)
- *  • per-folder "last watched" video name (v1.1.0) so BrowseActivity can badge
- *    the video the user was last playing in that folder ("continuar de onde
- *    parou").
+ * v1.2.0 additions (alongside the v1.0/v1.1 stores):
+ *  • per-(folder, video) resume position — keyed `"resume_<folderPath>::<videoName>"`
+ *    so the same video name in two different folders keeps independent resume
+ *    positions (critical for cross-folder playlists where every lesson's file
+ *    is literally named "video.mp4").
+ *  • per-(folder, video) "watched" flag — keyed `"watched_<folderPath>::<videoName>"`
+ *    so BrowseActivity can show a ✓ checkmark on finished lessons.
+ *
+ * The legacy per-URL resume store (`pos_<url>`) and the per-folder last-watched
+ * store (`last_<folderPath>`) are retained for backward compatibility.
  */
 class SessionManager private constructor(context: Context) {
 
@@ -37,13 +42,8 @@ class SessionManager private constructor(context: Context) {
             .apply()
     }
 
-    // ───────── video resume positions ─────────
+    // ───────── legacy per-URL resume positions (v1.0) ─────────
 
-    /**
-     * Returns the saved playback position in milliseconds for the given file URL,
-     * or 0L if no position was saved. We also clear positions that are within
-     * the last 5 seconds of the file (treat those as "finished").
-     */
     fun getResumePosition(fileUrl: String, durationMs: Long = -1L): Long {
         val pos = prefs.getLong("pos_$fileUrl", 0L)
         if (pos <= 0L) return 0L
@@ -59,7 +59,50 @@ class SessionManager private constructor(context: Context) {
         prefs.edit().remove("pos_$fileUrl").apply()
     }
 
-    // ───────── per-folder last watched (v1.1.0) ─────────
+    // ───────── per-(folder, video) resume (v1.2.0) ─────────
+    //
+    // Keyed by "resume_<folderPath>::<videoName>". This is what powers the
+    // cross-folder playlist: every lesson folder contains a file literally
+    // named "video.mp4", so keying on (folder, video) — not just video name —
+    // is the only way to keep their resume positions independent.
+
+    /** Saves the playback position for the given (folder, video) pair. */
+    fun saveResume(folderPath: String, videoName: String, positionMs: Long) {
+        prefs.edit().putLong(resumeKey(folderPath, videoName), positionMs).apply()
+    }
+
+    /** Returns the saved position (ms) for the (folder, video) pair, or 0. */
+    fun getResume(folderPath: String, videoName: String): Long {
+        return prefs.getLong(resumeKey(folderPath, videoName), 0L)
+    }
+
+    /** True when there is a non-zero resume position for the (folder, video) pair. */
+    fun hasResume(folderPath: String, videoName: String): Boolean =
+        prefs.getLong(resumeKey(folderPath, videoName), 0L) > 0L
+
+    /** Clears the resume position for the (folder, video) pair (called on natural end). */
+    fun clearResume(folderPath: String, videoName: String) {
+        prefs.edit().remove(resumeKey(folderPath, videoName)).apply()
+    }
+
+    private fun resumeKey(folderPath: String, videoName: String): String =
+        "resume_$folderPath::$videoName"
+
+    // ───────── per-(folder, video) watched flag (v1.2.0) ─────────
+
+    /** Marks the (folder, video) pair as fully watched. */
+    fun markWatched(folderPath: String, videoName: String) {
+        prefs.edit().putBoolean(watchedKey(folderPath, videoName), true).apply()
+    }
+
+    /** True when the (folder, video) pair was previously watched to the end. */
+    fun isWatched(folderPath: String, videoName: String): Boolean =
+        prefs.getBoolean(watchedKey(folderPath, videoName), false)
+
+    private fun watchedKey(folderPath: String, videoName: String): String =
+        "watched_$folderPath::$videoName"
+
+    // ───────── per-folder last watched (v1.1.0, retained) ─────────
 
     /** Records the name of the last video opened from [folderPath]. */
     fun saveLastWatched(folderPath: String, videoName: String) {
