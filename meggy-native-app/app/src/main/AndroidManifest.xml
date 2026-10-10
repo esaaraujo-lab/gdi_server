@@ -51,6 +51,15 @@
             android:supportsPictureInPicture="true" android:resizeableActivity="true"
             android:screenOrientation="sensorLandscape" />
 
+        <!-- v2.0.0: New activities for bottom navigation -->
+        <activity android:name=".ui.search.SearchActivity" android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
+            android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".ui.mylist.MyListActivity" android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
+        <activity android:name=".ui.settings.SettingsActivity" android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
+
         <!-- ★ v1.6.0: FileProvider para UpdateChecker (instalar APK) -->
         <provider
             android:name="androidx.core.content.FileProvider"
