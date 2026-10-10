@@ -23,6 +23,15 @@
     <color name="accent_red">#FF6B6B</color>
     <color name="accent_teal">#4ECDC4</color>
     
+    <!-- Material Design aliases (usado por layouts antigos) -->
+    <color name="md_surface_container">#1E2230</color>
+    <color name="md_on_surface">#E6EDF3</color>
+    <color name="md_on_surface_variant">#8B949E</color>
+    <color name="md_outline">#30363D</color>
+    <color name="md_outline_variant">#21262D</color>
+    <color name="md_error">#FF6B6B</color>
+    <color name="md_on_error">#FFFFFF</color>
+    
     <!-- Legacy -->
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
