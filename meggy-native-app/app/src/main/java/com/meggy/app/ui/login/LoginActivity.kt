@@ -5,11 +5,9 @@ import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.meggy.app.MeggyApp
 import com.meggy.app.data.ApiService
 import com.meggy.app.databinding.ActivityLoginBinding
 import com.meggy.app.ui.home.HomeActivity
-import com.meggy.app.util.SessionManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -58,7 +56,14 @@ class LoginActivity : AppCompatActivity() {
             val success = withContext(Dispatchers.IO) { api.login(user, pass) }
             setLoading(false)
             if (success) {
-                startActivity(Intent(this@LoginActivity, HomeActivity::class.java))
+                // ★ v2.0.2: Clear the entire back stack when going to Home.
+                // Combined with android:noHistory="true" on LoginActivity in
+                // the manifest, this guarantees the user can NEVER press back
+                // to return to the login screen after a successful login.
+                val intent = Intent(this@LoginActivity, HomeActivity::class.java)
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                startActivity(intent)
+                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
                 finish()
             } else {
                 binding.passwordLayout.error = "Usuário ou senha inválidos"
