@@ -1,98 +1,111 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#0D1117"
     android:orientation="vertical">
 
-    <!-- ★ v1.4.0: Card "Continuar de onde parou" -->
-    <com.google.android.material.card.MaterialCardView
-        android:id="@+id/continue_card"
+    <!-- Top Nav -->
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_margin="16dp"
-        app:cardCornerRadius="16dp"
-        app:cardElevation="4dp"
-        app:cardBackgroundColor="#1E2230"
-        app:strokeWidth="0dp"
-        android:focusable="true"
-        android:focusableInTouchMode="true"
-        android:clickable="true"
-        android:foreground="?attr/selectableItemBackground"
-        android:visibility="gone">
+        android:layout_height="56dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="20dp"
+        android:background="#0D1117">
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="🐩" android:textSize="24sp" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Meggy" android:textSize="22sp" android:textStyle="bold"
+            android:textColor="#FF8B9F" android:layout_marginStart="8dp" />
+        <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+        <TextView
+            android:id="@+id/top_sair"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Sair"
+            android:textColor="#8B949E"
+            android:textSize="13sp"
+            android:padding="8dp"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:clickable="true"
+            android:foreground="?attr/selectableItemBackground" />
+    </LinearLayout>
+
+    <!-- Scrollable content -->
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:padding="16dp">
+            android:orientation="vertical">
 
+            <!-- Hero Banner -->
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="280dp">
+                <View android:layout_width="match_parent" android:layout_height="match_parent"
+                    android:background="@drawable/hero_gradient" />
+                <LinearLayout
+                    android:layout_width="match_parent" android:layout_height="match_parent"
+                    android:orientation="vertical" android:padding="32dp"
+                    android:gravity="center_vertical">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:text="🐕 DESTAQUE DA SEMANA" android:textColor="#FF8B9F"
+                        android:textSize="13sp" android:textStyle="bold" android:layout_marginBottom="8dp" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:text="PF - Agente da Polícia Federal" android:textColor="#FFFFFF"
+                        android:textSize="28sp" android:textStyle="bold" android:layout_marginBottom="12dp" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:text="Preparatório completo. 45 aulas em vídeo HD." android:textColor="#8B949E"
+                        android:textSize="14sp" android:layout_marginBottom="20dp" />
+                    <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+                        <Button android:id="@+id/hero_play" android:layout_width="wrap_content"
+                            android:layout_height="wrap_content" android:text="▶ Assistir"
+                            android:background="#FFFFFF" android:textColor="#000000"
+                            android:paddingHorizontal="28dp" android:paddingVertical="10dp"
+                            android:textAllCaps="false"
+                            android:focusable="true" android:focusableInTouchMode="true"
+                            android:clickable="true" />
+                    </LinearLayout>
+                </LinearLayout>
+            </FrameLayout>
+
+            <!-- Continue Assistindo rail -->
             <TextView
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:gravity="center"
-                android:textSize="24sp"
-                android:background="@drawable/icon_bg_gradient"
-                android:text="▶"
-                android:textColor="@android:color/white" />
+                android:id="@+id/label_continue"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Continue assistindo" android:textColor="#E6EDF3"
+                android:textSize="18sp" android:textStyle="bold"
+                android:paddingHorizontal="24dp" android:paddingTop="24dp" android:paddingBottom="12dp" />
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rail_continue"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:clipToPadding="false" android:paddingHorizontal="20dp"
+                android:nestedScrollingEnabled="false" />
 
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="12dp"
-                android:orientation="vertical">
+            <!-- Drives rail -->
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Explorar drives" android:textColor="#E6EDF3"
+                android:textSize="18sp" android:textStyle="bold"
+                android:paddingHorizontal="24dp" android:paddingTop="24dp" android:paddingBottom="12dp" />
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rail_drives"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:clipToPadding="false" android:paddingHorizontal="20dp"
+                android:nestedScrollingEnabled="false" />
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Continuar"
-                    android:textColor="#FF8B9F"
-                    android:textSize="11sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/continue_title"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:textColor="#E6EDF3"
-                    android:textSize="14sp"
-                    android:textStyle="bold"
-                    android:maxLines="2"
-                    android:ellipsize="end" />
-
-                <TextView
-                    android:id="@+id/continue_subtitle"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:textColor="#8B949E"
-                    android:textSize="11sp"
-                    android:maxLines="1"
-                    android:ellipsize="end" />
-            </LinearLayout>
+            <!-- Footer -->
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="🐩 Meggy · v1.5.0" android:textColor="#484F58"
+                android:textSize="12sp" android:gravity="center"
+                android:paddingVertical="32dp" />
         </LinearLayout>
-    </com.google.android.material.card.MaterialCardView>
-
-    <!-- Título "Drives" -->
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:layout_marginBottom="8dp"
-        android:text="Drives"
-        android:textColor="#8B949E"
-        android:textSize="13sp"
-        android:textStyle="bold" />
-
-    <!-- Grid de drives -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recycler"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:clipToPadding="false"
-        android:padding="8dp" />
-
+    </androidx.core.widget.NestedScrollView>
 </LinearLayout>
