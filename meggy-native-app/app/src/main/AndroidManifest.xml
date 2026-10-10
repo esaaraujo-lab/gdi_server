@@ -28,9 +28,14 @@
         android:appCategory="video"
         tools:targetApi="34">
 
+        <!--
+          v2.0.2: SplashActivity with noHistory=true so it NEVER stays in the back stack.
+          After routing to Home or Login, the user can never press back to return to splash.
+        -->
         <activity
             android:name=".ui.splash.SplashActivity"
             android:exported="true"
+            android:noHistory="true"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
             android:theme="@style/Theme.Meggy.Splash">
             <intent-filter>
@@ -40,9 +45,22 @@
             </intent-filter>
         </activity>
 
+        <!--
+          v2.0.2: LoginActivity with noHistory=true so it NEVER stays in the back stack.
+          After successful login → Home, the user can never press back to return to login.
+        -->
         <activity android:name=".ui.login.LoginActivity" android:exported="false"
+            android:noHistory="true"
             android:configChanges="orientation|screenSize|keyboardHidden" android:windowSoftInputMode="adjustResize" />
+
+        <!--
+          v2.0.2: launchMode="singleTask" on the 4 bottom-nav activities.
+          This guarantees only ONE instance of each exists. When the user taps a nav tab,
+          startActivity() brings the existing instance to front (onNewIntent) and clears
+          activities above it. The back button always returns to Home, then exits the app.
+        -->
         <activity android:name=".ui.home.HomeActivity" android:exported="false"
+            android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
         <activity android:name=".ui.browse.BrowseActivity" android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
@@ -51,13 +69,15 @@
             android:supportsPictureInPicture="true" android:resizeableActivity="true"
             android:screenOrientation="sensorLandscape" />
 
-        <!-- v2.0.0: New activities for bottom navigation -->
         <activity android:name=".ui.search.SearchActivity" android:exported="false"
+            android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
             android:windowSoftInputMode="adjustResize" />
         <activity android:name=".ui.mylist.MyListActivity" android:exported="false"
+            android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
         <activity android:name=".ui.settings.SettingsActivity" android:exported="false"
+            android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
 
         <!-- ★ v1.6.0: FileProvider para UpdateChecker (instalar APK) -->
