@@ -41,17 +41,23 @@ class ApiService(private val context: Context) {
         }
     }
     
-    suspend fun listFolder(driveIdx: Int, folderId: String, password: String = ""): List<FileItem>? {
+    // ★ v1.0.7 FIX: POST para o PATH COMPLETO (ex: /0:/folder1/folder2/)
+    // Antes POSTava para /${driveIdx}:/ sempre, ignorando subfolders.
+    // O worker.js usa o PATH da URL para navegar, não o id no body.
+    suspend fun listFolder(fullPath: String): List<FileItem>? {
         val jsonBody = JSONObject().apply {
-            put("id", folderId)
+            put("id", "")
             put("type", "folder")
-            put("password", password)
+            put("password", "")
             put("page_token", JSONObject.NULL)
             put("page_index", 0)
         }.toString()
         
+        // Garantir que o path termina com /
+        val path = if (fullPath.endsWith("/")) fullPath else "$fullPath/"
+        
         val request = Request.Builder()
-            .url("${MeggyApp.BASE_URL}/$driveIdx:/")
+            .url("${MeggyApp.BASE_URL}$path")
             .post(jsonBody.toRequestBody("application/json".toMediaTypeOrNull()))
             .header("Cookie", "session=${sessionManager.sessionCookie ?: ""}")
             .build()
@@ -74,7 +80,7 @@ class ApiService(private val context: Context) {
                     driveId = f.optString("driveId"),
                     link = f.optString("link", null),
                     size = f.optLong("size", 0L),
-                    modifiedTime = f.optString("modifiedTime", "")
+                    modifiedTime = f.optString("modifiedTime", null)
                 ))
             }
             result
