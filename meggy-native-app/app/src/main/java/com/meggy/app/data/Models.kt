@@ -1,5 +1,6 @@
 package com.meggy.app.data
 
+import android.graphics.Color
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -19,12 +20,15 @@ import org.json.JSONObject
  * Drives 0..1 have known root Google Drive IDs (so we can list their top-level folder
  * without first asking the server). Drives 2..11 are addressed by index — the worker
  * resolves the underlying Drive folder transparently.
+ *
+ * v1.5.0: [icon] now carries the emoji string rendered on the card (was a category
+ * slug like "trt"/"courses" before).
  */
 data class DriveItem(
     val index: Int,
     val name: String,
     val rootFolderId: String?,
-    val icon: String = "folder"
+    val icon: String = "📁"
 ) {
     companion object {
         /**
@@ -33,18 +37,18 @@ data class DriveItem(
          * Indices 2..11 use the drive index as the path segment (e.g. POST /2:/).
          */
         val ALL: List<DriveItem> = listOf(
-            DriveItem(0,  "RETA FINAL TRTs",            "18pNVx52TY5ImVTTEyxp30oEQJCnKgzL7", "trt"),
-            DriveItem(1,  "CURSOS - PLATAFORMAS COMPLETAS", "1lZo5wBhqC44yEySqX6rjyzBuJEEvGPs7", "courses"),
-            DriveItem(2,  "VESTIBULARES PLATAFORMAS",    null, "vestibular"),
-            DriveItem(3,  "VESTIBULARES ISOLADAS",       null, "vestibular"),
-            DriveItem(4,  "MUSICA E CANTO",              null, "music"),
-            DriveItem(5,  "CARREIRAS EDUCACIONAIS",      null, "career"),
-            DriveItem(6,  "CLUBE FIT",                   null, "fitness"),
-            DriveItem(7,  "HIPOPRESSIVOS",               null, "health"),
-            DriveItem(8,  "SAÚDE E MEDICINA",            null, "health"),
-            DriveItem(9,  "TUDO DE TRIBUNAIS",           null, "tribunais"),
-            DriveItem(10, "ALFACON 2026",                null, "alfa"),
-            DriveItem(11, "PREPARATÓRIO OAB",            null, "oab")
+            DriveItem(0,  "RETA FINAL TRTs",                "18pNVx52TY5ImVTTEyxp30oEQJCnKgzL7", "⚖️"),
+            DriveItem(1,  "CURSOS - PLATAFORMAS COMPLETAS", "1lZo5wBhqC44yEySqX6rjyzBuJEEvGPs7", "📚"),
+            DriveItem(2,  "VESTIBULARES PLATAFORMAS",       null, "🎯"),
+            DriveItem(3,  "VESTIBULARES ISOLADAS",          null, "🎨"),
+            DriveItem(4,  "MUSICA E CANTO",                 null, "🎼"),
+            DriveItem(5,  "CARREIRAS EDUCACIONAIS",         null, "🏆"),
+            DriveItem(6,  "CLUBE FIT",                      null, "💪"),
+            DriveItem(7,  "HIPOPRESSIVOS",                  null, "🧘"),
+            DriveItem(8,  "SAÚDE E MEDICINA",               null, "⚕️"),
+            DriveItem(9,  "TUDO DE TRIBUNAIS",              null, "⚖️"),
+            DriveItem(10, "ALFACON 2026",                   null, "🎓"),
+            DriveItem(11, "PREPARATÓRIO OAB",               null, "🛡️")
         )
     }
 }
@@ -185,4 +189,36 @@ data class CourseItem(
             return out
         }
     }
+}
+
+// ──────────────────────────── v1.5.0 colour helpers ────────────────────────────
+
+/**
+ * 12-colour palette mirroring the web preview's `colorFromString` palette.
+ * Used to give every drive/course/file card a visually distinct gradient.
+ */
+private val STRING_COLOR_PALETTE: IntArray = intArrayOf(
+    0xFFFF6B6B.toInt(),
+    0xFF4ECDC4.toInt(),
+    0xFFFFD93D.toInt(),
+    0xFFFF8B9F.toInt(),
+    0xFFC026D3.toInt(),
+    0xFF6BCB77.toInt(),
+    0xFFFF9F1C.toInt(),
+    0xFF7B68EE.toInt(),
+    0xFF00BFFF.toInt(),
+    0xFFFF4757.toInt(),
+    0xFFA8E6CF.toInt(),
+    0xFFDDA0DD.toInt()
+)
+
+/**
+ * Returns a stable ARGB colour int (opaque) for the given string by hashing it
+ * and picking from [STRING_COLOR_PALETTE]. Matches the JS web preview's
+ * `colorFromString` so cards look identical across web/native.
+ */
+fun colorFromString(str: String): Int {
+    var hash = 0
+    for (c in str) hash = c.code + ((hash shl 5) - hash)
+    return STRING_COLOR_PALETTE[Math.floorMod(hash, STRING_COLOR_PALETTE.size)]
 }
