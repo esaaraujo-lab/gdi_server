@@ -1,4 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  v2.0.0 — Player layout.
+
+  Changes vs v1.8.0:
+  • Added seek_gesture_hint TextView (overlay center) — shows "±10s"
+    when user double-taps to seek.
+  • Added swipe_indicator TextView (overlay center-top) — shows
+    "🔆 80%" or "🔊 60%" during vertical swipes.
+  • Added sleep_timer_label TextView (top-left, below title bar) —
+    shows "⏰ 12:34" countdown when sleep timer is active.
+  • Added sleep_timer_button (⏰) in the top bar — opens timer dialog.
+-->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -49,79 +61,143 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         android:layout_gravity="top"
         android:background="@drawable/top_gradient"
-        android:padding="16dp"
-        android:gravity="center_vertical">
+        android:paddingHorizontal="16dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="10dp">
 
-        <TextView
-            android:id="@+id/title_label"
-            android:layout_width="0dp"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:textColor="@android:color/white"
-            android:textSize="16sp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/title_label"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="@android:color/white"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:ellipsize="end"
+                android:singleLine="true"
+                android:shadowColor="#80000000"
+                android:shadowDx="0"
+                android:shadowDy="1"
+                android:shadowRadius="4" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/prev_button"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="48dp"
+                android:text="⏮"
+                android:textColor="@android:color/white"
+                app:cornerRadius="16dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/next_button"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="48dp"
+                android:text="⏭"
+                android:textColor="@android:color/white"
+                app:cornerRadius="16dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/speed_button"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="56dp"
+                android:text="1.0x"
+                android:textColor="@android:color/white"
+                app:strokeColor="@android:color/white"
+                app:strokeWidth="1dp"
+                app:cornerRadius="16dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/sleep_button"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="48dp"
+                android:text="🌙"
+                android:textColor="@android:color/white"
+                app:cornerRadius="16dp" />
+
+            <!-- v2.0.0: ⏰ sleep timer button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/sleep_timer_button"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="48dp"
+                android:text="⏰"
+                android:textColor="@android:color/white"
+                app:cornerRadius="16dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/playlist_button"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="48dp"
+                android:text="☰"
+                android:textColor="@android:color/white"
+                app:cornerRadius="16dp" />
+        </LinearLayout>
+
+        <!-- v2.0.0: Sleep timer countdown label -->
+        <TextView
+            android:id="@+id/sleep_timer_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:textColor="#FFFF8B9F"
+            android:textSize="12sp"
             android:textStyle="bold"
-            android:ellipsize="end"
-            android:singleLine="true"
             android:shadowColor="#80000000"
             android:shadowDx="0"
             android:shadowDy="1"
-            android:shadowRadius="4" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/prev_button"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="48dp"
-            android:text="⏮"
-            android:textColor="@android:color/white"
-            app:cornerRadius="16dp" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/next_button"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="48dp"
-            android:text="⏭"
-            android:textColor="@android:color/white"
-            app:cornerRadius="16dp" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/speed_button"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="56dp"
-            android:text="1.0x"
-            android:textColor="@android:color/white"
-            app:strokeColor="@android:color/white"
-            app:strokeWidth="1dp"
-            app:cornerRadius="16dp" />
-
-        <!-- ★ v1.3.0: Botão DEDICADO de modo descanso (🌙) -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/sleep_button"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="48dp"
-            android:text="🌙"
-            android:textColor="@android:color/white"
-            app:cornerRadius="16dp" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/playlist_button"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="48dp"
-            android:text="☰"
-            android:textColor="@android:color/white"
-            app:cornerRadius="16dp" />
+            android:shadowRadius="3"
+            android:visibility="gone" />
     </LinearLayout>
+
+    <!-- v2.0.0: Seek gesture hint (center overlay, transient) -->
+    <TextView
+        android:id="@+id/seek_gesture_hint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="#CC000000"
+        android:paddingHorizontal="22dp"
+        android:paddingVertical="10dp"
+        android:textColor="@android:color/white"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        android:elevation="8dp" />
+
+    <!-- v2.0.0: Swipe indicator (top-center overlay, transient) -->
+    <TextView
+        android:id="@+id/swipe_indicator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_marginTop="80dp"
+        android:background="#CC000000"
+        android:paddingHorizontal="22dp"
+        android:paddingVertical="10dp"
+        android:textColor="@android:color/white"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        android:elevation="8dp" />
 
 </FrameLayout>
