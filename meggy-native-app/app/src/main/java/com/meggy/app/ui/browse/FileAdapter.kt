@@ -1,6 +1,7 @@
 package com.meggy.app.ui.browse
 
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
@@ -13,11 +14,23 @@ import com.meggy.app.databinding.ItemFileBinding
  *
  * Click handling is delegated to two callbacks: [onFolder] for folders and
  * [onFile] for downloadable files.
+ *
+ * v1.1.0: supports a "continuar de onde parou" badge — call [setLastWatched]
+ * with the name of the video the user last played in this folder and the
+ * matching card will show a pink "▶ continuar" pill.
  */
 class FileAdapter(
     private val onFolder: (FileItem) -> Unit,
     private val onFile: (FileItem) -> Unit
 ) : ListAdapter<FileItem, FileAdapter.VH>(DIFF) {
+
+    private var lastWatchedName: String? = null
+
+    /** Highlights the video whose name matches [name] with a resume badge. */
+    fun setLastWatched(name: String?) {
+        lastWatchedName = name
+        if (itemCount > 0) notifyItemRangeChanged(0, itemCount)
+    }
 
     inner class VH(val binding: ItemFileBinding) : RecyclerView.ViewHolder(binding.root) {
         init {
@@ -53,6 +66,9 @@ class FileAdapter(
                 item.isPdf    -> "\uD83D\uDCC4"   // 📄
                 else          -> "\uD83D\uDCC4"   // 📄
             }
+            // v1.1.0: resume badge
+            val showBadge = item.isVideo && item.name == lastWatchedName
+            lastWatchedBadge.visibility = if (showBadge) View.VISIBLE else View.GONE
         }
     }
 
