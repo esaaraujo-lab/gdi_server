@@ -41,9 +41,7 @@ class ApiService(private val context: Context) {
         }
     }
     
-    // ★ v1.0.7 FIX: POST para o PATH COMPLETO (ex: /0:/folder1/folder2/)
-    // Antes POSTava para /${driveIdx}:/ sempre, ignorando subfolders.
-    // O worker.js usa o PATH da URL para navegar, não o id no body.
+    // ★ v1.0.8: POST para o PATH COMPLETO. OkHttp faz o encoding correto (%20).
     suspend fun listFolder(fullPath: String): List<FileItem>? {
         val jsonBody = JSONObject().apply {
             put("id", "")
@@ -53,7 +51,7 @@ class ApiService(private val context: Context) {
             put("page_index", 0)
         }.toString()
         
-        // Garantir que o path termina com /
+        // Garantir trailing slash
         val path = if (fullPath.endsWith("/")) fullPath else "$fullPath/"
         
         val request = Request.Builder()
@@ -67,6 +65,12 @@ class ApiService(private val context: Context) {
             if (!response.isSuccessful) return null
             
             val body = response.body?.string() ?: return null
+            
+            // ★ v1.0.8: verificar se resposta é HTML (login redirect) em vez de JSON
+            if (body.trimStart().startsWith("<!DOCTYPE") || body.trimStart().startsWith("<html")) {
+                return null  // sessão expirou — precisa re-login
+            }
+            
             val json = JSONObject(body)
             val files = json.optJSONObject("data")?.optJSONArray("files") ?: return emptyList()
             
@@ -100,6 +104,8 @@ class ApiService(private val context: Context) {
             if (!response.isSuccessful) return null
             
             val body = response.body?.string() ?: return null
+            if (body.trimStart().startsWith("<")) return null
+            
             val json = JSONObject(body)
             if (!json.optBoolean("ok")) return null
             
