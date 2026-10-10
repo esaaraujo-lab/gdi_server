@@ -70,10 +70,6 @@ class BrowseActivity : AppCompatActivity() {
     }
 
     private fun openFolder(file: FileItem) {
-        // ★ v1.0.8 FIX: NÃO usar URLEncoder (produz + em vez de %20).
-        // OkHttp's HttpUrl.parse() faz o encoding correto (%20 para espaços).
-        // Antes: URLEncoder.encode("PF - Policial") → "PF+-+Policial" → pasta não encontrada!
-        // Agora: file.name direto → OkHttp encode → "PF%20-%20Policial" → funciona!
         val newPath = if (currentPath.endsWith("/")) {
             "$currentPath${file.name}/"
         } else {
@@ -90,8 +86,9 @@ class BrowseActivity : AppCompatActivity() {
         val link = file.link
         if (!link.isNullOrEmpty()) {
             val intent = Intent(this, PlayerActivity::class.java)
-            intent.putExtra("url", MeggyApp.BASE_URL + link)
-            intent.putExtra("title", file.name)
+            // ★ v1.0.9 FIX: usar as MESMAS chaves que PlayerActivity espera
+            intent.putExtra(PlayerActivity.EXTRA_URL, MeggyApp.BASE_URL + link)
+            intent.putExtra(PlayerActivity.EXTRA_TITLE, file.name)
             startActivity(intent)
         }
     }
