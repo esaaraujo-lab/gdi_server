@@ -63,12 +63,14 @@ class FileAdapter(
             fileMeta.text = when {
                 item.isFolder -> "pasta"
                 item.isVideo -> "vídeo · ${item.humanSize}"
+                item.isAudio -> "áudio · ${item.humanSize}"
                 item.isPdf -> "PDF · ${item.humanSize}"
                 else -> item.humanSize
             }
             fileIcon.text = when {
                 item.isFolder -> "\uD83D\uDCC1"   // 📁
                 item.isVideo  -> "\uD83C\uDFA5"   // 🎥
+                item.isAudio -> "\uD83C\uDFB5"   // 🎵
                 item.isPdf    -> "\uD83D\uDCC4"   // 📄
                 else          -> "\uD83D\uDCC4"   // 📄
             }
