@@ -1,14 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  v1.8.0 — Home screen.
+  v2.0.0 — Home screen.
 
-  Changes vs v1.7.0:
-  • Footer TextView now has id=footer_version (was hardcoded "v1.5.0").
-    HomeActivity sets it programmatically from BuildConfig.VERSION_NAME.
-  • Top nav bar uses bg_primary + subtle 1dp pink divider line.
-  • Hero banner refined: badge, 32sp title, 14sp subtitle, primary
-    "▶ Assistir" button + secondary "Saiba mais" ghost button.
-  • Rails keep their Netflix-style horizontal scroll.
+  Changes vs v1.8.0:
+  • Hero container has id=hero_root with a Stack of hero overlays
+    (rotated by HeroRotator with crossfade).
+  • Hero has 3 dots indicator at the bottom showing which slide is
+    active (1/4, 2/4, etc.).
+  • Continue Assistindo rail now uses the multi-item list (was 1 item).
+  • Skeleton rail shown while data loads.
+  • Bottom navigation bar (4 tabs) at the very bottom.
+  • Footer still has dynamic version from BuildConfig.VERSION_NAME.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
@@ -56,7 +58,6 @@
             android:foreground="?attr/selectableItemBackground" />
     </LinearLayout>
 
-    <!-- 1dp pink divider under nav -->
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
@@ -74,22 +75,36 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- Hero Banner -->
+            <!-- Hero Banner (rotativo) -->
             <FrameLayout
+                android:id="@+id/hero_root"
                 android:layout_width="match_parent"
-                android:layout_height="300dp">
+                android:layout_height="320dp">
+
+                <!-- Background gradient (static) -->
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:background="@drawable/hero_gradient" />
 
+                <!-- Hero icon (top-right corner) -->
+                <TextView
+                    android:id="@+id/hero_icon"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="top|end"
+                    android:layout_margin="22dp"
+                    android:textSize="44sp"
+                    android:alpha="0.55" />
+
                 <!-- Bottom scrim so hero text reads well -->
                 <View
                     android:layout_width="match_parent"
-                    android:layout_height="140dp"
+                    android:layout_height="160dp"
                     android:layout_gravity="bottom"
                     android:background="@drawable/tile_overlay_bottom" />
 
+                <!-- Hero text content -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
@@ -98,9 +113,9 @@
                     android:gravity="center_vertical">
 
                     <TextView
+                        android:id="@+id/hero_badge"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="🐕 DESTAQUE DA SEMANA"
                         android:textColor="@color/meggy_pink"
                         android:textSize="12sp"
                         android:textStyle="bold"
@@ -108,9 +123,9 @@
                         android:layout_marginBottom="10dp" />
 
                     <TextView
+                        android:id="@+id/hero_title"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="PF — Agente da Polícia Federal"
                         android:textColor="#FFFFFFFF"
                         android:textSize="30sp"
                         android:textStyle="bold"
@@ -121,9 +136,9 @@
                         android:layout_marginBottom="12dp" />
 
                     <TextView
+                        android:id="@+id/hero_subtitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Preparatório completo. 45 aulas em vídeo HD."
                         android:textColor="#B5C0CC"
                         android:textSize="14sp"
                         android:layout_marginBottom="22dp" />
@@ -131,13 +146,14 @@
                     <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal">
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
 
                         <Button
                             android:id="@+id/hero_play"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="▶  Assistir"
+                            android:text="▶  Explorar"
                             android:background="#FFFFFFFF"
                             android:textColor="#FF000000"
                             android:paddingHorizontal="30dp"
@@ -149,8 +165,42 @@
                             android:focusable="true"
                             android:focusableInTouchMode="true"
                             android:clickable="true" />
+
+                        <!-- Manual prev/next arrows -->
+                        <TextView
+                            android:id="@+id/hero_prev"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:layout_marginStart="18dp"
+                            android:gravity="center"
+                            android:text="‹"
+                            android:textColor="#CCFFFFFF"
+                            android:textSize="28sp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:clickable="true"
+                            android:focusable="true" />
+                        <TextView
+                            android:id="@+id/hero_next"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:gravity="center"
+                            android:text="›"
+                            android:textColor="#CCFFFFFF"
+                            android:textSize="28sp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:clickable="true"
+                            android:focusable="true" />
                     </LinearLayout>
                 </LinearLayout>
+
+                <!-- Dots indicator (bottom-right) -->
+                <LinearLayout
+                    android:id="@+id/hero_dots"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="bottom|end"
+                    android:layout_margin="20dp"
+                    android:orientation="horizontal" />
             </FrameLayout>
 
             <!-- Continue Assistindo rail -->
@@ -203,7 +253,19 @@
                 android:textColor="@color/text_muted"
                 android:textSize="12sp"
                 android:gravity="center"
-                android:paddingVertical="32dp" />
+                android:paddingVertical="24dp" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
+
+    <!-- Bottom navigation -->
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottom_nav"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/bg_surface"
+        app:labelVisibilityMode="labeled"
+        app:itemTextColor="@color/meggy_pink"
+        app:itemIconTint="@color/meggy_pink"
+        app:menu="@menu/bottom_nav"
+        xmlns:app="http://schemas.android.com/apk/res-auto" />
 </LinearLayout>
