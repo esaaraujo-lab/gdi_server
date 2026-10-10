@@ -13,6 +13,9 @@ import com.meggy.app.databinding.ItemPlaylistBinding
  * Highlights the currently-playing entry in Meggy pink. Clicking an entry
  * notifies [onClick] with the absolute position so PlayerActivity can jump to
  * it via [com.meggy.app.util.PlaylistManager.setIndex].
+ *
+ * v1.2.0: shows the [FileItem.folderLabel] as a subtitle when present (i.e.
+ * cross-folder playlists) so the user can tell "video.mp4" entries apart.
  */
 class PlaylistAdapter(
     private val items: List<FileItem>,
@@ -38,21 +41,31 @@ class PlaylistAdapter(
 
     override fun onBindViewHolder(holder: VH, position: Int) {
         val item = items[position]
+        val isCurrent = position == currentPos
         with(holder.binding) {
             playlistIndex.text = "${position + 1}"
             playlistTitle.text = item.name
-            val isCurrent = position == currentPos
+            // v1.2.0: folder subtitle (only for cross-folder playlists).
+            val label = item.folderLabel
+            if (!label.isNullOrBlank()) {
+                playlistFolder.visibility = View.VISIBLE
+                playlistFolder.text = label
+            } else {
+                playlistFolder.visibility = View.GONE
+            }
             if (isCurrent) {
                 root.setBackgroundColor(0x33FF8B9F.toInt())
                 playlistIndex.setTextColor(0xFFFF8B9F.toInt())
                 playlistTitle.setTextColor(0xFFFF8B9F.toInt())
                 playlistTitle.setTypeface(null, android.graphics.Typeface.BOLD)
+                playlistFolder.setTextColor(0x99FF8B9F.toInt())
                 nowPlayingDot.visibility = View.VISIBLE
             } else {
                 root.setBackgroundColor(0x00000000)
                 playlistIndex.setTextColor(0xFF8B949E.toInt())
                 playlistTitle.setTextColor(0xFFE6EDF3.toInt())
                 playlistTitle.setTypeface(null, android.graphics.Typeface.NORMAL)
+                playlistFolder.setTextColor(0xFF8B949E.toInt())
                 nowPlayingDot.visibility = View.GONE
             }
         }
