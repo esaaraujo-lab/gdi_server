@@ -7,10 +7,11 @@ import android.content.SharedPreferences
  * SessionManager — persists the worker.js `session` cookie (an opaque encrypted
  * string returned by POST /login) in SharedPreferences.
  *
- * The cookie is reused on every subsequent API call (see [com.meggy.app.data.ApiService]).
- *
- * Also persists per-file video resume positions: the key is the file's download link
- * (which is unique per file) and the value is the playback position in milliseconds.
+ * Also persists:
+ *  • per-file video resume positions (key = file download link, value = ms)
+ *  • per-folder "last watched" video name (v1.1.0) so BrowseActivity can badge
+ *    the video the user was last playing in that folder ("continuar de onde
+ *    parou").
  */
 class SessionManager private constructor(context: Context) {
 
@@ -56,6 +57,18 @@ class SessionManager private constructor(context: Context) {
 
     fun clearResumePosition(fileUrl: String) {
         prefs.edit().remove("pos_$fileUrl").apply()
+    }
+
+    // ───────── per-folder last watched (v1.1.0) ─────────
+
+    /** Records the name of the last video opened from [folderPath]. */
+    fun saveLastWatched(folderPath: String, videoName: String) {
+        prefs.edit().putString("last_$folderPath", videoName).apply()
+    }
+
+    /** Returns the name of the last video opened from [folderPath], or null. */
+    fun getLastWatched(folderPath: String): String? {
+        return prefs.getString("last_$folderPath", null)
     }
 
     companion object {
