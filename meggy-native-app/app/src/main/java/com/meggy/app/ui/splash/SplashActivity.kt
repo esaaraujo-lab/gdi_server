@@ -15,12 +15,18 @@ import kotlinx.coroutines.launch
 /**
  * SplashActivity — Meggy-branded launch screen.
  *
- * Shows the pink→purple gradient with the poodle emoji and app name for 1.5 seconds,
- * then routes the user to either HomeActivity (if a session cookie is still present)
- * or LoginActivity (otherwise).
+ * v2.0.2: Uses FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TASK when routing
+ * to Home or Login. This clears the entire back stack so that:
+ *   • After login, the user can NEVER press back to return to Login/Splash.
+ *   • After re-opening the app, old activities from a previous session are
+ *     cleared and the routing decision is made fresh.
  *
- * Note: we do NOT validate the cookie here — if it has expired the first API call
- * from HomeActivity will surface a 401 and the user will be bounced back to login.
+ * The activity itself is also declared with android:noHistory="true" in the
+ * manifest as a belt-and-suspenders guarantee.
+ *
+ * Note: we do NOT validate the cookie here — if it has expired the first API
+ * call from HomeActivity/BrowseActivity will detect the HTML login redirect
+ * and bounce the user back to LoginActivity (see ApiService.listFolder).
  */
 class SplashActivity : AppCompatActivity() {
 
@@ -45,6 +51,10 @@ class SplashActivity : AppCompatActivity() {
             } else {
                 Intent(this@SplashActivity, LoginActivity::class.java)
             }
+            // ★ v2.0.2: Clear the entire back stack so the user can never
+            // navigate back to Splash (or any stale activity from a previous
+            // launch) after routing.
+            target.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             startActivity(target)
             overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
             finish()
