@@ -5,7 +5,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -16,26 +15,10 @@ import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
 
-/**
- * UpdateChecker — v1.6.0
- * 
- * Correções:
- * 1. FileProvider em vez de Uri.fromFile() (fix crash Android 7+)
- * 2. RECEIVER_NOT_EXPORTED flag (fix crash Android 14+)
- * 3. Verifica SEMPRE ao abrir app (sem throttle de 6h)
- * 4. POST_NOTIFICATIONS permission request (Android 13+)
- * 5. Toast na main thread (context pode não ser Activity)
- */
 object UpdateChecker {
 
     private const val GITHUB_API = "https://api.github.com/repos/esaaraujo-lab/gdi_server/releases/latest"
-    private const val PREFS_NAME = "meggy_update"
-    private const val KEY_LAST_VERSION = "last_version"
 
-    /**
-     * Verifica se há nova versão AO ABRIR O APP.
-     * Se houver, baixa e instala automaticamente.
-     */
     fun checkForUpdate(context: Context, currentVersion: String) {
         Thread {
             try {
@@ -66,7 +49,6 @@ object UpdateChecker {
                     }
                     
                     if (apkUrl != null) {
-                        // Notificar na main thread
                         val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
                         mainHandler.post {
                             Toast.makeText(context, "🌙 Nova versão $remoteVersion! Baixando...", Toast.LENGTH_LONG).show()
@@ -110,29 +92,13 @@ object UpdateChecker {
                     if (id == downloadId) {
                         val file = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
                         if (file.exists()) {
-                            // ★ v1.6.0 FIX: FileProvider em vez de Uri.fromFile()
-                            val apkUri = FileProvider.getUriForFile(
-                                context,
-                                "${context.packageName}.fileprovider",
-                                file
-                            )
-                            val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                                setDataAndType(apkUri, "application/vnd.android.package-archive")
-                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
-                            }
-                            // Grant permission to all packages that can receive this intent
-                            val resInfo = context.packageManager.queryBroadcastReceivers(installIntent, 0)
-                            for (ri in resInfo) {
-                                context.grantUriPermission(ri.activityInfo.packageName, apkUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            }
-                            context.startActivity(installIntent)
+                            installApk(context, file)
                         }
                         try { context.unregisterReceiver(this) } catch (_: Exception) {}
                     }
                 }
             }
             
-            // ★ v1.6.0 FIX: RECEIVER_NOT_EXPORTED para Android 14+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 context.registerReceiver(receiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_NOT_EXPORTED)
             } else {
@@ -142,6 +108,50 @@ object UpdateChecker {
             val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
             mainHandler.post {
                 Toast.makeText(context, "Erro ao baixar atualização", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    // ★ v1.6.3: Instalação robusta via FileProvider + grantUriPermission
+    private fun installApk(context: Context, file: File) {
+        try {
+            val apkUri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file
+            )
+            
+            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(apkUri, "application/vnd.android.package-archive")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+            }
+            
+            // ★ v1.6.3: grantUriPermission para o package installer
+            // Em vez de queryIntentActivities, grant para todos que resolvem
+            val resInfo = context.packageManager.queryIntentActivities(installIntent, 0)
+            for (ri in resInfo) {
+                context.grantUriPermission(
+                    ri.activityInfo.packageName,
+                    apkUri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+            
+            context.startActivity(installIntent)
+        } catch (e: Exception) {
+            // Fallback: tentar sem FileProvider (para Android < 7)
+            try {
+                @Suppress("DEPRECATION")
+                val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(Uri.fromFile(file), "application/vnd.android.package-archive")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(installIntent)
+            } catch (e2: Exception) {
+                val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+                mainHandler.post {
+                    Toast.makeText(context, "Não foi possível instalar. Baixe manualmente.", Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
