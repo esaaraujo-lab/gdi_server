@@ -1,6 +1,7 @@
 package com.meggy.app.ui.browse
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
@@ -11,30 +12,11 @@ import com.meggy.app.data.ApiService
 import com.meggy.app.data.FileItem
 import com.meggy.app.databinding.ActivityBrowseBinding
 import com.meggy.app.ui.player.PlayerActivity
-import com.meggy.app.util.CrossFolderPlaylist
 import com.meggy.app.util.PlaylistManager
-import com.meggy.app.util.SessionManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * BrowseActivity — v1.2.0
- *
- * Folder navigation. When the user opens a video:
- *  • If the folder contains ≥2 videos → same-folder playlist (fast path, same
- *    as v1.1.0). Every entry is tagged with `folderPath = currentPath`.
- *  • If the folder contains <2 videos → cross-folder scan
- *    ([CrossFolderPlaylist.build]) which lists the parent folder's sibling
- *    subfolders 6 at a time and assembles a playlist spanning the whole
- *    subject. Each entry is tagged with `folderLabel` (subfolder name) +
- *    `folderPath` (full path).
- *  • Records the video as the folder's "last watched" (v1.1.0 behaviour).
- *
- * After [loadFolder], the adapter is fed two sets so cards can show:
- *  • a "▶ continuar" badge on videos with a non-zero resume position, and
- *  • a "✓" checkmark on videos previously watched to the end.
- */
 class BrowseActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityBrowseBinding
@@ -69,7 +51,7 @@ class BrowseActivity : AppCompatActivity() {
     private fun loadFolder() {
         binding.loadingView.visibility = View.VISIBLE
         binding.emptyState.visibility = View.GONE
-
+        
         lifecycleScope.launch {
             val files = withContext(Dispatchers.IO) { api.listFolder(currentPath) }
             binding.loadingView.visibility = View.GONE
@@ -79,25 +61,12 @@ class BrowseActivity : AppCompatActivity() {
                 onFile = { file -> openFile(file) }
             )
             binding.recycler.adapter = adapter
-
+            
             if (files.isNullOrEmpty()) {
                 binding.emptyState.visibility = View.VISIBLE
                 adapter.submitList(emptyList())
             } else {
                 adapter.submitList(files)
-
-                val sm = SessionManager.get(this@BrowseActivity)
-                // v1.2.0: badge every video in this folder that has a resume
-                // position ("continuar") or was watched to the end ("✓").
-                val resumed = files
-                    .filter { it.isVideo && sm.hasResume(currentPath, it.name) }
-                    .map { it.name }
-                    .toSet()
-                val watched = files
-                    .filter { it.isVideo && sm.isWatched(currentPath, it.name) }
-                    .map { it.name }
-                    .toSet()
-                adapter.setResumeAndWatched(resumed, watched)
             }
         }
     }
@@ -108,7 +77,7 @@ class BrowseActivity : AppCompatActivity() {
         } else {
             "$currentPath/${file.name}/"
         }
-
+        
         val intent = Intent(this, BrowseActivity::class.java)
         intent.putExtra("drivePath", newPath)
         intent.putExtra("folderName", file.name)
@@ -118,56 +87,47 @@ class BrowseActivity : AppCompatActivity() {
     private fun openFile(file: FileItem) {
         val link = file.link
         if (link.isNullOrEmpty()) return
-
-        if (!file.isVideo) {
-            // Non-video (e.g. PDF) — just hand the URL to the player.
-            launchPlayer(MeggyApp.BASE_URL + link, file.name, currentPath)
-            return
-        }
-
-        // Show a brief loading indicator while the playlist is assembled.
-        binding.loadingView.visibility = View.VISIBLE
-        lifecycleScope.launch {
-            val playlist = withContext(Dispatchers.IO) { buildPlaylistFor(file) }
-            binding.loadingView.visibility = View.GONE
-
-            val (videos, index) = playlist
-            if (videos.isNotEmpty() && index >= 0) {
-                PlaylistManager.setPlaylist(videos, index, this@BrowseActivity)
+        
+        val fullUrl = MeggyApp.BASE_URL + link
+        
+        if (file.isVideo || file.isAudio) {
+            // ★ v1.4.0: Vídeos e áudios abrem no PlayerActivity (ExoPlayer toca ambos)
+            // Build playlist from same folder (videos + audios)
+            val allFiles = (binding.recycler.adapter as? FileAdapter)?.currentList ?: emptyList()
+            val playableItems = allFiles.filter { (it.isVideo || it.isAudio) && !it.link.isNullOrEmpty() }
+            val playIndex = playableItems.indexOfFirst { it.id == file.id }
+            
+            if (playableItems.isNotEmpty() && playIndex >= 0) {
+                PlaylistManager.setPlaylist(playableItems, playIndex, this)
             }
-            // Remember which video was last opened from this folder.
-            SessionManager.get(this@BrowseActivity).saveLastWatched(currentPath, file.name)
-
-            launchPlayer(MeggyApp.BASE_URL + link, file.name, currentPath)
+            
+            val intent = Intent(this, PlayerActivity::class.java)
+            intent.putExtra(PlayerActivity.EXTRA_URL, fullUrl)
+            intent.putExtra(PlayerActivity.EXTRA_TITLE, file.name)
+            intent.putExtra(PlayerActivity.EXTRA_FOLDER_PATH, currentPath)
+            // ★ v1.4.0: Salvar último assistido para "Continuar" na home
+            com.meggy.app.util.SessionManager.get(this).saveLastWatched(currentPath, file.name)
+            startActivity(intent)
+        } else if (file.isPdf) {
+            // ★ v1.4.0: PDFs abrem no navegador (Android tem leitor de PDF nativo via intent)
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(fullUrl))
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            try {
+                startActivity(intent)
+            } catch (e: Exception) {
+                // Se não tem app de PDF, abrir no navegador
+                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(fullUrl))
+                startActivity(browserIntent)
+            }
+        } else {
+            // Outros arquivos: tentar abrir via intent
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(fullUrl))
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            try {
+                startActivity(intent)
+            } catch (e: Exception) {
+                // Ignorar se não consegue abrir
+            }
         }
-    }
-
-    /**
-     * Same-folder fast path when the folder has ≥2 videos; otherwise falls back
-     * to a cross-folder scan. Every returned entry is tagged with `folderPath`
-     * so PlayerActivity can key resume positions per (folder, video).
-     */
-    private suspend fun buildPlaylistFor(clicked: FileItem): Pair<List<FileItem>, Int> {
-        val allFiles = (binding.recycler.adapter as? FileAdapter)?.currentList ?: emptyList()
-        val sameFolder = allFiles
-            .filter { it.isVideo && !it.link.isNullOrEmpty() }
-            .map { it.copy(folderPath = currentPath) }
-
-        if (sameFolder.size >= 2) {
-            val idx = sameFolder.indexOfFirst { it.id == clicked.id }
-            return sameFolder to (if (idx < 0) 0 else idx)
-        }
-
-        // Single-video (or empty) folder → cross-folder scan.
-        val result = CrossFolderPlaylist.build(currentPath, clicked, api)
-        return result.items to result.startIndex
-    }
-
-    private fun launchPlayer(url: String, title: String, folderPath: String) {
-        val intent = Intent(this, PlayerActivity::class.java)
-        intent.putExtra(PlayerActivity.EXTRA_URL, url)
-        intent.putExtra(PlayerActivity.EXTRA_TITLE, title)
-        intent.putExtra(PlayerActivity.EXTRA_FOLDER_PATH, folderPath)
-        startActivity(intent)
     }
 }
