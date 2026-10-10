@@ -4,28 +4,29 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.meggy.app.BuildConfig
+import com.meggy.app.MeggyApp
+import com.meggy.app.data.ApiService
 import com.meggy.app.data.DriveItem
+import com.meggy.app.data.FileItem
 import com.meggy.app.databinding.ActivityHomeBinding
 import com.meggy.app.ui.browse.BrowseActivity
 import com.meggy.app.ui.login.LoginActivity
+import com.meggy.app.ui.player.PlayerActivity
+import com.meggy.app.util.CrossFolderPlaylist
 import com.meggy.app.util.PlaylistManager
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.UpdateChecker
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-/**
- * Netflix-style home screen (v1.5.0).
- *
- * Layout: NestedScrollView with a 280dp hero banner, then two horizontal rails:
- *  - "Continue assistindo" — populated from SessionManager's last-watched entry.
- *  - "Explorar drives"     — the 12 root drives as horizontal cards.
- *
- * The hero's "▶ Assistir" button opens the first drive.
- */
 class HomeActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityHomeBinding
+    private lateinit var api: ApiService
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,30 +39,21 @@ class HomeActivity : AppCompatActivity() {
             return
         }
 
-        // ★ v1.4.0: Verificar atualizações
+        api = ApiService(this)
         UpdateChecker.checkForUpdate(this, BuildConfig.VERSION_NAME)
-
-        // Top nav: logout
         binding.topSair.setOnClickListener { logout() }
-
-        // Hero: open first drive
-        binding.heroPlay.setOnClickListener {
-            val first = DriveItem.ALL.first()
-            openDrive(first)
-        }
+        binding.heroPlay.setOnClickListener { openDrive(DriveItem.ALL.first()) }
 
         setupContinueRail()
         setupDrivesRail()
     }
 
-    /** "Continue assistindo" rail — built from SessionManager's last-watched entry. */
     private fun setupContinueRail() {
         val sm = SessionManager.get(this)
         val lastFolder = sm.getLastWatchedFolder()
         val lastVideo = sm.getLastWatchedVideoName()
 
         if (lastFolder.isNullOrBlank() || lastVideo.isNullOrBlank()) {
-            // No history yet — hide the rail and its label.
             binding.labelContinue.visibility = View.GONE
             binding.railContinue.visibility = View.GONE
             return
@@ -74,30 +66,69 @@ class HomeActivity : AppCompatActivity() {
 
         val shortFolder = lastFolder.substringAfterLast("/").ifBlank { lastFolder }
         val item = RailItem(
-            title = lastVideo,
-            subtitle = shortFolder,
-            icon = "\uD83C\uDFA5", // 🎥
-            hasProgress = true,
-            progress = 35,
-            isWatched = false,
-            hasResume = true
+            title = lastVideo, subtitle = shortFolder, icon = "🎥",
+            hasProgress = true, progress = 35, isWatched = false, hasResume = true
         )
         binding.railContinue.adapter = RailAdapter(listOf(item)) {
-            // Reopen the last-watched folder so the user lands on the playlist.
-            val intent = Intent(this, BrowseActivity::class.java)
-            intent.putExtra("drivePath", lastFolder)
+            // ★ v1.5.1: "Continuar" → abrir PlayerActivity com cross-folder playlist
+            continueWatching(lastFolder, lastVideo, shortFolder)
+        }
+    }
+
+    // ★ v1.5.1: Builds cross-folder playlist and opens PlayerActivity directly
+    private fun continueWatching(folderPath: String, videoName: String, shortFolder: String) {
+        lifecycleScope.launch {
+            // 1. Listar arquivos da pasta do último vídeo
+            val files = withContext(Dispatchers.IO) { api.listFolder(folderPath) }
+            
+            if (!files.isNullOrEmpty()) {
+                // Encontrar o vídeo clicado
+                val clickedVideo = files.find { it.name == videoName && (it.isVideo || it.isAudio) }
+                
+                if (clickedVideo != null && !clickedVideo.link.isNullOrEmpty()) {
+                    val playable = files.filter { (it.isVideo || it.isAudio) && !it.link.isNullOrEmpty() }
+                    
+                    if (playable.size > 1) {
+                        // Múltiplos vídeos na mesma pasta
+                        val idx = playable.indexOfFirst { it.name == videoName }
+                        PlaylistManager.setPlaylist(playable, if (idx >= 0) idx else 0, this@HomeActivity)
+                        launchPlayer(MeggyApp.BASE_URL + clickedVideo.link, videoName, folderPath)
+                        return@launch
+                    } else if (clickedVideo != null) {
+                        // Só 1 vídeo → cross-folder playlist
+                        val result = withContext(Dispatchers.IO) {
+                            CrossFolderPlaylist.build(folderPath, clickedVideo, api)
+                        }
+                        if (result.items.isNotEmpty()) {
+                            PlaylistManager.setPlaylist(result.items, result.startIndex, this@HomeActivity)
+                        }
+                        launchPlayer(MeggyApp.BASE_URL + clickedVideo.link, videoName, folderPath)
+                        return@launch
+                    }
+                }
+            }
+            
+            // Fallback: abrir BrowseActivity na pasta
+            val intent = Intent(this@HomeActivity, BrowseActivity::class.java)
+            intent.putExtra("drivePath", folderPath)
             intent.putExtra("folderName", shortFolder)
             startActivity(intent)
         }
     }
 
-    /** "Explorar drives" rail — 12 drives as horizontal cards. */
+    private fun launchPlayer(url: String, title: String, folderPath: String) {
+        SessionManager.get(this).saveLastWatched(folderPath, title)
+        val intent = Intent(this, PlayerActivity::class.java)
+        intent.putExtra(PlayerActivity.EXTRA_URL, url)
+        intent.putExtra(PlayerActivity.EXTRA_TITLE, title)
+        intent.putExtra(PlayerActivity.EXTRA_FOLDER_PATH, folderPath)
+        startActivity(intent)
+    }
+
     private fun setupDrivesRail() {
         binding.railDrives.layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
-        binding.railDrives.adapter = DriveRailAdapter(DriveItem.ALL) { drive ->
-            openDrive(drive)
-        }
+        binding.railDrives.adapter = DriveRailAdapter(DriveItem.ALL) { drive -> openDrive(drive) }
     }
 
     private fun openDrive(drive: DriveItem) {
