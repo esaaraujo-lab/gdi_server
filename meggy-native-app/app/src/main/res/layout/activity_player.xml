@@ -12,7 +12,7 @@
         app:resize_mode="fit"
         app:use_controller="true"
         app:show_buffering="when_playing"
-        app:controller_auto_show="true"
+        
         app:animation_enabled="true"
         app:surface_type="surface_view" />
 
