@@ -72,8 +72,8 @@ class ApiService(private val context: Context) {
                     mimeType = f.optString("mimeType"),
                     id = f.optString("id"),
                     driveId = f.optString("driveId"),
-                    link = f.optString("link", ""),
-                    size = f.optString("size", "0"),
+                    link = f.optString("link", null),
+                    size = f.optLong("size", 0L),
                     modifiedTime = f.optString("modifiedTime", "")
                 ))
             }
