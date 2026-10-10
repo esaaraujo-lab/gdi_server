@@ -2,9 +2,11 @@ package com.meggy.app.ui.browse
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
+import com.meggy.app.MeggyApp
 import com.meggy.app.data.ApiService
 import com.meggy.app.data.FileItem
 import com.meggy.app.databinding.ActivityBrowseBinding
@@ -30,12 +32,12 @@ class BrowseActivity : AppCompatActivity() {
         driveIdx = intent.getIntExtra("driveIdx", 0)
         folderId = intent.getStringExtra("folderId") ?: ""
         folderName = intent.getStringExtra("folderName") ?: "Browse"
-        
-        binding.titleText.text = folderName
-        binding.backButton.setOnClickListener { finish() }
+
+        binding.breadcrumb.text = folderName
+        binding.toolbar.setNavigationOnClickListener { finish() }
 
         val spanCount = calculateSpanCount()
-        binding.recyclerView.layoutManager = GridLayoutManager(this, spanCount)
+        binding.recycler.layoutManager = GridLayoutManager(this, spanCount)
 
         loadFolder()
     }
@@ -47,17 +49,24 @@ class BrowseActivity : AppCompatActivity() {
     }
 
     private fun loadFolder() {
-        binding.loadingView.visibility = android.view.View.VISIBLE
+        binding.loadingView.visibility = View.VISIBLE
+        binding.emptyState.visibility = View.GONE
+        
         lifecycleScope.launch {
             val files = withContext(Dispatchers.IO) { api.listFolder(driveIdx, folderId) }
-            binding.loadingView.visibility = android.view.View.GONE
+            binding.loadingView.visibility = View.GONE
+
+            val adapter = FileAdapter(
+                onFolder = { file -> openFolder(file) },
+                onFile = { file -> openFile(file) }
+            )
+            binding.recycler.adapter = adapter
             
             if (files.isNullOrEmpty()) {
-                binding.emptyView.visibility = android.view.View.VISIBLE
-                binding.recyclerView.adapter = FileAdapter(emptyList(), { file -> openFolder(file) }, { file -> openFile(file) })
+                binding.emptyState.visibility = View.VISIBLE
+                adapter.submitList(emptyList())
             } else {
-                binding.emptyView.visibility = android.view.View.GONE
-                binding.recyclerView.adapter = FileAdapter(files, { file -> openFolder(file) }, { file -> openFile(file) })
+                adapter.submitList(files)
             }
         }
     }
@@ -73,7 +82,7 @@ class BrowseActivity : AppCompatActivity() {
     private fun openFile(file: FileItem) {
         if (file.link.isNotEmpty()) {
             val intent = Intent(this, PlayerActivity::class.java)
-            intent.putExtra("url", com.meggy.app.MeggyApp.BASE_URL + file.link)
+            intent.putExtra("url", MeggyApp.BASE_URL + file.link)
             intent.putExtra("title", file.name)
             startActivity(intent)
         }
