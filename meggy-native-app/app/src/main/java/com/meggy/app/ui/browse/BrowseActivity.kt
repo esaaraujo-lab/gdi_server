@@ -12,21 +12,13 @@ import com.meggy.app.data.ApiService
 import com.meggy.app.data.FileItem
 import com.meggy.app.databinding.ActivityBrowseBinding
 import com.meggy.app.ui.player.PlayerActivity
+import com.meggy.app.util.CrossFolderPlaylist
 import com.meggy.app.util.PlaylistManager
 import com.meggy.app.util.SessionManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * Netflix-style browse grid (v1.5.0).
- *
- * Each entry is rendered as a Netflix-style card (gradient background derived
- * from the file name, ✓ watched badge, ▶ continuar badge, pink→purple progress
- * bar on videos) via [FileAdapter] + [com.meggy.app.databinding.ItemRailCardBinding].
- *
- * Breadcrumb and folder navigation behaviour is unchanged from v1.4.0.
- */
 class BrowseActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityBrowseBinding
@@ -79,7 +71,6 @@ class BrowseActivity : AppCompatActivity() {
                 adapter.submitList(emptyList())
             } else {
                 adapter.submitList(files)
-                // Apply resume + watched badges for the current folder.
                 val sm = SessionManager.get(this@BrowseActivity)
                 val resumed = files.filter { it.isVideo && sm.hasResume(currentPath, it.name) }
                     .map { it.name }.toSet()
@@ -96,7 +87,6 @@ class BrowseActivity : AppCompatActivity() {
         } else {
             "$currentPath/${file.name}/"
         }
-
         val intent = Intent(this, BrowseActivity::class.java)
         intent.putExtra("drivePath", newPath)
         intent.putExtra("folderName", file.name)
@@ -110,37 +100,54 @@ class BrowseActivity : AppCompatActivity() {
         val fullUrl = MeggyApp.BASE_URL + link
 
         if (file.isVideo || file.isAudio) {
+            // ★ v1.5.1: Same-folder playlist first
             val allFiles = fileAdapter?.currentList ?: emptyList()
             val playableItems = allFiles.filter { (it.isVideo || it.isAudio) && !it.link.isNullOrEmpty() }
             val playIndex = playableItems.indexOfFirst { it.id == file.id }
 
-            if (playableItems.isNotEmpty() && playIndex >= 0) {
+            if (playableItems.size > 1 && playIndex >= 0) {
+                // Multiple videos in same folder → use as playlist
                 PlaylistManager.setPlaylist(playableItems, playIndex, this)
-            }
+                launchPlayer(fullUrl, file.name, currentPath)
+            } else {
+                // ★ v1.5.1: Single video → try cross-folder playlist
+                lifecycleScope.launch {
+                    binding.loadingView.visibility = View.VISIBLE
+                    val result = withContext(Dispatchers.IO) {
+                        CrossFolderPlaylist.build(currentPath, file, api)
+                    }
+                    binding.loadingView.visibility = View.GONE
 
-            val intent = Intent(this, PlayerActivity::class.java)
-            intent.putExtra(PlayerActivity.EXTRA_URL, fullUrl)
-            intent.putExtra(PlayerActivity.EXTRA_TITLE, file.name)
-            intent.putExtra(PlayerActivity.EXTRA_FOLDER_PATH, currentPath)
-            SessionManager.get(this).saveLastWatched(currentPath, file.name)
-            startActivity(intent)
+                    if (result.items.size > 1) {
+                        // Cross-folder playlist found
+                        PlaylistManager.setPlaylist(result.items, result.startIndex, this@BrowseActivity)
+                    } else if (playableItems.isNotEmpty() && playIndex >= 0) {
+                        // Fallback: single-item playlist
+                        PlaylistManager.setPlaylist(playableItems, playIndex, this@BrowseActivity)
+                    }
+
+                    launchPlayer(fullUrl, file.name, currentPath)
+                }
+            }
         } else if (file.isPdf) {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(fullUrl))
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            try {
-                startActivity(intent)
-            } catch (e: Exception) {
-                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(fullUrl))
-                startActivity(browserIntent)
+            try { startActivity(intent) } catch (e: Exception) {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(fullUrl)))
             }
         } else {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(fullUrl))
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            try {
-                startActivity(intent)
-            } catch (e: Exception) {
-                // Ignore if no app can handle it.
-            }
+            try { startActivity(intent) } catch (_: Exception) {}
         }
+    }
+
+    private fun launchPlayer(url: String, title: String, folderPath: String) {
+        SessionManager.get(this).saveLastWatched(folderPath, title)
+        val intent = Intent(this, PlayerActivity::class.java)
+        intent.putExtra(PlayerActivity.EXTRA_URL, url)
+        intent.putExtra(PlayerActivity.EXTRA_TITLE, title)
+        intent.putExtra(PlayerActivity.EXTRA_FOLDER_PATH, folderPath)
+        startActivity(intent)
     }
 }
