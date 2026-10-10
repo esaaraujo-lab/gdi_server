@@ -7,7 +7,6 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.view.animation.AlphaAnimation
-import android.view.animation.Animation
 import android.view.animation.AnimationSet
 import android.view.animation.DecelerateInterpolator
 import android.widget.TextView
@@ -47,8 +46,12 @@ class HomeActivity : AppCompatActivity() {
         binding = ActivityHomeBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // ★ v2.0.2: If the session was cleared (e.g. by Settings → Sair or by
+        // BrowseActivity detecting an expired cookie), finish() immediately.
+        // The launch flow will re-route through SplashActivity → LoginActivity.
+        // We do NOT startActivity(Login) here because that would re-introduce
+        // the back-stack bug where Login could be reached by pressing back.
         if (!SessionManager.get(this).isLoggedIn) {
-            startActivity(Intent(this, LoginActivity::class.java))
             finish()
             return
         }
@@ -61,7 +64,12 @@ class HomeActivity : AppCompatActivity() {
 
         binding.topSair.setOnClickListener { logout() }
 
-        // Bottom navigation
+        // ★ v2.0.2: Bottom navigation — NO finish() on tab switch.
+        // Each nav activity is declared with launchMode="singleTask" in the
+        // manifest, so startActivity() brings the existing instance to front
+        // (or creates a new one) AND clears activities above it. This keeps
+        // the back stack clean: back from any tab always returns to Home,
+        // and back from Home exits the app (never returns to Login).
         binding.bottomNav.selectedItemId = R.id.nav_home
         binding.bottomNav.setOnItemSelectedListener { item ->
             when (item.itemId) {
@@ -69,19 +77,18 @@ class HomeActivity : AppCompatActivity() {
                 R.id.nav_search -> {
                     startActivity(Intent(this, SearchActivity::class.java))
                     overridePendingTransition(0, 0)
-                    finish()
+                    // Do NOT finish() — singleTask on SearchActivity handles
+                    // back-stack cleanup automatically.
                     true
                 }
                 R.id.nav_mylist -> {
                     startActivity(Intent(this, MyListActivity::class.java))
                     overridePendingTransition(0, 0)
-                    finish()
                     true
                 }
                 R.id.nav_settings -> {
                     startActivity(Intent(this, SettingsActivity::class.java))
                     overridePendingTransition(0, 0)
-                    finish()
                     true
                 }
                 else -> false
@@ -93,11 +100,18 @@ class HomeActivity : AppCompatActivity() {
         setupDrivesRail()
     }
 
+    // ★ v2.0.2: If HomeActivity is brought back to front (singleTask), ensure
+    // the bottom nav highlights the Home tab. This handles the case where the
+    // user navigated Home → Search → back → Home.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        binding.bottomNav.selectedItemId = R.id.nav_home
+    }
+
     // ──────────── v2.0.0: Hero rotativo ────────────
 
     private fun setupHero() {
         heroRotator = HeroRotator(binding, HeroItem.ALL) { hero ->
-            // ▶ Explorar → abre o drive em destaque no Browse
             val intent = Intent(this, BrowseActivity::class.java)
             intent.putExtra("drivePath", hero.drivePath)
             intent.putExtra("folderName", hero.driveName)
@@ -106,11 +120,6 @@ class HomeActivity : AppCompatActivity() {
         heroRotator?.start()
     }
 
-    /**
-     * v2.0.0 — HeroRotator crossfades between [HeroItem]s every 8 seconds.
-     * Manual ‹ › arrows let the user navigate. Dots indicator at bottom-right
-     * shows the current slide.
-     */
     private class HeroRotator(
         private val binding: ActivityHomeBinding,
         private val items: List<HeroItem>,
@@ -128,13 +137,8 @@ class HomeActivity : AppCompatActivity() {
             render(animate = false)
         }
 
-        fun start() {
-            handler.postDelayed(rotateRunnable, 8000L)
-        }
-
-        fun stop() {
-            handler.removeCallbacks(rotateRunnable)
-        }
+        fun start() { handler.postDelayed(rotateRunnable, 8000L) }
+        fun stop() { handler.removeCallbacks(rotateRunnable) }
 
         private fun next() {
             index = (index + 1) % items.size
@@ -158,12 +162,9 @@ class HomeActivity : AppCompatActivity() {
             binding.heroIcon.text = item.icon
             updateDots()
             if (animate) {
-                // Crossfade the text layer
-                val out = AlphaAnimation(1f, 0f).apply { duration = 300 }
                 val inn = AlphaAnimation(0f, 1f).apply { duration = 300 }
                 val set = AnimationSet(true).apply {
                     interpolator = DecelerateInterpolator()
-                    addAnimation(out)
                     addAnimation(inn)
                 }
                 binding.heroBadge.startAnimation(inn)
@@ -213,7 +214,6 @@ class HomeActivity : AppCompatActivity() {
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         binding.railContinue.addItemDecoration(RailGutterDecoration(8))
 
-        // Build RailItems from recents
         val railItems = recents.map { r ->
             val shortFolder = r.folderPath.substringAfterLast("/").ifBlank { r.folderPath }
             RailItem(
@@ -227,18 +227,24 @@ class HomeActivity : AppCompatActivity() {
             )
         }
         binding.railContinue.adapter = RailAdapter(railItems) { item ->
-            // Find matching recent + open player
             val match = recents.find { it.videoName == item.title } ?: return@RailAdapter
             continueWatching(match.folderPath, match.videoName, item.subtitle)
         }
     }
 
-    // ★ v1.5.1: Builds cross-folder playlist and opens PlayerActivity directly
     private fun continueWatching(folderPath: String, videoName: String, shortFolder: String) {
         lifecycleScope.launch {
             val files = withContext(Dispatchers.IO) { api.listFolder(folderPath) }
 
-            if (!files.isNullOrEmpty()) {
+            // ★ v2.0.2: Detect expired session — ApiService returns null when
+            // the server responds with an HTML login redirect (401/302 → /login).
+            // In that case, clear the session and route back to Login.
+            if (files == null) {
+                bounceToLogin()
+                return@launch
+            }
+
+            if (files.isNotEmpty()) {
                 val clickedVideo = files.find { it.name == videoName && (it.isVideo || it.isAudio) }
 
                 if (clickedVideo != null && !clickedVideo.link.isNullOrEmpty()) {
@@ -293,7 +299,13 @@ class HomeActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
-    private fun logout() {
+    /**
+     * v2.0.2 — Clears the session and routes to LoginActivity with CLEAR_TASK
+     * so the entire back stack is wiped. Used by:
+     *   • the "Sair" button
+     *   • BrowseActivity/HomeActivity when an expired session is detected
+     */
+    private fun bounceToLogin() {
         SessionManager.get(this).clearSession()
         PlaylistManager.clear()
         val intent = Intent(this, LoginActivity::class.java)
@@ -302,15 +314,15 @@ class HomeActivity : AppCompatActivity() {
         finish()
     }
 
+    private fun logout() {
+        bounceToLogin()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         heroRotator?.stop()
     }
 
-    /**
-     * v1.8.0 — Horizontal gutter between rail items so the pink focus
-     * halo isn't clipped by the next card.
-     */
     private class RailGutterDecoration(private val gutterDp: Int) : RecyclerView.ItemDecoration() {
         override fun getItemOffsets(
             outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State
