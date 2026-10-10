@@ -20,11 +20,10 @@ import com.meggy.app.util.SessionManager
 /**
  * v2.0.0 — Minha lista (favoritos).
  *
- * Reads the favorites list from SessionManager and displays it as a
- * Netflix-style grid. Tapping a favorite with a link opens the player;
- * tapping one without a link (rare — happens when the FileItem was
- * serialized from a recent without a link) opens BrowseActivity in its
- * folder.
+ * v2.0.2: BottomNav no longer calls finish() on tab switch — the target
+ * activity is declared with launchMode="singleTask" in the manifest, so
+ * startActivity() brings the existing instance to front and clears
+ * activities above it.
  */
 class MyListActivity : AppCompatActivity() {
 
@@ -43,15 +42,19 @@ class MyListActivity : AppCompatActivity() {
                 R.id.nav_mylist -> true
                 R.id.nav_home -> {
                     startActivity(Intent(this, HomeActivity::class.java))
-                    overridePendingTransition(0, 0); finish(); true
+                    overridePendingTransition(0, 0)
+                    // v2.0.2: NO finish() — singleTask handles back-stack cleanup.
+                    true
                 }
                 R.id.nav_search -> {
                     startActivity(Intent(this, SearchActivity::class.java))
-                    overridePendingTransition(0, 0); finish(); true
+                    overridePendingTransition(0, 0)
+                    true
                 }
                 R.id.nav_settings -> {
                     startActivity(Intent(this, SettingsActivity::class.java))
-                    overridePendingTransition(0, 0); finish(); true
+                    overridePendingTransition(0, 0)
+                    true
                 }
                 else -> false
             }
@@ -66,6 +69,12 @@ class MyListActivity : AppCompatActivity() {
         binding.recycler.adapter = adapter
 
         loadFavorites()
+    }
+
+    // v2.0.2: Restore the correct nav highlight when brought back to front.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        binding.bottomNav.selectedItemId = R.id.nav_mylist
     }
 
     override fun onResume() {
