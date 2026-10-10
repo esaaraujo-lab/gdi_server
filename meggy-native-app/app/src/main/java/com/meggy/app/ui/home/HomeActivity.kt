@@ -1,11 +1,13 @@
 package com.meggy.app.ui.home
 
 import android.content.Intent
+import android.graphics.Rect
 import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.meggy.app.BuildConfig
 import com.meggy.app.MeggyApp
 import com.meggy.app.data.ApiService
@@ -41,6 +43,10 @@ class HomeActivity : AppCompatActivity() {
 
         api = ApiService(this)
         UpdateChecker.checkForUpdate(this, BuildConfig.VERSION_NAME)
+
+        // ★ v1.8.0: dynamic version footer (was hardcoded "v1.5.0" in XML).
+        binding.footerVersion.text = "🐩 Meggy · v${BuildConfig.VERSION_NAME}"
+
         binding.topSair.setOnClickListener { logout() }
         binding.heroPlay.setOnClickListener { openDrive(DriveItem.ALL.first()) }
 
@@ -63,6 +69,8 @@ class HomeActivity : AppCompatActivity() {
         binding.railContinue.visibility = View.VISIBLE
         binding.railContinue.layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        // Add small gutters between rail cards so the focus halo has room.
+        binding.railContinue.addItemDecoration(RailGutterDecoration(8))
 
         val shortFolder = lastFolder.substringAfterLast("/").ifBlank { lastFolder }
         val item = RailItem(
@@ -80,14 +88,14 @@ class HomeActivity : AppCompatActivity() {
         lifecycleScope.launch {
             // 1. Listar arquivos da pasta do último vídeo
             val files = withContext(Dispatchers.IO) { api.listFolder(folderPath) }
-            
+
             if (!files.isNullOrEmpty()) {
                 // Encontrar o vídeo clicado
                 val clickedVideo = files.find { it.name == videoName && (it.isVideo || it.isAudio) }
-                
+
                 if (clickedVideo != null && !clickedVideo.link.isNullOrEmpty()) {
                     val playable = files.filter { (it.isVideo || it.isAudio) && !it.link.isNullOrEmpty() }
-                    
+
                     if (playable.size > 1) {
                         // Múltiplos vídeos na mesma pasta
                         val idx = playable.indexOfFirst { it.name == videoName }
@@ -107,7 +115,7 @@ class HomeActivity : AppCompatActivity() {
                     }
                 }
             }
-            
+
             // Fallback: abrir BrowseActivity na pasta
             val intent = Intent(this@HomeActivity, BrowseActivity::class.java)
             intent.putExtra("drivePath", folderPath)
@@ -128,6 +136,7 @@ class HomeActivity : AppCompatActivity() {
     private fun setupDrivesRail() {
         binding.railDrives.layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        binding.railDrives.addItemDecoration(RailGutterDecoration(8))
         binding.railDrives.adapter = DriveRailAdapter(DriveItem.ALL) { drive -> openDrive(drive) }
     }
 
@@ -145,5 +154,26 @@ class HomeActivity : AppCompatActivity() {
         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         startActivity(intent)
         finish()
+    }
+
+    /**
+     * v1.8.0 — Horizontal gutter between rail items so the pink focus
+     * halo isn't clipped by the next card. Uses dpToPx for density
+     * independence.
+     */
+    private class RailGutterDecoration(private val gutterDp: Int) : RecyclerView.ItemDecoration() {
+        override fun getItemOffsets(
+            outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State
+        ) {
+            val density = view.resources.displayMetrics.density
+            val px = (gutterDp * density).toInt()
+            outRect.right = px
+            // Left padding only on the first item so the rail aligns
+            // with the screen edge already defined by the recycler's
+            // paddingHorizontal.
+            if (parent.getChildAdapterPosition(view) == 0) {
+                outRect.left = 0
+            }
+        }
     }
 }
