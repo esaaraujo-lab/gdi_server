@@ -1,156 +1,115 @@
 package com.meggy.app.data
 
 import com.meggy.app.MeggyApp
-import com.meggy.app.util.SessionManager
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import okhttp3.FormBody
-import okhttp3.MediaType.Companion.toJsonMediaType
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.io.IOException
 
-/**
- * ApiService — thin Kotlin wrapper around the worker.js HTTP API at https://educa.eu.org.
- *
- * All methods are `suspend` and run on [Dispatchers.IO]. Throws [ApiException] on
- * any non-2xx (or unexpected redirect) response.
- *
- * Endpoints used:
- *   POST /login                                    (form-encoded, expect 302 + Set-Cookie)
- *   POST /<driveIdx>:/                             (JSON body, list folder)
- *   GET  /api/courses/list                         (JSON, list enrolled courses)
- */
-class ApiService(private val app: MeggyApp) {
-
-    /**
-     * Login. Returns the session cookie value (without the `session=` prefix).
-     *
-     * The worker returns 302 on success and a 200/401 on failure. We deliberately
-     * disable auto-redirect in the OkHttp client so we can capture the Set-Cookie
-     * header from the 302 response.
-     */
-    suspend fun login(username: String, password: String): LoginResult = withContext(Dispatchers.IO) {
-        try {
-            val form = FormBody.Builder()
-                .add("username", username)
-                .add("password", password)
-                .build()
-            val req = Request.Builder()
-                .url("${MeggyApp.BASE_URL}/login")
-                .post(form)
-                .build()
-            val resp = app.client.newCall(req).execute()
-            resp.use { r ->
-                when (r.code) {
-                    in 300..399 -> {
-                        // Success — extract session cookie from Set-Cookie
-                        val cookieHeader = r.header("Set-Cookie") ?: return@use LoginResult.Failure(
-                            "Servidor não retornou cookie de sessão (resposta vazia)."
-                        )
-                        val cookie = parseCookieValue(cookieHeader, "session")
-                            ?: return@use LoginResult.Failure("Cookie de sessão não encontrado.")
-                        LoginResult.Success(sessionCookie = cookie, username = username)
+class ApiService {
+    
+    companion object {
+        private const val TAG = "ApiService"
+    }
+    
+    suspend fun login(username: String, password: String): Boolean {
+        val formBody = "username=${java.net.URLEncoder.encode(username, "UTF-8")}" +
+                       "&password=${java.net.URLEncoder.encode(password, "UTF-8")}"
+        
+        val request = Request.Builder()
+            .url("${MeggyApp.BASE_URL}/login")
+            .post(formBody.toRequestBody("application/x-www-form-urlencoded".toMediaTypeOrNull()))
+            .build()
+        
+        return try {
+            val response = MeggyApp.okHttpClient.newCall(request).execute()
+            // 302 = success (redirect after login)
+            if (response.code == 302 || response.code == 200) {
+                // Extract Set-Cookie header
+                val cookies = response.headers("Set-Cookie")
+                for (cookie in cookies) {
+                    if (cookie.startsWith("session=")) {
+                        val sessionValue = cookie.substringAfter("session=").substringBefore(";")
+                        SessionManager.saveSession(sessionValue)
+                        return true
                     }
-                    200 -> LoginResult.Failure(
-                        "Credenciais inválidas ou endpoint de login em manutenção (200)."
-                    )
-                    401, 403 -> LoginResult.Failure("Usuário ou senha incorretos.")
-                    else -> LoginResult.Failure("Erro de login: HTTP ${r.code}")
                 }
             }
-        } catch (e: Exception) {
-            LoginResult.Failure("Falha de rede: ${e.message ?: e.javaClass.simpleName}")
+            false
+        } catch (e: IOException) {
+            false
         }
     }
-
-    /**
-     * List the contents of a folder.
-     *
-     * @param driveIdx  drive index (0..11) — path segment of the URL.
-     * @param folderId  encrypted folder ID. Pass `null` for the root of the drive.
-     * @param pageToken continuation token from a previous call, or null for the first page.
-     */
-    suspend fun listFolder(
-        driveIdx: Int,
-        folderId: String?,
-        pageToken: String? = null
-    ): FolderListing = withContext(Dispatchers.IO) {
-        val session = SessionManager.get(app).sessionCookie
-            ?: throw ApiException("Not logged in")
-
-        val bodyJson = JSONObject().apply {
-            put("id", folderId ?: "")
+    
+    suspend fun listFolder(driveIdx: Int, folderId: String, password: String = ""): List<FileItem>? {
+        val jsonBody = JSONObject().apply {
+            put("id", folderId)
             put("type", "folder")
-            put("password", "")
-            put("page_token", pageToken ?: JSONObject.NULL)
+            put("password", password)
+            put("page_token", JSONObject.NULL)
             put("page_index", 0)
         }.toString()
-
-        val req = Request.Builder()
+        
+        val request = Request.Builder()
             .url("${MeggyApp.BASE_URL}/$driveIdx:/")
-            .header("Cookie", "session=$session")
-            .header("Content-Type", "application/json")
-            .post(bodyJson.toRequestBody("application/json".toJsonMediaType()))
+            .post(jsonBody.toRequestBody("application/json".toMediaTypeOrNull()))
+            .header("Cookie", "session=${SessionManager.getSession()}")
             .build()
-
-        val resp = app.client.newCall(req).execute()
-        resp.use { r ->
-            if (!r.isSuccessful) {
-                throw ApiException("listFolder HTTP ${r.code}: ${r.message}")
+        
+        return try {
+            val response = MeggyApp.okHttpClient.newCall(request).execute()
+            if (!response.isSuccessful) return null
+            
+            val body = response.body?.string() ?: return null
+            val json = JSONObject(body)
+            val files = json.optJSONObject("data")?.optJSONArray("files") ?: return emptyList()
+            
+            val result = mutableListOf<FileItem>()
+            for (i in 0 until files.length()) {
+                val f = files.getJSONObject(i)
+                result.add(FileItem(
+                    name = f.optString("name"),
+                    mimeType = f.optString("mimeType"),
+                    id = f.optString("id"),
+                    driveId = f.optString("driveId"),
+                    link = f.optString("link", ""),
+                    size = f.optString("size", "0"),
+                    modifiedTime = f.optString("modifiedTime", "")
+                ))
             }
-            val text = r.body?.string().orEmpty()
-            if (text.isBlank()) throw ApiException("listFolder: resposta vazia do servidor")
-            try {
-                FolderListing.parse(text)
-            } catch (e: Exception) {
-                throw ApiException("listFolder: JSON inválido — ${e.message}")
-            }
+            result
+        } catch (e: Exception) {
+            null
         }
     }
-
-    /**
-     * List the courses the current user is enrolled in. May return an empty list
-     * if the worker does not have the /api/courses/list endpoint enabled.
-     */
-    suspend fun listCourses(): List<CourseItem> = withContext(Dispatchers.IO) {
-        val session = SessionManager.get(app).sessionCookie ?: return@withContext emptyList()
-        val req = Request.Builder()
+    
+    suspend fun listCourses(): List<CourseItem>? {
+        val request = Request.Builder()
             .url("${MeggyApp.BASE_URL}/api/courses/list")
-            .header("Cookie", "session=$session")
-            .get()
+            .header("Cookie", "session=${SessionManager.getSession()}")
             .build()
-        try {
-            val resp = app.client.newCall(req).execute()
-            resp.use { r ->
-                if (!r.isSuccessful) return@use emptyList()
-                val text = r.body?.string().orEmpty()
-                if (text.isBlank()) return@use emptyList()
-                CourseItem.parse(text)
+        
+        return try {
+            val response = MeggyApp.okHttpClient.newCall(request).execute()
+            if (!response.isSuccessful) return null
+            
+            val body = response.body?.string() ?: return null
+            val json = JSONObject(body)
+            if (!json.optBoolean("ok")) return null
+            
+            val courses = json.optJSONArray("courses") ?: return emptyList()
+            val result = mutableListOf<CourseItem>()
+            for (i in 0 until courses.length()) {
+                val c = courses.getJSONObject(i)
+                result.add(CourseItem(
+                    coursePath = c.optString("coursePath"),
+                    courseName = c.optString("courseName")
+                ))
             }
-        } catch (_: Exception) {
-            emptyList()
+            result
+        } catch (e: Exception) {
+            null
         }
-    }
-
-    // ───────── helpers ─────────
-
-    /**
-     * Extract the value of [name] from a Set-Cookie header such as
-     * `session=abc; Path=/; HttpOnly`. Returns null if not found.
-     */
-    private fun parseCookieValue(setCookie: String, name: String): String? {
-        val parts = setCookie.split(';')
-        for (p in parts) {
-            val trimmed = p.trim()
-            val eq = trimmed.indexOf('=')
-            if (eq > 0 && trimmed.substring(0, eq) == name) {
-                return trimmed.substring(eq + 1).trim()
-            }
-        }
-        return null
     }
 }
-
-/** Thrown when an API call fails for any reason. */
-class ApiException(message: String) : Exception(message)
