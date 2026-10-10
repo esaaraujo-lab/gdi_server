@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Android TV support (optional) -->
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <!-- Touchscreen optional (funciona em TV sem touch) -->
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Meggy"
+        android:usesCleartextTraffic="false"
+        android:banner="@drawable/banner"
+        tools:targetApi="31">
+
+        <activity
+            android:name=".SplashActivity"
+            android:theme="@style/Theme.Meggy.Splash"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <!-- Mobile launcher -->
+                <category android:name="android.intent.category.LAUNCHER" />
+                <!-- Android TV launcher -->
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
+            android:exported="false"
+            android:launchMode="singleTask" />
+    </application>
+</manifest>
