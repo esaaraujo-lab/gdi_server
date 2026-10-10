@@ -19,9 +19,8 @@ class BrowseActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityBrowseBinding
     private lateinit var api: ApiService
-    private var driveIdx: Int = 0
-    private var folderId: String = ""
-    private var folderName: String = ""
+    private var currentPath: String = "/"
+    private var folderName: String = "Browse"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -29,8 +28,8 @@ class BrowseActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         api = ApiService(this)
-        driveIdx = intent.getIntExtra("driveIdx", 0)
-        folderId = intent.getStringExtra("folderId") ?: ""
+        // ★ v1.0.7 FIX: receber drivePath (ex: /0:/) em vez de folderId
+        currentPath = intent.getStringExtra("drivePath") ?: "/"
         folderName = intent.getStringExtra("folderName") ?: "Browse"
 
         binding.breadcrumb.text = folderName
@@ -53,7 +52,8 @@ class BrowseActivity : AppCompatActivity() {
         binding.emptyState.visibility = View.GONE
         
         lifecycleScope.launch {
-            val files = withContext(Dispatchers.IO) { api.listFolder(driveIdx, folderId) }
+            // ★ v1.0.7 FIX: passar o PATH COMPLETO para ApiService
+            val files = withContext(Dispatchers.IO) { api.listFolder(currentPath) }
             binding.loadingView.visibility = View.GONE
 
             val adapter = FileAdapter(
@@ -72,9 +72,12 @@ class BrowseActivity : AppCompatActivity() {
     }
 
     private fun openFolder(file: FileItem) {
+        // ★ v1.0.7 FIX: append folder name ao path atual e URL-encode
+        val encodedName = java.net.URLEncoder.encode(file.name, "UTF-8")
+        val newPath = if (currentPath.endsWith("/")) "$currentPath$encodedName/" else "$currentPath/$encodedName/"
+        
         val intent = Intent(this, BrowseActivity::class.java)
-        intent.putExtra("driveIdx", driveIdx)
-        intent.putExtra("folderId", file.id)
+        intent.putExtra("drivePath", newPath)
         intent.putExtra("folderName", file.name)
         startActivity(intent)
     }
