@@ -66,6 +66,21 @@
                 android:textSize="11sp"
                 android:maxLines="1"
                 android:ellipsize="end" />
+
+            <!-- v1.1.0: "continuar de onde parou" badge -->
+            <TextView
+                android:id="@+id/last_watched_badge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/badge_resume"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="2dp"
+                android:text="\u25B6 continuar"
+                android:textColor="@color/meggy_pink"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
         </LinearLayout>
 
     </LinearLayout>
