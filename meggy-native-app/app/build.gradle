@@ -19,8 +19,8 @@ android {
         minSdk 21
         targetSdk 34
         // ★ v2.0.0: Bottom Nav (4 tabs) + Hero rotativo + Search/MyList/Settings + Player gestures
-        versionCode 22
-        versionName "2.0.2"
+        versionCode 23
+        versionName "2.1.0"
     }
 
     // ★ v1.4.0: Signing config com keystore FIXA (mesma em todos os builds)
@@ -76,4 +76,5 @@ dependencies {
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'
+    implementation 'io.coil-kt:coil:2.5.0'
 }
