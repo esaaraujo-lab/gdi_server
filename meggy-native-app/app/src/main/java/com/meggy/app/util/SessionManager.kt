@@ -64,12 +64,28 @@ class SessionManager private constructor(context: Context) {
         prefs.edit().putLong(resumeKey(folderPath, videoName), positionMs).apply()
     }
 
+    /**
+     * v2.3.1 FIX: Returns the saved position, but returns 0 if the position
+     * is within 10 seconds of the end (using the saved duration). This
+     * prevents the "auto-skip cascade" where opening a nearly-finished
+     * video causes it to immediately end and jump to the next one.
+     */
     fun getResume(folderPath: String, videoName: String): Long {
-        return prefs.getLong(resumeKey(folderPath, videoName), 0L)
+        val pos = prefs.getLong(resumeKey(folderPath, videoName), 0L)
+        if (pos <= 0L) return 0L
+        val dur = prefs.getLong(durKey(folderPath, videoName), 0L)
+        // If we know the duration and the position is within 10s of the end,
+        // treat as "finished" — return 0 so the player starts from the beginning.
+        if (dur > 0L && dur - pos < 10_000L) return 0L
+        return pos
     }
 
+    /**
+     * v2.3.1: Uses getResume() so the ▶ continuar badge disappears when the
+     * video is essentially finished (within 10s of end).
+     */
     fun hasResume(folderPath: String, videoName: String): Boolean =
-        prefs.getLong(resumeKey(folderPath, videoName), 0L) > 0L
+        getResume(folderPath, videoName) > 0L
 
     fun clearResume(folderPath: String, videoName: String) {
         prefs.edit().remove(resumeKey(folderPath, videoName)).apply()
