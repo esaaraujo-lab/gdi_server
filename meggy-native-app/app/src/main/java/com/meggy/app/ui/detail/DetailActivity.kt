@@ -320,6 +320,18 @@ class DetailActivity : AppCompatActivity() {
         )
     }
 
+    /** v2.2.0 — Horizontal gutter for the continue rail. */
+    private class RailGutterDecoration(private val gutterDp: Int) : RecyclerView.ItemDecoration() {
+        override fun getItemOffsets(
+            outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State
+        ) {
+            val density = view.resources.displayMetrics.density
+            val px = (gutterDp * density).toInt()
+            outRect.right = px
+            if (parent.getChildAdapterPosition(view) == 0) outRect.left = 0
+        }
+    }
+
     private class GridGutterDecoration(private val gutterDp: Int) : RecyclerView.ItemDecoration() {
         override fun getItemOffsets(
             outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State
