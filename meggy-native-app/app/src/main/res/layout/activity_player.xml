@@ -91,6 +91,18 @@
             <!-- v2.3.0: REMOVED prev_button (⏮) and next_button (⏭) per user request.
                  Navigation between lessons is done via the playlist sidebar (☰). -->
 
+            <!-- v2.3.2: ↺ Reiniciar button — restarts the current video from 0 -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/restart_button"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="48dp"
+                android:text="↺"
+                android:textSize="20sp"
+                android:textColor="@android:color/white"
+                app:cornerRadius="16dp" />
+
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/speed_button"
                 style="@style/Widget.Material3.Button.TextButton"
