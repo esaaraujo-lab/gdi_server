@@ -239,7 +239,7 @@ class HomeActivity : AppCompatActivity() {
             val files = withContext(Dispatchers.IO) { api.listFolder(folderPath) }
 
             // ★ v2.1.0: Use AuthHelper for consistent expired-session handling.
-            if (AuthHelper.isSessionExpired(files)) {
+            if (files == null) {
                 AuthHelper.bounceToLogin(this@HomeActivity)
                 return@launch
             }
