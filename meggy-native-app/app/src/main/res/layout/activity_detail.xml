@@ -148,6 +148,30 @@
                 android:paddingTop="22dp"
                 android:paddingBottom="10dp" />
 
+            <!-- ★ v2.2.0: Continue de onde parou rail (per-drive recents) -->
+            <TextView
+                android:id="@+id/label_continue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Continue de onde parou"
+                android:textColor="@color/meggy_pink"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:paddingHorizontal="20dp"
+                android:paddingTop="20dp"
+                android:paddingBottom="8dp"
+                android:visibility="gone" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rail_continue"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clipToPadding="false"
+                android:paddingHorizontal="14dp"
+                android:paddingBottom="6dp"
+                android:nestedScrollingEnabled="false"
+                android:visibility="gone" />
+
             <!-- Grid -->
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/recycler"
