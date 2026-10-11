@@ -64,6 +64,9 @@
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
         <activity android:name=".ui.browse.BrowseActivity" android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
+        <!-- v2.1.0: DetailActivity (Netflix-style hero + grid) -->
+        <activity android:name=".ui.detail.DetailActivity" android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
         <activity android:name=".ui.player.PlayerActivity" android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
             android:supportsPictureInPicture="true" android:resizeableActivity="true"
