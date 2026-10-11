@@ -455,6 +455,18 @@ class PlayerActivity : AppCompatActivity() {
         playlistVisible = !playlistVisible
         binding.playlistContainer.visibility = if (playlistVisible) View.VISIBLE else View.GONE
         binding.playlistButton.text = if (playlistVisible) "\u2715" else "\u2630"
+        // ★ v2.4.0: Auto-focus the current item so D-pad navigation works immediately.
+        if (playlistVisible) {
+            binding.playlistRecycler.post {
+                val idx = PlaylistManager.index()
+                binding.playlistRecycler.smoothScrollToPosition(idx)
+                // Request focus on the RecyclerView so D-pad up/down navigates items
+                binding.playlistRecycler.requestFocus()
+                // Focus the specific item view
+                val vh = binding.playlistRecycler.findViewHolderForAdapterPosition(idx)
+                vh?.itemView?.requestFocus()
+            }
+        }
     }
 
     private fun hidePlaylist() {
@@ -488,7 +500,7 @@ class PlayerActivity : AppCompatActivity() {
 
         val cookie = SessionManager.get(this).sessionCookie
         val httpFactory = DefaultHttpDataSource.Factory()
-            .setUserAgent("MeggyNative/2.0 (Android)")
+            .setUserAgent("MeggyNative/2.4 (Android)")
             .setAllowCrossProtocolRedirects(true)
             .setDefaultRequestProperties(
                 if (!cookie.isNullOrBlank()) mapOf("Cookie" to "session=$cookie") else emptyMap()
@@ -498,16 +510,34 @@ class PlayerActivity : AppCompatActivity() {
             .setMediaSourceFactory(DefaultMediaSourceFactory(httpFactory))
             .build()
 
-        exo.setMediaItem(MediaItem.fromUri(url))
+        // ★ v2.4.0: Load ALL playlist items into ExoPlayer as a native playlist.
+        // This makes the Media3 controller's prev/next buttons work for BOTH
+        // same-folder AND cross-folder playlists. Previously we only loaded 1
+        // media item, so the controller's next button did nothing.
+        val playlist = PlaylistManager.all()
+        val startIndex = PlaylistManager.index()
+
+        if (playlist.isNotEmpty() && startIndex in playlist.indices) {
+            // Build MediaItem list from all playlist entries
+            val mediaItems = playlist.map { file ->
+                val fullUrl = MeggyApp.BASE_URL + (file.link ?: "")
+                MediaItem.Builder().setUri(fullUrl).build()
+            }
+            exo.setMediaItems(mediaItems, startIndex, 0L)
+        } else {
+            // Single item fallback (no playlist)
+            exo.setMediaItem(MediaItem.fromUri(url))
+        }
+
         exo.prepare()
 
         // ★ v2.3.2: If the video was already watched (✓), treat as REVIEW —
         // start from the beginning instead of seeking to a near-end position.
-        // This prevents the auto-skip cascade AND lets the user re-watch any
-        // lesson by simply tapping it.
         val isReview = isWatched(item)
         val saved = if (isReview) 0L else resumeFor(item, url)
-        if (saved > 0L) exo.seekTo(saved)
+        if (saved > 0L && !isReview) {
+            exo.seekTo(startIndex, saved)
+        }
         if (isReview) {
             binding.root.post {
                 Snackbar.make(binding.root, "📖 Revisão — começando do início", Snackbar.LENGTH_SHORT).show()
@@ -522,11 +552,33 @@ class PlayerActivity : AppCompatActivity() {
         exo.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_ENDED) {
+                    // ★ v2.4.0: ExoPlayer auto-advances to the next media item in the
+                    // playlist. STATE_ENDED only fires when the ENTIRE playlist is done.
                     markEnded(item)
-                    // ★ v2.0.0: Respect autoplayNext setting
-                    val autoplay = SessionManager.get(this@PlayerActivity).autoplayNext
-                    if (autoplay) {
-                        binding.root.post { playNext() }
+                    Snackbar.make(binding.root, "Fim da playlist", Snackbar.LENGTH_LONG).show()
+                }
+            }
+
+            // ★ v2.4.0: Sync PlaylistManager + UI when ExoPlayer transitions between
+            // media items (auto-advance OR controller prev/next button press).
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                val newIndex = exo.currentMediaItemIndex
+                if (newIndex != PlaylistManager.index()) {
+                    // Mark the previous item as watched if this was an auto-advance
+                    if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                        markEnded(item)
+                    }
+                    PlaylistManager.setIndex(newIndex)
+                    val newItem = PlaylistManager.getCurrent()
+                    if (newItem != null) {
+                        currentItem = newItem
+                        currentUrl = MeggyApp.BASE_URL + (newItem.link ?: "")
+                        binding.titleLabel.text = displayTitle(newItem)
+                        playlistAdapter?.updateCurrent(newIndex)
+                        // Reset speed to 1x on transition (matching old playItem behavior)
+                        speedIndex = 1
+                        exo.playbackParameters = PlaybackParameters(1.0f)
+                        binding.speedButton.text = "1.0x"
                     }
                 }
             }
@@ -559,26 +611,42 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * v2.4.0 — Jump to a specific playlist item by index.
+     * Uses exo.seekTo(index, 0) instead of releasing + recreating the player.
+     * The onMediaItemTransition listener handles updating UI + PlaylistManager.
+     */
     private fun playItem(item: FileItem) {
+        val p = player
+        if (p != null) {
+            // Find the index of this item in the playlist
+            val playlist = PlaylistManager.all()
+            val idx = playlist.indexOfFirst { it.name == item.name && (it.folderPath ?: "") == (item.folderPath ?: "") }
+            if (idx >= 0) {
+                p.seekTo(idx, 0L)
+                p.play()
+                return
+            }
+        }
+        // Fallback: release + recreate (for single-item or edge cases)
         releasePlayer()
         currentItem = item
         binding.titleLabel.text = displayTitle(item)
         initialisePlayer()
         playlistAdapter?.updateCurrent(PlaylistManager.index())
-        // ★ v2.3.0: REMOVED updateNavButtons() — no more prev/next buttons.
-        // Reset velocidade para 1x ao trocar de vídeo
         speedIndex = 1
         player?.playbackParameters = PlaybackParameters(1.0f)
         binding.speedButton.text = "1.0x"
     }
 
     private fun playNext() {
-        val next = PlaylistManager.getNext()
-        if (next == null || next.link.isNullOrEmpty()) {
+        val p = player
+        if (p != null && p.hasNextMediaItem()) {
+            p.seekToNextMediaItem()
+            p.play()
+        } else {
             Snackbar.make(binding.root, "Fim da playlist", Snackbar.LENGTH_LONG).show()
-            return
         }
-        playItem(next)
     }
 
     // ★ v2.3.0: REMOVED playPrev(), updateNavButtons(), togglePlayPause().
