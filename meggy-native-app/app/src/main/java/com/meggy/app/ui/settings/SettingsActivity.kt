@@ -2,6 +2,8 @@ package com.meggy.app.ui.settings
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.meggy.app.BuildConfig
 import com.meggy.app.R
@@ -12,14 +14,15 @@ import com.meggy.app.ui.mylist.MyListActivity
 import com.meggy.app.ui.search.SearchActivity
 import com.meggy.app.util.PlaylistManager
 import com.meggy.app.util.SessionManager
+import com.meggy.app.util.UpdateChecker
 
 /**
  * v2.0.0 — Settings screen.
  *
- * v2.0.2: BottomNav no longer calls finish() on tab switch — the target
- * activity is declared with launchMode="singleTask" in the manifest, so
- * startActivity() brings the existing instance to front and clears
- * activities above it.
+ * v2.2.0: Added "Verificar atualização" button that manually triggers
+ * UpdateChecker.checkForUpdate with showFeedback=true. This gives the
+ * user a way to force-check for updates (the auto-check on app open
+ * might have been missed or failed).
  */
 class SettingsActivity : AppCompatActivity() {
 
@@ -42,7 +45,6 @@ class SettingsActivity : AppCompatActivity() {
                 R.id.nav_home -> {
                     startActivity(Intent(this, HomeActivity::class.java))
                     overridePendingTransition(0, 0)
-                    // v2.0.2: NO finish() — singleTask handles back-stack cleanup.
                     true
                 }
                 R.id.nav_search -> {
@@ -94,6 +96,12 @@ class SettingsActivity : AppCompatActivity() {
             sm.autoplayNext = isChecked
         }
 
+        // ★ v2.2.0: Manual update check button
+        binding.btnCheckUpdate.setOnClickListener {
+            Toast.makeText(this, "🔍 Verificando atualizações...", Toast.LENGTH_SHORT).show()
+            UpdateChecker.checkForUpdate(this, BuildConfig.VERSION_NAME, showFeedback = true)
+        }
+
         binding.btnLogout.setOnClickListener { logout() }
 
         binding.aboutText.text = buildString {
@@ -106,7 +114,6 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    // v2.0.2: Restore the correct nav highlight when brought back to front.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         binding.bottomNav.selectedItemId = R.id.nav_settings
@@ -121,11 +128,6 @@ class SettingsActivity : AppCompatActivity() {
         binding.sleepValue.text = if (min == 0) "Off" else "${min}min"
     }
 
-    /**
-     * v2.0.2 — Logout clears the session and routes to LoginActivity with
-     * CLEAR_TASK so the entire back stack is wiped. The user can never
-     * press back to return to Settings/Home after logging out.
-     */
     private fun logout() {
         SessionManager.get(this).clearSession()
         PlaylistManager.clear()
