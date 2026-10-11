@@ -18,6 +18,7 @@ import com.meggy.app.data.FileItem
 import com.meggy.app.databinding.ActivityBrowseBinding
 import com.meggy.app.ui.login.LoginActivity
 import com.meggy.app.ui.player.PlayerActivity
+import com.meggy.app.util.AuthHelper
 import com.meggy.app.util.CrossFolderPlaylist
 import com.meggy.app.util.PlaylistManager
 import com.meggy.app.util.SessionManager
@@ -86,28 +87,9 @@ class BrowseActivity : AppCompatActivity() {
             val files = withContext(Dispatchers.IO) { api.listFolder(currentPath) }
             binding.loadingView.visibility = View.GONE
 
-            // ★ v2.0.2: Detect expired session.
-            //
-            // ApiService.listFolder returns null in TWO cases:
-            //   (a) network/IO error
-            //   (b) the server responded with an HTML login redirect because
-            //       the session cookie expired.
-            //
-            // We can't distinguish (a) from (b) without inspecting the response
-            // code, but the practical fix is the same for the user: if the
-            // session is still flagged as "logged in" locally AND we got null,
-            // treat it as an expired session → clear it and bounce to Login.
-            // If the session was already cleared (e.g. by another activity),
-            // also bounce to Login.
-            if (files == null) {
-                val sm = SessionManager.get(this@BrowseActivity)
-                if (sm.isLoggedIn) {
-                    // Session was thought to be valid but the server rejected it.
-                    // Clear it so SplashActivity routes to Login next time.
-                    sm.clearSession()
-                    PlaylistManager.clear()
-                }
-                bounceToLogin()
+            // ★ v2.1.0: Use AuthHelper for consistent expired-session handling.
+            if (AuthHelper.isSessionExpired(files)) {
+                AuthHelper.bounceToLogin(this@BrowseActivity)
                 return@launch
             }
 
@@ -116,6 +98,7 @@ class BrowseActivity : AppCompatActivity() {
                 onFile = { file -> openFile(file) }
             )
             fileAdapter = adapter
+            adapter.setFolderPath(currentPath)
             binding.recycler.adapter = adapter
 
             if (files.isEmpty()) {
