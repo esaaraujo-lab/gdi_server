@@ -1,9 +1,8 @@
 package com.meggy.app.ui.browse
 
+import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
-import android.os.Handler
-import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -11,29 +10,25 @@ import android.view.animation.AnimationUtils
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import coil.ImageLoader
+import coil.memory.MemoryCache
+import coil.request.ImageRequest
+import coil.size.Size
 import com.meggy.app.R
 import com.meggy.app.data.FileItem
 import com.meggy.app.data.colorFromString
 import com.meggy.app.databinding.ItemRailCardBinding
+import com.meggy.app.util.SessionManager
 
 /**
- * Netflix/Disney+ inspired tile grid adapter (v1.8.0).
+ * Netflix/Disney+ inspired tile grid adapter (v2.1.0).
  *
- * Each card is a 200dp-wide tile with:
- *  - A 200dp tall thumbnail whose gradient is derived from the file name hash.
- *  - Top + bottom scrims so the overlaid title/subtitle stay legible.
- *  - Pink "▶ continuar" and green ✓ badges in the top corners.
- *  - A pink→purple progress bar at the very bottom (videos only).
- *
- * Animations
- * ----------
- *  • [tile_appear] — staggered fade-in + slide-up played on first bind.
- *    Stagger delay = position × 40ms (capped at 320ms).
- *  • Focus change — animated scale 1.0 ↔ 1.06, elevation 0 ↔ 16dp, and
- *    the [focus_ring] view toggles between INVISIBLE / VISIBLE so the
- *    pink halo + crisp border wrap the focused tile.
- *
- * Click handling: folders invoke [onFolder], files invoke [onFile].
+ * v2.1.0 changes:
+ *  • Real thumbnails — loads Google Drive thumbnailLink via Coil when
+ *    available. Falls back to gradient + emoji when not.
+ *  • Real progress bar — reads position/duration from SessionManager
+ *    and shows the actual % watched (was hardcoded 35%).
+ *  • Thumbnail ImageView added to item_rail_card.xml.
  */
 class FileAdapter(
     private val onFolder: (FileItem) -> Unit,
@@ -42,13 +37,18 @@ class FileAdapter(
 
     private var resumedNames: Set<String> = emptySet()
     private var watchedNames: Set<String> = emptySet()
-    private val appearHandler = Handler(Looper.getMainLooper())
+    private var currentFolderPath: String = "/"
 
     /** Feeds the two badge sets for the current folder and refreshes every row. */
     fun setResumeAndWatched(resumed: Set<String>, watched: Set<String>) {
         resumedNames = resumed
         watchedNames = watched
         if (itemCount > 0) notifyItemRangeChanged(0, itemCount)
+    }
+
+    /** v2.1.0: Sets the current folder path so we can look up real progress %. */
+    fun setFolderPath(path: String) {
+        currentFolderPath = path
     }
 
     inner class VH(val binding: ItemRailCardBinding) : RecyclerView.ViewHolder(binding.root) {
@@ -66,7 +66,6 @@ class FileAdapter(
             }
         }
 
-        /** Smooth scale + elevation + ring toggle on focus change. */
         fun animateFocus(hasFocus: Boolean) {
             val scale = if (hasFocus) 1.06f else 1f
             binding.cardRoot.animate().scaleX(scale).scaleY(scale)
@@ -81,13 +80,10 @@ class FileAdapter(
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
         val inflater = LayoutInflater.from(parent.context)
         val vh = VH(ItemRailCardBinding.inflate(inflater, parent, false))
-        // Cards in the grid fill their column width.
         vh.binding.root.layoutParams = ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
         )
-        // Strip horizontal margins so grid spacing is symmetric (parent
-        // ItemOffsetsDecoration handles inter-tile gutters).
         val lp = vh.binding.root.layoutParams as? ViewGroup.MarginLayoutParams
         lp?.let {
             it.marginEnd = 0
@@ -100,8 +96,9 @@ class FileAdapter(
     override fun onBindViewHolder(holder: VH, position: Int) {
         val item = getItem(position)
         val res = holder.itemView.resources
+        val ctx = holder.itemView.context
+
         with(holder.binding) {
-            // Title & subtitle
             cardTitle.text = item.name
             cardSubtitle.text = when {
                 item.isFolder -> "pasta"
@@ -111,29 +108,64 @@ class FileAdapter(
                 else -> item.humanSize
             }
             cardIcon.text = when {
-                item.isFolder -> "\uD83D\uDCC1" // 📁
-                item.isVideo  -> "\uD83C\uDFA5" // 🎥
-                item.isAudio  -> "\uD83C\uDFB5" // 🎵
-                item.isPdf    -> "\uD83D\uDCC4" // 📄
-                else          -> "\uD83D\uDCC4" // 📄
+                item.isFolder -> "\uD83D\uDCC1"
+                item.isVideo  -> "\uD83C\uDFA5"
+                item.isAudio  -> "\uD83C\uDFB5"
+                item.isPdf    -> "\uD83D\uDCC4"
+                else          -> "\uD83D\uDCC4"
             }
 
-            // Per-card gradient background derived from the file name hash.
+            // Per-card gradient background (always set as fallback under thumbnail)
             val baseColor = colorFromString(item.name)
             cardBg.background = tileGradientDrawable(res, baseColor)
 
-            // Progress bar on videos (static 35% — matches web preview).
+            // ★ v2.1.0: Load real thumbnail via Coil (videos + PDFs only).
+            // Folders don't have thumbnails — show emoji + gradient.
+            val thumbUrl = item.thumbnailLink
+            if (thumbUrl != null && (item.isVideo || item.isPdf || item.isAudio)) {
+                cardThumbnail.visibility = View.VISIBLE
+                cardIcon.visibility = View.GONE
+                val loader = getOrCreateImageLoader(ctx)
+                val request = ImageRequest.Builder(ctx)
+                    .data(thumbUrl)
+                    .target(
+                        onStart = { /* gradient shows underneath as placeholder */ },
+                        onSuccess = { result ->
+                            cardThumbnail.setImageDrawable(result)
+                        },
+                        onError = { 
+                            // Thumbnail failed — show emoji fallback
+                            cardThumbnail.visibility = View.GONE
+                            cardIcon.visibility = View.VISIBLE
+                        }
+                    )
+                    .build()
+                loader.enqueue(request)
+            } else {
+                cardThumbnail.visibility = View.GONE
+                cardIcon.visibility = View.VISIBLE
+            }
+
+            // ★ v2.1.0: Real progress bar (was hardcoded 35%).
             val isVideo = item.isVideo
-            progressBar.visibility = if (isVideo) View.VISIBLE else View.GONE
             if (isVideo) {
-                cardBg.post {
-                    val w = cardBg.width
-                    if (w > 0) {
-                        val lp = progressBar.layoutParams
-                        lp.width = (w * 35 / 100).coerceAtLeast(1)
-                        progressBar.layoutParams = lp
+                val sm = SessionManager.get(ctx)
+                val progress = sm.getResumeProgress(currentFolderPath, item.name)
+                if (progress > 0) {
+                    progressBar.visibility = View.VISIBLE
+                    cardBg.post {
+                        val w = cardBg.width
+                        if (w > 0) {
+                            val lp = progressBar.layoutParams
+                            lp.width = (w * progress / 100).coerceAtLeast(1)
+                            progressBar.layoutParams = lp
+                        }
                     }
+                } else {
+                    progressBar.visibility = View.GONE
                 }
+            } else {
+                progressBar.visibility = View.GONE
             }
 
             // "continuar" badge on videos with a resume position.
@@ -145,23 +177,20 @@ class FileAdapter(
             watchedBadge.visibility = if (showWatched) View.VISIBLE else View.GONE
         }
 
-        // Staggered tile-appear animation (first bind only).
         playAppear(holder, position)
     }
 
     private fun playAppear(holder: VH, position: Int) {
         val anim = AnimationUtils.loadAnimation(holder.itemView.context, R.anim.tile_appear)
-        val delay = (position % 12) * 40L  // cap stagger so deep scroll positions don't wait
+        val delay = (position % 12) * 40L
         anim.startOffset = delay.coerceAtMost(320L)
         holder.binding.root.startAnimation(anim)
     }
 
-    /** Two-stop diagonal gradient with the per-name colour tinted at the top-left. */
     private fun tileGradientDrawable(res: android.content.res.Resources, baseColor: Int): GradientDrawable {
         val r = Color.red(baseColor)
         val g = Color.green(baseColor)
         val b = Color.blue(baseColor)
-        // 35% opacity tint at the start, fading to near-black ink at the end.
         val start = Color.argb(0x59, r, g, b)
         val end = Color.parseColor("#FF0F1218")
         val cornerPx = (16 * res.displayMetrics.density)
@@ -177,6 +206,23 @@ class FileAdapter(
         private val DIFF = object : DiffUtil.ItemCallback<FileItem>() {
             override fun areItemsTheSame(o: FileItem, n: FileItem) = o.id == n.id
             override fun areContentsTheSame(o: FileItem, n: FileItem) = o == n
+        }
+
+        @Volatile
+        private var sharedImageLoader: ImageLoader? = null
+
+        /** v2.1.0 — Singleton Coil ImageLoader with memory cache. */
+        fun getOrCreateImageLoader(ctx: Context): ImageLoader {
+            return sharedImageLoader ?: synchronized(this) {
+                sharedImageLoader ?: ImageLoader.Builder(ctx.applicationContext)
+                    .memoryCache {
+                        MemoryCache.Builder(ctx.applicationContext)
+                            .maxSizePercent(0.25)
+                            .build()
+                    }
+                    .crossfade(true)
+                    .build().also { sharedImageLoader = it }
+            }
         }
     }
 }
