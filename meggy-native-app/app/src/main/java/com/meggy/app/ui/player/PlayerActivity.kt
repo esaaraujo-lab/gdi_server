@@ -128,20 +128,12 @@ class PlayerActivity : AppCompatActivity() {
         binding.speedButton.text = "${formatSpeed(speeds[speedIndex])}x"
         binding.speedButton.setOnClickListener { cycleSpeed() }
         binding.playlistButton.setOnClickListener { togglePlaylist() }
-        binding.prevButton.setOnClickListener { playPrev() }
-        binding.nextButton.setOnClickListener { playNext() }
         binding.sleepButton.setOnClickListener { toggleSleepMode() }
         // ★ v2.0.0: Sleep timer button
         binding.sleepTimerButton.setOnClickListener { showSleepTimerDialog() }
 
-        // ★ v2.2.0: Bottom lesson navigation bar (big prev/play/next arrows)
-        binding.bottomPrevButton.setOnClickListener { playPrev() }
-        binding.bottomNextButton.setOnClickListener { playNext() }
-        binding.bottomPlayButton.setOnClickListener { togglePlayPause() }
-        // Show the bottom nav bar if there's a playlist
-        if (PlaylistManager.all().isNotEmpty()) {
-            binding.lessonNavBar.visibility = View.VISIBLE
-        }
+        // ★ v2.3.0: REMOVED prev/next button wiring + bottom nav bar per user request.
+        // Navigation between lessons is done via the playlist sidebar (☰).
 
         // ★ v2.0.0: Gesture detection setup
         setupGestures()
@@ -158,7 +150,6 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         setupPlaylistSidebar()
-        updateNavButtons()
         scheduleAutoHide()
 
         // ★ v2.0.0: Auto-start sleep timer if default is set
@@ -361,13 +352,9 @@ class PlayerActivity : AppCompatActivity() {
         controlsVisible = true
         binding.titleLabel.animate().alpha(1f).setDuration(200).start()
         binding.speedButton.animate().alpha(1f).setDuration(200).start()
-        binding.prevButton.animate().alpha(if (PlaylistManager.hasPrev()) 1f else 0.35f).setDuration(200).start()
-        binding.nextButton.animate().alpha(if (PlaylistManager.hasNext()) 1f else 0.35f).setDuration(200).start()
         binding.playlistButton.animate().alpha(1f).setDuration(200).start()
         binding.sleepButton.animate().alpha(1f).setDuration(200).start()
         binding.sleepTimerButton.animate().alpha(1f).setDuration(200).start()
-        // ★ v2.2.0: Bottom nav bar stays visible (doesn't auto-hide)
-        binding.lessonNavBar.animate().alpha(1f).setDuration(200).start()
         binding.playerView.useController = true
         binding.playerView.showController()
         scheduleAutoHide()
@@ -379,13 +366,9 @@ class PlayerActivity : AppCompatActivity() {
         if (!playlistVisible) {
             binding.titleLabel.animate().alpha(0f).setDuration(200).start()
             binding.speedButton.animate().alpha(0f).setDuration(200).start()
-            binding.prevButton.animate().alpha(0f).setDuration(200).start()
-            binding.nextButton.animate().alpha(0f).setDuration(200).start()
             binding.playlistButton.animate().alpha(0f).setDuration(200).start()
             binding.sleepButton.animate().alpha(0f).setDuration(200).start()
             binding.sleepTimerButton.animate().alpha(0f).setDuration(200).start()
-            // ★ v2.2.0: Bottom nav bar does NOT auto-hide (stays visible so
-            // the user can always navigate between lessons).
             binding.playerView.hideController()
         }
     }
@@ -546,7 +529,7 @@ class PlayerActivity : AppCompatActivity() {
         binding.titleLabel.text = displayTitle(item)
         initialisePlayer()
         playlistAdapter?.updateCurrent(PlaylistManager.index())
-        updateNavButtons()
+        // ★ v2.3.0: REMOVED updateNavButtons() — no more prev/next buttons.
         // Reset velocidade para 1x ao trocar de vídeo
         speedIndex = 1
         player?.playbackParameters = PlaybackParameters(1.0f)
@@ -557,48 +540,13 @@ class PlayerActivity : AppCompatActivity() {
         val next = PlaylistManager.getNext()
         if (next == null || next.link.isNullOrEmpty()) {
             Snackbar.make(binding.root, "Fim da playlist", Snackbar.LENGTH_LONG).show()
-            updateNavButtons()
             return
         }
         playItem(next)
     }
 
-    private fun playPrev() {
-        val prev = PlaylistManager.getPrev()
-        if (prev == null || prev.link.isNullOrEmpty()) {
-            // ★ v2.2.0: Show feedback when no previous lesson
-            Snackbar.make(binding.root, "Sem aula anterior", Snackbar.LENGTH_SHORT).show()
-            updateNavButtons()
-            return
-        }
-        playItem(prev)
-    }
-
-    private fun updateNavButtons() {
-        binding.prevButton.isEnabled = PlaylistManager.hasPrev()
-        binding.prevButton.alpha = if (PlaylistManager.hasPrev()) 1f else 0.35f
-        binding.nextButton.isEnabled = PlaylistManager.hasNext()
-        binding.nextButton.alpha = if (PlaylistManager.hasNext()) 1f else 0.35f
-        // ★ v2.2.0: Update bottom nav bar button states too
-        binding.bottomPrevButton.alpha = if (PlaylistManager.hasPrev()) 1f else 0.35f
-        binding.bottomPrevButton.isEnabled = PlaylistManager.hasPrev()
-        binding.bottomNextButton.alpha = if (PlaylistManager.hasNext()) 1f else 0.35f
-        binding.bottomNextButton.isEnabled = PlaylistManager.hasNext()
-    }
-
-    /** ★ v2.2.0: Toggle play/pause + update the bottom bar icon. */
-    private fun togglePlayPause() {
-        val p = player ?: return
-        if (p.isPlaying) {
-            p.pause()
-            binding.bottomPlayIcon.text = "▶"
-            binding.bottomPlayLabel.text = "Reproduzir"
-        } else {
-            p.play()
-            binding.bottomPlayIcon.text = "⏸"
-            binding.bottomPlayLabel.text = "Pausar"
-        }
-    }
+    // ★ v2.3.0: REMOVED playPrev(), updateNavButtons(), togglePlayPause().
+    // The user can navigate between lessons via the playlist sidebar (☰).
 
     private fun releasePlayer() {
         saveJob?.cancel()
