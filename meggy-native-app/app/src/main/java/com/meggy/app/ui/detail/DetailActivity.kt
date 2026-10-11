@@ -9,6 +9,7 @@ import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.meggy.app.MeggyApp
 import com.meggy.app.data.ApiService
@@ -16,6 +17,8 @@ import com.meggy.app.data.FileItem
 import com.meggy.app.data.colorFromString
 import com.meggy.app.databinding.ActivityDetailBinding
 import com.meggy.app.ui.browse.BrowseActivity
+import com.meggy.app.ui.home.RailAdapter
+import com.meggy.app.ui.home.RailItem
 import com.meggy.app.ui.player.PlayerActivity
 import com.meggy.app.util.AuthHelper
 import com.meggy.app.util.CrossFolderPlaylist
@@ -78,7 +81,99 @@ class DetailActivity : AppCompatActivity() {
             binding.recycler.scrollToPosition(0)
         }
 
+        // ★ v2.2.0: Setup "Continue de onde parou" rail (per-drive recents)
+        setupContinueRail()
+
         loadFolder()
+    }
+
+    /**
+     * v2.2.0 — "Continue de onde parou" rail.
+     *
+     * Filters SessionManager.getRecents() for items whose folderPath
+     * starts with the current drive/folder path. Shows up to 8 tiles
+     * with video name, folder label, progress bar, and ▶ continuar badge.
+     *
+     * This lets the user resume any video they started watching WITHIN
+     * this drive — even if it's in a subfolder they haven't opened yet.
+     */
+    private fun setupContinueRail() {
+        val sm = SessionManager.get(this)
+        val allRecents = sm.getRecents()
+        // Filter: only show recents from THIS drive/folder
+        val driveRecents = allRecents.filter { it.folderPath.startsWith(currentPath) }
+
+        if (driveRecents.isEmpty()) {
+            binding.labelContinue.visibility = View.GONE
+            binding.railContinue.visibility = View.GONE
+            return
+        }
+
+        binding.labelContinue.visibility = View.VISIBLE
+        binding.railContinue.visibility = View.VISIBLE
+        binding.railContinue.layoutManager =
+            LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        binding.railContinue.addItemDecoration(RailGutterDecoration(8))
+
+        val railItems = driveRecents.map { r ->
+            val shortFolder = r.folderPath.substringAfterLast("/").ifBlank { r.folderPath }
+            val progress = sm.getResumeProgress(r.folderPath, r.videoName)
+            RailItem(
+                title = r.videoName,
+                subtitle = shortFolder,
+                icon = "🎥",
+                hasProgress = progress > 0,
+                progress = progress,
+                isWatched = sm.isWatched(r.folderPath, r.videoName),
+                hasResume = sm.hasResume(r.folderPath, r.videoName)
+            )
+        }
+        binding.railContinue.adapter = RailAdapter(railItems) { item ->
+            val match = driveRecents.find { it.videoName == item.title } ?: return@RailAdapter
+            continueWatching(match.folderPath, match.videoName, item.subtitle)
+        }
+    }
+
+    /**
+     * v2.2.0 — Opens the player for a "continue" item, building a
+     * cross-folder playlist if needed (same logic as HomeActivity).
+     */
+    private fun continueWatching(folderPath: String, videoName: String, shortFolder: String) {
+        lifecycleScope.launch {
+            val files = withContext(Dispatchers.IO) { api.listFolder(folderPath) }
+            if (files == null) {
+                AuthHelper.bounceToLogin(this@DetailActivity)
+                return@launch
+            }
+
+            if (files.isNotEmpty()) {
+                val clickedVideo = files.find { it.name == videoName && (it.isVideo || it.isAudio) }
+                if (clickedVideo != null && !clickedVideo.link.isNullOrEmpty()) {
+                    val playable = files.filter { (it.isVideo || it.isAudio) && !it.link.isNullOrEmpty() }
+                    if (playable.size > 1) {
+                        val idx = playable.indexOfFirst { it.name == videoName }
+                        PlaylistManager.setPlaylist(playable, if (idx >= 0) idx else 0, this@DetailActivity)
+                        launchPlayer(MeggyApp.BASE_URL + clickedVideo.link, videoName, folderPath)
+                        return@launch
+                    } else {
+                        val result = withContext(Dispatchers.IO) {
+                            CrossFolderPlaylist.build(folderPath, clickedVideo, api)
+                        }
+                        if (result.items.isNotEmpty()) {
+                            PlaylistManager.setPlaylist(result.items, result.startIndex, this@DetailActivity)
+                        }
+                        launchPlayer(MeggyApp.BASE_URL + clickedVideo.link, videoName, folderPath)
+                        return@launch
+                    }
+                }
+            }
+
+            // Fallback: open subfolder in DetailActivity
+            val intent = Intent(this@DetailActivity, DetailActivity::class.java)
+            intent.putExtra("drivePath", folderPath)
+            intent.putExtra("folderName", shortFolder)
+            startActivity(intent)
+        }
     }
 
     private fun calculateSpanCount(): Int {
