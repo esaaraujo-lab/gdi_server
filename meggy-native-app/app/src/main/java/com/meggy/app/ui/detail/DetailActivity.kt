@@ -139,6 +139,11 @@ class DetailActivity : AppCompatActivity() {
      * cross-folder playlist if needed (same logic as HomeActivity).
      */
     private fun continueWatching(folderPath: String, videoName: String, shortFolder: String) {
+        // ★ v2.3.1: Show visual feedback immediately so the user knows the tap registered.
+        com.google.android.material.snackbar.Snackbar.make(
+            binding.root, "Carregando \"$videoName\"...", com.google.android.material.snackbar.Snackbar.LENGTH_SHORT
+        ).show()
+
         lifecycleScope.launch {
             val files = withContext(Dispatchers.IO) { api.listFolder(folderPath) }
             if (files == null) {
