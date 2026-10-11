@@ -1,30 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  v1.8.0 — Netflix/Disney+ inspired animated tile.
+  v2.1.0 — Netflix/Disney+ inspired animated tile WITH thumbnail support.
 
-  Layout strategy
-  ===============
-  • Outer FrameLayout hosts: (1) the focus ring background (toggled in
-    code), (2) the MaterialCardView with the actual content, (3) the
-    pink glow shadow layer.
-  • MaterialCardView uses rounded 16dp corners, no internal padding —
-    the thumbnail bleeds edge-to-edge (poster style).
-  • Thumbnail area is a fixed 200dp tall FrameLayout so the grid keeps
-    a consistent rhythm.
-  • Bottom scrim (tile_overlay_bottom) + top scrim (tile_overlay_top)
-    guarantee text contrast over any gradient.
-  • Info (title / subtitle / continue badge) sits on TOP of the
-    bottom scrim — no separate info section, matching the modern
-    streaming-app aesthetic.
-  • Watched ✓ + continue ▶ badges float in the top-right corner.
-
-  Animation hooks
-  ===============
-  • Card scale on focus: 1.0 → 1.06 (set in adapter's onFocusChange).
-  • Elevation on focus: 0dp → 16dp.
-  • Pink focus ring: visibility toggled in adapter's onFocusChange.
-  • Tile appear (fade+slide): started in onBindViewHolder via
-    R.anim.tile_appear.
+  Changes vs v1.8.0:
+  • Added card_thumbnail ImageView between card_bg and card_icon.
+    When a thumbnail URL is available, the ImageView loads it via Coil
+    and the emoji icon is hidden. When no thumbnail is available, the
+    ImageView is gone and the emoji+gradient fallback shows.
+  • card_bg (gradient) stays visible underneath the thumbnail as a
+    loading placeholder + fallback.
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -58,14 +42,23 @@
             android:layout_width="match_parent"
             android:layout_height="200dp">
 
-            <!-- Thumbnail gradient (set in code via colorFromString) -->
+            <!-- Thumbnail gradient (set in code via colorFromString) — fallback + loading placeholder -->
             <View
                 android:id="@+id/card_bg"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:background="@drawable/card_gradient_pink" />
 
-            <!-- Big emoji icon (centered) -->
+            <!-- v2.1.0: Real thumbnail ImageView (Coil-loaded, gone by default) -->
+            <ImageView
+                android:id="@+id/card_thumbnail"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:visibility="gone"
+                android:contentDescription="Thumbnail" />
+
+            <!-- Big emoji icon (centered) — shown when no thumbnail -->
             <TextView
                 android:id="@+id/card_icon"
                 android:layout_width="match_parent"
