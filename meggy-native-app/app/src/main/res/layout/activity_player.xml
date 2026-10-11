@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  v2.2.0 — Player layout.
-  
-  Changes vs v2.0.0:
-  • Added bottom-center prev/next/play bar (lesson_navigation_bar) with
-    BIG arrows for "aula anterior" / "próxima aula". This is always
-    visible when a playlist exists (doesn't auto-hide) so the user
-    can always navigate between lessons.
-  • Top-bar prev/next buttons kept for redundancy but made bigger.
+  v2.3.0 — Player layout (restored to v2.1.1 state, then removed prev/next arrows).
+
+  Changes vs v2.2.0:
+  • REMOVED the bottom lesson navigation bar (lesson_nav_bar) — user feedback.
+  • REMOVED prev_button (⏮) and next_button (⏭) from the top bar — user feedback.
+  • Kept ALL other features: title, speed, sleep mode (🌙), sleep timer (⏰),
+    playlist sidebar (☰), gestures (double-tap seek, swipe), auto-hide controls.
+
+  The user can still navigate between lessons via the playlist sidebar (☰).
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -87,29 +88,8 @@
                 android:shadowDy="1"
                 android:shadowRadius="4" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/prev_button"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minWidth="52dp"
-                android:minHeight="48dp"
-                android:text="⏮"
-                android:textSize="22sp"
-                android:textColor="@android:color/white"
-                app:cornerRadius="16dp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/next_button"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minWidth="52dp"
-                android:minHeight="48dp"
-                android:text="⏭"
-                android:textSize="22sp"
-                android:textColor="@android:color/white"
-                app:cornerRadius="16dp" />
+            <!-- v2.3.0: REMOVED prev_button (⏮) and next_button (⏭) per user request.
+                 Navigation between lessons is done via the playlist sidebar (☰). -->
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/speed_button"
@@ -167,115 +147,6 @@
             android:shadowDy="1"
             android:shadowRadius="3"
             android:visibility="gone" />
-    </LinearLayout>
-
-    <!-- ★ v2.2.0: Bottom-center lesson navigation bar (always visible when playlist exists) -->
-    <LinearLayout
-        android:id="@+id/lesson_nav_bar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom"
-        android:orientation="horizontal"
-        android:gravity="center"
-        android:background="@drawable/bottom_gradient"
-        android:paddingHorizontal="20dp"
-        android:paddingVertical="14dp"
-        android:visibility="gone"
-        android:elevation="4dp">
-
-        <!-- Aula anterior (big arrow) -->
-        <LinearLayout
-            android:id="@+id/bottom_prev_button"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:padding="10dp"
-            android:focusable="true"
-            android:focusableInTouchMode="true"
-            android:clickable="true"
-            android:foreground="?attr/selectableItemBackground">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="‹‹"
-                android:textColor="@android:color/white"
-                android:textSize="32sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Aula anterior"
-                android:textColor="#CCFFFFFF"
-                android:textSize="11sp"
-                android:layout_marginTop="2dp" />
-        </LinearLayout>
-
-        <!-- Play/Pause (center) -->
-        <LinearLayout
-            android:id="@+id/bottom_play_button"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="0.8"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:padding="10dp"
-            android:focusable="true"
-            android:focusableInTouchMode="true"
-            android:clickable="true"
-            android:foreground="?attr/selectableItemBackground">
-
-            <TextView
-                android:id="@+id/bottom_play_icon"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="⏸"
-                android:textColor="@android:color/white"
-                android:textSize="36sp" />
-
-            <TextView
-                android:id="@+id/bottom_play_label"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Pausar"
-                android:textColor="#CCFFFFFF"
-                android:textSize="11sp"
-                android:layout_marginTop="2dp" />
-        </LinearLayout>
-
-        <!-- Próxima aula (big arrow) -->
-        <LinearLayout
-            android:id="@+id/bottom_next_button"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:padding="10dp"
-            android:focusable="true"
-            android:focusableInTouchMode="true"
-            android:clickable="true"
-            android:foreground="?attr/selectableItemBackground">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="››"
-                android:textColor="@android:color/white"
-                android:textSize="32sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Próxima aula"
-                android:textColor="#CCFFFFFF"
-                android:textSize="11sp"
-                android:layout_marginTop="2dp" />
-        </LinearLayout>
     </LinearLayout>
 
     <!-- v2.0.0: Seek gesture hint (center overlay, transient) -->
