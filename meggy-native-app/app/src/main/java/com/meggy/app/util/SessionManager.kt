@@ -78,6 +78,40 @@ class SessionManager private constructor(context: Context) {
     private fun resumeKey(folderPath: String, videoName: String): String =
         "resume_$folderPath::$videoName"
 
+    // ───────── v2.1.0: per-(folder, video) duration ─────────
+    //
+    // Stored alongside the resume position so adapters can compute the
+    // real progress percentage:  progress = position * 100 / duration.
+    // Keyed by "dur_<folderPath>::<videoName>".
+
+    /** Saves the total duration (ms) for the (folder, video) pair. */
+    fun saveResumeDuration(folderPath: String, videoName: String, durationMs: Long) {
+        if (durationMs > 0L) {
+            prefs.edit().putLong(durKey(folderPath, videoName), durationMs).apply()
+        }
+    }
+
+    /** Returns the saved duration (ms) for the (folder, video) pair, or 0. */
+    fun getResumeDuration(folderPath: String, videoName: String): Long {
+        return prefs.getLong(durKey(folderPath, videoName), 0L)
+    }
+
+    /**
+     * Returns the progress percentage (0..100) for the (folder, video) pair.
+     * Returns 0 if no resume position or duration is stored, or if duration
+     * is 0 (avoid div-by-zero).
+     */
+    fun getResumeProgress(folderPath: String, videoName: String): Int {
+        val pos = getResume(folderPath, videoName)
+        if (pos <= 0L) return 0
+        val dur = getResumeDuration(folderPath, videoName)
+        if (dur <= 0L) return 0
+        return ((pos * 100L) / dur).toInt().coerceIn(0, 100)
+    }
+
+    private fun durKey(folderPath: String, videoName: String): String =
+        "dur_$folderPath::$videoName"
+
     // ───────── per-(folder, video) watched flag (v1.2.0) ─────────
 
     fun markWatched(folderPath: String, videoName: String) {
