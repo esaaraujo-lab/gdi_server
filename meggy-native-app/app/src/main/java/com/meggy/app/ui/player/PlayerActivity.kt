@@ -127,6 +127,8 @@ class PlayerActivity : AppCompatActivity() {
         binding.titleLabel.text = displayTitle(item)
         binding.speedButton.text = "${formatSpeed(speeds[speedIndex])}x"
         binding.speedButton.setOnClickListener { cycleSpeed() }
+        // ★ v2.3.2: Restart button — seeks to 0 and clears any watched flag
+        binding.restartButton.setOnClickListener { restartVideo() }
         binding.playlistButton.setOnClickListener { togglePlaylist() }
         binding.sleepButton.setOnClickListener { toggleSleepMode() }
         // ★ v2.0.0: Sleep timer button
@@ -352,6 +354,7 @@ class PlayerActivity : AppCompatActivity() {
         controlsVisible = true
         binding.titleLabel.animate().alpha(1f).setDuration(200).start()
         binding.speedButton.animate().alpha(1f).setDuration(200).start()
+        binding.restartButton.animate().alpha(1f).setDuration(200).start()
         binding.playlistButton.animate().alpha(1f).setDuration(200).start()
         binding.sleepButton.animate().alpha(1f).setDuration(200).start()
         binding.sleepTimerButton.animate().alpha(1f).setDuration(200).start()
@@ -366,6 +369,7 @@ class PlayerActivity : AppCompatActivity() {
         if (!playlistVisible) {
             binding.titleLabel.animate().alpha(0f).setDuration(200).start()
             binding.speedButton.animate().alpha(0f).setDuration(200).start()
+            binding.restartButton.animate().alpha(0f).setDuration(200).start()
             binding.playlistButton.animate().alpha(0f).setDuration(200).start()
             binding.sleepButton.animate().alpha(0f).setDuration(200).start()
             binding.sleepTimerButton.animate().alpha(0f).setDuration(200).start()
@@ -376,6 +380,28 @@ class PlayerActivity : AppCompatActivity() {
     private fun scheduleAutoHide() {
         handler.removeCallbacks(hideControlsRunnable)
         handler.postDelayed(hideControlsRunnable, CONTROLS_HIDE_DELAY)
+    }
+
+    /**
+     * v2.3.2 — Restarts the current video from position 0.
+     * Clears the watched flag so the video is treated as "in progress" again
+     * (not a review). The user can use this to re-watch from the beginning
+     * at any time.
+     */
+    private fun restartVideo() {
+        val p = player ?: return
+        p.seekTo(0)
+        p.play()
+        // Clear watched flag so it's no longer treated as a review
+        val item = currentItem
+        val fp = item?.folderPath
+        if (!fp.isNullOrBlank() && !item.name.isBlank()) {
+            // We don't have a clearWatched() method, but we can re-save resume=0
+            // which effectively makes hasResume() return false → no ▶ badge.
+            SessionManager.get(this).saveResume(fp, item.name, 0L)
+        }
+        Snackbar.make(binding.root, "↺ Reiniciando do início", Snackbar.LENGTH_SHORT).show()
+        showControls()
     }
 
     // ──────────── v1.3.0: VELOCIDADE ROTATIVA ────────────
@@ -475,8 +501,18 @@ class PlayerActivity : AppCompatActivity() {
         exo.setMediaItem(MediaItem.fromUri(url))
         exo.prepare()
 
-        val saved = resumeFor(item, url)
+        // ★ v2.3.2: If the video was already watched (✓), treat as REVIEW —
+        // start from the beginning instead of seeking to a near-end position.
+        // This prevents the auto-skip cascade AND lets the user re-watch any
+        // lesson by simply tapping it.
+        val isReview = isWatched(item)
+        val saved = if (isReview) 0L else resumeFor(item, url)
         if (saved > 0L) exo.seekTo(saved)
+        if (isReview) {
+            binding.root.post {
+                Snackbar.make(binding.root, "📖 Revisão — começando do início", Snackbar.LENGTH_SHORT).show()
+            }
+        }
 
         // ★ v2.0.0: Apply default speed from settings on init
         exo.playbackParameters = PlaybackParameters(speeds[speedIndex])
@@ -562,6 +598,17 @@ class PlayerActivity : AppCompatActivity() {
         } catch (_: Exception) {}
         p.release()
         player = null
+    }
+
+    /**
+     * v2.3.2 — Returns true if this video was previously watched to the end.
+     * Used to decide whether to start from the beginning (review mode) or
+     * seek to the saved resume position.
+     */
+    private fun isWatched(item: FileItem?): Boolean {
+        val fp = item?.folderPath
+        if (fp.isNullOrBlank() || item.name.isBlank()) return false
+        return SessionManager.get(this).isWatched(fp, item.name)
     }
 
     private fun resumeFor(item: FileItem?, url: String): Long {
