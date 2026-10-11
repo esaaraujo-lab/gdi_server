@@ -55,7 +55,8 @@ data class FileItem(
     val size: Long,
     val modifiedTime: String?,
     val folderLabel: String? = null,
-    val folderPath: String? = null
+    val folderPath: String? = null,
+    val thumbnailLink: String? = null  // v2.1.0: Google Drive thumbnail URL
 ) {
     val isFolder: Boolean get() = mimeType == "application/vnd.google-apps.folder"
     val isAudio: Boolean
@@ -85,15 +86,46 @@ data class FileItem(
         fun fromJson(o: JSONObject): FileItem {
             val sizeStr = o.optString("size", "0")
             val sizeLong = sizeStr.toLongOrNull() ?: 0L
+            // v2.1.0: parse thumbnailLink from Google Drive API response.
+            // The worker.js passes it through if present. We also try to
+            // construct it from the file ID as a fallback.
+            val rawThumb = if (o.has("thumbnailLink") && !o.isNull("thumbnailLink"))
+                o.getString("thumbnailLink") else null
+            val fileId = o.optString("id", "")
+            val thumb = when {
+                !rawThumb.isNullOrBlank() -> enlargeThumbnail(rawThumb)
+                fileId.isNotBlank() -> "https://drive.google.com/thumbnail?id=$fileId&sz=w400"
+                else -> null
+            }
             return FileItem(
                 name = o.optString("name", "(sem nome)"),
                 mimeType = o.optString("mimeType", "application/octet-stream"),
-                id = o.optString("id", ""),
+                id = fileId,
                 driveId = if (o.has("driveId")) o.getString("driveId") else null,
                 link = if (o.has("link") && !o.isNull("link")) o.getString("link") else null,
                 size = sizeLong,
-                modifiedTime = if (o.has("modifiedTime") && !o.isNull("modifiedTime")) o.getString("modifiedTime") else null
+                modifiedTime = if (o.has("modifiedTime") && !o.isNull("modifiedTime")) o.getString("modifiedTime") else null,
+                thumbnailLink = thumb
             )
+        }
+
+        /**
+         * v2.1.0 — Google Drive returns thumbnail URLs with a default size
+         * parameter (e.g. `sz=s200`). We enlarge it to w400 for sharper
+         * tiles on high-DPI screens.
+         */
+        private fun enlargeThumbnail(url: String): String {
+            return try {
+                // Replace sz=NNN with sz=w400 (width 400px)
+                if (url.contains("sz=")) {
+                    url.replace(Regex("sz=[^&]+"), "sz=w400")
+                } else if (url.contains("=s")) {
+                    // Format: =s200 → =w400
+                    url.replace(Regex("=s[0-9]+"), "=w400")
+                } else {
+                    url
+                }
+            } catch (_: Exception) { url }
         }
 
         /** v2.0.0: serializes a FileItem back to JSON for SharedPreferences storage. */
@@ -108,6 +140,7 @@ data class FileItem(
             o.put("modifiedTime", item.modifiedTime ?: JSONObject.NULL)
             item.folderLabel?.let { o.put("folderLabel", it) }
             item.folderPath?.let { o.put("folderPath", it) }
+            item.thumbnailLink?.let { o.put("thumbnailLink", it) }
             return o
         }
 
