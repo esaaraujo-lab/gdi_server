@@ -88,7 +88,8 @@ class BrowseActivity : AppCompatActivity() {
             binding.loadingView.visibility = View.GONE
 
             // ★ v2.1.0: Use AuthHelper for consistent expired-session handling.
-            if (AuthHelper.isSessionExpired(files)) {
+            // Direct null check enables Kotlin smart-casting (AuthHelper.isSessionExpired doesn't).
+            if (files == null) {
                 AuthHelper.bounceToLogin(this@BrowseActivity)
                 return@launch
             }
