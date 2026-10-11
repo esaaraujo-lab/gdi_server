@@ -200,6 +200,28 @@
                     android:textColor="@color/meggy_pink" />
             </LinearLayout>
 
+            <!-- ─── Atualização ─── -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ATUALIZAÇÃO"
+                android:textColor="@color/meggy_pink"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.18"
+                android:paddingTop="24dp"
+                android:paddingBottom="6dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_check_update"
+                style="@style/Widget.Material3.Button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="🔍 Verificar atualização"
+                android:backgroundTint="@color/meggy_pink"
+                android:textColor="#FF000000"
+                app:cornerRadius="14dp" />
+
             <!-- ─── Conta ─── -->
             <TextView
                 android:layout_width="wrap_content"
