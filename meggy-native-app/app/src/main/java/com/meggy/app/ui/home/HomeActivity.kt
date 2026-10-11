@@ -22,11 +22,13 @@ import com.meggy.app.data.DriveItem
 import com.meggy.app.data.HeroItem
 import com.meggy.app.databinding.ActivityHomeBinding
 import com.meggy.app.ui.browse.BrowseActivity
+import com.meggy.app.ui.detail.DetailActivity
 import com.meggy.app.ui.login.LoginActivity
 import com.meggy.app.ui.mylist.MyListActivity
 import com.meggy.app.ui.player.PlayerActivity
 import com.meggy.app.ui.search.SearchActivity
 import com.meggy.app.ui.settings.SettingsActivity
+import com.meggy.app.util.AuthHelper
 import com.meggy.app.util.CrossFolderPlaylist
 import com.meggy.app.util.PlaylistManager
 import com.meggy.app.util.SessionManager
@@ -236,11 +238,9 @@ class HomeActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val files = withContext(Dispatchers.IO) { api.listFolder(folderPath) }
 
-            // ★ v2.0.2: Detect expired session — ApiService returns null when
-            // the server responds with an HTML login redirect (401/302 → /login).
-            // In that case, clear the session and route back to Login.
-            if (files == null) {
-                bounceToLogin()
+            // ★ v2.1.0: Use AuthHelper for consistent expired-session handling.
+            if (AuthHelper.isSessionExpired(files)) {
+                AuthHelper.bounceToLogin(this@HomeActivity)
                 return@launch
             }
 
@@ -268,7 +268,7 @@ class HomeActivity : AppCompatActivity() {
                 }
             }
 
-            val intent = Intent(this@HomeActivity, BrowseActivity::class.java)
+            val intent = Intent(this@HomeActivity, DetailActivity::class.java)
             intent.putExtra("drivePath", folderPath)
             intent.putExtra("folderName", shortFolder)
             startActivity(intent)
@@ -293,7 +293,8 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun openDrive(drive: DriveItem) {
-        val intent = Intent(this, BrowseActivity::class.java)
+        // ★ v2.1.0: Open DetailActivity (Netflix-style hero) instead of BrowseActivity.
+        val intent = Intent(this, DetailActivity::class.java)
         intent.putExtra("drivePath", "/${drive.index}:/")
         intent.putExtra("folderName", drive.name)
         startActivity(intent)
