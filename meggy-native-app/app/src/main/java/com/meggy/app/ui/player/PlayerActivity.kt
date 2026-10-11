@@ -594,6 +594,11 @@ class PlayerActivity : AppCompatActivity() {
         val fp = item.folderPath
         if (!fp.isNullOrBlank() && !item.name.isBlank()) {
             SessionManager.get(this).saveResume(fp, item.name, positionMs)
+            // ★ v2.1.0: Also save duration so adapters can compute real progress %.
+            val p = player
+            if (p != null && p.duration > 0) {
+                SessionManager.get(this).saveResumeDuration(fp, item.name, p.duration)
+            }
         } else if (url != null) {
             SessionManager.get(this).saveResumePosition(url, positionMs)
         }
