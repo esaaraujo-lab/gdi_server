@@ -96,7 +96,7 @@ class DetailActivity : AppCompatActivity() {
             binding.loadingView.visibility = View.GONE
 
             // ★ v2.1.0: Detect expired session via AuthHelper
-            if (AuthHelper.isSessionExpired(files)) {
+            if (files == null) {
                 AuthHelper.bounceToLogin(this@DetailActivity)
                 return@launch
             }
