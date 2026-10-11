@@ -10,12 +10,13 @@ import com.meggy.app.databinding.ItemPlaylistBinding
 /**
  * Adapter for the playlist sidebar in PlayerActivity.
  *
- * Highlights the currently-playing entry in Meggy pink. Clicking an entry
- * notifies [onClick] with the absolute position so PlayerActivity can jump to
- * it via [com.meggy.app.util.PlaylistManager.setIndex].
- *
- * v1.2.0: shows the [FileItem.folderLabel] as a subtitle when present (i.e.
- * cross-folder playlists) so the user can tell "video.mp4" entries apart.
+ * v2.4.0 changes:
+ *  • Focus indicator — the item background uses a selector (playlist_item_background)
+ *    that shows a pink border + tint when focused via D-pad. This gives clear
+ *    visual feedback on TV/remote navigation.
+ *  • The root is now selectable (android:state_selected) so the current item
+ *    also shows a subtle highlight even when not focused.
+ *  • minHeight 48dp added for touch target compliance.
  */
 class PlaylistAdapter(
     private val items: List<FileItem>,
@@ -45,7 +46,6 @@ class PlaylistAdapter(
         with(holder.binding) {
             playlistIndex.text = "${position + 1}"
             playlistTitle.text = item.name
-            // v1.2.0: folder subtitle (only for cross-folder playlists).
             val label = item.folderLabel
             if (!label.isNullOrBlank()) {
                 playlistFolder.visibility = View.VISIBLE
