@@ -134,6 +134,15 @@ class PlayerActivity : AppCompatActivity() {
         // ★ v2.0.0: Sleep timer button
         binding.sleepTimerButton.setOnClickListener { showSleepTimerDialog() }
 
+        // ★ v2.2.0: Bottom lesson navigation bar (big prev/play/next arrows)
+        binding.bottomPrevButton.setOnClickListener { playPrev() }
+        binding.bottomNextButton.setOnClickListener { playNext() }
+        binding.bottomPlayButton.setOnClickListener { togglePlayPause() }
+        // Show the bottom nav bar if there's a playlist
+        if (PlaylistManager.all().isNotEmpty()) {
+            binding.lessonNavBar.visibility = View.VISIBLE
+        }
+
         // ★ v2.0.0: Gesture detection setup
         setupGestures()
 
@@ -357,6 +366,8 @@ class PlayerActivity : AppCompatActivity() {
         binding.playlistButton.animate().alpha(1f).setDuration(200).start()
         binding.sleepButton.animate().alpha(1f).setDuration(200).start()
         binding.sleepTimerButton.animate().alpha(1f).setDuration(200).start()
+        // ★ v2.2.0: Bottom nav bar stays visible (doesn't auto-hide)
+        binding.lessonNavBar.animate().alpha(1f).setDuration(200).start()
         binding.playerView.useController = true
         binding.playerView.showController()
         scheduleAutoHide()
@@ -373,6 +384,8 @@ class PlayerActivity : AppCompatActivity() {
             binding.playlistButton.animate().alpha(0f).setDuration(200).start()
             binding.sleepButton.animate().alpha(0f).setDuration(200).start()
             binding.sleepTimerButton.animate().alpha(0f).setDuration(200).start()
+            // ★ v2.2.0: Bottom nav bar does NOT auto-hide (stays visible so
+            // the user can always navigate between lessons).
             binding.playerView.hideController()
         }
     }
@@ -553,6 +566,8 @@ class PlayerActivity : AppCompatActivity() {
     private fun playPrev() {
         val prev = PlaylistManager.getPrev()
         if (prev == null || prev.link.isNullOrEmpty()) {
+            // ★ v2.2.0: Show feedback when no previous lesson
+            Snackbar.make(binding.root, "Sem aula anterior", Snackbar.LENGTH_SHORT).show()
             updateNavButtons()
             return
         }
@@ -564,6 +579,25 @@ class PlayerActivity : AppCompatActivity() {
         binding.prevButton.alpha = if (PlaylistManager.hasPrev()) 1f else 0.35f
         binding.nextButton.isEnabled = PlaylistManager.hasNext()
         binding.nextButton.alpha = if (PlaylistManager.hasNext()) 1f else 0.35f
+        // ★ v2.2.0: Update bottom nav bar button states too
+        binding.bottomPrevButton.alpha = if (PlaylistManager.hasPrev()) 1f else 0.35f
+        binding.bottomPrevButton.isEnabled = PlaylistManager.hasPrev()
+        binding.bottomNextButton.alpha = if (PlaylistManager.hasNext()) 1f else 0.35f
+        binding.bottomNextButton.isEnabled = PlaylistManager.hasNext()
+    }
+
+    /** ★ v2.2.0: Toggle play/pause + update the bottom bar icon. */
+    private fun togglePlayPause() {
+        val p = player ?: return
+        if (p.isPlaying) {
+            p.pause()
+            binding.bottomPlayIcon.text = "▶"
+            binding.bottomPlayLabel.text = "Reproduzir"
+        } else {
+            p.play()
+            binding.bottomPlayIcon.text = "⏸"
+            binding.bottomPlayLabel.text = "Pausar"
+        }
     }
 
     private fun releasePlayer() {
