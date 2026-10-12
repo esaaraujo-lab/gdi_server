@@ -17,12 +17,14 @@ jobs:
           - platform: windows-latest
             args: ''
             label: windows
-          - platform: macos-latest
-            args: '--target universal-apple-darwin'
-            label: macos
           - platform: ubuntu-22.04
             args: ''
             label: linux
+          # macOS disabled until we get an Apple Developer cert for codesign.
+          # To re-enable: add back the macos-latest entry with --target universal-apple-darwin.
+          # - platform: macos-latest
+          #   args: '--target universal-apple-darwin'
+          #   label: macos
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -54,8 +56,10 @@ jobs:
 
       - name: Generate icons
         working-directory: meggy-desktop
+        env:
+          PYTHONIOENCODING: utf-8
         run: |
-          python scripts/generate_icon.py
+          python scripts/generate_icon.py src-tauri/icons/icon.png
           npx @tauri-apps/cli@2 icon src-tauri/icons/icon.png
 
       - name: Install JS dependencies
@@ -66,7 +70,9 @@ jobs:
         working-directory: meggy-desktop
         run: npx @tauri-apps/cli@2 build ${{ matrix.args }}
         env:
-          # Prevent the build from failing on code signing (we don't have certs)
+          # Disable macOS codesign — we don't have an Apple Developer cert.
+          # The app will be unsigned (users need to right-click → Open on first launch).
+          CODESIGN_IDENTITY: ''
           APPLE_SIGNING_IDENTITY: ''
           APPLE_ID: ''
           APPLE_PASSWORD: ''
@@ -76,10 +82,16 @@ jobs:
         id: find
         shell: bash
         run: |
-          echo "=== Searching for artifacts ==="
-          find meggy-desktop/src-tauri/target -type f \( -name "*.exe" -o -name "*.msi" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" \) 2>/dev/null || true
+          echo "=== Searching for installer artifacts ==="
           mkdir -p artifacts
-          find meggy-desktop/src-tauri/target -type f \( -name "*.exe" -o -name "*.msi" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" \) -exec cp {} artifacts/ \; 2>/dev/null || true
+          # Only collect INSTALLERS (not intermediate build exes):
+          # - Windows: *-setup.exe (NSIS) + *.msi
+          # - macOS: *.dmg
+          # - Linux: *.AppImage + *.deb
+          find meggy-desktop/src-tauri/target -type f \
+            \( -name "*-setup.exe" -o -name "*.msi" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" \) \
+            -exec cp {} artifacts/ \; 2>/dev/null || true
+          echo "=== Final artifacts ==="
           ls -la artifacts/ || true
 
       - name: Upload artifacts
@@ -97,21 +109,17 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
           body: |
-            ## 🐩 Meggy Desktop ${{ github.ref_name }}
+            ## Meggy Desktop ${{ github.ref_name }}
 
             ### Downloads
-            - **Windows:** `meggy_1.0.0_x64-setup.exe` (instalador NSIS)
-            - **macOS:** `meggy_1.0.0_universal.dmg` (ARM + Intel)
-            - **Linux:** `meggy_1.0.0_amd64.AppImage` + `.deb`
+            - **Windows:** `Meggy_1.0.0_x64-setup.exe` (instalador NSIS)
+            - **Linux:** `Meggy_1.0.0_amd64.AppImage` + `.deb`
 
             ### Como instalar
             #### Windows
             Baixe o `.exe`, dê duplo-clique, siga o instalador.
 
-            #### macOS
-            Baixe o `.dmg`, arraste Meggy para Applications. Na 1ª abertura: botão direito → Abrir (para bypass do Gatekeeper — app não é assinado pela Apple).
-
             #### Linux
-            Baixe o `.AppImage`, dê permissão de execução (`chmod +x meggy.AppImage`), dê duplo-clique.
+            Baixe o `.AppImage`, dê permissão de execução (`chmod +x Meggy_1.0.0_amd64.AppImage`), dê duplo-clique.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
