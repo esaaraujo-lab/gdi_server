@@ -560,7 +560,7 @@
   // Cache em memória para evitar regenerar na mesma sessão
   let _chainCache={};
   // ★ Sprint 6: LRU no _chainCache (limita a 5 aulas em memória)
-  const _chainCacheMax=10;  // ★ FASE 0: era 5 — bump para 10 reduz Drive reads em sessões longas (aluno navegando entre 6+ aulas). Memória: ~5KB/entry × 10 = 50KB (negligenciável).
+  const _chainCacheMax=5;
   // ★ v80-FIX-MEGGY BUG 5: per-key in-flight promise map. Concurrent calls
   //    to generateAll (e.g. user clicks Resumo then Questões fast) share the
   //    same in-flight promise — avoids duplicate PDF extraction + API calls.
@@ -687,15 +687,18 @@
     let allText='';
     const pdfTexts=[];
     const pdfErrors=[]; // ★ coleta erros por PDF para diagnóstico
-    // ★ v87-FIX-MEGGY-MODULES BUG 6 (defense in depth): when multiple PDFs
-    //    are passed in, prefer the one(s) whose filename matches the current
-    //    lesson (realLessonName). This is the SECOND layer of defense after
-    //    the gdi-core.js M9 panel filter — if items slip through here (e.g.
-    //    from regenerate() or another caller), we still keep only the
-    //    lesson-matching PDFs so Meggy doesn't mix content from 5 lessons.
+    // ★ WEB-RESUMO-MD-PRIORITY: defense-in-depth — NUNCA usar como input
+    //   arquivos .md/.txt gerados por IA (Ebook gerado por IA, Resumo IA,
+    //   etc.). Substitui o filtro anterior `resumo_ia` (estreito demais —
+    //   não pegava "Ebook gerado por IA.md" com espaços). Espelha o filtro
+    //   do monolito gdi-meggy.js (generateAll).
+    const _isAiGeneratedMd=(name)=>{
+      const n=(name||'').toLowerCase();
+      if(!/\.md$|\.txt$/.test(n))return false;
+      return /ebook.*ia|resumo.*ia|gerado.*por.*ia|\bia\b.*gerad|intelig.*artif/i.test(n);
+    };
     let itemsToRead = (items||[]).filter(it => {
-      const nm = (it && it.name || '').toLowerCase();
-      if (nm.includes('resumo_ia')) { console.info('[Meggy] Pulando PDF de resumo de IA:', it.name); return false; }
+      if(_isAiGeneratedMd(it&&it.name||'')){ console.info('[Meggy] Pulando AI-generated .md (não usar como input):', it.name); return false; }
       return true;
     });
     if(items && items.length > 1){
@@ -704,29 +707,76 @@
       if(lessonName){
         const _base = lessonName.toLowerCase().replace(/\.[a-z0-9]+$/i,'').trim();
         if(_base){
-          const _matches = items.filter(it => it && it.name && it.name.toLowerCase().replace(/\.[a-z0-9]+$/i,'').includes(_base));
+          const _matches = itemsToRead.filter(it => it && it.name && it.name.toLowerCase().replace(/\.[a-z0-9]+$/i,'').includes(_base));
           if(_matches.length > 0){
-            console.info('[Meggy] BUG6 layer-2 filter: keeping '+_matches.length+' of '+items.length+' PDFs matching lesson "'+lessonName+'"');
+            console.info('[Meggy] BUG6 layer-2 filter: keeping '+_matches.length+' of '+itemsToRead.length+' items matching lesson "'+lessonName+'"');
             itemsToRead = _matches;
           }
         }
       }
     }
-    // ★ Sprint 6: paraleliza extração (era sequencial, demorava 4x mais)
+    // ★ WEB-RESUMO-MD-PRIORITY: ESTRATÉGIA TRANSCRIÇÃO-PRIMEIRO.
+    //   1. Busca arquivos com "transcri" no nome PRIMEIRO (são o conteúdo real da aula)
+    //   2. Se achar transcrição E extrai com sucesso (text > 50 chars), USA SÓ ELA —
+    //      não desperdiça tempo extraindo PDFs/ebooks (a transcrição é mais completa)
+    //   3. Se NÃO achar transcrição (ou falhar), aí sim extrai PDFs/materiais.
+    //   Espelha a lógica do monolito gdi-meggy.js (FIX v54 TRANSC-FIRST).
+    const transcriptionItems = itemsToRead.filter(it => /transcri/i.test((it&&it.name)||''));
+    const otherItems = itemsToRead.filter(it => !/transcri/i.test((it&&it.name)||''));
     if(progressCb)progressCb({phase:'extract-start',total:itemsToRead.length});
     const extractPdfText = window.__gdiMeggy.pdf.extractPdfText; // late-bind
-    const results=await Promise.allSettled(itemsToRead.map(async item=>{
+    const extractTextFile = window.__gdiMeggy.pdf.extractTextFile; // late-bind (.md/.txt)
+    const getFileType = window.__gdiMeggy.pdf.getFileType; // late-bind
+    // ★ PASSO 1: tenta extrair transcrições PRIMEIRO (sequencial, rápido — são .md/.txt)
+    let transcriptionText = '';
+    for(const item of transcriptionItems){
       try{
         if(progressCb)progressCb({phase:'extract',pdf:item.name});
-        const txt=await extractPdfText(item.url,(p)=>{
+        let txt;
+        const _ftype = getFileType ? getFileType(item.name) : 'pdf';
+        if(_ftype==='pdf'){
+          txt=await extractPdfText(item.url,(p)=>{if(progressCb)progressCb(Object.assign({pdf:item.name},p));});
+        }else{
+          txt=await extractTextFile(item.url);
+        }
+        if(txt && txt.trim().length > 50){
+          transcriptionText += (transcriptionText ? '\n\n---\n\n' : '') + txt;
+          pdfTexts.push({name:item.name, text:txt});
+        }
+      }catch(e){
+        pdfErrors.push({name:item.name, error:e.message||String(e), url:item.url||''});
+        console.warn('[Meggy] transcrição falhou:', item.name, e.message);
+      }
+    }
+    let results=[];
+    if(transcriptionText && transcriptionText.trim().length >= 50){
+      // ★ PASSO 2A: transcrição encontrada! Usa SÓ ela — não extrai PDFs (economiza 30-60s)
+      allText = transcriptionText;
+      if(progressCb)progressCb({phase:'extract-done', source:'transcription', chars:allText.length});
+    }else{
+      // ★ PASSO 2B: sem transcrição (ou falhou) — extrai PDFs/materiais em paralelo
+      if(progressCb && transcriptionItems.length){
+        progressCb({phase:'extract-fallback', reason:'transcrição falhou, usando PDFs'});
+      }
+      results=await Promise.allSettled(otherItems.map(async item=>{
+      try{
+        if(progressCb)progressCb({phase:'extract',pdf:item.name});
+        let txt;
+        const _ftype = getFileType ? getFileType(item.name) : 'pdf';
+        if(_ftype==='pdf'){
+          txt=await extractPdfText(item.url,(p)=>{
           if(progressCb)progressCb(Object.assign({pdf:item.name},p));
         });
+        }else{
+          txt=await extractTextFile(item.url);
+          if(progressCb)progressCb({pdf:item.name,page:'text',current:1,total:1});
+        }
         return {name:item.name,text:txt};
       }catch(e){
         throw {name:item.name,error:e.message||String(e),url:item.url};
       }
-    }));
-    results.forEach(r=>{
+      }));
+      results.forEach(r=>{
       if(r.status==='fulfilled'){
         const {name,text}=r.value;
         if(text&&text.trim().length>50){
@@ -738,7 +788,8 @@
         pdfErrors.push({name:err.name||'PDF',error:err.error||'erro',url:err.url||''});
         console.warn('[Meggy] PDF falhou:',err.name,err.error);
       }
-    });
+      });
+    }
     if(!allText||allText.trim().length<50){
       // ★ Mensagem detalhada com os erros de cada PDF
       let detail='Não foi possível extrair texto dos PDFs.';
@@ -777,13 +828,12 @@
         //   - exige ## títulos + ### subtítulos + EXEMPLOS práticos + pegadinhas
         //   - seções ## Pegadinhas de Prova e ## Resumo Rápido ao final
         //   - usa até 40000 chars do material (era 20000)
-        // ★ v1.0.158 FASE 0 bug #2: resumo cap restaurado 80000 -> 150000.
-        //    A redução para 80K no v1.0.156 foi baseada em diagnóstico ERRADO: pensava-se
-        //    que CF Workers free rejeitava body >100KB com 403. Na verdade, CF aceita
-        //    100MB (erro seria 413, não 403). O 403 vinha de upstream (NVIDIA/handleAi).
-        //    Agora que o handleAi racing tem fallback callUnifiedAi (v1.0.146+), o 403
-        //    não ocorre mais. Resumo volta a ser PROFUNDO (150K chars ≈ 37K tokens).
-        fn:()=>U.callIsaKeyed('Você é um professor especialista em concursos públicos. Leia TODO o material abaixo e crie um RESUMO PROFUNDO E DETALHADO em Markdown.\n\nREQUISITOS:\n- Mínimo 2000 caracteres (NÃO seja breve)\n- Estruture com ## títulos e ### subtítulos\n- Para CADA tópico: explique o conceito, dê EXEMPLOS práticos, e destaque pegadinhas de prova\n- Use **negrito** para palavras-chave e dispositivos legais\n- Use listas com marcadores para enumerações\n- Inclua uma seção ## Pegadinhas de Prova no final\n- Inclua uma seção ## Resumo Rápido com 5-10 bullets dos pontos mais importantes\n\nNÃO omita nenhum tema. Seja PROFUNDO, não conciso.\n\nMaterial:\n'+allText.slice(0,150000),0)
+        // ★ v1.0.156 FIX: resumo cap 150000 -> 80000. CF Workers free rejeita
+        //    body > 100KB com 403. JSON {message:150K chars} = ~150KB → 403 → callIsa
+        //    retorna null → "não conseguiu gerar o resumo". Pílulas (80K) funcionavam,
+        //    resumo (150K) falhava. Reduzido para 80K (mesmo das pílulas). O worker.js
+        //    agora aceita até 80K (userMsg slice 30K → 80K no v1.0.156).
+        fn:()=>U.callIsaKeyed('Você é um professor especialista em concursos públicos. Leia TODO o material abaixo e crie um RESUMO PROFUNDO E DETALHADO em Markdown.\n\nREQUISITOS:\n- Mínimo 2000 caracteres (NÃO seja breve)\n- Estruture com ## títulos e ### subtítulos\n- Para CADA tópico: explique o conceito, dê EXEMPLOS práticos, e destaque pegadinhas de prova\n- Use **negrito** para palavras-chave e dispositivos legais\n- Use listas com marcadores para enumerações\n- Inclua uma seção ## Pegadinhas de Prova no final\n- Inclua uma seção ## Resumo Rápido com 5-10 bullets dos pontos mais importantes\n\nNÃO omita nenhum tema. Seja PROFUNDO, não conciso.\n\nMaterial:\n'+allText.slice(0,80000),0)
           .then(r=>{if(r&&r.trim()){_chainCache[key].summary=r;saveIsaSummary(lesson,r,_coursePath,_subject);}})
           .catch(e=>console.warn('[Meggy] resumo falhou',e.message))
       });
