@@ -1,7 +1,7 @@
 use tauri::{
-    menu::{Menu, MenuItem, PredefinedMenuItem},
+    menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::TrayIconBuilder,
-    AppHandle, Manager, WindowEvent, WebviewUrl, WebviewWindowBuilder,
+    AppHandle, Emitter, Manager, WindowEvent, WebviewUrl, WebviewWindowBuilder,
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, ShortcutState};
 use std::path::PathBuf;
@@ -95,14 +95,31 @@ fn toggle_main_window(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// v1.1.3: Entry point.
-/// FIX: Removed pause_all_media from on_window_event (caused crash on startup).
-/// Now pause is ONLY called from tray menu and Ctrl+Shift+M (where we have AppHandle).
-/// The close button (X) just hides the window without pausing — media stops
-/// because the webview is hidden (browser pauses hidden tabs in most cases).
+/// v1.2.0: Entry point.
+///
+/// NEW in v1.2.0:
+///   • Single Instance Lock — second launch shows the existing window instead of starting
+///     a second process (fixes "depois que fechei ele não abre mais").
+///   • Native Menu Bar — Arquivo / Editar / Ajuda, like a real desktop app.
+///
+/// KEPT from v1.1.3:
+///   • on_window_event stays SIMPLE — just `window.hide()` + `api.prevent_close()`.
+///     NO `app_handle()` call (caused crash on startup in v1.1.2).
+///   • pause_all_media() only called from tray menu and Ctrl+Shift+M (where we have
+///     AppHandle safely). The X button just hides the window.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // ★ v1.2.0 FEATURE 1: Single Instance Lock
+        // If a second instance launches, this callback fires in the FIRST instance.
+        // We show & focus the main window; the second process exits automatically.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::init(
@@ -141,12 +158,73 @@ pub fn run() {
                 })
                 .build(),
         )
+        // ★ v1.2.0 FEATURE 2: Native Menu Bar event handler
+        // Handles clicks on Arquivo / Editar / Ajuda menu items.
+        // (Tray menu events are routed to TrayIconBuilder::on_menu_event below.)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "m_new_window" => {
+                let _ = open_new_window_internal(app);
+            }
+            "m_close" => {
+                hide_main_window(app);
+            }
+            "m_quit" => {
+                app.exit(0);
+            }
+            "m_about" => {
+                let _ = app.emit("menu-about", ());
+            }
+            "m_check_update" => {
+                let _ = app.emit("menu-check-update", ());
+            }
+            _ => {}
+        })
         .invoke_handler(tauri::generate_handler![
             open_downloads_folder,
             open_new_window,
             toggle_main_window,
         ])
         .setup(|app| {
+            // ─── Native Menu Bar (v1.2.0) ───
+            // IDs are prefixed with `m_` to avoid clashing with the tray menu
+            // item IDs (Tauri requires globally-unique menu item IDs per app).
+            let new_window = MenuItem::with_id(
+                app,
+                "m_new_window",
+                "Nova Janela",
+                true,
+                Some("Ctrl+Shift+N"),
+            )?;
+            let close = MenuItem::with_id(app, "m_close", "Fechar", true, Some("Ctrl+W"))?;
+            let quit = MenuItem::with_id(app, "m_quit", "Sair", true, Some("Ctrl+Q"))?;
+            let file_menu =
+                Submenu::with_items(app, "Arquivo", true, &[&new_window, &close, &quit])?;
+
+            let cut = PredefinedMenuItem::cut(app, None)?;
+            let copy = PredefinedMenuItem::copy(app, None)?;
+            let paste = PredefinedMenuItem::paste(app, None)?;
+            let select_all = PredefinedMenuItem::select_all(app, None)?;
+            let edit_menu = Submenu::with_items(
+                app,
+                "Editar",
+                true,
+                &[&cut, &copy, &paste, &select_all],
+            )?;
+
+            let about =
+                MenuItem::with_id(app, "m_about", "Sobre Meggy", true, None::<&str>)?;
+            let check_update = MenuItem::with_id(
+                app,
+                "m_check_update",
+                "Verificar Atualizações",
+                true,
+                None::<&str>,
+            )?;
+            let help_menu = Submenu::with_items(app, "Ajuda", true, &[&about, &check_update])?;
+
+            let menu = Menu::with_items(app, &[&file_menu, &edit_menu, &help_menu])?;
+            app.set_menu(menu)?;
+
             // ─── System Tray ───
             let show_item =
                 MenuItem::with_id(app, "show", "Mostrar Meggy", true, None::<&str>)?;
@@ -164,7 +242,7 @@ pub fn run() {
             )?;
             let sep2 = PredefinedMenuItem::separator(app)?;
             let quit_item = MenuItem::with_id(app, "quit", "Sair", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[
+            let tray_menu = Menu::with_items(app, &[
                 &show_item,
                 &hide_item,
                 &sep1,
@@ -175,7 +253,7 @@ pub fn run() {
             ])?;
 
             TrayIconBuilder::new()
-                .menu(&menu)
+                .menu(&tray_menu)
                 .show_menu_on_left_click(true)
                 .tooltip("Meggy — Plataforma de Estudos")
                 .on_menu_event(|app, event| match event.id.as_ref() {
@@ -213,6 +291,9 @@ pub fn run() {
             // Media pausing is now handled ONLY in tray menu + Ctrl+Shift+M.
             // When the window is hidden via X button, the browser engine
             // automatically throttles/pauses media in most cases.
+            //
+            // v1.2.0: Still simple. The single-instance plugin handles the
+            // "second launch" case — second process exits before reaching here.
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {
                     let _ = window.hide();
