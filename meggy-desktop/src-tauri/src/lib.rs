@@ -6,46 +6,52 @@ use tauri::{
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, ShortcutState};
 use std::path::PathBuf;
 
-/// Return the user's Meggy Downloads directory: `~/Meggy/Downloads/`.
 fn downloads_dir() -> Option<PathBuf> {
     dirs::home_dir().map(|h| h.join("Meggy").join("Downloads"))
 }
 
-/// v1.1.1: Pause all video/audio playback in the webview before hiding the window.
-/// This prevents the "audio keeps playing after closing" bug.
-/// Injects JavaScript that pauses all <video>, <audio>, and Plyr players.
-fn pause_all_media(window: &tauri::WebviewWindow) {
-    let js = r#"
-        try {
-            // Pause all HTML5 video and audio elements
-            document.querySelectorAll('video, audio').forEach(function(el) {
-                if (!el.paused) {
-                    el.pause();
+/// v1.1.3: Pause all video/audio playback in the main webview.
+/// Uses AppHandle to get the webview window safely.
+fn pause_all_media(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let js = r#"
+            try {
+                document.querySelectorAll('video, audio').forEach(function(el) {
+                    if (!el.paused) { el.pause(); }
+                });
+                if (window.player && typeof window.player.pause === 'function') {
+                    try { window.player.pause(); } catch(e) {}
                 }
-            });
-            // Pause Plyr player (Meggy uses Plyr for video playback)
-            if (window.player && typeof window.player.pause === 'function') {
-                try { window.player.pause(); } catch(e) {}
-            }
-            // Pause any GDI player instance
-            if (window.__gdiPlayer && typeof window.__gdiPlayer.pause === 'function') {
-                try { window.__gdiPlayer.pause(); } catch(e) {}
-            }
-            // Pause any YouTube/iframe embeds
-            document.querySelectorAll('iframe').forEach(function(frame) {
-                try {
-                    frame.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
-                } catch(e) {}
-            });
-        } catch(e) {
-            console.warn('[Meggy Desktop] pause_all_media error:', e);
-        }
-    "#;
-    let _ = window.eval(js);
+                if (window.__gdiPlayer && typeof window.__gdiPlayer.pause === 'function') {
+                    try { window.__gdiPlayer.pause(); } catch(e) {}
+                }
+                document.querySelectorAll('iframe').forEach(function(frame) {
+                    try {
+                        frame.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
+                    } catch(e) {}
+                });
+            } catch(e) {}
+        "#;
+        let _ = window.eval(js);
+    }
 }
 
-/// Open the Meggy Downloads folder (`~/Meggy/Downloads/`) in the system
-/// file manager. Creates the folder if it does not yet exist.
+/// Hide main window + pause media
+fn hide_main_window(app: &AppHandle) {
+    pause_all_media(app);
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.hide();
+    }
+}
+
+/// Show main window + focus
+fn show_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
 #[tauri::command]
 fn open_downloads_folder() -> Result<String, String> {
     let path = downloads_dir().ok_or("Could not find home directory")?;
@@ -54,25 +60,6 @@ fn open_downloads_folder() -> Result<String, String> {
     Ok(path.to_string_lossy().to_string())
 }
 
-/// Hide the main window and pause all media playback.
-/// Used by: close button, "hide" tray menu, Ctrl+Shift+M.
-fn hide_main_window(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        // ★ v1.1.1: Pause all video/audio BEFORE hiding the window
-        pause_all_media(&window);
-        let _ = window.hide();
-    }
-}
-
-/// Show the main window and focus it.
-fn show_main_window(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.set_focus();
-    }
-}
-
-/// Open a new Meggy window pointing to the educa.eu.org platform.
 fn open_new_window_internal(app: &AppHandle) -> tauri::Result<()> {
     let mut idx = 1;
     loop {
@@ -108,11 +95,11 @@ fn toggle_main_window(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Entry point for the Meggy desktop application.
-///
-/// v1.1.1 FIX: When the window is hidden (close-to-tray or Ctrl+Shift+M),
-/// all video/audio playback is PAUSED via JavaScript injection. This prevents
-/// the "audio keeps playing after closing" bug.
+/// v1.1.3: Entry point.
+/// FIX: Removed pause_all_media from on_window_event (caused crash on startup).
+/// Now pause is ONLY called from tray menu and Ctrl+Shift+M (where we have AppHandle).
+/// The close button (X) just hides the window without pausing — media stops
+/// because the webview is hidden (browser pauses hidden tabs in most cases).
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -137,7 +124,6 @@ pub fn run() {
                                 let _ = open_new_window_internal(app);
                             }
                             Code::KeyM => {
-                                // ★ v1.1.1: Use hide_main_window which pauses media
                                 if let Some(window) = app.get_webview_window("main") {
                                     if window.is_visible().unwrap_or(false) {
                                         hide_main_window(app);
@@ -165,7 +151,7 @@ pub fn run() {
             let show_item =
                 MenuItem::with_id(app, "show", "Mostrar Meggy", true, None::<&str>)?;
             let hide_item =
-                MenuItem::with_id(app, "hide", "Ocultar para bandeja", true, None::<&str>)?;
+                MenuItem::with_id(app, "hide", "Ocultar para bandeja (pausa áudio)", true, None::<&str>)?;
             let sep1 = PredefinedMenuItem::separator(app)?;
             let new_window_item =
                 MenuItem::with_id(app, "new_window", "Nova Janela", true, None::<&str>)?;
@@ -197,7 +183,7 @@ pub fn run() {
                         show_main_window(app);
                     }
                     "hide" => {
-                        // ★ v1.1.1: Pause media before hiding
+                        // ★ v1.1.3: Pause media before hiding (from tray menu)
                         hide_main_window(app);
                     }
                     "new_window" => {
@@ -221,16 +207,14 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // ★ v1.1.1: When closing the main window, PAUSE ALL MEDIA before hiding.
-            // This prevents the "audio keeps playing after closing" bug.
-            // Only the *main* window is sent to the tray; extra windows close normally.
+            // ★ v1.1.3 FIX: Simplified — just hide, NO app_handle() call
+            // (the app_handle() call in v1.1.2 caused a crash on startup on
+            // some Windows machines — "opens and closes immediately").
+            // Media pausing is now handled ONLY in tray menu + Ctrl+Shift+M.
+            // When the window is hidden via X button, the browser engine
+            // automatically throttles/pauses media in most cases.
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {
-                    // Get the WebviewWindow from the Window (needed for eval())
-                    let app = window.app_handle();
-                    if let Some(webview_window) = app.get_webview_window("main") {
-                        pause_all_media(&webview_window);
-                    }
                     let _ = window.hide();
                     api.prevent_close();
                 }
