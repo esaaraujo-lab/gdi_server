@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 """
-v1.0.0 — Generates a 512x512 PNG icon for the Meggy desktop app.
+v1.0.1 — Generates a 512x512 PNG icon for the Meggy desktop app.
 
 Creates a gradient background (deep purple → magenta → pink) with a white
 "M" letter in the center, matching the Meggy brand identity.
 
 The generated icon.png is used by `tauri icon` to produce all required
 sizes (32x32, 128x128, 128x128@2x, icon.ico, icon.icns).
+
+v1.0.1 FIX: Removed Unicode characters from print statements to avoid
+UnicodeEncodeError on Windows (cp1252 codec can't encode ✓).
 """
 
 from PIL import Image, ImageDraw, ImageFont
 import os
+import sys
 
 def generate_icon(output_path):
     size = 512
@@ -21,20 +25,18 @@ def generate_icon(output_path):
     for y in range(size):
         progress = y / size
         if progress < 0.5:
-            # First half: purple → magenta
             t = progress * 2
             r = int(26 + (123 - 26) * t)
             g = int(10 + (31 - 10) * t)
             b = int(46 + (162 - 46) * t)
         else:
-            # Second half: magenta → pink
             t = (progress - 0.5) * 2
             r = int(123 + (255 - 123) * t)
             g = int(31 + (139 - 31) * t)
             b = int(162 + (159 - 162) * t)
         draw.line([(0, y), (size, y)], fill=(r, g, b, 255))
 
-    # Draw a soft white circle in the center (poodle silhouette abstraction)
+    # Soft white circle in the center (poodle silhouette abstraction)
     center = size // 2
     radius = size // 3
     for r_offset in range(radius, 0, -1):
@@ -67,16 +69,18 @@ def generate_icon(output_path):
     text_h = bbox[3] - bbox[1]
     x = (size - text_w) // 2 - bbox[0]
     y = (size - text_h) // 2 - bbox[1]
-    
+
     # Shadow
     draw.text((x + 3, y + 3), text, fill=(0, 0, 0, 80), font=font)
     # Main letter
     draw.text((x, y), text, fill=(255, 255, 255, 255), font=font)
 
     # Save
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
     img.save(output_path, 'PNG')
-    print(f"✓ Icon generated: {output_path} ({size}x{size})")
+    # v1.0.1: ASCII-only print to avoid UnicodeEncodeError on Windows cp1252
+    print("[OK] Icon generated: " + output_path + " (" + str(size) + "x" + str(size) + ")")
 
 if __name__ == '__main__':
-    generate_icon('src-tauri/icons/icon.png')
+    out = sys.argv[1] if len(sys.argv) > 1 else 'src-tauri/icons/icon.png'
+    generate_icon(out)
