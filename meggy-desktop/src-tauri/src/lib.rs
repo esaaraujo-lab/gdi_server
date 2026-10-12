@@ -226,8 +226,11 @@ pub fn run() {
             // Only the *main* window is sent to the tray; extra windows close normally.
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {
-                    // Pause all video/audio playback before hiding
-                    pause_all_media(window);
+                    // Get the WebviewWindow from the Window (needed for eval())
+                    let app = window.app_handle();
+                    if let Some(webview_window) = app.get_webview_window("main") {
+                        pause_all_media(&webview_window);
+                    }
                     let _ = window.hide();
                     api.prevent_close();
                 }
