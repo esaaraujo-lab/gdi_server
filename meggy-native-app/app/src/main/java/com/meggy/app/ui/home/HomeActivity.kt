@@ -238,29 +238,82 @@ class HomeActivity : AppCompatActivity() {
     }
 
     /**
-     * v2.5.0 — Extracts a human-friendly course name from a folder path.
+     * v2.5.1 — Extracts the REAL course name from a folder path.
      *
-     * Paths look like:
-     *   "/0:/PF - Agente da PF/Curso X/Bloco I/DirAdmin/001 - PODERES/"
-     *   "/9:/Tribunal Regional/TRT 3ª Região/Aulas/"
+     * PROBLEM: Paths often have generic intermediate buckets like:
+     *   "/0:/0 DIVERSOS/Cursos e Cursinhos Completo/Leilão Vendas e Cripto/Mercado Livre/Módulo 01/Aula 01.mp4"
      *
-     * Logic:
-     *   1. Strip drive index ("0:", "9:", etc.)
-     *   2. Take the FIRST segment after the drive index — that's the course name.
-     *   3. If only drive + one folder, return that folder.
+     * The COURSE is "Mercado Livre" — it's the last REAL segment BEFORE
+     * module/lesson patterns start.
+     *
+     * HEURISTIC:
+     *   1. Split path, skip drive index ("0:", "9:", etc.)
+     *   2. Walk segments from DEEPEST to SHALLOWEST.
+     *   3. Skip segments that are modules/lessons (MÓDULO 1, AULA 01, 001 - X).
+     *   4. Skip segments that are too short (< 3 chars: "I", "A", "Sub").
+     *   5. The FIRST non-skipped segment (deepest) is the COURSE name.
+     *   6. If all are skipped, return the deepest segment (fallback).
      *
      * Examples:
-     *   "/0:/PF - Agente/.../video.mp4" → "PF - Agente"
-     *   "/9:/Tribunal Regional/.../" → "Tribunal Regional"
+     *   "/0:/0 DIVERSOS/Leilão/Mercado Livre/Módulo 1/Sub/Aula.mp4" → "Mercado Livre"
+     *   "/0:/PF - Agente/Curso X/Bloco I/DirAdmin/001 - PODERES/" → "DirAdmin"
+     *   "/9:/Tribunal Regional/TRT 3ª Região/Aulas/" → "TRT 3ª Região"
      */
     private fun extractCourseName(folderPath: String): String {
-        // Strip leading/trailing slashes, split
         val segments = folderPath.trim('/').split('/').filter { it.isNotBlank() }
         if (segments.isEmpty()) return folderPath
-        // segments[0] is the drive index like "0:" — skip it
+
+        // Skip drive index ("0:", "9:", etc.)
         val startIdx = if (segments[0].matches(Regex("^\\d+:$"))) 1 else 0
-        // Take the first real segment after the drive index
-        return if (startIdx < segments.size) segments[startIdx] else segments.last()
+        val pathSegments = segments.drop(startIdx)
+        if (pathSegments.isEmpty()) return segments.last()
+
+        /**
+         * Returns true if a segment is a MODULE or LESSON or GENERIC bucket
+         * (not a course name). These are skipped when searching for the course.
+         */
+        fun isModuleOrLesson(seg: String): Boolean {
+            val lower = seg.trim().lowercase()
+            // Module/lesson patterns: "MÓDULO 1", "AULA 01", "BLOCO I", "PARTE 1"
+            if (lower.matches(Regex("^(módulo|modulo|aula|bloco|parte|capítulo|capitulo|unidade|topico|tópico)\\s*\\d+.*"))) return true
+            // Numbered prefix: "001 - PODERES", "01 - INTRODUÇÃO" (lesson names)
+            if (seg.matches(Regex("^\\d{2,}\\s*[-–].*"))) return true
+            // Pure number: "001", "2026", "1"
+            if (seg.matches(Regex("^\\d+$"))) return true
+            // Too short to be a course name (less than 3 chars): "I", "A", "1A", "Sub"
+            if (seg.trim().length < 3) return true
+            // GENERIC bucket names — organizational folders, NOT courses
+            val GENERIC = setOf(
+                "diversos", "vídeos", "videos", "aulas", "aulão", "aulao",
+                "curso", "cursos", "cursinho", "cursinhos", "completo", "completos",
+                "módulos", "modulos", "modulo", "módulo", "bloco", "blocos",
+                "material", "materiais", "apostila", "apostilas", "pdf", "pdfs",
+                "plataforma", "plataformas", "novidades", "atualizado", "atualizados",
+                "sub", "subs", "subpasta", "subpastas", "geral", "extra", "extras",
+                "provas", "exercícios", "exercicios", "questões", "questoes",
+                "leilão vendas e cripto", "leilao vendas e cripto",
+                "cursos e cursinhos completo", "cursos e cursinhos",
+                "retas final", "reta final", "retafinal",
+                "2024", "2025", "2026", "2027"
+            )
+            if (lower in GENERIC) return true
+            // "0 DIVERSOS", "1 VÍDEOS", "2 AULAS" — starts with number + space
+            if (seg.matches(Regex("^\\d+\\s+.*"))) return true
+            // Ends with file extension (it's a file, not a folder): .mp4, .mp3, .pdf
+            if (lower.matches(Regex("^.*\\.(mp4|mkv|webm|mov|avi|mp3|m4a|aac|ogg|wav|flac|pdf)$"))) return true
+            return false
+        }
+
+        // Walk from DEEPEST to SHALLOWEST, skip modules/lessons, return first real segment.
+        // This finds the course name = the deepest folder that isn't a module/lesson bucket.
+        for (seg in pathSegments.reversed()) {
+            if (!isModuleOrLesson(seg)) {
+                return seg
+            }
+        }
+
+        // Fallback: all segments were modules/lessons → return the deepest one
+        return pathSegments.last()
     }
 
     /**
