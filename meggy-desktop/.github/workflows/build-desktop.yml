@@ -17,12 +17,14 @@ jobs:
           - platform: windows-latest
             args: ''
             label: windows
-          - platform: macos-latest
-            args: '--target universal-apple-darwin'
-            label: macos
           - platform: ubuntu-22.04
             args: ''
             label: linux
+          # macOS disabled until we get an Apple Developer cert for codesign.
+          # To re-enable: add back the macos-latest entry with --target universal-apple-darwin.
+          # - platform: macos-latest
+          #   args: '--target universal-apple-darwin'
+          #   label: macos
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -68,6 +70,9 @@ jobs:
         working-directory: meggy-desktop
         run: npx @tauri-apps/cli@2 build ${{ matrix.args }}
         env:
+          # Disable macOS codesign — we don't have an Apple Developer cert.
+          # The app will be unsigned (users need to right-click → Open on first launch).
+          CODESIGN_IDENTITY: ''
           APPLE_SIGNING_IDENTITY: ''
           APPLE_ID: ''
           APPLE_PASSWORD: ''
