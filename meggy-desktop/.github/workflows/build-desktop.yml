@@ -54,8 +54,10 @@ jobs:
 
       - name: Generate icons
         working-directory: meggy-desktop
+        env:
+          PYTHONIOENCODING: utf-8
         run: |
-          python scripts/generate_icon.py
+          python scripts/generate_icon.py src-tauri/icons/icon.png
           npx @tauri-apps/cli@2 icon src-tauri/icons/icon.png
 
       - name: Install JS dependencies
@@ -66,7 +68,6 @@ jobs:
         working-directory: meggy-desktop
         run: npx @tauri-apps/cli@2 build ${{ matrix.args }}
         env:
-          # Prevent the build from failing on code signing (we don't have certs)
           APPLE_SIGNING_IDENTITY: ''
           APPLE_ID: ''
           APPLE_PASSWORD: ''
@@ -97,7 +98,7 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
           body: |
-            ## 🐩 Meggy Desktop ${{ github.ref_name }}
+            ## Meggy Desktop ${{ github.ref_name }}
 
             ### Downloads
             - **Windows:** `meggy_1.0.0_x64-setup.exe` (instalador NSIS)
