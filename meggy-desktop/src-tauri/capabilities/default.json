@@ -10,8 +10,6 @@
     "notification:allow-notify",
     "autostart:allow-enable",
     "autostart:allow-disable",
-    "autostart:allow-is-enabled",
-    "global-shortcut:allow-register",
-    "global-shortcut:allow-unregister"
+    "autostart:allow-is-enabled"
   ]
 }
