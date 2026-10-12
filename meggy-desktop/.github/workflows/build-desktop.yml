@@ -111,19 +111,29 @@ jobs:
           body: |
             ## Meggy Desktop ${{ github.ref_name }}
 
+            ### Novidades desta versão (v1.1.0)
+            - **Abrir pasta de Downloads** — item novo na bandeja do sistema e atalho `Ctrl+Shift+D` abrem `~/Meggy/Downloads/` no gerenciador de arquivos.
+            - **Multi-janela** — item "Nova Janela" na bandeja e atalho `Ctrl+Shift+N` abrem janelas extras (1024×720) para você acompanhar vídeo + anotações lado a lado.
+            - **Atalhos globais de teclado** — funcionam mesmo com o app minimizado:
+              - `Ctrl+Shift+M` — mostrar/ocultar janela principal
+              - `Ctrl+Shift+N` — abrir nova janela
+              - `Ctrl+Shift+D` — abrir pasta de Downloads
+            - A janela principal continua minimizando para a bandeja ao fechar; janelas extras fecham normalmente.
+            - O webapp em `educa.eu.org` agora detecta `window.__TAURI__` e pode chamar `invoke('open_new_window' | 'open_downloads_folder' | 'toggle_main_window')`.
+
             ### Downloads
-            - **Windows:** `meggy_1.0.0_x64-setup.exe` (instalador NSIS)
-            - **macOS:** `meggy_1.0.0_universal.dmg` (ARM + Intel)
-            - **Linux:** `meggy_1.0.0_amd64.AppImage` + `.deb`
+            - **Windows:** `Meggy_1.1.0_x64-setup.exe` (instalador NSIS) + `Meggy_1.1.0_x64_en-US.msi`
+            - **macOS:** desativado (precisa de certificado Apple Developer)
+            - **Linux:** `Meggy_1.1.0_amd64.AppImage` + `Meggy_1.1.0_amd64.deb`
 
             ### Como instalar
             #### Windows
             Baixe o `.exe`, dê duplo-clique, siga o instalador.
 
             #### macOS
-            Baixe o `.dmg`, arraste Meggy para Applications. Na 1ª abertura: botão direito → Abrir (para bypass do Gatekeeper — app não é assinado pela Apple).
+            Desativado nesta versão. Para reativar é preciso um certificado Apple Developer ($99/ano).
 
             #### Linux
-            Baixe o `.AppImage`, dê permissão de execução (`chmod +x meggy.AppImage`), dê duplo-clique.
+            Baixe o `.AppImage`, dê permissão de execução (`chmod +x Meggy.AppImage`), dê duplo-clique.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
