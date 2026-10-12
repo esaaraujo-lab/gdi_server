@@ -216,14 +216,17 @@ class HomeActivity : AppCompatActivity() {
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         binding.railContinue.addItemDecoration(RailGutterDecoration(8))
 
+        // ★ v2.5.0: Show the COURSE NAME (not the folder path) as subtitle.
+        // extractCourseName() returns a human-friendly label like
+        // "PF - Agente" or "DirAdmin" depending on the path depth.
         val railItems = recents.map { r ->
-            val shortFolder = r.folderPath.substringAfterLast("/").ifBlank { r.folderPath }
+            val courseName = extractCourseName(r.folderPath)
             RailItem(
                 title = r.videoName,
-                subtitle = shortFolder,
+                subtitle = courseName,
                 icon = "🎥",
                 hasProgress = sm.hasResume(r.folderPath, r.videoName),
-                progress = 35,
+                progress = sm.getResumeProgress(r.folderPath, r.videoName),
                 isWatched = sm.isWatched(r.folderPath, r.videoName),
                 hasResume = sm.hasResume(r.folderPath, r.videoName)
             )
@@ -232,6 +235,55 @@ class HomeActivity : AppCompatActivity() {
             val match = recents.find { it.videoName == item.title } ?: return@RailAdapter
             continueWatching(match.folderPath, match.videoName, item.subtitle)
         }
+    }
+
+    /**
+     * v2.5.0 — Extracts a human-friendly course name from a folder path.
+     *
+     * Paths look like:
+     *   "/0:/PF - Agente da PF/Curso X/Bloco I/DirAdmin/001 - PODERES/"
+     *   "/9:/Tribunal Regional/TRT 3ª Região/Aulas/"
+     *
+     * Logic:
+     *   1. Strip drive index ("0:", "9:", etc.)
+     *   2. Take the FIRST segment after the drive index — that's the course name.
+     *   3. If only drive + one folder, return that folder.
+     *
+     * Examples:
+     *   "/0:/PF - Agente/.../video.mp4" → "PF - Agente"
+     *   "/9:/Tribunal Regional/.../" → "Tribunal Regional"
+     */
+    private fun extractCourseName(folderPath: String): String {
+        // Strip leading/trailing slashes, split
+        val segments = folderPath.trim('/').split('/').filter { it.isNotBlank() }
+        if (segments.isEmpty()) return folderPath
+        // segments[0] is the drive index like "0:" — skip it
+        val startIdx = if (segments[0].matches(Regex("^\\d+:$"))) 1 else 0
+        // Take the first real segment after the drive index
+        return if (startIdx < segments.size) segments[startIdx] else segments.last()
+    }
+
+    /**
+     * v2.5.0 — Returns the IMMEDIATE PARENT folder path of a video.
+     *
+     * For cross-folder playlists, the video lives in a subfolder like:
+     *   "/0:/PF - Agente/Curso/Bloco I/DirAdmin/001 - PODERES/"
+     *
+     * When the user clicks "Continue", we want to open the DetailActivity
+     * for the IMMEDIATE PARENT folder (e.g. "001 - PODERES") so they land
+     * in the right place — not the course root or a random subfolder.
+     *
+     * If the parent folder contains many videos, we still open it — the
+     * DetailActivity's grid will show them and the user can scroll to the
+     * one they were watching.
+     */
+    private fun immediateParentPath(folderPath: String): Pair<String, String> {
+        val segments = folderPath.trim('/').split('/').filter { it.isNotBlank() }
+        if (segments.isEmpty()) return "/" to "Meggy"
+        // Rebuild the path with trailing slash
+        val path = "/" + segments.joinToString("/") + "/"
+        val name = segments.last()
+        return path to name
     }
 
     private fun continueWatching(folderPath: String, videoName: String, shortFolder: String) {
@@ -273,9 +325,15 @@ class HomeActivity : AppCompatActivity() {
                 }
             }
 
+            // ★ v2.5.0: If the video isn't in the folder (e.g. cross-folder where
+            // the video name is "video.mp4" in a different subfolder), open the
+            // IMMEDIATE PARENT folder in DetailActivity — that's where the user
+            // was watching. The DetailActivity's "Continue de onde parou" rail
+            // will show the video at the top.
+            val (parentPath, parentName) = immediateParentPath(folderPath)
             val intent = Intent(this@HomeActivity, DetailActivity::class.java)
-            intent.putExtra("drivePath", folderPath)
-            intent.putExtra("folderName", shortFolder)
+            intent.putExtra("drivePath", parentPath)
+            intent.putExtra("folderName", parentName)
             startActivity(intent)
         }
     }
