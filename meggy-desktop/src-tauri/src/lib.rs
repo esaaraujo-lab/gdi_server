@@ -11,12 +11,41 @@ fn downloads_dir() -> Option<PathBuf> {
     dirs::home_dir().map(|h| h.join("Meggy").join("Downloads"))
 }
 
+/// v1.1.1: Pause all video/audio playback in the webview before hiding the window.
+/// This prevents the "audio keeps playing after closing" bug.
+/// Injects JavaScript that pauses all <video>, <audio>, and Plyr players.
+fn pause_all_media(window: &tauri::WebviewWindow) {
+    let js = r#"
+        try {
+            // Pause all HTML5 video and audio elements
+            document.querySelectorAll('video, audio').forEach(function(el) {
+                if (!el.paused) {
+                    el.pause();
+                }
+            });
+            // Pause Plyr player (Meggy uses Plyr for video playback)
+            if (window.player && typeof window.player.pause === 'function') {
+                try { window.player.pause(); } catch(e) {}
+            }
+            // Pause any GDI player instance
+            if (window.__gdiPlayer && typeof window.__gdiPlayer.pause === 'function') {
+                try { window.__gdiPlayer.pause(); } catch(e) {}
+            }
+            // Pause any YouTube/iframe embeds
+            document.querySelectorAll('iframe').forEach(function(frame) {
+                try {
+                    frame.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
+                } catch(e) {}
+            });
+        } catch(e) {
+            console.warn('[Meggy Desktop] pause_all_media error:', e);
+        }
+    "#;
+    let _ = window.eval(js);
+}
+
 /// Open the Meggy Downloads folder (`~/Meggy/Downloads/`) in the system
 /// file manager. Creates the folder if it does not yet exist.
-///
-/// This is the user-facing entry point for the "downloads offline" feature:
-/// the web app downloads files via its normal browser mechanism, and the
-/// user can find them later via the tray menu or the `Ctrl+Shift+D` shortcut.
 #[tauri::command]
 fn open_downloads_folder() -> Result<String, String> {
     let path = downloads_dir().ok_or("Could not find home directory")?;
@@ -25,10 +54,25 @@ fn open_downloads_folder() -> Result<String, String> {
     Ok(path.to_string_lossy().to_string())
 }
 
+/// Hide the main window and pause all media playback.
+/// Used by: close button, "hide" tray menu, Ctrl+Shift+M.
+fn hide_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        // ★ v1.1.1: Pause all video/audio BEFORE hiding the window
+        pause_all_media(&window);
+        let _ = window.hide();
+    }
+}
+
+/// Show the main window and focus it.
+fn show_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
 /// Open a new Meggy window pointing to the educa.eu.org platform.
-///
-/// Each window gets a unique label (`window-1`, `window-2`, …) so the user
-/// can keep a video player open in one window and notes / forum in another.
 fn open_new_window_internal(app: &AppHandle) -> tauri::Result<()> {
     let mut idx = 1;
     loop {
@@ -47,23 +91,18 @@ fn open_new_window_internal(app: &AppHandle) -> tauri::Result<()> {
     }
 }
 
-/// Tauri command wrapper for `open_new_window_internal`. Exposed to JS as
-/// `window.__TAURI__.core.invoke('open_new_window')`.
 #[tauri::command]
 fn open_new_window(app: AppHandle) -> Result<(), String> {
     open_new_window_internal(&app).map_err(|e| e.to_string())
 }
 
-/// Toggle the main window visibility (show / hide). Exposed to JS as
-/// `window.__TAURI__.core.invoke('toggle_main_window')`.
 #[tauri::command]
 fn toggle_main_window(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {
         if window.is_visible().unwrap_or(false) {
-            let _ = window.hide();
+            hide_main_window(&app);
         } else {
-            let _ = window.show();
-            let _ = window.set_focus();
+            show_main_window(&app);
         }
     }
     Ok(())
@@ -71,21 +110,9 @@ fn toggle_main_window(app: AppHandle) -> Result<(), String> {
 
 /// Entry point for the Meggy desktop application.
 ///
-/// Features:
-///  - Opens https://educa.eu.org in a native window (no browser chrome).
-///  - System tray with "Mostrar / Ocultar / Nova Janela / Downloads / Sair".
-///  - Close button minimizes to tray (app stays running).
-///  - Multi-window: open additional windows via tray or `Ctrl+Shift+N`.
-///  - Global shortcuts:
-///      `Ctrl+Shift+M` — toggle main window visibility
-///      `Ctrl+Shift+N` — open a new window
-///      `Ctrl+Shift+D` — open the downloads folder
-///  - Plugins: shell, notification, autostart, global-shortcut.
-///
-/// v1.1.0: re-added tauri_plugin_global_shortcut using the Tauri 2.0
-/// Builder API (`Builder::new().with_handler(...).build()`) instead of the
-/// removed `init()` function. Shortcuts are registered in `setup()` via
-/// `GlobalShortcutExt::global_shortcut().register(...)`.
+/// v1.1.1 FIX: When the window is hidden (close-to-tray or Ctrl+Shift+M),
+/// all video/audio playback is PAUSED via JavaScript injection. This prevents
+/// the "audio keeps playing after closing" bug.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -98,7 +125,6 @@ pub fn run() {
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
-                    // Only react on key-press (ignore key-release).
                     if event.state != ShortcutState::Pressed {
                         return;
                     }
@@ -107,22 +133,19 @@ pub fn run() {
                         mods.contains(Modifiers::CONTROL) && mods.contains(Modifiers::SHIFT);
                     if ctrl_shift {
                         match shortcut.key {
-                            // Ctrl+Shift+N — open a new window
                             Code::KeyN => {
                                 let _ = open_new_window_internal(app);
                             }
-                            // Ctrl+Shift+M — toggle main window visibility
                             Code::KeyM => {
+                                // ★ v1.1.1: Use hide_main_window which pauses media
                                 if let Some(window) = app.get_webview_window("main") {
                                     if window.is_visible().unwrap_or(false) {
-                                        let _ = window.hide();
+                                        hide_main_window(app);
                                     } else {
-                                        let _ = window.show();
-                                        let _ = window.set_focus();
+                                        show_main_window(app);
                                     }
                                 }
                             }
-                            // Ctrl+Shift+D — open the downloads folder
                             Code::KeyD => {
                                 let _ = open_downloads_folder();
                             }
@@ -171,15 +194,11 @@ pub fn run() {
                 .tooltip("Meggy — Plataforma de Estudos")
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => {
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
+                        show_main_window(app);
                     }
                     "hide" => {
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.hide();
-                        }
+                        // ★ v1.1.1: Pause media before hiding
+                        hide_main_window(app);
                     }
                     "new_window" => {
                         let _ = open_new_window_internal(app);
@@ -195,8 +214,6 @@ pub fn run() {
                 .build(app)?;
 
             // ─── Global Shortcuts ───
-            // The handler is set in the plugin Builder above; here we just
-            // register which key combinations should trigger it.
             app.global_shortcut().register("Ctrl+Shift+N")?;
             app.global_shortcut().register("Ctrl+Shift+M")?;
             app.global_shortcut().register("Ctrl+Shift+D")?;
@@ -204,12 +221,13 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Minimize to tray instead of closing — the app stays running
-            // in the background so the user can quickly resume studying.
-            // Only the *main* window is sent to the tray; extra windows
-            // (window-1, window-2, …) close normally.
+            // ★ v1.1.1: When closing the main window, PAUSE ALL MEDIA before hiding.
+            // This prevents the "audio keeps playing after closing" bug.
+            // Only the *main* window is sent to the tray; extra windows close normally.
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {
+                    // Pause all video/audio playback before hiding
+                    pause_all_media(window);
                     let _ = window.hide();
                     api.prevent_close();
                 }
