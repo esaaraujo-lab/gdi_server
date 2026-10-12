@@ -366,15 +366,32 @@
     return 'pdf';
   }
   async function extractTextFile(url){
-    // Fetch direto — sem pdf.js. Retorna o texto cru (md/txt) ou HTML saneado.
+    // ★ v155 FIX: Fetch com redirect:'follow' + detecção de HTML (login redirect).
+    //   Antes, se o cookie expirava, o fetch retornava a página de login HTML
+    //   em vez do .md — e o generateAll() usava o HTML como "texto" → a IA
+    //   recebia "<!DOCTYPE html>..." em vez da transcrição.
     let resp;
-    const fetchOpts=[{credentials:'same-origin'},{credentials:'include'},{credentials:'omit'}];
+    const fetchOpts=[
+      {credentials:'same-origin',redirect:'follow'},
+      {credentials:'include',redirect:'follow'},
+      {credentials:'omit',redirect:'follow'}
+    ];
     for(const opts of fetchOpts){
-      try{resp=await fetch(url,opts);if(resp.ok)break;}catch(_){}
+      try{
+        resp=await fetch(url,opts);
+        if(resp.ok)break;
+      }catch(_){}
     }
     if(!resp||!resp.ok)throw new Error('HTTP '+(resp?resp.status:'fetch')+' ao baixar arquivo de texto');
     const txt=await resp.text();
     if(!txt||txt.trim().length<10)throw new Error('Arquivo de texto vazio');
+    // ★ v155: Detectar HTML (login redirect) — se começar com <!DOCTYPE ou <html,
+    // é uma página de login, não o arquivo .md
+    const trimmed=txt.trimStart();
+    if(trimmed.startsWith('<!DOCTYPE')||trimmed.startsWith('<html')||trimmed.startsWith('<HTML')){
+      console.warn('[Meggy] extractTextFile: resposta é HTML (possível redirect de login), não .md');
+      throw new Error('Arquivo de texto retornou HTML (sessão expirada?)');
+    }
     // Para HTML: strip tags básico (mantém texto legível para o LLM)
     // Para MD/TXT: retorna cru (o LLM entende markdown naturalmente)
     return txt;
