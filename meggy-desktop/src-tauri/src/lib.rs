@@ -10,8 +10,10 @@ use tauri::{
 ///  - Opens https://educa.eu.org in a native window (no browser chrome).
 ///  - System tray with "Mostrar / Ocultar / Sair" menu.
 ///  - Close button minimizes to tray (app stays running).
-///  - Plugins: autostart, global-shortcut, notification, shell.
-///  - Global shortcut Ctrl+Shift+M toggles window visibility.
+///  - Plugins: autostart, notification, shell.
+///
+/// v1.0.3: Removed tauri_plugin_global_shortcut (API changed in Tauri 2.0 —
+/// uses Builder instead of init()). Will re-add in v1.1.0 with proper setup.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -21,17 +23,12 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec!["--hidden"]),
         ))
-        .plugin(tauri_plugin_global_shortcut::init())
         .setup(|app| {
             // ─── System Tray ───
             let show_item = MenuItem::with_id(app, "show", "Mostrar Meggy", true, None::<&str>)?;
             let hide_item = MenuItem::with_id(app, "hide", "Ocultar para bandeja", true, None::<&str>)?;
-            let separator = app.menu().and_then(|_| None).unwrap_or_else(|| {
-                // Some platforms don't support separators easily; skip gracefully
-                MenuItem::with_id(app, "sep_placeholder", "—", false, None::<&str>).ok().unwrap()
-            });
             let quit_item = MenuItem::with_id(app, "quit", "Sair", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show_item, &hide_item, &separator, &quit_item])?;
+            let menu = Menu::with_items(app, &[&show_item, &hide_item, &quit_item])?;
 
             TrayIconBuilder::new()
                 .menu(&menu)
@@ -57,11 +54,6 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
-
-            // ─── Global Shortcut: Ctrl+Shift+M toggles window ───
-            // (Handled by tauri-plugin-global-shortcut; registration via JS or Rust)
-            // For simplicity, we skip explicit registration here — the plugin
-            // is available for the frontend to use via window.__TAURI__.
 
             Ok(())
         })
