@@ -976,8 +976,27 @@
     //   3. Se NÃO achar transcrição (ou falhar), aí sim extrai PDFs/materiais
     //   Isto resolve o bug do v53 onde PDFs grandes travavam a extração e o resumo
     //   nunca era gerado mesmo com a transcrição disponível.
-    const transcriptionItems = items.filter(it => /transcri/i.test(it.name||''));
-    const otherItems = items.filter(it => !/transcri/i.test(it.name||''));
+    // ★ WEB-RESUMO-MD-PRIORITY: defense-in-depth — NUNCA usar como input
+    //   arquivos .md/.txt gerados por IA (Ebook gerado por IA, Resumo IA,
+    //   etc.). Seria sumarizar um resumo. O filtro primário está no
+    //   gdi-core.js (click handler), mas replicamos aqui para proteger
+    //   também contra callers diretos de generateAll() (batalhão,
+    //   flashcards library, regenerate, etc.).
+    const _isAiGeneratedMd=(name)=>{
+      const n=(name||'').toLowerCase();
+      if(!/\.md$|\.txt$/.test(n))return false;
+      return /ebook.*ia|resumo.*ia|gerado.*por.*ia|\bia\b.*gerad|intelig.*artif/i.test(n);
+    };
+    const _safeItems=items.filter(it=>!_isAiGeneratedMd(it.name||''));
+    if(_safeItems.length<items.length){
+      console.log('[Meggy] generateAll: filtrando '+(items.length-_safeItems.length)+' arquivo(s) AI-generated .md (não usar como input)');
+    }
+    // ★ WEB-RESUMO-MD-PRIORITY: transcrições PRIMEIRO (são .md/.txt/.pdf com
+    //   "transcri" no nome). Depois, todos os outros itens seguros (PDFs,
+    //   materiais genéricos, etc.). Se houver transcrição válida (>50 chars),
+    //   usa SÓ ela — não desperdiça tempo com PDFs/ebooks.
+    const transcriptionItems = _safeItems.filter(it => /transcri/i.test(it.name||''));
+    const otherItems = _safeItems.filter(it => !/transcri/i.test(it.name||''));
 
     if(progressCb)progressCb({phase:'extract-start',total:items.length});
 
@@ -2117,12 +2136,98 @@
     }catch(_){return [];}
   }
 
-  // ── Public API ── (E — todos os 16 métodos preservados)
+  // ═══ WEB-RESUMO-MD-PRIORITY: showResumoIA ═══
+  // Botão "Resumo de IA" no painel de materiais — carrega .md/.txt pré-gerado
+  // pelo curso (Ebook gerado por IA, Resumo IA, etc.) direto do Drive, sem
+  // passar pela IA Meggy. Esses arquivos já SÃO resumos — apenas exibimos.
+  //
+  // Prioridade de seleção (se múltiplos .md de IA na pasta):
+  //   1. *Ebook*IA*.md (ebook gerado por IA — mais completo)
+  //   2. *Resumo*IA*.md
+  //   3. *gerado*por*IA*.md
+  //   4. Qualquer .md com "ia" no nome (fallback)
+  //
+  // Se nenhum .md de IA for encontrado, mostra:
+  //   "Não há resumo de IA disponível para esta aula"
+  async function showResumoIA(items, bodyEl, lessonName){
+    if(!bodyEl)return;
+    const lesson=realLessonName(lessonName||(items&&items[0]&&items[0].name)||'aula');
+    // ★ detector AI-generated .md (mesma regex do gdi-core.js / generateAll)
+    const _isAiMd=(name)=>{
+      const n=(name||'').toLowerCase();
+      if(!/\.md$|\.txt$/.test(n))return false;
+      return /ebook.*ia|resumo.*ia|gerado.*por.*ia|\bia\b.*gerad|intelig.*artif/i.test(n);
+    };
+    // ★ detector mais amplo: qualquer .md/.txt com "ia" no nome
+    const _isAnyIaMd=(name)=>{
+      const n=(name||'').toLowerCase();
+      if(!/\.md$|\.txt$/.test(n))return false;
+      return /\bia\b|intelig|resumo|ebook/.test(n);
+    };
+    // prioridade de seleção
+    const _pick=(arr)=>{
+      if(!arr||!arr.length)return null;
+      const _ebookIa=arr.find(x=>/ebook.*ia/.test((x.name||'').toLowerCase()));
+      if(_ebookIa)return _ebookIa;
+      const _resumoIa=arr.find(x=>/resumo.*ia/.test((x.name||'').toLowerCase()));
+      if(_resumoIa)return _resumoIa;
+      const _geradoIa=arr.find(x=>/gerado.*por.*ia/.test((x.name||'').toLowerCase()));
+      if(_geradoIa)return _geradoIa;
+      return arr[0];
+    };
+    let aiItems=(items||[]).filter(x=>x&&_isAiMd(x.name||''));
+    // fallback: se não achou com regex estrita, tenta a ampla (qualquer .md com "ia")
+    if(!aiItems.length)aiItems=(items||[]).filter(x=>x&&_isAnyIaMd(x.name||''));
+    if(!aiItems.length){
+      bodyEl.innerHTML=`<div class="gdi-mat-empty" style="padding:40px 20px;text-align:center;">
+        <i class="bi bi-stars" style="font-size:38px;color:var(--ferreto-primary,#ff8b9f);"></i>
+        <div style="margin-top:10px;font-size:14px;color:var(--ferreto-text,#e6edf3);font-weight:600;">N\u00e3o h\u00e1 resumo de IA dispon\u00edvel para esta aula</div>
+        <div style="margin-top:4px;font-size:12px;color:var(--ferreto-text-muted,#8b949e);">Use o bot\u00e3o \u201cResumo Meggy\u201d para gerar um novo com a IA.</div>
+      </div>`;
+      return;
+    }
+    const picked=_pick(aiItems);
+    setLoading(bodyEl,'Carregando resumo de IA: '+picked.name+'…');
+    try{
+      // fetch direto do .md (texto puro — sem extração PDF)
+      let resp;
+      const fetchOpts=[{credentials:'same-origin'},{credentials:'include'},{credentials:'omit'}];
+      for(const opts of fetchOpts){
+        try{resp=await fetch(picked.url,opts);if(resp.ok)break;}catch(_){}
+      }
+      if(!resp||!resp.ok)throw new Error('HTTP '+(resp?resp.status:'fetch')+' ao baixar resumo de IA');
+      const txt=await resp.text();
+      if(!txt||txt.trim().length<10)throw new Error('Resumo de IA vazio');
+      const html=renderMd(txt);
+      bodyEl.innerHTML=`<div class="gdi-mat-isa-result" style="max-width:880px;margin:0 auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;padding:12px 16px;background:linear-gradient(135deg,rgba(255,139,159,.12),rgba(192,38,211,.06));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;flex-wrap:wrap;flex-shrink:0;">
+          <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">
+            <i class="bi bi-journal-richtext" style="color:var(--ferreto-primary,#ff8b9f);font-size:20px;flex:none;"></i>
+            <b style="color:var(--ferreto-text,#f0f6fc);font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Resumo de IA · ${esc(lesson)}</b>
+            <span style="background:rgba(255,139,159,.15);color:#ff8b9f;border:1px solid rgba(255,139,159,.3);padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;flex:none;">PR\u00c9-GERADO</span>
+          </div>
+          <button id="gdi-ria-dl" title="Baixar em PDF" style="background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);color:var(--ferreto-text,#e6edf3);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;flex:none;"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
+        </div>
+        <div style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);margin-bottom:8px;padding:0 4px;">Arquivo: ${esc(picked.name)} · Este resumo foi gerado pelo curso (não pela Meggy).</div>
+        <div class="gdi-isa-summary-body" style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;padding:20px 24px;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.8;max-height:60vh;overflow-y:auto;">
+          ${html}
+        </div>
+      </div>`;
+      const dlBtn=bodyEl.querySelector('#gdi-ria-dl');
+      if(dlBtn)dlBtn.onclick=()=>downloadAsPdf('Resumo de IA · '+lesson,txt);
+      showToast('Resumo de IA carregado: '+picked.name);
+    }catch(e){
+      setError(bodyEl,'N\u00e3o foi poss\u00edvel carregar o resumo de IA: '+(e.message||e));
+    }
+  }
+
+  // ── Public API ── (E — todos os 17 métodos preservados + showResumoIA)
   // ★ FIX 6 (Task 21): added downloadAsPdf to exports. It was defined as a local
   // function but never exported, yet renderResumos references window.gdiIsaPdf.downloadAsPdf
   // (line 2137). The check `if (... && window.gdiIsaPdf.downloadAsPdf)` silently failed,
   // so the "PDF" button on saved resumos did nothing. Now exported.
-  window.gdiIsaPdf={summary,questions,mindmap,flashcards,regenerate,extractPdfText,saveIsaSummary,listIsaSummaries,delIsaSummary,downloadAsPdf,fetchSharedQuestions,fetchSharedSummaries,saveSharedSummary,saveEssayMD,startBattalion,getBattalionStatus};
+  // ★ WEB-RESUMO-MD-PRIORITY: added showResumoIA (botão "Resumo de IA" no M9).
+  window.gdiIsaPdf={summary,questions,mindmap,flashcards,regenerate,extractPdfText,saveIsaSummary,listIsaSummaries,delIsaSummary,downloadAsPdf,fetchSharedQuestions,fetchSharedSummaries,saveSharedSummary,saveEssayMD,startBattalion,getBattalionStatus,showResumoIA};
 
   // ═══ REATIVADO: aba "Resumos" na Central de Estudos (Task 13 — FIX 2) ═══
   // Antes era um stub no-op (window.renderResumos=function(){};). Agora é uma
