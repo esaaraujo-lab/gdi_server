@@ -1,7 +1,7 @@
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::TrayIconBuilder,
-    AppHandle, Emitter, Manager, PageLoadEvent, WindowEvent, WebviewUrl, WebviewWindowBuilder,
+    AppHandle, Emitter, Manager, WindowEvent, WebviewUrl, WebviewWindowBuilder,
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, ShortcutState};
 use std::path::PathBuf;
@@ -32,7 +32,7 @@ use std::path::PathBuf;
 //   • pause_all_media() only called from tray menu, Ctrl+Shift+M, and
 //     hide_main_window() — NOT from close event.
 
-const APP_VERSION: &str = "1.3.0";
+const APP_VERSION: &str = "1.3.1";
 const GITHUB_RELEASES_URL: &str =
     "https://api.github.com/repos/esaaraujo-lab/gdi_server/releases/latest";
 
@@ -44,7 +44,7 @@ const WEBVIEW_INIT_JS: &str = r#"(function() {
     // ─── JS bridge (always (re)bind, cheap) ───
     if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke && !window.meggyDesktop) {
         window.meggyDesktop = {
-            version: '1.3.0',
+            version: '1.3.1',
             isDesktop: true,
             downloadVideo: async function(url, filename, course) {
                 return await window.__TAURI__.core.invoke('download_video', { url: url, filename: filename, course: course });
@@ -493,10 +493,11 @@ pub fn run() {
         )
         // ★ v1.3.0: Inject keyboard shortcuts + JS bridge into EVERY webview
         // on every navigation (incl. cross-origin to educa.eu.org).
-        .on_page_load(|webview, payload| {
-            if payload.event() == PageLoadEvent::Started {
-                let _ = webview.eval(WEBVIEW_INIT_JS);
-            }
+        // We don't filter by PageLoadEvent::Started vs Finished because the
+        // injected script is idempotent (guarded by window.__meggyKB /
+        // !window.meggyDesktop). Running on both events is harmless.
+        .on_page_load(|webview, _payload| {
+            let _ = webview.eval(WEBVIEW_INIT_JS);
         })
         // ★ v1.2.0: Native Menu Bar event handler (Arquivo / Editar / Ajuda)
         .on_menu_event(|app, event| match event.id.as_ref() {
