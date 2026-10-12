@@ -1,6 +1,6 @@
 {
   "name": "meggy-desktop",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Meggy — Plataforma de Estudos (Desktop: Windows + macOS + Linux)",
   "scripts": {
     "tauri": "tauri",
