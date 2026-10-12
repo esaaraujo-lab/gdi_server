@@ -937,48 +937,31 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   Bus.onGlobal('media:ready',({type,el})=>{
     if(type!=='video'||!el||el.__m7)return;
     el.__m7=true;
-    // ★ v1.0.182: auto-hide skip intro button after 15s (independent of video time).
-    // User requested: "deixar o btn pular intro por até 15s e depois deixar ele sumir sozinho"
-    let _introHideTimer=null;
-    let _introHiddenByTimer=false;  // flag: timer escondeu o botão, não re-exibir até trocar vídeo
-    const _startHideTimer=()=>{
-      if(_introHideTimer)clearTimeout(_introHideTimer);
-      _introHideTimer=setTimeout(()=>{
-        _introHiddenByTimer=true;
-        if(skipBtn&&document.body.contains(skipBtn)&&skipBtn.style.display==='block'){
-          skipBtn.style.display='none';
-        }
-      },15000); // 15 segundos
-    };
     const upd=()=>{
       if(!skipBtn||!document.body.contains(skipBtn))return;
-      // ★ v1.0.182: se o timer de 15s já escondeu o botão, não re-exibir
-      // (mesmo se video time ainda está na janela de visibilidade)
-      if(_introHiddenByTimer){
-        if(skipBtn.style.display!=='none')skipBtn.style.display='none';
-        return;
-      }
       const S=GDIUser.getIntro(courseKey());
       const tm=el.currentTime;
       let show=false;
+      // ★ v1.0.110 FIX BUG #2: button visibility window extended.
+      // Before: if S (intro) was set, button only showed while `tm < S-0.3` — so for
+      // a 15s intro the button vanished after ~15s, leaving the user no chance to
+      // click it if they were slow. Now the button stays visible for at least 60s
+      // OR 30s past the intro point, whichever is longer (capped at 300s to avoid
+      // showing it deep into a long video). The 120s window for the "no intro set
+      // yet" case is unchanged.
       if(S&&S>0)show=tm>0.4&&tm<Math.max(S+30,60)&&tm<300;
       else show=tm>1&&tm<120;
+      // ★FIX: só toca no DOM quando muda (era reescrito a cada timeupdate)
       const html=S
         ?'<i class="bi bi-skip-forward-fill"></i> Pular introdu\u00e7\u00e3o ('+gdiFmtTime(S)+')'
         :'<i class="bi bi-skip-forward-fill"></i> Pular introdu\u00e7\u00e3o';
       if(skipBtn.innerHTML!==html)skipBtn.innerHTML=html;
       const disp=show?'block':'none';
-      if(skipBtn.style.display!==disp){
-        skipBtn.style.display=disp;
-        // ★ v1.0.182: iniciar timer de 15s quando botão aparece pela 1ª vez
-        if(disp==='block')_startHideTimer();
-      }
+      if(skipBtn.style.display!==disp)skipBtn.style.display=disp;
     };
     el.addEventListener('timeupdate',upd);
     el.addEventListener('seeked',()=>setTimeout(upd,80));
     el.addEventListener('play',upd);
-    // ★ v1.0.182: resetar flag quando vídeo troca (loadedmetadata = novo vídeo)
-    el.addEventListener('loadedmetadata',()=>{_introHiddenByTimer=false;if(_introHideTimer)clearTimeout(_introHideTimer);});
   });
   window.GDI_MODULES.push({name:'skip-intro',init:function(){
     const wrap=document.querySelector('.gdi-player-wrap');
@@ -1011,12 +994,37 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 (function(){
   const frames=new Map();let gen=0,lastKey='';
   function classify(name){
-    const n2=name.toLowerCase();
-    if(/mapa/.test(n2))                       return{l:'Mapa Mental', i:'bi-diagram-3',              ord:4};
-    if(/simulado/.test(n2))                   return{l:'Minissimulado',i:'bi-stopwatch',             ord:2};
-    if(/quest|exerc|prova/.test(n2))          return{l:'Exerc\u00edcios',  i:'bi-ui-checks',              ord:1};
-    if(/resumo|iara|\bia\b|intelig/.test(n2)) return{l:'Resumo IA',   i:'bi-stars',                  ord:3};
-    return                                    {l:'Material',    i:'bi-file-earmark-text-fill',ord:0};
+    const n2=(name||'').toLowerCase();
+    // ★ WEB-RESUMO-MD-PRIORITY: Transcrição tem prioridade MÁXIMA (ord:-1)
+    //   para aparecer como primeira aba e ser usada como fonte primária
+    //   pelo resumo Meggy. Antes transcrições eram classificadas como
+    //   "Material" genérico (ord:0) e perdiam para PDFs na ordenação.
+    if(/transcri/.test(n2))                    return{l:'Transcri\u00e7\u00e3o', i:'bi-card-text',          ord:-1};
+    if(/mapa/.test(n2))                        return{l:'Mapa Mental',          i:'bi-diagram-3',          ord:4};
+    if(/simulado/.test(n2))                    return{l:'Minissimulado',        i:'bi-stopwatch',          ord:2};
+    if(/quest|exerc|prova/.test(n2))           return{l:'Exerc\u00edcios',       i:'bi-ui-checks',          ord:1};
+    // ★ WEB-RESUMO-MD-PRIORITY: detecta Resumo IA (ebook gerado por IA,
+    //   resumo IA, etc.) — esses .md NUNCA devem entrar como input do
+    //   resumo Meggy (seria sumarizar resumo). São carregados como
+    //   "Resumo de IA" (botão dedicado) para visualização direta.
+    if(/ebook.*ia|resumo.*ia|gerado.*por.*ia|\bia\b.*gerad|intelig.*artif/i.test(n2))
+                                                return{l:'Resumo IA',           i:'bi-stars',              ord:5};
+    if(/resumo|iara|intelig/.test(n2))         return{l:'Resumo IA',            i:'bi-stars',              ord:3};
+    return                                     {l:'Material',                i:'bi-file-earmark-text-fill',ord:0};
+  }
+  // ★ WEB-RESUMO-MD-PRIORITY: helper para detectar .md/.txt gerados por IA.
+  //   Esses arquivos NUNCA devem ser passados como input para o resumo Meggy
+  //   (seria sumarizar um resumo). São exibidos apenas como "Resumo de IA".
+  function isAiGeneratedMd(name){
+    const n=(name||'').toLowerCase();
+    if(!/\.md$|\.txt$/.test(n))return false;
+    return /ebook.*ia|resumo.*ia|gerado.*por.*ia|\bia\b.*gerad|intelig.*artif/i.test(n);
+  }
+  // ★ WEB-RESUMO-MD-PRIORITY: helper para detectar arquivos de transcrição.
+  //   Aceita "Transcrição", "Transcricao" (sem acento), "transcript".
+  function isTranscriptionFile(name){
+    const n=(name||'').toLowerCase();
+    return /transcri/.test(n);
   }
   function courseBase(){
     let nm='';
@@ -1108,7 +1116,22 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     tabsEl.innerHTML='<span class="gdi-mat-loading">Buscando PDFs da aula\u2026</span>';
     if(statusEl)statusEl.textContent='';
     bodyEl.innerHTML='';
-    const isPdf=x=>(x.fileExtension||'').toLowerCase()==='pdf'||/pdf/i.test(x.mimeType||'');
+    // ★ WEB-RESUMO-MD-PRIORITY: trocado isPdf por isMaterial para incluir
+    //   também .md e .txt (transcrições). Antes, apenas PDFs chegavam ao
+    //   array `items` — logo, transcrições .md nunca eram encontradas pelo
+    //   generateAll() do gdi-meggy.js (que tem lógica transcription-first
+    //   mas ela só funciona se as transcrições estiverem em items).
+    //   Hoje: PDFs + .md + .txt entram em items. A filtragem de
+    //   "não usar AI-generated .md como input" acontece no click handler.
+    const isMaterial=x=>{
+      const ext=(x.fileExtension||((x.name||'').split('.').pop()||'')).toLowerCase();
+      const mt=(x.mimeType||'').toLowerCase();
+      if(ext==='pdf'||mt.includes('pdf'))return true;
+      if(ext==='md'||mt.includes('markdown'))return true;
+      if(ext==='txt'||mt==='text/plain')return true;
+      if(ext==='html'||mt.includes('html'))return true;
+      return false;
+    };
     try{
       let found=[];
       // ★C.2: se window.playlistVideos já tem itens de fPath, a chamada
@@ -1139,16 +1162,16 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
             });
         }
       }
-      found=here.filter(isPdf);
+      found=here.filter(isMaterial);
       if(!found.length){
         const subs=here.filter(x=>x.mimeType==='application/vnd.google-apps.folder').slice(0,20);
         for(const sf of subs){
           const fp=fPath+encodeURIComponent(sf.name)+'/';
-          found=found.concat((await gdiListAllFiles(fp,gdiGetPw(fp))).filter(isPdf));
+          found=found.concat((await gdiListAllFiles(fp,gdiGetPw(fp))).filter(isMaterial));
           if(found.length)break;
         }
       }
-      if(!found.length)found=(await gdiListAllFiles(pPath,gdiGetPw(pPath))).filter(isPdf);
+      if(!found.length)found=(await gdiListAllFiles(pPath,gdiGetPw(pPath))).filter(isMaterial);
       const seen=new Set();const uniq=[];
       found.forEach(x=>{if(!seen.has(x.name)){seen.add(x.name);uniq.push(x)}});
       const pdfs=uniq.slice(0,12);
@@ -1156,8 +1179,8 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       if(!pdfs.length){
         if(tabsEl.isConnected){
           tabsEl.innerHTML='';
-          if(statusEl)statusEl.textContent='sem PDF';
-          if(bodyEl)bodyEl.innerHTML=`<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material PDF encontrado para esta aula.</div></div>`;
+          if(statusEl)statusEl.textContent='sem material';
+          if(bodyEl)bodyEl.innerHTML=`<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material encontrado para esta aula.</div></div>`;
           lastKey=p;
         }
         return;
@@ -1168,21 +1191,59 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         const b2=UI.second_domain_for_dl?UI.downloaddomain+x.link:window.location.origin+x.link;
         const url=b2+(x.link.includes('?')?'&':'?')+'inline=true';
         const match=base&&x.name.toLowerCase().includes(base)?0:1;
-        return{name:x.name,label:cls.l,icon:cls.i,ord:cls.ord,match,url};
+        // ★ WEB-RESUMO-MD-PRIORITY: marca cada item com flags de tipo
+        //   para os click handlers saberem filtrar:
+        //   - isAiGenerated: .md/.txt gerado por IA (NÃO usar como input Meggy)
+        //   - isTranscription: transcrição da aula (fonte preferida p/ resumo)
+        //   - isMarkdown: .md/.txt/.html (renderizar como markdown, não iframe)
+        const _n=x.name||'';
+        const _ext=(_n.split('.').pop()||'').toLowerCase();
+        return{
+          name:_n,label:cls.l,icon:cls.i,ord:cls.ord,match,url,
+          isAiGenerated:isAiGeneratedMd(_n),
+          isTranscription:isTranscriptionFile(_n),
+          isMarkdown:['md','txt','html'].includes(_ext)
+        };
       });
       items.sort((x,y)=>x.match-y.match||x.ord-y.ord||x.name.localeCompare(y.name,undefined,{numeric:true}));
+      // ★ WEB-RESUMO-MD-PRIORITY: Transcrição SEMPRE primeiro (independente
+      //   do match do courseBase). Assim, ao clicar em "Resumo Meggy", a
+      //   primeira aba já é a transcrição — generateAll() acha ela como
+      //   primeira fonte e pula a extração de PDF (economiza 30-60s).
+      {
+        const _transc=items.filter(x=>x.isTranscription);
+        if(_transc.length){
+          const _rest=items.filter(x=>!x.isTranscription);
+          items.length=0;
+          _transc.forEach(i=>items.push(i));
+          _rest.forEach(i=>items.push(i));
+        }
+      }
       // ★ v87-FIX-MEGGY-MODULES BUG 6: when multiple PDFs are present, keep
       //    ONLY the ones whose filename matches the current lesson name
       //    (courseBase). Before, the panel SORTED matching PDFs first but
       //    still passed ALL of them to generateAll → Meggy mixed content
       //    from 5 different lessons. Now: if any PDF matches, filter to just
       //    those; otherwise fall back to the full list (legacy behavior).
+      // ★ WEB-RESUMO-MD-PRIORITY: porém, NUNCA removemos transcrições nem
+      //    AI-generated .md — transcrições são sempre mantidas (fonte
+      //    primária), e AI-generated .md são mantidas como "Resumo de IA".
       if(base && items.length>1){
         const _matches=items.filter(x=>x.name.toLowerCase().includes(base));
+        const _transc=items.filter(x=>x.isTranscription);
+        const _aiMd=items.filter(x=>x.isAiGenerated);
         if(_matches.length>0){
-          // mutate `items` in place (preserve reference — `const items`).
-          items.length=0;
-          for(let i=0;i<_matches.length;i++)items.push(_matches[i]);
+          // mantém matches + transcrições + AI .md (sem duplicar)
+          const _keep=new Set();
+          _matches.forEach(x=>_keep.add(x));
+          _transc.forEach(x=>_keep.add(x));
+          _aiMd.forEach(x=>_keep.add(x));
+          const _newList=[];
+          items.forEach(x=>{ if(_keep.has(x))_newList.push(x); });
+          if(_newList.length){
+            items.length=0;
+            _newList.forEach(x=>items.push(x));
+          }
         }
       }
       // ★ salva items para o botão "Regerar" encontrar
@@ -1194,14 +1255,21 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         it.idx=idx;
       });
       if(!tabsEl.isConnected)return;
+      // ★ WEB-RESUMO-MD-PRIORITY: detecção de "Resumo de IA" disponível
+      //   (qualquer .md/.txt gerado por IA na pasta). Habilita o botão
+      //   dedicado "Resumo de IA" entre os botões Meggy.
+      const _hasResumoIA=items.some(x=>x.isAiGenerated);
       tabsEl.innerHTML=items.map(it=>`
         <div class="gdi-mat-tab" data-mat="${it.idx}" title="${escHtml(it.name)}">
           <i class="bi ${it.icon}"></i><span>${escHtml(it.tabLabel)}</span>
         </div>`).join('')+
         `<div class="gdi-mat-tab gdi-mat-isa" data-mat="isa-summary" title="Gerar resumo com a Meggy (IA)">
           <i class="bi bi-stars"></i><span>Resumo Meggy</span>
-        </div>
-        <div class="gdi-mat-tab gdi-mat-isa" data-mat="isa-questions" title="Gerar questões com a Meggy (IA)">
+        </div>`+
+        (_hasResumoIA?`<div class="gdi-mat-tab gdi-mat-isa" data-mat="isa-resumo-ia" title="Ver resumo de IA pré-gerado pelo curso">
+          <i class="bi bi-journal-richtext"></i><span>Resumo de IA</span>
+        </div>`:'')+
+        `<div class="gdi-mat-tab gdi-mat-isa" data-mat="isa-questions" title="Gerar questões com a Meggy (IA)">
           <i class="bi bi-patch-question"></i><span>Questões Meggy</span>
         </div>
         <div class="gdi-mat-tab gdi-mat-isa" data-mat="isa-mindmap" title="Gerar pílulas com a Meggy (IA)">
@@ -1210,11 +1278,56 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         <div class="gdi-mat-tab gdi-mat-isa" data-mat="isa-flashcards" title="Flashcards desta aula">
           <i class="bi bi-card-text"></i><span>Flashcards</span>
         </div>`;
-      if(statusEl)statusEl.textContent=items.length+' PDF'+(items.length>1?'s':'');
+      if(statusEl)statusEl.textContent=items.length+' material'+(items.length>1?'s':'');
       const isMobile=Os.isMobile;
       function show(idx){
         if(!tabsEl.isConnected||!bodyEl.isConnected)return;
         tabsEl.querySelectorAll('.gdi-mat-tab').forEach(t=>t.classList.toggle('active',+t.dataset.mat===idx));
+        const _curItem=items[idx];
+        // ★ WEB-RESUMO-MD-PRIORITY: arquivos .md/.txt/.html NÃO são PDFs —
+        //   renderizamos como markdown dentro de um container estilizado.
+        //   Antes, cairiam no branch iframe e o navegador baixaria o .md
+        //   ou mostraria texto cru sem formatação.
+        if(_curItem && _curItem.isMarkdown){
+          (async()=>{
+            try{
+              const _resp=await fetch(_curItem.url,{credentials:'same-origin'});
+              if(!_resp.ok)throw new Error('HTTP '+_resp.status);
+              const _txt=await _resp.text();
+              // render markdown com sanitização
+              let _html;
+              if(window.marked){
+                try{_html=marked.parse(_txt);}catch(_){_html=escHtml(_txt).replace(/\n/g,'<br>');}
+              }else{
+                _html=escHtml(_txt).replace(/\n/g,'<br>');
+              }
+              if(window.gdiSanitize){try{_html=window.gdiSanitize(_html);}catch(_){}}
+              const _isAi=_curItem.isAiGenerated;
+              const _isTr=_curItem.isTranscription;
+              const _badge=_isAi?'<span style="background:rgba(255,139,159,.15);color:#ff8b9f;border:1px solid rgba(255,139,159,.3);padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;">RESUMO DE IA</span>':
+                          _isTr?'<span style="background:rgba(93,222,218,.15);color:#5ddeda;border:1px solid rgba(93,222,218,.3);padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;">TRANSCRI\u00c7\u00c3O</span>':'';
+              bodyEl.innerHTML=`<div class="gdi-mat-isa-result" style="max-width:880px;margin:0 auto;">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;padding:12px 16px;background:linear-gradient(135deg,rgba(255,139,159,.08),rgba(93,222,218,.04));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;flex-wrap:wrap;flex-shrink:0;">
+                  <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">
+                    <i class="bi ${_curItem.icon||'bi-file-earmark-text'}" style="color:var(--ferreto-primary,#ff8b9f);font-size:20px;flex:none;"></i>
+                    <b style="color:var(--ferreto-text,#f0f6fc);font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(_curItem.name)}</b>
+                    ${_badge}
+                  </div>
+                  <a href="${_curItem.url.replace(/\?inline=true/,'')}" target="_blank" rel="noopener" class="gdi-mode-btn" style="text-decoration:none;font-size:11px;padding:5px 10px;flex:none;" title="Abrir em aba nova">
+                    <i class="bi bi-box-arrow-up-right"></i> Abrir
+                  </a>
+                </div>
+                <div class="gdi-isa-summary-body" style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;padding:20px 24px;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.8;max-height:60vh;overflow-y:auto;">
+                  ${_html}
+                </div>
+              </div>`;
+            }catch(err){
+              bodyEl.innerHTML=`<div class="gdi-mat-empty"><i class="bi bi-exclamation-triangle" style="font-size:34px;color:#ff6b6b;"></i><div>N\u00e3o foi poss\u00edvel carregar o arquivo: ${escHtml(err.message||err)}.</div>
+                <a href="${_curItem.url.replace(/\?inline=true/,'')}" target="_blank" rel="noopener" class="gdi-btn gdi-btn-primary" style="margin-top:14px;text-decoration:none;"><i class="bi bi-box-arrow-up-right"></i> Abrir em nova aba</a></div>`;
+            }
+          })();
+          return;
+        }
         if(isMobile){
           // ★ Android/iOS: muitos navegadores móveis NÃO renderizam PDF em <iframe>
           // e abrem popup de download. Usamos pdf.js (viewer) embutido para
@@ -1345,21 +1458,48 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         t.addEventListener('click',()=>{
           (async ()=>{
             const m=t.dataset.mat;
+            // ★ WEB-RESUMO-MD-PRIORITY: filtro CENTRAL de segurança —
+            //   nunca passar AI-generated .md/.txt como INPUT para o
+            //   resumo/questões/pílulas/flashcards Meggy (seria
+            //   sumarizar um resumo). Esse filtro é defense-in-depth:
+            //   o generateAll() no gdi-meggy.js também filtra, mas se
+            //   houver regressão lá, este filtro aqui ainda protege.
+            const _meggyItems=items.filter(x=>!x.isAiGenerated);
             if(m==='isa-summary'){
               activateOnly(t);
-              if(window.gdiIsaPdf)try{await window.gdiIsaPdf.summary(items,bodyEl,base);}catch(e){showToast('Erro: '+e.message);}
+              if(!_meggyItems.length){showToast('Nenhum material disponível para gerar resumo (excluindo resumos de IA).');return;}
+              if(window.gdiIsaPdf)try{await window.gdiIsaPdf.summary(_meggyItems,bodyEl,base);}catch(e){showToast('Erro: '+e.message);}
               else showToast('Módulo Meggy indisponível');
+            }else if(m==='isa-resumo-ia'){
+              // ★ WEB-RESUMO-MD-PRIORITY: botão "Resumo de IA" — carrega
+              //   .md/.txt pré-gerado pelo curso (Ebook gerado por IA,
+              //   Resumo IA, etc.) direto do Drive, sem passar pela IA.
+              activateOnly(t);
+              if(window.gdiIsaPdf&&window.gdiIsaPdf.showResumoIA){
+                try{await window.gdiIsaPdf.showResumoIA(items,bodyEl,base);}catch(e){showToast('Erro: '+e.message);}
+              }else{
+                // fallback local: usa o mesmo renderizador do show()
+                const _aiMd=items.filter(x=>x.isAiGenerated);
+                if(!_aiMd.length){
+                  bodyEl.innerHTML=`<div class="gdi-mat-empty"><i class="bi bi-stars" style="font-size:34px;color:var(--ferreto-primary,#ff8b9f);"></i><div>N\u00e3o h\u00e1 resumo de IA dispon\u00edvel para esta aula.</div></div>`;
+                }else{
+                  show(_aiMd[0].idx);
+                }
+              }
             }else if(m==='isa-questions'){
               activateOnly(t);
-              if(window.gdiIsaPdf)try{await window.gdiIsaPdf.questions(items,bodyEl,base);}catch(e){showToast('Erro: '+e.message);}
+              if(!_meggyItems.length){showToast('Nenhum material disponível para gerar questões.');return;}
+              if(window.gdiIsaPdf)try{await window.gdiIsaPdf.questions(_meggyItems,bodyEl,base);}catch(e){showToast('Erro: '+e.message);}
               else showToast('Módulo Meggy indisponível');
             }else if(m==='isa-mindmap'){
               activateOnly(t);
-              if(window.gdiIsaPdf&&window.gdiIsaPdf.mindmap)try{await window.gdiIsaPdf.mindmap(items,bodyEl,base);}catch(e){showToast('Erro: '+e.message);}
+              if(!_meggyItems.length){showToast('Nenhum material disponível para gerar pílulas.');return;}
+              if(window.gdiIsaPdf&&window.gdiIsaPdf.mindmap)try{await window.gdiIsaPdf.mindmap(_meggyItems,bodyEl,base);}catch(e){showToast('Erro: '+e.message);}
               else showToast('Módulo Meggy indisponível');
             }else if(m==='isa-flashcards'){
               activateOnly(t);
-              if(window.gdiIsaPdf&&window.gdiIsaPdf.flashcards)try{await window.gdiIsaPdf.flashcards(items,bodyEl,base);}catch(e){showToast('Erro: '+e.message);}
+              if(!_meggyItems.length){showToast('Nenhum material disponível para gerar flashcards.');return;}
+              if(window.gdiIsaPdf&&window.gdiIsaPdf.flashcards)try{await window.gdiIsaPdf.flashcards(_meggyItems,bodyEl,base);}catch(e){showToast('Erro: '+e.message);}
               else showToast('Módulo Flashcards indisponível');
             }else{
               show(+m);
