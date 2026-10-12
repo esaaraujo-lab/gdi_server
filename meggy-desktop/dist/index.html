@@ -6,62 +6,106 @@
     <title>Meggy — Plataforma de Estudos</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; }
         body {
-            background: #0D0E12;
+            background: radial-gradient(circle at 30% 20%, #1a1d2e 0%, #0D0E12 60%);
             display: flex;
             align-items: center;
             justify-content: center;
-            height: 100vh;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             overflow: hidden;
+            color: #E6E6E6;
         }
         .loader {
             text-align: center;
+            width: 320px;
+            padding: 40px 24px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 139, 159, 0.15);
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5),
+                        0 0 60px rgba(255, 139, 159, 0.08);
+            backdrop-filter: blur(6px);
         }
-        .loader h1 {
-            font-size: 64px;
-            margin-bottom: 12px;
-            animation: pulse 1.5s ease-in-out infinite;
+        .logo {
+            font-size: 72px;
+            line-height: 1;
+            margin-bottom: 16px;
+            filter: drop-shadow(0 4px 12px rgba(255, 139, 159, 0.35));
+            animation: bob 2.4s ease-in-out infinite;
         }
-        .loader h2 {
-            font-size: 28px;
-            color: #FF8B9F;
-            font-weight: bold;
-            margin-bottom: 8px;
+        h1 {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 4px;
+            background: linear-gradient(90deg, #FF8B9F 0%, #FFB37F 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
             letter-spacing: 0.02em;
         }
-        .loader p {
+        .tagline {
+            font-size: 13px;
             color: #8B949E;
-            font-size: 14px;
+            margin-bottom: 22px;
+            letter-spacing: 0.04em;
         }
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 3px solid #232634;
-            border-top-color: #FF8B9F;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            margin: 24px auto 0;
+        .version-badge {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 600;
+            color: #FF8B9F;
+            background: rgba(255, 139, 159, 0.10);
+            border: 1px solid rgba(255, 139, 159, 0.25);
+            padding: 3px 10px;
+            border-radius: 999px;
+            margin-bottom: 22px;
+            letter-spacing: 0.06em;
         }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.6; }
+        .progress-track {
+            width: 100%;
+            height: 4px;
+            background: #232634;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-bottom: 12px;
         }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #FF8B9F 0%, #FFB37F 100%);
+            border-radius: 2px;
+            animation: load 0.95s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        .status {
+            font-size: 12px;
+            color: #6E7681;
+            letter-spacing: 0.02em;
+        }
+        @keyframes bob {
+            0%, 100% { transform: translateY(0); }
+            50%      { transform: translateY(-6px); }
+        }
+        @keyframes load {
+            0%   { width: 0%; }
+            40%  { width: 45%; }
+            70%  { width: 75%; }
+            100% { width: 100%; }
         }
     </style>
 </head>
 <body>
     <div class="loader">
-        <h1>🐩</h1>
-        <h2>Meggy</h2>
-        <p>Carregando plataforma de estudos...</p>
-        <div class="spinner"></div>
+        <div class="logo">🐩</div>
+        <h1>Meggy</h1>
+        <div class="tagline">PLATAFORMA DE ESTUDOS</div>
+        <div class="version-badge">v1.3.0</div>
+        <div class="progress-track"><div class="progress-fill"></div></div>
+        <div class="status">Conectando ao educa.eu.org…</div>
     </div>
     <script>
         // ============================================================
-        // Meggy Desktop v1.1.0 — JS bridge
+        // Meggy Desktop v1.3.0 — Loader + JS bridge documentation
         // ============================================================
         //
         // This loader page runs inside the native Tauri webview. After
@@ -74,25 +118,47 @@
         //     const isDesktop = typeof window.__TAURI__ !== 'undefined'
         //                       && typeof window.__TAURI__.core !== 'undefined';
         //
-        // And then call the custom Tauri commands registered in
-        // src-tauri/src/lib.rs:
+        // v1.3.0 ALSO injects a `window.meggyDesktop.*` bridge via the
+        // Rust `on_page_load` callback (src-tauri/src/lib.rs). The bridge
+        // is re-injected on every navigation, so it's available on the
+        // local loader AND on educa.eu.org. Available methods:
         //
-        //     // Open a second Meggy window (e.g. for notes / forum).
-        //     await window.__TAURI__.core.invoke('open_new_window');
+        //     await window.meggyDesktop.downloadVideo(url, filename, course);
+        //     await window.meggyDesktop.checkUpdates();
+        //     await window.meggyDesktop.openUpdateUrl();
+        //     await window.meggyDesktop.showAbout();
+        //     await window.meggyDesktop.openDownloads();
+        //     await window.meggyDesktop.openNewWindow();
+        //     await window.meggyDesktop.toggleWindow();
         //
-        //     // Toggle the main window visibility (show/hide).
-        //     await window.__TAURI__.core.invoke('toggle_main_window');
+        // Custom Tauri commands (src-tauri/src/lib.rs) — also callable
+        // directly via `window.__TAURI__.core.invoke('cmd', args)`:
         //
-        //     // Open the Meggy downloads folder in the file manager.
-        //     // The folder is created at ~/Meggy/Downloads/ on first call.
-        //     await window.__TAURI__.core.invoke('open_downloads_folder');
+        //     open_downloads_folder() → string
+        //     open_new_window() → void
+        //     toggle_main_window() → void
+        //     check_for_updates() → { current_version, latest_version,
+        //                              has_update, download_url }
+        //     open_update_url() → void
+        //     show_about_dialog() → void
+        //     download_video(url, filename, course) → string (filepath)
         //
         // Global keyboard shortcuts (work even when the app is not
-        // focused) are also available:
+        // focused) — registered in Rust:
         //
         //     Ctrl+Shift+M — toggle main window visibility
         //     Ctrl+Shift+N — open a new window
         //     Ctrl+Shift+D — open the downloads folder
+        //
+        // In-player keyboard shortcuts (work when a video player has
+        // focus) — injected via on_page_load on every navigation:
+        //
+        //     Space         — play / pause
+        //     ← / →         — seek -10s / +10s
+        //     ↑ / ↓         — volume up / down
+        //     F             — toggle fullscreen
+        //     M             — toggle mute
+        //     0-9           — seek to 0%-90%
         //
         // The system tray menu exposes the same actions plus
         // "Mostrar / Ocultar / Sair".
@@ -102,7 +168,7 @@
         // Using replace() so the back button doesn't return to this loader.
         setTimeout(function() {
             window.location.replace("https://educa.eu.org");
-        }, 800);
+        }, 1000);
     </script>
 </body>
 </html>
