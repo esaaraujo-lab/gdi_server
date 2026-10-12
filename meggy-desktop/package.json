@@ -1,0 +1,14 @@
+{
+  "name": "meggy-desktop",
+  "version": "1.0.0",
+  "description": "Meggy — Plataforma de Estudos (Desktop: Windows + macOS + Linux)",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "icon": "python scripts/generate_icon.py && tauri icon src-tauri/icons/icon.png"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}
