@@ -60,7 +60,45 @@
         <div class="spinner"></div>
     </div>
     <script>
-        // Redirect to the web app after a brief loading screen.
+        // ============================================================
+        // Meggy Desktop v1.1.0 — JS bridge
+        // ============================================================
+        //
+        // This loader page runs inside the native Tauri webview. After
+        // a brief loading screen it redirects to https://educa.eu.org.
+        //
+        // Because `withGlobalTauri` is enabled in tauri.conf.json, the
+        // web app at educa.eu.org can detect that it is running inside
+        // Meggy Desktop via:
+        //
+        //     const isDesktop = typeof window.__TAURI__ !== 'undefined'
+        //                       && typeof window.__TAURI__.core !== 'undefined';
+        //
+        // And then call the custom Tauri commands registered in
+        // src-tauri/src/lib.rs:
+        //
+        //     // Open a second Meggy window (e.g. for notes / forum).
+        //     await window.__TAURI__.core.invoke('open_new_window');
+        //
+        //     // Toggle the main window visibility (show/hide).
+        //     await window.__TAURI__.core.invoke('toggle_main_window');
+        //
+        //     // Open the Meggy downloads folder in the file manager.
+        //     // The folder is created at ~/Meggy/Downloads/ on first call.
+        //     await window.__TAURI__.core.invoke('open_downloads_folder');
+        //
+        // Global keyboard shortcuts (work even when the app is not
+        // focused) are also available:
+        //
+        //     Ctrl+Shift+M — toggle main window visibility
+        //     Ctrl+Shift+N — open a new window
+        //     Ctrl+Shift+D — open the downloads folder
+        //
+        // The system tray menu exposes the same actions plus
+        // "Mostrar / Ocultar / Sair".
+        // ============================================================
+
+        // Redirect to the web app after the loading screen.
         // Using replace() so the back button doesn't return to this loader.
         setTimeout(function() {
             window.location.replace("https://educa.eu.org");
