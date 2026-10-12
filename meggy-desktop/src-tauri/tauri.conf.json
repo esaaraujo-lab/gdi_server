@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Meggy",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "identifier": "com.meggy.desktop",
   "build": {
     "frontendDist": "../dist"
@@ -11,7 +11,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Meggy — Plataforma de Estudos",
+        "title": "Meggy \u2014 Plataforma de Estudos",
         "url": "index.html",
         "width": 1280,
         "height": 800,
@@ -39,7 +39,7 @@
     ],
     "category": "Education",
     "shortDescription": "Plataforma de Estudos",
-    "longDescription": "Meggy — Plataforma de estudos integrada com acesso a cursos em vídeo, PDFs e áudios.",
+    "longDescription": "Meggy \u2014 Plataforma de estudos integrada com acesso a cursos em v\u00eddeo, PDFs e \u00e1udios.",
     "macOS": {
       "signingIdentity": null
     }
