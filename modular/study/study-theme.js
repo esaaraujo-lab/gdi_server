@@ -33,7 +33,7 @@
     f.href='https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Rubik:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap';
     document.head.appendChild(f);
   }
-  if(!document.querySelector('link[rel="preconnect"][href*="fonts.gstatic"]')){
+  if(!document.querySelector('link[rel="preconnect"][h[href*="fonts.gstatic"]')){
     const p=document.createElement('link');p.rel='preconnect';p.crossOrigin='';p.href='https://fonts.gstatic.com';document.head.appendChild(p);
   }
 
