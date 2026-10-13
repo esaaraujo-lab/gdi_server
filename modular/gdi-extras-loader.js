@@ -33,7 +33,7 @@
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
   // ★ v1.0.91: bump 92 → 93 (Shaka skin + Pomodoro sidebar + video-in-panel + PDF split + rest mode fix + OCR AI routing + parallel dispatch).
-  const CACHE_VERSION = '156';  // ★ v156: streaming callIsa + max_tokens 16384 + prompt resumo menos exigente
+  const CACHE_VERSION = '157';  // ★ v157: Pollinations + Groq + OCR + TTS + callIsa racing-first
   window.CACHE_VERSION = CACHE_VERSION;
 
   const MODULES = [
@@ -63,6 +63,7 @@
     'study/study-plan.js',           // ★ v1.0.139: Plano de estudo adaptativo
     'study/study-notifications.js',  // ★ v1.0.140: Notificações + busca nas notas
     'gdi-player-enhancer.js',        // ★ v1.0.138: Speed memory + keyboard shortcuts + resume prompt
+    'gdi-ai-providers.js',           // ★ v157: Pollinations + Groq + OCR + TTS (providers extras)
     'study/study-panel.js'           // LAST — shell + home + drives + nav
   ];
 
