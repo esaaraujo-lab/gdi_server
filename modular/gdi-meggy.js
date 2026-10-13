@@ -1182,7 +1182,7 @@
         //   - exige ## títulos + ### subtítulos + EXEMPLOS práticos + pegadinhas
         //   - seções ## Pegadinhas de Prova e ## Resumo Rápido ao final
         //   - usa até 40000 chars do material (era 20000)
-        fn:()=>callIsaKeyed('Você é um professor especialista em concursos públicos. Leia TODO o material abaixo e crie um RESUMO DETALHADO em Markdown.\n\nREQUISITOS:\n- Mínimo 1500 caracteres\n- Estruture com ## títulos e ### subtítulos\n- Para CADA tópico: explique o conceito, dê EXEMPLOS práticos, e destaque pegadinhas de prova\n- Use **negrito** para palavras-chave e dispositivos legais\n- Use listas com marcadores para enumerações\n- Inclua uma seção ## Pegadinhas de Prova no final\n- Inclua uma seção ## Resumo Rápido com 5-10 bullets dos pontos mais importantes\n\nSeja detalhado mas objetivo. Foque nos pontos que caem em prova.\n\nMaterial:\n'+allText.slice(0,40000),0)
+        fn:()=>callIsaKeyed('Crie um resumo OBJETIVO em Markdown deste material. Use ## títulos e - bullets. Máximo 3000 caracteres. Inclua uma seção ## Pegadinhas no final.\n\nMaterial:\n'+allText.slice(0,10000),0)
           .then(r=>{if(r&&r.trim()){_chainCache[key].summary=r;saveIsaSummary(lesson,r,_coursePath,_subject);}})
           .catch(e=>{console.warn('[Meggy] resumo falhou',e.message);if(progressCb)progressCb({phase:'error',task:'resumo',error:e.message});})
       });
@@ -1192,7 +1192,7 @@
     if(!_chainCache[key].mindmap){
       allTasks.push({
         
-        fn:()=>callIsaKeyed('Crie "Pílulas" deste material — um resumo ultra-conciso em bullets. Apenas pontos-chave para revisão rápida. Máximo 15 bullets. Formato:\n# Pílulas\n- Ponto-chave 1\n- Ponto-chave 2\n...\n\nConteúdo:\n'+allText.slice(0,20000),0)
+        fn:()=>callIsaKeyed('Crie "Pílulas" deste material — um resumo ultra-conciso em bullets. Apenas pontos-chave para revisão rápida. Máximo 15 bullets. Formato:\n# Pílulas\n- Ponto-chave 1\n- Ponto-chave 2\n...\n\nConteúdo:\n'+allText.slice(0,10000),0)
           .then(r=>{if(r&&r.trim())_chainCache[key].mindmap=r;})
           .catch(e=>console.warn('[Meggy] pílulas falhou',e.message))
       });
@@ -1215,7 +1215,7 @@
       pdfTexts.forEach((pdf)=>{
         allTasks.push({
           
-          fn:()=>callIsaKeyed('Você é um examinador de concurso público brasileiro. Baseado neste material, gere 5 questões de múltipla escolha em JSON array. Misture:\n- 6 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"legalText":"...","explanation":"...","fundamentacao":"..."}\n- 4 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"legalText":"...","explanation":"...","fundamentacao":"..."}\n\nCAMPOS:\n- statement: enunciado claro, contexto completo\n- legalText: o dispositivo legal/dispositivo normativo aplicável (ex: "art. 5º, CF"; "Súmula Vinculante 14"; "Lei 8.906/94, art. 7º")\n- explanation: explicação técnica do acerto/erro (regra violada ou aplicada)\n- fundamentacao: fundamentação didática completa, explicando por que a alternativa correta está correta E por que as outras estão erradas\n\nSem comentários, só JSON.\n\n'+pdf.text.slice(0,10000),0)
+          fn:()=>callIsaKeyed('Gere 5 questões de múltipla escolha sobre este material em JSON. Formato: [{"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"explanation":"..."}]. Só JSON.\n\n'+pdf.text.slice(0,10000),0)
             .then(resp=>{
               if(!resp)return;
               try{
@@ -1378,7 +1378,7 @@
     setLoading(bodyEl,'Meggy está criando questões…');
     let resp;
     try{
-      resp=await callIsa('Baseado neste material, gere 5 questões de concurso público em JSON array. Misture:\n- 3 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"explanation":"..."}\n- 2 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"explanation":"..."}\nSem comentários, só JSON:\n\n'+text.slice(0,15000));
+      resp=await callIsa('Gere 5 questões de múltipla escolha sobre este material em JSON. Formato: [{"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"explanation":"..."}]. Só JSON:\n\n'+text.slice(0,15000));
     }catch(e){setError(bodyEl,'Meggy indisponível: '+e.message);return false;}
     let arr;
     try{arr=parseJsonArray(resp);}catch(e){setError(bodyEl,'Meggy retornou formato inválido: '+e.message);return false;}
