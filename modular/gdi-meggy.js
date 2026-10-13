@@ -30,6 +30,14 @@
 // ('gdi-questions-v1').
 // ═══════════════════════════════════════════════════════════════
 (function(){
+  // ★ v160: CSS para botão TTS
+  if(!document.getElementById('gdi-tts-css')){
+    const style=document.createElement('style');
+    style.id='gdi-tts-css';
+    style.textContent='.gdi-isa-tts-btn:hover{background:#E0657F!important;color:#fff!important}.gdi-isa-tts-btn:active{transform:scale(0.95)}';
+    document.head.appendChild(style);
+  }
+
   if(window.__gdiM9Isa)return;window.__gdiM9Isa=true;
   const LS_SUM='gdi-isa-summaries-v1';
   const LQ='gdi-questions-v1';
@@ -851,14 +859,37 @@
           <button id="gdi-isa-regen" title="Regerar (PDF pode estar incompleto)" style="background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);color:var(--ferreto-text,#e6edf3);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;transition:.15s;"><i class="bi bi-arrow-clockwise"></i> Regerar</button>
           <button id="gdi-isa-dl" title="Baixar em PDF" style="background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);color:var(--ferreto-text,#e6edf3);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;transition:.15s;"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
           <button id="gdi-isa-copy" title="Copiar resumo" style="background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);color:var(--ferreto-text,#e6edf3);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;transition:.15s;"><i class="bi bi-clipboard"></i> Copiar</button>
+          <button id="gdi-isa-tts" title="Ouvir resumo em voz alta" style="background:#FF8B9F;border:none;color:#000;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;transition:.15s;font-weight:600;"><i class="bi bi-volume-up"></i> Ouvir</button>
         </div>
       </div>
-      <div class="gdi-isa-summary-body" style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;padding:20px 24px;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.8;">
+      <div class="gdi-isa-summary-body" id="gdi-isa-summary-text" style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;padding:20px 24px;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.8;">
         ${renderMd(markdownText)}
       </div>
     </div>`;
     bodyEl.querySelector('#gdi-isa-dl').onclick=()=>downloadAsPdf(lesson,markdownText);
     bodyEl.querySelector('#gdi-isa-copy').onclick=()=>copySummary(markdownText);
+    // ★ v160: Botão Ouvir (TTS) — usa Browser TTS nativo (voz pt-BR, sem API key)
+    const ttsBtn=bodyEl.querySelector('#gdi-isa-tts');
+    if(ttsBtn){
+      ttsBtn.onclick=function(){
+        if(window.gdiAiProviders&&window.gdiAiProviders.tts){
+          if(window.gdiAiProviders.tts.isSpeaking()){
+            window.gdiAiProviders.tts.stop();
+            ttsBtn.innerHTML='<i class="bi bi-volume-up"></i> Ouvir';
+          }else{
+            // Extrair texto puro do resumo
+            const summaryBody=bodyEl.querySelector('#gdi-isa-summary-text');
+            const txt=summaryBody?summaryBody.innerText:markdownText;
+            window.gdiAiProviders.tts.speak(txt,{
+              onEnd:function(){ttsBtn.innerHTML='<i class="bi bi-volume-up"></i> Ouvir';}
+            });
+            ttsBtn.innerHTML='<i class="bi bi-stop-circle"></i> Parar';
+          }
+        }else{
+          showToast('TTS não disponível neste navegador');
+        }
+      };
+    }
     // ★ botão Regerar: limpa cache e regenera resumo + questões
     const regenBtn=bodyEl.querySelector('#gdi-isa-regen');
     if(regenBtn)regenBtn.onclick=()=>{
@@ -1182,7 +1213,34 @@
         //   - exige ## títulos + ### subtítulos + EXEMPLOS práticos + pegadinhas
         //   - seções ## Pegadinhas de Prova e ## Resumo Rápido ao final
         //   - usa até 40000 chars do material (era 20000)
-        fn:()=>callIsaKeyed('Crie um resumo OBJETIVO em Markdown deste material. Use ## títulos e - bullets. Máximo 3000 caracteres. Inclua uma seção ## Pegadinhas no final.\n\nMaterial:\n'+allText.slice(0,10000),0)
+        fn:async()=>{
+          // ★ v160: Auto-retry incremental — tenta prompt rico, se falhar simplifica
+          const PROMPTS_RESUMO=[
+            // Nível 7 (rico): prompt completo do gdi_extras
+            'Você é um professor especialista em concursos públicos. Leia TODO o material abaixo e crie um RESUMO PROFUNDO E DETALHADO em Markdown.\n\nREQUISITOS:\n- Estruture com ## títulos e ### subtítulos\n- Para CADA tópico: explique o conceito, dê EXEMPLOS práticos\n- Use **negrito** para palavras-chave e dispositivos legais\n- Inclua uma seção ## Pegadinhas de Prova no final\n- Inclua uma seção ## Resumo Rápido com 5-10 bullets\n\nMaterial:\n'+allText.slice(0,20000),
+            // Nível 5 (médio): menos requisitos
+            'Crie um resumo DETALHADO em Markdown deste material. Use ## títulos, **negrito** e - bullets. Inclua ## Pegadinhas de Prova no final. Material:\n'+allText.slice(0,15000),
+            // Nível 3 (simples): mínimo
+            'Crie um resumo em Markdown deste material. Use ## títulos e bullets. Material:\n'+allText.slice(0,10000)
+          ];
+          for(let p=0;p<PROMPTS_RESUMO.length;p++){
+            if(progressCb)progressCb({phase:'generating',task:'resumo',attempt:p+1,maxAttempts:PROMPTS_RESUMO.length,eta:(p+1)*30+'s'});
+            try{
+              const r=await callIsaKeyed(PROMPTS_RESUMO[p],0);
+              if(r&&r.trim().length>200){
+                _chainCache[key].summary=r;
+                saveIsaSummary(lesson,r,_coursePath,_subject);
+                return;
+              }
+            }catch(e){
+              console.warn('[Meggy] resumo tentativa '+(p+1)+' falhou:',e.message);
+              if(p<PROMPTS_RESUMO.length-1){
+                if(progressCb)progressCb({phase:'retry',task:'resumo',attempt:p+2,reason:e.message});
+              }
+            }
+          }
+          if(progressCb)progressCb({phase:'error',task:'resumo',error:'Todas as tentativas falharam'});
+        }()
           .then(r=>{if(r&&r.trim()){_chainCache[key].summary=r;saveIsaSummary(lesson,r,_coursePath,_subject);}})
           .catch(e=>{console.warn('[Meggy] resumo falhou',e.message);if(progressCb)progressCb({phase:'error',task:'resumo',error:e.message});})
       });
@@ -1192,7 +1250,7 @@
     if(!_chainCache[key].mindmap){
       allTasks.push({
         
-        fn:()=>callIsaKeyed('Crie "Pílulas" deste material — um resumo ultra-conciso em bullets. Apenas pontos-chave para revisão rápida. Máximo 15 bullets. Formato:\n# Pílulas\n- Ponto-chave 1\n- Ponto-chave 2\n...\n\nConteúdo:\n'+allText.slice(0,10000),0)
+        fn:()=>callIsaKeyed('Crie "Pílulas" deste material — pontos-chave para revisão rápida ANTES da prova. Formato Markdown:\n# Pílulas de Revisão\n\n## Conceitos Essenciais\n- **Conceito 1**: explicação curta com exemplo\n- **Conceito 2**: explicação curta\n\n## Pegadinhas Rápidas\n- ⚠️ Pegadinha 1\n- ⚠️ Pegadinha 2\n\n## Mnemônicos\n- Dica para memorizar\n\nMáximo 20 bullets no total. Seja OBJETIVO mas COMPLETO.\n\nConteúdo:\n'+allText.slice(0,15000),0)
           .then(r=>{if(r&&r.trim())_chainCache[key].mindmap=r;})
           .catch(e=>console.warn('[Meggy] pílulas falhou',e.message))
       });
@@ -1281,7 +1339,7 @@
     if(!items||!items.length){setError(bodyEl,'Nenhum PDF disponível.');return;}
     const lesson=realLessonName(lessonName||items[0].name);
     bodyEl.__items=items;bodyEl.__lesson=lesson;
-    setLoading(bodyEl,'Meggy está lendo o material e criando resumo + questões + pílulas…');
+    setLoading(bodyEl,'🐩 Meggy está lendo o material e criando resumo + questões + pílulas…\n⏱️ Tempo estimado: 30-60 segundos. Não feche esta aba.');
     try{
       const result=await generateAll(items,lesson,'summary',(p)=>{
         // ★ feedback de progresso durante extração/OCR
