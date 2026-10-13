@@ -33,7 +33,7 @@
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
   // ★ v1.0.91: bump 92 → 93 (Shaka skin + Pomodoro sidebar + video-in-panel + PDF split + rest mode fix + OCR AI routing + parallel dispatch).
-  const CACHE_VERSION = '160';  // ★ v160: retry incremental + TTS + pílulas elaborado + feedback melhorado
+  const CACHE_VERSION = '161';  // ★ v161: fix gdi-ai-providers not in CORE_CHAIN + study-theme selector fix
   window.CACHE_VERSION = CACHE_VERSION;
 
   const MODULES = [
@@ -244,7 +244,7 @@
       // carregando os módulos restantes. Antes já era assim no for-loop sequencial;
       // agora o mesmo comportamento é preservado nas chains paralelas via
       // `loadChain` que nunca rejeita (sempre resuelve com {ok, fail} counts).
-      const CORE_CHAIN = ['gdi-worker-bridge.js', 'storage.js', 'gdi-pdf.js', 'gdi-ui.js', 'gdi-player-enhancer.js'];
+      const CORE_CHAIN = ['gdi-worker-bridge.js', 'storage.js', 'gdi-pdf.js', 'gdi-ui.js', 'gdi-player-enhancer.js', 'gdi-ai-providers.js'];
       const MEGGY_CHAIN = [
         'meggy/meggy-utils.js',
         'meggy/meggy-pdf-engine.js',
