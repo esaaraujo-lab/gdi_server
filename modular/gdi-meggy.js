@@ -534,11 +534,32 @@
 
   // ── ISA call (POST /api/ai) ──
   // ── ISA call (POST /api/ai) ──
-  // ★ v156: Usa /api/ai/stream internamente para evitar timeout e dar feedback visual.
-  //   O streaming mantém a conexão viva (sem timeout de 60s) e permite
-  //   mostrar o texto aparecendo progressivamente na tela.
+  // ★ v157: Tenta /api/ai PRIMEIRO (com racing paralelo de todos os backends
+  //   incluindo Pollinations + Groq). Só usa /api/ai/stream como fallback.
+  //   Motivo: /api/ai tem Promise.any racing (CF + NVIDIA + OpenRouter + Pollinations + Groq)
+  //   enquanto /api/ai/stream só usa NVIDIA z-ai/glm-5.3 (lento).
   async function callIsa(prompt, onProgress){
-    // ★ v156: Tenta streaming primeiro (melhor UX + sem timeout)
+    // ★ v157: /api/ai PRIMEIRO (racing entre todos os backends)
+    try{
+      const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({message:prompt,messages:[]})});
+      if(r.ok){
+        const data=await r.json();
+        if(data.ok&&data.response&&data.response.trim().length>10){
+          // ★ Se onProgress, simula progresso (já temos o texto completo)
+          if(onProgress&&typeof onProgress==='function'){
+            onProgress(data.response);
+          }
+          return data.response;
+        }
+        if(!data.ok){
+          throw new Error(data.error||'Meggy indisponível');
+        }
+      }
+    }catch(apiErr){
+      console.warn('[Meggy] /api/ai falhou, tentando /api/ai/stream:',apiErr.message);
+    }
+    // ★ Fallback: /api/ai/stream (só NVIDIA, mas mantém conexão viva)
     try{
       const r=await fetch('/api/ai/stream',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({message:prompt,messages:[]})});
@@ -562,7 +583,7 @@
               if(parsed.text){
                 fullText+=parsed.text;
                 if(onProgress&&typeof onProgress==='function'){
-                  onProgress(fullText); // ★ feedback progressivo
+                  onProgress(fullText);
                 }
               }
               if(parsed.error){
@@ -576,17 +597,20 @@
         if(fullText&&fullText.trim().length>10){
           return fullText;
         }
-        // Se streaming retornou vazio, cai pro fallback não-streaming
       }
     }catch(streamErr){
-      console.warn('[Meggy] streaming falhou, tentando não-streaming:',streamErr.message);
+      console.warn('[Meggy] streaming também falhou:',streamErr.message);
     }
-    // ★ Fallback: /api/ai não-streaming (caso streaming falhe)
-    const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({message:prompt,messages:[]})});
-    const data=await r.json();
-    if(!data.ok)throw new Error(data.error||'Meggy indisponível');
-    return data.response||'';
+    // ★ Último recurso: Pollinations direto (sem key, sem worker)
+    if(window.gdiAiProviders&&window.gdiAiProviders.pollinations){
+      console.log('[Meggy] Tentando Pollinations direto (fallback final)');
+      const text=await window.gdiAiProviders.pollinations.complete(prompt);
+      if(onProgress&&typeof onProgress==='function'){
+        onProgress(text);
+      }
+      return text;
+    }
+    throw new Error('Todos os backends de IA falharam (worker + streaming + Pollinations)');
   }
 
   // ── Render Markdown (uses marked if available, fallback to <br>) ──
