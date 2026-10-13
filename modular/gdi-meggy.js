@@ -533,7 +533,55 @@
   }
 
   // ── ISA call (POST /api/ai) ──
-  async function callIsa(prompt){
+  // ── ISA call (POST /api/ai) ──
+  // ★ v156: Usa /api/ai/stream internamente para evitar timeout e dar feedback visual.
+  //   O streaming mantém a conexão viva (sem timeout de 60s) e permite
+  //   mostrar o texto aparecendo progressivamente na tela.
+  async function callIsa(prompt, onProgress){
+    // ★ v156: Tenta streaming primeiro (melhor UX + sem timeout)
+    try{
+      const r=await fetch('/api/ai/stream',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({message:prompt,messages:[]})});
+      if(r.ok&&r.headers.get('content-type')&&r.headers.get('content-type').includes('text/event-stream')){
+        const reader=r.body.getReader();
+        const decoder=new TextDecoder();
+        let buffer='';
+        let fullText='';
+        while(true){
+          const{done,value}=await reader.read();
+          if(done)break;
+          buffer+=decoder.decode(value,{stream:true});
+          const lines=buffer.split('\n');
+          buffer=lines.pop()||'';
+          for(const line of lines){
+            if(!line.startsWith('data: '))continue;
+            const data=line.slice(6).trim();
+            if(data==='[DONE]')continue;
+            try{
+              const parsed=JSON.parse(data);
+              if(parsed.text){
+                fullText+=parsed.text;
+                if(onProgress&&typeof onProgress==='function'){
+                  onProgress(fullText); // ★ feedback progressivo
+                }
+              }
+              if(parsed.error){
+                throw new Error(parsed.error);
+              }
+            }catch(e){
+              if(e.message&&e.message.length>5)throw e;
+            }
+          }
+        }
+        if(fullText&&fullText.trim().length>10){
+          return fullText;
+        }
+        // Se streaming retornou vazio, cai pro fallback não-streaming
+      }
+    }catch(streamErr){
+      console.warn('[Meggy] streaming falhou, tentando não-streaming:',streamErr.message);
+    }
+    // ★ Fallback: /api/ai não-streaming (caso streaming falhe)
     const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({message:prompt,messages:[]})});
     const data=await r.json();
@@ -923,8 +971,8 @@
   // callIsa para tarefas paralelas — SEM header customizado (evita CORS)
   // O worker já faz round-robin entre as chaves NVIDIA automaticamente.
   // Requisições paralelas naturalmente usam chaves diferentes.
-  async function callIsaKeyed(prompt,keyHint){
-    return callIsa(prompt);
+  async function callIsaKeyed(prompt,keyHint,onProgress){
+    return callIsa(prompt,onProgress);
   }
 
   // Gera TODOS os materiais EM PARALELO TOTAL (não em cascata)
@@ -1110,9 +1158,9 @@
         //   - exige ## títulos + ### subtítulos + EXEMPLOS práticos + pegadinhas
         //   - seções ## Pegadinhas de Prova e ## Resumo Rápido ao final
         //   - usa até 40000 chars do material (era 20000)
-        fn:()=>callIsaKeyed('Você é um professor especialista em concursos públicos. Leia TODO o material abaixo e crie um RESUMO PROFUNDO E DETALHADO em Markdown.\n\nREQUISITOS:\n- Mínimo 2000 caracteres (NÃO seja breve)\n- Estruture com ## títulos e ### subtítulos\n- Para CADA tópico: explique o conceito, dê EXEMPLOS práticos, e destaque pegadinhas de prova\n- Use **negrito** para palavras-chave e dispositivos legais\n- Use listas com marcadores para enumerações\n- Inclua uma seção ## Pegadinhas de Prova no final\n- Inclua uma seção ## Resumo Rápido com 5-10 bullets dos pontos mais importantes\n\nNÃO omita nenhum tema. Seja PROFUNDO, não conciso.\n\nMaterial:\n'+allText.slice(0,40000),0)
+        fn:()=>callIsaKeyed('Você é um professor especialista em concursos públicos. Leia TODO o material abaixo e crie um RESUMO DETALHADO em Markdown.\n\nREQUISITOS:\n- Mínimo 1500 caracteres\n- Estruture com ## títulos e ### subtítulos\n- Para CADA tópico: explique o conceito, dê EXEMPLOS práticos, e destaque pegadinhas de prova\n- Use **negrito** para palavras-chave e dispositivos legais\n- Use listas com marcadores para enumerações\n- Inclua uma seção ## Pegadinhas de Prova no final\n- Inclua uma seção ## Resumo Rápido com 5-10 bullets dos pontos mais importantes\n\nSeja detalhado mas objetivo. Foque nos pontos que caem em prova.\n\nMaterial:\n'+allText.slice(0,40000),0)
           .then(r=>{if(r&&r.trim()){_chainCache[key].summary=r;saveIsaSummary(lesson,r,_coursePath,_subject);}})
-          .catch(e=>console.warn('[Meggy] resumo falhou',e.message))
+          .catch(e=>{console.warn('[Meggy] resumo falhou',e.message);if(progressCb)progressCb({phase:'error',task:'resumo',error:e.message});})
       });
     }
 
@@ -1166,7 +1214,7 @@
                 addQBatch(_batchAI);
               }catch(e){console.warn('[Meggy] parse questões falhou',e.message);}
             })
-            .catch(e=>console.warn('[Meggy] questões falharam',e.message))
+            .catch(e=>{console.warn('[Meggy] questões falharam',e.message);if(progressCb)progressCb({phase:'error',task:'questões',error:e.message});})
         });
       });
     }
