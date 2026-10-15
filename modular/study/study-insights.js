@@ -353,7 +353,8 @@
     }
 
     // Sucesso — renderiza a resposta em Markdown simples
-    const md=String(data.response||'');
+    // ★ v1.0.190 FIX: API retorna campo `markdown` (não `response`). Aceita ambos para compat.
+    const md=String(data.response||data.markdown||'');
     // Markdown muito simples: ## → h2, ** → bold, listas com -
     let html=escHtml(md)
       .replace(/^## (.+)$/gm,'<h3 style="color:var(--ferreto-text,#f0f6fc);font-size:13px;font-weight:700;margin:12px 0 6px;">$1</h3>')
