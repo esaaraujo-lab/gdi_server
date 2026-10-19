@@ -388,7 +388,8 @@
       {id:'cronograma',icon:'bi-calendar3',label:'Cronograma'},
       {id:'stats',icon:'bi-graph-up',label:'Estatísticas'},
       {id:'radar',icon:'bi-bullseye',label:'Mapa de Fracos'},
-      {id:'achievements',icon:'bi-trophy',label:'Conquistas'}
+      {id:'achievements',icon:'bi-trophy',label:'Conquistas'},
+      {id:'apps',icon:'bi-download',label:'Apps'}
     ]}
   ];
 
@@ -519,10 +520,105 @@
     else if(currentTab==='radar'){if(window.renderRadar)window.renderRadar(body);else body.innerHTML='<div class="gdi-empty-state"><span class="gdi-empty-state-icon">🎯</span><h3>Radar indisponível</h3><p>O módulo de radar não carregou.</p></div>';}
     else if(currentTab==='stats')renderStats(body);
     else if(currentTab==='achievements')renderAchievements(body);
+    else if(currentTab==='apps')renderApps(body);
     // REMOVIDO: tabs cursos/mar/revisoes/fc/subjects/trails não têm mais handler
     // (funções renderCursos/renderMarathon/renderRevisoes/renderFlash/renderSubjects/renderTrails
     //  permanecem definidas abaixo para preservar a API pública)
     else body.innerHTML='<div class="gdi-notes-empty">Aba inválida.</div>';
+  }
+
+  // ═══ v1.0.197: ABA APPS — links para Android, Windows, Roku ═══
+  function renderApps(body){
+    body.innerHTML=`
+      <div style="padding:20px;">
+        <h2 style="color:var(--ferreto-text,#f0f6fc);font-size:18px;margin:0 0 20px;">📱 Apps Meggy</h2>
+        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin:0 0 24px;">Baixe o app da Meggy para suas plataformas e estude em qualquer lugar.</p>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;">
+
+          <!-- Android -->
+          <div style="background:linear-gradient(135deg,rgba(93,222,218,.08),rgba(93,222,218,.02));border:1px solid rgba(93,222,218,.3);border-radius:14px;padding:20px;">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+              <span style="font-size:32px;">🤖</span>
+              <div>
+                <div style="font-size:15px;font-weight:700;color:var(--ferreto-text,#f0f6fc);">Android</div>
+                <div style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);">Smartphones e Tablets</div>
+              </div>
+            </div>
+            <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0 0 14px;line-height:1.5;">App nativo Kotlin com ExoPlayer, navegação Netflix-style, download offline e auto-update.</p>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <a href="https://github.com/esaaraujo-lab/student_gdi/releases/download/v2.5.1/meggy-android-v2.5.1.apk" target="_blank" style="display:block;text-align:center;padding:10px 16px;background:linear-gradient(135deg,#5ddeda,#3aa8a4);color:#0d1119;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600;">⬇ Baixar APK (v2.5.1)</a>
+              <a href="https://github.com/esaaraujo-lab/student_gdi/releases" target="_blank" style="display:block;text-align:center;padding:8px 16px;background:transparent;color:var(--ferreto-text-muted,#8b949e);text-decoration:none;border:1px solid var(--ferreto-border,#30363d);border-radius:8px;font-size:12px;">Ver todas as versões</a>
+            </div>
+            <div style="margin-top:12px;font-size:11px;color:var(--ferreto-text-muted,#8b949e);">
+              <div>✓ Android 7.0+ (API 24+)</div>
+              <div>✓ ExoPlayer + Coil thumbnails</div>
+              <div>✓ Download offline</div>
+            </div>
+          </div>
+
+          <!-- Windows/Linux -->
+          <div style="background:linear-gradient(135deg,rgba(255,139,159,.08),rgba(255,139,159,.02));border:1px solid rgba(255,139,159,.3);border-radius:14px;padding:20px;">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+              <span style="font-size:32px;">💻</span>
+              <div>
+                <div style="font-size:15px;font-weight:700;color:var(--ferreto-text,#f0f6fc);">Windows / Linux</div>
+                <div style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);">Desktop nativo (Tauri 2.0)</div>
+              </div>
+            </div>
+            <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0 0 14px;line-height:1.5;">App desktop com Tauri 2.0 (Rust), multi-janela, atalhos globais, auto-update e TTS.</p>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <a href="https://github.com/esaaraujo-lab/student_gdi/releases/download/v1.3.1/meggy-windows-v1.3.1.msi" target="_blank" style="display:block;text-align:center;padding:10px 16px;background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600;">⬇ Baixar Windows (.msi)</a>
+              <a href="https://github.com/esaaraujo-lab/student_gdi/releases/download/v1.3.1/meggy-linux-v1.3.1.AppImage" target="_blank" style="display:block;text-align:center;padding:8px 16px;background:transparent;color:var(--ferreto-text-muted,#8b949e);text-decoration:none;border:1px solid var(--ferreto-border,#30363d);border-radius:8px;font-size:12px;">⬇ Linux (.AppImage)</a>
+            </div>
+            <div style="margin-top:12px;font-size:11px;color:var(--ferreto-text-muted,#8b949e);">
+              <div>✓ Windows 10/11 64-bit</div>
+              <div>✓ Multi-janela + atalhos globais</div>
+              <div>✓ Auto-update + TTS</div>
+            </div>
+          </div>
+
+          <!-- Roku -->
+          <div style="background:linear-gradient(135deg,rgba(139,148,158,.08),rgba(139,148,158,.02));border:1px solid rgba(139,148,158,.3);border-radius:14px;padding:20px;">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+              <span style="font-size:32px;">📺</span>
+              <div>
+                <div style="font-size:15px;font-weight:700;color:var(--ferreto-text,#f0f6fc);">Roku TV / Stick</div>
+                <div style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);">Smart TV (sideload)</div>
+              </div>
+            </div>
+            <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0 0 14px;line-height:1.5;">App nativo Roku (BrightScript + SceneGraph) para TV. Instalação manual via Developer Mode.</p>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <a href="https://github.com/esaaraujo-lab/student_gdi/raw/main/roku-app/meggy-roku-v1.0.2.zip" target="_blank" style="display:block;text-align:center;padding:10px 16px;background:linear-gradient(135deg,#8b949e,#586069);color:#fff;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600;">⬇ Baixar ZIP (v1.0.2)</a>
+              <a href="https://github.com/esaaraujo-lab/student_gdi/blob/main/roku-app/INSTALACAO.md" target="_blank" style="display:block;text-align:center;padding:8px 16px;background:transparent;color:var(--ferreto-text-muted,#8b949e);text-decoration:none;border:1px solid var(--ferreto-border,#30363d);border-radius:8px;font-size:12px;">📖 Guia de instalação</a>
+            </div>
+            <div style="margin-top:12px;font-size:11px;color:var(--ferreto-text-muted,#8b949e);">
+              <div>✓ Roku TV, Stick, Ultra</div>
+              <div>✓ Player com resume</div>
+              <div>✓ Instalação via Developer Mode</div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Info box -->
+        <div style="margin-top:24px;background:rgba(93,222,218,.05);border:1px solid rgba(93,222,218,.2);border-radius:12px;padding:16px;">
+          <div style="display:flex;align-items:flex-start;gap:12px;">
+            <span style="font-size:20px;">💡</span>
+            <div style="flex:1;">
+              <div style="color:var(--ferreto-text,#f0f6fc);font-size:13px;font-weight:600;margin-bottom:4px;">Não sabe qual baixar?</div>
+              <div style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;line-height:1.5;">
+                <strong>Android</strong>: instale o APK no celular (ative "Fontes desconhecidas" nas configurações).<br>
+                <strong>Windows</strong>: execute o .msi e siga o assistente de instalação.<br>
+                <strong>Roku</strong>: ative o Developer Mode na TV e faça sideload do ZIP (ver guia).<br>
+                <br>
+                📱 Plataforma web também disponível: <a href="https://educa.eu.org" style="color:var(--ferreto-accent,#5ddeda);">educa.eu.org</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   function renderPanel(){
@@ -1660,7 +1756,7 @@
           // Validate the requested tab against the known set; fall back to 'home'
           // ★ FIX (Agent 10 Bug 20): unknown ?central=foo no longer opens a blank
           //    panel — falls back to 'home' instead.
-          const KNOWN_TABS = ['home','drives','questoes','simulado','addmateria','resumos','provas','redacao','cronograma','stats','radar','achievements'];
+          const KNOWN_TABS = ['home','drives','questoes','simulado','addmateria','resumos','provas','redacao','cronograma','stats','radar','achievements','apps'];
           // Espera GDIUser estar pronto (state carregado) antes de abrir
           const openNow = function(){
             let tab = (autoOpen === '1' || autoOpen === 'true') ? 'home' : autoOpen;
