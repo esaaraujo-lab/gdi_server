@@ -9,26 +9,18 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import org.json.JSONArray
 
 /**
  * ApiService — thin Kotlin wrapper around the worker.js HTTP API at https://educa.eu.org.
- *
- * All methods are `suspend` and run on [Dispatchers.IO]. Throws [ApiException] on
- * any non-2xx (or unexpected redirect) response.
- *
- * Endpoints used:
- *   POST /login                                    (form-encoded, expect 302 + Set-Cookie)
- *   POST /<driveIdx>:/                             (JSON body, list folder)
- *   GET  /api/courses/list                         (JSON, list enrolled courses)
  */
 class ApiService(private val app: BiBiGynApp) {
 
     /**
      * Login. Returns the session cookie value (without the `session=` prefix).
      *
-     * The worker returns 302 on success and a 200/401 on failure. We deliberately
-     * disable auto-redirect in the OkHttp client so we can capture the Set-Cookie
-     * header from the 302 response.
+     * ★ FIX: Worker retorna HTTP 200 (não 302) no sucesso, com Set-Cookie header.
+     * Antes o app tratava 200 como falha — agora verifica Set-Cookie em ambos 200 e 302.
      */
     suspend fun login(username: String, password: String): LoginResult = withContext(Dispatchers.IO) {
         try {
@@ -42,21 +34,25 @@ class ApiService(private val app: BiBiGynApp) {
                 .build()
             val resp = app.client.newCall(req).execute()
             resp.use { r ->
-                when (r.code) {
-                    in 300..399 -> {
-                        // Success — extract session cookie from Set-Cookie
-                        val cookieHeader = r.header("Set-Cookie") ?: return@use LoginResult.Failure(
-                            "Servidor não retornou cookie de sessão (resposta vazia)."
-                        )
-                        val cookie = parseCookieValue(cookieHeader, "session")
-                            ?: return@use LoginResult.Failure("Cookie de sessão não encontrado.")
-                        LoginResult.Success(sessionCookie = cookie, username = username)
+                // ★ Worker retorna 200 com Set-Cookie no sucesso, 401 no fracasso
+                if (r.code == 200 || r.code == 302) {
+                    // Verifica Set-Cookie (pode vir múltiplos headers)
+                    val cookies = r.headers("Set-Cookie")
+                    for (cookie in cookies) {
+                        if (cookie.startsWith("session=")) {
+                            val sessionValue = cookie.substringAfter("session=").substringBefore(";")
+                            if (sessionValue.isNotEmpty()) {
+                                return@use LoginResult.Success(sessionCookie = sessionValue, username = username)
+                            }
+                        }
                     }
-                    200 -> LoginResult.Failure(
-                        "Credenciais inválidas ou endpoint de login em manutenção (200)."
-                    )
-                    401, 403 -> LoginResult.Failure("Usuário ou senha incorretos.")
-                    else -> LoginResult.Failure("Erro de login: HTTP ${r.code}")
+                    // 200/302 sem cookie de sessão → credenciais inválidas
+                    return@use LoginResult.Failure("Usuário ou senha incorretos.")
+                }
+                if (r.code == 401 || r.code == 403) {
+                    LoginResult.Failure("Usuário ou senha incorretos.")
+                } else {
+                    LoginResult.Failure("Erro de login: HTTP ${r.code}")
                 }
             }
         } catch (e: Exception) {
@@ -66,10 +62,6 @@ class ApiService(private val app: BiBiGynApp) {
 
     /**
      * List the contents of a folder.
-     *
-     * @param driveIdx  drive index (0..11) — path segment of the URL.
-     * @param folderId  encrypted folder ID. Pass `null` for the root of the drive.
-     * @param pageToken continuation token from a previous call, or null for the first page.
      */
     suspend fun listFolder(
         driveIdx: Int,
@@ -79,78 +71,96 @@ class ApiService(private val app: BiBiGynApp) {
         val session = SessionManager.get(app).sessionCookie
             ?: throw ApiException("Not logged in")
 
-        val bodyJson = JSONObject().apply {
+        val jsonBody = JSONObject().apply {
             put("id", folderId ?: "")
             put("type", "folder")
             put("password", "")
-            put("page_token", pageToken ?: JSONObject.NULL)
+            put("page_token", if (pageToken != null) pageToken else JSONObject.NULL)
             put("page_index", 0)
         }.toString()
 
         val req = Request.Builder()
             .url("${BiBiGynApp.BASE_URL}/$driveIdx:/")
+            .post(jsonBody.toRequestBody("application/json".toMediaType()))
             .header("Cookie", "session=$session")
             .header("Content-Type", "application/json")
-            .post(bodyJson.toRequestBody("application/json".toMediaType()))
             .build()
 
         val resp = app.client.newCall(req).execute()
         resp.use { r ->
-            if (!r.isSuccessful) {
-                throw ApiException("listFolder HTTP ${r.code}: ${r.message}")
+            if (!r.isSuccessful) throw ApiException("HTTP ${r.code}")
+
+            val body = r.body?.string() ?: throw ApiException("Empty response")
+
+            // Check if response is HTML (login redirect)
+            if (body.trimStart().startsWith("<!DOCTYPE") || body.trimStart().startsWith("<html")) {
+                throw ApiException("Session expired")
             }
-            val text = r.body?.string().orEmpty()
-            if (text.isBlank()) throw ApiException("listFolder: resposta vazia do servidor")
-            try {
-                FolderListing.parse(text)
-            } catch (e: Exception) {
-                throw ApiException("listFolder: JSON inválido — ${e.message}")
+
+            val json = JSONObject(body)
+            val files = json.optJSONObject("data")?.optJSONArray("files") ?: JSONArray()
+            val result = mutableListOf<FileItem>()
+            for (i in 0 until files.length()) {
+                val f = files.getJSONObject(i)
+                result.add(FileItem(
+                    name = f.optString("name"),
+                    mimeType = f.optString("mimeType"),
+                    id = f.optString("id"),
+                    driveId = f.optString("driveId"),
+                    link = f.optString("link", null),
+                    size = f.optLong("size", 0L),
+                    modifiedTime = f.optString("modifiedTime", null)
+                ))
             }
+            FolderListing(files = result, nextPageToken = null)
         }
     }
 
     /**
-     * List the courses the current user is enrolled in. May return an empty list
-     * if the worker does not have the /api/courses/list endpoint enabled.
+     * List enrolled courses.
      */
     suspend fun listCourses(): List<CourseItem> = withContext(Dispatchers.IO) {
-        val session = SessionManager.get(app).sessionCookie ?: return@withContext emptyList()
+        val session = SessionManager.get(app).sessionCookie
+            ?: return@withContext emptyList()
+
         val req = Request.Builder()
             .url("${BiBiGynApp.BASE_URL}/api/courses/list")
             .header("Cookie", "session=$session")
-            .get()
             .build()
+
         try {
             val resp = app.client.newCall(req).execute()
             resp.use { r ->
                 if (!r.isSuccessful) return@use emptyList()
-                val text = r.body?.string().orEmpty()
-                if (text.isBlank()) return@use emptyList()
-                CourseItem.parse(text)
+                val body = r.body?.string() ?: return@use emptyList()
+                if (body.trimStart().startsWith("<")) return@use emptyList()
+
+                val json = JSONObject(body)
+                if (!json.optBoolean("ok")) return@use emptyList()
+
+                val courses = json.optJSONArray("courses") ?: return@use emptyList()
+                val result = mutableListOf<CourseItem>()
+                for (i in 0 until courses.length()) {
+                    val c = courses.getJSONObject(i)
+                    result.add(CourseItem(
+                        coursePath = c.optString("coursePath"),
+                        courseName = c.optString("courseName")
+                    ))
+                }
+                result
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             emptyList()
         }
     }
 
-    // ───────── helpers ─────────
-
-    /**
-     * Extract the value of [name] from a Set-Cookie header such as
-     * `session=abc; Path=/; HttpOnly`. Returns null if not found.
-     */
-    private fun parseCookieValue(setCookie: String, name: String): String? {
-        val parts = setCookie.split(';')
-        for (p in parts) {
-            val trimmed = p.trim()
-            val eq = trimmed.indexOf('=')
-            if (eq > 0 && trimmed.substring(0, eq) == name) {
-                return trimmed.substring(eq + 1).trim()
+    private fun parseCookieValue(header: String, key: String): String? {
+        for (part in header.split(";")) {
+            val trimmed = part.trim()
+            if (trimmed.startsWith("$key=")) {
+                return trimmed.substringAfter("=")
             }
         }
         return null
     }
 }
-
-/** Thrown when an API call fails for any reason. */
-class ApiException(message: String) : Exception(message)
