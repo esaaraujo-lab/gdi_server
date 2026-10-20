@@ -5,7 +5,7 @@ import com.bibigyn.app.util.SessionManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
-import okhttp3.MediaType.Companion.toJsonMediaType
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
@@ -91,7 +91,7 @@ class ApiService(private val app: BiBiGynApp) {
             .url("${BiBiGynApp.BASE_URL}/$driveIdx:/")
             .header("Cookie", "session=$session")
             .header("Content-Type", "application/json")
-            .post(bodyJson.toRequestBody("application/json".toJsonMediaType()))
+            .post(bodyJson.toRequestBody("application/json".toMediaType()))
             .build()
 
         val resp = app.client.newCall(req).execute()
