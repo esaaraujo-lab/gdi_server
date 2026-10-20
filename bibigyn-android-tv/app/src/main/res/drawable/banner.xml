@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    BiBi Gyn TV banner — 320x180dp (Android TV banner spec).
+    Gradient fitness theme: teal → pink with "BiBi Gyn" wordmark.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+
+    <!-- Background gradient: teal → pink (fitness + saúde) -->
+    <path
+        android:fillColor="#5DDEDA"
+        android:pathData="M0,0 H320 V180 H0 Z" />
+
+    <!-- Diagonal accent -->
+    <path
+        android:fillColor="#FF8B9F"
+        android:pathData="M0,120 L320,60 L320,180 L0,180 Z" />
+
+    <!-- Left accent bar -->
+    <path
+        android:fillColor="#0D1119"
+        android:pathData="M0,0 H8 V180 H0 Z" />
+
+    <!-- "BiBi Gyn" text — simplified as rectangles (vector text is complex) -->
+    <!-- B -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M40,60 H70 V70 H50 V80 H65 V90 H50 V110 H40 Z" />
+    <!-- i -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M80,60 H90 V110 H80 Z M80,50 H90 V60 H80 Z" />
+    <!-- B -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M100,60 H130 V70 H110 V80 H125 V90 H110 V110 H100 Z" />
+    <!-- i -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M140,60 H150 V110 H140 Z M140,50 H150 V60 H140 Z" />
+
+    <!-- "Gyn" subtitle area -->
+    <path
+        android:fillColor="#0D1119"
+        android:pathData="M40,120 H280 V140 H40 Z" />
+
+    <!-- Fitness icon (dumbbell shape) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M200,75 H210 V95 H200 Z M190,80 H200 V90 H190 Z M210,80 H220 V90 H210 Z M220,75 H230 V95 H220 Z" />
+
+</vector>
