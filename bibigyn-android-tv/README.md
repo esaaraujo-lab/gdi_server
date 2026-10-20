@@ -1,4 +1,4 @@
-# 📺 BiBi Gyn — Android TV App
+# 📺 BiBi Fit — Android TV App
 
 App Android TV (Leanback) para as plataformas **Clube Fit** e **Hipopressivos** do educa.eu.org.
 
@@ -6,9 +6,9 @@ Baseado no app Meggy, mas com apenas 2 drives (fitness + saúde) e nome/capa dif
 
 ## 🎯 Diferenças do Meggy
 
-| Característica | Meggy | BiBi Gyn |
+| Característica | Meggy | BiBi Fit |
 |---------------|-------|----------|
-| **Nome** | Meggy | BiBi Gyn |
+| **Nome** | Meggy | BiBi Fit |
 | **Package ID** | `com.meggy.app` | `com.bibigyn.app` |
 | **Drives** | 12 (todos) | 2 (Clube Fit + Hipopressivos) |
 | **Tema** | Poodle (rosa/roxo) | Fitness (teal/rosa + halteres) |
@@ -82,17 +82,17 @@ bibigyn-android-tv/
 │       └── res/
 │           ├── drawable/banner.xml           # TV banner (320x180dp)
 │           ├── drawable/ic_launcher_*.xml    # Ícone halteres
-│           └── values/strings.xml            # app_name = "BiBi Gyn"
+│           └── values/strings.xml            # app_name = "BiBi Fit"
 ├── build-workflow.yml                        # GitHub Actions
 └── README.md
 ```
 
 ## 🎨 Identidade Visual
 
-- **Nome**: BiBi Gyn
+- **Nome**: BiBi Fit
 - **Ícone**: Halteres (dumbbell) com coração
 - **Cores**: Teal (#5DDEDA) → Rosa (#FF8B9F) — gradiente fitness
-- **Banner TV**: 320x180dp com "BiBi Gyn" + halteres
+- **Banner TV**: 320x180dp com "BiBi Fit" + halteres
 
 ## 📞 Suporte
 
