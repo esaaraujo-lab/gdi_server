@@ -35,7 +35,34 @@ class LoginActivity : AppCompatActivity() {
             } else false
         }
 
+        // ★ TV FIX: scroll automático para o campo focado quando o teclado aparece
+        setupKeyboardScrollFix()
+
         binding.username.requestFocus()
+    }
+
+    /**
+     * ★ TV FIX: Quando um campo recebe foco (e o teclado on-screen aparece),
+     * rola o ScrollView para garantir que o campo fique visível acima do teclado.
+     */
+    private fun setupKeyboardScrollFix() {
+        val scrollView = binding.loginScroll
+        val fields = listOf(binding.username, binding.password, binding.btnLogin)
+
+        for (field in fields) {
+            field.setOnFocusChangeListener { view, hasFocus ->
+                if (hasFocus) {
+                    view.post {
+                        val location = IntArray(2)
+                        view.getLocationInWindow(location)
+                        val viewTop = location[1]
+                        val targetY = scrollView.height / 4
+                        val scrollOffset = maxOf(0, viewTop - targetY)
+                        scrollView.smoothScrollTo(0, scrollOffset)
+                    }
+                }
+            }
+        }
     }
 
     private fun attemptLogin() {
@@ -56,10 +83,6 @@ class LoginActivity : AppCompatActivity() {
             val success = withContext(Dispatchers.IO) { api.login(user, pass) }
             setLoading(false)
             if (success) {
-                // ★ v2.0.2: Clear the entire back stack when going to Home.
-                // Combined with android:noHistory="true" on LoginActivity in
-                // the manifest, this guarantees the user can NEVER press back
-                // to return to the login screen after a successful login.
                 val intent = Intent(this@LoginActivity, HomeActivity::class.java)
                 intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                 startActivity(intent)
