@@ -19,7 +19,7 @@ android {
         minSdk 21
         targetSdk 34
         // ★ v2.0.0: Bottom Nav (4 tabs) + Hero rotativo + Search/MyList/Settings + Player gestures
-        versionCode 3
+        versionCode 4
         versionName "2.0.2"
     }
 
