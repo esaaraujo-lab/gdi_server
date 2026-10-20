@@ -28,18 +28,21 @@ android {
     }
 
     signingConfigs {
-        // Re-use the debug keystore as the release signing config.
-        // This is the same approach used by gdi-app v1.0.6 to resolve
-        // "pacote inválido" errors when sideloading the APK on Android TV.
+        // Use debug keystore for both debug and release builds.
+        // On GitHub Actions: generated at ~/.android/debug.keystore
+        // Locally: falls back to app/debug.keystore if present
+        def keystoreFile = file("${System.getProperty('user.home')}/.android/debug.keystore")
+        if (!keystoreFile.exists()) {
+            keystoreFile = file("debug.keystore")
+        }
         debug {
-            storeFile keystoreProperties.containsKey("storeFile") ? file(keystoreProperties['storeFile']) : file("debug.keystore")
+            storeFile keystoreProperties.containsKey("storeFile") ? file(keystoreProperties['storeFile']) : keystoreFile
             storePassword keystoreProperties.containsKey("storePassword") ? keystoreProperties['storePassword'] : "android"
             keyAlias keystoreProperties.containsKey("keyAlias") ? keystoreProperties['keyAlias'] : "androiddebugkey"
             keyPassword keystoreProperties.containsKey("keyPassword") ? keystoreProperties['keyPassword'] : "android"
         }
         release {
-            // Same as debug — keeps APK installable alongside the system debug-signed apps.
-            storeFile keystoreProperties.containsKey("storeFile") ? file(keystoreProperties['storeFile']) : file("debug.keystore")
+            storeFile keystoreProperties.containsKey("storeFile") ? file(keystoreProperties['storeFile']) : keystoreFile
             storePassword keystoreProperties.containsKey("storePassword") ? keystoreProperties['storePassword'] : "android"
             keyAlias keystoreProperties.containsKey("keyAlias") ? keystoreProperties['keyAlias'] : "androiddebugkey"
             keyPassword keystoreProperties.containsKey("keyPassword") ? keystoreProperties['keyPassword'] : "android"
