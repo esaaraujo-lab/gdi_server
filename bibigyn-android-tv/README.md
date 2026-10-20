@@ -1,108 +1,87 @@
-# 📺 BiBi Fit — Android TV App
+# Meggy — Native Android App
 
-App Android TV (Leanback) para as plataformas **Clube Fit** e **Hipopressivos** do educa.eu.org.
+A native Kotlin Android app for the [Meggy / GDI Index](https://educa.eu.org) study platform.
+Replaces the previous Flutter WebView wrapper with a proper native experience
+built on Material 3 + ExoPlayer + Leanback.
 
-Baseado no app Meggy, mas com apenas 2 drives (fitness + saúde) e nome/capa diferentes para não conflitar com o app Meggy principal.
+## Highlights
 
-## 🎯 Diferenças do Meggy
+- **Material 3** dark theme with Meggy pink → purple gradient branding
+- **Grid UI** for the 12 root drives + enrolled courses (auto-fit columns: 2 on phones, 5–6 on TV)
+- **Folder browsing** via the worker.js JSON API, with breadcrumb navigation
+- **ExoPlayer / Media3** video player with:
+  - Cookie-authenticated streaming (session cookie injected as a request header)
+  - Resume position saved per-file (SharedPreferences)
+  - 0.5×–2.0× speed control
+  - Picture-in-picture (Android 8+)
+- **D-pad friendly** — works on phones, tablets, and Android TV / Google TV
+  - Optional `leanback` feature (installs on non-TV devices too)
+  - `LEANBACK_LAUNCHER` category so it appears in the TV launcher
+- **OkHttp 4.x** networking (simpler than Retrofit, fewer deps)
+- **Signing config** uses the debug keystore — APK installs alongside other
+  sideloaded apps without "pacote inválido" errors
 
-| Característica | Meggy | BiBi Fit |
-|---------------|-------|----------|
-| **Nome** | Meggy | BiBi Fit |
-| **Package ID** | `com.meggy.app` | `com.bibigyn.app` |
-| **Drives** | 12 (todos) | 2 (Clube Fit + Hipopressivos) |
-| **Tema** | Poodle (rosa/roxo) | Fitness (teal/rosa + halteres) |
-| **Foco** | Estudos geral | Fitness + saúde |
+## Project Layout
 
-## 📦 Drives Incluídos
+```
+meggy-native-app/
+├── settings.gradle
+├── build.gradle                  # root (AGP 8.1.4, Kotlin 1.9.10)
+├── gradle.properties
+├── gradle/wrapper/gradle-wrapper.properties   # Gradle 8.2
+├── build-workflow.yml            # GitHub Actions workflow (copy to .github/workflows/)
+└── app/
+    ├── build.gradle              # app deps: Material3, Media3, OkHttp, Leanback
+    ├── proguard-rules.pro
+    └── src/main/
+        ├── AndroidManifest.xml
+        ├── java/com/meggy/app/
+        │   ├── MeggyApp.kt              # Application class + OkHttp singleton
+        │   ├── data/
+        │   │   ├── ApiService.kt        # login / listFolder / listCourses
+        │   │   └── Models.kt            # DriveItem, FileItem, FolderListing, ...
+        │   ├── util/SessionManager.kt   # cookie + resume position storage
+        │   └── ui/
+        │       ├── splash/SplashActivity.kt
+        │       ├── login/LoginActivity.kt
+        │       ├── home/{HomeActivity,DriveAdapter}.kt
+        │       ├── browse/{BrowseActivity,FileAdapter}.kt
+        │       └── player/PlayerActivity.kt
+        └── res/
+            ├── values/{strings,colors,themes}.xml
+            ├── layout/{activity_splash,activity_login,activity_home,
+            │          activity_browse,activity_player,item_drive,item_file}.xml
+            ├── drawable/{gradient_meggy,ic_launcher_*,banner,...}.xml
+            └── mipmap-anydpi-v26/{ic_launcher,ic_launcher_round}.xml
+```
 
-1. **Clube Fit** (`/6:/`) — Treinos, aulas de fitness
-2. **Hipopressivos** (`/7:/`) — Exercícios hipopressivos
+## Build
 
-## ✨ Funcionalidades
+The project is built via GitHub Actions (see `build-workflow.yml`). Locally:
 
-Mesmas do Meggy.apk:
-- ✅ Login (cookie de sessão persistente)
-- ✅ Home com grid de drives
-- ✅ Navegação de pastas (browse)
-- ✅ Player de vídeo (ExoPlayer)
-- ✅ Playlist com próxima aula automática
-- ✅ Resume (continuar de onde parou)
-- ✅ Android TV compatível (D-pad, leanback)
-- ✅ Também funciona em smartphones/tablets
-
-## 🚀 Instalação
-
-### Android TV (sideload)
 ```bash
-adb install bibigyn-release.apk
+cd meggy-native-app
+# Generate a debug keystore if you don't already have one:
+keytool -genkey -v -keystore app/debug.keystore -storepass android \
+  -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 \
+  -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+# Build:
+gradle assembleRelease
+# Output: app/build/outputs/apk/release/app-release.apk
 ```
 
-### Smartphone/Tablet
-```bash
-adb install bibigyn-release.apk
-```
+Requirements: JDK 17, Android SDK 34, Gradle 8.2 (or use the included wrapper).
 
-### Login
-- **Usuário**: seu email (ex: `elton@araujo.eu.org`)
-- **Senha**: sua senha do educa.eu.org
+## API
 
-## 🔨 Build
+The app talks to `https://educa.eu.org` via three endpoints:
 
-### Local
-```bash
-cd bibigyn-android-tv
-./gradlew assembleRelease
-# APK: app/build/outputs/apk/release/app-release.apk
-```
+| Endpoint                  | Method | Description                                       |
+|---------------------------|--------|---------------------------------------------------|
+| `/login`                  | POST   | Form-encoded username/password → 302 + Set-Cookie |
+| `/<driveIdx>:/`           | POST   | JSON body → folder listing                       |
+| `/api/courses/list`       | GET    | Enrolled courses (optional, best-effort)         |
 
-### GitHub Actions (CI/CD)
-O workflow `.github/workflows/bibigyn-android-tv.yml` builda automaticamente a cada push. Em tags `v*`, cria GitHub Release com o APK.
-
-## 📁 Estrutura
-
-```
-bibigyn-android-tv/
-├── app/
-│   ├── build.gradle                          # applicationId: com.bibigyn.app
-│   └── src/main/
-│       ├── AndroidManifest.xml              # LEANBACK_LAUNCHER
-│       ├── java/com/bibigyn/app/
-│       │   ├── BiBiGynApp.kt               # Application class
-│       │   ├── data/
-│       │   │   ├── ApiService.kt           # HTTP client
-│       │   │   └── Models.kt               # DriveItem.ALL = 2 drives
-│       │   ├── ui/
-│       │   │   ├── splash/SplashActivity.kt
-│       │   │   ├── login/LoginActivity.kt
-│       │   │   ├── home/HomeActivity.kt     # Grid de 2 drives
-│       │   │   ├── browse/BrowseActivity.kt # Navegação de pastas
-│       │   │   └── player/PlayerActivity.kt # ExoPlayer
-│       │   └── util/SessionManager.kt
-│       └── res/
-│           ├── drawable/banner.xml           # TV banner (320x180dp)
-│           ├── drawable/ic_launcher_*.xml    # Ícone halteres
-│           └── values/strings.xml            # app_name = "BiBi Fit"
-├── build-workflow.yml                        # GitHub Actions
-└── README.md
-```
-
-## 🎨 Identidade Visual
-
-- **Nome**: BiBi Fit
-- **Ícone**: Halteres (dumbbell) com coração
-- **Cores**: Teal (#5DDEDA) → Rosa (#FF8B9F) — gradiente fitness
-- **Banner TV**: 320x180dp com "BiBi Fit" + halteres
-
-## 📞 Suporte
-
-- **Plataforma web**: https://educa.eu.org
-- **Drives**: `/6:/` (Clube Fit) + `/7:/` (Hipopressivos)
-- **Backend**: Cloudflare Worker (worker.js)
-
-## 📄 Compatibilidade
-
-- ✅ Android TV (Leanback)
-- ✅ Android 5.0+ (API 21+)
-- ✅ Smartphones e tablets
-- ✅ Instalação lado-a-lado com Meggy (package IDs diferentes)
+The download URL for a file is `https://educa.eu.org` + `file.link` (the `link`
+field on a file object is a relative path). ExoPlayer streams it directly with
+the session cookie attached as a `Cookie:` header.
