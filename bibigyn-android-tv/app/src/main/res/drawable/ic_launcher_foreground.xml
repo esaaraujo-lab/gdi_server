@@ -1,12 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Meggy launcher icon foreground — a stylised poodle silhouette drawn as a
-    vector path on a transparent background. The background gradient is supplied
-    separately by ic_launcher_background.xml.
-
-    The path approximates a sitting poodle facing right, with the characteristic
-    puff-ball tail, ear, and top-knot. Dimensions: 108x108dp viewport with the
-    inner 72x72dp safe area used by the silhouette.
+    BiBi Fit — launcher icon foreground
+    Silhueta de mulher fitness: corpo definido, rabo de cavalo, halteres
+    Diferente do Meggy (poodle) para não confundir na TV
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -14,46 +10,104 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Top-knot (puff above the head) -->
+    <!-- Rabo de cavalo (atrás, longo) -->
     <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M54,18 m-7,0 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0 z" />
+        android:fillColor="#FF6B35"
+        android:pathData="M38,20 C34,24 33,34 35,44 C37,54 40,58 42,56 C44,54 42,44 40,34 C39,26 39,22 38,20 z" />
 
-    <!-- Head puff -->
+    <!-- Cabeça (rosto) -->
     <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M48,32 m-11,0 a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 z" />
+        android:fillColor="#FFD4A8"
+        android:pathData="M54,24 m-8,0 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0 z" />
 
-    <!-- Ear (left flap) -->
+    <!-- Cabelo (topo + franja) -->
     <path
-        android:fillColor="#FFE0E0E0"
-        android:pathData="M37,30 C32,30 28,34 28,40 C28,46 32,50 38,50 C38,44 38,38 37,30 Z" />
+        android:fillColor="#FF6B35"
+        android:pathData="M46,22 C44,16 48,12 54,12 C60,12 64,16 62,22 C62,20 60,18 54,18 C48,18 46,20 46,22 z" />
 
-    <!-- Body (rounded torso) -->
+    <!-- Pescoço -->
     <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M52,42 C42,42 36,50 36,60 C36,72 44,80 56,80 L72,80 C82,80 88,72 88,62 C88,52 80,46 70,46 C66,42 60,42 56,42 Z" />
+        android:fillColor="#FFD4A8"
+        android:pathData="M50,30 L58,30 L58,38 L50,38 z" />
 
-    <!-- Front legs -->
+    <!-- Top esportivo (rosa) -->
     <path
-        android:fillColor="#FFE0E0E0"
-        android:pathData="M48,72 L48,86 Q48,90 52,90 L56,90 Q60,90 60,86 L60,72 Z" />
-    <path
-        android:fillColor="#FFE0E0E0"
-        android:pathData="M66,72 L66,86 Q66,90 70,90 L74,90 Q78,90 78,86 L78,72 Z" />
+        android:fillColor="#FF1744"
+        android:pathData="M40,38 C40,36 48,34 54,34 C60,34 68,36 68,38 L68,52 C68,54 60,56 54,56 C48,56 40,54 40,52 z" />
 
-    <!-- Tail puff (classic poodle pom-pom) -->
+    <!-- Decote -->
     <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M86,52 m-7,0 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0 z" />
+        android:fillColor="#FFD4A8"
+        android:pathData="M48,38 C50,40 58,40 60,38 L58,42 L50,42 z" />
 
-    <!-- Eye -->
+    <!-- Ombros definidos -->
     <path
-        android:fillColor="#FF1A0A1F"
-        android:pathData="M50,32 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0 z" />
+        android:fillColor="#FFD4A8"
+        android:pathData="M36,40 C34,38 32,40 32,44 C32,48 34,50 36,48 z" />
+    <path
+        android:fillColor="#FFD4A8"
+        android:pathData="M72,40 C74,38 76,40 76,44 C76,48 74,50 72,48 z" />
 
-    <!-- Nose -->
+    <!-- Braço esquerdo (levantando halter) -->
     <path
-        android:fillColor="#FF1A0A1F"
-        android:pathData="M42,40 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0 z" />
+        android:fillColor="#FFD4A8"
+        android:pathData="M32,44 C30,38 28,32 30,28 L34,30 L36,38 L36,48 z" />
+
+    <!-- Braço direito (levantando halter) -->
+    <path
+        android:fillColor="#FFD4A8"
+        android:pathData="M76,44 C78,38 80,32 78,28 L74,30 L72,38 L72,48 z" />
+
+    <!-- Halter esquerdo -->
+    <path
+        android:fillColor="#424242"
+        android:pathData="M26,24 L34,24 L34,28 L26,28 z M28,22 L32,22 L32,30 L28,30 z" />
+
+    <!-- Halter direito -->
+    <path
+        android:fillColor="#424242"
+        android:pathData="M74,24 L82,24 L82,28 L74,28 z M76,22 L80,22 L80,30 L76,30 z" />
+
+    <!-- Abdômen (definido) -->
+    <path
+        android:fillColor="#FFD4A8"
+        android:pathData="M46,56 L62,56 L62,78 L46,78 z" />
+
+    <!-- Linhas do abdômen -->
+    <path
+        android:fillColor="#E6A87E"
+        android:pathData="M49,58 L59,58 L59,60 L49,60 z" />
+    <path
+        android:fillColor="#E6A87E"
+        android:pathData="M49,63 L59,63 L59,65 L49,65 z" />
+    <path
+        android:fillColor="#E6A87E"
+        android:pathData="M49,68 L59,68 L59,70 L49,70 z" />
+
+    <!-- Calça legging (preta) -->
+    <path
+        android:fillColor="#212121"
+        android:pathData="M46,78 L62,78 L62,96 L46,96 z" />
+
+    <!-- Pernas (atléticas) -->
+    <path
+        android:fillColor="#FFD4A8"
+        android:pathData="M46,78 L52,78 L51,96 L46,96 z" />
+    <path
+        android:fillColor="#FFD4A8"
+        android:pathData="M56,78 L62,78 L62,96 L57,96 z" />
+
+    <!-- Sorriso -->
+    <path
+        android:fillColor="#E91E63"
+        android:pathData="M50,26 C52,28 56,28 58,26 C56,29 52,29 50,26 z" />
+
+    <!-- Olhos -->
+    <path
+        android:fillColor="#424242"
+        android:pathData="M50,22 m-1,0 a1,1 0 1,0 2,0 a1,1 0 1,0 -2,0 z" />
+    <path
+        android:fillColor="#424242"
+        android:pathData="M58,22 m-1,0 a1,1 0 1,0 2,0 a1,1 0 1,0 -2,0 z" />
+
 </vector>
