@@ -217,52 +217,20 @@ data class HeroItem(
          */
         val ALL: List<HeroItem> = listOf(
             HeroItem(
-                title = "PF — Agente da Polícia Federal",
-                subtitle = "Preparatório completo. 45 aulas em vídeo HD.",
-                badge = "🐕 DESTAQUE DA SEMANA",
-                drivePath = "/0:/",
-                driveName = "RETA FINAL TRTs",
-                icon = "⚖️"
+                title = "Clube Fit — Treinos Completos",
+                subtitle = "Aulas de fitness, musculação e cardio. Vídeos HD.",
+                badge = "💪 DESTAQUE DA SEMANA",
+                drivePath = "/6:/",
+                driveName = "CLUBE FIT",
+                icon = "💪"
             ),
             HeroItem(
-                title = "Tribunais — Completo",
-                subtitle = "Material atualizado para 2026. Aulas + PDFs.",
-                badge = "⚖️ EM ALTA",
-                drivePath = "/9:/",
-                driveName = "TUDO DE TRIBUNAIS",
-                icon = "⚖️"
-            ),
-            HeroItem(
-                title = "Alfacon 2026",
-                subtitle = "Cursos completos da plataforma Alfacon.",
-                badge = "🎓 NOVIDADE",
-                drivePath = "/10:/",
-                driveName = "ALFACON 2026",
-                icon = "🎓"
-            ),
-            HeroItem(
-                title = "Preparatório OAB",
-                subtitle = "Tudo para a 1ª e 2ª fase da OAB.",
-                badge = "🛡️ DESTAQUE",
-                drivePath = "/11:/",
-                driveName = "PREPARATÓRIO OAB",
-                icon = "🛡️"
-            ),
-            HeroItem(
-                title = "Vestibulares — Plataformas",
-                subtitle = "Aulas de major vestibulares do país.",
-                badge = "🎯 DESTAQUE",
-                drivePath = "/2:/",
-                driveName = "VESTIBULARES PLATAFORMAS",
-                icon = "🎯"
-            ),
-            HeroItem(
-                title = "Saúde e Medicina",
-                subtitle = "Residências, especializações e atualizações.",
-                badge = "⚕️ DESTAQUE",
-                drivePath = "/8:/",
-                driveName = "SAÚDE E MEDICINA",
-                icon = "⚕️"
+                title = "Hipopressivos — Técnica Completa",
+                subtitle = "Exercícios hipopressivos para fortalecimento core.",
+                badge = "🧘 EM ALTA",
+                drivePath = "/7:/",
+                driveName = "HIPOPRESSIVOS",
+                icon = "🧘"
             )
         )
     }
