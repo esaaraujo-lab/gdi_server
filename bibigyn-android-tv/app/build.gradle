@@ -26,17 +26,10 @@ android {
     // ★ v1.4.0: Signing config com keystore FIXA (mesma em todos os builds)
     signingConfigs {
         release {
-            if (keystoreFile.exists()) {
-                storeFile rootProject.file(keystoreProperties['storeFile'])
-                storePassword keystoreProperties['storePassword']
-                keyAlias keystoreProperties['keyAlias']
-                keyPassword keystoreProperties['keyPassword']
-            } else {
-                storeFile file("${System.getProperty('user.home')}/.android/debug.keystore")
-                storePassword 'android'
-                keyAlias 'androiddebugkey'
-                keyPassword 'android'
-            }
+            storeFile rootProject.file('app/bibigyn-release.keystore')
+            storePassword 'bibigyn2026'
+            keyAlias 'bibigyn'
+            keyPassword 'bibigyn2026'
         }
     }
 
