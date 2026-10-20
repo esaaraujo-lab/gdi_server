@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">BiBi Gyn</string>
-    <string name="app_subtitle">Fitness & Hipopressivos</string>
+    <string name="app_subtitle">Fitness &amp; Hipopressivos</string>
 
     <!-- Login -->
     <string name="login_welcome">Bem-vindo de volta</string>
