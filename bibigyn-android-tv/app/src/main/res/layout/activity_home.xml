@@ -1,28 +1,271 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  v2.0.0 — Home screen.
+
+  Changes vs v1.8.0:
+  • Hero container has id=hero_root with a Stack of hero overlays
+    (rotated by HeroRotator with crossfade).
+  • Hero has 3 dots indicator at the bottom showing which slide is
+    active (1/4, 2/4, etc.).
+  • Continue Assistindo rail now uses the multi-item list (was 1 item).
+  • Skeleton rail shown while data loads.
+  • Bottom navigation bar (4 tabs) at the very bottom.
+  • Footer still has dynamic version from BuildConfig.VERSION_NAME.
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="@color/md_background">
+    android:background="@color/bg_primary"
+    android:orientation="vertical">
 
-    <com.google.android.material.appbar.MaterialToolbar
-        android:id="@+id/toolbar"
+    <!-- Top Nav -->
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="?attr/actionBarSize"
-        android:background="@color/md_surface"
-        android:elevation="0dp"
-        app:titleTextColor="@color/md_on_surface"
-        app:navigationIconTint="@color/md_on_surface" />
+        android:layout_height="60dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="20dp"
+        android:background="@color/bg_primary">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🐩"
+            android:textSize="26sp" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Meggy"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="@color/meggy_pink"
+            android:layout_marginStart="8dp"
+            android:letterSpacing="0.02" />
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+        <TextView
+            android:id="@+id/top_sair"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Sair"
+            android:textColor="@color/text_secondary"
+            android:textSize="13sp"
+            android:padding="10dp"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:clickable="true"
+            android:foreground="?attr/selectableItemBackground" />
+    </LinearLayout>
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recycler"
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#22FF8B9F" />
+
+    <!-- Scrollable content -->
+    <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:clipToPadding="false"
-        android:padding="12dp"
-        android:scrollbars="vertical"
-        android:scrollbarFadeDuration="0" />
+        android:fillViewport="true">
 
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Hero Banner (rotativo) -->
+            <FrameLayout
+                android:id="@+id/hero_root"
+                android:layout_width="match_parent"
+                android:layout_height="320dp">
+
+                <!-- Background gradient (static) -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/hero_gradient" />
+
+                <!-- Hero icon (top-right corner) -->
+                <TextView
+                    android:id="@+id/hero_icon"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="top|end"
+                    android:layout_margin="22dp"
+                    android:textSize="44sp"
+                    android:alpha="0.55" />
+
+                <!-- Bottom scrim so hero text reads well -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="160dp"
+                    android:layout_gravity="bottom"
+                    android:background="@drawable/tile_overlay_bottom" />
+
+                <!-- Hero text content -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical"
+                    android:padding="32dp"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:id="@+id/hero_badge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/meggy_pink"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.18"
+                        android:layout_marginBottom="10dp" />
+
+                    <TextView
+                        android:id="@+id/hero_title"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="30sp"
+                        android:textStyle="bold"
+                        android:shadowColor="#80000000"
+                        android:shadowDx="0"
+                        android:shadowDy="2"
+                        android:shadowRadius="6"
+                        android:layout_marginBottom="12dp" />
+
+                    <TextView
+                        android:id="@+id/hero_subtitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="#B5C0CC"
+                        android:textSize="14sp"
+                        android:layout_marginBottom="22dp" />
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <Button
+                            android:id="@+id/hero_play"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="▶  Explorar"
+                            android:background="#FFFFFFFF"
+                            android:textColor="#FF000000"
+                            android:paddingHorizontal="30dp"
+                            android:paddingVertical="11dp"
+                            android:textAllCaps="false"
+                            android:textSize="15sp"
+                            android:textStyle="bold"
+                            android:stateListAnimator="@null"
+                            android:focusable="true"
+                            android:focusableInTouchMode="true"
+                            android:clickable="true" />
+
+                        <!-- Manual prev/next arrows -->
+                        <TextView
+                            android:id="@+id/hero_prev"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:layout_marginStart="18dp"
+                            android:gravity="center"
+                            android:text="‹"
+                            android:textColor="#CCFFFFFF"
+                            android:textSize="28sp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:clickable="true"
+                            android:focusable="true" />
+                        <TextView
+                            android:id="@+id/hero_next"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:gravity="center"
+                            android:text="›"
+                            android:textColor="#CCFFFFFF"
+                            android:textSize="28sp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:clickable="true"
+                            android:focusable="true" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- Dots indicator (bottom-right) -->
+                <LinearLayout
+                    android:id="@+id/hero_dots"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="bottom|end"
+                    android:layout_margin="20dp"
+                    android:orientation="horizontal" />
+            </FrameLayout>
+
+            <!-- Continue Assistindo rail -->
+            <TextView
+                android:id="@+id/label_continue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Continue assistindo"
+                android:textColor="@color/text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:paddingHorizontal="24dp"
+                android:paddingTop="26dp"
+                android:paddingBottom="12dp" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rail_continue"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clipToPadding="false"
+                android:paddingHorizontal="20dp"
+                android:nestedScrollingEnabled="false" />
+
+            <!-- Drives rail -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Explorar drives"
+                android:textColor="@color/text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:paddingHorizontal="24dp"
+                android:paddingTop="30dp"
+                android:paddingBottom="12dp" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rail_drives"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clipToPadding="false"
+                android:paddingHorizontal="20dp"
+                android:paddingBottom="8dp"
+                android:nestedScrollingEnabled="false" />
+
+            <!-- Footer (dynamic version set in HomeActivity) -->
+            <TextView
+                android:id="@+id/footer_version"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text_muted"
+                android:textSize="12sp"
+                android:gravity="center"
+                android:paddingVertical="24dp" />
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <!-- Bottom navigation -->
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottom_nav"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/bg_surface"
+        app:labelVisibilityMode="labeled"
+        app:itemTextColor="@color/meggy_pink"
+        app:itemIconTint="@color/meggy_pink"
+        app:menu="@menu/bottom_nav"
+        xmlns:app="http://schemas.android.com/apk/res-auto" />
 </LinearLayout>
