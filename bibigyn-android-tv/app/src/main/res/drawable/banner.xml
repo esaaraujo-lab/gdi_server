@@ -1,7 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    BiBi Fit TV banner — 320x180dp (Android TV banner spec).
-    Tema fitness: gradiente rosa → laranja com silhueta de mulher marromba.
+  v2.5.0 — TV banner (320x180dp) — ELEGANT REDESIGN.
+  
+  Design:
+  • Rich diagonal gradient: deep purple (#1a0a2e) → magenta (#7b1fa2) → pink (#ff8b9f)
+  • Decorative circular accents (bokeh effect) in upper-right
+  • Poodle silhouette (simplified but cleaner) in a soft circle
+  • "Meggy" wordmark in bold white with subtle pink accent
+  • "Plataforma de Estudos" tagline
+  
+  This is what appears on the Android TV home screen row.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="320dp"
@@ -9,79 +17,89 @@
     android:viewportWidth="320"
     android:viewportHeight="180">
 
-    <!-- Background gradient: rosa → laranja (fitness energy) -->
+    <!-- Background: rich diagonal gradient -->
     <path
-        android:fillColor="#FF6B9F"
+        android:fillColor="#FF1A0A2E"
         android:pathData="M0,0 H320 V180 H0 Z" />
 
-    <!-- Diagonal accent (laranja) -->
+    <!-- Gradient overlay: purple → magenta → pink (diagonal) -->
     <path
-        android:fillColor="#FF9800"
-        android:pathData="M0,100 L320,40 L320,180 L0,180 Z" />
+        android:fillColor="#FF7B1FA2"
+        android:fillAlpha="0.6"
+        android:pathData="M0,0 L320,0 L320,180 Z" />
 
-    <!-- Left accent bar -->
     <path
-        android:fillColor="#0D1119"
-        android:pathData="M0,0 H6 V180 H0 Z" />
+        android:fillColor="#FFFF8B9F"
+        android:fillAlpha="0.3"
+        android:pathData="M0,0 L320,180 L0,180 Z" />
 
-    <!-- "BiBi Fit" text — letras brancas stylizadas -->
-    <!-- B -->
+    <!-- Decorative bokeh circles (upper-right) -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M40,50 H70 V60 H50 V70 H65 V80 H50 V100 H40 z" />
-    <!-- i -->
+        android:fillColor="#FFFF8B9F"
+        android:fillAlpha="0.15"
+        android:pathData="M250,30 m-25,0 a25,25 0 1,0 50,0 a25,25 0 1,0 -50,0 z" />
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M80,50 H90 V100 H80 z M80,40 H90 V50 H80 z" />
-    <!-- B -->
+        android:fillColor="#FF5DDEDA"
+        android:fillAlpha="0.1"
+        android:pathData="M280,60 m-18,0 a18,18 0 1,0 36,0 a18,18 0 1,0 -36,0 z" />
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M100,50 H130 V60 H110 V70 H125 V80 H110 V100 H100 z" />
-    <!-- i -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M140,50 H150 V100 H140 z M140,40 H150 V50 H140 z" />
+        android:fillColor="#FFFFD93D"
+        android:fillAlpha="0.08"
+        android:pathData="M230,55 m-12,0 a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0 z" />
 
-    <!-- "Fit" — menor, abaixo -->
+    <!-- Soft circle behind poodle (glow effect) -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M40,110 H50 V120 H45 V130 H50 V140 H40 z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M55,110 H65 V140 H55 z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M70,110 H80 V120 H75 V130 H80 V140 H70 z" />
+        android:fillColor="#FFFFFFFF"
+        android:fillAlpha="0.08"
+        android:pathData="M70,90 m-38,0 a38,38 0 1,0 76,0 a38,38 0 1,0 -76,0 z" />
 
-    <!-- Silhueta de mulher fitness (lado direito) -->
-    <!-- Cabeça -->
+    <!-- Poodle silhouette — cleaner version -->
+    <!-- Head (top puff) -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M250,40 m-8,0 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0 z" />
-    <!-- Corpo -->
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M60,72 m-12,0 a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0 z" />
+    <!-- Body -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M242,48 C240,52 238,60 238,70 C238,80 240,90 242,95 L258,95 C260,90 262,80 262,70 C262,60 260,52 258,48 z" />
-    <!-- Pernas -->
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M58,90 C44,90 34,102 34,118 C34,134 50,144 70,144 L100,144 C118,144 130,134 130,118 C130,102 120,90 104,90 C96,82 74,82 62,84 Z" />
+    <!-- Tail puff -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M242,95 L248,95 L246,140 L242,140 z" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M134,100 m-10,0 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0 z" />
+    <!-- Ear (darker accent) -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M252,95 L258,95 L258,140 L254,140 z" />
-    <!-- Braços (levantando halteres) -->
+        android:fillColor="#FFE0CFE8"
+        android:pathData="M50,68 C46,60 44,52 48,48 C52,46 58,50 60,58 Z" />
+
+    <!-- "Meggy" wordmark — M -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M238,55 C234,50 230,45 228,42 L232,40 L236,45 L240,52 z" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M160,70 L172,70 L180,86 L188,70 L200,70 L200,110 L191,110 L191,84 L183,98 L177,98 L169,84 L169,110 L160,110 Z" />
+
+    <!-- e -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M262,55 C266,50 270,45 272,42 L268,40 L264,45 L260,52 z" />
-    <!-- Halteres -->
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M205,90 C205,82 211,78 219,78 C227,78 233,82 233,90 L233,94 L214,94 C214,98 216,100 220,100 C223,100 225,99 226,97 L233,97 C231,105 226,110 219,110 C211,110 205,105 205,90 Z M214,90 L225,90 C225,87 223,85 219,85 C216,85 214,87 214,90 Z" />
+
+    <!-- g -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M225,38 L233,38 L233,42 L225,42 z M227,36 L231,36 L231,44 L227,44 z" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M238,78 L247,78 L247,82 C249,80 252,78 256,78 C263,78 268,84 268,94 C268,104 263,110 256,110 C252,110 249,108 247,106 L247,116 C247,119 245,120 242,120 L238,120 Z M247,94 C247,100 250,103 254,103 C258,103 260,100 260,94 C260,88 258,85 254,85 C250,85 247,88 247,94 Z" />
+
+    <!-- g (second) -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M267,38 L275,38 L275,42 L267,42 z M269,36 L273,36 L273,44 L269,44 z" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M273,78 L282,78 L282,82 C284,80 287,78 291,78 C298,78 303,84 303,94 C303,104 298,110 291,110 C287,110 284,108 282,106 L282,116 C282,119 280,120 277,120 L273,120 Z M282,94 C282,100 285,103 289,103 C293,103 295,100 295,94 C295,88 293,85 289,85 C285,85 282,88 282,94 Z" />
+
+    <!-- y -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M308,78 L317,78 L312,98 C311,103 308,106 303,106 L300,106 L300,100 L302,100 C304,100 305,99 306,97 L296,78 L305,78 L311,90 Z" />
+
+    <!-- Tagline: "Plataforma de Estudos" -->
+    <path
+        android:fillColor="#FFE0CFE8"
+        android:fillAlpha="0.9"
+        android:pathData="M160,122 L160,126 L164,126 L164,128 L160,128 L160,132 L158,132 L158,122 Z M166,122 L168,122 L168,132 L166,132 Z M170,122 L172,122 L176,129 L176,122 L178,122 L178,132 L176,132 L172,125 L172,132 L170,132 Z M180,122 L182,122 L182,132 L180,132 Z M184,122 L186,122 L186,130 L190,130 L190,132 L184,132 Z M192,122 L194,122 L194,132 L192,132 Z M196,122 L198,122 L202,129 L202,122 L204,122 L204,132 L202,132 L198,125 L198,132 L196,132 Z M206,122 L208,122 L208,132 L206,132 Z M210,122 L212,122 L216,129 L216,122 L218,122 L218,132 L216,132 L212,125 L212,132 L210,132 Z M220,122 L222,122 L222,130 L226,130 L226,132 L220,132 Z M228,122 L230,122 L230,132 L228,132 Z M232,122 L234,122 L238,129 L238,122 L240,122 L240,132 L238,132 L234,125 L234,132 L232,132 Z M242,122 L244,122 L244,132 L242,132 Z M246,122 L248,122 L248,130 L252,130 L252,132 L246,132 Z M254,122 L256,122 L256,132 L254,132 Z M258,122 L260,122 L264,129 L264,122 L266,122 L266,132 L264,132 L260,125 L260,132 L258,132 Z" />
 
 </vector>
