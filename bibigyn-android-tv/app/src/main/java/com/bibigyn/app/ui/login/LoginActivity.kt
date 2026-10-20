@@ -15,17 +15,6 @@ import com.bibigyn.app.ui.home.HomeActivity
 import com.bibigyn.app.util.SessionManager
 import kotlinx.coroutines.launch
 
-/**
- * LoginActivity — elegant Meggy-branded login form.
- *
- * Posts form-encoded username/password to /login. On success the session cookie
- * is stored in [SessionManager] and the user is routed to [HomeActivity].
- *
- * Form behaviour:
- *   - Enter on the password field triggers submit
- *   - Submit button is disabled while the request is in flight
- *   - Errors surface as a Snackbar (works on both touch and TV)
- */
 class LoginActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityLoginBinding
@@ -38,7 +27,6 @@ class LoginActivity : AppCompatActivity() {
 
         api = ApiService(application as BiBiGynApp)
 
-        // If we already have a session, skip login entirely.
         if (SessionManager.get(this).isLoggedIn) {
             startActivity(Intent(this, HomeActivity::class.java))
             finish()
@@ -54,8 +42,47 @@ class LoginActivity : AppCompatActivity() {
 
         binding.btnLogin.setOnClickListener { attemptLogin() }
 
+        // ★ TV FIX: scroll automático para o campo focado quando o teclado aparece
+        // Isso garante que o teclado on-screen da TV nunca cubra o campo ativo
+        setupKeyboardScrollFix()
+
         // D-pad focus: start on username field.
         binding.username.requestFocus()
+    }
+
+    /**
+     * ★ TV FIX: Quando um campo recebe foco (e o teclado on-screen aparece),
+     * rola o ScrollView para garantir que o campo fique visível acima do teclado.
+     */
+    private fun setupKeyboardScrollFix() {
+        val scrollView = binding.loginScroll
+        val fields = listOf(binding.username, binding.password, binding.btnLogin)
+
+        for (field in fields) {
+            field.setOnFocusChangeListener { view, hasFocus ->
+                if (hasFocus) {
+                    // Post para garantir que o layout já foi atualizado
+                    view.post {
+                        val scrollY = calculateScrollYForView(view, scrollView.height)
+                        scrollView.smoothScrollTo(0, scrollY)
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Calcula a posição Y para rolar o ScrollView de modo que o view
+     * fique no terço superior da tela (acima do teclado on-screen).
+     */
+    private fun calculateScrollYForView(view: View, screenHeight: Int): Int {
+        val location = IntArray(2)
+        view.getLocationInWindow(location)
+        val viewTop = location[1]
+        // Quer o view no terço superior (1/3 da tela) — deixa espaço para o teclado
+        val targetY = screenHeight / 4
+        val scrollOffset = viewTop - targetY
+        return maxOf(0, scrollOffset)
     }
 
     private fun attemptLogin() {
