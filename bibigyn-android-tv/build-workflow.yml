@@ -1,113 +1,56 @@
-# BiBi Fit Android TV — Build & Release workflow.
-#
-# Copy this file to `.github/workflows/bibigyn-android-tv.yml` in the
-# esaaraujo-lab/gdi_server repository to enable CI builds.
-#
-# The workflow:
-#   1. Builds a signed debug-keystore release APK from bibigyn-android-tv/
-#   2. Uploads the APK as a GitHub Actions artifact (downloadable from the run page)
-#   3. On tag pushes (v*), creates a GitHub Release with the APK attached.
-#
-# The APK is signed with the debug keystore (same approach as gdi-app v1.0.6)
-# which makes it installable alongside other sideloaded apps on Android TV.
-
 name: Build BiBi Fit Android TV
 
 on:
   push:
-    branches: [ main ]
-    paths:
-      - 'bibigyn-android-tv/**'
-      - '.github/workflows/bibigyn-android-tv.yml'
-    tags: [ 'v*' ]
-  pull_request:
-    branches: [ main ]
-    paths:
-      - 'bibigyn-android-tv/**'
+    tags: ['bibigyn-v*']
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
-    name: Build APK
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: bibigyn-android-tv
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
           java-version: '17'
+          distribution: 'temurin'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: |
-            platforms;android-34
-            build-tools;34.0.0
-
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('bibigyn-android-tv/**/*.gradle*', 'bibigyn-android-tv/**/gradle-wrapper.properties') }}
-          restore-keys: gradle-${{ runner.os }}-
-
-      - name: Set up Gradle
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.2'
 
-      - name: Verify fixed keystore exists
+      - name: Verify keystore
         run: |
-          # ★ BiBi Fit usa keystore FIXO commitado no repo (bibigyn-release.keystore)
-          # Assinatura sempre igual → auto-update sem desinstalar
-          ls -la app/bibigyn-release.keystore
-          if [ ! -f app/bibigyn-release.keystore ]; then
-            echo "❌ ERRO: bibigyn-release.keystore não encontrado!"
-            exit 1
-          fi
-          echo "✅ Keystore fixo encontrado"
+          ls -la bibigyn-android-tv/app/bibigyn-release.keystore
+          ls -la bibigyn-android-tv/keystore.properties
 
-      - name: Build release APK
-        run: gradle --no-daemon --stacktrace assembleRelease
+      - name: Build APK (release)
+        working-directory: bibigyn-android-tv
+        run: gradle assembleRelease --no-daemon --no-build-cache
 
-      - name: Build debug APK (fallback)
+      - name: Build APK (debug fallback)
         if: failure()
-        run: gradle --no-daemon --stacktrace assembleDebug
+        working-directory: bibigyn-android-tv
+        run: gradle assembleDebug --no-daemon --no-build-cache
 
-      - name: Locate built APK
-        id: apk
-        run: |
-          set -e
-          APK=$(find app/build/outputs/apk -name "*.apk" | head -1)
-          echo "apk_path=$APK" >> "$GITHUB_OUTPUT"
-          echo "Found APK: $APK"
-          cp "$APK" bibigyn-release.apk
-          ls -la bibigyn-release.apk
+      - name: Find APK
+        run: find bibigyn-android-tv -name "*.apk" -type f
 
-      - name: Upload artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: bibigyn-android-tv-apk
-          path: bibigyn-android-tv/bibigyn-release.apk
-          retention-days: 30
-          if-no-files-found: error
+          path: bibigyn-android-tv/app/build/outputs/apk/**/*.apk
 
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/bibigyn-v')
         uses: softprops/action-gh-release@v2
         with:
-          files: bibigyn-android-tv/bibigyn-release.apk
+          files: bibigyn-android-tv/app/build/outputs/apk/**/*.apk
           generate_release_notes: true
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
