@@ -610,7 +610,7 @@
             </div>
             <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0 0 14px;line-height:1.5;">App separado para Android TV com apenas 2 drives: Clube Fit e Hipopressivos. Mesmas funções do Meggy, mas focado em fitness.</p>
             <div style="display:flex;flex-direction:column;gap:8px;">
-              <a href="https://github.com/esaaraujo-lab/gdi_server/releases/download/bibigyn-v1.2.2/app-release.apk" target="_blank" style="display:block;text-align:center;padding:10px 16px;background:linear-gradient(135deg,#5ddeda,#ff8b9f);color:#0d1119;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600;">⬇ Baixar APK (v1.2.2)</a>
+              <a href="https://github.com/esaaraujo-lab/gdi_server/releases/download/bibigyn-v1.3.1/app-release.apk" target="_blank" style="display:block;text-align:center;padding:10px 16px;background:linear-gradient(135deg,#5ddeda,#ff8b9f);color:#0d1119;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600;">⬇ Baixar APK (v1.3.1)</a>
               <a href="https://github.com/esaaraujo-lab/gdi_server/tree/main/bibigyn-android-tv" target="_blank" style="display:block;text-align:center;padding:8px 16px;background:transparent;color:var(--ferreto-text-muted,#8b949e);text-decoration:none;border:1px solid var(--ferreto-border,#30363d);border-radius:8px;font-size:12px;">Ver código-fonte</a>
             </div>
             <div style="margin-top:12px;font-size:11px;color:var(--ferreto-text-muted,#8b949e);">
