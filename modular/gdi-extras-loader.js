@@ -33,7 +33,7 @@
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
   // ★ v1.0.91: bump 92 → 93 (Shaka skin + Pomodoro sidebar + video-in-panel + PDF split + rest mode fix + OCR AI routing + parallel dispatch).
-  const CACHE_VERSION = '171';  // ★ v1.0.190: coach fix (data.markdown) + scan-and-save
+  const CACHE_VERSION = '172';  // ★ v1.0.190: coach fix (data.markdown) + scan-and-save
   window.CACHE_VERSION = CACHE_VERSION;
 
   const MODULES = [
