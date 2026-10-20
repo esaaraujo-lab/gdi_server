@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    BiBi Gyn launcher icon foreground — stylised dumbbell (fitness theme).
+    Vector path on transparent background. Background gradient supplied by ic_launcher_background.xml.
+    Dimensions: 108x108dp viewport with inner 72x72dp safe area.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Dumbbell bar (horizontal) -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M30,54 L78,54 L78,58 L30,58 Z" />
+
+    <!-- Left weight plate (outer) -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M22,42 L30,42 L30,70 L22,70 Z" />
+
+    <!-- Left weight plate (inner) -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M30,46 L36,46 L36,66 L30,66 Z" />
+
+    <!-- Right weight plate (outer) -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M78,42 L86,42 L86,70 L78,70 Z" />
+
+    <!-- Right weight plate (inner) -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M72,46 L78,46 L78,66 L72,66 Z" />
+
+    <!-- Heart accent above dumbbell (saúde + fitness) -->
+    <path
+        android:fillColor="#FFFF8B9F"
+        android:pathData="M54,30 m-6,0 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0 z" />
+
+</vector>
