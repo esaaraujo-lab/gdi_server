@@ -35,4 +35,30 @@
     <!-- Status bar -->
     <color name="black_overlay">#AA000000</color>
     <color name="white_overlay">#66FFFFFF</color>
+    <!-- v1.7.0 additions -->
+    <color name="bg_primary">#0D1117</color>
+    <color name="bg_surface">#161B22</color>
+    <color name="bg_surface_light">#1E2230</color>
+    <color name="bg_card">#1A1F2E</color>
+    <color name="border_subtle">#21262D</color>
+    <color name="border_default">#30363D</color>
+    <color name="text_primary">#E6EDF3</color>
+    <color name="text_secondary">#8B949E</color>
+    <color name="text_muted">#484F58</color>
+    <color name="accent_green">#3FB950</color>
+    <color name="accent_yellow">#FAB005</color>
+    <color name="accent_red">#FF6B6B</color>
+    <color name="accent_teal">#4ECDC4</color>
+
+    <!-- v1.8.0 — Tile accents (Netflix/Disney inspired) -->
+    <color name="tile_bg">#FF0F1218</color>
+    <color name="tile_bg_focused">#FF161B22</color>
+    <color name="tile_scrim_top">#66000000</color>
+    <color name="tile_scrim_bottom">#F00D0E12</color>
+    <color name="tile_focus_ring">#FFFF8B9F</color>
+    <color name="tile_focus_halo">#33FF8B9F</color>
+    <color name="tile_title">#FFFFFFFF</color>
+    <color name="tile_subtitle">#FFC0C4D0</color>
+    <color name="hero_pink_accent">#FFFF8B9F</color>
+    <color name="header_scrim">#F00D0E12</color>
 </resources>
