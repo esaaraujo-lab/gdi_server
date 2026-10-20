@@ -28,24 +28,21 @@ android {
     }
 
     signingConfigs {
-        // Use debug keystore for both debug and release builds.
-        // On GitHub Actions: generated at ~/.android/debug.keystore
-        // Locally: falls back to app/debug.keystore if present
-        def keystoreFile = file("${System.getProperty('user.home')}/.android/debug.keystore")
-        if (!keystoreFile.exists()) {
-            keystoreFile = file("debug.keystore")
-        }
+        // ★ BiBi Fit — keystore FIXO para auto-update sem desinstalar
+        // O keystore.properties + bibigyn-release.keystore são commitados no repo
+        // Assim toda build tem a mesma assinatura e o APK se auto-atualiza
+        def keystoreFile = file("bibigyn-release.keystore")
         debug {
-            storeFile keystoreProperties.containsKey("storeFile") ? file(keystoreProperties['storeFile']) : keystoreFile
-            storePassword keystoreProperties.containsKey("storePassword") ? keystoreProperties['storePassword'] : "android"
-            keyAlias keystoreProperties.containsKey("keyAlias") ? keystoreProperties['keyAlias'] : "androiddebugkey"
-            keyPassword keystoreProperties.containsKey("keyPassword") ? keystoreProperties['keyPassword'] : "android"
+            storeFile keystoreFile
+            storePassword "bibigyn2026"
+            keyAlias "bibigyn"
+            keyPassword "bibigyn2026"
         }
         release {
-            storeFile keystoreProperties.containsKey("storeFile") ? file(keystoreProperties['storeFile']) : keystoreFile
-            storePassword keystoreProperties.containsKey("storePassword") ? keystoreProperties['storePassword'] : "android"
-            keyAlias keystoreProperties.containsKey("keyAlias") ? keystoreProperties['keyAlias'] : "androiddebugkey"
-            keyPassword keystoreProperties.containsKey("keyPassword") ? keystoreProperties['keyPassword'] : "android"
+            storeFile keystoreFile
+            storePassword "bibigyn2026"
+            keyAlias "bibigyn"
+            keyPassword "bibigyn2026"
         }
     }
 
