@@ -1,5 +1,6 @@
 package com.bibigyn.app.data
 
+import android.graphics.Color
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -15,25 +16,17 @@ import org.json.JSONObject
 
 /**
  * One of the 12 hardcoded root drives shown on the home screen.
- *
- * Drives 0..1 have known root Google Drive IDs (so we can list their top-level folder
- * without first asking the server). Drives 2..11 are addressed by index — the worker
- * resolves the underlying Drive folder transparently.
  */
 data class DriveItem(
     val index: Int,
     val name: String,
     val rootFolderId: String?,
-    val icon: String = "folder"
+    val icon: String = "📁"
 ) {
     companion object {
-        /**
-         * BiBi Gyn — apenas 2 drives (fitness + saúde).
-         * Clube Fit (índice 6) e Hipopressivos (índice 7) — mesmos índices do worker.
-         */
         val ALL: List<DriveItem> = listOf(
-            DriveItem(6,  "CLUBE FIT",                   null, "fitness"),
-            DriveItem(7,  "HIPOPRESSIVOS",               null, "health")
+            DriveItem(6,  "CLUBE FIT",                   null, "💪"),
+            DriveItem(7,  "HIPOPRESSIVOS",               null, "🧘")
         )
     }
 }
@@ -42,9 +35,6 @@ data class DriveItem(
 
 /**
  * A file or folder returned by POST /<driveIdx>:/.
- *
- * `link` is null for folders (folders are not downloadable). For files, prepend
- * [com.bibigyn.app.BiBiGynApp.BASE_URL] to obtain the full streaming URL.
  */
 data class FileItem(
     val name: String,
@@ -53,9 +43,15 @@ data class FileItem(
     val driveId: String?,
     val link: String?,
     val size: Long,
-    val modifiedTime: String?
+    val modifiedTime: String?,
+    val folderLabel: String? = null,
+    val folderPath: String? = null,
+    val thumbnailLink: String? = null  // v2.1.0: Google Drive thumbnail URL
 ) {
     val isFolder: Boolean get() = mimeType == "application/vnd.google-apps.folder"
+    val isAudio: Boolean
+        get() = mimeType.startsWith("audio/") || name.endsWith(".mp3", true) || name.endsWith(".m4a", true) || name.endsWith(".aac", true) || name.endsWith(".ogg", true) || name.endsWith(".wav", true) || name.endsWith(".flac", true)
+
     val isVideo: Boolean
         get() = mimeType.startsWith("video/") ||
                 name.endsWith(".mp4", true) ||
@@ -80,15 +76,62 @@ data class FileItem(
         fun fromJson(o: JSONObject): FileItem {
             val sizeStr = o.optString("size", "0")
             val sizeLong = sizeStr.toLongOrNull() ?: 0L
+            // v2.1.0: parse thumbnailLink from Google Drive API response.
+            // The worker.js passes it through if present. We also try to
+            // construct it from the file ID as a fallback.
+            val rawThumb = if (o.has("thumbnailLink") && !o.isNull("thumbnailLink"))
+                o.getString("thumbnailLink") else null
+            val fileId = o.optString("id", "")
+            val thumb = when {
+                !rawThumb.isNullOrBlank() -> enlargeThumbnail(rawThumb)
+                fileId.isNotBlank() -> "https://drive.google.com/thumbnail?id=$fileId&sz=w400"
+                else -> null
+            }
             return FileItem(
                 name = o.optString("name", "(sem nome)"),
                 mimeType = o.optString("mimeType", "application/octet-stream"),
-                id = o.optString("id", ""),
+                id = fileId,
                 driveId = if (o.has("driveId")) o.getString("driveId") else null,
                 link = if (o.has("link") && !o.isNull("link")) o.getString("link") else null,
                 size = sizeLong,
-                modifiedTime = if (o.has("modifiedTime") && !o.isNull("modifiedTime")) o.getString("modifiedTime") else null
+                modifiedTime = if (o.has("modifiedTime") && !o.isNull("modifiedTime")) o.getString("modifiedTime") else null,
+                thumbnailLink = thumb
             )
+        }
+
+        /**
+         * v2.1.0 — Google Drive returns thumbnail URLs with a default size
+         * parameter (e.g. `sz=s200`). We enlarge it to w400 for sharper
+         * tiles on high-DPI screens.
+         */
+        private fun enlargeThumbnail(url: String): String {
+            return try {
+                // Replace sz=NNN with sz=w400 (width 400px)
+                if (url.contains("sz=")) {
+                    url.replace(Regex("sz=[^&]+"), "sz=w400")
+                } else if (url.contains("=s")) {
+                    // Format: =s200 → =w400
+                    url.replace(Regex("=s[0-9]+"), "=w400")
+                } else {
+                    url
+                }
+            } catch (_: Exception) { url }
+        }
+
+        /** v2.0.0: serializes a FileItem back to JSON for SharedPreferences storage. */
+        fun toJson(item: FileItem): JSONObject {
+            val o = JSONObject()
+            o.put("name", item.name)
+            o.put("mimeType", item.mimeType)
+            o.put("id", item.id)
+            o.put("driveId", item.driveId ?: JSONObject.NULL)
+            o.put("link", item.link ?: JSONObject.NULL)
+            o.put("size", item.size)
+            o.put("modifiedTime", item.modifiedTime ?: JSONObject.NULL)
+            item.folderLabel?.let { o.put("folderLabel", it) }
+            item.folderPath?.let { o.put("folderPath", it) }
+            item.thumbnailLink?.let { o.put("thumbnailLink", it) }
+            return o
         }
 
         fun parseList(arr: JSONArray?): List<FileItem> {
@@ -102,11 +145,6 @@ data class FileItem(
 
 // ──────────────────────────── Folder listing response ────────────────────────────
 
-/**
- * Response envelope for POST /<driveIdx>:/.
- *
- * The worker returns `{ "nextPageToken": null, "curPageIndex": 0, "data": { "files": [...] } }`.
- */
 data class FolderListing(
     val files: List<FileItem>,
     val nextPageToken: String?,
@@ -127,10 +165,6 @@ data class FolderListing(
 
 // ──────────────────────────── Login ────────────────────────────
 
-/**
- * Result of a login attempt. On success, `sessionCookie` is the raw value
- * (without the `session=` prefix) extracted from the Set-Cookie header.
- */
 sealed class LoginResult {
     data class Success(val sessionCookie: String, val username: String) : LoginResult()
     data class Failure(val reason: String) : LoginResult()
@@ -138,9 +172,6 @@ sealed class LoginResult {
 
 // ──────────────────────────── User courses ────────────────────────────
 
-/**
- * One enrolled course returned by GET /api/courses/list.
- */
 data class CourseItem(
     val coursePath: String,
     val courseName: String
@@ -161,4 +192,101 @@ data class CourseItem(
             return out
         }
     }
+}
+
+// ──────────────────────────── v2.0.0: Hero rotation ────────────────────────────
+
+/**
+ * One hero banner entry — a curated "destaque" course from any drive.
+ * Rotated by HomeActivity.HeroRotator every 8s with crossfade.
+ */
+data class HeroItem(
+    val title: String,
+    val subtitle: String,
+    val badge: String,            // e.g. "🐕 DESTAQUE DA SEMANA"
+    val drivePath: String,        // BrowseActivity drivePath
+    val driveName: String,        // displayed in browse
+    val icon: String,             // emoji shown in hero corner
+    val colorHint: String? = null // optional colorFromString hint
+) {
+    companion object {
+        /**
+         * Curated list of destaques spanning multiple drives. Picked 1-2
+         * per major drive so the rotation surfaces content from across
+         * the whole library, not just the first drive.
+         */
+        val ALL: List<HeroItem> = listOf(
+            HeroItem(
+                title = "PF — Agente da Polícia Federal",
+                subtitle = "Preparatório completo. 45 aulas em vídeo HD.",
+                badge = "🐕 DESTAQUE DA SEMANA",
+                drivePath = "/0:/",
+                driveName = "RETA FINAL TRTs",
+                icon = "⚖️"
+            ),
+            HeroItem(
+                title = "Tribunais — Completo",
+                subtitle = "Material atualizado para 2026. Aulas + PDFs.",
+                badge = "⚖️ EM ALTA",
+                drivePath = "/9:/",
+                driveName = "TUDO DE TRIBUNAIS",
+                icon = "⚖️"
+            ),
+            HeroItem(
+                title = "Alfacon 2026",
+                subtitle = "Cursos completos da plataforma Alfacon.",
+                badge = "🎓 NOVIDADE",
+                drivePath = "/10:/",
+                driveName = "ALFACON 2026",
+                icon = "🎓"
+            ),
+            HeroItem(
+                title = "Preparatório OAB",
+                subtitle = "Tudo para a 1ª e 2ª fase da OAB.",
+                badge = "🛡️ DESTAQUE",
+                drivePath = "/11:/",
+                driveName = "PREPARATÓRIO OAB",
+                icon = "🛡️"
+            ),
+            HeroItem(
+                title = "Vestibulares — Plataformas",
+                subtitle = "Aulas de major vestibulares do país.",
+                badge = "🎯 DESTAQUE",
+                drivePath = "/2:/",
+                driveName = "VESTIBULARES PLATAFORMAS",
+                icon = "🎯"
+            ),
+            HeroItem(
+                title = "Saúde e Medicina",
+                subtitle = "Residências, especializações e atualizações.",
+                badge = "⚕️ DESTAQUE",
+                drivePath = "/8:/",
+                driveName = "SAÚDE E MEDICINA",
+                icon = "⚕️"
+            )
+        )
+    }
+}
+
+// ──────────────────────────── v1.5.0 colour helpers ────────────────────────────
+
+private val STRING_COLOR_PALETTE: IntArray = intArrayOf(
+    0xFFFF6B6B.toInt(),
+    0xFF4ECDC4.toInt(),
+    0xFFFFD93D.toInt(),
+    0xFFFF8B9F.toInt(),
+    0xFFC026D3.toInt(),
+    0xFF6BCB77.toInt(),
+    0xFFFF9F1C.toInt(),
+    0xFF7B68EE.toInt(),
+    0xFF00BFFF.toInt(),
+    0xFFFF4757.toInt(),
+    0xFFA8E6CF.toInt(),
+    0xFFDDA0DD.toInt()
+)
+
+fun colorFromString(str: String): Int {
+    var hash = 0
+    for (c in str) hash = c.code + ((hash shl 5) - hash)
+    return STRING_COLOR_PALETTE[Math.floorMod(hash, STRING_COLOR_PALETTE.size)]
 }
