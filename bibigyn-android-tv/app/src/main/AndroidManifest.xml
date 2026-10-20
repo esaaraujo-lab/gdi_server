@@ -2,14 +2,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
 
-    <!-- Optional features — required="false" so the app installs on both mobile and TV -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.hardware.faketouch" android:required="false" />
@@ -27,21 +28,14 @@
         android:appCategory="video"
         tools:targetApi="34">
 
-        <!-- FileProvider for APK auto-update install -->
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.fileprovider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
-        </provider>
-
-        <!-- Splash — LEANBACK_LAUNCHER for TV home, normal LAUNCHER for phones -->
+        <!--
+          v2.0.2: SplashActivity with noHistory=true so it NEVER stays in the back stack.
+          After routing to Home or Login, the user can never press back to return to splash.
+        -->
         <activity
             android:name=".ui.splash.SplashActivity"
             android:exported="true"
+            android:noHistory="true"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
             android:theme="@style/Theme.Meggy.Splash">
             <intent-filter>
@@ -51,29 +45,54 @@
             </intent-filter>
         </activity>
 
-        <activity
-            android:name=".ui.login.LoginActivity"
-            android:exported="false"
-            android:configChanges="orientation|screenSize|keyboardHidden"
-            android:windowSoftInputMode="adjustResize|stateHidden" />
+        <!--
+          v2.0.2: LoginActivity with noHistory=true so it NEVER stays in the back stack.
+          After successful login → Home, the user can never press back to return to login.
+        -->
+        <activity android:name=".ui.login.LoginActivity" android:exported="false"
+            android:noHistory="true"
+            android:configChanges="orientation|screenSize|keyboardHidden" android:windowSoftInputMode="adjustResize|stateHidden" />
 
-        <activity
-            android:name=".ui.home.HomeActivity"
-            android:exported="false"
+        <!--
+          v2.0.2: launchMode="singleTask" on the 4 bottom-nav activities.
+          This guarantees only ONE instance of each exists. When the user taps a nav tab,
+          startActivity() brings the existing instance to front (onNewIntent) and clears
+          activities above it. The back button always returns to Home, then exits the app.
+        -->
+        <activity android:name=".ui.home.HomeActivity" android:exported="false"
+            android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
-
-        <activity
-            android:name=".ui.browse.BrowseActivity"
-            android:exported="false"
+        <activity android:name=".ui.browse.BrowseActivity" android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
-
-        <activity
-            android:name=".ui.player.PlayerActivity"
-            android:exported="false"
+        <!-- v2.1.0: DetailActivity (Netflix-style hero + grid) -->
+        <activity android:name=".ui.detail.DetailActivity" android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
+        <activity android:name=".ui.player.PlayerActivity" android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
-            android:supportsPictureInPicture="true"
-            android:resizeableActivity="true"
+            android:supportsPictureInPicture="true" android:resizeableActivity="true"
             android:screenOrientation="sensorLandscape" />
+
+        <activity android:name=".ui.search.SearchActivity" android:exported="false"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
+        <activity android:name=".ui.mylist.MyListActivity" android:exported="false"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
+        <activity android:name=".ui.settings.SettingsActivity" android:exported="false"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
+
+        <!-- ★ v1.6.0: FileProvider para UpdateChecker (instalar APK) -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
     </application>
 </manifest>
