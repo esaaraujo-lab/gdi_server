@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  v2.1.0 — Netflix/Disney+ inspired animated tile WITH thumbnail support.
+
+  Changes vs v1.8.0:
+  • Added card_thumbnail ImageView between card_bg and card_icon.
+    When a thumbnail URL is available, the ImageView loads it via Coil
+    and the emoji icon is hidden. When no thumbnail is available, the
+    ImageView is gone and the emoji+gradient fallback shows.
+  • card_bg (gradient) stays visible underneath the thumbnail as a
+    loading placeholder + fallback.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="200dp"
+    android:layout_height="wrap_content"
+    android:layout_marginEnd="12dp"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    android:clickable="true"
+    android:foreground="?attr/selectableItemBackground">
+
+    <!-- Pink focus ring (hidden by default, shown on focus) -->
+    <View
+        android:id="@+id/focus_ring"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/tile_focus_border"
+        android:visibility="invisible" />
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/card_root"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="0dp"
+        app:cardBackgroundColor="#0F1218"
+        app:strokeWidth="0dp"
+        app:strokeColor="@android:color/transparent">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="200dp">
+
+            <!-- Thumbnail gradient (set in code via colorFromString) — fallback + loading placeholder -->
+            <View
+                android:id="@+id/card_bg"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/card_gradient_pink" />
+
+            <!-- v2.1.0: Real thumbnail ImageView (Coil-loaded, gone by default) -->
+            <ImageView
+                android:id="@+id/card_thumbnail"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:visibility="gone"
+                android:contentDescription="Thumbnail" />
+
+            <!-- Big emoji icon (centered) — shown when no thumbnail -->
+            <TextView
+                android:id="@+id/card_icon"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:textSize="44dp"
+                android:alpha="0.95" />
+
+            <!-- Top scrim for badge contrast -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layout_gravity="top"
+                android:background="@drawable/tile_overlay_top" />
+
+            <!-- Bottom scrim for title contrast (~55% of thumbnail) -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="120dp"
+                android:layout_gravity="bottom"
+                android:background="@drawable/tile_overlay_bottom" />
+
+            <!-- Watched ✓ badge (top-right) -->
+            <TextView
+                android:id="@+id/watched_badge"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="top|end"
+                android:layout_margin="10dp"
+                android:background="@drawable/badge_watched"
+                android:gravity="center"
+                android:text="✓"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
+            <!-- Continue ▶ badge (top-right, below watched) -->
+            <TextView
+                android:id="@+id/continue_badge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|start"
+                android:layout_margin="10dp"
+                android:background="@drawable/badge_resume"
+                android:paddingHorizontal="9dp"
+                android:paddingVertical="3dp"
+                android:text="▶ continuar"
+                android:textColor="#FFFF8B9F"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <!-- Bottom info: title + subtitle (overlay on scrim) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom"
+                android:orientation="vertical"
+                android:paddingHorizontal="12dp"
+                android:paddingBottom="10dp">
+
+                <TextView
+                    android:id="@+id/card_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:shadowColor="#80000000"
+                    android:shadowDx="0"
+                    android:shadowDy="1"
+                    android:shadowRadius="3"
+                    android:maxLines="2"
+                    android:ellipsize="end"
+                    android:lineSpacingExtra="1dp" />
+
+                <TextView
+                    android:id="@+id/card_subtitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="#FFC0C4D0"
+                    android:textSize="10.5sp"
+                    android:layout_marginTop="2dp"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:alpha="0.92" />
+            </LinearLayout>
+
+            <!-- Progress bar at the very bottom (pink→purple gradient) -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="3dp"
+                android:layout_gravity="bottom"
+                android:background="#1AFFFFFF" />
+
+            <View
+                android:id="@+id/progress_bar"
+                android:layout_width="70dp"
+                android:layout_height="3dp"
+                android:layout_gravity="bottom|start"
+                android:background="@drawable/progress_gradient" />
+        </FrameLayout>
+    </com.google.android.material.card.MaterialCardView>
+</FrameLayout>
