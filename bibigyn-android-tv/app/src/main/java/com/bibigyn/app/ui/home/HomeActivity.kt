@@ -46,7 +46,7 @@ class HomeActivity : AppCompatActivity() {
             return
         }
 
-        binding.toolbar.title = "BiBi Gyn — ${SessionManager.get(this).username ?: "olá"}"
+        binding.toolbar.title = "BiBi Fit — ${SessionManager.get(this).username ?: "olá"}"
         binding.toolbar.setNavigationIcon(android.R.drawable.ic_menu_close_clear_cancel)
         binding.toolbar.setNavigationOnClickListener {
             SessionManager.get(this).clearSession()
