@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  v2.0.0 — Bottom navigation menu (4 tabs).
+  Início / Buscar / Minha lista / Ajustes
+-->
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_home"
+        android:icon="@android:drawable/ic_media_play"
+        android:title="Início" />
+    <item
+        android:id="@+id/nav_search"
+        android:icon="@android:drawable/ic_menu_search"
+        android:title="Buscar" />
+    <item
+        android:id="@+id/nav_mylist"
+        android:icon="@android:drawable/btn_star_big_off"
+        android:title="Minha lista" />
+    <item
+        android:id="@+id/nav_settings"
+        android:icon="@android:drawable/ic_menu_preferences"
+        android:title="Ajustes" />
+</menu>
