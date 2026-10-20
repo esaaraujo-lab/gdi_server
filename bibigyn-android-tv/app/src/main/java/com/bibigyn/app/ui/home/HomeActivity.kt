@@ -14,6 +14,7 @@ import com.bibigyn.app.databinding.ActivityHomeBinding
 import com.bibigyn.app.ui.browse.BrowseActivity
 import com.bibigyn.app.ui.login.LoginActivity
 import com.bibigyn.app.util.SessionManager
+import com.bibigyn.app.util.UpdateChecker
 import kotlinx.coroutines.launch
 
 /**
@@ -71,6 +72,9 @@ class HomeActivity : AppCompatActivity() {
 
         // Best-effort fetch of user's enrolled courses. Append them to the grid.
         loadCourses()
+
+        // ★ Auto-update: verifica GitHub Releases por bibigyn-v* (silencioso)
+        UpdateChecker.checkForUpdate(this, com.bibigyn.app.BuildConfig.VERSION_NAME)
     }
 
     private fun openDrive(drive: DriveItem) {
