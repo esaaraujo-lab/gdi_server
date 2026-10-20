@@ -1,4 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  v2.3.0 — Player layout (restored to v2.1.1 state, then removed prev/next arrows).
+
+  Changes vs v2.2.0:
+  • REMOVED the bottom lesson navigation bar (lesson_nav_bar) — user feedback.
+  • REMOVED prev_button (⏮) and next_button (⏭) from the top bar — user feedback.
+  • Kept ALL other features: title, speed, sleep mode (🌙), sleep timer (⏰),
+    playlist sidebar (☰), gestures (double-tap seek, swipe), auto-hide controls.
+
+  The user can still navigate between lessons via the playlist sidebar (☰).
+-->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -12,44 +23,173 @@
         app:resize_mode="fit"
         app:use_controller="true"
         app:show_buffering="when_playing"
+        app:animation_enabled="true"
         app:surface_type="surface_view" />
 
-    <!-- Top gradient + title overlay -->
+    <!-- Playlist sidebar -->
+    <FrameLayout
+        android:id="@+id/playlist_container"
+        android:layout_width="320dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="end"
+        android:background="#E6000000"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="64dp"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="12dp"
+            android:text="Playlist"
+            android:textColor="#E6EDF3"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/playlist_recycler"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_marginTop="112dp"
+            android:layout_marginBottom="16dp"
+            android:clipToPadding="false"
+            android:paddingHorizontal="8dp" />
+    </FrameLayout>
+
+    <!-- Top gradient + title + buttons overlay -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         android:layout_gravity="top"
         android:background="@drawable/top_gradient"
-        android:padding="16dp"
-        android:gravity="center_vertical">
+        android:paddingHorizontal="16dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="10dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/title_label"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="@android:color/white"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:ellipsize="end"
+                android:singleLine="true"
+                android:shadowColor="#80000000"
+                android:shadowDx="0"
+                android:shadowDy="1"
+                android:shadowRadius="4" />
+
+            <!-- v2.3.0: REMOVED prev_button (⏮) and next_button (⏭) per user request.
+                 Navigation between lessons is done via the playlist sidebar (☰). -->
+
+            <!-- v2.3.2: ↺ Reiniciar button — restarts the current video from 0 -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/restart_button"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="48dp"
+                android:text="↺"
+                android:textSize="20sp"
+                android:textColor="@android:color/white"
+                app:cornerRadius="16dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/speed_button"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="56dp"
+                android:text="1.0x"
+                android:textColor="@android:color/white"
+                app:strokeColor="@android:color/white"
+                app:strokeWidth="1dp"
+                app:cornerRadius="16dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/sleep_button"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="48dp"
+                android:text="🌙"
+                android:textColor="@android:color/white"
+                app:cornerRadius="16dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/sleep_timer_button"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="48dp"
+                android:text="⏰"
+                android:textColor="@android:color/white"
+                app:cornerRadius="16dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/playlist_button"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="48dp"
+                android:text="☰"
+                android:textColor="@android:color/white"
+                app:cornerRadius="16dp" />
+        </LinearLayout>
 
         <TextView
-            android:id="@+id/title_label"
-            android:layout_width="0dp"
+            android:id="@+id/sleep_timer_label"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:textColor="@android:color/white"
-            android:textSize="16sp"
+            android:layout_marginTop="6dp"
+            android:textColor="#FFFF8B9F"
+            android:textSize="12sp"
             android:textStyle="bold"
-            android:ellipsize="end"
-            android:singleLine="true"
             android:shadowColor="#80000000"
             android:shadowDx="0"
             android:shadowDy="1"
-            android:shadowRadius="4" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/speed_button"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="64dp"
-            android:text="1.0x"
-            android:textColor="@android:color/white"
-            app:strokeColor="@android:color/white"
-            app:strokeWidth="1dp"
-            app:cornerRadius="16dp" />
+            android:shadowRadius="3"
+            android:visibility="gone" />
     </LinearLayout>
+
+    <!-- v2.0.0: Seek gesture hint (center overlay, transient) -->
+    <TextView
+        android:id="@+id/seek_gesture_hint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="#CC000000"
+        android:paddingHorizontal="22dp"
+        android:paddingVertical="10dp"
+        android:textColor="@android:color/white"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        android:elevation="8dp" />
+
+    <!-- v2.0.0: Swipe indicator (top-center overlay, transient) -->
+    <TextView
+        android:id="@+id/swipe_indicator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_marginTop="80dp"
+        android:background="#CC000000"
+        android:paddingHorizontal="22dp"
+        android:paddingVertical="10dp"
+        android:textColor="@android:color/white"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        android:elevation="8dp" />
 
 </FrameLayout>
