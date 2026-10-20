@@ -1,44 +1,88 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  v1.8.0 — Browse (inside-drive) screen.
+
+  Changes vs v1.7.0:
+  • Header now has gradient scrim + 1dp pink accent line for that
+    Netflix/Disney "channel header" feel.
+  • MaterialToolbar title styled in white 18sp bold.
+  • Breadcrumb redesigned: pill chip with pink chevrons between
+    segments, ellipsizes middle.
+  • RecyclerView padding tuned for tile focus scale (so scaled tiles
+    don't clip against the recycler edges).
+  • Loading + empty + error states polished (larger emoji, retry
+    button uses Meggy pink accent).
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/md_background">
+    android:background="@color/bg_primary">
 
-    <com.google.android.material.appbar.MaterialToolbar
-        android:id="@+id/toolbar"
-        android:layout_width="match_parent"
-        android:layout_height="?attr/actionBarSize"
-        android:background="@color/md_surface"
-        android:elevation="0dp"
-        app:titleTextColor="@color/md_on_surface"
-        app:navigationIconTint="@color/md_on_surface" />
-
-    <TextView
-        android:id="@+id/breadcrumb"
+    <!-- Header (toolbar + accent line) -->
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingHorizontal="16dp"
-        android:paddingVertical="8dp"
-        android:textColor="@color/md_on_surface_variant"
-        android:textSize="13sp"
-        android:singleLine="true"
-        android:ellipsize="middle"
-        tools:ignore="HardcodedText"
-        xmlns:tools="http://schemas.android.com/tools" />
+        android:background="@color/bg_primary">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:background="@color/bg_primary"
+            android:elevation="0dp"
+            app:titleTextColor="@color/text_primary"
+            app:titleTextAppearance="@style/TextAppearance.Material3.TitleLarge"
+            app:navigationIconTint="@color/meggy_pink" />
+
+        <!-- 1dp pink accent line under header -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_gravity="bottom"
+            android:background="#22FF8B9F" />
+    </FrameLayout>
+
+    <!-- Breadcrumb chip -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="18dp"
+        android:paddingVertical="6dp">
+
+        <TextView
+            android:id="@+id/breadcrumb"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/breadcrumb_chip"
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="7dp"
+            android:textColor="@color/text_secondary"
+            android:textSize="12.5sp"
+            android:singleLine="true"
+            android:ellipsize="middle"
+            tools:ignore="HardcodedText" />
+    </LinearLayout>
 
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1">
 
+        <!-- Tile grid (extra padding so focused-scaled tiles don't clip) -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recycler"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clipToPadding="false"
-            android:padding="12dp"
+            android:paddingHorizontal="10dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="24dp"
             android:scrollbars="vertical"
             android:scrollbarFadeDuration="0" />
 
@@ -62,15 +106,16 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="48sp"
+                android:textSize="56sp"
                 android:text="📭" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="12dp"
                 android:text="@string/browse_empty"
-                android:textColor="@color/md_on_surface_variant" />
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp" />
         </LinearLayout>
 
         <LinearLayout
@@ -86,26 +131,25 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="48sp"
+                android:textSize="56sp"
                 android:text="⚠️" />
 
             <TextView
                 android:id="@+id/error_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="12dp"
                 android:gravity="center"
-                android:textColor="@color/md_on_surface_variant" />
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/retry_button"
                 style="@style/Widget.Meggy.Button"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="18dp"
                 android:text="@string/browse_retry" />
         </LinearLayout>
-
     </FrameLayout>
-
 </LinearLayout>
