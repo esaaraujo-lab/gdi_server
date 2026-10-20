@@ -51,7 +51,7 @@
         -->
         <activity android:name=".ui.login.LoginActivity" android:exported="false"
             android:noHistory="true"
-            android:configChanges="orientation|screenSize|keyboardHidden" android:windowSoftInputMode="adjustResize" />
+            android:configChanges="orientation|screenSize|keyboardHidden" android:windowSoftInputMode="adjustResize|stateHidden" />
 
         <!--
           v2.0.2: launchMode="singleTask" on the 4 bottom-nav activities.
@@ -75,7 +75,7 @@
         <activity android:name=".ui.search.SearchActivity" android:exported="false"
             android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
-            android:windowSoftInputMode="adjustResize" />
+            android:windowSoftInputMode="adjustResize|stateHidden" />
         <activity android:name=".ui.mylist.MyListActivity" android:exported="false"
             android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
