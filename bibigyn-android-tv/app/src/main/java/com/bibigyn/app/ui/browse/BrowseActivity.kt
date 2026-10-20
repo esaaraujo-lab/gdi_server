@@ -1,181 +1,206 @@
 package com.bibigyn.app.ui.browse
 
 import android.content.Intent
+import android.graphics.Rect
+import android.net.Uri
 import android.os.Bundle
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
-import com.google.android.material.snackbar.Snackbar
+import androidx.recyclerview.widget.RecyclerView
 import com.bibigyn.app.BiBiGynApp
 import com.bibigyn.app.data.ApiService
 import com.bibigyn.app.data.FileItem
 import com.bibigyn.app.databinding.ActivityBrowseBinding
-import com.bibigyn.app.ui.home.HomeActivity
 import com.bibigyn.app.ui.login.LoginActivity
 import com.bibigyn.app.ui.player.PlayerActivity
+import com.bibigyn.app.util.AuthHelper
+import com.bibigyn.app.util.CrossFolderPlaylist
+import com.bibigyn.app.util.PlaylistManager
 import com.bibigyn.app.util.SessionManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-/**
- * BrowseActivity — folder browser.
- *
- * Maintains a simple navigation stack of (folderId, folderName) pairs so the
- * hardware Back button / D-pad Back traverses up the folder hierarchy before
- * leaving the activity.
- *
- * Click folder  → push new (id, name) and reload
- * Click video   → launch PlayerActivity with the full download URL
- * Click PDF     → (placeholder) Snackbar for now — a PDF viewer activity can be
- *                 added later without changing this call site.
- */
 class BrowseActivity : AppCompatActivity() {
-
-    private data class Crumb(val folderId: String?, val name: String)
 
     private lateinit var binding: ActivityBrowseBinding
     private lateinit var api: ApiService
-    private lateinit var adapter: FileAdapter
-
-    private val stack = ArrayDeque<Crumb>()
-    private var driveIndex: Int = 0
+    private var currentPath: String = "/"
+    private var folderName: String = "Browse"
+    private var fileAdapter: FileAdapter? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityBrowseBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        api = ApiService(application as BiBiGynApp)
+        api = ApiService(this)
+        currentPath = intent.getStringExtra("drivePath") ?: "/"
+        folderName = intent.getStringExtra("folderName") ?: "Browse"
 
-        if (!SessionManager.get(this).isLoggedIn) {
-            startActivity(Intent(this, LoginActivity::class.java))
-            finish()
-            return
+        // ★ v1.8.0: toolbar title + pink chevron breadcrumb.
+        binding.toolbar.title = folderName
+        binding.toolbar.setNavigationOnClickListener { finish() }
+        binding.breadcrumb.text = buildBreadcrumb(currentPath, folderName)
+
+        val spanCount = calculateSpanCount()
+        val layoutManager = GridLayoutManager(this, spanCount)
+        binding.recycler.layoutManager = layoutManager
+        binding.recycler.addItemDecoration(GridGutterDecoration(10))
+
+        binding.retryButton?.setOnClickListener { loadFolder() }
+
+        loadFolder()
+    }
+
+    private fun buildBreadcrumb(path: String, displayName: String): CharSequence {
+        val pinkColor = ForegroundColorSpan(0xFFFF8B9F.toInt())
+        val grayColor = ForegroundColorSpan(0xFF8B949E.toInt())
+        val sb = SpannableStringBuilder()
+        sb.append("Meggy", grayColor, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        val segments = path.trim('/').split('/').filter { it.isNotBlank() }
+        for (seg in segments) {
+            sb.append("  ›  ", pinkColor, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            val label = if (seg.matches(Regex("^\\d+:$"))) displayName else seg
+            sb.append(label, grayColor, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
-
-        driveIndex = intent.getIntExtra(EXTRA_DRIVE_INDEX, 0)
-        val driveName = intent.getStringExtra(EXTRA_DRIVE_NAME) ?: "Drive"
-        val rootFolderId = intent.getStringExtra(EXTRA_FOLDER_ID)
-        val rootFolderName = intent.getStringExtra(EXTRA_FOLDER_NAME) ?: driveName
-
-        // Seed the navigation stack with the drive root.
-        stack.addLast(Crumb(rootFolderId, rootFolderName))
-
-        binding.toolbar.title = driveName
-        binding.toolbar.setNavigationIcon(android.R.drawable.ic_media_previous)
-        binding.toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
-        binding.toolbar.setOnClickListener { onBackPressedDispatcher.onBackPressed() }
-
-        adapter = FileAdapter(
-            onFolder = { f -> pushFolder(f.id, f.name) },
-            onFile = { f -> openFile(f) }
-        )
-
-        val span = computeSpan()
-        binding.recycler.layoutManager = GridLayoutManager(this, span)
-        binding.recycler.adapter = adapter
-        binding.recycler.setItemViewCacheSize(20)
-
-        updateBreadcrumb()
-        loadCurrent()
-
-        binding.retryButton.setOnClickListener { loadCurrent() }
+        return sb
     }
 
-    private fun pushFolder(folderId: String?, name: String) {
-        stack.addLast(Crumb(folderId, name))
-        updateBreadcrumb()
-        loadCurrent()
+    private fun calculateSpanCount(): Int {
+        val displayMetrics = resources.displayMetrics
+        val screenWidthDp = displayMetrics.widthPixels / displayMetrics.density
+        return if (screenWidthDp >= 900) 5 else if (screenWidthDp >= 600) 4 else 2
     }
 
-    private fun popFolder(): Boolean {
-        if (stack.size <= 1) return false
-        stack.removeLast()
-        updateBreadcrumb()
-        loadCurrent()
-        return true
-    }
+    private fun loadFolder() {
+        binding.loadingView.visibility = View.VISIBLE
+        binding.errorState?.visibility = View.GONE
+        binding.emptyState.visibility = View.GONE
 
-    private fun updateBreadcrumb() {
-        binding.breadcrumb.text = stack.joinToString("  ›  ") { it.name }
-    }
-
-    private fun loadCurrent() {
-        val current = stack.lastOrNull() ?: return
-        showLoading(true)
         lifecycleScope.launch {
-            try {
-                val listing = api.listFolder(driveIndex, current.folderId, null)
-                val sorted = listing.files.sortedWith(
-                    compareByDescending<FileItem> { it.isFolder }
-                        .thenBy { it.name.lowercase() }
-                )
-                adapter.submitList(sorted) {
-                    showLoading(false)
-                    if (sorted.isEmpty()) {
-                        binding.emptyState.visibility = View.VISIBLE
-                    } else {
-                        binding.emptyState.visibility = View.GONE
-                    }
-                }
-            } catch (e: Exception) {
-                showLoading(false)
-                binding.errorState.visibility = View.VISIBLE
-                binding.errorText.text = e.message ?: "Erro desconhecido"
-                Snackbar.make(binding.root, e.message ?: "Erro", Snackbar.LENGTH_LONG).show()
+            val files = withContext(Dispatchers.IO) { api.listFolder(currentPath) }
+            binding.loadingView.visibility = View.GONE
+
+            // ★ v2.1.0: Use AuthHelper for consistent expired-session handling.
+            // Direct null check enables Kotlin smart-casting (AuthHelper.isSessionExpired doesn't).
+            if (files == null) {
+                AuthHelper.bounceToLogin(this@BrowseActivity)
+                return@launch
+            }
+
+            val adapter = FileAdapter(
+                onFolder = { file -> openFolder(file) },
+                onFile = { file -> openFile(file) }
+            )
+            fileAdapter = adapter
+            adapter.setFolderPath(currentPath)
+            binding.recycler.adapter = adapter
+
+            if (files.isEmpty()) {
+                binding.errorState?.visibility = View.VISIBLE
+                binding.emptyState.visibility = View.VISIBLE
+                adapter.submitList(emptyList())
+            } else {
+                adapter.submitList(files)
+                val sm = SessionManager.get(this@BrowseActivity)
+                val resumed = files.filter { it.isVideo && sm.hasResume(currentPath, it.name) }
+                    .map { it.name }.toSet()
+                val watched = files.filter { it.isVideo && sm.isWatched(currentPath, it.name) }
+                    .map { it.name }.toSet()
+                adapter.setResumeAndWatched(resumed, watched)
             }
         }
     }
 
-    private fun openFile(f: FileItem) {
-        val link = f.link
-        if (link.isNullOrBlank()) {
-            Snackbar.make(binding.root, "Arquivo sem link de download.", Snackbar.LENGTH_LONG).show()
-            return
-        }
-        val fullUrl = if (link.startsWith("http")) link else "${com.bibigyn.app.BiBiGynApp.BASE_URL}$link"
+    /**
+     * v2.0.2 — Routes to LoginActivity with CLEAR_TASK so the entire back
+     * stack is wiped. Used when an expired session is detected.
+     */
+    private fun bounceToLogin() {
+        val intent = Intent(this, LoginActivity::class.java)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        startActivity(intent)
+        finish()
+    }
 
-        if (f.isVideo) {
-            val intent = Intent(this, PlayerActivity::class.java).apply {
-                putExtra(PlayerActivity.EXTRA_URL, fullUrl)
-                putExtra(PlayerActivity.EXTRA_TITLE, f.name)
-                putExtra(PlayerActivity.EXTRA_COOKIE, SessionManager.get(this@BrowseActivity).sessionCookie)
-            }
-            startActivity(intent)
-            overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+    private fun openFolder(file: FileItem) {
+        val newPath = if (currentPath.endsWith("/")) {
+            "$currentPath${file.name}/"
         } else {
-            // Non-video files (PDFs etc.) — placeholder for a future viewer.
-            Snackbar.make(binding.root, "Visualização de ${f.mimeType} em breve.", Snackbar.LENGTH_LONG).show()
+            "$currentPath/${file.name}/"
+        }
+        val intent = Intent(this, BrowseActivity::class.java)
+        intent.putExtra("drivePath", newPath)
+        intent.putExtra("folderName", file.name)
+        startActivity(intent)
+    }
+
+    private fun openFile(file: FileItem) {
+        val link = file.link
+        if (link.isNullOrEmpty()) return
+
+        val fullUrl = BiBiGynApp.BASE_URL + link
+
+        if (file.isVideo || file.isAudio) {
+            val allFiles = fileAdapter?.currentList ?: emptyList()
+            val playableItems = allFiles.filter { (it.isVideo || it.isAudio) && !it.link.isNullOrEmpty() }
+            val playIndex = playableItems.indexOfFirst { it.id == file.id }
+
+            if (playableItems.size > 1 && playIndex >= 0) {
+                PlaylistManager.setPlaylist(playableItems, playIndex, this)
+                launchPlayer(fullUrl, file.name, currentPath)
+            } else {
+                lifecycleScope.launch {
+                    binding.loadingView.visibility = View.VISIBLE
+                    val result = withContext(Dispatchers.IO) {
+                        CrossFolderPlaylist.build(currentPath, file, api)
+                    }
+                    binding.loadingView.visibility = View.GONE
+
+                    if (result.items.size > 1) {
+                        PlaylistManager.setPlaylist(result.items, result.startIndex, this@BrowseActivity)
+                    } else if (playableItems.isNotEmpty() && playIndex >= 0) {
+                        PlaylistManager.setPlaylist(playableItems, playIndex, this@BrowseActivity)
+                    }
+
+                    launchPlayer(fullUrl, file.name, currentPath)
+                }
+            }
+        } else if (file.isPdf) {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(fullUrl))
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            try { startActivity(intent) } catch (e: Exception) {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(fullUrl)))
+            }
+        } else {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(fullUrl))
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            try { startActivity(intent) } catch (_: Exception) {}
         }
     }
 
-    private fun showLoading(loading: Boolean) {
-        binding.loadingView.visibility = if (loading) View.VISIBLE else View.GONE
-        binding.errorState.visibility = View.GONE
-        if (loading) binding.emptyState.visibility = View.GONE
+    private fun launchPlayer(url: String, title: String, folderPath: String) {
+        SessionManager.get(this).saveLastWatched(folderPath, title)
+        val intent = Intent(this, PlayerActivity::class.java)
+        intent.putExtra(PlayerActivity.EXTRA_URL, url)
+        intent.putExtra(PlayerActivity.EXTRA_TITLE, title)
+        intent.putExtra(PlayerActivity.EXTRA_FOLDER_PATH, folderPath)
+        startActivity(intent)
     }
 
-    private fun computeSpan(): Int {
-        val dm = resources.displayMetrics
-        val widthDp = dm.widthPixels / dm.density
-        return when {
-            widthDp >= 960 -> 6
-            widthDp >= 720 -> 5
-            widthDp >= 540 -> 4
-            widthDp >= 360 -> 3
-            else -> 2
+    private class GridGutterDecoration(private val gutterDp: Int) : RecyclerView.ItemDecoration() {
+        override fun getItemOffsets(
+            outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State
+        ) {
+            val density = view.resources.displayMetrics.density
+            val px = (gutterDp * density).toInt()
+            outRect.set(px / 2, px / 2, px / 2, px / 2)
         }
-    }
-
-    @Deprecated("Use onBackPressedDispatcher instead.")
-    override fun onBackPressed() {
-        if (!popFolder()) super.onBackPressed()
-    }
-
-    companion object {
-        const val EXTRA_DRIVE_INDEX = "drive_index"
-        const val EXTRA_DRIVE_NAME   = "drive_name"
-        const val EXTRA_FOLDER_ID    = "folder_id"
-        const val EXTRA_FOLDER_NAME  = "folder_name"
     }
 }
