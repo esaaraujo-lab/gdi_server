@@ -15,28 +15,29 @@ import androidx.core.content.FileProvider
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
-import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.TimeUnit
 
-/**
- * v2.6.0 — UpdateChecker com filtro por tag prefix native-v*
- *
- * ★ Mudancas:
- *  - NAO usa mais releases/latest (que pode retornar bibigyn-v* ou desktop-v*)
- *  - Lista todas as releases e filtra por tag prefix "native-v"
- *  - Auto-download + auto-install silencioso (sem dialog — so toast)
- *  - Se ja esta na ultima versao, NAO faz nada (silencioso)
- */
 object UpdateChecker {
 
     private const val GITHUB_RELEASES_API = "https://api.github.com/repos/esaaraujo-lab/gdi_server/releases?per_page=10"
     private const val TAG_PREFIX = "bibigyn-v"
-    private const val PREFS_NAME = "meggy_update"
+    private const val PREFS_NAME = "bibigyn_update"
     private const val KEY_DOWNLOADED_VERSION = "downloaded_version"
+    private const val KEY_LAST_CHECK = "last_check_time"
+    private const val CHECK_INTERVAL_MS = 6 * 3600 * 1000L  // 6 hours between checks
 
     fun checkForUpdate(context: Context, currentVersion: String, showFeedback: Boolean = false) {
         val localVersion = currentVersion.replace(TAG_PREFIX, "").replace("v", "").trim()
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+        // ★ Only check once every 6 hours (not every app open)
+        val lastCheck = prefs.getLong(KEY_LAST_CHECK, 0L)
+        val now = System.currentTimeMillis()
+        if (!showFeedback && now - lastCheck < CHECK_INTERVAL_MS) {
+            return  // Skip — checked recently
+        }
+        prefs.edit().putLong(KEY_LAST_CHECK, now).apply()
 
         Thread {
             try {
@@ -57,13 +58,11 @@ object UpdateChecker {
 
                 val body = response.body?.string()
                 if (body.isNullOrBlank()) {
-                    if (showFeedback) showToast(context, "Resposta vazia do servidor")
+                    if (showFeedback) showToast(context, "Resposta vazia")
                     return@Thread
                 }
 
                 val releasesArray = JSONArray(body)
-
-                // Busca a primeira release com tag prefix "native-v"
                 var remoteVersion = ""
                 var apkUrl: String? = null
                 var apkSize = 0L
@@ -89,22 +88,20 @@ object UpdateChecker {
                 }
 
                 if (remoteVersion.isEmpty()) {
-                    if (showFeedback) showToast(context, "Nenhuma release native-v* encontrada")
+                    if (showFeedback) showToast(context, "Nenhuma release encontrada")
                     return@Thread
                 }
 
-                // Mesma versao — NAO fazer nada (silencioso)
+                // ★ SAME version — do NOTHING (silent)
                 if (remoteVersion == localVersion) {
                     if (showFeedback) showToast(context, "Voce esta na versao mais recente (v$localVersion)")
                     return@Thread
                 }
 
-                // Versao remota e mais nova → auto-download + auto-install
+                // Remote is newer → auto-download + auto-install
                 if (isNewer(remoteVersion, localVersion) && apkUrl != null) {
-                    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                     val sizeStr = if (apkSize > 0) " (${apkSize / 1024 / 1024} MB)" else ""
-                    val fileName = "meggy-$remoteVersion.apk"
-
+                    val fileName = "bibigyn-$remoteVersion.apk"
                     val lastDownloaded = prefs.getString(KEY_DOWNLOADED_VERSION, "") ?: ""
                     val downloadedFile = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
 
@@ -119,14 +116,13 @@ object UpdateChecker {
                     if (showFeedback) showToast(context, "Voce esta na versao mais recente (v$localVersion)")
                 }
             } catch (e: Exception) {
-                if (showFeedback) showToast(context, "Erro de rede: ${e.message ?: "verifique sua conexao"}")
+                if (showFeedback) showToast(context, "Erro de rede: ${e.message ?: ""}")
             }
         }.start()
     }
 
     private fun showToast(context: Context, message: String) {
-        val mainHandler = Handler(Looper.getMainLooper())
-        mainHandler.post {
+        Handler(Looper.getMainLooper()).post {
             Toast.makeText(context, message, Toast.LENGTH_LONG).show()
         }
     }
@@ -149,12 +145,11 @@ object UpdateChecker {
     ) {
         try {
             val request = DownloadManager.Request(Uri.parse(url)).apply {
-                setTitle("Meggy — Atualizacao v$remoteVersion")
-                setDescription("Baixando nova versao do app...")
+                setTitle("BiBi Fit — Atualizacao v$remoteVersion")
+                setDescription("Baixando nova versao...")
                 setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
                 setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, fileName)
             }
-
             val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
             val downloadId = dm.enqueue(request)
 
@@ -184,29 +179,18 @@ object UpdateChecker {
 
     private fun installApk(context: Context, file: File) {
         try {
-            val apkUri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                file
-            )
-
+            val apkUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
             val installIntent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(apkUri, "application/vnd.android.package-archive")
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
             }
-
             val resInfo = context.packageManager.queryIntentActivities(installIntent, 0)
             for (ri in resInfo) {
-                context.grantUriPermission(
-                    ri.activityInfo.packageName,
-                    apkUri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
+                context.grantUriPermission(ri.activityInfo.packageName, apkUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-
             context.startActivity(installIntent)
         } catch (e: Exception) {
-            showToast(context, "Nao foi possivel instalar. Baixe manualmente.")
+            showToast(context, "Nao foi possivel instalar.")
         }
     }
 }
