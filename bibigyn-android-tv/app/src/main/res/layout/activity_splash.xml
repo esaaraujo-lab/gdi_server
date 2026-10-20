@@ -25,7 +25,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
-        android:text="Fitness & Hipopressivos"
+        android:text="Fitness &amp; Hipopressivos"
         android:textColor="#8B949E"
         android:textSize="14sp" />
 
