@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">BiBi Gyn</string>
+    <string name="app_name">BiBi Fit</string>
     <string name="app_subtitle">Fitness &amp; Hipopressivos</string>
 
     <!-- Login -->
@@ -11,7 +11,7 @@
     <string name="login_loading">Entrando…</string>
 
     <!-- Home -->
-    <string name="home_title">BiBi Gyn</string>
+    <string name="home_title">BiBi Fit</string>
     <string name="home_logout">Sair</string>
     <string name="home_my_courses">Meus Cursos</string>
 
