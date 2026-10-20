@@ -14,6 +14,8 @@ import org.json.JSONArray
 /**
  * ApiService — thin Kotlin wrapper around the worker.js HTTP API at https://educa.eu.org.
  */
+class ApiException(message: String) : Exception(message)
+
 class ApiService(private val app: BiBiGynApp) {
 
     /**
@@ -112,7 +114,7 @@ class ApiService(private val app: BiBiGynApp) {
                     modifiedTime = f.optString("modifiedTime", null)
                 ))
             }
-            FolderListing(files = result, nextPageToken = null)
+            FolderListing(files = result, nextPageToken = null, currentPageIndex = 0)
         }
     }
 
