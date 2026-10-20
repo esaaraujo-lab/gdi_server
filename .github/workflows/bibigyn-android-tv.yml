@@ -1,1 +1,59 @@
+name: Build BiBi Gyn Android TV
 
+on:
+  push:
+    tags: ['bibigyn-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Generate debug keystore
+        run: |
+          mkdir -p ~/.android
+          keytool -genkey -v -keystore ~/.android/debug.keystore \
+            -storepass android -alias androiddebugkey -keypass android \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.2'
+
+      - name: Build APK (release)
+        working-directory: bibigyn-android-tv
+        run: gradle assembleRelease --no-daemon --no-build-cache
+
+      - name: Build APK (debug fallback)
+        if: failure()
+        working-directory: bibigyn-android-tv
+        run: gradle assembleDebug --no-daemon --no-build-cache
+
+      - name: Find APK
+        run: find bibigyn-android-tv -name "*.apk" -type f
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: bibigyn-android-tv-apk
+          path: bibigyn-android-tv/app/build/outputs/apk/**/*.apk
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/bibigyn-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: bibigyn-android-tv/app/build/outputs/apk/**/*.apk
+          generate_release_notes: true
