@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    BiBi Gyn TV banner — 320x180dp (Android TV banner spec).
-    Gradient fitness theme: teal → pink with "BiBi Gyn" wordmark.
+    BiBi Fit TV banner — 320x180dp (Android TV banner spec).
+    Tema fitness: gradiente rosa → laranja com silhueta de mulher marromba.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="320dp"
@@ -9,47 +9,79 @@
     android:viewportWidth="320"
     android:viewportHeight="180">
 
-    <!-- Background gradient: teal → pink (fitness + saúde) -->
+    <!-- Background gradient: rosa → laranja (fitness energy) -->
     <path
-        android:fillColor="#5DDEDA"
+        android:fillColor="#FF6B9F"
         android:pathData="M0,0 H320 V180 H0 Z" />
 
-    <!-- Diagonal accent -->
+    <!-- Diagonal accent (laranja) -->
     <path
-        android:fillColor="#FF8B9F"
-        android:pathData="M0,120 L320,60 L320,180 L0,180 Z" />
+        android:fillColor="#FF9800"
+        android:pathData="M0,100 L320,40 L320,180 L0,180 Z" />
 
     <!-- Left accent bar -->
     <path
         android:fillColor="#0D1119"
-        android:pathData="M0,0 H8 V180 H0 Z" />
+        android:pathData="M0,0 H6 V180 H0 Z" />
 
-    <!-- "BiBi Gyn" text — simplified as rectangles (vector text is complex) -->
+    <!-- "BiBi Fit" text — letras brancas stylizadas -->
     <!-- B -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M40,60 H70 V70 H50 V80 H65 V90 H50 V110 H40 Z" />
+        android:pathData="M40,50 H70 V60 H50 V70 H65 V80 H50 V100 H40 z" />
     <!-- i -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M80,60 H90 V110 H80 Z M80,50 H90 V60 H80 Z" />
+        android:pathData="M80,50 H90 V100 H80 z M80,40 H90 V50 H80 z" />
     <!-- B -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M100,60 H130 V70 H110 V80 H125 V90 H110 V110 H100 Z" />
+        android:pathData="M100,50 H130 V60 H110 V70 H125 V80 H110 V100 H100 z" />
     <!-- i -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M140,60 H150 V110 H140 Z M140,50 H150 V60 H140 Z" />
+        android:pathData="M140,50 H150 V100 H140 z M140,40 H150 V50 H140 z" />
 
-    <!-- "Gyn" subtitle area -->
-    <path
-        android:fillColor="#0D1119"
-        android:pathData="M40,120 H280 V140 H40 Z" />
-
-    <!-- Fitness icon (dumbbell shape) -->
+    <!-- "Fit" — menor, abaixo -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M200,75 H210 V95 H200 Z M190,80 H200 V90 H190 Z M210,80 H220 V90 H210 Z M220,75 H230 V95 H220 Z" />
+        android:pathData="M40,110 H50 V120 H45 V130 H50 V140 H40 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M55,110 H65 V140 H55 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M70,110 H80 V120 H75 V130 H80 V140 H70 z" />
+
+    <!-- Silhueta de mulher fitness (lado direito) -->
+    <!-- Cabeça -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M250,40 m-8,0 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0 z" />
+    <!-- Corpo -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M242,48 C240,52 238,60 238,70 C238,80 240,90 242,95 L258,95 C260,90 262,80 262,70 C262,60 260,52 258,48 z" />
+    <!-- Pernas -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M242,95 L248,95 L246,140 L242,140 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M252,95 L258,95 L258,140 L254,140 z" />
+    <!-- Braços (levantando halteres) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M238,55 C234,50 230,45 228,42 L232,40 L236,45 L240,52 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M262,55 C266,50 270,45 272,42 L268,40 L264,45 L260,52 z" />
+    <!-- Halteres -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M225,38 L233,38 L233,42 L225,42 z M227,36 L231,36 L231,44 L227,44 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M267,38 L275,38 L275,42 L267,42 z M269,36 L273,36 L273,44 L269,44 z" />
 
 </vector>
