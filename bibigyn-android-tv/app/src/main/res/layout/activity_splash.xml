@@ -1,40 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@drawable/gradient_meggy"
     android:gravity="center"
-    android:padding="32dp">
+    android:background="@drawable/gradient_meggy">
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textSize="120sp"
+        android:textSize="64sp"
         android:text="💪" />
 
-    <Space android:layout_width="match_parent" android:layout_height="24dp" />
-
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/app_name"
-        android:textAppearance="@style/TextAppearance.Meggy.Title"
-        android:textSize="44sp" />
+        android:layout_marginTop="8dp"
+        android:text="BiBi Fit"
+        android:textSize="32sp"
+        android:textStyle="bold"
+        android:textColor="#FF6B35" />
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
-        android:text="@string/app_subtitle"
-        android:textAppearance="@style/TextAppearance.Meggy.Subtitle" />
-
-    <Space android:layout_width="match_parent" android:layout_height="48dp" />
-
-    <ProgressBar
-        android:layout_width="32dp"
-        android:layout_height="32dp"
-        android:indeterminateTint="@android:color/white" />
+        android:text="Fitness & Hipopressivos"
+        android:textColor="#8B949E"
+        android:textSize="14sp" />
 
 </LinearLayout>
