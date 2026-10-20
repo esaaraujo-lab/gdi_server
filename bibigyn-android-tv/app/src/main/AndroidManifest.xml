@@ -44,7 +44,7 @@
             android:name=".ui.login.LoginActivity"
             android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden"
-            android:windowSoftInputMode="adjustResize" />
+            android:windowSoftInputMode="adjustResize|stateHidden" />
 
         <activity
             android:name=".ui.home.HomeActivity"
