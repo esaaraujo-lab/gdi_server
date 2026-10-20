@@ -1,48 +1,51 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+    Meggy Login — layout compacto para TV.
+    Campos no TOPO da tela para que o teclado on-screen não os cubra.
+    ScrollView permite rolar quando o teclado aparece.
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/login_scroll"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0D1117">
-
-    <!-- Background gradient -->
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@drawable/login_gradient" />
+    android:background="#0D1117"
+    android:fillViewport="true"
+    android:scrollbars="none">
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:gravity="center"
-        android:padding="32dp">
+        android:gravity="center_horizontal"
+        android:padding="24dp"
+        android:paddingBottom="400dp">
 
-        <!-- Logo -->
+        <!-- Logo compacto -->
         <TextView
-            android:layout_width="80dp"
-            android:layout_height="80dp"
-            android:gravity="center"
-            android:textSize="48sp"
-            android:text="🐩"
-            android:layout_marginBottom="16dp" />
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="36sp"
+            android:text="🐩" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
             android:text="Meggy"
-            android:textSize="32sp"
+            android:textSize="28sp"
             android:textStyle="bold"
-            android:textColor="#FF8B9F"
-            android:layout_marginBottom="8dp" />
+            android:textColor="#FF8B9F" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
             android:text="Sua tutorinha de estudos 🐾"
             android:textColor="#8B949E"
-            android:textSize="14sp"
-            android:layout_marginBottom="40dp" />
+            android:textSize="14sp" />
+
+        <Space android:layout_width="match_parent" android:layout_height="16dp" />
 
         <!-- Username -->
         <com.google.android.material.textfield.TextInputLayout
@@ -50,7 +53,7 @@
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
+            android:layout_marginBottom="12dp"
             android:hint="Usuário"
             app:boxStrokeColor="#FF8B9F"
             app:hintTextColor="#FF8B9F">
@@ -70,7 +73,7 @@
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="32dp"
+            android:layout_marginBottom="20dp"
             android:hint="Senha"
             app:boxStrokeColor="#FF8B9F"
             app:hintTextColor="#FF8B9F"
@@ -107,4 +110,4 @@
             android:indeterminateTint="#FF8B9F" />
 
     </LinearLayout>
-</FrameLayout>
+</ScrollView>
