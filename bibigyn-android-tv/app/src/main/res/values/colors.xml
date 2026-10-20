@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Meggy brand -->
+    <color name="meggy_pink">#FFFF8B9F</color>
+    <color name="meggy_pink_dark">#FFE0657F</color>
+    <color name="meggy_purple">#FFC026D3</color>
+    <color name="meggy_purple_deep">#FF7B1FA2</color>
+    <color name="meggy_teal">#FF5DDEDA</color>
+
+    <!-- Material 3 dark palette -->
+    <color name="md_background">#FF0D0E12</color>
+    <color name="md_surface">#FF16181F</color>
+    <color name="md_surface_variant">#FF232634</color>
+    <color name="md_surface_container">#FF1B1E27</color>
+    <color name="md_outline">#FF3A3F4F</color>
+    <color name="md_outline_variant">#FF2A2E3A</color>
+
+    <color name="md_on_background">#FFEAEAF0</color>
+    <color name="md_on_surface">#FFEAEAF0</color>
+    <color name="md_on_surface_variant">#FFC0C4D0</color>
+
+    <color name="md_primary">#FFFF8B9F</color>
+    <color name="md_on_primary">#FF1A0A0F</color>
+    <color name="md_primary_container">#FF7B1FA2</color>
+    <color name="md_on_primary_container">#FFFFEAF1</color>
+
+    <color name="md_secondary">#FFC026D3</color>
+    <color name="md_on_secondary">#FF1A0A1F</color>
+    <color name="md_secondary_container">#FF5A1B6E</color>
+    <color name="md_on_secondary_container">#FFFBD7FF</color>
+
+    <color name="md_error">#FFCF6679</color>
+    <color name="md_on_error">#FF600014</color>
+
+    <!-- Status bar -->
+    <color name="black_overlay">#AA000000</color>
+    <color name="white_overlay">#66FFFFFF</color>
+</resources>
