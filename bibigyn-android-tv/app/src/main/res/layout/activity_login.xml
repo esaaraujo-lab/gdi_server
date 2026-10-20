@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    BiBi Fit Login — layout compacto para TV.
+    Meggy Login — layout compacto para TV.
     Campos no TOPO da tela para que o teclado on-screen não os cubra.
-    O ScrollView permite rolar para baixo quando o teclado aparece.
+    ScrollView permite rolar quando o teclado aparece.
 -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/login_scroll"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/gradient_meggy"
+    android:background="#0D1117"
     android:fillViewport="true"
     android:scrollbars="none">
 
@@ -21,7 +21,7 @@
         android:padding="24dp"
         android:paddingBottom="400dp">
 
-        <!-- Logo compacto (não ocupa metade da tela) -->
+        <!-- Logo compacto -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -32,98 +32,82 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="@string/app_name"
-            android:textAppearance="@style/TextAppearance.Meggy.Title"
-            android:textSize="28sp" />
+            android:text="Meggy"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:textColor="#FF8B9F" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
-            android:text="@string/login_welcome"
-            android:textAppearance="@style/TextAppearance.Meggy.Subtitle"
+            android:text="Sua tutorinha de estudos 🐾"
+            android:textColor="#8B949E"
             android:textSize="14sp" />
 
         <Space android:layout_width="match_parent" android:layout_height="16dp" />
 
-        <!-- Card de login — compacto, no topo -->
-        <com.google.android.material.card.MaterialCardView
+        <!-- Username -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/username_layout"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:cardCornerRadius="20dp"
-            app:cardBackgroundColor="@color/md_surface"
-            app:cardElevation="8dp"
-            app:strokeWidth="0dp">
+            android:layout_marginBottom="12dp"
+            android:hint="Usuário"
+            app:boxStrokeColor="#FF8B9F"
+            app:hintTextColor="#FF8B9F">
 
-            <LinearLayout
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/username"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="20dp">
+                android:textColor="#E6EDF3"
+                android:inputType="text"
+                android:imeOptions="actionNext" />
+        </com.google.android.material.textfield.TextInputLayout>
 
-                <com.google.android.material.textfield.TextInputLayout
-                    android:id="@+id/username_layout"
-                    style="@style/Widget.Meggy.TextInputLayout"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="@string/login_username_hint">
+        <!-- Password -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/password_layout"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="20dp"
+            android:hint="Senha"
+            app:boxStrokeColor="#FF8B9F"
+            app:hintTextColor="#FF8B9F"
+            app:endIconMode="password_toggle">
 
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/username"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:inputType="text"
-                        android:imeOptions="actionNext"
-                        android:maxLines="1"
-                        android:textColor="@color/md_on_surface" />
-                </com.google.android.material.textfield.TextInputLayout>
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/password"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="#E6EDF3"
+                android:inputType="textPassword"
+                android:imeOptions="actionDone" />
+        </com.google.android.material.textfield.TextInputLayout>
 
-                <Space android:layout_width="match_parent" android:layout_height="12dp" />
+        <!-- Login button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_login"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="Entrar"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textColor="#FFFFFF"
+            app:backgroundTint="#FF8B9F"
+            app:cornerRadius="28dp" />
 
-                <com.google.android.material.textfield.TextInputLayout
-                    android:id="@+id/password_layout"
-                    style="@style/Widget.Meggy.TextInputLayout"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    app:endIconMode="password_toggle"
-                    android:hint="@string/login_password_hint">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/password"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:inputType="textPassword"
-                        android:imeOptions="actionDone"
-                        android:maxLines="1"
-                        android:textColor="@color/md_on_surface" />
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <Space android:layout_width="match_parent" android:layout_height="20dp" />
-
-                <FrameLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content">
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btn_login"
-                        style="@style/Widget.Meggy.Button"
-                        android:layout_width="match_parent"
-                        android:layout_height="56dp"
-                        android:text="@string/login_button"
-                        android:textSize="16sp"
-                        android:textStyle="bold" />
-
-                    <ProgressBar
-                        android:id="@+id/login_progress"
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:layout_gravity="center"
-                        android:visibility="gone"
-                        android:indeterminateTint="@color/md_on_primary_container" />
-                </FrameLayout>
-
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
+        <!-- Progress -->
+        <ProgressBar
+            android:id="@+id/login_progress"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginTop="20dp"
+            android:visibility="gone"
+            android:indeterminateTint="#FF8B9F" />
 
     </LinearLayout>
 </ScrollView>
