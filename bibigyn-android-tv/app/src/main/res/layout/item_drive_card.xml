@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  v1.8.0 — Drive rail tile (home "Explorar drives" rail).
+
+  Mirrors item_rail_card.xml styling: poster-style FrameLayout with
+  per-drive gradient, big emoji, bottom scrim with the drive name
+  overlaid. Pink focus ring + scale animation handled in
+  DriveRailAdapter.onFocusChange.
+
+  Size: 150dp wide × 210dp tall (2:3 poster ratio, slightly smaller
+  than rail cards so the drives rail reads as a secondary row).
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="150dp"
+    android:layout_height="wrap_content"
+    android:layout_marginEnd="12dp"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    android:clickable="true"
+    android:foreground="?attr/selectableItemBackground">
+
+    <!-- Pink focus ring -->
+    <View
+        android:id="@+id/drive_focus_ring"
+        android:layout_width="match_parent"
+        android:layout_height="210dp"
+        android:background="@drawable/tile_focus_border"
+        android:visibility="invisible" />
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/drive_card_root"
+        android:layout_width="match_parent"
+        android:layout_height="210dp"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="0dp"
+        app:cardBackgroundColor="#0F1218"
+        app:strokeWidth="0dp"
+        app:strokeColor="@android:color/transparent">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <!-- Per-drive gradient background (set in code) -->
+            <View
+                android:id="@+id/drive_bg"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/card_gradient_pink" />
+
+            <!-- Big emoji icon (centered) -->
+            <TextView
+                android:id="@+id/drive_icon"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:textSize="52sp"
+                android:alpha="0.95" />
+
+            <!-- Top scrim (subtle) -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_gravity="top"
+                android:background="@drawable/tile_overlay_top" />
+
+            <!-- Bottom scrim -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="96dp"
+                android:layout_gravity="bottom"
+                android:background="@drawable/tile_overlay_bottom" />
+
+            <!-- Drive name overlaid at the bottom -->
+            <TextView
+                android:id="@+id/drive_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom"
+                android:gravity="center"
+                android:paddingHorizontal="10dp"
+                android:paddingBottom="12dp"
+                android:textColor="#FFFFFFFF"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:shadowColor="#80000000"
+                android:shadowDx="0"
+                android:shadowDy="1"
+                android:shadowRadius="3"
+                android:maxLines="2"
+                android:ellipsize="end" />
+
+            <!-- Pink accent line at the very bottom -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="3dp"
+                android:layout_gravity="bottom"
+                android:background="@drawable/progress_gradient" />
+        </FrameLayout>
+    </com.google.android.material.card.MaterialCardView>
+</FrameLayout>
