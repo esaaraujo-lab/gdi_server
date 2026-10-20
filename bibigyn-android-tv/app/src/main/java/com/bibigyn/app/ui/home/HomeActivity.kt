@@ -67,11 +67,9 @@ class HomeActivity : AppCompatActivity() {
         binding.recycler.setItemViewCacheSize(20)
         binding.recycler.isDrawingCacheEnabled = true
 
-        // Initial list = the 12 root drives.
+        // ★ BiBi Fit: mostra APENAS os 2 drives (Clube Fit + Hipopressivos)
+        // NÃO busca cursos extras do /api/courses/list — apenas os 2 drives fixos
         adapter.submitList(DriveItem.ALL)
-
-        // Best-effort fetch of user's enrolled courses. Append them to the grid.
-        loadCourses()
 
         // ★ Auto-update: verifica GitHub Releases por bibigyn-v* (silencioso)
         UpdateChecker.checkForUpdate(this, com.bibigyn.app.BuildConfig.VERSION_NAME)
