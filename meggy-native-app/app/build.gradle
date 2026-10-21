@@ -19,8 +19,8 @@ android {
         minSdk 21
         targetSdk 34
         // ★ v2.0.0: Bottom Nav (4 tabs) + Hero rotativo + Search/MyList/Settings + Player gestures
-        versionCode 35
-        versionName "2.6.4"
+        versionCode 36
+        versionName "2.7.0"
     }
 
     // ★ v1.4.0: Signing config com keystore FIXA (mesma em todos os builds)
