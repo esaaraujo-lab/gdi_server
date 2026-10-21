@@ -1,0 +1,322 @@
+// ═══════════════════════════════════════════════════════════════
+// Meggy Desktop — API Client (Rust → worker.js)
+// ═══════════════════════════════════════════════════════════════
+
+use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
+use tauri::State;
+
+const BASE_URL: &str = "https://educa.eu.org";
+
+pub struct AppState {
+    pub client: reqwest::Client,
+    pub cookie: Mutex<Option<String>>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            client: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .unwrap(),
+            cookie: Mutex::new(None),
+        }
+    }
+}
+
+// ─── Tauri Commands ───
+
+#[derive(Serialize)]
+pub struct LoginResult {
+    pub ok: bool,
+    pub error: Option<String>,
+}
+
+#[tauri::command]
+pub async fn login(
+    state: State<'_, AppState>,
+    username: String,
+    password: String,
+) -> Result<LoginResult, String> {
+    let resp = state
+        .client
+        .post(format!("{}/login", BASE_URL))
+        .form(&[("username", &username), ("password", &password)])
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let status = resp.status().as_u16();
+
+    if status == 200 || status == 302 {
+        let cookies = resp.headers().get_all("set-cookie");
+        for cookie in cookies {
+            if let Ok(val) = cookie.to_str() {
+                if val.starts_with("session=") {
+                    let session = val.split(';').next().unwrap_or("");
+                    *state.cookie.lock().unwrap() = Some(session.to_string());
+                    return Ok(LoginResult { ok: true, error: None });
+                }
+            }
+        }
+    }
+
+    Ok(LoginResult {
+        ok: false,
+        error: Some("Usuário ou senha inválidos".to_string()),
+    })
+}
+
+#[derive(Serialize)]
+pub struct Drive {
+    pub index: i32,
+    pub name: String,
+}
+
+#[tauri::command]
+pub async fn get_drives() -> Result<Vec<Drive>, String> {
+    // Hardcoded drives (same as app.min.js)
+    Ok(vec![
+        Drive { index: 0, name: "RETA FINAL TRTs".into() },
+        Drive { index: 1, name: "CURSOS - PLATAFORMAS COMPLETAS".into() },
+        Drive { index: 2, name: "VESTIBULARES PLATAFORMAS".into() },
+        Drive { index: 3, name: "VESTIBULARES ISOLADAS".into() },
+        Drive { index: 4, name: "MUSICA E CANTO".into() },
+        Drive { index: 5, name: "CARREIRAS EDUCACIONAIS".into() },
+        Drive { index: 6, name: "CLUBE FIT".into() },
+        Drive { index: 7, name: "HIPOPRESSIVOS".into() },
+        Drive { index: 8, name: "SAÚDE E MEDICINA".into() },
+        Drive { index: 9, name: "TUDO DE TRIBUNAIS".into() },
+        Drive { index: 10, name: "ALFACON 2026".into() },
+        Drive { index: 11, name: "PREPARATÓRIO OAB".into() },
+    ])
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct FileItem {
+    pub name: String,
+    pub mime_type: String,
+    pub id: String,
+    pub link: Option<String>,
+    pub size: i64,
+}
+
+#[tauri::command]
+pub async fn list_folder(
+    state: State<'_, AppState>,
+    drive_index: i32,
+) -> Result<Vec<FileItem>, String> {
+    let cookie = state.cookie.lock().unwrap().clone();
+    let cookie = cookie.ok_or("Not logged in")?;
+
+    let body = serde_json::json!({
+        "id": "",
+        "type": "folder",
+        "password": "",
+        "page_token": null,
+        "page_index": 0
+    });
+
+    let resp = state
+        .client
+        .post(format!("{}/{}:/", BASE_URL, drive_index))
+        .header("Cookie", &cookie)
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+
+    let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    let files = json["data"]["files"]
+        .as_array()
+        .ok_or("Invalid response")?;
+
+    let items: Vec<FileItem> = files
+        .iter()
+        .map(|f| FileItem {
+            name: f["name"].as_str().unwrap_or("").to_string(),
+            mime_type: f["mimeType"].as_str().unwrap_or("").to_string(),
+            id: f["id"].as_str().unwrap_or("").to_string(),
+            link: f["link"].as_str().map(|s| s.to_string()),
+            size: f["size"].as_i64().unwrap_or(0),
+        })
+        .collect();
+
+    Ok(items)
+}
+
+#[tauri::command]
+pub async fn get_course_lessons(
+    state: State<'_, AppState>,
+    course_path: String,
+) -> Result<serde_json::Value, String> {
+    let cookie = state.cookie.lock().unwrap().clone();
+    let cookie = cookie.ok_or("Not logged in")?;
+
+    let resp = state
+        .client
+        .post(format!("{}/api/courses/scan-progress", BASE_URL))
+        .header("Cookie", &cookie)
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({ "coursePath": course_path }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    resp.json().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_courses_list(
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    let cookie = state.cookie.lock().unwrap().clone();
+    let cookie = cookie.ok_or("Not logged in")?;
+
+    let resp = state
+        .client
+        .get(format!("{}/api/courses/list", BASE_URL))
+        .header("Cookie", &cookie)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    resp.json().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn ai_chat(
+    state: State<'_, AppState>,
+    message: String,
+) -> Result<String, String> {
+    let cookie = state.cookie.lock().unwrap().clone();
+    let cookie = cookie.ok_or("Not logged in")?;
+
+    let resp = state
+        .client
+        .post(format!("{}/api/ai", BASE_URL))
+        .header("Cookie", &cookie)
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({ "message": message, "messages": [] }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    Ok(json["response"].as_str().unwrap_or("Sem resposta").to_string())
+}
+
+#[tauri::command]
+pub async fn ai_coach(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let cookie = state.cookie.lock().unwrap().clone();
+    let cookie = cookie.ok_or("Not logged in")?;
+
+    let resp = state
+        .client
+        .post(format!("{}/api/ai/coach", BASE_URL))
+        .header("Cookie", &cookie)
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({ "action": "analyze" }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    resp.json().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn ai_status(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let cookie = state.cookie.lock().unwrap().clone();
+    let cookie = cookie.unwrap_or_default();
+
+    let resp = state
+        .client
+        .get(format!("{}/api/ai/status", BASE_URL))
+        .header("Cookie", &cookie)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    resp.json().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_d1_status(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let cookie = state.cookie.lock().unwrap().clone();
+    let cookie = cookie.ok_or("Not logged in")?;
+
+    let resp = state
+        .client
+        .get(format!("{}/api/d1/status", BASE_URL))
+        .header("Cookie", &cookie)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    resp.json().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn scan_course(
+    state: State<'_, AppState>,
+    course_path: String,
+) -> Result<serde_json::Value, String> {
+    let cookie = state.cookie.lock().unwrap().clone();
+    let cookie = cookie.ok_or("Not logged in")?;
+
+    let resp = state
+        .client
+        .post(format!("{}/api/courses/scan-and-save", BASE_URL))
+        .header("Cookie", &cookie)
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({ "coursePath": course_path }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    resp.json().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn save_user_state(
+    state: State<'_, AppState>,
+    data: serde_json::Value,
+) -> Result<bool, String> {
+    let cookie = state.cookie.lock().unwrap().clone();
+    let cookie = cookie.ok_or("Not logged in")?;
+
+    let resp = state
+        .client
+        .post(format!("{}/userstate/save", BASE_URL))
+        .header("Cookie", &cookie)
+        .header("Content-Type", "application/json")
+        .json(&data)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(resp.status().is_success())
+}
+
+#[tauri::command]
+pub async fn get_user_state(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let cookie = state.cookie.lock().unwrap().clone();
+    let cookie = cookie.ok_or("Not logged in")?;
+
+    let resp = state
+        .client
+        .get(format!("{}/userstate/get", BASE_URL))
+        .header("Cookie", &cookie)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    resp.json().await.map_err(|e| e.to_string())
+}
