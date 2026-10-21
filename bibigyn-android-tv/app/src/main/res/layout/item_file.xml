@@ -4,8 +4,8 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="5dp"
-    app:cardCornerRadius="12dp"
+    android:layout_margin="6dp"
+    app:cardCornerRadius="14dp"
     app:cardElevation="3dp"
     app:cardBackgroundColor="#1E2230"
     app:strokeWidth="0dp"
@@ -14,31 +14,33 @@
     android:clickable="true"
     android:foreground="?attr/selectableItemBackground">
 
+    <!-- ★ TV FOCUS: State-list background for clear focus feedback -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:padding="12dp"
-        android:minHeight="56dp">
+        android:padding="14dp"
+        android:minHeight="60dp"
+        android:background="@drawable/tile_focus_border">
 
         <FrameLayout
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginEnd="12dp"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:layout_marginEnd="14dp"
             android:layout_gravity="top|center_horizontal">
 
             <View
-                android:layout_width="48dp"
-                android:layout_height="48dp"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
                 android:background="@drawable/icon_bg_gradient" />
 
             <TextView
                 android:id="@+id/file_icon"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
                 android:gravity="center"
-                android:textSize="22sp" />
+                android:textSize="24sp" />
         </FrameLayout>
 
         <LinearLayout
@@ -47,13 +49,12 @@
             android:layout_weight="1"
             android:orientation="vertical">
 
-            <!-- ★ v1.4.0: maxLines=3 para nomes longos -->
             <TextView
                 android:id="@+id/file_name"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:textColor="#E6EDF3"
-                android:textSize="14sp"
+                android:textSize="15sp"
                 android:textStyle="bold"
                 android:maxLines="3"
                 android:ellipsize="end"
@@ -61,39 +62,31 @@
 
             <TextView
                 android:id="@+id/file_meta"
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
                 android:textColor="#8B949E"
                 android:textSize="11sp"
-                android:maxLines="2"
-                android:ellipsize="end" />
-
-            <!-- ★ v1.4.0: Badge "continuar" -->
-            <TextView
-                android:id="@+id/last_watched_badge"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:background="@drawable/badge_resume"
-                android:paddingHorizontal="8dp"
-                android:paddingVertical="2dp"
-                android:text="▶ continuar"
-                android:textColor="#FF8B9F"
-                android:textSize="10sp"
-                android:visibility="gone" />
-
-            <!-- ★ v1.4.0: Checkmark "assistido" -->
-            <TextView
-                android:id="@+id/watched_check"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:text="✓ assistido"
-                android:textColor="#3FB950"
-                android:textSize="10sp"
-                android:visibility="gone" />
+                android:layout_marginTop="2dp" />
         </LinearLayout>
 
+        <TextView
+            android:id="@+id/badge_watched"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="✓"
+            android:textSize="16sp"
+            android:textColor="#3FB950"
+            android:visibility="gone"
+            android:layout_marginStart="8dp" />
+
+        <TextView
+            android:id="@+id/badge_resume"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="▶"
+            android:textSize="14sp"
+            android:textColor="#FF8B9F"
+            android:visibility="gone"
+            android:layout_marginStart="8dp" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>
