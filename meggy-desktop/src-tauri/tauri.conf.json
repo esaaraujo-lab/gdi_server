@@ -1,35 +1,39 @@
 {
-  "$schema": "https://schema.tauri.app/config/2",
+  "$schema": "https://raw.githubusercontent.com/nicehash/tauri/v2/crates/tauri-config-schema/schema.json",
   "productName": "Meggy",
-  "version": "1.3.1",
+  "version": "1.0.0",
   "identifier": "com.meggy.desktop",
   "build": {
-    "frontendDist": "../dist"
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
   },
   "app": {
-    "withGlobalTauri": true,
     "windows": [
       {
-        "label": "main",
-        "title": "Meggy \u2014 Plataforma de Estudos",
-        "url": "index.html",
+        "title": "Meggy",
         "width": 1280,
         "height": 800,
         "minWidth": 800,
         "minHeight": 600,
-        "center": true,
         "resizable": true,
         "fullscreen": false,
+        "center": true,
         "decorations": true
       }
     ],
     "security": {
       "csp": null
+    },
+    "trayIcon": {
+      "iconPath": "icons/icon.png",
+      "tooltip": "Meggy"
     }
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["msi", "nsis", "appimage", "deb"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -37,11 +41,17 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "category": "Education",
-    "shortDescription": "Plataforma de Estudos",
-    "longDescription": "Meggy \u2014 Plataforma de estudos integrada com acesso a cursos em v\u00eddeo, PDFs e \u00e1udios.",
-    "macOS": {
-      "signingIdentity": null
+    "resources": [],
+    "externalBin": []
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/esaaraujo-lab/gdi_server/releases/latest/download/latest.json"
+      ],
+      "dialog": true,
+      "pubkey": ""
     }
   }
 }
