@@ -37,6 +37,62 @@ import kotlinx.coroutines.launch
 
 class PlayerActivity : AppCompatActivity() {
 
+    // ★ TV FIX: D-pad UP shows controls, D-pad navigation between buttons
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+            when (event.keyCode) {
+                android.view.KeyEvent.KEYCODE_DPAD_UP -> {
+                    if (sleepMode) {
+                        exitSleepMode()
+                        return true
+                    }
+                    if (!controlsVisible) {
+                        showControls()
+                        // Focus first button
+                        binding.speedButton.requestFocus()
+                        return true
+                    }
+                }
+                android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    if (controlsVisible && !binding.speedButton.isFocused) {
+                        // Navigate down from buttons to player area
+                        binding.playerView.requestFocus()
+                        return true
+                    }
+                }
+                android.view.KeyEvent.KEYCODE_DPAD_LEFT, android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    if (controlsVisible) {
+                        // Let D-pad navigate between buttons naturally
+                        // (Android handles focus traversal)
+                    }
+                }
+                android.view.KeyEvent.KEYCODE_BACK -> {
+                    if (playlistVisible) {
+                        hidePlaylist()
+                        return true
+                    }
+                    if (controlsVisible) {
+                        hideControls()
+                        return true
+                    }
+                }
+                android.view.KeyEvent.KEYCODE_DPAD_CENTER, android.view.KeyEvent.KEYCODE_ENTER -> {
+                    if (sleepMode) {
+                        exitSleepMode()
+                        return true
+                    }
+                    if (!controlsVisible) {
+                        showControls()
+                        binding.speedButton.requestFocus()
+                        return true
+                    }
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+
     private lateinit var binding: ActivityPlayerBinding
     private var player: ExoPlayer? = null
     private var currentItem: FileItem? = null
