@@ -6,6 +6,7 @@
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use tauri::Manager;  // for AppHandle::path()
 
 pub fn init_db(db_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let conn = Connection::open(db_path)?;
@@ -135,7 +136,7 @@ pub async fn save_summary(
             &summary,
             &questions,
             &mindmap,
-            chrono::Utc::now().timestamp()
+            now_ts()
         ],
     ).map_err(|e| e.to_string())?;
     
@@ -201,7 +202,7 @@ pub async fn save_flashcards(
         
         conn.execute(
             "INSERT OR REPLACE INTO flashcards (id, subject, front, back, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-            rusqlite::params![&id, &subject, &front, &back, chrono::Utc::now().timestamp()],
+            rusqlite::params![&id, &subject, &front, &back, now_ts()],
         ).map_err(|e| e.to_string())?;
     }
     
@@ -220,4 +221,13 @@ fn uuid() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
     format!("card_{}", ts)
+}
+
+/// Returns current Unix timestamp in seconds (replaces chrono::Utc::now().timestamp()).
+fn now_ts() -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
 }
