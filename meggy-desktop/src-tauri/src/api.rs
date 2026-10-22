@@ -107,21 +107,33 @@ pub struct FileItem {
 pub async fn list_folder(
     state: State<'_, AppState>,
     drive_index: i32,
+    path: Option<String>,
 ) -> Result<Vec<FileItem>, String> {
     let cookie = state.cookie.lock().unwrap().clone();
     let cookie = cookie.ok_or("Not logged in")?;
 
+    // Build URL: if a path is provided (e.g. "/0:/CURSO X/"), POST to it;
+    // otherwise POST to the drive root "/{drive_index}://".
+    // The worker.js apiRequest handler uses the URL path (not the body id)
+    // to determine which folder to list.
+    let url = match &path {
+        Some(p) if !p.is_empty() => {
+            // Ensure leading "/" and trailing "/"
+            let p = if p.starts_with('/') { p.clone() } else { format!("/{}", p) };
+            let p = if p.ends_with('/') { p } else { format!("{}/", p) };
+            format!("{}{}", BASE_URL, p)
+        }
+        _ => format!("{}/{}:/", BASE_URL, drive_index),
+    };
+
     let body = serde_json::json!({
-        "id": "",
-        "type": "folder",
-        "password": "",
         "page_token": null,
         "page_index": 0
     });
 
     let resp = state
         .client
-        .post(format!("{}/{}:/", BASE_URL, drive_index))
+        .post(&url)
         .header("Cookie", &cookie)
         .header("Content-Type", "application/json")
         .json(&body)
