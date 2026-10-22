@@ -3,7 +3,6 @@
 // ═══════════════════════════════════════════════════════════════
 
 use serde::Serialize;
-use std::sync::Mutex;
 use tauri::State;
 use crate::api::AppState;
 
