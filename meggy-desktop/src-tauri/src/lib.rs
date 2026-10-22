@@ -8,7 +8,7 @@ mod auth;
 mod db;
 mod scanner;
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tauri_plugin_single_instance::init as init_single_instance;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
