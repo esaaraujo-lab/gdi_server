@@ -16,7 +16,20 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    use tauri_plugin_global_shortcut::ShortcutState;
+                    if event.state == ShortcutState::Pressed {
+                        // Identifica qual atalho foi pressionado via string
+                        let s = format!("{:?}", shortcut);
+                        if s.contains("KeyP") {
+                            app.emit("global-play-pause", ()).ok();
+                        }
+                    }
+                })
+                .build(),
+        )
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec!["--autostart"]),
@@ -28,8 +41,14 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
-            // Single instance — se já está rodando, foca a janela existente
-            let _ = app.handle().plugin(init_single_instance(app.handle().clone()));
+            // Single instance — se já está rodando, foca a janela existente.
+            // init() recebe um closure FnMut(&AppHandle, Vec<String> args, String cwd).
+            let _ = app.handle().plugin(init_single_instance(|app, _args, _cwd| {
+                if let Some(window) = app.get_webview_window("main") {
+                    window.show().ok();
+                    window.set_focus().ok();
+                }
+            }));
 
             // Inicializa banco SQLite local
             let app_dir = app.handle().path().app_data_dir().unwrap_or_else(|_| {
@@ -73,15 +92,11 @@ pub fn run() {
 }
 
 fn register_global_shortcuts(app: &tauri::AppHandle) {
-    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
-    
-    // Play/Pause global
-    let play_pause = Shortcut::new(Some("CommandOrControl+Shift+P"));
-    app.global_shortcut().register(play_pause, move |_app, _shortcut, event| {
-        if event.state == ShortcutState::Pressed {
-            _app.emit("global-play-pause", ()).ok();
-        }
-    }).ok();
+    use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+
+    // Play/Pause global: Ctrl+Shift+P
+    let play_pause = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyP);
+    app.global_shortcut().register(play_pause).ok();
 }
 
 fn setup_tray(app: &tauri::AppHandle) {
