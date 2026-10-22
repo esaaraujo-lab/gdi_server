@@ -12,10 +12,10 @@ export async function getDrives() {
   return invoke<{ index: number; name: string }[]>("get_drives");
 }
 
-export async function listFolder(driveIndex: number) {
+export async function listFolder(driveIndex: number, path?: string) {
   return invoke<{
     name: string; mime_type: string; id: string; link: string | null; size: number;
-  }[]>("list_folder", { driveIndex });
+  }[]>("list_folder", { driveIndex, path: path ?? null });
 }
 
 export async function getCourseLessons(coursePath: string) {
