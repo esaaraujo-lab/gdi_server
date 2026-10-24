@@ -529,3 +529,168 @@
   border-color: rgba(15, 23, 42, 0.1);
   color: #1f2540;
 }
+
+/* ═══ Player de vídeo inline (todas as funcionalidades do GDI) ═══ */
+.meggy-player-layout {
+  display: flex;
+  gap: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.meggy-player-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.meggy-player-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: rgba(22, 27, 38, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+}
+
+.meggy-player-controls select {
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: #e6edf3;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.meggy-player-playlist {
+  width: 320px;
+  flex-shrink: 0;
+  background: rgba(22, 27, 38, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 12px;
+  padding: 16px;
+  max-height: 75vh;
+  overflow-y: auto;
+}
+
+.meggy-playlist-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.meggy-playlist-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-size: 13px;
+  color: #9aa4b8;
+}
+
+.meggy-playlist-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e6edf3;
+}
+
+.meggy-playlist-item.active {
+  background: rgba(255, 139, 159, 0.12);
+  color: #ff8b9f;
+  border-left: 3px solid #ff8b9f;
+  padding-left: 7px;
+}
+
+.meggy-playlist-num {
+  font-size: 11px;
+  color: #6b7488;
+  width: 24px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.meggy-playlist-item.active .meggy-playlist-num {
+  color: #ff8b9f;
+}
+
+.meggy-playlist-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meggy-playlist-size {
+  font-size: 11px;
+  color: #6b7488;
+  flex-shrink: 0;
+}
+
+/* ─── Toast "Retomando de HH:MM:SS" ─── */
+.meggy-toast-resume {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(22, 27, 38, 0.95);
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 139, 159, 0.3);
+  border-radius: 999px;
+  padding: 10px 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #e6edf3;
+  font-size: 14px;
+  z-index: 10001;
+  box-shadow: 0 10px 30px -8px rgba(0, 0, 0, 0.6);
+  animation: meggy-toast-in 0.3s ease-out;
+}
+
+.meggy-toast-resume i {
+  color: #ff8b9f;
+  font-size: 16px;
+}
+
+.meggy-toast-btn {
+  background: rgba(255, 139, 159, 0.15);
+  border: 1px solid rgba(255, 139, 159, 0.3);
+  color: #ff8b9f;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.meggy-toast-btn:hover {
+  background: rgba(255, 139, 159, 0.25);
+}
+
+.meggy-toast-out {
+  opacity: 0;
+  transform: translateX(-50%) translateY(10px);
+  transition: all 0.25s;
+}
+
+@keyframes meggy-toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ─── Mobile: player playlist vira drawer abaixo ─── */
+@media (max-width: 768px) {
+  .meggy-player-layout {
+    flex-direction: column;
+  }
+  .meggy-player-playlist {
+    width: 100%;
+    max-height: 300px;
+  }
+}
