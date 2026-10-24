@@ -1,0 +1,17 @@
+{
+  "repo": "esaaraujo-lab/gdi_server",
+  "visibility": "public",
+  "backup_date": "20261024",
+  "backup_type": "full_repo_tarball",
+  "source_commit_sha": "c6c09939af288ff93788badc82a4455a0641572c",
+  "source_tag": "backup-20261024",
+  "tarball_filename": "gdi_server-backup-20261024.tar.gz",
+  "tarball_size_bytes": 24558057,
+  "tarball_size_human": "24M",
+  "tarball_sha256": "ced54fb8caa0ddadf72a682dc8c22a97991fc06f8e4d36713bb2dd4749ee2e2d",
+  "file_count_in_tarball": 455,
+  "download_url": "https://api.github.com/repos/esaaraujo-lab/gdi_server/tarball/backup-20261024",
+  "tag_url": "https://github.com/esaaraujo-lab/gdi_server/releases/tag/backup-20261024",
+  "generated_at": "2026-10-24T14:24:34+00:00",
+  "generated_by": "GitHub API backup script"
+}
