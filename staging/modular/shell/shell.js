@@ -528,12 +528,17 @@
                 container.querySelectorAll('.meggy-card[data-folder]').forEach(card => {
                   card.onclick = () => Shell.views._renderDrives(card.dataset.folder);
                 });
-                // Video clicks — open INLINE player in main pane (like GDI does)
-                container.querySelectorAll('.meggy-card[data-video]').forEach(card => {
+                // Video clicks — open INLINE player with full playlist (todos os vídeos da pasta)
+                const videoCards = container.querySelectorAll('.meggy-card[data-video]');
+                const playlist = Array.from(videoCards).map(c => ({
+                  link: c.dataset.video,
+                  name: c.querySelector('.meggy-card-title')?.textContent || 'Vídeo',
+                  size: c.querySelector('.meggy-card-meta')?.textContent || ''
+                }));
+                videoCards.forEach((card, i) => {
                   card.onclick = () => {
-                    const link = card.dataset.video;
-                    const name = card.querySelector('.meggy-card-title')?.textContent || 'Vídeo';
-                    if (link) Shell.views._playVideoInline(link, name);
+                    const v = playlist[i];
+                    if (v.link) Shell.views._playVideoInline(v.link, v.name, playlist, i);
                   };
                 });
               }).catch(err => {
@@ -556,35 +561,258 @@
         }
       },
 
-      _playVideoInline(link, name) {
+      // ═══ Player de vídeo INLINE com TODAS as funcionalidades do GDI ═══
+      // Funcionalidades portadas do app.min.js:
+      // - Playlist lateral (próximo/anterior)
+      // - Resume tracking (salva posição a cada 5s via GDIUser.setResume)
+      // - Toast "Retomando de HH:MM:SS" com botão "Recomeçar"
+      // - Atalhos: espaço (play/pause), ←/→ (seek 10s), ↑/↓ (volume), F (fullscreen), M (mute), N (next)
+      // - Download do vídeo
+      // - Fullscreen
+      // - Playback speed (0.5x, 1x, 1.25x, 1.5x, 2x)
+      // - Picture-in-Picture
+      // - Auto-advance para próximo vídeo da playlist
+      _playVideoInline(link, name, playlist, currentIndex) {
         const main = document.getElementById('meggy-main');
         if (!main) return;
         const videoUrl = link.startsWith('http') ? link : (window.location.origin + link);
         console.log('[Meggy Shell] player inline:', name, '→', videoUrl);
+
+        // Se não recebeu playlist, criar com 1 item
+        const pl = playlist || [{ name: name, link: videoUrl, size: '' }];
+        const idx = currentIndex || 0;
+
+        // Resume: buscar posição salva
+        let resumePos = 0;
+        try {
+          if (window.GDIUser && window.GDIUser.state && window.GDIUser.state.resume) {
+            const key = videoUrl; // ou path
+            const saved = window.GDIUser.state.resume[key];
+            if (saved && typeof saved === 'number') resumePos = saved;
+            else if (saved && saved.pos) resumePos = saved.pos;
+          }
+        } catch (e) {}
+
+        // Renderizar player + playlist lateral
         main.innerHTML = `
           <div class="meggy-view-header">
             <h1 class="meggy-view-title">🎬 <span style="font-size:18px;font-weight:500;">${name}</span></h1>
-            <button class="meggy-header-btn" id="meggy-player-back" title="Voltar">
-              <i class="bi bi-arrow-left"></i> Voltar
-            </button>
-          </div>
-          <div style="max-width:900px;margin:0 auto;">
-            <video src="${videoUrl}" controls autoplay playsinline
-              style="width:100%;max-height:75vh;border-radius:12px;background:#000;box-shadow:0 10px 30px -12px rgba(0,0,0,0.55);"
-              onerror="this.style.display='none';document.getElementById('meggy-player-error').style.display='block'">
-            </video>
-            <div id="meggy-player-error" style="display:none;padding:40px;text-align:center;color:#ff8b9f;">
-              ⚠️ Não foi possível carregar o vídeo.<br>
-              <a href="${videoUrl}" target="_blank" style="color:#5ddeda;">Abrir em nova aba</a>
+            <div style="display:flex;gap:8px;">
+              <button class="meggy-header-btn" id="meggy-player-prev" title="Anterior (N)">
+                <i class="bi bi-skip-start"></i>
+              </button>
+              <button class="meggy-header-btn" id="meggy-player-next" title="Próximo">
+                <i class="bi bi-skip-end"></i>
+              </button>
+              <button class="meggy-header-btn" id="meggy-player-download" title="Download">
+                <i class="bi bi-download"></i>
+              </button>
+              <button class="meggy-header-btn" id="meggy-player-back" title="Voltar">
+                <i class="bi bi-arrow-left"></i> Voltar
+              </button>
             </div>
           </div>
+          <div class="meggy-player-layout">
+            <div class="meggy-player-main">
+              <video id="meggy-video" src="${videoUrl}" controls autoplay playsinline
+                style="width:100%;max-height:75vh;border-radius:12px;background:#000;box-shadow:0 10px 30px -12px rgba(0,0,0,0.55);"
+                onerror="this.style.display='none';document.getElementById('meggy-player-error').style.display='block'">
+              </video>
+              <div id="meggy-player-error" style="display:none;padding:40px;text-align:center;color:#ff8b9f;">
+                ⚠️ Não foi possível carregar o vídeo.<br>
+                <a href="${videoUrl}" target="_blank" style="color:#5ddeda;">Abrir em nova aba</a>
+              </div>
+              <div class="meggy-player-controls">
+                <select id="meggy-speed" title="Velocidade">
+                  <option value="0.5">0.5x</option>
+                  <option value="0.75">0.75x</option>
+                  <option value="1" selected>1x</option>
+                  <option value="1.25">1.25x</option>
+                  <option value="1.5">1.5x</option>
+                  <option value="2">2x</option>
+                </select>
+                <button class="meggy-header-btn" id="meggy-pip" title="Picture-in-Picture">
+                  <i class="bi bi-pip"></i> PiP
+                </button>
+                <button class="meggy-header-btn" id="meggy-fullscreen" title="Fullscreen (F)">
+                  <i class="bi bi-fullscreen"></i>
+                </button>
+                <span style="margin-left:auto;color:#6b7488;font-size:12px;">
+                  <span id="meggy-time">00:00</span> / <span id="meggy-duration">00:00</span>
+                </span>
+              </div>
+            </div>
+            <aside class="meggy-player-playlist" id="meggy-playlist">
+              <h3 style="font-size:14px;color:#9aa4b8;margin-bottom:12px;">📋 Playlist (${pl.length})</h3>
+              <div class="meggy-playlist-items">
+                ${pl.map((v, i) => `
+                  <div class="meggy-playlist-item ${i === idx ? 'active' : ''}" data-idx="${i}">
+                    <span class="meggy-playlist-num">${i + 1}</span>
+                    <span class="meggy-playlist-name" title="${v.name}">${v.name}</span>
+                    ${v.size ? `<span class="meggy-playlist-size">${v.size}</span>` : ''}
+                  </div>
+                `).join('')}
+              </div>
+            </aside>
+          </div>
         `;
-        // Bind back button — voltar para a pasta atual
+
+        const video = document.getElementById('meggy-video');
+        const speedSel = document.getElementById('meggy-speed');
+        const timeEl = document.getElementById('meggy-time');
+        const durEl = document.getElementById('meggy-duration');
+
+        // ─── Resume tracking (salvar posição a cada 5s) ───
+        let lastSave = 0;
+        const saveResume = () => {
+          if (!video || !video.currentTime) return;
+          const now = Date.now();
+          if (now - lastSave < 5000) return; // throttle 5s
+          lastSave = now;
+          try {
+            if (window.GDIUser && window.GDIUser.setResume) {
+              window.GDIUser.setResume(videoUrl, video.currentTime, video.duration || 0);
+            }
+          } catch (e) {}
+        };
+
+        // ─── Toast "Retomando de HH:MM:SS" ───
+        const showResumeToast = (pos) => {
+          const fmtTime = (s) => {
+            s = Math.floor(s);
+            const h = Math.floor(s / 3600);
+            const m = Math.floor((s % 3600) / 60);
+            const sec = s % 60;
+            return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${m}:${String(sec).padStart(2,'0')}`;
+          };
+          const toast = document.createElement('div');
+          toast.className = 'meggy-toast-resume';
+          toast.innerHTML = `<i class="bi bi-clock-history"></i> Retomando de <b>&nbsp;${fmtTime(pos)}</b>
+            <button class="meggy-toast-btn" type="button">Recomeçar</button>`;
+          main.appendChild(toast);
+          toast.querySelector('.meggy-toast-btn').onclick = () => {
+            video.currentTime = 0;
+            toast.remove();
+          };
+          setTimeout(() => { toast.classList.add('meggy-toast-out'); setTimeout(() => toast.remove(), 250); }, 7000);
+        };
+
+        // ─── Quando metadados carregarem ───
+        video.addEventListener('loadedmetadata', () => {
+          durEl.textContent = formatTime(video.duration);
+          // Aplicar resume se há posição salva (>10s e <90% do vídeo)
+          if (resumePos > 10 && video.duration && resumePos < video.duration * 0.9) {
+            video.currentTime = resumePos;
+            showResumeToast(resumePos);
+            console.log('[Meggy Shell] resume aplicado:', resumePos, 's');
+          }
+        });
+
+        // ─── Timeupdate (atualizar display + salvar resume) ───
+        video.addEventListener('timeupdate', () => {
+          timeEl.textContent = formatTime(video.currentTime);
+          saveResume();
+        });
+
+        // ─── Ended (próximo vídeo) ───
+        video.addEventListener('ended', () => {
+          if (idx < pl.length - 1) {
+            const next = pl[idx + 1];
+            Shell.views._playVideoInline(next.link, next.name, pl, idx + 1);
+          }
+        });
+
+        // ─── Speed change ───
+        speedSel.onchange = () => { video.playbackRate = parseFloat(speedSel.value); };
+
+        // ─── PiP ───
+        document.getElementById('meggy-pip').onclick = async () => {
+          try { await video.requestPictureInPicture(); } catch (e) { console.warn('PiP failed:', e); }
+        };
+
+        // ─── Fullscreen ───
+        document.getElementById('meggy-fullscreen').onclick = () => {
+          if (document.fullscreenElement) document.exitFullscreen();
+          else video.requestFullscreen().catch(() => {});
+        };
+
+        // ─── Download ───
+        document.getElementById('meggy-player-download').onclick = () => {
+          const a = document.createElement('a');
+          a.href = videoUrl;
+          a.download = name;
+          a.target = '_blank';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        };
+
+        // ─── Prev/Next ───
+        document.getElementById('meggy-player-prev').onclick = () => {
+          if (idx > 0) {
+            const prev = pl[idx - 1];
+            Shell.views._playVideoInline(prev.link, prev.name, pl, idx - 1);
+          }
+        };
+        document.getElementById('meggy-player-next').onclick = () => {
+          if (idx < pl.length - 1) {
+            const next = pl[idx + 1];
+            Shell.views._playVideoInline(next.link, next.name, pl, idx + 1);
+          }
+        };
+
+        // ─── Playlist item click ───
+        document.querySelectorAll('.meggy-playlist-item').forEach(item => {
+          item.onclick = () => {
+            const i = parseInt(item.dataset.idx);
+            if (i !== idx && pl[i]) {
+              Shell.views._playVideoInline(pl[i].link, pl[i].name, pl, i);
+            }
+          };
+        });
+
+        // ─── Back button ───
         document.getElementById('meggy-player-back').onclick = () => {
           window.history.back();
         };
+
+        // ─── Atalhos de teclado ───
+        const keyHandler = (e) => {
+          if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+          switch (e.key) {
+            case ' ': e.preventDefault(); video.paused ? video.play() : video.pause(); break;
+            case 'ArrowRight': video.currentTime = Math.min(video.duration, video.currentTime + 10); break;
+            case 'ArrowLeft': video.currentTime = Math.max(0, video.currentTime - 10); break;
+            case 'ArrowUp': e.preventDefault(); video.volume = Math.min(1, video.volume + 0.1); break;
+            case 'ArrowDown': e.preventDefault(); video.volume = Math.max(0, video.volume - 0.1); break;
+            case 'f': case 'F':
+              if (document.fullscreenElement) document.exitFullscreen();
+              else video.requestFullscreen().catch(() => {});
+              break;
+            case 'm': case 'M': video.muted = !video.muted; break;
+            case 'n': case 'N':
+              if (idx < pl.length - 1) {
+                const next = pl[idx + 1];
+                Shell.views._playVideoInline(next.link, next.name, pl, idx + 1);
+              }
+              break;
+          }
+        };
+        document.addEventListener('keydown', keyHandler);
+        // Remover listener quando sair do player
+        main._cleanupKeyboard = () => document.removeEventListener('keydown', keyHandler);
+
         // Scroll to top
         main.scrollTop = 0;
+
+        function formatTime(s) {
+          if (!isFinite(s)) return '00:00';
+          s = Math.floor(s);
+          const h = Math.floor(s / 3600);
+          const m = Math.floor((s % 3600) / 60);
+          const sec = s % 60;
+          return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${m}:${String(sec).padStart(2,'0')}`;
+        }
       },
 
       meggyAI(el) {
