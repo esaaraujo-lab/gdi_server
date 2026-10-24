@@ -366,12 +366,13 @@
   if (window.UI && window.UI.shell_enabled) {
     const loadShell = async () => {
       try {
-        // Aguarda Bus + __gdiStudy estarem prontos (shell.js também checa)
+        // Aguarda apenas Bus (app.min.js) — __gdiStudy é opcional
         let waits = 0;
-        while ((!window.Bus || !window.__gdiStudy) && waits < 50) {
+        while (!window.Bus && waits < 25) {
           await new Promise(r => setTimeout(r, 200));
           waits++;
         }
+        console.log('[GDI Loader] shell: Bus pronto após ' + (waits*200) + 'ms — carregando shell');
         // Load CSS
         const link = document.createElement('link');
         link.rel = 'stylesheet';
