@@ -20,39 +20,23 @@
       modulesReady: false
     },
 
-    // ─── Init: mount immediately, no waiting (Bus is in script scope, not window.Bus) ───
+    // ─── Init: mount immediately — gdi-utils.js (loaded before us) provides Bus ───
     initAttempts: 0,
     init() {
-      Shell.initAttempts++;
       if (document.getElementById('meggy-shell')) {
         console.log('[Meggy Shell] já montado, skip');
         return;
       }
 
-      // Bus is declared with `const Bus` in app.min.js — it's in the script scope,
-      // NOT in window.Bus. Since shell.js is loaded via <script> tag, it shares
-      // the same global scope IF app.min.js already executed.
-      // We check via typeof (safe for undefined) — same pattern as gdi-extras-loader.js
+      // Bus is provided by gdi-utils.js (loaded via <script defer> before us)
+      // If not available, log error but still try to mount (shell works without Bus for basic nav)
       let busReady = false;
-      try {
-        busReady = (typeof Bus !== 'undefined');
-      } catch (e) {
-        busReady = false;
-      }
-
-      // Also check document is ready enough
-      if (!busReady && Shell.initAttempts < 30) { // 30 * 150ms = 4.5s wait
-        if (Shell.initAttempts === 1) {
-          console.log('[Meggy Shell] init — waiting for Bus (attempt 1, will retry up to 4.5s)');
-        }
-        setTimeout(() => Shell.init(), 150);
-        return;
-      }
+      try { busReady = (typeof Bus !== 'undefined'); } catch (e) {}
 
       if (!busReady) {
-        console.warn('[Meggy Shell] Bus não disponível após 4.5s — montando shell mesmo assim (Bus é opcional para o shell)');
+        console.warn('[Meggy Shell] Bus não disponível — gdi-utils.js falhou? Montando mesmo assim');
       } else {
-        console.log('[Meggy Shell] init — Bus disponível, montando shell (attempt #' + Shell.initAttempts + ')');
+        console.log('[Meggy Shell] init — Bus disponível, montando shell nativo');
       }
       Shell.state.modulesReady = true;
       Shell.mount();
@@ -61,9 +45,6 @@
 
     // ─── Mount: create DOM ───
     mount() {
-      // Hide existing GDIndex UI (body content)
-      document.body.style.overflow = 'hidden';
-
       // Create sidebar overlay (mobile)
       const overlay = document.createElement('div');
       overlay.className = 'meggy-sidebar-overlay';
@@ -107,8 +88,12 @@
         </div>
       `;
 
-      document.body.appendChild(overlay);
-      document.body.appendChild(shell);
+      // Mount into #meggy-root container (provided by worker-staging.js html())
+      // Shell IS the body now — no overlay on top of GDIndex.
+      const root = document.getElementById('meggy-root') || document.body;
+      root.innerHTML = ''; // clear (in case of remount)
+      root.appendChild(overlay);
+      root.appendChild(shell);
 
       // Bind events
       document.getElementById('meggy-menu-btn').onclick = () => Shell.toggleSidebar();
@@ -129,7 +114,39 @@
       const theme = document.documentElement.getAttribute('data-bs-theme') || 'dark';
       document.getElementById('meggy-theme-icon').className = theme === 'dark' ? 'bi bi-moon-stars' : 'bi bi-sun';
 
-      console.log('[Meggy Shell] ✓ shell mounted');
+      console.log('[Meggy Shell] ✓ shell mounted into #meggy-root');
+    },
+
+    // ─── Lazy load full GDIndex (app.min.js + 24 modules) when needed ───
+    gdindexLoaded: false,
+    async loadFullGDIndex() {
+      if (Shell.gdindexLoaded) return true;
+      console.log('[Meggy Shell] lazy loading full GDIndex (app.min.js + gdi-extras-loader.js)...');
+      try {
+        // Load app.min.js (134KB) — provides full GDIStorage, GDIUser, player, etc.
+        await Shell._loadScript('/app.min.js?v=17');
+        // Load gdi-extras-loader.js — loads 24 modules (gdi-core, gdi-ui, gdi-study, gdi-meggy, etc.)
+        await Shell._loadScript('/gdi-extras.js?v=151');
+        // Wait for modules to register (gdi-extras-loader has its own bootstrap)
+        await new Promise(r => setTimeout(r, 2000));
+        Shell.gdindexLoaded = true;
+        console.log('[Meggy Shell] ✓ full GDIndex loaded (app.min.js + 24 modules)');
+        return true;
+      } catch (e) {
+        console.error('[Meggy Shell] full GDIndex load failed:', e);
+        return false;
+      }
+    },
+
+    _loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.defer = true;
+        s.onload = () => resolve();
+        s.onerror = () => reject(new Error('Failed: ' + src));
+        document.head.appendChild(s);
+      });
     },
 
     // ─── Sidebar ───
@@ -327,38 +344,53 @@
           <div id="meggy-cursos-container">
             <div class="meggy-loading">
               <div class="spinner-border" role="status"></div>
-              <div>Carregando cursos...</div>
+              <div>Carregando módulo de cursos...</div>
             </div>
           </div>
         `;
-        // Try to use existing renderCursos from gdi-study.js
-        try {
-          if (window.__gdiStudy && window.__gdiStudy.courses && window.__gdiStudy.courses.renderCursos) {
-            const container = document.getElementById('meggy-cursos-container');
-            container.innerHTML = '';
-            // Create a wrapper that mimics the expected structure
-            const wrapper = document.createElement('div');
-            wrapper.className = 'gdi-central-box';
-            wrapper.style.cssText = 'max-width:none;padding:0;background:transparent;border:none;';
-            container.appendChild(wrapper);
-            window.__gdiStudy.courses.renderCursos(wrapper);
-          } else {
+
+        (async () => {
+          // Need full GDIndex for renderCursos (gdi-study.js module)
+          if (!window.__gdiStudy) {
+            const ok = await Shell.loadFullGDIndex();
+            if (!ok) {
+              document.getElementById('meggy-cursos-container').innerHTML = `
+                <div class="meggy-placeholder">
+                  <div class="meggy-placeholder-icon">⚠️</div>
+                  <div class="meggy-placeholder-title">Não foi possível carregar os cursos</div>
+                  <div class="meggy-placeholder-desc">Tente novamente em alguns segundos.</div>
+                </div>`;
+              return;
+            }
+          }
+          // Now render
+          try {
+            if (window.__gdiStudy && window.__gdiStudy.courses && window.__gdiStudy.courses.renderCursos) {
+              const container = document.getElementById('meggy-cursos-container');
+              container.innerHTML = '';
+              const wrapper = document.createElement('div');
+              wrapper.className = 'gdi-central-box';
+              wrapper.style.cssText = 'max-width:none;padding:0;background:transparent;border:none;';
+              container.appendChild(wrapper);
+              window.__gdiStudy.courses.renderCursos(wrapper);
+            } else {
+              document.getElementById('meggy-cursos-container').innerHTML = `
+                <div class="meggy-placeholder">
+                  <div class="meggy-placeholder-icon">📚</div>
+                  <div class="meggy-placeholder-title">Módulo de cursos indisponível</div>
+                  <div class="meggy-placeholder-desc">window.__gdiStudy.courses não encontrado após load.</div>
+                </div>`;
+            }
+          } catch (e) {
+            console.error('[Shell] cursos view:', e);
             document.getElementById('meggy-cursos-container').innerHTML = `
               <div class="meggy-placeholder">
-                <div class="meggy-placeholder-icon">📚</div>
-                <div class="meggy-placeholder-title">Módulo de cursos carregando</div>
-                <div class="meggy-placeholder-desc">gdi-study.js ainda não inicializou.</div>
+                <div class="meggy-placeholder-icon">⚠️</div>
+                <div class="meggy-placeholder-title">Erro ao carregar cursos</div>
+                <div class="meggy-placeholder-desc">${e.message}</div>
               </div>`;
           }
-        } catch (e) {
-          console.error('[Shell] cursos view:', e);
-          document.getElementById('meggy-cursos-container').innerHTML = `
-            <div class="meggy-placeholder">
-              <div class="meggy-placeholder-icon">⚠️</div>
-              <div class="meggy-placeholder-title">Erro ao carregar cursos</div>
-              <div class="meggy-placeholder-desc">${e.message}</div>
-            </div>`;
-        }
+        })();
       },
 
       drives(el, initialPath) {
@@ -377,7 +409,7 @@
         Shell.views._renderDrives(initialPath || '/');
       },
 
-      _renderDrives(path) {
+      async _renderDrives(path) {
         const container = document.getElementById('meggy-drives-container');
         const bc = document.getElementById('meggy-drives-breadcrumb');
 
@@ -423,7 +455,7 @@
               };
             });
 
-            // Fetch files
+            // Fetch files — gdi-utils.js (lean) provides gdiListAllFiles; if missing, lazy-load full GDIndex
             if (window.gdiListAllFiles) {
               const pw = window.gdiGetPw ? window.gdiGetPw() : '';
               window.gdiListAllFiles(path, pw).then(files => {
@@ -479,7 +511,14 @@
                 container.innerHTML = `<div class="meggy-placeholder"><div class="meggy-placeholder-icon">⚠️</div><div class="meggy-placeholder-title">Erro</div><div class="meggy-placeholder-desc">${err.message}</div></div>`;
               });
             } else {
-              container.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">⚠️</div><div class="meggy-placeholder-title">gdiListAllFiles não disponível</div></div>';
+              // Fallback: lazy load full GDIndex (app.min.js + 24 modules) and retry
+              container.innerHTML = '<div class="meggy-loading"><div class="spinner-border"></div><div>Carregando GDIndex...</div></div>';
+              const ok = await Shell.loadFullGDIndex();
+              if (ok && window.gdiListAllFiles) {
+                return Shell.views._renderDrives(path);
+              } else {
+                container.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">⚠️</div><div class="meggy-placeholder-title">gdiListAllFiles não disponível</div><div class="meggy-placeholder-desc">Falha ao carregar GDIndex completo.</div></div>';
+              }
             }
           }
         } catch (e) {
