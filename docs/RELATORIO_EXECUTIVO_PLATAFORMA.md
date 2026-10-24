@@ -12,7 +12,7 @@
 
 ## 🎯 RESUMO EXECUTIVO (TL;DR)
 
-A Meggy **é hoje um "GDI Melhorado"** — um fork do `maple3142/GDIndex` (1873★) com ~8 300 linhas de camadas bolt-on (Área do Aluno, Meggy AI, Auth, D1, Scanner, Admin). Não é uma plataforma nativa porque **herda do GDIndex**: núcleo de proxy Google Drive, filesystem, UI base, autenticação e persistência.
+A Meggy **é hoje um "GDI Melhorado"** — um fork do `@googledrive/index` (GDI Index 2.5.9, por **Parveen Bhadoo** no GitLab — `GoogleDriveIndex/Google-Drive-Index`, 184⭐/413 forks) com ~8 300 linhas de camadas bolt-on (Área do Aluno, Meggy AI, Auth, D1, Scanner, Admin). Não é uma plataforma nativa porque **herda do GDI Index**: núcleo de proxy Google Drive, filesystem, UI base, autenticação e persistência.
 
 ### Dívida técnica: ALTA
 
@@ -57,14 +57,27 @@ Plataforma de estudos brasileira multi-app que oferece:
 ### 1.2 Origem técnica
 
 ```
-maple3142/GDIndex (1873⭐, MIT)
-    └── TheFirstSpeedster/goindex (fork com auth)
-        └── esaaraujo-lab/student_gdi (fork Meggy)
-            └── worker.js: 17% GDIndex puro (~1.700 linhas)
+Parveen Bhadoo / @googledrive/index (GitLab, 184⭐, 413 forks)
+  ├─ npm: @googledrive/index (33 versões, 2.0.20 → 2.5.9, desde 2021-06-28)
+  ├─ repo: gitlab.com/GoogleDriveIndex/Google-Drive-Index (master branch)
+  ├─ homepage: gdi.js.org
+  └─ descrição: "Google Drive Index - A serverless Google Drive directory listing on Cloudflare Workers"
+      │
+      └── esaaraujo-lab/student_gdi (fork Meggy — educa.eu.org)
+            └── worker.js: 17% GDI Index puro (~1.700 linhas)
                          + 83% Meggy-added (~8.300 linhas)
 ```
 
-**Evidência:** `worker.js:31` (CDN_VERSION='2.5.9'), `worker.js:78` (authConfig), `worker.js:220-221` (googleDrive class), `worker.js:483` (requestOptions).
+**Evidência direta no `worker.js`:**
+- Linha 31: `// GDI-JS 2.5.9 — WORKER COMPLETO`
+- Linha 78: `const CDN_VERSION = '2.5.9';`
+- Linha 216: `company_link: "https://gdi.js.org"` (homepage oficial do GDI Index)
+- Linha 233: `const cdn_base = 'https://cdn.jsdelivr.net/npm/@googledrive/index@' + CDN_VERSION;`
+- Linha 4555: `'HTTP-Referer': 'https://gdi.js.org'`
+- Linha 483: footer atribui a "TheFirstSpeedster" (handle histórico do projeto GDI Index)
+- npm API confirma: autor = `parveenbhadoo` (Parveen Bhadoo), repo = GitLab `GoogleDriveIndex/Google-Drive-Index`
+
+> ⚠️ **Correção histórica:** análise anterior atribuía incorretamente a origem a `maple3142/GDIndex` (GitHub, 1873⭐, Vue.js). Isso está **ERRADO** — `maple3142/GDIndex` é um projeto **diferente** (Vue.js, GitHub). A base real do Meggy é o `@googledrive/index` de Parveen Bhadoo no GitLab. O worklog do projeto (linha 3) confirma: *"Project: Parveen Badhoo's GDI Index, transformed by user into a study platform."* (variante ortográfica Bhadoo/Badhoo).
 
 ### 1.3 Camadas adicionadas pelo Meggy
 
@@ -385,18 +398,20 @@ wrangler secret put HMAC_BASE_KEY
 | `code-ownership-audit` | @ffseika0304 | Code ownership — útil para organizar módulos | Fase 3 |
 | `content-strategy` | @coreyhaines31 | Content strategy — útil para roadmap de features | Fase 5 |
 
-### 6.3 Skills GitHub (repos de referência para estudar)
+### 6.3 Repos de referência (GitLab + GitHub) para estudar
 
-| Repo | ⭐ | O que emprestar |
-|------|-----|-----------------|
-| `maple3142/GDIndex` | 1873 | A origem — comparar para ver o que mudou |
-| `menukaonline/goindex-extended` | 496 | Features extras (search, dark mode) |
-| `tks18/gindex-v4` | 250 | Vue.js + dark mode + video player melhorado |
-| `frappe/lms` | 3340 | LMS open-source moderno — referência de arquitetura |
-| `pupilfirst/pupilfirst` | 980 | LMS async school — referência de UX |
-| `artcc/freelingo` | 205 | AI language learning self-hosted — referência de AI tutor |
-| `Open-TutorAi/open-tutor-ai-CE` | 113 | AI educational platform — referência |
-| `FlameEducation/FlameEducation` | 4 | LLM-based education system (LLM+TTS+ASR) — referência |
+| Repo | ⭐ | Plataforma | O que emprestar |
+|------|-----|------------|-----------------|
+| `GoogleDriveIndex/Google-Drive-Index` (Parveen Bhadoo) | 184 | GitLab | ✅ **A origem real do Meggy** — comparar para ver o que mudou desde 2.5.9 |
+| npm `@googledrive/index` (parveenbhadoo) | 33 versões | npm | Pacote oficial — base do CDN usado em worker.js:233 |
+| `maple3142/GDIndex` | 1873 | GitHub | ⚠️ Projeto **diferente** (Vue.js) — NÃO é a base do Meggy, mas útil como referência alternativa |
+| `menukaonline/goindex-extended` | 496 | GitHub | Features extras (search, dark mode) — fork independente |
+| `tks18/gindex-v4` | 250 | GitHub | Vue.js + dark mode + video player melhorado — referência de UI |
+| `frappe/lms` | 3340 | GitHub | LMS open-source moderno — referência de arquitetura nativa |
+| `pupilfirst/pupilfirst` | 980 | GitHub | LMS async school — referência de UX |
+| `artcc/freelingo` | 205 | GitHub | AI language learning self-hosted — referência de AI tutor |
+| `Open-TutorAi/open-tutor-ai-CE` | 113 | GitHub | AI educational platform — referência |
+| `FlameEducation/FlameEducation` | 4 | GitHub | LLM-based education system (LLM+TTS+ASR) — referência |
 
 ---
 
@@ -611,21 +626,24 @@ As skills ClawHub instaladas (`improve-codebase-architecture`, `code-security-au
 - `skill-clean-audit` (@elisabeth15501, v1.4.0) — comprehension/change risk
 - `skill-finder-cn` — descoberta de skills
 
-### C. Repos GitHub de referência
+### C. Repos de referência (GitLab + GitHub)
 
-- `maple3142/GDIndex` (1873⭐) — origem
-- `frappe/lms` (3340⭐) — LMS moderno
-- `pupilfirst/pupilfirst` (980⭐) — LMS async
-- `artcc/freelingo` (205⭐) — AI language learning
+- `GoogleDriveIndex/Google-Drive-Index` no GitLab (184⭐, 413 forks) — ✅ **origem real do Meggy** (por Parveen Bhadoo)
+- npm `@googledrive/index` (parveenbhadoo) — pacote oficial, 33 versões desde 2021-06-28
+- `frappe/lms` (3340⭐, GitHub) — LMS moderno
+- `pupilfirst/pupilfirst` (980⭐, GitHub) — LMS async
+- `artcc/freelingo` (205⭐, GitHub) — AI language learning
+- `maple3142/GDIndex` (1873⭐, GitHub) — ⚠️ projeto **diferente** (Vue.js), NÃO é a base do Meggy
 
 ### D. Glossário
 
-- **GDIndex** — Google Drive Index (maple3142/GDIndex), proxy Cloudflare Workers para Google Drive
+- **GDI Index** — Google Drive Index (`@googledrive/index` por Parveen Bhadoo, GitLab `GoogleDriveIndex/Google-Drive-Index`), proxy serverless Cloudflare Workers para Google Drive — **a base real do Meggy**
+- **GDIndex** — termo genérico às vezes usado para se referir ao GDI Index (mesmo projeto)
 - **Área do Aluno** — overlay frontend com cursos/questões/flashcards/IA (gdi-study.js + gdi-meggy.js)
 - **Meggy AI** — assistente de IA (chat, resumos, flashcards, coach)
 - **Bolt-on** — camada adicionada sobre um núcleo existente sem substituí-lo
 - **Shallow module** — módulo cuja interface é tão complexa quanto a implementação (per skill improve-codebase-architecture)
-- **Seam** — ponto onde uma interface vive,允许 alterar comportamento sem editar in-place
+- **Seam** — ponto onde uma interface vive, permite alterar comportamento sem editar in-place
 
 ---
 
