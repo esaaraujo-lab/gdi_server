@@ -20,20 +20,36 @@
       modulesReady: false
     },
 
-    // ─── Init: wait for GDIndex modules, then mount ───
+    // ─── Init: wait for Bus only (minimal dependency), then mount ───
+    initAttempts: 0,
     init() {
+      Shell.initAttempts++;
       if (document.getElementById('meggy-shell')) {
         console.log('[Meggy Shell] já montado, skip');
         return;
       }
 
-      // Wait for Bus (app.min.js) + window.__gdiStudy (gdi-study.js)
-      if (!window.Bus || !window.__gdiStudy) {
-        setTimeout(() => Shell.init(), 150);
+      // DEBUG: log what's available
+      if (Shell.initAttempts <= 3 || Shell.initAttempts % 10 === 0) {
+        console.log('[Meggy Shell] init attempt #' + Shell.initAttempts +
+          ' — Bus:' + (typeof window.Bus) +
+          ' __gdiStudy:' + (typeof window.__gdiStudy) +
+          ' __gdiStudyPanel:' + (typeof window.__gdiStudyPanel));
+      }
+
+      // Minimal wait: just Bus (app.min.js). __gdiStudy is optional — shell works without it.
+      if (!window.Bus) {
+        if (Shell.initAttempts > 60) { // 60 * 150ms = 9s timeout
+          console.error('[Meggy Shell] TIMEOUT esperando Bus — montando mesmo assim');
+          Shell.mount();
+          Shell.router.init();
+        } else {
+          setTimeout(() => Shell.init(), 150);
+        }
         return;
       }
 
-      console.log('[Meggy Shell] init — modules ready, mounting shell');
+      console.log('[Meggy Shell] init — modules ready (Bus ✓, __gdiStudy: ' + (typeof window.__gdiStudy) + '), mounting shell');
       Shell.state.modulesReady = true;
       Shell.mount();
       Shell.router.init();
