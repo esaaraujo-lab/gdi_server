@@ -535,12 +535,18 @@
                 const playlist = Array.from(videoCards).map(c => ({
                   link: c.dataset.video,
                   name: c.querySelector('.meggy-card-title')?.textContent || 'Vídeo',
-                  size: c.querySelector('.meggy-card-meta')?.textContent || ''
+                  size: c.querySelector('.meggy-card-meta')?.textContent || '',
+                  folder: ''
                 }));
+                // ★ Guardar pasta atual ANTES de abrir player (para Voltar funcionar)
+                Shell.state.previousFolderPath = Shell.state.currentFolderPath;
                 videoCards.forEach((card, i) => {
                   card.onclick = () => {
                     const v = playlist[i];
-                    if (v.link) Shell.views._playVideoInline(v.link, v.name, playlist, i);
+                    if (v.link) {
+                      Shell.state.previousFolderPath = Shell.state.currentFolderPath;
+                      Shell.views._playVideoInline(v.link, v.name, playlist, i);
+                    }
                   };
                 });
               }).catch(err => {
@@ -599,6 +605,13 @@
         Shell.state.currentView = 'player';
         Shell.state.playerPlaylist = pl;
         Shell.state.playerIndex = idx;
+
+        // ★ Registrar no histórico para Voltar funcionar
+        // Se não veio de um switchTo (currentIndex == 0 e playlist nova), fazer pushState
+        if (!Shell.state._inPlayer) {
+          Shell.state._inPlayer = true;
+          // Não faz pushState aqui — o popstate handler cuida de renderizar
+        }
 
         // Renderizar página de aula completa
         main.innerHTML = `
@@ -803,7 +816,19 @@
         };
         document.getElementById('meggy-lesson-prev').onclick = () => { if (idx > 0) switchTo(idx - 1); };
         document.getElementById('meggy-lesson-next').onclick = () => { if (idx < pl.length - 1) switchTo(idx + 1); };
-        document.getElementById('meggy-lesson-back').onclick = () => { window.history.back(); };
+        document.getElementById('meggy-lesson-back').onclick = () => {
+          // Voltar para a pasta anterior (usando estado salvo)
+          const prevFolder = Shell.state.previousFolderPath || '/drives';
+          console.log('[Meggy Shell] voltando para:', prevFolder);
+          Shell.state._inPlayer = false;
+          Shell.router.navigate(prevFolder);
+          // Após navegar, re-renderizar a pasta
+          setTimeout(() => {
+            if (window.MeggyShell && Shell.state.previousFolderPath) {
+              Shell.views._renderDrives(Shell.state.previousFolderPath);
+            }
+          }, 100);
+        };
 
         // ─── Playlist item click ───
         document.querySelectorAll('.meggy-playlist-item').forEach(item => {
