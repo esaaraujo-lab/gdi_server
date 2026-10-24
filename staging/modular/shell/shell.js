@@ -95,6 +95,34 @@
       root.appendChild(overlay);
       root.appendChild(shell);
 
+      // ★ Bloquear Área do Aluno antiga (study-panel.js) — não deve abrir sobre o shell nativo
+      try {
+        // Override __gdiOpenCentral (alias usado pelo botão "Área do Aluno" do GDIndex)
+        window.__gdiOpenCentral = function() {
+          console.log('[Meggy Shell] __gdiOpenCentral bloqueado — shell nativo já está ativo');
+          Shell.router.navigate('/cursos');
+        };
+        // Override panel.openPanel se existir
+        if (window.__gdiStudy && window.__gdiStudy.panel) {
+          window.__gdiStudy.panel.openPanel = function() {
+            console.log('[Meggy Shell] __gdiStudy.panel.openPanel bloqueado — shell nativo já está ativo');
+            Shell.router.navigate('/cursos');
+          };
+        }
+        // Esconder qualquer elemento .gdi-central-box que apareça
+        const observer = new MutationObserver(() => {
+          document.querySelectorAll('.gdi-central-box, #gdi-central-panel, [class*="gdi-central"]').forEach(el => {
+            if (el.id !== 'meggy-shell' && !el.closest('#meggy-shell')) {
+              el.style.display = 'none';
+            }
+          });
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        console.log('[Meggy Shell] ✓ Área do Aluno antiga bloqueada');
+      } catch (e) {
+        console.warn('[Meggy Shell] falha ao bloquear área do aluno antiga:', e);
+      }
+
       // Bind events
       document.getElementById('meggy-menu-btn').onclick = () => Shell.toggleSidebar();
       document.getElementById('meggy-logo').onclick = () => Shell.router.navigate('/');
@@ -500,11 +528,12 @@
                 container.querySelectorAll('.meggy-card[data-folder]').forEach(card => {
                   card.onclick = () => Shell.views._renderDrives(card.dataset.folder);
                 });
-                // Video clicks — open in new tab for now (Phase 3 will integrate player)
+                // Video clicks — open INLINE player in main pane (like GDI does)
                 container.querySelectorAll('.meggy-card[data-video]').forEach(card => {
                   card.onclick = () => {
                     const link = card.dataset.video;
-                    if (link) window.open(link, '_blank');
+                    const name = card.querySelector('.meggy-card-title')?.textContent || 'Vídeo';
+                    if (link) Shell.views._playVideoInline(link, name);
                   };
                 });
               }).catch(err => {
@@ -525,6 +554,37 @@
           console.error('[Shell] drives view:', e);
           container.innerHTML = `<div class="meggy-placeholder"><div class="meggy-placeholder-icon">⚠️</div><div class="meggy-placeholder-title">Erro</div><div class="meggy-placeholder-desc">${e.message}</div></div>`;
         }
+      },
+
+      _playVideoInline(link, name) {
+        const main = document.getElementById('meggy-main');
+        if (!main) return;
+        const videoUrl = link.startsWith('http') ? link : (window.location.origin + link);
+        console.log('[Meggy Shell] player inline:', name, '→', videoUrl);
+        main.innerHTML = `
+          <div class="meggy-view-header">
+            <h1 class="meggy-view-title">🎬 <span style="font-size:18px;font-weight:500;">${name}</span></h1>
+            <button class="meggy-header-btn" id="meggy-player-back" title="Voltar">
+              <i class="bi bi-arrow-left"></i> Voltar
+            </button>
+          </div>
+          <div style="max-width:900px;margin:0 auto;">
+            <video src="${videoUrl}" controls autoplay playsinline
+              style="width:100%;max-height:75vh;border-radius:12px;background:#000;box-shadow:0 10px 30px -12px rgba(0,0,0,0.55);"
+              onerror="this.style.display='none';document.getElementById('meggy-player-error').style.display='block'">
+            </video>
+            <div id="meggy-player-error" style="display:none;padding:40px;text-align:center;color:#ff8b9f;">
+              ⚠️ Não foi possível carregar o vídeo.<br>
+              <a href="${videoUrl}" target="_blank" style="color:#5ddeda;">Abrir em nova aba</a>
+            </div>
+          </div>
+        `;
+        // Bind back button — voltar para a pasta atual
+        document.getElementById('meggy-player-back').onclick = () => {
+          window.history.back();
+        };
+        // Scroll to top
+        main.scrollTop = 0;
       },
 
       meggyAI(el) {
