@@ -569,185 +569,149 @@
         }
       },
 
-      // ═══ PÁGINA DE AULA COMPLETA (replica do GDI file_video) ═══
-      // Funcionalidades:
-      // - Playlist INTERFOLDER (loadCrossFolderPlaylist): vídeos de TODAS as subpastas da pasta pai
-      // - Tabs laterais: Playlist | Meggy AI | Material (PDF/resumos)
-      // - Modo Foco: esconde sidebar do shell, expande player
-      // - Resume tracking + toast "Retomando de HH:MM:SS"
-      // - Atalhos: espaço/←→/↑↓/F/M/N/P/S
-      // - Speed 0.5-2x, PiP, download, fullscreen
-      // - Auto-advance
-      // - Lazy load do GDIndex quando abre Meggy AI (precisa __gdiMeggy.widget)
+      // ═══ PÁGINA DE AULA — RÉPLICA 100% FIEL DO GDI ═══
+      // Estrutura idêntica à produção:
+      // gdi-study > gdi-study-bar (breadcrumb + modos) > gdi-study-grid (left player + right material) > gdi-study-foot (anotações + playlist)
       _playVideoInline(link, name, playlist, currentIndex) {
         const main = document.getElementById('meggy-main');
         if (!main) return;
         const videoUrl = link.startsWith('http') ? link : (window.location.origin + link);
 
-        // Se não recebeu playlist, criar com 1 item
         let pl = playlist || [{ name: name, link: videoUrl, size: '', folder: '' }];
         let idx = currentIndex || 0;
 
-        // Resume: buscar posição salva
+        // Resume
         let resumePos = 0;
         try {
           if (window.GDIUser && window.GDIUser.state && window.GDIUser.state.resume) {
-            const key = videoUrl;
-            const saved = window.GDIUser.state.resume[key];
+            const saved = window.GDIUser.state.resume[videoUrl];
             if (saved && typeof saved === 'number') resumePos = saved;
             else if (saved && saved.pos) resumePos = saved.pos;
           }
         } catch (e) {}
 
-        // Limpar keyboard listener anterior
         if (main._cleanupKeyboard) { main._cleanupKeyboard(); main._cleanupKeyboard = null; }
-
         Shell.state.currentView = 'player';
         Shell.state.playerPlaylist = pl;
         Shell.state.playerIndex = idx;
 
-        // ★ Registrar no histórico para Voltar funcionar
-        // Se não veio de um switchTo (currentIndex == 0 e playlist nova), fazer pushState
-        if (!Shell.state._inPlayer) {
-          Shell.state._inPlayer = true;
-          // Não faz pushState aqui — o popstate handler cuida de renderizar
+        // Construir breadcrumb da pasta atual
+        const folderPath = Shell.state.currentFolderPath || '';
+        const parts = folderPath.split('/').filter(Boolean);
+        let bcHTML = '<li><a href="/" title="Home" data-nav="/">Home</a></li><li class="gdi-bc-sep">/</li>';
+        let cumPath = '';
+        for (let i = 0; i < parts.length; i++) {
+          cumPath += '/' + parts[i];
+          const isLast = i === parts.length - 1;
+          const label = parts[i].match(/^\d+:$/) ? (window.drive_names?.[+parts[i].slice(0,-1)] || parts[i]) : decodeURIComponent(parts[i]);
+          const short = label.length > 20 ? label.slice(0,17) + '…' : label;
+          if (isLast) {
+            bcHTML += `<li><a href="${cumPath}/" title="${label}" data-nav="${cumPath}/">${short}</a></li><li class="gdi-bc-sep">/</li>`;
+          } else {
+            bcHTML += `<li><a href="${cumPath}/" title="${label}" data-nav="${cumPath}/">${short}</a></li><li class="gdi-bc-sep">/</li>`;
+          }
         }
+        const shortName = name.length > 20 ? name.slice(0,17) + '…' : name;
+        bcHTML += `<li class="gdi-bc-cur" title="${name}">${shortName}</li>`;
 
-        // Renderizar página de aula completa
+        // Tamanho do arquivo
+        const fileSize = pl[idx]?.size || '';
+
+        // Renderizar página de aula — RÉPLICA DO GDI
         main.innerHTML = `
-          <div class="meggy-lesson-page" id="meggy-lesson-page">
-            <div class="meggy-lesson-header">
-              <div class="meggy-lesson-title-row">
-                <button class="meggy-header-btn" id="meggy-lesson-back" title="Voltar">
-                  <i class="bi bi-arrow-left"></i>
-                </button>
-                <h1 class="meggy-view-title" id="meggy-lesson-name">🎬 ${name}</h1>
-                <div class="meggy-lesson-actions">
-                  <button class="meggy-header-btn" id="meggy-lesson-focus" title="Modo Foco (S)">
-                    <i class="bi bi-arrows-fullscreen"></i> Foco
-                  </button>
-                  <button class="meggy-header-btn" id="meggy-lesson-prev" title="Anterior (P)">
-                    <i class="bi bi-skip-start"></i>
-                  </button>
-                  <button class="meggy-header-btn" id="meggy-lesson-next" title="Próximo (N)">
-                    <i class="bi bi-skip-end"></i>
-                  </button>
-                  <button class="meggy-header-btn" id="meggy-lesson-download" title="Download">
-                    <i class="bi bi-download"></i>
-                  </button>
-                </div>
+          <div class="gdi-study" id="gdi-study">
+            <div class="gdi-study-bar">
+              <div class="gdi-study-bc"><ol class="gdi-bc">${bcHTML}</ol></div>
+              <div class="gdi-study-modes" id="gdi-slot-modes" data-m10="1">
+                <button class="gdi-mode-btn active" data-mode="split" title="Tela dividida (vídeo + material)"><i class="bi bi-layout-split"></i><span class="d-none d-md-inline">Dividido</span></button>
+                <button class="gdi-mode-btn" data-mode="fv" title="Foco na aula (vídeo em largura total)"><i class="bi bi-lightning-charge-fill"></i><span class="d-none d-md-inline">Foco na aula</span></button>
+                <button class="gdi-mode-btn" data-mode="fm" title="Foco no material (só PDF, zoom automático)"><i class="bi bi-file-earmark-pdf-fill"></i><span class="d-none d-md-inline">Foco no material</span></button>
+                <button class="gdi-watched-btn" id="gdi-watched-btn" title="Marcar esta aula como assistida" data-b="1"><i class="bi bi-eye"></i><span>Assistido</span></button>
               </div>
             </div>
-            <div class="meggy-lesson-body">
-              <div class="meggy-lesson-player">
-                <video id="meggy-video" src="${videoUrl}" controls autoplay playsinline
-                  style="width:100%;max-height:70vh;border-radius:12px;background:#000;box-shadow:0 10px 30px -12px rgba(0,0,0,0.55);"
-                  onerror="this.style.display='none';document.getElementById('meggy-player-error').style.display='block'">
-                </video>
-                <div id="meggy-player-error" style="display:none;padding:40px;text-align:center;color:#ff8b9f;">
-                  ⚠️ Não foi possível carregar o vídeo.<br>
-                  <a href="${videoUrl}" target="_blank" style="color:#5ddeda;">Abrir em nova aba</a>
-                </div>
-                <div class="meggy-player-controls">
-                  <select id="meggy-speed" title="Velocidade">
-                    <option value="0.5">0.5x</option>
-                    <option value="0.75">0.75x</option>
-                    <option value="1" selected>1x</option>
-                    <option value="1.25">1.25x</option>
-                    <option value="1.5">1.5x</option>
-                    <option value="2">2x</option>
-                  </select>
-                  <button class="meggy-header-btn" id="meggy-pip" title="Picture-in-Picture">
-                    <i class="bi bi-pip"></i> PiP
-                  </button>
-                  <button class="meggy-header-btn" id="meggy-fullscreen" title="Fullscreen (F)">
-                    <i class="bi bi-fullscreen"></i>
-                  </button>
-                  <span style="margin-left:auto;color:#6b7488;font-size:12px;">
-                    <span id="meggy-time">00:00</span> / <span id="meggy-duration">00:00</span>
-                  </span>
-                </div>
-              </div>
-              <aside class="meggy-lesson-sidebar" id="meggy-lesson-sidebar">
-                <div class="meggy-lesson-tabs">
-                  <button class="meggy-lesson-tab active" data-tab="playlist">📋 Playlist</button>
-                  <button class="meggy-lesson-tab" data-tab="ai">🤖 Meggy AI</button>
-                  <button class="meggy-lesson-tab" data-tab="material">📄 Material</button>
-                </div>
-                <div class="meggy-lesson-tab-content" id="meggy-lesson-tab-content">
-                  <div class="meggy-tab-pane active" id="meggy-tab-playlist">
-                    <div class="meggy-playlist-header">
-                      <span id="meggy-playlist-count">${idx + 1} / ${pl.length}</span>
-                      <button class="meggy-header-btn" id="meggy-load-interfolder" title="Carregar vídeos de todas as subpastas" style="font-size:11px;padding:4px 8px;">
-                        <i class="bi bi-collection"></i> Interfolder
-                      </button>
-                    </div>
-                    <div class="meggy-playlist-items" id="meggy-playlist-items">
-                      ${pl.map((v, i) => `
-                        <div class="meggy-playlist-item ${i === idx ? 'active' : ''}" data-idx="${i}">
-                          <span class="meggy-playlist-num">${i + 1}</span>
-                          <div class="meggy-playlist-info">
-                            <span class="meggy-playlist-name" title="${v.name}">${v.name}</span>
-                            ${v.folder ? `<span class="meggy-playlist-folder">${v.folder}</span>` : ''}
-                          </div>
-                          ${v.size ? `<span class="meggy-playlist-size">${v.size}</span>` : ''}
-                        </div>
-                      `).join('')}
-                    </div>
+            <div class="gdi-study-grid" id="gdi-study-grid">
+              <section class="gdi-study-left">
+                <div class="gdi-study-head">
+                  <i class="bi bi-camera-video-fill gdi-icon-video" style="font-size:22px;"></i>
+                  <div class="gdi-study-title">
+                    <div class="gdi-file-header-name" id="gdi-file-header-name">${name}</div>
+                    <div class="gdi-file-header-meta" id="gdi-file-header-meta">${fileSize}</div>
                   </div>
-                  <div class="meggy-tab-pane" id="meggy-tab-ai">
-                    <div class="meggy-ai-placeholder">
-                      <div class="meggy-placeholder-icon">🤖</div>
-                      <div class="meggy-placeholder-title">Meggy AI</div>
-                      <div class="meggy-placeholder-desc">Chat, resumos, questões e flashcards da aula</div>
-                      <button class="meggy-header-btn" id="meggy-load-ai" style="margin-top:16px;">
-                        <i class="bi bi-robot"></i> Carregar Meggy AI
-                      </button>
-                      <div class="meggy-placeholder-phase">Faz lazy-load do GDIndex (gdi-meggy.js)</div>
-                    </div>
+                </div>
+                <div class="gdi-player-wrap" style="width:100%;">
+                  <video id="meggy-video" src="${videoUrl}" controls autoplay playsinline
+                    style="width:100%;max-height:60vh;border-radius:8px;background:#000;"
+                    onerror="this.style.display='none';document.getElementById('meggy-player-error').style.display='block'">
+                  </video>
+                  <div id="meggy-player-error" style="display:none;padding:40px;text-align:center;color:#ff8b9f;">
+                    ⚠️ Não foi possível carregar o vídeo.<br>
+                    <a href="${videoUrl}" target="_blank" style="color:#5ddeda;">Abrir em nova aba</a>
                   </div>
-                  <div class="meggy-tab-pane" id="meggy-tab-material">
-                    <div class="meggy-ai-placeholder">
-                      <div class="meggy-placeholder-icon">📄</div>
-                      <div class="meggy-placeholder-title">Material da Aula</div>
-                      <div class="meggy-placeholder-desc">PDFs e materiais de apoio da pasta</div>
-                      <button class="meggy-header-btn" id="meggy-load-material" style="margin-top:16px;">
-                        <i class="bi bi-folder"></i> Carregar Materiais
-                      </button>
-                    </div>
+                </div>
+                <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+                  <button class="gdi-mode-btn" id="gdi-prev-btn" title="Aula anterior" ${idx === 0 ? 'disabled' : ''}><i class="bi bi-chevron-left"></i> Anterior</button>
+                  <button class="gdi-mode-btn" id="gdi-next-btn" title="Próxima aula" ${idx >= pl.length - 1 ? 'disabled' : ''}>Próxima <i class="bi bi-chevron-right"></i></button>
+                  <a class="gdi-mode-btn" id="gdi-download-btn" href="${videoUrl}" download="${name}" target="_blank" title="Download"><i class="bi bi-download"></i> Download</a>
+                  <button class="gdi-mode-btn" id="gdi-interfolder-btn" title="Carregar vídeos de todas as subpastas"><i class="bi bi-collection"></i> Interfolder</button>
+                </div>
+              </section>
+              <aside class="gdi-study-right" id="gdi-slot-right" data-m9="1">
+                <div class="gdi-mat-head"><strong><i class="bi bi-journal-bookmark-fill" style="color:var(--ferreto-primary,#ff8b9f);"></i> Materiais da aula</strong><span id="gdi-mat-status">sem material</span></div>
+                <div class="gdi-mat-tabs" id="gdi-mat-tabs"></div>
+                <div class="gdi-mat-body" id="gdi-mat-body">
+                  <div class="gdi-mat-empty">
+                    <i class="bi bi-file-earmark-x" style="font-size:34px;"></i>
+                    <div id="gdi-mat-empty-text">Nenhum material encontrado para esta aula.</div>
+                    <button class="gdi-mode-btn" id="gdi-load-material" style="margin-top:12px;"><i class="bi bi-folder"></i> Carregar Materiais</button>
                   </div>
                 </div>
               </aside>
+            </div>
+            <div class="gdi-study-foot">
+              <div class="gdi-study-notes">
+                <div class="gdi-notes-head"><i class="bi bi-journal-text"></i> Anotações da aula</div>
+                <textarea class="gdi-notes-input" id="gdi-notes-input" placeholder="Digite sua anotação para esta aula…"></textarea>
+                <div class="gdi-notes-foot">
+                  <span class="gdi-notes-time" id="gdi-notes-time" onclick="document.getElementById('meggy-video').currentTime = parseFloat(prompt('Ir para (segundos):', '0')) || 0">00:00</span>
+                  <button class="gdi-mode-btn" id="gdi-notes-save"><i class="bi bi-save"></i> Salvar</button>
+                </div>
+              </div>
+              <div class="gdi-playlist-wrap">
+                <div class="gdi-playlist-head">
+                  <button class="gdi-mode-btn" id="gdi-pl-toggle"><i class="bi bi-list-ul"></i> Playlist <span id="gdi-pl-count">${idx + 1} / ${pl.length}</span> <i class="bi bi-chevron-up"></i></button>
+                </div>
+                <div class="gdi-playlist-items" id="gdi-playlist-items">
+                  ${pl.map((v, i) => `
+                    <div class="gdi-playlist-item ${i === idx ? 'cur' : ''}" data-idx="${i}" title="${v.name}">
+                      <div><i class="bi ${i === idx ? 'bi-play-fill' : 'bi-play'} me-2"></i><span style="${i === idx ? 'font-weight:600;' : ''}">${v.name}</span></div>
+                      <span class="gdi-pl-size">${v.size || ''}</span>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
             </div>
           </div>
         `;
 
         const video = document.getElementById('meggy-video');
-        const speedSel = document.getElementById('meggy-speed');
-        const timeEl = document.getElementById('meggy-time');
-        const durEl = document.getElementById('meggy-duration');
-        const lessonPage = document.getElementById('meggy-lesson-page');
+        const timeEl = document.getElementById('gdi-notes-time');
+        const plCountEl = document.getElementById('gdi-pl-count');
 
         // ─── Resume tracking ───
         let lastSave = 0;
         const saveResume = () => {
-          if (!video || !video.currentTime) return;
+          if (!video?.currentTime) return;
           const now = Date.now();
           if (now - lastSave < 5000) return;
           lastSave = now;
-          try {
-            if (window.GDIUser && window.GDIUser.setResume) {
-              window.GDIUser.setResume(videoUrl, video.currentTime, video.duration || 0);
-            }
-          } catch (e) {}
+          try { window.GDIUser?.setResume?.(videoUrl, video.currentTime, video.duration || 0); } catch (e) {}
         };
 
         // ─── Toast "Retomando de HH:MM:SS" ───
         const showResumeToast = (pos) => {
           const toast = document.createElement('div');
           toast.className = 'meggy-toast-resume';
-          toast.innerHTML = `<i class="bi bi-clock-history"></i> Retomando de <b>&nbsp;${formatTime(pos)}</b>
-            <button class="meggy-toast-btn" type="button">Recomeçar</button>`;
+          toast.innerHTML = `<i class="bi bi-clock-history"></i> Retomando de <b>&nbsp;${formatTime(pos)}</b><button class="meggy-toast-btn" type="button">Recomeçar</button>`;
           main.appendChild(toast);
           toast.querySelector('.meggy-toast-btn').onclick = () => { video.currentTime = 0; toast.remove(); };
           setTimeout(() => { toast.classList.add('meggy-toast-out'); setTimeout(() => toast.remove(), 250); }, 7000);
@@ -756,25 +720,21 @@
         function formatTime(s) {
           if (!isFinite(s)) return '00:00';
           s = Math.floor(s);
-          const h = Math.floor(s / 3600);
-          const m = Math.floor((s % 3600) / 60);
-          const sec = s % 60;
+          const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
           return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${m}:${String(sec).padStart(2,'0')}`;
         }
 
         // ─── Video events ───
         video.addEventListener('loadedmetadata', () => {
-          durEl.textContent = formatTime(video.duration);
           if (resumePos > 10 && video.duration && resumePos < video.duration * 0.9) {
             video.currentTime = resumePos;
             showResumeToast(resumePos);
-            console.log('[Meggy Shell] resume aplicado:', resumePos, 's');
           }
         });
         video.addEventListener('timeupdate', () => { timeEl.textContent = formatTime(video.currentTime); saveResume(); });
         video.addEventListener('ended', () => { if (idx < pl.length - 1) switchTo(idx + 1); });
 
-        // ─── Switch video (sem recarregar página) ───
+        // ─── Switch video ───
         function switchTo(newIdx) {
           if (newIdx < 0 || newIdx >= pl.length) return;
           const v = pl[newIdx];
@@ -782,227 +742,175 @@
           Shell.state.playerIndex = idx;
           video.src = v.link.startsWith('http') ? v.link : (window.location.origin + v.link);
           video.play().catch(() => {});
-          document.getElementById('meggy-lesson-name').textContent = '🎬 ' + v.name;
-          document.getElementById('meggy-playlist-count').textContent = `${idx + 1} / ${pl.length}`;
-          document.querySelectorAll('.meggy-playlist-item').forEach((el, i) => {
-            el.classList.toggle('active', i === idx);
+          document.getElementById('gdi-file-header-name').textContent = v.name;
+          document.getElementById('gdi-file-header-meta').textContent = v.size || '';
+          plCountEl.textContent = `${idx + 1} / ${pl.length}`;
+          document.querySelectorAll('.gdi-playlist-item').forEach((el, i) => {
+            el.classList.toggle('cur', i === idx);
+            const span = el.querySelector('span');
+            if (span) span.style.fontWeight = i === idx ? '600' : '';
           });
-          // Atualizar resume
+          // Update prev/next disabled
+          document.getElementById('gdi-prev-btn').disabled = idx === 0;
+          document.getElementById('gdi-next-btn').disabled = idx >= pl.length - 1;
+          // Atualizar breadcrumb
+          const shortName = v.name.length > 20 ? v.name.slice(0,17) + '…' : v.name;
+          const bcCur = main.querySelector('.gdi-bc-cur');
+          if (bcCur) { bcCur.textContent = shortName; bcCur.title = v.name; }
           resumePos = 0;
-          try {
-            const newUrl = v.link.startsWith('http') ? v.link : (window.location.origin + v.link);
-            if (window.GDIUser && window.GDIUser.state && window.GDIUser.state.resume) {
-              const saved = window.GDIUser.state.resume[newUrl];
-              if (saved && typeof saved === 'number') resumePos = saved;
-              else if (saved && saved.pos) resumePos = saved.pos;
-            }
-          } catch (e) {}
           main.scrollTop = 0;
         }
 
-        // ─── Controls ───
-        speedSel.onchange = () => { video.playbackRate = parseFloat(speedSel.value); };
-        document.getElementById('meggy-pip').onclick = async () => {
-          try { await video.requestPictureInPicture(); } catch (e) { console.warn('PiP:', e); }
-        };
-        document.getElementById('meggy-fullscreen').onclick = () => {
-          if (document.fullscreenElement) document.exitFullscreen();
-          else video.requestFullscreen().catch(() => {});
-        };
-        document.getElementById('meggy-lesson-download').onclick = () => {
-          const a = document.createElement('a');
-          a.href = videoUrl; a.download = name; a.target = '_blank';
-          document.body.appendChild(a); a.click(); a.remove();
-        };
-        document.getElementById('meggy-lesson-prev').onclick = () => { if (idx > 0) switchTo(idx - 1); };
-        document.getElementById('meggy-lesson-next').onclick = () => { if (idx < pl.length - 1) switchTo(idx + 1); };
-        document.getElementById('meggy-lesson-back').onclick = () => {
-          // Voltar para a pasta anterior (usando estado salvo)
-          const prevFolder = Shell.state.previousFolderPath || '/drives';
-          console.log('[Meggy Shell] voltando para:', prevFolder);
-          Shell.state._inPlayer = false;
-          Shell.router.navigate(prevFolder);
-          // Após navegar, re-renderizar a pasta
-          setTimeout(() => {
-            if (window.MeggyShell && Shell.state.previousFolderPath) {
-              Shell.views._renderDrives(Shell.state.previousFolderPath);
-            }
-          }, 100);
-        };
-
-        // ─── Playlist item click ───
-        document.querySelectorAll('.meggy-playlist-item').forEach(item => {
-          item.onclick = () => { const i = parseInt(item.dataset.idx); if (i !== idx) switchTo(i); };
-        });
-
-        // ─── Tabs (Playlist / AI / Material) ───
-        document.querySelectorAll('.meggy-lesson-tab').forEach(tab => {
-          tab.onclick = () => {
-            const tabName = tab.dataset.tab;
-            document.querySelectorAll('.meggy-lesson-tab').forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
-            document.querySelectorAll('.meggy-tab-pane').forEach(p => p.classList.remove('active'));
-            document.getElementById('meggy-tab-' + tabName).classList.add('active');
+        // ─── Modos (Dividido / Foco na aula / Foco no material) ───
+        document.querySelectorAll('.gdi-mode-btn[data-mode]').forEach(btn => {
+          btn.onclick = () => {
+            document.querySelectorAll('.gdi-mode-btn[data-mode]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const mode = btn.dataset.mode;
+            const grid = document.getElementById('gdi-study-grid');
+            const study = document.getElementById('gdi-study');
+            study.classList.remove('mode-split', 'mode-fv', 'mode-fm');
+            study.classList.add('mode-' + mode);
+            console.log('[Meggy Shell] modo:', mode);
           };
         });
 
-        // ─── Modo Foco (S) ───
-        let focusMode = false;
-        document.getElementById('meggy-lesson-focus').onclick = toggleFocus;
-        function toggleFocus() {
-          focusMode = !focusMode;
-          lessonPage.classList.toggle('focus-mode', focusMode);
-          const sidebar = document.getElementById('meggy-sidebar');
-          if (sidebar) sidebar.style.display = focusMode ? 'none' : '';
-          const header = document.getElementById('meggy-header');
-          if (header) header.style.display = focusMode ? 'none' : '';
-          console.log('[Meggy Shell] modo foco:', focusMode ? 'ON' : 'OFF');
-        }
+        // ─── Assistido ───
+        document.getElementById('gdi-watched-btn').onclick = function() {
+          const watched = this.dataset.b === '1';
+          this.dataset.b = watched ? '0' : '1';
+          this.classList.toggle('watched', !watched);
+          try {
+            const key = videoUrl;
+            if (window.GDIUser?.setWatched) window.GDIUser.setWatched(key, !watched);
+          } catch (e) {}
+          console.log('[Meggy Shell] assistido:', !watched);
+        };
 
-        // ─── Interfolder playlist (loadCrossFolderPlaylist) ───
-        document.getElementById('meggy-load-interfolder').onclick = async () => {
-          const btn = document.getElementById('meggy-load-interfolder');
+        // ─── Prev/Next/Download ───
+        document.getElementById('gdi-prev-btn').onclick = () => { if (idx > 0) switchTo(idx - 1); };
+        document.getElementById('gdi-next-btn').onclick = () => { if (idx < pl.length - 1) switchTo(idx + 1); };
+
+        // ─── Interfolder ───
+        document.getElementById('gdi-interfolder-btn').onclick = async () => {
+          const btn = document.getElementById('gdi-interfolder-btn');
           btn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Carregando...';
           btn.disabled = true;
           try {
             const currentPath = Shell.state.currentFolderPath || '';
-            if (!currentPath) { btn.innerHTML = '⚠️ Sem pasta'; return; }
+            if (!currentPath || !window.gdiListAllFiles) { btn.innerHTML = '⚠️ Sem pasta'; return; }
             const parts = currentPath.split('/').filter(Boolean);
             const parentPath = '/' + parts.slice(0, -1).join('/') + '/';
-            console.log('[Meggy Shell] interfolder: parent=', parentPath);
-            if (!window.gdiListAllFiles) { btn.innerHTML = '⚠️ gdiListAllFiles'; return; }
             const parentFiles = await window.gdiListAllFiles(parentPath, '');
             const subFolders = parentFiles.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
-            console.log('[Meggy Shell] interfolder:', subFolders.length, 'subpastas');
             const collected = [];
             const BATCH = 6;
             for (let i = 0; i < subFolders.length; i += BATCH) {
               const batch = subFolders.slice(i, i + BATCH);
               const results = await Promise.all(batch.map(folder => {
                 const fpath = parentPath + encodeURIComponent(folder.name) + '/';
-                return window.gdiListAllFiles(fpath, '').then(files => {
-                  const videos = files
-                    .filter(f => (f.mimeType || '').includes('video') || f.name.endsWith('.mp4'))
-                    .filter(f => !(f.name.includes('.part-')))
-                    .map(f => ({
-                      name: f.name,
-                      link: f.link ? (f.link.startsWith('http') ? f.link : window.location.origin + f.link) : '',
-                      size: f.size ? (f.size/1024/1024).toFixed(1) + ' MB' : '',
-                      folder: folder.name
-                    }));
-                  return videos;
-                }).catch(() => []);
+                return window.gdiListAllFiles(fpath, '').then(files => files
+                  .filter(f => (f.mimeType||'').includes('video') || f.name.endsWith('.mp4'))
+                  .filter(f => !f.name.includes('.part-'))
+                  .map(f => ({
+                    name: f.name,
+                    link: f.link ? (f.link.startsWith('http') ? f.link : window.location.origin + f.link) : '',
+                    size: f.size ? (f.size/1024/1024).toFixed(1)+' MB' : '',
+                    folder: folder.name
+                  }))).catch(() => []);
               }));
               results.forEach(v => collected.push(...v));
               btn.innerHTML = `<div class="spinner-border spinner-border-sm"></div> ${collected.length} vídeos`;
             }
             const seen = new Set();
-            const deduped = collected.filter(v => {
-              const k = (v.folder || '') + '|' + v.name;
-              if (seen.has(k)) return false;
-              seen.add(k); return true;
-            });
-            deduped.sort((a, b) => (a.folder || '').localeCompare(b.folder || '') || a.name.localeCompare(b.name));
-            pl = deduped;
+            pl = collected.filter(v => { const k = (v.folder||'')+'|'+v.name; if (seen.has(k)) return false; seen.add(k); return true; });
+            pl.sort((a,b) => (a.folder||'').localeCompare(b.folder||'') || a.name.localeCompare(b.name));
             Shell.state.playerPlaylist = pl;
             idx = pl.findIndex(v => v.name === name || v.link === videoUrl);
             if (idx === -1) idx = 0;
             Shell.state.playerIndex = idx;
-            const itemsEl = document.getElementById('meggy-playlist-items');
+            // Re-render playlist
+            const itemsEl = document.getElementById('gdi-playlist-items');
             itemsEl.innerHTML = pl.map((v, i) => `
-              <div class="meggy-playlist-item ${i === idx ? 'active' : ''}" data-idx="${i}">
-                <span class="meggy-playlist-num">${i + 1}</span>
-                <div class="meggy-playlist-info">
-                  <span class="meggy-playlist-name" title="${v.name}">${v.name}</span>
-                  ${v.folder ? `<span class="meggy-playlist-folder">${v.folder}</span>` : ''}
-                </div>
-                ${v.size ? `<span class="meggy-playlist-size">${v.size}</span>` : ''}
+              <div class="gdi-playlist-item ${i === idx ? 'cur' : ''}" data-idx="${i}" title="${v.name}">
+                <div><i class="bi ${i === idx ? 'bi-play-fill' : 'bi-play'} me-2"></i><span style="${i === idx ? 'font-weight:600;' : ''}">${v.name}</span></div>
+                <span class="gdi-pl-size">${v.size || ''}</span>
               </div>
             `).join('');
-            document.getElementById('meggy-playlist-count').textContent = `${idx + 1} / ${pl.length}`;
-            document.querySelectorAll('.meggy-playlist-item').forEach(item => {
+            plCountEl.textContent = `${idx + 1} / ${pl.length}`;
+            document.querySelectorAll('.gdi-playlist-item').forEach(item => {
               item.onclick = () => { const i = parseInt(item.dataset.idx); if (i !== idx) switchTo(i); };
             });
             btn.innerHTML = `<i class="bi bi-check"></i> ${pl.length} vídeos`;
             btn.disabled = false;
-            console.log('[Meggy Shell] interfolder completo:', pl.length, 'vídeos');
-          } catch (e) {
-            console.error('[Meggy Shell] interfolder erro:', e);
-            btn.innerHTML = '⚠️ Erro';
-          }
+          } catch (e) { console.error('[Meggy Shell] interfolder:', e); btn.innerHTML = '⚠️ Erro'; }
         };
 
-        // ─── Meggy AI (lazy load GDIndex) ───
-        document.getElementById('meggy-load-ai').onclick = async () => {
-          const btn = document.getElementById('meggy-load-ai');
-          btn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Carregando GDIndex...';
-          btn.disabled = true;
-          const ok = await Shell.loadFullGDIndex();
-          if (ok && window.__gdiMeggy && window.__gdiMeggy.widget) {
-            if (window.__gdiMeggy.widget.open) window.__gdiMeggy.widget.open();
-            const aiPane = document.getElementById('meggy-tab-ai');
-            aiPane.innerHTML = `
-              <div style="padding:16px;color:#9aa4b8;font-size:13px;">
-                <p>🤖 <b>Meggy AI carregada!</b></p>
-                <p>O widget da Meggy foi aberto (canto inferior direito).</p>
-                <p style="margin-top:12px;color:#6b7488;">Use o widget para:</p>
-                <ul style="margin:8px 0;padding-left:20px;color:#9aa4b8;">
-                  <li>💬 Chat sobre a aula</li>
-                  <li>📝 Gerar resumo</li>
-                  <li>❓ Criar questões</li>
-                  <li>🃏 Flashcards</li>
-                </ul>
-              </div>
-            `;
-          } else {
-            btn.innerHTML = '⚠️ Falhou';
-            btn.disabled = false;
-          }
+        // ─── Playlist item click ───
+        document.querySelectorAll('.gdi-playlist-item').forEach(item => {
+          item.onclick = () => { const i = parseInt(item.dataset.idx); if (i !== idx) switchTo(i); };
+        });
+
+        // ─── Playlist toggle ───
+        document.getElementById('gdi-pl-toggle').onclick = () => {
+          const items = document.getElementById('gdi-playlist-items');
+          items.style.display = items.style.display === 'none' ? 'block' : 'none';
         };
 
-        // ─── Material (PDFs da pasta) ───
-        document.getElementById('meggy-load-material').onclick = async () => {
-          const btn = document.getElementById('meggy-load-material');
+        // ─── Breadcrumb navigation ───
+        document.querySelectorAll('.gdi-bc a[data-nav]').forEach(a => {
+          a.onclick = (e) => { e.preventDefault(); Shell.router.navigate(a.dataset.nav); };
+        });
+
+        // ─── Material (PDFs) ───
+        document.getElementById('gdi-load-material').onclick = async () => {
+          const btn = document.getElementById('gdi-load-material');
           btn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Carregando...';
-          btn.disabled = true;
           try {
             const currentPath = Shell.state.currentFolderPath || '';
-            if (!currentPath || !window.gdiListAllFiles) { btn.innerHTML = '⚠️ Sem pasta'; return; }
+            if (!currentPath || !window.gdiListAllFiles) { btn.innerHTML = '⚠️'; return; }
             const files = await window.gdiListAllFiles(currentPath, '');
-            const pdfs = files.filter(f => (f.mimeType || '').includes('pdf') || f.name.endsWith('.pdf'));
-            const materialPane = document.getElementById('meggy-tab-material');
+            const pdfs = files.filter(f => (f.mimeType||'').includes('pdf') || f.name.endsWith('.pdf'));
+            const matBody = document.getElementById('gdi-mat-body');
             if (!pdfs.length) {
-              materialPane.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">📄</div><div class="meggy-placeholder-title">Nenhum PDF nesta pasta</div></div>';
+              document.getElementById('gdi-mat-status').textContent = 'sem material';
+              matBody.innerHTML = '<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material encontrado para esta aula.</div></div>';
             } else {
-              materialPane.innerHTML = `
-                <div style="padding:12px;">
-                  <h3 style="font-size:14px;color:#9aa4b8;margin-bottom:12px;">📄 ${pdfs.length} materiais</h3>
-                  ${pdfs.map(p => `
-                    <div class="meggy-playlist-item" style="cursor:pointer;" data-pdf="${p.link || ''}">
-                      <span class="meggy-playlist-num">📄</span>
-                      <div class="meggy-playlist-info">
-                        <span class="meggy-playlist-name" title="${p.name}">${p.name}</span>
-                        <span class="meggy-playlist-folder">${p.size ? (p.size/1024/1024).toFixed(1)+' MB' : 'PDF'}</span>
-                      </div>
-                    </div>
-                  `).join('')}
+              document.getElementById('gdi-mat-status').textContent = pdfs.length + ' material(is)';
+              matBody.innerHTML = pdfs.map(p => `
+                <div class="gdi-mat-item" data-pdf="${p.link || ''}" style="padding:8px;border-radius:6px;cursor:pointer;background:rgba(255,255,255,0.04);margin-bottom:6px;">
+                  <i class="bi bi-file-earmark-pdf"></i> ${p.name}
+                  <span style="float:right;color:#6b7488;font-size:11px;">${p.size ? (p.size/1024/1024).toFixed(1)+' MB' : ''}</span>
                 </div>
-              `;
-              materialPane.querySelectorAll('[data-pdf]').forEach(el => {
-                el.onclick = () => {
-                  const link = el.dataset.pdf;
-                  if (link) window.open(link.startsWith('http') ? link : window.location.origin + link, '_blank');
-                };
+              `).join('');
+              matBody.querySelectorAll('[data-pdf]').forEach(el => {
+                el.onclick = () => { const link = el.dataset.pdf; if (link) window.open(link.startsWith('http') ? link : window.location.origin + link, '_blank'); };
+                el.onmouseenter = () => el.style.background = 'rgba(255,139,159,0.12)';
+                el.onmouseleave = () => el.style.background = 'rgba(255,255,255,0.04)';
               });
             }
-          } catch (e) {
-            console.error('[Meggy Shell] material erro:', e);
-          }
+          } catch (e) { console.error('[Meggy Shell] material:', e); }
         };
+
+        // ─── Anotações ───
+        const notesInput = document.getElementById('gdi-notes-input');
+        const notesKey = 'meggy-notes-' + videoUrl;
+        try { notesInput.value = localStorage.getItem(notesKey) || ''; } catch (e) {}
+        document.getElementById('gdi-notes-save').onclick = () => {
+          try { localStorage.setItem(notesKey, notesInput.value); showToast('Anotação salva!'); } catch (e) {}
+        };
+
+        function showToast(msg) {
+          const t = document.createElement('div');
+          t.className = 'meggy-toast-resume';
+          t.innerHTML = `<i class="bi bi-check"></i> ${msg}`;
+          main.appendChild(t);
+          setTimeout(() => { t.classList.add('meggy-toast-out'); setTimeout(() => t.remove(), 250); }, 2000);
+        }
 
         // ─── Atalhos de teclado ───
         const keyHandler = (e) => {
-          if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+          if (['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)) return;
           switch (e.key) {
             case ' ': e.preventDefault(); video.paused ? video.play() : video.pause(); break;
             case 'ArrowRight': video.currentTime = Math.min(video.duration, video.currentTime + 10); break;
@@ -1011,27 +919,21 @@
             case 'ArrowDown': e.preventDefault(); video.volume = Math.max(0, video.volume - 0.1); break;
             case 'f': case 'F':
               if (document.fullscreenElement) document.exitFullscreen();
-              else video.requestFullscreen().catch(() => {});
+              else video.requestFullscreen?.().catch(() => {});
               break;
             case 'm': case 'M': video.muted = !video.muted; break;
             case 'n': case 'N': if (idx < pl.length - 1) switchTo(idx + 1); break;
             case 'p': case 'P': if (idx > 0) switchTo(idx - 1); break;
-            case 's': case 'S': toggleFocus(); break;
           }
         };
         document.addEventListener('keydown', keyHandler);
         main._cleanupKeyboard = () => document.removeEventListener('keydown', keyHandler);
 
-        // Scroll to top
         main.scrollTop = 0;
 
         // ─── Auto-load interfolder se playlist tem só 1 vídeo ───
         if (pl.length <= 1 && Shell.state.currentFolderPath) {
-          console.log('[Meggy Shell] auto-load interfolder (playlist só 1 vídeo)');
-          setTimeout(() => {
-            const btn = document.getElementById('meggy-load-interfolder');
-            if (btn) btn.click();
-          }, 1000);
+          setTimeout(() => document.getElementById('gdi-interfolder-btn')?.click(), 1000);
         }
       },
 
