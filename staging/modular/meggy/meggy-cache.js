@@ -1,0 +1,1252 @@
+// ═══════════════════════════════════════════════════════════════
+// meggy-cache.js — generateAll + cacheGet/Save + addQ(Batch) +
+//                  saveIsaSummary/listIsa/delIsa + downloadAsPdf +
+//                  copySummary + autoCreateFlashcards + regenerate
+//
+// Module 3 of 7 (modular/meggy/).
+// Sourced from gdi-meggy.js M9-ISA IIFE (lines 591-842, 904-1170, 2025-2047).
+//
+// CRITICAL: _chainCache, _inflight, _qWriteChain, _chainCacheMax stay HERE.
+// generateAll + regenerate must stay together (regenerate awaits _inflight[key]
+// and deletes _chainCache[key] — v1.0.84 BUG 5/8 fix).
+//
+// Exposes:
+//   • window.__gdiMeggy.cache = { generateAll, regenerate, cacheGet, cacheSave,
+//     addQ, addQBatch, saveIsaSummary, listIsaSummaries, delIsaSummary,
+//     downloadAsPdf, copySummary, autoCreateFlashcards, _chainCache, _inflight,
+//     _qWriteChain }
+//
+// Guard: window.__gdiMeggyCache
+// Depends on: utils (lessonKey, lsGet, lsSet, uid, renderMd, esc, callIsaKeyed,
+//   parseJsonArray, realLessonName), pdf-engine (extractPdfText),
+//   questions (extractQuestionsFromText) [late-bind], summaries (saveSharedSummary,
+//   summary) [late-bind]
+// ═══════════════════════════════════════════════════════════════
+(function(){
+  if(window.__gdiMeggyCache)return;
+  window.__gdiMeggyCache=true;
+
+  window.__gdiMeggy = window.__gdiMeggy || {};
+
+  // ── Late-bound namespace shortcuts (resolved at call-time via property lookup) ──
+  // U is stable; U.func() resolves the function fresh on every call.
+  const U = window.__gdiMeggy.utils;
+  const LS_SUM = U.CONSTS.LS_SUM;
+  const LQ = U.CONSTS.LQ;
+
+  // ── Question bank integration (replicates M23 addQ on LS) ──
+  function addQ(obj){
+    // ★ v1.0.99: route through _qWriteChain to prevent RMW race + cap at 2000
+    _qWriteChain = _qWriteChain.then(() => {
+      const q=U.lsGet(LQ,[]);
+      q.push({id:U.uid(),createdAt:Date.now(),hits:0,misses:0,...obj});
+      if(q.length > 2000) q.splice(0, q.length - 2000);
+      U.lsSet(LQ,q);
+    }).catch(err => { console.warn('[Meggy] addQ chain error:', err && err.message); });
+    return _qWriteChain;
+  }
+
+  // ═══ PATCH B: Inserção em batch de questões (elimina O(N²) no localStorage) ═══
+  // Lê LS 1×, faz push de todos os itens únicos, grava 1×.
+  // Retorna o número de itens efetivamente adicionados (após dedupe por statement).
+  // ★ v80-FIX-MEGGY BUG 1: serialize writes with a per-key promise chain to
+  //    avoid read-modify-write races when called concurrently from generateAll
+  //    (parallel PDF processing). Last-write-wins was losing question batches.
+  let _qWriteChain = Promise.resolve();
+  function addQBatch(newItems){
+    if(!newItems || !newItems.length) return 0;
+    _qWriteChain = _qWriteChain.then(() => {
+      const all = U.lsGet(LQ, []);
+      const seen = new Set(all.map(x => x.statement));
+      let added = 0;
+      for(const item of newItems){
+        if(!item || !item.statement || seen.has(item.statement)) continue;
+        all.push(Object.assign({id:'q'+Date.now()+'_'+Math.random().toString(36).slice(2,7), createdAt:Date.now(), hits:0, misses:0}, item));
+        seen.add(item.statement);
+        added++;
+      }
+      // ★ v1.0.99: cap at 2000 entries
+      if(all.length > 2000) all.splice(0, all.length - 2000);
+      if(added) U.lsSet(LQ, all);
+      return added;
+    }).catch(err => {
+      console.warn('[Meggy] addQBatch chain error:', err && err.message);
+      return 0;
+    });
+    return _qWriteChain;
+  }
+
+  // ── Summaries storage ──
+  // ★ FIX: agora salva também o path do curso e a matéria — para o botão
+  // "Resumo" no painel de materiais (M9) agrupar corretamente.
+  // ★ FIX 3 (Task 13): também persiste no Drive via storage.js saveMaterial(),
+  //    na subpasta 'resumos' da pasta do usuário. Assim o resumo sobrevive a
+  //    limpeza do localStorage e fica acessível de outros dispositivos.
+  // ★ v1.0.99: serialize LS_SUM writes to prevent RMW race
+  let _sumWriteChain = Promise.resolve();
+  function saveIsaSummary(lesson, summary, coursePath, subject){
+    _sumWriteChain = _sumWriteChain.then(() => {
+      const arr=U.lsGet(LS_SUM,[]);
+    // extrai course e subject do path se não vierem explícitos
+    // path típico: /7:/Sou + Carreiras Policiais 5.0/Bloco I - Direito Constitucional/01 - Aula.mp4
+    let derivedCourse=coursePath||'';
+    let derivedSubject=subject||'';
+    if(!derivedCourse){
+      // tenta derivar do lessonKey atual (URL do navegador)
+      const p=window.location.pathname||'';
+      const seg=p.split('/').filter(Boolean);
+      if(seg.length>=2){
+        // /7:/Curso/Materia/Aula → curso = seg[1], materia = seg[2] (se houver)
+        derivedCourse='/'+seg.slice(0,2).join('/')+'/';
+        if(seg.length>=3){
+          try{derivedSubject=decodeURIComponent(seg[2]);}catch(_){derivedSubject=seg[2];}
+        }
+      }
+    }
+    arr.unshift({
+      id:U.uid(),
+      lesson:String(lesson||'Aula').slice(0,200),
+      // ★ FIX-MEGGY (Task 20-7 #6): cap summary at 50000 chars to prevent
+      //   localStorage quota exhaustion (LS_SUM has up to 200 entries; 200 ×
+      //   unbounded summary could exceed the 5-10MB localStorage limit and
+      //   throw QuotaExceededError, which would lose the ENTIRE batch since
+      //   lsSet is inside the chain).
+      summary:String(summary||'').slice(0,50000),
+      path:derivedCourse,
+      subject:derivedSubject||'Geral',
+      date:Date.now()
+    });
+      U.lsSet(LS_SUM,arr.slice(0,200));
+
+      // ★ FIX 3 (Task 13): também salva no Drive
+      try{
+        if(window.GDIStorage && typeof window.GDIStorage.saveMaterial==='function' && derivedCourse && summary){
+          window.GDIStorage.saveMaterial(derivedCourse, String(lesson||'Aula').slice(0,200), 'resumos', String(summary)).catch(e=>console.warn('[Meggy] saveIsaSummary Drive save failed:', e&&e.message));
+        }
+      }catch(e){ console.warn('[Meggy] saveIsaSummary exception:', e&&e.message); }
+    }).catch(err => { console.warn('[Meggy] saveIsaSummary chain error:', err && err.message); });
+    return _sumWriteChain;
+  }
+  function listIsaSummaries(){return U.lsGet(LS_SUM,[]);}
+  function delIsaSummary(id){
+    _sumWriteChain = _sumWriteChain.then(() => {
+      U.lsSet(LS_SUM,U.lsGet(LS_SUM,[]).filter(x=>x.id!==id));
+    }).catch(err => { console.warn('[Meggy] delIsaSummary chain error:', err && err.message); });
+    return _sumWriteChain;
+  }
+
+  // ── Download summary as PDF (via print dialog) ──
+  function downloadAsPdf(lesson, markdownText){
+    const html=U.renderMd(markdownText);
+    const w=window.open('','_blank');
+    if(!w){showToast('Permita pop-ups para baixar o PDF');return;}
+    w.document.write(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">
+    <title>${U.esc(lesson)} — Resumo Meggy</title>
+    <style>
+      @page{margin:2cm;size:A4;}
+      *{box-sizing:border-box;}
+      body{font-family:'Georgia','Times New Roman',serif;color:#1a1a1a;line-height:1.7;max-width:210mm;margin:0 auto;padding:20px;}
+      h1{font-family:'Helvetica',sans-serif;font-size:22px;color:#c026d3;border-bottom:2px solid #ff8b9f;padding-bottom:8px;margin-bottom:6px;}
+      .meta{font-family:'Helvetica',sans-serif;font-size:11px;color:#666;margin-bottom:24px;}
+      h2{font-family:'Helvetica',sans-serif;font-size:17px;color:#1a1a1a;margin-top:24px;border-left:3px solid #ff8b9f;padding-left:10px;}
+      h3{font-family:'Helvetica',sans-serif;font-size:14px;color:#333;margin-top:18px;}
+      p{margin:8px 0;text-align:justify;}
+      ul,ol{margin:8px 0;padding-left:24px;}
+      li{margin:4px 0;}
+      code{background:#f4f4f4;padding:2px 6px;border-radius:3px;font-family:'Courier New',monospace;font-size:12px;}
+      pre{background:#f4f4f4;padding:12px;border-radius:6px;overflow-x:auto;font-size:11px;}
+      blockquote{border-left:3px solid #ff8b9f;margin:12px 0;padding:4px 16px;color:#555;font-style:italic;}
+      strong{color:#1a1a1a;}
+      @media print{body{padding:0;}}
+    </style></head><body>
+    <h1>${U.esc(lesson)}</h1>
+    <div class="meta">Resumo gerado pela Meggy 🐩 · ${new Date().toLocaleDateString('pt-BR')}</div>
+    ${html}
+    <script>window.onload=function(){setTimeout(function(){window.print();},300);};</script>
+    </body></html>`);
+    w.document.close();
+  }
+
+  // ── Copy summary to clipboard ──
+  async function copySummary(text){
+    try{
+      await navigator.clipboard.writeText(text);
+      showToast('Resumo copiado para a área de transferência');
+    }catch(_){
+      const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();
+      try{document.execCommand('copy');showToast('Resumo copiado');}catch(_){showToast('Não foi possível copiar');}
+      ta.remove();
+    }
+  }
+
+  // ── Auto-criar flashcards das questões geradas ──
+  // Cada questão vira um flashcard: frente = enunciado, verso = resposta certa + explicação
+  // ★FIX: usa gdi-cards-v1 (mesma chave da Central de Estudos) em vez de gdi-fc-v1
+  // ★FIX v2: agora salva urlPath (path real da aula) para permitir agrupar por
+  // disciplina (pasta pai) e tema (nome da aula) na biblioteca de flashcards.
+  function autoCreateFlashcards(questions,lesson,urlPath){
+    // ★ FIX-MEGGY #5 (Agent 5 R4 / Agent 14 Bug 5): route through
+    //   window.__gdiMeggy.flashcards.addCardsBatch (which serializes via
+    //   _cardsWriteChain) instead of doing a direct RMW on gdi-cards-v1.
+    //   Direct lsGet→mutate→lsSet here races with the library's own
+    //   writes (manual add/delete/grade) AND with concurrent
+    //   autoCreateFlashcards calls for different lessons — last-write-wins
+    //   silently loses flashcards.
+    const fcNs = window.__gdiMeggy && window.__gdiMeggy.flashcards;
+    if(fcNs && typeof fcNs.addCardsBatch === 'function'){
+      const path=urlPath||U.lessonKey()||lesson;
+      const newCards=[];
+      questions.forEach(q=>{
+        if(!q||!q.statement||!Array.isArray(q.options))return;
+        const correctLetter=String.fromCharCode(65 + (q.correct||0));
+        const correctText=q.options[q.correct||0]||'';
+        const back=correctLetter+') '+correctText+(q.explanation?'\n\n💡 '+q.explanation:'');
+        newCards.push({
+          id:U.uid(),f:q.statement,b:back,due:Date.now()+86400000,box:0,
+          src:'ISA:'+lesson,path:path,lesson:lesson,createdAt:Date.now()
+        });
+      });
+      const n=newCards.length;
+      if(n) fcNs.addCardsBatch(newCards);
+      return n;
+    }
+    // Fallback (flashcards module not loaded yet): local serialized chain
+    //   to at least avoid races between multiple autoCreateFlashcards calls.
+    if(!window.__gdiMeggyCacheFcFallbackChain){
+      window.__gdiMeggyCacheFcFallbackChain = Promise.resolve();
+    }
+    const path=urlPath||U.lessonKey()||lesson;
+    const newCards=[];
+    questions.forEach(q=>{
+      if(!q||!q.statement||!Array.isArray(q.options))return;
+      const correctLetter=String.fromCharCode(65 + (q.correct||0));
+      const correctText=q.options[q.correct||0]||'';
+      const back=correctLetter+') '+correctText+(q.explanation?'\n\n💡 '+q.explanation:'');
+      newCards.push({
+        id:U.uid(),f:q.statement,b:back,due:Date.now()+86400000,box:0,
+        src:'ISA:'+lesson,path:path,lesson:lesson,createdAt:Date.now()
+      });
+    });
+    const n=newCards.length;
+    if(n){
+      window.__gdiMeggyCacheFcFallbackChain = window.__gdiMeggyCacheFcFallbackChain.then(() => {
+        const cards=U.lsGet('gdi-cards-v1',[]);
+        // ★ v1.0.103 FIX (Task 20-18 #9): O(N×C) → O(N+C) dedup via Set<string>.
+        //   Previously `cards.some(x => x.f === c.f)` ran INSIDE the newCards loop —
+        //   O(C) per new card, O(N×C) total for N new cards vs C existing. For a fresh
+        //   lesson generating 20 questions into a 1,000-card library, that's 20,000
+        //   string comparisons per autoCreateFlashcards call. Set.has() drops it to
+        //   ~1,020 ops (1,000 to build the Set once + 20 lookups). The Set is also
+        //   updated as we push new (deduplicated) cards, so subsequent iterations see
+        //   them too — preserves the original "skip if already in cards" semantics
+        //   even if `newCards` itself contains duplicate fronts.
+        const _existingFronts = new Set();
+        for(let _i = 0; _i < cards.length; _i++){
+          const _c = cards[_i];
+          if(_c && typeof _c.f === 'string') _existingFronts.add(_c.f);
+        }
+        for(const c of newCards){
+          if(!_existingFronts.has(c.f)){
+            cards.push(c);
+            _existingFronts.add(c.f);
+          }
+        }
+        U.lsSet('gdi-cards-v1',cards);
+      }).catch(e=>console.warn('[Meggy] autoCreateFlashcards fallback chain error:', e&&e.message));
+    }
+    return n;
+  }
+
+  // ── Drive cache (GET/POST /api/ai/cache) ──
+  // ★ Sprint 4: agora tenta primeiro os endpoints granulares opcionais
+  //   /api/ai/summaries, /api/ai/flashcards, /api/ai/questions
+  //   Se falhar (worker antigo), cai para o cache unificado /api/ai/cache.
+  //   Isso permite migração gradual: worker novo = 4 arquivos; worker antigo = 1.
+  const GRANULAR_AVAILABLE = (function(){
+    // detecta uma vez se endpoints granulares existem (HEAD request)
+    let _checked=null;
+    // ★ FIX-MEGGY #7 (Agent 20 Bug 8): re-probe every 5 min instead of
+    //   caching the first result forever — otherwise a deploy that adds
+    //   the granular endpoints (or removes them) doesn't take effect
+    //   until the user reloads the page.
+    let _checkedAt=0;
+    const _TTL=5*60*1000; // 5 min
+    return async function(){
+      if(_checked!==null && Date.now() - _checkedAt < _TTL) return _checked;
+      try{
+        const r=await fetch('/api/ai/summaries?probe=1',{method:'HEAD'});
+        _checked=r.ok;
+      }catch(_){_checked=false;}
+      _checkedAt=Date.now();
+      return _checked;
+    };
+  })();
+
+  async function cacheGet(keyOverride){
+    // ★ v87-FIX-MEGGY-MODULES BUG 4: accept optional keyOverride so we can
+    //    probe multiple cache keys (lesson URL, PDF-matched key, etc.) to
+    //    find the Battalion's persistent memory, which is saved under
+    //    `courseKey/pdfName` keys that never match U.lessonKey() (URL).
+    const _key = keyOverride || U.lessonKey();
+    // ★ FIX-MEGGY (Task 20-7 #2): distinguish "cache miss" (return null) from
+    //   "server down / network error" (throw). Before, the catch swallowed
+    //   ALL errors and returned null — callers couldn't tell a transient
+    //   outage from a legitimate miss, leading to silent regeneration loops.
+    //   Now: throw on fetch failures, JSON parse failures, and HTTP 5xx;
+    //   return null only on HTTP 4xx/200-with-no-cached (legitimate miss).
+    let granular;
+    try{
+      granular = await GRANULAR_AVAILABLE();
+    }catch(e){
+      // GRANULAR_AVAILABLE already swallows internally, but defensively:
+      throw new Error('cacheGet: GRANULAR_AVAILABLE probe failed: ' + (e && e.message || e));
+    }
+    let r;
+    try{
+      if(granular){
+        r = await fetch('/api/ai/summaries?key='+encodeURIComponent(_key),{cache:'no-store'});
+      }else{
+        r = await fetch('/api/ai/cache?key='+encodeURIComponent(_key),{cache:'no-store'});
+      }
+    }catch(e){
+      // Network error (fetch threw — DNS, CORS, offline, etc.)
+      throw new Error('cacheGet: network error: ' + (e && e.message || e));
+    }
+    if(!r.ok && r.status >= 500){
+      // Server error — distinguish from miss
+      throw new Error('cacheGet: server error HTTP ' + r.status);
+    }
+    if(!r.ok){
+      // HTTP 4xx (404, 403, etc.) — treat as miss (return null)
+      return null;
+    }
+    let d;
+    try{
+      d = await r.json();
+    }catch(e){
+      console.warn('[Meggy] cacheGet: resposta não-JSON, tratando como miss');
+      return null;
+    }
+    return (d && d.ok && d.cached) ? d.cached : null;
+  }
+
+  // ★ FIX-MEGGY (Task 20-7 #4): per-URL failed-download tracker with TTL.
+  //   When a Battalion resumos/ file exists but its download fails (network
+  //   error or non-OK HTTP), we record the URL for _FAILED_DOWNLOAD_TTL so
+  //   subsequent cacheGetRobust calls SKIP it instead of falling through to
+  //   "cache miss → regenerate". Without this, a transient Drive outage
+  //   caused infinite regeneration: every render re-matched the same file,
+  //   re-failed the download, fell through to miss, regenerated, saved,
+  //   and on the next render did it all again. Differentiates "file exists
+  //   but couldn't download" (skip + TTL) from "file doesn't exist" (no
+  //   match → fall through normally).
+  const _failedDownloadURLs = new Map();
+  const _FAILED_DOWNLOAD_TTL = 5 * 60 * 1000; // 5 min
+  function _isFailedDownload(url){
+    if(!url) return false;
+    const ts = _failedDownloadURLs.get(url);
+    if(!ts) return false;
+    if(Date.now() - ts > _FAILED_DOWNLOAD_TTL){
+      _failedDownloadURLs.delete(url);
+      return false;
+    }
+    return true;
+  }
+  function _markFailedDownload(url){
+    if(!url) return;
+    // ★ CYCLE-6 FIX (Agent 6): cap _failedDownloadURLs to prevent unbounded
+    //   growth. Entries expire after _FAILED_DOWNLOAD_TTL but are only
+    //   evicted lazily (when _isFailedDownload is called for that exact
+    //   URL). In a long-lived session navigating many lessons, expired
+    //   entries accumulate without bound. When the Map exceeds the cap,
+    //   opportunistically sweep expired entries; if still over cap, drop
+    //   oldest by timestamp (FIFO fallback — entries are short-lived so
+    //   FIFO ≈ LRU here).
+    if(_failedDownloadURLs.size >= 200){
+      const now = Date.now();
+      for(const [k, ts] of _failedDownloadURLs){
+        if(now - ts > _FAILED_DOWNLOAD_TTL) _failedDownloadURLs.delete(k);
+      }
+      if(_failedDownloadURLs.size >= 200){
+        // Still over cap — drop oldest by timestamp
+        let oldestKey=null, oldestTs=Infinity;
+        for(const [k, ts] of _failedDownloadURLs){
+          if(ts < oldestTs){ oldestTs = ts; oldestKey = k; }
+        }
+        if(oldestKey) _failedDownloadURLs.delete(oldestKey);
+      }
+    }
+    _failedDownloadURLs.set(url, Date.now());
+  }
+
+  // ★ v87-FIX-MEGGY-MODULES BUG 4: robust cache lookup that probes multiple
+  //    key variants so Meggy can reuse the Battalion's persistent memory.
+  //    Battalion saves with key `courseKey + '/' + pdfName` (e.g.,
+  //    /7:/Course/Aula1.pdf), but Meggy's cacheGet() looks up by
+  //    U.lessonKey() = window.location.pathname (e.g., /7:/Course/Aula1.mp4).
+  //    These NEVER match → Meggy always re-extracts PDFs and ignores the
+  //    Battalion's work. This helper tries:
+  //      (1) primary lesson URL key (cacheGet())
+  //      (2) URL with video extension (.mp4/.webm/…) swapped to .pdf
+  //      (3) Battalion's .meggy.ai/resumos/ Drive folder via
+  //          window.GDIStorage.listMaterials, matched by lesson name
+  //    Returns the first hit (or null). Logs misses so we can debug.
+  async function cacheGetRobust(){
+    // ★ FIX-MEGGY (Task 20-7 #2): cacheGet now throws on network/server
+    //   errors. cacheGetRobust is "robust" by design — it should try each
+    //   strategy and fall through, so we wrap each cacheGet call in its
+    //   own try/catch. The last network error is remembered and re-thrown
+    //   at the end IF no strategy returned a hit AND no strategy returned
+    //   a clean null (miss). This way: (a) a single down endpoint doesn't
+    //   abort the whole lookup, (b) a fully-down cache layer surfaces the
+    //   error to generateAll instead of silently regenerating.
+    let _lastNetErr = null;
+
+    // (1) primary key
+    let primary = null;
+    try{
+      primary = await cacheGet();
+    }catch(e){
+      _lastNetErr = e;
+      console.warn('[Meggy] cacheGet primary failed (will try alternates):', e && e.message);
+    }
+    if(primary){
+      console.info('[Meggy] cache hit via primary lesson key:', U.lessonKey());
+      return primary;
+    }
+
+    // (2) PDF-extension variant — for video lesson pages, try the PDF with
+    //     the same basename in the same folder.
+    const p = window.location.pathname || '';
+    if(/\.(mp4|webm|mov|m4v|avi|mkv|m3u8)$/i.test(p)){
+      const pdfKey = p.replace(/\.[a-z0-9]+$/i, '.pdf');
+      if(pdfKey && pdfKey !== p){
+        try{
+          const hit2 = await cacheGet(pdfKey);
+          if(hit2){
+            console.info('[Meggy] cache hit via PDF-extension key:', pdfKey);
+            return hit2;
+          }
+        }catch(e){
+          _lastNetErr = e;
+          console.warn('[Meggy] cacheGet PDF-key failed (will try Battalion):', e && e.message);
+        }
+      }
+    }
+
+    // (3) Battalion resumos/ Drive folder — match by lesson name.
+    //     Battalion writes <safeLesson>_<safePdf>_<ts>.md into .meggy.ai/resumos/.
+    //     We list the folder, find a file whose name (minus timestamp + safe-chars)
+    //     matches the current lesson name, and lazy-load its content.
+    try{
+      if(window.GDIStorage && typeof window.GDIStorage.listMaterials === 'function'){
+        const seg = p.split('/').filter(Boolean);
+        if(seg.length >= 2){
+          const coursePath = '/' + seg.slice(0,2).join('/') + '/';
+          let lessonName = '';
+          try{ lessonName = (typeof U.realLessonName === 'function') ? (U.realLessonName('') || '') : ''; }catch(_){ lessonName = ''; }
+          if(lessonName){
+            const base = lessonName.toLowerCase().replace(/\.[a-z0-9]+$/i,'').trim();
+            if(base){
+              const items = await window.GDIStorage.listMaterials('resumos', coursePath);
+              if(Array.isArray(items) && items.length){
+                // Normalize a Drive filename back to a comparable form:
+                // strip extension, strip trailing _<timestamp>, replace _ with space.
+                const norm = s => String(s||'')
+                  .replace(/\.(md|json)$/i,'')
+                  .replace(/_\d{10,}$/,'')
+                  .replace(/[_-]+/g,' ')
+                  .toLowerCase()
+                  .trim();
+                const match = items.find(it => it && it.name && norm(it.name).includes(base));
+                if(match){
+                  let content = match.content || '';
+                  let downloadFailed = false;
+                  if(!content && match.downloadUrl){
+                    // ★ FIX-MEGGY (Task 20-7 #4): differentiate "file exists
+                    //   but couldn't download" from "file doesn't exist".
+                    //   If the URL is in the failed-download TTL map, skip
+                    //   (don't retry every render → no infinite regeneration).
+                    if(_isFailedDownload(match.downloadUrl)){
+                      console.info('[Meggy] Battalion resumos/ match found but download recently failed (within ' +
+                        (_FAILED_DOWNLOAD_TTL/1000/60) + 'min TTL); skipping to avoid infinite regeneration:', match.name);
+                      downloadFailed = true;
+                    }else{
+                      try{
+                        const r = await fetch(match.downloadUrl, {cache:'no-store'});
+                        if(r.ok){
+                          content = await r.text();
+                        }else{
+                          // HTTP error — file exists but couldn't be fetched.
+                          _markFailedDownload(match.downloadUrl);
+                          downloadFailed = true;
+                          console.warn('[Meggy] Battalion resumos/ download HTTP '+r.status+'; marking failed for ' +
+                            (_FAILED_DOWNLOAD_TTL/1000/60) + 'min:', match.name);
+                        }
+                      }catch(e){
+                        // Network error — file exists but couldn't be downloaded.
+                        _markFailedDownload(match.downloadUrl);
+                        downloadFailed = true;
+                        console.warn('[Meggy] Battalion resumos/ download network error; marking failed for ' +
+                          (_FAILED_DOWNLOAD_TTL/1000/60) + 'min:', match.name, e && e.message);
+                      }
+                    }
+                  }
+                  if(content){
+                    console.info('[Meggy] cache hit via Battalion resumos/ folder:', match.name);
+                    // Wrap in the shape cacheGet() returns. Questions/mindmap not
+                    // in the MD file — caller will regenerate them as needed.
+                    return { summary: content, questions: [], mindmap: null };
+                  }
+                  if(downloadFailed){
+                    // ★ FIX-MEGGY (Task 20-7 #4): surface the failure to caller
+                    //   so generateAll doesn't silently regenerate (and re-save,
+                    //   re-matching the same un-downloadable file on next render).
+                    throw new Error('Battalion resumos/ file exists but download failed: ' + match.name);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }catch(e){
+      // If this is our own "download failed" signal, propagate it.
+      if(e && e.message && /^Battalion resumos\/ file exists/.test(e.message)){
+        throw e;
+      }
+      console.warn('[Meggy] Battalion resumos/ fallback failed (non-critical):', e && e.message || e);
+    }
+
+    // If any strategy threw a network/server error AND no strategy returned
+    // a clean miss (we wouldn't reach here if any had hit), surface the last
+    // error so the caller can distinguish "cache layer down" from "true miss".
+    if(_lastNetErr){
+      throw _lastNetErr;
+    }
+
+    console.info('[Meggy] cache miss — no hit for primary, PDF-key, or Battalion resumos/. Will extract.');
+    return null;
+  }
+  async function cacheSave(summary,questions,lessonName,mindmap){
+    try{
+      // ★FIX: se mindmap não foi passado, preserva o que já está no cache
+      // (antes, ao adicionar mais questões, o cache era sobrescrito SEM mindmap)
+      let mindmapToSave=mindmap;
+      if(mindmapToSave===undefined){
+        const existing=await cacheGet();
+        mindmapToSave=(existing&&existing.mindmap)||null;
+      }
+      // ★ tenta endpoint granular primeiro; senão, cache unificado
+      const granular=await GRANULAR_AVAILABLE();
+      const endpoint=granular?'/api/ai/summaries':'/api/ai/cache';
+      await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({key:U.lessonKey(),summary,questions,mindmap:mindmapToSave,lessonName})});
+    }catch(e){
+      // ★ FIX-MEGGY (Task 20-7 #3): log instead of silently swallowing —
+      //   the original `catch(_){}` hid Drive cache failures, making cache
+      //   misses look like normal behavior and complicating diagnosis.
+      //   Non-blocking: we still don't re-throw (caller's flow continues),
+      //   but the warn leaves a breadcrumb in the console.
+      console.warn('[Meggy] cacheSave failed (non-blocking):', e && e.message || e);
+    }
+  }
+
+  // ── GERAÇÃO EM CADEIA: resumo + pílulas + questões ──
+  // Qualquer aba clicada (Resumo/Questões/Pílulas) dispara a geração
+  // dos 3 em cadeia se ainda não existirem. Cada um é salvo no Drive.
+  // As questões ciclam entre TODOS os PDFs, gerando até 20 por material.
+
+  // Cache em memória para evitar regenerar na mesma sessão
+  let _chainCache={};
+  // ★ Sprint 6: LRU no _chainCache (limita a 5 aulas em memória)
+  const _chainCacheMax=5;
+  // ★ v80-FIX-MEGGY BUG 5: per-key in-flight promise map. Concurrent calls
+  //    to generateAll (e.g. user clicks Resumo then Questões fast) share the
+  //    same in-flight promise — avoids duplicate PDF extraction + API calls.
+  const _inflight={};
+  function _chainCacheEvict(){
+    const keys=Object.keys(_chainCache);
+    if(keys.length<=_chainCacheMax) return;
+    // ★ CYCLE-6 FIX (Agent 6): evict in a LOOP until size <= _chainCacheMax.
+    //   The previous single-eviction-per-call logic only removed ONE key
+    //   per call, so a temporary overshoot (e.g., 7 concurrent in-flight
+    //   generateAll calls all adding their keys before any resolves) left
+    //   the cache stuck at the overshoot size forever — subsequent single
+    //   evictions only kept pace with new adds, never shrinking back down
+    //   to _chainCacheMax. The Map's insertion order reflects LRU position
+    //   (the hit path does delete + re-set to move keys to MRU), so iterating
+    //   from index 0 evicts the LRU entries first.
+    // ★ FIX-MEGGY #6 (Agent 5 R5): skip in-flight keys during eviction —
+    //   if we delete a key whose _inflight promise is still running, the
+    //   IIFE continues mutating an orphaned object (it holds a reference),
+    //   but later `return _chainCache[key]` returns undefined and crashes
+    //   the caller.
+    const need = keys.length - _chainCacheMax;
+    let evicted = 0;
+    for(let i=0; i<keys.length && evicted<need; i++){
+      if(_inflight[keys[i]]) continue; // still running — don't evict
+      delete _chainCache[keys[i]];
+      evicted++;
+    }
+  }
+
+  // Gera TODOS os materiais EM PARALELO TOTAL (não em cascata)
+  // Cada tarefa usa uma chave NVIDIA diferente (se houver múltiplas)
+  // ★ v80-FIX-MEGGY BUG 5: hoist `key` and wrap entire body in an async IIFE
+  //    stored in _inflight[key]. Concurrent calls share the same promise —
+  //    prevents duplicate PDF extraction + API calls when user clicks
+  //    Resumo/Questões/Pílulas fast in succession.
+  // ★ FIX-MEGGY (Task 20-7 #5) VERIFIED: the `try {` on the next line is the
+  //    VERY FIRST statement inside the async IIFE — there is NO synchronous
+  //    code between `(async () => {` and `try {` that could throw and leak
+  //    `_inflight[key]`. If `U.lessonKey()` (line above the IIFE) throws, the
+  //    assignment `_inflight[key] = ...` never runs, so no leak. If the IIFE
+  //    itself throws synchronously (impossible — async functions always return
+  //    a Promise), the `finally` still runs because the throw is inside `try`.
+  //    Conclusion: the try wraps the ENTIRE IIFE body; _inflight[key] is
+  //    always cleaned up. No code change needed — this comment is the audit.
+  async function generateAll(items,lesson,trigger,progressCb){
+    const key=U.lessonKey();
+    if(_inflight[key]) return _inflight[key];
+    _inflight[key] = (async () => {
+      try {
+    // ★ FIX 3 (Task 13): deriva coursePath e subject da URL atual para passar
+    //    explicitamente ao saveIsaSummary (que agora também persiste no Drive).
+    //    Antes, saveIsaSummary derivava sozinho — mas sempre que generateAll
+    //    era chamado a partir de uma página de aula, a URL já tinha o formato
+    //    /<drive>:/<curso>/<materia>/<aula>, então derivar 1× aqui é mais eficiente
+    //    e garante consistência entre os 2 call-sites (cache hit e geração nova).
+    const _p=window.location.pathname||'';
+    const _seg=_p.split('/').filter(Boolean);
+    let _coursePath='',_subject='';
+    if(_seg.length>=2){
+      _coursePath='/'+_seg.slice(0,2).join('/')+'/';
+      if(_seg.length>=3){
+        try{_subject=decodeURIComponent(_seg[2]);}catch(_){_subject=_seg[2];}
+      }
+    }
+    // se já tem tudo no cache em memória, pula
+    if(_chainCache[key]&&_chainCache[key].summary&&_chainCache[key].mindmap&&_chainCache[key].questionsGenerated){
+      // ★ FIX-MEGGY (Task 20-7 #1): LRU touch — delete + re-set moves the key
+      //   to the end of insertion order (MRU position). _chainCacheEvict
+      //   removes the FIRST key (LRU), so this ensures recently-used entries
+      //   survive eviction. Without this, eviction is pure FIFO (oldest
+      //   insertion wins) — the comment "aproximação LRU" was misleading.
+      const _hit=_chainCache[key];
+      delete _chainCache[key];
+      _chainCache[key]=_hit;
+      return _chainCache[key];
+    }
+
+    // verifica cache do Drive PRIMEIRO (antes de extrair PDF)
+    // ★ v87-FIX-MEGGY-MODULES BUG 4: use cacheGetRobust() so we probe
+    //    multiple key variants (lesson URL, PDF-extension key, Battalion
+    //    resumos/ Drive folder). Before, Meggy only tried U.lessonKey(),
+    //    which never matched the Battalion's `courseKey/pdfName` keys →
+    //    persistent memory was always ignored.
+    const cached=await cacheGetRobust();
+    if(!_chainCache[key]){_chainCache[key]={};_chainCacheEvict();}
+    if(cached){
+      _chainCache[key].summary=cached.summary||null;
+      _chainCache[key].mindmap=cached.mindmap||null;
+      _chainCache[key].cachedQuestions=cached.questions||[];
+    }
+
+    // ★ Se já tem resumo + pílulas + questões no Drive, carrega e NÃO regenera
+    if(_chainCache[key].summary&&_chainCache[key].mindmap&&cached&&cached.questions&&cached.questions.length){
+      _chainCache[key].questionsGenerated=true;
+      _chainCache[key].questions=cached.questions;
+      // ★ PATCH B: carrega questões no banco local em batch (1 read + 1 write)
+      const _batch=[];
+      cached.questions.forEach(q=>{
+        if(q&&q.statement){
+          let cleanQ;
+          if(q.type==='tf'||(!q.options&&q.correct!==undefined)){
+            cleanQ={subject:lesson,type:'tf',statement:String(q.statement),options:['Certo','Errado'],correct:Math.max(0,Math.min(1,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
+          }else if(Array.isArray(q.options)){
+            // ★ FIX-MEGGY (Task 20-7 #7): generalize Math.min(3,...) to
+            //   (q.options.length||4)-1 so MC questions with 5 options (A-E,
+            //   common in some concursos) don't have their `correct` index
+            //   silently clamped to 3 (option D). The hardcoded `3` assumed
+            //   4-option MC; (length-1) handles any option count, with 4 as
+            //   the fallback if options is somehow empty/invalid.
+            cleanQ={subject:lesson,type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min((q.options.length||4)-1,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
+          }
+          if(cleanQ)_batch.push(cleanQ);
+        }
+      });
+      addQBatch(_batch);
+      // flashcards do cache
+      if(cached.questions.length)autoCreateFlashcards(cached.questions,lesson,U.lessonKey());
+      saveIsaSummary(lesson,_chainCache[key].summary,_coursePath,_subject);
+            return _chainCache[key];
+    }
+
+    // só extrai PDF se precisa gerar algo
+    let allText='';
+    const pdfTexts=[];
+    const pdfErrors=[]; // ★ coleta erros por PDF para diagnóstico
+    // ★ WEB-RESUMO-MD-PRIORITY: defense-in-depth — NUNCA usar como input
+    //   arquivos .md/.txt gerados por IA (Ebook gerado por IA, Resumo IA,
+    //   etc.). Substitui o filtro anterior `resumo_ia` (estreito demais —
+    //   não pegava "Ebook gerado por IA.md" com espaços). Espelha o filtro
+    //   do monolito gdi-meggy.js (generateAll).
+    const _isAiGeneratedMd=(name)=>{
+      const n=(name||'').toLowerCase();
+      if(!/\.md$|\.txt$/.test(n))return false;
+      return /ebook.*ia|resumo.*ia|gerado.*por.*ia|\bia\b.*gerad|intelig.*artif/i.test(n);
+    };
+    let itemsToRead = (items||[]).filter(it => {
+      if(_isAiGeneratedMd(it&&it.name||'')){ console.info('[Meggy] Pulando AI-generated .md (não usar como input):', it.name); return false; }
+      return true;
+    });
+    if(items && items.length > 1){
+      let lessonName = '';
+      try{ lessonName = (typeof U.realLessonName === 'function') ? (U.realLessonName('') || '') : ''; }catch(_){ lessonName=''; }
+      if(lessonName){
+        const _base = lessonName.toLowerCase().replace(/\.[a-z0-9]+$/i,'').trim();
+        if(_base){
+          const _matches = itemsToRead.filter(it => it && it.name && it.name.toLowerCase().replace(/\.[a-z0-9]+$/i,'').includes(_base));
+          if(_matches.length > 0){
+            console.info('[Meggy] BUG6 layer-2 filter: keeping '+_matches.length+' of '+itemsToRead.length+' items matching lesson "'+lessonName+'"');
+            itemsToRead = _matches;
+          }
+        }
+      }
+    }
+    // ★ WEB-RESUMO-MD-PRIORITY: ESTRATÉGIA TRANSCRIÇÃO-PRIMEIRO.
+    //   1. Busca arquivos com "transcri" no nome PRIMEIRO (são o conteúdo real da aula)
+    //   2. Se achar transcrição E extrai com sucesso (text > 50 chars), USA SÓ ELA —
+    //      não desperdiça tempo extraindo PDFs/ebooks (a transcrição é mais completa)
+    //   3. Se NÃO achar transcrição (ou falhar), aí sim extrai PDFs/materiais.
+    //   Espelha a lógica do monolito gdi-meggy.js (FIX v54 TRANSC-FIRST).
+    const transcriptionItems = itemsToRead.filter(it => /transcri/i.test((it&&it.name)||''));
+    const otherItems = itemsToRead.filter(it => !/transcri/i.test((it&&it.name)||''));
+    if(progressCb)progressCb({phase:'extract-start',total:itemsToRead.length});
+    const extractPdfText = window.__gdiMeggy.pdf.extractPdfText; // late-bind
+    const extractTextFile = window.__gdiMeggy.pdf.extractTextFile; // late-bind (.md/.txt)
+    const getFileType = window.__gdiMeggy.pdf.getFileType; // late-bind
+    // ★ PASSO 1: tenta extrair transcrições PRIMEIRO (sequencial, rápido — são .md/.txt)
+    let transcriptionText = '';
+    for(const item of transcriptionItems){
+      try{
+        if(progressCb)progressCb({phase:'extract',pdf:item.name});
+        let txt;
+        const _ftype = getFileType ? getFileType(item.name) : 'pdf';
+        if(_ftype==='pdf'){
+          txt=await extractPdfText(item.url,(p)=>{if(progressCb)progressCb(Object.assign({pdf:item.name},p));});
+        }else{
+          txt=await extractTextFile(item.url);
+        }
+        if(txt && txt.trim().length > 50){
+          transcriptionText += (transcriptionText ? '\n\n---\n\n' : '') + txt;
+          pdfTexts.push({name:item.name, text:txt});
+        }
+      }catch(e){
+        pdfErrors.push({name:item.name, error:e.message||String(e), url:item.url||''});
+        console.warn('[Meggy] transcrição falhou:', item.name, e.message);
+      }
+    }
+    let results=[];
+    if(transcriptionText && transcriptionText.trim().length >= 50){
+      // ★ PASSO 2A: transcrição encontrada! Usa SÓ ela — não extrai PDFs (economiza 30-60s)
+      allText = transcriptionText;
+      if(progressCb)progressCb({phase:'extract-done', source:'transcription', chars:allText.length});
+    }else{
+      // ★ PASSO 2B: sem transcrição (ou falhou) — extrai PDFs/materiais em paralelo
+      if(progressCb && transcriptionItems.length){
+        progressCb({phase:'extract-fallback', reason:'transcrição falhou, usando PDFs'});
+      }
+      results=await Promise.allSettled(otherItems.map(async item=>{
+      try{
+        if(progressCb)progressCb({phase:'extract',pdf:item.name});
+        let txt;
+        const _ftype = getFileType ? getFileType(item.name) : 'pdf';
+        if(_ftype==='pdf'){
+          txt=await extractPdfText(item.url,(p)=>{
+          if(progressCb)progressCb(Object.assign({pdf:item.name},p));
+        });
+        }else{
+          txt=await extractTextFile(item.url);
+          if(progressCb)progressCb({pdf:item.name,page:'text',current:1,total:1});
+        }
+        return {name:item.name,text:txt};
+      }catch(e){
+        throw {name:item.name,error:e.message||String(e),url:item.url};
+      }
+      }));
+      results.forEach(r=>{
+      if(r.status==='fulfilled'){
+        const {name,text}=r.value;
+        if(text&&text.trim().length>50){
+          allText+=(allText?'\n\n---\n\n':'')+text;
+          pdfTexts.push({name,text});
+        }
+      }else{
+        const err=r.reason||{};
+        pdfErrors.push({name:err.name||'PDF',error:err.error||'erro',url:err.url||''});
+        console.warn('[Meggy] PDF falhou:',err.name,err.error);
+      }
+      });
+    }
+    if(!allText||allText.trim().length<50){
+      // ★ Mensagem detalhada com os erros de cada PDF
+      let detail='Não foi possível extrair texto dos PDFs.';
+      if(pdfErrors.length){
+        detail+=' Erros por arquivo:\n';
+        pdfErrors.forEach(e=>{
+          detail+='• '+e.name+': '+e.error+'\n';
+        });
+        // sugestões baseadas no tipo de erro
+        const hasHttp=pdfErrors.some(e=>/HTTP/.test(e.error));
+        const hasScanned=pdfErrors.some(e=>/escaneado|sem texto/i.test(e.error));
+        const hasPdfjs=pdfErrors.some(e=>/pdf\.js/.test(e.error));
+        detail+='\nSugestões:\n';
+        if(hasHttp)detail+='• Verifique se o PDF está acessível (sem proteção de link) e se você está logado.\n';
+        // ★ v91 FIX: mensagem stale — a Meggy FAZ OCR (Tesseract + opcionalmente CF Workers AI vision).
+        //    Quando o erro chega aqui, o OCR já foi tentado e falhou (ou o PDF é 100% imagem sem texto).
+        if(hasScanned)detail+='• Alguns PDFs são escaneados (só imagens) — a Meggy tentou OCR (Tesseract + IA) mas não conseguiu extrair texto útil. Tente um PDF com texto selecionável.\n';
+        if(hasPdfjs)detail+='• O PDF pode estar corrompido ou criptografado.\n';
+        if(!hasHttp&&!hasScanned&&!hasPdfjs)detail+='• Tente abrir o PDF no navegador para confirmar que carrega normalmente.\n';
+      }
+      throw new Error(detail);
+    }
+    _chainCache[key].allText=allText;
+    _chainCache[key].pdfTexts=pdfTexts;
+
+    // ★ PARALELISMO TOTAL: resumo + pílulas + questões de cada PDF — TODOS ao mesmo tempo
+    // Cada tarefa recebe um keyHint diferente para distribuir entre as APIs NVIDIA
+
+    const allTasks=[];
+
+    // tarefa 1: resumo
+    if(!_chainCache[key].summary){
+      allTasks.push({
+        // ★ Task FINAL / Fix 1d: prompt reformulado para resumo PROFUNDO e DETALHADO
+        //   - mínimo 2000 caracteres (era ~500)
+        //   - exige ## títulos + ### subtítulos + EXEMPLOS práticos + pegadinhas
+        //   - seções ## Pegadinhas de Prova e ## Resumo Rápido ao final
+        //   - usa até 40000 chars do material (era 20000)
+        // ★ v1.0.156 FIX: resumo cap 150000 -> 80000. CF Workers free rejeita
+        //    body > 100KB com 403. JSON {message:150K chars} = ~150KB → 403 → callIsa
+        //    retorna null → "não conseguiu gerar o resumo". Pílulas (80K) funcionavam,
+        //    resumo (150K) falhava. Reduzido para 80K (mesmo das pílulas). O worker.js
+        //    agora aceita até 80K (userMsg slice 30K → 80K no v1.0.156).
+        fn:()=>U.callIsaKeyed('Você é um professor especialista em concursos públicos. Leia TODO o material abaixo e crie um RESUMO PROFUNDO E DETALHADO em Markdown.\n\nREQUISITOS:\n- Mínimo 2000 caracteres (NÃO seja breve)\n- Estruture com ## títulos e ### subtítulos\n- Para CADA tópico: explique o conceito, dê EXEMPLOS práticos, e destaque pegadinhas de prova\n- Use **negrito** para palavras-chave e dispositivos legais\n- Use listas com marcadores para enumerações\n- Inclua uma seção ## Pegadinhas de Prova no final\n- Inclua uma seção ## Resumo Rápido com 5-10 bullets dos pontos mais importantes\n\nNÃO omita nenhum tema. Seja PROFUNDO, não conciso.\n\nMaterial:\n'+allText.slice(0,80000),0)
+          .then(r=>{if(r&&r.trim()){_chainCache[key].summary=r;saveIsaSummary(lesson,r,_coursePath,_subject);}})
+          .catch(e=>console.warn('[Meggy] resumo falhou',e.message))
+      });
+    }
+
+    // tarefa 2: pílulas
+    if(!_chainCache[key].mindmap){
+      allTasks.push({
+
+        // ★ v87-FIX-MEGGY-MODULES BUG 5: raise pílulas prompt cap 20000 -> 80000.
+        fn:()=>U.callIsaKeyed('Crie "Pílulas" deste material — um resumo ultra-conciso em bullets. Apenas pontos-chave para revisão rápida. Máximo 15 bullets. Formato:\n# Pílulas\n- Ponto-chave 1\n- Ponto-chave 2\n...\n\nConteúdo:\n'+allText.slice(0,80000),0)
+          .then(r=>{if(r&&r.trim())_chainCache[key].mindmap=r;})
+          .catch(e=>console.warn('[Meggy] pílulas falhou',e.message))
+      });
+    }
+
+    // tarefa 3+: questões de cada PDF (uma tarefa por PDF)
+    if(!_chainCache[key].questionsGenerated){
+      _chainCache[key].questionsGenerated=true;
+      _chainCache[key]._allCleanQ=[];
+      // ★ PATCH B: extrai questões existentes em batch (1 read + 1 write)
+      const _batchExtract=[];
+      const extractQuestionsFromText = window.__gdiMeggy.questions.extractQuestionsFromText; // late-bind
+      for(const pdf of pdfTexts){
+        const existing=extractQuestionsFromText(pdf.text);
+        for(const q of existing){
+          _batchExtract.push({subject:lesson,type:'open',statement:q,options:[],correct:0,explanation:'Questão extraída do material.',source:'PDF-extract'});
+        }
+      }
+      addQBatch(_batchExtract);
+      // uma tarefa por PDF
+      pdfTexts.forEach((pdf)=>{
+        allTasks.push({
+
+          // ★ v87-FIX-MEGGY-MODULES BUG 5: raise questions prompt cap 15000 -> 60000.
+          fn:()=>U.callIsaKeyed('Você é um examinador de concurso público brasileiro experiente. Baseado neste material, gere 10 questões de concurso em JSON array. Misture:\n- 6 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"legalText":"...","explanation":"...","fundamentacao":"..."}\n- 4 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"legalText":"...","explanation":"...","fundamentacao":"..."}\n\nCAMPOS:\n- statement: enunciado claro, contexto completo\n- legalText: o dispositivo legal/dispositivo normativo aplicável (ex: "art. 5º, CF"; "Súmula Vinculante 14"; "Lei 8.906/94, art. 7º")\n- explanation: explicação técnica do acerto/erro (regra violada ou aplicada)\n- fundamentacao: fundamentação didática completa, explicando por que a alternativa correta está correta E por que as outras estão erradas\n\nSem comentários, só JSON.\n\n'+pdf.text.slice(0,60000),0)
+            .then(resp=>{
+              if(!resp)return;
+              try{
+                const arr=U.parseJsonArray(resp);
+                // ★ PATCH B: inserir questões em batch (1 read + 1 write)
+                const _batchAI=[];
+                arr.forEach(q=>{
+                  if(!q||!q.statement)return;
+                  let cleanQ;
+                  if(q.type==='tf'||(!q.options&&q.correct!==undefined)){
+                    cleanQ={type:'tf',statement:String(q.statement),options:['Certo','Errado'],correct:Math.max(0,Math.min(1,Number(q.correct)||0)),explanation:String(q.explanation||''),legalText:String(q.legalText||q.fundamentacao||''),fundamentacao:String(q.fundamentacao||'')};
+                  }else if(Array.isArray(q.options)){
+                    // ★ FIX-MEGGY (Task 20-7 #7): see note above — generalize
+                    //   Math.min(3,...) → (q.options.length||4)-1 for 5+ option MC.
+                    cleanQ={type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min((q.options.length||4)-1,Number(q.correct)||0)),explanation:String(q.explanation||''),legalText:String(q.legalText||q.fundamentacao||''),fundamentacao:String(q.fundamentacao||'')};
+                  }
+                  if(cleanQ){
+                    _batchAI.push(Object.assign({subject:lesson,source:'ISA-PDF'},cleanQ));
+                    _chainCache[key]._allCleanQ.push(cleanQ);
+                  }
+                });
+                addQBatch(_batchAI);
+              }catch(e){console.warn('[Meggy] parse questões falhou',e.message);}
+            })
+            .catch(e=>console.warn('[Meggy] questões falharam',e.message))
+        });
+      });
+    }
+
+    // ★ EXECUTA TODAS AS TAREFAS AO MESMO TEMPO (paralelismo)
+    // Se OpenRouter estiver configurado no worker, cada callIsa automaticamente
+    // dispara 3 modelos free em paralelo (race) — primeiro a responder vence.
+    // Isso significa que resumo+pílulas+questões(N PDFs) = 2+N tarefas × 3 modelos = race máximo.
+    if(allTasks.length>0){
+      await Promise.allSettled(allTasks.map(t=>t.fn()));
+    }
+
+    // finaliza: flashcards + salva no Drive
+    _chainCache[key].questions=_chainCache[key]._allCleanQ||[];
+    if(_chainCache[key].questions.length){
+      autoCreateFlashcards(_chainCache[key].questions,lesson,U.lessonKey());
+    }
+
+    // salva TUDO no Drive em um único POST (resumo + pílulas + questões)
+    try{
+      // ★ CYCLE2-6 FIX (Agent 6 re-review): use GRANULAR_AVAILABLE to pick
+      //   the endpoint, consistent with cacheSave(). Before, this POST was
+      //   hardcoded to /api/ai/cache — if the granular endpoints are ever
+      //   implemented server-side, cacheGet would read from /api/ai/summaries
+      //   but this POST would write to /api/ai/cache, causing silent cache
+      //   corruption (writes and reads go to different endpoints → cache
+      //   miss → redundant regeneration on every visit). Currently latent
+      //   (granular probe always returns false since the server never
+      //   registered /api/ai/summaries), but the fix makes the code
+      //   consistent and future-proof. GRANULAR_AVAILABLE is cached for
+      //   5min, so the second call here (the first was in cacheGetRobust
+      //   at line 647) returns immediately.
+      const _gPost = await GRANULAR_AVAILABLE();
+      const _postEndpoint = _gPost ? '/api/ai/summaries' : '/api/ai/cache';
+      await fetch(_postEndpoint,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          key:U.lessonKey(),
+          summary:_chainCache[key].summary||null,
+          questions:_chainCache[key].questions||null,
+          mindmap:_chainCache[key].mindmap||null,
+          lessonName:lesson
+        })});
+    }catch(e){
+      // ★ FIX 20-14 #E (Agent 14): align with Fix #3 (Task 20-7 cacheSave
+      //   console.warn) — the original `catch(_){}` silently swallowed Drive
+      //   cache save failures, making it impossible to diagnose why generated
+      //   materials weren't persisting. Still non-blocking (generation result
+      //   is returned regardless), but the warn leaves a breadcrumb.
+      console.warn('[Meggy] generateAll cache save failed (non-blocking):', e&&e.message||e);
+    }
+    // compartilha no pool de resumos
+    if(_chainCache[key].summary){
+      // late-bind to summaries module
+      if(window.__gdiMeggy.summaries && window.__gdiMeggy.summaries.saveSharedSummary){
+        window.__gdiMeggy.summaries.saveSharedSummary(lesson,_chainCache[key].summary,_chainCache[key].questions||null);
+      }
+    }
+
+    return _chainCache[key];
+      } finally {
+        delete _inflight[key];
+      }
+    })();
+    return _inflight[key];
+  }
+
+  // ── Regenerate: força regeração de tudo (limpa cache em memória + Drive) ──
+  async function regenerate(items,bodyEl,lessonName){
+    if(!items||!items.length){U.setError(bodyEl,'Nenhum PDF disponível.');return;}
+    const lesson=U.realLessonName(lessonName||items[0].name);
+    const key=U.lessonKey();
+    // ★ v80-FIX-MEGGY BUG 8: wait for any in-flight generateAll before
+    //    clearing _chainCache. Otherwise the in-flight .then() writes its
+    //    results into the NEW (empty) _chainCache, repopulating it and
+    //    defeating the regenerate.
+    if(_inflight && _inflight[key]){
+      try { await _inflight[key]; } catch(_){}
+    }
+    // limpa cache em memória
+    // ★ v1.0.84: only wipe current key, not all lessons (preserves in-flight generateAll for other lessons)
+    if(key) delete _chainCache[key];
+    // limpa cache do Drive (★FIX: também limpa mindmap, antes ficava preso)
+    try{
+      // ★ CYCLE2-6 FIX (Agent 6 re-review): use GRANULAR_AVAILABLE to pick
+      //   the endpoint, consistent with cacheSave() and generateAll's POST.
+      //   Before, this clear POST was hardcoded to /api/ai/cache — if the
+      //   granular endpoints are ever implemented server-side, the clear
+      //   would go to /api/ai/cache while cacheGet reads from /api/ai/summaries,
+      //   so the stale entry would survive regenerate and the user would see
+      //   the old summary/pílulas/questões instead of freshly-regenerated ones.
+      const _gClear = await GRANULAR_AVAILABLE();
+      const _clearEndpoint = _gClear ? '/api/ai/summaries' : '/api/ai/cache';
+      await fetch(_clearEndpoint,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({key,summary:null,questions:null,mindmap:null,lessonName:lesson})});
+    }catch(e){
+      // ★ FIX 20-14 #E (cont.): same console.warn alignment as generateAll above.
+      console.warn('[Meggy] regenerate cache clear failed (non-blocking):', e&&e.message||e);
+    }
+    // regenera tudo em cadeia — late-bind to summaries module
+    if(window.__gdiMeggy.summaries && window.__gdiMeggy.summaries.summary){
+      await window.__gdiMeggy.summaries.summary(items,bodyEl,lessonName);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // METADATA-ONLY CACHE — Scanner Distribuído (Section 9.3)
+  // ═══════════════════════════════════════════════════════════════
+  // Per Section 9.3 of PROJETO_ENG_SCANNER_DISTRIBUIDO.md, the cache now
+  // stores ONLY METADATA (path to the material file in the lesson folder),
+  // NOT the content itself. When the Meggy widget needs a resumo or
+  // questoes for a lesson, it:
+  //   (1) calls cacheGetMeta(lessonPath, materialType) to get the metadata
+  //   (2) if the entry has a `file` field, calls loadMaterialFromFolder(...)
+  //       to fetch the actual content from /api/materials/load-from-folder
+  //   (3) if the entry has a `content` field (legacy), uses it directly
+  //
+  // Backward compat: legacy cache entries with `content` field are returned
+  // as-is and treated as content-bearing. New entries are metadata-only.
+  //
+  // Agent 7 (meggy-summaries.js / meggy-questions.js) is responsible for:
+  //   - saving the material file to the lesson folder via
+  //     /api/materials/save-in-folder
+  //   - calling cacheSaveMeta(lessonPath, materialType, file, courseHash)
+  //     to register the metadata entry
+  //
+  // Endpoints (implemented by Agent 1; we code against the contract and
+  // fail silently if they're absent):
+  //   GET  /api/materials/load-from-folder?lessonPath=...&materialType=...&fileName=...
+  //        → { ok:true, content:'<markdown|json string>', file:'<actualFileName>' }
+  //        If fileName is omitted, server picks any shared file of that type
+  //        in the lesson folder (cross-student discovery).
+  //   GET  /api/materials/check-exists?lessonPath=...&materialType=...&fileName=...
+  //        → { ok:true, exists:true|false }
+  //   GET  /api/materials/meta?lessonPath=...&materialType=...
+  //        → { ok:true, entry:{...} }   (optional; falls back to localStorage)
+  //   POST /api/materials/meta  body:{lessonPath,materialType,file,generatedAt,courseHash}
+  //   DELETE /api/materials/meta  body:{lessonPath,materialType}
+  //
+  // All fetches fail gracefully (return null/false) so the widget can fall
+  // back to AI generation if endpoints are absent or files are missing.
+
+  const META_LS_PREFIX = 'gdi-mat-meta:'; // localStorage key prefix
+
+  function _metaLsKey(lessonPath, materialType){
+    return META_LS_PREFIX + materialType + ':' + lessonPath;
+  }
+
+  // Cheap, stable hash of the course segment (/drive:/CourseName/) — used
+  // as courseHash for cache entries. Same course = same hash, regardless of
+  // which lesson inside it we're looking at.
+  function deriveCourseHash(lessonPath){
+    try{
+      const p = String(lessonPath || '');
+      const seg = p.split('/').filter(Boolean);
+      if(seg.length < 2) return '';
+      const courseKey = '/' + seg.slice(0,2).join('/') + '/';
+      let h = 0;
+      for(let i=0;i<courseKey.length;i++){
+        h = ((h<<5) - h) + courseKey.charCodeAt(i);
+        h |= 0;
+      }
+      return 'c' + Math.abs(h).toString(36);
+    }catch(_){ return ''; }
+  }
+
+  // materialAuthorFromFileName: extracts the author (username) from the
+  // filename prefix (before the first underscore). Convention:
+  //   "<username>_Aula 1.md"           → "<username>"
+  //   "<username>_<discipline>.json"   → "<username>"
+  // Strips directory prefix if present (e.g., ".gdi-resumos/<user>_Aula 1.md").
+  function materialAuthorFromFileName(fileName){
+    try{
+      const n = String(fileName || '');
+      const base = n.lastIndexOf('/') >= 0 ? n.slice(n.lastIndexOf('/') + 1) : n;
+      const i = base.indexOf('_');
+      if(i <= 0) return '';
+      return base.slice(0, i);
+    }catch(_){ return ''; }
+  }
+
+  // cacheGetMeta: returns the metadata entry for a lesson+materialType.
+  //   - Legacy entry (has `content`): returned as-is (caller uses content directly)
+  //   - New metadata-only entry (has `file`): caller must call loadMaterialFromFolder
+  //   - Miss: returns null
+  async function cacheGetMeta(lessonPath, materialType){
+    if(!lessonPath || !materialType) return null;
+    // (1) localStorage mirror (fast — my own generated materials)
+    try{
+      const v = localStorage.getItem(_metaLsKey(lessonPath, materialType));
+      if(v){
+        const entry = JSON.parse(v);
+        if(entry && (entry.file || typeof entry.content !== 'undefined')){
+          return entry;
+        }
+      }
+    }catch(_){}
+    // (2) Optional server-side metadata endpoint (Agent 1 may or may not
+    //     implement). If absent (404), we fall through silently — discovery
+    //     happens via loadMaterialFromFolder (no fileName).
+    try{
+      const r = await fetch('/api/materials/meta?lessonPath=' + encodeURIComponent(lessonPath) + '&materialType=' + encodeURIComponent(materialType), {cache:'no-store'});
+      if(r.ok){
+        const d = await r.json();
+        if(d && d.ok && d.entry){
+          // Backward compat: legacy entry with `content` field — return as-is
+          if(typeof d.entry.content !== 'undefined') return d.entry;
+          // New metadata-only entry
+          if(d.entry.file) return d.entry;
+        }
+      }
+    }catch(_){}
+    return null;
+  }
+
+  // cacheSaveMeta: registers a metadata-only entry. Called by Agent 7
+  // after saving a material file to the lesson folder. Does NOT store
+  // content — only the path/fileName.
+  async function cacheSaveMeta(lessonPath, materialType, file, courseHash){
+    if(!lessonPath || !materialType || !file) return null;
+    const entry = {
+      lessonPath: lessonPath,
+      materialType: materialType,
+      file: file,
+      generatedAt: Date.now(),
+      courseHash: courseHash || deriveCourseHash(lessonPath)
+    };
+    // localStorage mirror (fast hit on next read)
+    try{ localStorage.setItem(_metaLsKey(lessonPath, materialType), JSON.stringify(entry)); }catch(_){}
+    // Server-side metadata (optional; silent fail if endpoint absent)
+    try{
+      await fetch('/api/materials/meta', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(entry)
+      });
+    }catch(_){}
+    return entry;
+  }
+
+  // invalidateCacheMeta: clears a stale entry (file deleted from Drive, etc.)
+  async function invalidateCacheMeta(lessonPath, materialType){
+    if(!lessonPath || !materialType) return;
+    try{ localStorage.removeItem(_metaLsKey(lessonPath, materialType)); }catch(_){}
+    try{
+      await fetch('/api/materials/meta', {
+        method:'DELETE',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({lessonPath, materialType})
+      });
+    }catch(_){}
+  }
+
+  // loadMaterialFromFolder: fetches content for a specific file in the
+  // lesson folder. If `fileName` is omitted, server picks any shared file
+  // of that type in the folder (cross-student discovery). Returns:
+  //   - { content, file, author } on success
+  //   - null on miss / error
+  async function loadMaterialFromFolder(lessonPath, materialType, fileName){
+    if(!lessonPath || !materialType) return null;
+    try{
+      let url = '/api/materials/load-from-folder?lessonPath=' + encodeURIComponent(lessonPath) + '&materialType=' + encodeURIComponent(materialType);
+      if(fileName) url += '&fileName=' + encodeURIComponent(fileName);
+      const r = await fetch(url, {cache:'no-store'});
+      if(!r.ok) return null;
+      const d = await r.json();
+      if(!d || !d.ok) return null;
+      const content = (typeof d.content === 'string') ? d.content : (d.content == null ? '' : String(d.content));
+      const actualFile = d.file || fileName || '';
+      const author = materialAuthorFromFileName(actualFile);
+      return { content, file: actualFile, author };
+    }catch(_){ return null; }
+  }
+
+  // materialExistsInFolder: HEAD-style check. Use this BEFORE AI generation
+  // to skip regeneration if material already exists in the lesson folder.
+  async function materialExistsInFolder(lessonPath, materialType, fileName){
+    if(!lessonPath || !materialType || !fileName) return false;
+    try{
+      const r = await fetch('/api/materials/check-exists?lessonPath=' + encodeURIComponent(lessonPath) + '&materialType=' + encodeURIComponent(materialType) + '&fileName=' + encodeURIComponent(fileName));
+      if(!r.ok) return false;
+      const d = await r.json();
+      return !!(d && d.ok && d.exists === true);
+    }catch(_){ return false; }
+  }
+
+  // ═══ CYCLE-6 FIX (Agent 6): auth:change cleanup ═══
+  // When the user logs out (auth state → 'out'/'logout'), drop all
+  // session-bound in-memory state from this module:
+  //   • _chainCache — holds per-lesson summaries/mindmaps/questions from
+  //     the PREVIOUS user's lessons; keeping them would let the next user
+  //     see stale content for those lessons (cache hit → no regeneration).
+  //   • _inflight — per-key in-flight promise map. Deleting entries does
+  //     NOT cancel the running IIFEs (JS has no promise cancellation), but
+  //     it forces a fresh generateAll call for the same key to start a new
+  //     IIFE instead of dedup-joining the stale one. The stale IIFE's
+  //     `finally { delete _inflight[key]; }` is a no-op (already deleted).
+  //   • _failedDownloadURLs — per-URL TTL Map of failed Drive downloads;
+  //     URLs are user-scoped (Drive paths include user-specific folder IDs).
+  // _qWriteChain / _sumWriteChain are NOT reset — they have no user data
+  // (they just serialize localStorage writes; localStorage itself is
+  // per-tab and the data inside is keyed by user only via Drive POSTs).
+  // GRANULAR_AVAILABLE is NOT reset — it probes the worker (shared infra),
+  // not user state.
+  // NOTE (known limitation): a stale generateAll IIFE that started before
+  //   logout may still complete and write to _chainCache[key] AFTER we
+  //   cleared it. The new user would see those stale partial writes until
+  //   they navigate to that lesson (which triggers a fresh generateAll
+  //   cache-miss → server fetch). Accepted in v1.0.103 (Wave 1) per
+  //   worklog Task 20-7 item 17; full fix would require a session-gen
+  //   counter checked at every _chainCache[key] write — deferred.
+  function _clearChainCacheAndInflight(){
+    try{
+      // Preserve object reference (exported on window.__gdiMeggy.cache._chainCache
+      // and _inflight for diagnostics); just delete all keys.
+      for(const k in _chainCache){
+        if(Object.prototype.hasOwnProperty.call(_chainCache, k)) delete _chainCache[k];
+      }
+      for(const k in _inflight){
+        if(Object.prototype.hasOwnProperty.call(_inflight, k)) delete _inflight[k];
+      }
+      _failedDownloadURLs.clear();
+    }catch(_){}
+  }
+  if(typeof Bus !== 'undefined' && typeof Bus.onGlobal === 'function'){
+    Bus.onGlobal('auth:change', (state)=>{
+      if(state === 'out' || state === 'logout'){
+        try{ _clearChainCacheAndInflight(); }catch(_){}
+      }
+    });
+  }
+
+  // ── Namespace exports ──
+  window.__gdiMeggy.cache = {
+    generateAll, regenerate,
+    cacheGet, cacheGetRobust, cacheSave,
+    // ★ Task 9 (Scanner Distribuído): metadata-only cache + folder-load helpers
+    cacheGetMeta, cacheSaveMeta, invalidateCacheMeta,
+    loadMaterialFromFolder, materialExistsInFolder,
+    materialAuthorFromFileName, deriveCourseHash,
+    addQ, addQBatch,
+    saveIsaSummary, listIsaSummaries, delIsaSummary,
+    downloadAsPdf, copySummary,
+    autoCreateFlashcards,
+    // Expose shared state for diagnostics / future modules
+    _chainCache, _inflight, _qWriteChain,
+    // ★ CYCLE-6: expose teardown hook for testing / explicit cleanup
+    _clearChainCacheAndInflight
+  };
+
+  // ── Aliases para compatibilidade (gdiIsaPdf.* assemblado em meggy-summaries.js) ──
+  // Os métodos saveIsaSummary/listIsaSummaries/delIsaSummary/downloadAsPdf são
+  // expostos no gdiIsaPdf por meggy-summaries.js via Object.assign.
+
+  console.log('[GDI Extras] meggy-cache ativo (Module 3/7)');
+})();
