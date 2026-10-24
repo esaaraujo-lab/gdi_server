@@ -357,4 +357,38 @@
     _bootstrapPromise = null;
     return bootstrap();
   };
+
+  // ═══════════════════════════════════════════════════════════════
+  // Meggy Shell — Estratégia B (Split-View Shell)
+  // Carrega APÓS todos os módulos do GDIndex estarem prontos.
+  // Feature flag: window.UI.shell_enabled (definido no worker-staging.js)
+  // ═══════════════════════════════════════════════════════════════
+  if (window.UI && window.UI.shell_enabled) {
+    const loadShell = async () => {
+      try {
+        // Aguarda Bus + __gdiStudy estarem prontos (shell.js também checa)
+        let waits = 0;
+        while ((!window.Bus || !window.__gdiStudy) && waits < 50) {
+          await new Promise(r => setTimeout(r, 200));
+          waits++;
+        }
+        // Load CSS
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = '/modular/shell/shell.css?v=1';
+        link.onerror = () => console.error('[GDI Loader] shell.css falhou');
+        document.head.appendChild(link);
+        console.log('[GDI Loader] ✓ shell.css carregado');
+        // Load JS (sync — shell.js auto-inits)
+        await loadScript('/modular/shell/shell.js?v=1', false);
+        console.log('[GDI Loader] ✓ shell.js carregado');
+      } catch (e) {
+        console.error('[GDI Loader] shell load failed:', e && e.message || e);
+      }
+    };
+    // Kick off shell loading (don't block bootstrap)
+    setTimeout(loadShell, 800);
+  }
+
 })();
+
