@@ -20,7 +20,7 @@
       modulesReady: false
     },
 
-    // ─── Init: wait for Bus only (minimal dependency), then mount ───
+    // ─── Init: mount immediately, no waiting (Bus is in script scope, not window.Bus) ───
     initAttempts: 0,
     init() {
       Shell.initAttempts++;
@@ -29,27 +29,31 @@
         return;
       }
 
-      // DEBUG: log what's available
-      if (Shell.initAttempts <= 3 || Shell.initAttempts % 10 === 0) {
-        console.log('[Meggy Shell] init attempt #' + Shell.initAttempts +
-          ' — Bus:' + (typeof window.Bus) +
-          ' __gdiStudy:' + (typeof window.__gdiStudy) +
-          ' __gdiStudyPanel:' + (typeof window.__gdiStudyPanel));
+      // Bus is declared with `const Bus` in app.min.js — it's in the script scope,
+      // NOT in window.Bus. Since shell.js is loaded via <script> tag, it shares
+      // the same global scope IF app.min.js already executed.
+      // We check via typeof (safe for undefined) — same pattern as gdi-extras-loader.js
+      let busReady = false;
+      try {
+        busReady = (typeof Bus !== 'undefined');
+      } catch (e) {
+        busReady = false;
       }
 
-      // Minimal wait: just Bus (app.min.js). __gdiStudy is optional — shell works without it.
-      if (!window.Bus) {
-        if (Shell.initAttempts > 60) { // 60 * 150ms = 9s timeout
-          console.error('[Meggy Shell] TIMEOUT esperando Bus — montando mesmo assim');
-          Shell.mount();
-          Shell.router.init();
-        } else {
-          setTimeout(() => Shell.init(), 150);
+      // Also check document is ready enough
+      if (!busReady && Shell.initAttempts < 30) { // 30 * 150ms = 4.5s wait
+        if (Shell.initAttempts === 1) {
+          console.log('[Meggy Shell] init — waiting for Bus (attempt 1, will retry up to 4.5s)');
         }
+        setTimeout(() => Shell.init(), 150);
         return;
       }
 
-      console.log('[Meggy Shell] init — modules ready (Bus ✓, __gdiStudy: ' + (typeof window.__gdiStudy) + '), mounting shell');
+      if (!busReady) {
+        console.warn('[Meggy Shell] Bus não disponível após 4.5s — montando shell mesmo assim (Bus é opcional para o shell)');
+      } else {
+        console.log('[Meggy Shell] init — Bus disponível, montando shell (attempt #' + Shell.initAttempts + ')');
+      }
       Shell.state.modulesReady = true;
       Shell.mount();
       Shell.router.init();
