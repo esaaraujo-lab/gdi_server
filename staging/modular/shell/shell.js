@@ -440,6 +440,8 @@
       async _renderDrives(path) {
         const container = document.getElementById('meggy-drives-container');
         const bc = document.getElementById('meggy-drives-breadcrumb');
+        // ★ Guardar pasta atual para o player usar (interfolder + material)
+        Shell.state.currentFolderPath = path;
 
         try {
           if (path === '/' || !path) {
