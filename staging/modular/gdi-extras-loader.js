@@ -376,12 +376,12 @@
         // Load CSS
         const link = document.createElement('link');
         link.rel = 'stylesheet';
-        link.href = '/modular/shell/shell.css?v=1';
+        link.href = '/modular/shell/shell.css?v=2';
         link.onerror = () => console.error('[GDI Loader] shell.css falhou');
         document.head.appendChild(link);
         console.log('[GDI Loader] ✓ shell.css carregado');
         // Load JS (sync — shell.js auto-inits)
-        await loadScript('/modular/shell/shell.js?v=1', false);
+        await loadScript('/modular/shell/shell.js?v=2', false);
         console.log('[GDI Loader] ✓ shell.js carregado');
       } catch (e) {
         console.error('[GDI Loader] shell load failed:', e && e.message || e);
