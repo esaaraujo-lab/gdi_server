@@ -1,0 +1,531 @@
+/* ═══════════════════════════════════════════════════════════════
+   Meggy Shell — Split-View Layout (Estratégia B Fase 1)
+   Dark theme Meggy: #0d1119 bg, #ff8b9f pink, #5ddeda cyan
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ─── Shell root ─── */
+#meggy-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  background: #0d1119;
+  font-family: 'Rubik', 'Inter', system-ui, sans-serif;
+  color: #e6edf3;
+  overflow: hidden;
+}
+
+/* ─── Header ─── */
+#meggy-header {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 20px;
+  background: rgba(22, 27, 38, 0.72);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.meggy-mobile-menu-btn {
+  display: none;
+  background: none;
+  border: none;
+  color: #e6edf3;
+  font-size: 22px;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.meggy-header-logo {
+  font-family: 'Poppins', 'Rubik', system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  background: linear-gradient(135deg, #ff8b9f 0%, #c026d3 55%, #5ddeda 130%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.meggy-header-search {
+  flex: 1;
+  max-width: 500px;
+}
+
+.meggy-header-search input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 999px;
+  padding: 8px 16px;
+  color: #e6edf3;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  transition: 0.18s;
+}
+
+.meggy-header-search input::placeholder {
+  color: #6b7488;
+}
+
+.meggy-header-search input:focus {
+  border-color: #ff8b9f;
+  box-shadow: 0 0 0 4px rgba(255, 139, 159, 0.25);
+  background: rgba(22, 27, 38, 0.8);
+}
+
+.meggy-header-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.meggy-header-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: #e6edf3;
+  border-radius: 999px;
+  padding: 7px 13px;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: 0.15s;
+  font-family: inherit;
+}
+
+.meggy-header-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
+  transform: translateY(-1px);
+}
+
+.meggy-header-btn .bi {
+  font-size: 15px;
+}
+
+/* ─── Body (sidebar + main) ─── */
+#meggy-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* ─── Sidebar ─── */
+#meggy-sidebar {
+  width: 260px;
+  background: #161b22;
+  border-right: 1px solid rgba(255, 255, 255, 0.09);
+  padding: 16px 0;
+  overflow-y: auto;
+  flex-shrink: 0;
+  transition: transform 0.25s ease;
+}
+
+.meggy-sidebar-section {
+  padding: 8px 20px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6b7488;
+  margin-top: 12px;
+}
+
+.meggy-sidebar-section:first-child {
+  margin-top: 0;
+}
+
+.meggy-sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  color: #9aa4b8;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  border-left: 3px solid transparent;
+  user-select: none;
+}
+
+.meggy-sidebar-item:hover {
+  background: rgba(255, 255, 255, 0.045);
+  color: #e6edf3;
+}
+
+.meggy-sidebar-item.active {
+  background: rgba(255, 255, 255, 0.06);
+  color: #ff8b9f;
+  border-left-color: #ff8b9f;
+}
+
+.meggy-sidebar-item .bi {
+  font-size: 18px;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.meggy-sidebar-badge {
+  margin-left: auto;
+  background: rgba(255, 139, 159, 0.15);
+  color: #ff8b9f;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+/* ─── Main pane ─── */
+#meggy-main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 32px;
+  background: #0d1119;
+}
+
+.meggy-view-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  gap: 16px;
+}
+
+.meggy-view-title {
+  font-family: 'Poppins', 'Rubik', system-ui, sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: #e6edf3;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.meggy-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #6b7488;
+  flex-wrap: wrap;
+}
+
+.meggy-breadcrumb a {
+  color: #9aa4b8;
+  text-decoration: none;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.meggy-breadcrumb a:hover {
+  color: #ff8b9f;
+}
+
+.meggy-breadcrumb-sep {
+  color: #3d4651;
+}
+
+/* ─── Cards grid ─── */
+.meggy-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.meggy-card {
+  background: rgba(22, 27, 38, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.meggy-card:hover {
+  border-color: #ff8b9f;
+  background: rgba(22, 27, 38, 0.9);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.55);
+}
+
+.meggy-card-icon {
+  font-size: 32px;
+  margin-bottom: 12px;
+}
+
+.meggy-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #e6edf3;
+  margin-bottom: 6px;
+}
+
+.meggy-card-meta {
+  font-size: 12px;
+  color: #6b7488;
+}
+
+/* ─── Placeholder ─── */
+.meggy-placeholder {
+  text-align: center;
+  padding: 80px 20px;
+  color: #6b7488;
+}
+
+.meggy-placeholder-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.meggy-placeholder-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #9aa4b8;
+  margin-bottom: 8px;
+}
+
+.meggy-placeholder-desc {
+  font-size: 14px;
+  color: #6b7488;
+  margin-bottom: 4px;
+}
+
+.meggy-placeholder-phase {
+  font-size: 12px;
+  color: #4a5260;
+  margin-top: 8px;
+}
+
+/* ─── Loading ─── */
+.meggy-loading {
+  text-align: center;
+  padding: 40px;
+  color: #6b7488;
+  font-size: 14px;
+}
+
+.meggy-loading .spinner-border {
+  color: #ff8b9f;
+  margin-bottom: 12px;
+}
+
+/* ─── Continue watching ─── */
+.meggy-continue-section {
+  margin-bottom: 32px;
+}
+
+.meggy-continue-section h2 {
+  font-family: 'Poppins', sans-serif;
+  font-size: 18px;
+  font-weight: 600;
+  color: #e6edf3;
+  margin-bottom: 16px;
+}
+
+.meggy-continue-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: rgba(22, 27, 38, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 12px;
+}
+
+.meggy-continue-card:hover {
+  border-color: #ff8b9f;
+  background: rgba(22, 27, 38, 0.9);
+}
+
+.meggy-continue-thumb {
+  width: 120px;
+  height: 68px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(255, 139, 159, 0.15), rgba(93, 222, 218, 0.1));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.meggy-continue-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.meggy-continue-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e6edf3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 4px;
+}
+
+.meggy-continue-course {
+  font-size: 12px;
+  color: #6b7488;
+  margin-bottom: 8px;
+}
+
+.meggy-continue-progress {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.meggy-continue-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #ff8b9f, #c026d3);
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+
+/* ─── Mobile responsive ─── */
+.meggy-sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 9998;
+}
+
+@media (max-width: 768px) {
+  .meggy-mobile-menu-btn {
+    display: block;
+  }
+
+  #meggy-sidebar {
+    position: fixed;
+    left: 0;
+    top: 56px;
+    bottom: 0;
+    z-index: 10000;
+    width: 260px;
+    transform: translateX(-100%);
+  }
+
+  #meggy-sidebar.open {
+    transform: translateX(0);
+  }
+
+  .meggy-sidebar-overlay.open {
+    display: block;
+  }
+
+  .meggy-header-search {
+    display: none;
+  }
+
+  #meggy-main {
+    padding: 16px;
+  }
+
+  .meggy-cards-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .meggy-view-title {
+    font-size: 20px;
+  }
+}
+
+/* ─── Scrollbar ─── */
+#meggy-sidebar::-webkit-scrollbar,
+#meggy-main::-webkit-scrollbar {
+  width: 8px;
+}
+
+#meggy-sidebar::-webkit-scrollbar-track,
+#meggy-main::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#meggy-sidebar::-webkit-scrollbar-thumb,
+#meggy-main::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+}
+
+#meggy-sidebar::-webkit-scrollbar-thumb:hover,
+#meggy-main::-webkit-scrollbar-thumb:hover {
+  background: #ff8b9f;
+}
+
+/* ─── Light theme support ─── */
+[data-bs-theme="light"] #meggy-shell {
+  background: #f4f5fb;
+  color: #1f2540;
+}
+
+[data-bs-theme="light"] #meggy-header {
+  background: rgba(255, 255, 255, 0.78);
+  border-bottom-color: rgba(15, 23, 42, 0.1);
+}
+
+[data-bs-theme="light"] #meggy-sidebar {
+  background: #e9ebf5;
+  border-right-color: rgba(15, 23, 42, 0.1);
+}
+
+[data-bs-theme="light"] .meggy-sidebar-item {
+  color: #5a6478;
+}
+
+[data-bs-theme="light"] .meggy-sidebar-item:hover {
+  background: rgba(15, 23, 42, 0.05);
+  color: #1f2540;
+}
+
+[data-bs-theme="light"] .meggy-sidebar-item.active {
+  background: rgba(15, 23, 42, 0.05);
+  color: #ff8b9f;
+}
+
+[data-bs-theme="light"] .meggy-header-search input {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(15, 23, 42, 0.1);
+  color: #1f2540;
+}
+
+[data-bs-theme="light"] .meggy-card {
+  background: rgba(255, 255, 255, 0.78);
+  border-color: rgba(15, 23, 42, 0.1);
+}
+
+[data-bs-theme="light"] .meggy-card:hover {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+[data-bs-theme="light"] #meggy-main {
+  background: #f4f5fb;
+}
+
+[data-bs-theme="light"] .meggy-header-btn {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(15, 23, 42, 0.1);
+  color: #1f2540;
+}
