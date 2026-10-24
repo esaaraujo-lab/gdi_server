@@ -9,7 +9,7 @@
 
 ## 1. Resumo Executivo
 
-A Plataforma Meggy é, na origem, um **fork do `@googledrive/index` (GDIndex 2.5.9)** — o "Google Drive Index" de Parveen Badhoo / TheFirstSpeedster, disponível em `cdn.jsdelivr.net/npm/@googledrive/index@2.5.9` (referenciado em `student_gdi/worker.js:220-221, 233, 483`). Sobre esse backbone, o operador (Elton Araujo / "educa.eu.org") enxertou uma camada substantial de funcionalidades de "plataforma de estudos": **autenticação multiusuário com salt+hash SHA-256**, **Área do Aluno full-screen** (M22), **Meggy AI** (chat poodle + geração de resumos/questões/flashcards), **scanner distribuído de cursos**, **cache ISA em KV/D1**, **batalhão paralelo de geração de materiais**, **painel admin profissional**, e **cron de backfill** automático.
+A Plataforma Meggy é, na origem, um **fork do `@googledrive/index` (GDI Index 2.5.9)** — o "Google Drive Index" de **Parveen Bhadoo** (npm: `parveenbhadoo`, GitLab: `GoogleDriveIndex/Google-Drive-Index`, homepage: gdi.js.org), disponível em `cdn.jsdelivr.net/npm/@googledrive/index@2.5.9` (referenciado em `student_gdi/worker.js:220-221, 233, 483`). Sobre esse backbone, o operador (Elton Araujo / "educa.eu.org") enxertou uma camada substantial de funcionalidades de "plataforma de estudos": **autenticação multiusuário com salt+hash SHA-256**, **Área do Aluno full-screen** (M22), **Meggy AI** (chat poodle + geração de resumos/questões/flashcards), **scanner distribuído de cursos**, **cache ISA em KV/D1**, **batalhão paralelo de geração de materiais**, **painel admin profissional**, e **cron de backfill** automático.
 
 A análise linha-a-linha confirma a genealogia: **apenas ~17% do `worker.js` (≈1 700 / 9 976 linhas) é GDIndex original puro** — configuração, templates HTML, `apiRequest`, `handleSearch`, `handleId2Path`, `findId2Path`, classe `googleDrive`, `download`, `generateLink`, `fetchAccessToken`, `enQuery`, `driveEscape`, SW inline, `redirectToIndexPage`. Os outros **~83%** (~8 300 linhas) são adições Meggy — handlers `/api/*`, helpers `gdi*`, auth, scanner, AI, D1, KV, admin, cron, dual Module/SW entrypoint. No frontend, `app.min.js` (1 749 linhas) é quase inteiro GDIndex original (apenas algumas extensões como `gdiListAllFiles` em linhas 57-90 e o `Bus` em linhas 21-30 são Meggy-added). Já `gdi-study.js` (4 725 linhas) e `gdi-meggy.js` (2 750 linhas) são **100% Meggy-added**, organizados em 6 e 2 IIFEs respectivamente.
 
@@ -134,17 +134,35 @@ O seam mais carregado é o **`Bus`**: 9 referências em `gdi-study.js` (1159, 12
 
 ## 3. Origem e Genealogia
 
-### 3.1 Base: `@googledrive/index` (GDIndex 2.5.9)
+### 3.1 Base: `@googledrive/index` (GDI Index 2.5.9) — por Parveen Bhadoo
 
 **Evidência direta** em `student_gdi/worker.js`:
 - Linha 31: `// GDI-JS 2.5.9 — WORKER COMPLETO`
 - Linha 78: `const CDN_VERSION = '2.5.9';`
+- Linha 216: `company_link: "https://gdi.js.org"` (homepage oficial do GDI Index)
 - Linha 220-221: `poster: "https://cdn.jsdelivr.net/npm/@googledrive/index@2.5.9/images/poster.jpg"` / `audioposter: ...@2.5.9/images/music.jpg`
 - Linha 233: `const cdn_base = 'https://cdn.jsdelivr.net/npm/@googledrive/index@' + CDN_VERSION;`
+- Linha 4555: `'HTTP-Referer': 'https://gdi.js.org'`
 - Linha 483: `Redesigned by <a href="https://www.npmjs.com/package/@googledrive/index" target="_blank">TheFirstSpeedster</a>`
 - `app.min.js:3`: `console.log('[GDI core] v19.0-minimal');`
 
-O `@googledrive/index` é o pacote npm publicado por **TheFirstSpeedster** como fork do `maple3142/GDIndex` (1873★ no GitHub). A versão 2.5.9 é a base original — o worker.js herda todo o núcleo de proxy Google Drive desta versão.
+#### Genealogia confirmada (npm + GitLab APIs)
+
+O `@googledrive/index` é o pacote npm oficial do **GDI Index** (Google Drive Index), criado e mantido por **Parveen Bhadoo**:
+
+| Campo | Valor |
+|-------|-------|
+| **Autor** | Parveen Bhadoo (npm user: `parveenbhadoo`, email: `parveen.bhadoo+npm@googlemail.com`) |
+| **Pacote npm** | `@googledrive/index` — 33 versões (2.0.20 → 2.5.9), criado em 2021-06-28 |
+| **Repositório** | `gitlab.com/GoogleDriveIndex/Google-Drive-Index` (184⭐, 413 forks, criado 2021-06-19) |
+| **Grupo GitLab** | `gitlab.com/groups/GoogleDriveIndex` (criado 2022-05-10) |
+| **Homepage** | https://gdi.js.org |
+| **Descrição npm** | "Google Drive Index - A serverless Google Drive directory listing on Cloudflare Workers" |
+| **Última versão** | 2.5.9 (a usada pelo Meggy) |
+
+> ⚠️ **Correção histórica:** análise anterior atribuía incorretamente a origem a `maple3142/GDIndex` (GitHub, 1873⭐, Vue.js) via "TheFirstSpeedster". Isso está **ERRADO**. `maple3142/GDIndex` é um projeto **diferente** (Vue.js, GitHub) — não é a base do Meggy. A base real é o `@googledrive/index` de Parveen Bhadoo no GitLab. O handle "TheFirstSpeedster" que aparece no footer (`worker.js:483`) é um colaborador/handle histórico do projeto GDI Index, mas o autor e mantenedor do pacote npm é `parveenbhadoo` (Parveen Bhadoo).
+
+A versão 2.5.9 é a base original — o worker.js herda todo o núcleo de proxy Google Drive desta versão. O worklog do projeto (linha 3) confirma: *"Project: Parveen Badhoo's GDI Index, transformed by user into a study platform."* (variante ortográfica Bhadoo/Badhoo).
 
 ### 3.2 Camadas adicionadas pelo operador (Meggy / educa.eu.org)
 
