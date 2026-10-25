@@ -91,10 +91,10 @@
       `;
 
       // Mount into #meggy-root container (provided by worker-staging.js html())
-      // Shell IS the body now — no overlay on top of GDIndex.
+      // ★ A2: overlay INSIDE shell (z-index 50, between header 10 and sidebar 10000)
       const root = document.getElementById('meggy-root') || document.body;
       root.innerHTML = ''; // clear (in case of remount)
-      root.appendChild(overlay);
+      shell.appendChild(overlay); // overlay is first child of shell (not body sibling)
       root.appendChild(shell);
 
       // ★ Área do Aluno antiga REMOVIDA — study-panel.js não é mais carregado
@@ -292,7 +292,7 @@
         // ★ Continue assistindo — usar history (tem nome + path reais) + resume (posição)
         let continueHTML = '';
         try {
-          const d = (window.GDIUser && window.GDIUser.state) || {};
+          const d = (typeof GDIUser !== 'undefined' && GDIUser && GDIUser.state) || {};
           const history = d.history || [];
           const resume = d.resume || {};
           // Usar histórico (tem nome + path) — pegar últimos 6
@@ -613,8 +613,8 @@
 
         let resumePos = 0;
         try {
-          if (window.GDIUser && window.GDIUser.state && window.GDIUser.state.resume) {
-            const saved = window.GDIUser.state.resume[videoUrl];
+          if (typeof GDIUser !== 'undefined' && GDIUser && GDIUser.state && GDIUser.state.resume) {
+            const saved = GDIUser.state.resume[videoUrl];
             if (saved && typeof saved === 'number') resumePos = saved;
             else if (saved && saved.pos) resumePos = saved.pos;
           }
@@ -655,7 +655,7 @@
                 <button class="gdi-watched-btn" id="gdi-watched-btn" data-b="1"><i class="bi bi-eye"></i> Assistido</button>
               </div>
             </div>
-            <div class="gdi-study-grid" id="gdi-study-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:flex-start;">
+            <div class="gdi-study-grid" id="gdi-study-grid">
               <section class="gdi-study-left" style="display:flex;flex-direction:column;gap:12px;min-width:0;">
                 <div style="display:flex;align-items:center;gap:12px;">
                   <i class="bi ${isAudio ? 'bi-music-note-beamed' : 'bi-camera-video-fill'}" style="font-size:22px;color:#ff8b9f;"></i>
@@ -782,32 +782,28 @@
           main.scrollTop = 0;
         }
 
-        // Modos
+        // Modos — usar CSS classes (visibility/position) em vez de display:none (C1: não destrói iframes)
         document.querySelectorAll('.gdi-mode-btn[data-mode]').forEach(btn => {
           btn.onclick = () => {
             document.querySelectorAll('.gdi-mode-btn[data-mode]').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             const grid = document.getElementById('gdi-study-grid');
-            const right = document.getElementById('gdi-slot-right');
-            const left = document.querySelector('.gdi-study-left');
             const mode = btn.dataset.mode;
-            // ★ Usar CSS classes em vez de display:none (não destrói o conteúdo)
-            if (mode === 'fv') { 
-              grid.style.gridTemplateColumns = '1fr'; 
-              right.style.display = 'none';
-              left.style.display = '';
-            } else if (mode === 'fm') { 
-              grid.style.gridTemplateColumns = '1fr'; 
-              left.style.display = 'none';
-              right.style.display = '';
-              // Re-carregar materiais se voltou
-              if (!document.querySelector('.gdi-mat-tab.active')) setTimeout(loadMaterials, 100);
-            } else { 
-              grid.style.gridTemplateColumns = '1fr 1fr'; 
-              right.style.display = ''; 
-              left.style.display = '';
-              // Re-carregar materiais se voltou
-              if (!document.querySelector('.gdi-mat-tab.active')) setTimeout(loadMaterials, 100);
+            if (mode === 'fv') {
+              grid.classList.add('mode-fv');
+              grid.classList.remove('mode-fm');
+            } else if (mode === 'fm') {
+              grid.classList.add('mode-fm');
+              grid.classList.remove('mode-fv');
+            } else {
+              grid.classList.remove('mode-fv', 'mode-fm');
+            }
+            // Re-trigger material reload se necessário (iframe em branco)
+            const matBody = document.getElementById('gdi-mat-body');
+            if ((mode === 'fm' || mode === 'split') && matBody && (!matBody.innerHTML.trim() || matBody.querySelector('iframe[src=""]'))) {
+              const activeTab = document.querySelector('.gdi-mat-tab.active');
+              if (activeTab) setTimeout(() => activeTab.click(), 50);
+              else setTimeout(loadMaterials, 100);
             }
           };
         });
@@ -974,16 +970,23 @@
             }
             if (statusEl) statusEl.textContent = materials.length + ' material(is)';
 
-            // Tabs (botões verticais como Alfacon)
+            // Tabs (botões verticais como Alfacon) — C4: numbering for multiple generic PDFs
+            let materialCounter = 0;
             materials.forEach((m, i) => {
               const ext = (m.name.split('.').pop() || '').toLowerCase();
-              // ★ Classificação precisa (não usar includes('ia') — pega 'material')
               const lowName = m.name.toLowerCase();
               const isTransc = lowName.includes('transcri') || ext === 'txt';
-              const isAiResumo = lowName.startsWith('resumo') || lowName.includes('resumo_ia') || lowName.includes('resumo-ia') || lowName.includes('ia') && lowName.includes('resumo');
+              const isAiResumo = lowName.startsWith('resumo') || lowName.includes('resumo_ia') || lowName.includes('resumo-ia') || (lowName.includes('ia') && lowName.includes('resumo'));
               const isEbook = lowName.includes('ebook') || lowName.includes('apostila');
-              // ★ PDF genérico = "Material", só mostra nome se for IA/transcrição/ebook
-              const label = isTransc ? 'Transcrição' : isAiResumo ? 'Resumo de IA' : isEbook ? 'Ebook' : ext === 'pdf' ? 'Material' : m.name.replace(/\.[^.]+$/, '').substring(0, 15);
+              const isGenericPdf = ext === 'pdf' && !isTransc && !isAiResumo && !isEbook;
+              if (isGenericPdf) materialCounter++;
+              // ★ Label: "Material 1", "Material 2" se múltiplos PDFs genéricos; só "Material" se único
+              let label;
+              if (isTransc) label = 'Transcrição';
+              else if (isAiResumo) label = 'Resumo IA';
+              else if (isEbook) label = 'Ebook';
+              else if (isGenericPdf) label = materialCounter > 1 ? 'Material ' + materialCounter : 'Material';
+              else label = m.name.replace(/\.[^.]+$/, '').substring(0, 15);
               const icon = isTransc ? 'bi-card-text' : isAiResumo ? 'bi-stars' : isEbook ? 'bi-book' : ext === 'pdf' ? 'bi-file-earmark-pdf' : 'bi-file-earmark-text';
               const tab = document.createElement('button');
               tab.className = 'gdi-mat-tab' + (i === 0 ? ' active' : '');
@@ -1017,18 +1020,28 @@
               const ext = (m.name.split('.').pop() || '').toLowerCase();
               if (ext === 'pdf' && link) bodyEl.innerHTML = `<iframe src="${link}" style="width:100%;height:100%;border:none;border-radius:16px;"></iframe>`;
               else if ((ext === 'md' || ext === 'txt' || ext === 'html') && link) {
-                bodyEl.innerHTML = `<div id="gdi-mat-md" style="width:100%;height:100%;overflow:auto;padding:16px;color:#e6edf3;font-size:13px;">Carregando...</div>`;
-                fetch(link).then(r => r.text()).then(txt => { 
-                  const el = document.getElementById('gdi-mat-md'); 
-                  if (el) { 
-                    let h = txt.replace(/^### (.+)$/gm,'<h3 style="color:#ff8b9f;margin:12px 0 6px;">$1</h3>').replace(/^## (.+)$/gm,'<h2 style="color:#ff8b9f;margin:16px 0 8px;">$1</h2>').replace(/^# (.+)$/gm,'<h1 style="color:#ff8b9f;margin:20px 0 10px;">$1</h1>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/^- (.+)$/gm,'<li>$1</li>').replace(/\n/g,'<br>');
-                    // ★ Botão Baixar PDF
-                    h = '<div style="margin-bottom:12px;padding:8px 12px;background:rgba(255,139,159,0.08);border:1px solid rgba(255,139,159,0.2);border-radius:8px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:12px;color:#9aa4b8;"><i class="bi bi-file-earmark-text"></i> ' + m.name + '</span><button onclick="window._downloadMdAsPdf(\''+m.name+'\')" style="background:rgba(255,139,159,0.12);border:1px solid rgba(255,139,159,0.3);color:#ff8b9f;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;"><i class="bi bi-download"></i> Baixar PDF</button></div>' + h;
+                bodyEl.innerHTML = '<div id="gdi-mat-md" style="width:100%;height:100%;overflow:auto;padding:0;color:#e6edf3;font-size:14px;">Carregando...</div>';
+                fetch(link).then(r => r.text()).then(async txt => {
+                  const el = document.getElementById('gdi-mat-md');
+                  if (el) {
+                    // ★ C2: usar marked.js + DOMPurify (carregados globalmente) em vez de regex
+                    await Shell._ensureMdLibs();
+                    let h;
+                    if (window.marked) {
+                      try { h = window.marked.parse(txt); if (window.DOMPurify) h = window.DOMPurify.sanitize(h); }
+                      catch(_) { h = Shell._esc(txt).replace(/\n/g,'<br>'); }
+                    } else { h = Shell._esc(txt).replace(/\n/g,'<br>'); }
+                    // ★ Toolbar com botão Baixar PDF (sticky no topo)
+                    h = '<div style="margin-bottom:12px;padding:8px 12px;background:rgba(255,139,159,0.08);border:1px solid rgba(255,139,159,0.2);border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:2;backdrop-filter:blur(8px);">' +
+                        '<span style="font-size:12px;color:#9aa4b8;"><i class="bi bi-file-earmark-text"></i> ' + Shell._esc(m.name) + '</span>' +
+                        '<button onclick="window._downloadMdAsPdf(' + Shell._esc(JSON.stringify(m.name)) + ')" style="background:rgba(255,139,159,0.12);border:1px solid rgba(255,139,159,0.3);color:#ff8b9f;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;"><i class="bi bi-download"></i> Baixar PDF</button>' +
+                        '</div>' +
+                        '<div class="gdi-isa-summary-body" style="padding:16px;">' + h + '</div>';
                     el.innerHTML = h;
                     // ★ Guardar texto para download
                     window._lastMdText = txt;
                     window._lastMdName = m.name;
-                  } 
+                  }
                 }).catch(() => { const el = document.getElementById('gdi-mat-md'); if (el) el.textContent = 'Erro.'; });
               } else if (link) bodyEl.innerHTML = `<div style="text-align:center;padding:40px;"><a href="${link}" target="_blank" class="gdi-mode-btn"><i class="bi bi-download"></i> Abrir</a></div>`;
               else bodyEl.innerHTML = '<div style="text-align:center;padding:40px;color:#6b7488;">Sem preview</div>';
@@ -1290,7 +1303,7 @@
                   });
 
                   // ─── 4. Save to cache + material folder (fire-and-forget, não bloqueia render) ───
-                  const user = (window.GDIUser && window.GDIUser.state && window.GDIUser.state.user) || 'meggy';
+                  const user = (typeof GDIUser !== 'undefined' && GDIUser && GDIUser.state && GDIUser.state.user) || 'meggy';
                   const safeLesson = safeName(lessonName);
                   // ★ Fire-and-forget: salva cache + material folder em background
                   (async () => {
@@ -1849,7 +1862,7 @@
         
         // ★ Renderizar conteúdo NATIVO (sem GDIndex)
         if (feature === 'progresso') {
-          const d = (window.GDIUser && window.GDIUser.state) || {};
+          const d = (typeof GDIUser !== 'undefined' && GDIUser && GDIUser.state) || {};
           const watched = d.watched ? Object.keys(d.watched).length : 0;
           const history = d.history ? d.history.length : 0;
           el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">📊 Progresso</h1></div><div class="meggy-cards-grid"><div class="meggy-card" style="cursor:default;"><div class="meggy-card-icon">🎬</div><div class="meggy-card-title">' + watched + '</div><div class="meggy-card-meta">Aulas assistidas</div></div><div class="meggy-card" style="cursor:default;"><div class="meggy-card-icon">📺</div><div class="meggy-card-title">' + history + '</div><div class="meggy-card-meta">No histórico</div></div></div>';
@@ -1868,7 +1881,7 @@
           return;
         }
         if (feature === 'conquistas') {
-          const d = (window.GDIUser && window.GDIUser.state) || {};
+          const d = (typeof GDIUser !== 'undefined' && GDIUser && GDIUser.state) || {};
           const watched = d.watched ? Object.keys(d.watched).length : 0;
           const ach = [
             {icon:'🎬',name:'Primeira aula',done:watched>=1},
