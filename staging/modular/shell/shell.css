@@ -1268,3 +1268,111 @@ body.meggy-focus-mode #meggy-main {
   text-overflow: ellipsis;
   flex: 1;
 }
+
+/* ═══ RÉPLICA GDI — Notes + Playlist dropdown ═══ */
+.gdi-notes {
+  margin-top: 16px;
+  background: rgba(22,27,38,0.5);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.gdi-notes-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.gdi-notes-head strong {
+  font-size: 13px;
+  color: #e6edf3;
+}
+
+.gdi-notes textarea {
+  width: 100%;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 6px;
+  padding: 8px;
+  color: #e6edf3;
+  font-family: inherit;
+  font-size: 13px;
+  resize: vertical;
+  outline: none;
+}
+
+.gdi-notes textarea:focus {
+  border-color: #ff8b9f;
+}
+
+.gdi-notes-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.gdi-notes-actions button {
+  background: rgba(255,139,159,0.12);
+  border: 1px solid rgba(255,139,159,0.3);
+  color: #ff8b9f;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.gdi-notes-empty {
+  font-size: 12px;
+  color: #6b7488;
+  padding: 8px 0;
+}
+
+#gdi-playlist-wrap {
+  margin-top: 16px;
+}
+
+.gdi-playlist-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #9aa4b8;
+  transition: 0.15s;
+}
+
+.gdi-playlist-item:hover {
+  background: rgba(255,255,255,0.06);
+  color: #e6edf3;
+}
+
+.gdi-playlist-item.cur {
+  background: rgba(255,139,159,0.12);
+  color: #ff8b9f;
+}
+
+.gdi-playlist-item div {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gdi-pl-size {
+  font-size: 10px;
+  color: #6b7488;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.gdi-watched-btn.watched {
+  background: rgba(63,185,80,0.12);
+  border: 1px solid rgba(63,185,80,0.3);
+  color: #3fb950;
+}
