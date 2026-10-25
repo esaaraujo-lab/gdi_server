@@ -1862,3 +1862,204 @@ body.meggy-player-active .meggy-sidebar-expand-btn {
   height: 100%;
   overflow: auto;
 }
+
+/* ═══ Layout ALFACON — página de aula ═══ */
+.alfacon-layout {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 14px 16px 40px;
+}
+
+.alfacon-layout-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Mode: cols (2 colunas) */
+.alfacon-layout.mode-cols .alfacon-layout-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+/* Mode: focus-video (só vídeo) */
+.alfacon-layout.mode-focus-video .alfacon-layout-right {
+  display: none;
+}
+
+.alfacon-layout.mode-focus-video .alfacon-layout-grid {
+  grid-template-columns: 1fr;
+}
+
+/* Mode: focus-study (só material) */
+.alfacon-layout.mode-focus-study .alfacon-layout-left {
+  display: none;
+}
+
+.alfacon-layout.mode-focus-study .alfacon-layout-grid {
+  grid-template-columns: 1fr;
+}
+
+/* ─── Left: video + controls + playlist + annotations ─── */
+.alfacon-layout-left {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.alfacon-video-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+}
+
+.alfacon-lesson-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.alfacon-lesson-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.alfacon-layout-controls {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.alfacon-layout-controls-right {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.alfacon-lesson-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ─── Card (playlist, annotations) ─── */
+.alfacon-card {
+  background: rgba(22,27,38,0.5);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.alfacon-collapse-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px;
+  background: transparent;
+  border: none;
+  color: #e6edf3;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+
+.alfacon-collapse-btn:hover {
+  background: rgba(255,255,255,0.03);
+}
+
+.alfacon-collapse-icon {
+  display: flex;
+  align-items: center;
+  font-size: 18px;
+  color: #9aa4b8;
+}
+
+.alfacon-collapse-title {
+  flex: 1;
+}
+
+.alfacon-collapse-body {
+  border-top: 1px solid rgba(255,255,255,0.06);
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+/* ─── Annotations ─── */
+.alfacon-annotations-header {
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #e6edf3;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+#alfacon-annotations {
+  padding: 0;
+}
+
+#alfacon-annotations > textarea,
+#alfacon-annotations > div {
+  margin: 8px 12px;
+}
+
+#alfacon-annotations > div:first-child {
+  margin-top: 0;
+}
+
+/* ─── Right: material tabs + body ─── */
+.alfacon-layout-right {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.alfacon-material-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.alfacon-material-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1;
+}
+
+.alfacon-material-body {
+  background: rgba(22,27,38,0.72);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 16px;
+  min-height: 420px;
+  height: calc(100vh - 250px);
+  overflow: hidden;
+}
+
+.alfacon-material-body iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 16px;
+}
+
+.alfacon-material-body > div {
+  height: 100%;
+  overflow: auto;
+  padding: 16px;
+}
+
+.alfacon-material-status {
+  font-size: 11px;
+  color: #6b7488;
+  padding: 4px 0;
+}
