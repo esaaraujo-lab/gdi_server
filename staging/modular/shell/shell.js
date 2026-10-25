@@ -569,9 +569,9 @@
         }
       },
 
-      // ═══ PÁGINA DE AULA — RÉPLICA 100% FIEL DO GDI ═══
+      // ═══ PÁGINA DE AULA — RÉPLICA 100% GDI ═══
       // Estrutura idêntica à produção:
-      // gdi-study > gdi-study-bar (breadcrumb + modos) > gdi-study-grid (left player + right material) > gdi-study-foot (anotações + playlist)
+      // gdi-study > gdi-study-bar > gdi-study-grid (left: player+notes+playlist | right: materiais)
       _playVideoInline(link, name, playlist, currentIndex) {
         const main = document.getElementById('meggy-main');
         if (!main) return;
@@ -595,7 +595,7 @@
         Shell.state.playerPlaylist = pl;
         Shell.state.playerIndex = idx;
 
-        // Construir breadcrumb da pasta atual
+        // Breadcrumb
         const folderPath = Shell.state.currentFolderPath || '';
         const parts = folderPath.split('/').filter(Boolean);
         let bcHTML = '<li><a href="/" title="Home" data-nav="/" data-bc-type="home">Home</a></li><li class="gdi-bc-sep">/</li>';
@@ -603,25 +603,21 @@
         for (let i = 0; i < parts.length; i++) {
           cumPath += '/' + parts[i];
           const cumPathEncoded = cumPath.split('/').map((seg, si) => si === 0 ? '' : encodeURIComponent(seg)).join('/');
-          const isLast = i === parts.length - 1;
           const label = parts[i].match(/^\d+:$/) ? (window.drive_names?.[+parts[i].slice(0,-1)] || parts[i]) : decodeURIComponent(parts[i]);
           const short = label.length > 20 ? label.slice(0,17) + '…' : label;
-          // data-nav = caminho DECODIFICADO (para _renderDrives)
-          // href = caminho CODIFICADO (para URL válida)
           bcHTML += `<li><a href="${cumPathEncoded}/" title="${label}" data-nav="${cumPath}/" data-bc-type="folder">${short}</a></li><li class="gdi-bc-sep">/</li>`;
         }
         const shortName = name.length > 20 ? name.slice(0,17) + '…' : name;
         bcHTML += `<li class="gdi-bc-cur" title="${name}">${shortName}</li>`;
 
-        // Tamanho do arquivo
         const fileSize = pl[idx]?.size || '';
 
-        // Renderizar página de aula — RÉPLICA DO GDI
+        // ★ Estrutura 100% idêntica ao GDI
         main.innerHTML = `
           <div class="gdi-study" id="gdi-study">
             <div class="gdi-study-bar">
               <div class="gdi-study-bc"><ol class="gdi-bc">${bcHTML}</ol></div>
-              <div class="gdi-study-modes" id="gdi-slot-modes" data-m10="1">
+              <div class="gdi-study-modes">
                 <button class="gdi-mode-btn active" data-mode="split" title="Tela dividida (vídeo + material)"><i class="bi bi-layout-split"></i><span class="d-none d-md-inline">Dividido</span></button>
                 <button class="gdi-mode-btn" data-mode="fv" title="Foco na aula (vídeo em largura total)"><i class="bi bi-lightning-charge-fill"></i><span class="d-none d-md-inline">Foco na aula</span></button>
                 <button class="gdi-mode-btn" data-mode="fm" title="Foco no material (só PDF, zoom automático)"><i class="bi bi-file-earmark-pdf-fill"></i><span class="d-none d-md-inline">Foco no material</span></button>
@@ -629,7 +625,7 @@
               </div>
             </div>
             <div class="gdi-study-grid" id="gdi-study-grid">
-              <section class="gdi-study-left">
+              <section class="gdi-study-left" id="gdi-slot-left">
                 <div class="gdi-study-head">
                   <i class="bi bi-camera-video-fill gdi-icon-video" style="font-size:22px;"></i>
                   <div class="gdi-study-title">
@@ -650,44 +646,52 @@
                 <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
                   <button class="gdi-mode-btn" id="gdi-prev-btn" title="Aula anterior" ${idx === 0 ? 'disabled' : ''}><i class="bi bi-chevron-left"></i> Anterior</button>
                   <button class="gdi-mode-btn" id="gdi-next-btn" title="Próxima aula" ${idx >= pl.length - 1 ? 'disabled' : ''}>Próxima <i class="bi bi-chevron-right"></i></button>
-                  <a class="gdi-mode-btn" id="gdi-download-btn" href="${videoUrl}" download="${name}" target="_blank" title="Download"><i class="bi bi-download"></i> Download</a>
+                  <a class="gdi-mode-btn" href="${videoUrl}" download="${name}" target="_blank" title="Download"><i class="bi bi-download"></i> Download</a>
                   <button class="gdi-mode-btn" id="gdi-interfolder-btn" title="Carregar vídeos de todas as subpastas"><i class="bi bi-collection"></i> Interfolder</button>
+                </div>
+                <div class="gdi-notes" id="gdi-notes">
+                  <div class="gdi-notes-head"><strong>📝 Minhas anotações</strong><span id="gdi-notes-count" style="font-size:11px;color:#8b949e;"></span></div>
+                  <textarea id="gdi-note-input" rows="2" placeholder="Digite sua anotação para esta aula…"></textarea>
+                  <div class="gdi-notes-actions">
+                    <span id="gdi-note-time" title="Clique para ir a este momento do vídeo" style="cursor:pointer;">00:00</span>
+                    <button id="gdi-note-save"><i class="bi bi-save me-1"></i>Salvar</button>
+                  </div>
+                  <div id="gdi-notes-list"><div class="gdi-notes-empty">Nenhuma anotação ainda. Digite acima e salve.</div></div>
+                </div>
+                <div id="gdi-playlist-wrap">
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:6px;flex-wrap:wrap;">
+                    <button id="gdi-pl-toggle" class="gdi-mode-btn" style="padding:4px 10px;font-size:12px;flex:1;justify-content:flex-start;min-width:0;" title="Mostrar/ocultar a playlist">
+                      <i class="bi bi-collection-play me-2"></i><strong style="font-size:13px;">Playlist</strong>
+                      <span id="gdi-pl-count" style="font-size:11px;color:#8b949e;margin-left:6px;">${idx + 1} / ${pl.length}</span>
+                      <i id="gdi-pl-chev" class="bi bi-chevron-down" style="margin-left:auto;"></i>
+                    </button>
+                    <button id="gdi-pl-filter" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Esconder aulas já assistidas"><i class="bi bi-funnel"></i></button>
+                    <button id="gdi-pl-reload" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Descartar cache e reescanear"><i class="bi bi-arrow-clockwise"></i></button>
+                    <button id="gdi-pl-json" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Baixar playlist.json"><i class="bi bi-filetype-json"></i></button>
+                  </div>
+                  <div id="gdi-playlist-body" style="overflow-y:auto;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:6px;background:rgba(0,0,0,0.2);max-height:240px;display:none;">
+                    <div id="gdi-playlist-list">
+                      ${pl.map((v, i) => `
+                        <div class="gdi-playlist-item ${i === idx ? 'cur' : ''}" data-idx="${i}" title="${v.name}">
+                          <div><i class="bi ${i === idx ? 'bi-play-fill' : 'bi-film'} me-2"></i><span style="font-weight:${i === idx ? '600' : '400'};">${v.name}</span></div>
+                          <span class="gdi-pl-size">${v.size || ''}</span>
+                        </div>
+                      `).join('')}
+                    </div>
+                  </div>
                 </div>
               </section>
               <aside class="gdi-study-right" id="gdi-slot-right" data-m9="1">
-                <div class="gdi-mat-head"><strong><i class="bi bi-journal-bookmark-fill" style="color:var(--ferreto-primary,#ff8b9f);"></i> Materiais da aula</strong><span id="gdi-mat-status">buscando…</span></div>
+                <div class="gdi-mat-head"><strong><i class="bi bi-journal-bookmark-fill" style="color:#ff8b9f;"></i> Materiais da aula</strong><span id="gdi-mat-status">buscando…</span></div>
                 <div class="gdi-mat-tabs" id="gdi-mat-tabs"><span class="gdi-mat-loading">Buscando PDFs da aula…</span></div>
                 <div class="gdi-mat-body" id="gdi-mat-body"></div>
               </aside>
-            </div>
-            <div class="gdi-study-foot">
-              <div class="gdi-study-notes">
-                <div class="gdi-notes-head"><i class="bi bi-journal-text"></i> Anotações da aula</div>
-                <textarea class="gdi-notes-input" id="gdi-notes-input" placeholder="Digite sua anotação para esta aula…"></textarea>
-                <div class="gdi-notes-foot">
-                  <span class="gdi-notes-time" id="gdi-notes-time" onclick="document.getElementById('meggy-video').currentTime = parseFloat(prompt('Ir para (segundos):', '0')) || 0">00:00</span>
-                  <button class="gdi-mode-btn" id="gdi-notes-save"><i class="bi bi-save"></i> Salvar</button>
-                </div>
-              </div>
-              <div class="gdi-playlist-wrap">
-                <div class="gdi-playlist-head">
-                  <button class="gdi-mode-btn" id="gdi-pl-toggle"><i class="bi bi-list-ul"></i> Playlist <span id="gdi-pl-count">${idx + 1} / ${pl.length}</span> <i class="bi bi-chevron-up"></i></button>
-                </div>
-                <div class="gdi-playlist-items" id="gdi-playlist-items">
-                  ${pl.map((v, i) => `
-                    <div class="gdi-playlist-item ${i === idx ? 'cur' : ''}" data-idx="${i}" title="${v.name}">
-                      <div><i class="bi ${i === idx ? 'bi-play-fill' : 'bi-play'} me-2"></i><span style="${i === idx ? 'font-weight:600;' : ''}">${v.name}</span></div>
-                      <span class="gdi-pl-size">${v.size || ''}</span>
-                    </div>
-                  `).join('')}
-                </div>
-              </div>
             </div>
           </div>
         `;
 
         const video = document.getElementById('meggy-video');
-        const timeEl = document.getElementById('gdi-notes-time');
+        const timeEl = document.getElementById('gdi-note-time');
         const plCountEl = document.getElementById('gdi-pl-count');
 
         // ─── Resume tracking ───
@@ -700,7 +704,6 @@
           try { window.GDIUser?.setResume?.(videoUrl, video.currentTime, video.duration || 0); } catch (e) {}
         };
 
-        // ─── Toast "Retomando de HH:MM:SS" ───
         const showResumeToast = (pos) => {
           const toast = document.createElement('div');
           toast.className = 'meggy-toast-resume';
@@ -717,7 +720,6 @@
           return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${m}:${String(sec).padStart(2,'0')}`;
         }
 
-        // ─── Video events ───
         video.addEventListener('loadedmetadata', () => {
           if (resumePos > 10 && video.duration && resumePos < video.duration * 0.9) {
             video.currentTime = resumePos;
@@ -727,7 +729,6 @@
         video.addEventListener('timeupdate', () => { timeEl.textContent = formatTime(video.currentTime); saveResume(); });
         video.addEventListener('ended', () => { if (idx < pl.length - 1) switchTo(idx + 1); });
 
-        // ─── Switch video ───
         function switchTo(newIdx) {
           if (newIdx < 0 || newIdx >= pl.length) return;
           const v = pl[newIdx];
@@ -740,49 +741,56 @@
           plCountEl.textContent = `${idx + 1} / ${pl.length}`;
           document.querySelectorAll('.gdi-playlist-item').forEach((el, i) => {
             el.classList.toggle('cur', i === idx);
+            const icon = el.querySelector('i');
+            if (icon) icon.className = `bi ${i === idx ? 'bi-play-fill' : 'bi-film'} me-2`;
             const span = el.querySelector('span');
-            if (span) span.style.fontWeight = i === idx ? '600' : '';
+            if (span) span.style.fontWeight = i === idx ? '600' : '400';
           });
-          // Update prev/next disabled
           document.getElementById('gdi-prev-btn').disabled = idx === 0;
           document.getElementById('gdi-next-btn').disabled = idx >= pl.length - 1;
-          // Atualizar breadcrumb
-          const shortName = v.name.length > 20 ? v.name.slice(0,17) + '…' : v.name;
           const bcCur = main.querySelector('.gdi-bc-cur');
-          if (bcCur) { bcCur.textContent = shortName; bcCur.title = v.name; }
+          if (bcCur) { bcCur.textContent = v.name.length > 20 ? v.name.slice(0,17) + '…' : v.name; bcCur.title = v.name; }
           resumePos = 0;
           main.scrollTop = 0;
         }
 
-        // ─── Modos (Dividido / Foco na aula / Foco no material) ───
+        // ─── Modos (Dividido / Foco aula / Foco material) ───
         document.querySelectorAll('.gdi-mode-btn[data-mode]').forEach(btn => {
           btn.onclick = () => {
             document.querySelectorAll('.gdi-mode-btn[data-mode]').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             const mode = btn.dataset.mode;
-            const grid = document.getElementById('gdi-study-grid');
             const study = document.getElementById('gdi-study');
             study.classList.remove('mode-split', 'mode-fv', 'mode-fm');
             study.classList.add('mode-' + mode);
-            console.log('[Meggy Shell] modo:', mode);
           };
         });
 
         // ─── Assistido ───
         document.getElementById('gdi-watched-btn').onclick = function() {
-          const watched = this.dataset.b === '1';
-          this.dataset.b = watched ? '0' : '1';
-          this.classList.toggle('watched', !watched);
-          try {
-            const key = videoUrl;
-            if (window.GDIUser?.setWatched) window.GDIUser.setWatched(key, !watched);
-          } catch (e) {}
-          console.log('[Meggy Shell] assistido:', !watched);
+          const w = this.dataset.b === '1';
+          this.dataset.b = w ? '0' : '1';
+          this.classList.toggle('watched', !w);
+          try { if (window.GDIUser?.setWatched) window.GDIUser.setWatched(videoUrl, !w); } catch (e) {}
         };
 
-        // ─── Prev/Next/Download ───
+        // ─── Prev/Next ───
         document.getElementById('gdi-prev-btn').onclick = () => { if (idx > 0) switchTo(idx - 1); };
         document.getElementById('gdi-next-btn').onclick = () => { if (idx < pl.length - 1) switchTo(idx + 1); };
+
+        // ─── Playlist toggle (dropdown) ───
+        const plBody = document.getElementById('gdi-playlist-body');
+        const plChev = document.getElementById('gdi-pl-chev');
+        document.getElementById('gdi-pl-toggle').onclick = () => {
+          const isOpen = plBody.style.display !== 'none';
+          plBody.style.display = isOpen ? 'none' : 'block';
+          plChev.className = isOpen ? 'bi bi-chevron-down' : 'bi bi-chevron-up';
+        };
+
+        // ─── Playlist item click ───
+        document.querySelectorAll('.gdi-playlist-item').forEach(item => {
+          item.onclick = () => { const i = parseInt(item.dataset.idx); if (i !== idx) switchTo(i); };
+        });
 
         // ─── Interfolder ───
         document.getElementById('gdi-interfolder-btn').onclick = async () => {
@@ -791,7 +799,7 @@
           btn.disabled = true;
           try {
             const currentPath = Shell.state.currentFolderPath || '';
-            if (!currentPath || !window.gdiListAllFiles) { btn.innerHTML = '⚠️ Sem pasta'; return; }
+            if (!currentPath || !window.gdiListAllFiles) { btn.innerHTML = '⚠️'; return; }
             const parts = currentPath.split('/').filter(Boolean);
             const parentPath = '/' + parts.slice(0, -1).join('/') + '/';
             const parentFiles = await window.gdiListAllFiles(parentPath, '');
@@ -822,11 +830,10 @@
             idx = pl.findIndex(v => v.name === name || v.link === videoUrl);
             if (idx === -1) idx = 0;
             Shell.state.playerIndex = idx;
-            // Re-render playlist
-            const itemsEl = document.getElementById('gdi-playlist-items');
-            itemsEl.innerHTML = pl.map((v, i) => `
+            const listEl = document.getElementById('gdi-playlist-list');
+            listEl.innerHTML = pl.map((v, i) => `
               <div class="gdi-playlist-item ${i === idx ? 'cur' : ''}" data-idx="${i}" title="${v.name}">
-                <div><i class="bi ${i === idx ? 'bi-play-fill' : 'bi-play'} me-2"></i><span style="${i === idx ? 'font-weight:600;' : ''}">${v.name}</span></div>
+                <div><i class="bi ${i === idx ? 'bi-play-fill' : 'bi-film'} me-2"></i><span style="font-weight:${i === idx ? '600' : '400'};">${v.name}</span></div>
                 <span class="gdi-pl-size">${v.size || ''}</span>
               </div>
             `).join('');
@@ -836,38 +843,25 @@
             });
             btn.innerHTML = `<i class="bi bi-check"></i> ${pl.length} vídeos`;
             btn.disabled = false;
-          } catch (e) { console.error('[Meggy Shell] interfolder:', e); btn.innerHTML = '⚠️ Erro'; }
+          } catch (e) { console.error('[Meggy Shell] interfolder:', e); btn.innerHTML = '⚠️'; }
         };
 
-        // ─── Playlist item click ───
-        document.querySelectorAll('.gdi-playlist-item').forEach(item => {
-          item.onclick = () => { const i = parseInt(item.dataset.idx); if (i !== idx) switchTo(i); };
-        });
-
-        // ─── Playlist toggle ───
-        document.getElementById('gdi-pl-toggle').onclick = () => {
-          const items = document.getElementById('gdi-playlist-items');
-          items.style.display = items.style.display === 'none' ? 'block' : 'none';
-        };
-
-        // ─── Breadcrumb navigation — navegar para pasta (não router.navigate) ───
+        // ─── Breadcrumb ───
         document.querySelectorAll('.gdi-bc a[data-nav]').forEach(a => {
           a.onclick = (e) => {
             e.preventDefault();
             const navPath = a.dataset.nav;
             const bcType = a.dataset.bcType;
             if (bcType === 'home') {
-              // Voltar para Home do shell
               Shell.router.navigate('/');
             } else {
-              // Navegar para pasta no drives view
               Shell.router.navigate('/drives');
               setTimeout(() => Shell.views._renderDrives(navPath), 50);
             }
           };
         });
 
-        // ─── Material (PDFs + .md + .txt) — carregamento AUTOMÁTICO (réplica GDI) ───
+        // ─── Materiais — RÉPLICA 100% GDI (com subpastas) ───
         async function loadMaterials() {
           const tabsEl = document.getElementById('gdi-mat-tabs');
           const bodyEl = document.getElementById('gdi-mat-body');
@@ -879,56 +873,91 @@
           bodyEl.innerHTML = '';
 
           try {
-            const currentPath = Shell.state.currentFolderPath || '';
-            if (!currentPath || !window.gdiListAllFiles) {
+            const folderPath = Shell.state.currentFolderPath || '';
+            if (!folderPath || !window.gdiListAllFiles) {
               tabsEl.innerHTML = '';
               if (statusEl) statusEl.textContent = 'sem material';
-              bodyEl.innerHTML = '<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material encontrado para esta aula.</div></div>';
+              bodyEl.innerHTML = '<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material encontrado.</div></div>';
               return;
             }
-            const files = await window.gdiListAllFiles(currentPath, '');
-            // ★ Réplica GDI: PDFs + .md + .txt (transcrições)
+
+            // ★ Réplica exata do GDI isMaterial()
             const isMaterial = (x) => {
               const ext = (x.fileExtension || ((x.name||'').split('.').pop() || '')).toLowerCase();
               const mt = (x.mimeType || '').toLowerCase();
               if (ext === 'pdf' || mt.includes('pdf')) return true;
-              if (ext === 'md' || ext === 'txt') return true;
+              if (ext === 'md' || mt.includes('markdown')) return true;
+              if (ext === 'txt' || mt === 'text/plain') return true;
+              if (ext === 'html' || mt.includes('html')) return true;
               return false;
             };
-            const materials = files.filter(isMaterial);
+
+            // 1. Lista arquivos da pasta da aula
+            let found = [];
+            const here = await window.gdiListAllFiles(folderPath, '');
+            found = here.filter(isMaterial);
+
+            // 2. Se vazio: lista SUBPASTAS (até 20) e procura dentro
+            if (!found.length) {
+              const subs = here.filter(x => x.mimeType === 'application/vnd.google-apps.folder').slice(0, 20);
+              for (const sf of subs) {
+                const fp = folderPath + encodeURIComponent(sf.name) + '/';
+                const subFiles = await window.gdiListAllFiles(fp, '');
+                found = found.concat(subFiles.filter(isMaterial));
+                if (found.length) break; // para no primeiro material encontrado
+              }
+            }
+
+            // 3. Se ainda vazio: procura na pasta PAI
+            if (!found.length) {
+              const parts = folderPath.split('/').filter(Boolean);
+              const parentPath = '/' + parts.slice(0, -1).join('/') + '/';
+              if (parentPath !== '/' && parentPath !== folderPath) {
+                const parentFiles = await window.gdiListAllFiles(parentPath, '');
+                found = parentFiles.filter(isMaterial);
+              }
+            }
+
+            // 4. Dedupe por nome
+            const seen = new Set();
+            const uniq = [];
+            found.forEach(x => {
+              if (!seen.has(x.name)) { seen.add(x.name); uniq.push(x); }
+            });
+
             tabsEl.innerHTML = '';
-            if (!materials.length) {
+            if (!uniq.length) {
               if (statusEl) statusEl.textContent = 'sem material';
               bodyEl.innerHTML = '<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material encontrado para esta aula.</div></div>';
               return;
             }
-            if (statusEl) statusEl.textContent = materials.length + ' material(is)';
-            // Renderizar como tabs (1 tab por material) + body com link
-            materials.forEach((m, i) => {
+
+            if (statusEl) statusEl.textContent = uniq.length + ' material(is)';
+
+            // Renderizar tabs
+            uniq.forEach((m, i) => {
               const tab = document.createElement('button');
               tab.className = 'gdi-mat-tab' + (i === 0 ? ' active' : '');
-              const icon = m.name.endsWith('.md') || m.name.endsWith('.txt') ? 'bi-file-earmark-text' : 'bi-file-earmark-pdf';
+              const icon = m.name.endsWith('.pdf') ? 'bi-file-earmark-pdf'
+                         : (m.name.endsWith('.md') || m.name.endsWith('.txt')) ? 'bi-file-earmark-text'
+                         : 'bi-file-earmark-code';
               tab.innerHTML = `<i class="bi ${icon}"></i> ${m.name}`;
               tab.onclick = () => {
                 document.querySelectorAll('.gdi-mat-tab').forEach(t => t.classList.remove('active'));
                 tab.classList.add('active');
-                // Construir link — adicionar &inline=true para PDFs mostrar em iframe
                 let link = '';
                 if (m.link) {
                   link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
-                  // Adicionar &inline=true para PDFs (mostra em vez de baixar)
                   if (m.name.endsWith('.pdf') && !link.includes('inline=')) {
                     link += (link.includes('?') ? '&' : '?') + 'inline=true';
                   }
                 }
                 const isPdf = m.name.endsWith('.pdf');
-                const isText = m.name.endsWith('.md') || m.name.endsWith('.txt');
+                const isText = m.name.endsWith('.md') || m.name.endsWith('.txt') || m.name.endsWith('.html');
                 let viewerHTML = '';
                 if (link && isPdf) {
-                  // PDF: iframe com inline=true
                   viewerHTML = `<iframe src="${link}" style="width:100%;height:400px;border:1px solid rgba(255,255,255,0.09);border-radius:8px;background:#fff;" title="${m.name}"></iframe>`;
                 } else if (link && isText) {
-                  // .md/.txt: fetch + mostrar como texto
                   viewerHTML = `<div id="gdi-mat-text" style="width:100%;height:400px;overflow:auto;padding:12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:8px;color:#e6edf3;font-size:13px;white-space:pre-wrap;">Carregando...</div>`;
                   fetch(link).then(r => r.text()).then(txt => {
                     const el = document.getElementById('gdi-mat-text');
@@ -954,8 +983,8 @@
               };
               tabsEl.appendChild(tab);
             });
-            // Auto-clicar primeiro material
-            if (materials.length > 0) {
+            // Auto-clicar primeiro
+            if (uniq.length > 0) {
               const firstTab = tabsEl.querySelector('.gdi-mat-tab');
               if (firstTab) firstTab.click();
             }
@@ -966,26 +995,27 @@
             bodyEl.innerHTML = '<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Erro ao carregar materiais.</div></div>';
           }
         }
-        // Carregar materiais automaticamente (como o GDI faz)
         setTimeout(loadMaterials, 500);
 
         // ─── Anotações ───
-        const notesInput = document.getElementById('gdi-notes-input');
+        const notesInput = document.getElementById('gdi-note-input');
         const notesKey = 'meggy-notes-' + videoUrl;
         try { notesInput.value = localStorage.getItem(notesKey) || ''; } catch (e) {}
-        document.getElementById('gdi-notes-save').onclick = () => {
-          try { localStorage.setItem(notesKey, notesInput.value); showToast('Anotação salva!'); } catch (e) {}
+        document.getElementById('gdi-note-save').onclick = () => {
+          try { localStorage.setItem(notesKey, notesInput.value); } catch (e) {}
+          const list = document.getElementById('gdi-notes-list');
+          const note = document.createElement('div');
+          note.style.cssText = 'padding:8px;border-radius:6px;background:rgba(255,255,255,0.04);margin-top:6px;font-size:12px;';
+          note.innerHTML = `<span style="color:#5ddeda;">${timeEl.textContent}</span> ${notesInput.value}`;
+          list.appendChild(note);
+          notesInput.value = '';
+        };
+        timeEl.onclick = () => {
+          const t = parseFloat(prompt('Ir para (segundos):', '0')) || 0;
+          video.currentTime = t;
         };
 
-        function showToast(msg) {
-          const t = document.createElement('div');
-          t.className = 'meggy-toast-resume';
-          t.innerHTML = `<i class="bi bi-check"></i> ${msg}`;
-          main.appendChild(t);
-          setTimeout(() => { t.classList.add('meggy-toast-out'); setTimeout(() => t.remove(), 250); }, 2000);
-        }
-
-        // ─── Atalhos de teclado ───
+        // ─── Atalhos ───
         const keyHandler = (e) => {
           if (['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)) return;
           switch (e.key) {
@@ -1008,7 +1038,7 @@
 
         main.scrollTop = 0;
 
-        // ─── Auto-load interfolder se playlist tem só 1 vídeo ───
+        // Auto-load interfolder se playlist tem só 1 vídeo
         if (pl.length <= 1 && Shell.state.currentFolderPath) {
           setTimeout(() => document.getElementById('gdi-interfolder-btn')?.click(), 1000);
         }
