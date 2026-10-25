@@ -285,32 +285,40 @@
     // ─── Views ───
     views: {
       home(el) {
-        // Try to get user state for "continue watching"
+        // ★ Continue assistindo — usar history (tem nome + path reais) + resume (posição)
         let continueHTML = '';
         try {
           const d = (window.GDIUser && window.GDIUser.state) || {};
+          const history = d.history || [];
           const resume = d.resume || {};
-          const watched = d.watched || {};
-          const resumeKeys = Object.keys(resume).slice(0, 3);
-          if (resumeKeys.length > 0) {
-            continueHTML = '<div class="meggy-continue-section"><h2>▶ Continue assistindo</h2>';
-            for (const path of resumeKeys) {
-              const name = path.split('/').pop().replace(/\.\w+$/, '') || path;
-              const course = path.split('/')[2] || '';
-              const pos = resume[path] || 0;
+          // Usar histórico (tem nome + path) — pegar últimos 6
+          const recent = Array.isArray(history) ? history.slice(-6).reverse() : [];
+          if (recent.length > 0) {
+            continueHTML = '<div class="meggy-continue-section"><h2>▶ Continue assistindo</h2><div class="meggy-cards-grid">';
+            for (const h of recent) {
+              const rawName = h.name || h.path?.split('/').pop()?.replace(/\.\w+$/, '') || 'Aula';
+              const name = decodeURIComponent(rawName).replace(/\+/g, ' ');
+              const rawCourse = h.path?.split('/')[2] || h.coursePath?.split('/')[2] || '';
+              const course = decodeURIComponent(rawCourse).replace(/\+/g, ' ');
+              // Pegar posição do resume (procurar por URL ou path)
+              let pos = 0;
+              for (const [k, v] of Object.entries(resume)) {
+                if (k.includes(h.path) || h.path?.includes(k)) { pos = typeof v === 'number' ? v : (v?.pos || 0); break; }
+              }
+              const driveIdx = h.path?.match(/^\/(\d+):/)?.[1];
+              const driveName = driveIdx ? (window.drive_names?.[+driveIdx] || '') : '';
+              const progressColor = pos >= 80 ? '#3fb950' : pos >= 40 ? '#ffd43b' : '#ff8b9f';
               continueHTML += `
-                <div class="meggy-continue-card" data-path="${path}">
-                  <div class="meggy-continue-thumb">🎬</div>
-                  <div class="meggy-continue-info">
-                    <div class="meggy-continue-title">${name}</div>
-                    <div class="meggy-continue-course">${course}</div>
-                    <div class="meggy-continue-progress">
-                      <div class="meggy-continue-progress-bar" style="width:${Math.min(100, pos)}%"></div>
-                    </div>
+                <div class="meggy-card" data-resume-path="${h.path || ''}">
+                  <div class="meggy-card-icon">🎬</div>
+                  <div class="meggy-card-title">${name}</div>
+                  <div class="meggy-card-meta">${driveName}${course ? ' · ' + course : ''}</div>
+                  <div class="meggy-continue-progress" style="margin-top:8px;">
+                    <div class="meggy-continue-progress-bar" style="width:${Math.min(100, pos)}%;background:${progressColor};"></div>
                   </div>
                 </div>`;
             }
-            continueHTML += '</div>';
+            continueHTML += '</div></div>';
           }
         } catch (e) { console.warn('[Shell] home resume:', e); }
 
@@ -346,15 +354,15 @@
         el.querySelectorAll('.meggy-card[data-nav]').forEach(card => {
           card.onclick = () => Shell.router.navigate(card.dataset.nav);
         });
-        // Bind continue watching clicks
-        el.querySelectorAll('.meggy-continue-card').forEach(card => {
+        // Bind continue watching clicks — navegar para a pasta do vídeo
+        el.querySelectorAll('.meggy-card[data-resume-path]').forEach(card => {
           card.onclick = () => {
-            const path = card.dataset.path;
-            // Open in GDIndex player (will be integrated in Phase 3)
-            // For now, navigate to the folder
-            const folder = path.substring(0, path.lastIndexOf('/') + 1);
-            Shell.router.navigate('/drives');
-            setTimeout(() => Shell.views.drives(document.getElementById('meggy-main'), folder), 100);
+            const path = card.dataset.resumePath;
+            if (path) {
+              const folder = path.substring(0, path.lastIndexOf('/') + 1);
+              Shell.router.navigate('/drives');
+              setTimeout(() => Shell.views._renderDrives(folder), 50);
+            }
           };
         });
       },
