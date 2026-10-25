@@ -131,8 +131,9 @@
   border-right: 1px solid rgba(255, 255, 255, 0.09);
   padding: 16px 0;
   overflow-y: auto;
+  overflow-x: visible;
   flex-shrink: 0;
-  transition: transform 0.25s ease;
+  transition: width 0.2s ease;
 }
 
 .meggy-sidebar-section {
@@ -1384,8 +1385,9 @@ body.meggy-focus-mode #meggy-main {
 /* ═══ Sidebar contraída ao abrir vídeo (modo cinema) ═══ */
 /* ★ P4: Sidebar retrátil — só ícones, expand no hover */
 body.meggy-player-active #meggy-sidebar {
-  width: 60px;
-  overflow: visible;
+  width: 60px !important;
+  overflow: visible !important;
+  overflow-y: visible !important;
   border-right: 1px solid rgba(255,255,255,0.09);
   padding: 16px 0;
   transition: width 0.2s ease;
@@ -1401,9 +1403,15 @@ body.meggy-player-active #meggy-main {
 
 /* Esconder labels quando colapsada */
 body.meggy-player-active #meggy-sidebar .meggy-sidebar-item span {
-  opacity: 0;
+  opacity: 0 !important;
+  width: 0;
+  overflow: hidden;
   transition: opacity 0.2s ease;
   white-space: nowrap;
+}
+body.meggy-player-active #meggy-sidebar:hover .meggy-sidebar-item span {
+  opacity: 1 !important;
+  width: auto;
 }
 
 body.meggy-player-active #meggy-sidebar:hover .meggy-sidebar-item span {
@@ -1982,4 +1990,14 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   font-size: 11px;
   color: #6b7488;
   padding: 4px 0;
+}
+
+/* ★ Ícone SEMPRE visível (mesmo colapsado) */
+body.meggy-player-active #meggy-sidebar .meggy-sidebar-item .bi,
+body.meggy-player-active #meggy-sidebar .meggy-sidebar-item i {
+  opacity: 1 !important;
+  display: block !important;
+  font-size: 20px;
+  text-align: center;
+  width: 100%;
 }
