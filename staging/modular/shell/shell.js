@@ -375,6 +375,7 @@
         el.innerHTML = `
           <div class="meggy-view-header">
             <h1 class="meggy-view-title">📚 Meus Cursos</h1>
+            <button class="meggy-header-btn" id="meggy-add-course-btn" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;font-size:13px;"><i class="bi bi-folder-plus"></i> Adicionar Pasta de Curso</button>
           </div>
           <div id="meggy-cursos-container">
             <div class="meggy-loading">
@@ -383,6 +384,12 @@
             </div>
           </div>
         `;
+
+        // ★ Adicionar Pasta de Curso — abre folder picker do Explorar Drives
+        const addBtn = document.getElementById('meggy-add-course-btn');
+        if (addBtn) {
+          addBtn.onclick = () => Shell.views._showAddCourseDialog(el);
+        }
 
         (async () => {
           // ★ Render direto via API — shell nativo não precisa do GDIndex
@@ -1414,6 +1421,166 @@
         }
       },
 
+      // ★ Parse cache key into { drive, curso, disciplina, assunto, fileName }
+      // Key format: /6:/CURSOS%202025/DISCIPLINAS%20ISOLADAS/isolada-direito-constitucional-12-meses/Direito%20Constitucional/Aula%2001%20-%20Introdu%C3%A7%C3%A3o/001%20-%20aula.mp4
+      _parseCacheKey(key) {
+        try {
+          const parts = String(key || '').split('/').filter(Boolean);
+          if (parts.length === 0) return { drive: '', curso: 'Sem curso', disciplina: '', assunto: '', fileName: '' };
+          // Part 0 = drive index (e.g. "6:")
+          const driveIdx = parts[0].match(/^(\d+):$/) ? +parts[0].slice(0, -1) : null;
+          const driveName = (driveIdx !== null && window.drive_names && window.drive_names[driveIdx]) ? window.drive_names[driveIdx] : '';
+          // Decode all parts
+          const decoded = parts.map(p => { try { return decodeURIComponent(p); } catch(_) { return p; } });
+          // Heuristic: find the course root (folder with "isolada-" or "curso-" or "CURSOS" or a known course name)
+          // The structure is usually: /drive:/TOP_FOLDER/.../COURSE_ROOT/DISCIPLINA/ASSUNTO/file
+          // We'll treat the DEEPEST folder before the file as "assunto", the one before as "disciplina", and find the course root
+          let curso = '', disciplina = '', assunto = '';
+          const fileName = decoded[decoded.length - 1] || '';
+          const folders = decoded.slice(1, -1); // remove drive and filename
+          if (folders.length === 0) {
+            curso = driveName || 'Drive';
+          } else if (folders.length === 1) {
+            curso = folders[0];
+          } else if (folders.length === 2) {
+            curso = folders[0];
+            disciplina = folders[1];
+          } else {
+            // Find course root: first folder that matches "isolada-", "curso-", or contains "CURSO"
+            let courseIdx = folders.findIndex(f => /isolada-|curso-|^CURSOS$/i.test(f));
+            if (courseIdx === -1) {
+              // Fallback: use the 2nd-to-last folder as disciplina, 3rd-to-last as curso
+              curso = folders[folders.length - 3] || folders[0];
+              disciplina = folders[folders.length - 2] || '';
+              assunto = folders[folders.length - 1] || '';
+            } else {
+              curso = folders[courseIdx];
+              disciplina = folders[courseIdx + 1] || '';
+              // Assunto = remaining folders joined
+              const remaining = folders.slice(courseIdx + 2);
+              assunto = remaining.length > 0 ? remaining.join(' / ') : '';
+            }
+          }
+          return { drive: driveName, curso: curso || 'Sem curso', disciplina: disciplina || 'Geral', assunto: assunto || '', fileName: fileName };
+        } catch(e) {
+          return { drive: '', curso: 'Sem curso', disciplina: '', assunto: '', fileName: '' };
+        }
+      },
+
+      // ★ Group entries into tree: { cursoName → { disciplinaName → { assuntoName → [entries] } } }
+      _groupEntriesByHierarchy(entries) {
+        const tree = {};
+        entries.forEach(e => {
+          const p = Shell.views._parseCacheKey(e.key);
+          if (!tree[p.curso]) tree[p.curso] = {};
+          if (!tree[p.curso][p.disciplina]) tree[p.curso][p.disciplina] = {};
+          const assuntoKey = p.assunto || 'Sem assunto';
+          if (!tree[p.curso][p.disciplina][assuntoKey]) tree[p.curso][p.disciplina][assuntoKey] = [];
+          tree[p.curso][p.disciplina][assuntoKey].push(e);
+        });
+        return tree;
+      },
+
+      // ★ Render accordion tree: curso → disciplina → assunto → lessons
+      _renderStudyTree(container, tree, type, el, allEntries) {
+        const icon = type === 'flashcards' ? '🃏' : type === 'questoes' ? '❓' : '📚';
+        const label = type === 'flashcards' ? 'flashcard(s)' : type === 'questoes' ? 'questão(ões)' : 'resumo(s)';
+        const clickFn = type === 'flashcards' ? 'Shell.views._showFlashcardDeck' : type === 'questoes' ? 'Shell.views._showQuiz' : 'Shell.views._showSummary';
+
+        let html = '<div style="margin-bottom:16px;color:#9aa4b8;font-size:13px;">' + allEntries.length + ' conteúdo(s) · organizado por curso → disciplina → assunto</div>';
+        const cursos = Object.keys(tree).sort();
+        html += '<div class="meggy-tree">';
+        cursos.forEach((cursoName, ci) => {
+          const disciplinas = tree[cursoName];
+          const totalCurso = Object.values(disciplinas).reduce((acc, d) => acc + Object.values(d).reduce((a, arr) => a + arr.length, 0), 0);
+          html += '<div class="meggy-tree-node meggy-tree-curso">';
+          html += '<div class="meggy-tree-head" data-curso="' + ci + '" style="cursor:pointer;">';
+          html += '<i class="bi bi-chevron-right meggy-tree-chevron"></i>';
+          html += '<i class="bi bi-folder-fill meggy-tree-icon" style="color:#ff8b9f;"></i>';
+          html += '<span class="meggy-tree-label">' + Shell.views._esc(cursoName) + '</span>';
+          html += '<span class="meggy-tree-count">' + totalCurso + '</span>';
+          html += '</div>';
+          html += '<div class="meggy-tree-children" id="tree-curso-' + ci + '" style="display:none;">';
+          Object.keys(disciplinas).sort().forEach((discName, di) => {
+            const assuntos = disciplinas[discName];
+            const totalDisc = Object.values(assuntos).reduce((a, arr) => a + arr.length, 0);
+            html += '<div class="meggy-tree-node meggy-tree-disciplina">';
+            html += '<div class="meggy-tree-head" data-disc="' + ci + '-' + di + '" style="cursor:pointer;">';
+            html += '<i class="bi bi-chevron-right meggy-tree-chevron"></i>';
+            html += '<i class="bi bi-book meggy-tree-icon" style="color:#5ddeda;"></i>';
+            html += '<span class="meggy-tree-label">' + Shell.views._esc(discName) + '</span>';
+            html += '<span class="meggy-tree-count">' + totalDisc + '</span>';
+            html += '</div>';
+            html += '<div class="meggy-tree-children" id="tree-disc-' + ci + '-' + di + '" style="display:none;">';
+            Object.keys(assuntos).sort().forEach((assuntoName, ai) => {
+              const lessons = assuntos[assuntoName];
+              html += '<div class="meggy-tree-node meggy-tree-assunto">';
+              html += '<div class="meggy-tree-head" data-assunto="' + ci + '-' + di + '-' + ai + '" style="cursor:pointer;">';
+              html += '<i class="bi bi-chevron-right meggy-tree-chevron"></i>';
+              html += '<i class="bi bi-collection-play meggy-tree-icon" style="color:#a78bfa;"></i>';
+              html += '<span class="meggy-tree-label">' + Shell.views._esc(assuntoName) + '</span>';
+              html += '<span class="meggy-tree-count">' + lessons.length + '</span>';
+              html += '</div>';
+              html += '<div class="meggy-tree-children" id="tree-assunto-' + ci + '-' + di + '-' + ai + '" style="display:none;">';
+              html += '<div class="meggy-study-list">';
+              lessons.forEach((e) => {
+                const globalIdx = allEntries.indexOf(e);
+                const date = e.date ? new Date(e.date).toLocaleDateString('pt-BR') : '';
+                const lessonName = Shell.views._esc(e.lessonName || 'Aula');
+                const meta = type === 'resumos'
+                  ? (e.summary ? e.summary.replace(/[#*`>]/g, '').replace(/\n/g, ' ').substring(0, 80) + '...' : '')
+                  : (e.questions ? e.questions.length + ' ' + label : '');
+                html += '<div class="meggy-study-item" data-idx="' + globalIdx + '" style="cursor:pointer;">' +
+                  '<div class="meggy-study-item-icon">' + icon + '</div>' +
+                  '<div class="meggy-study-item-body">' +
+                    '<div class="meggy-study-item-title">' + lessonName + '</div>' +
+                    '<div class="meggy-study-item-meta">' + Shell.views._esc(meta) + (date ? ' · ' + date : '') + '</div>' +
+                  '</div>' +
+                  '<i class="bi bi-chevron-right meggy-study-item-chevron"></i>' +
+                '</div>';
+              });
+              html += '</div>';
+              html += '</div>'; // children assunto
+              html += '</div>'; // node assunto
+            });
+            html += '</div>'; // children disc
+            html += '</div>'; // node disc
+          });
+          html += '</div>'; // children curso
+          html += '</div>'; // node curso
+        });
+        html += '</div>'; // tree
+        container.innerHTML = html;
+
+        // ★ Wire accordion toggles
+        container.querySelectorAll('.meggy-tree-head').forEach(head => {
+          head.onclick = (e) => {
+            e.stopPropagation();
+            const chevron = head.querySelector('.meggy-tree-chevron');
+            const children = head.nextElementSibling;
+            if (children) {
+              const isOpen = children.style.display !== 'none';
+              children.style.display = isOpen ? 'none' : 'block';
+              chevron.classList.toggle('bi-chevron-right', isOpen);
+              chevron.classList.toggle('bi-chevron-down', !isOpen);
+            }
+          };
+        });
+
+        // ★ Wire lesson clicks
+        container.querySelectorAll('.meggy-study-item[data-idx]').forEach(item => {
+          item.onclick = (e) => {
+            e.stopPropagation();
+            const idx = parseInt(item.dataset.idx, 10);
+            const entry = allEntries[idx];
+            if (!entry) return;
+            if (type === 'flashcards') Shell.views._showFlashcardDeck(el, entry);
+            else if (type === 'questoes') Shell.views._showQuiz(el, entry);
+            else if (type === 'resumos') Shell.views._showSummary(el, entry);
+          };
+        });
+      },
+
       _mdToHtml(text) {
         if (!text || typeof text !== 'string') return '';
         let s = String(text);
@@ -1452,6 +1619,151 @@
           '</div>';
       },
 
+      // ★ _showAddCourseDialog: folder picker para adicionar curso via POST /api/courses/add
+      _showAddCourseDialog(parentEl) {
+        // Renderizar um modal overlay com o navegador de pastas
+        let modal = document.getElementById('meggy-add-course-modal');
+        if (!modal) {
+          modal = document.createElement('div');
+          modal.id = 'meggy-add-course-modal';
+          modal.className = 'meggy-modal-overlay';
+          modal.innerHTML = '<div class="meggy-modal-content" style="max-width:600px;">' +
+            '<div class="meggy-modal-header">' +
+              '<div class="meggy-modal-title"><i class="bi bi-folder-plus"></i> Adicionar Pasta de Curso</div>' +
+              '<button class="meggy-ai-drawer-close" id="meggy-add-course-close"><i class="bi bi-x"></i></button>' +
+            '</div>' +
+            '<div style="padding:16px;">' +
+              '<div style="margin-bottom:12px;font-size:13px;color:#9aa4b8;">Navegue até a pasta do curso e clique em "Adicionar como Curso". O sistema vai escanear e indexar todas as aulas.</div>' +
+              '<div id="meggy-add-course-browser" style="min-height:300px;max-height:400px;overflow-y:auto;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:12px;"></div>' +
+              '<div id="meggy-add-course-selected" style="margin-top:12px;padding:10px 12px;background:rgba(255,139,159,0.08);border:1px solid rgba(255,139,159,0.2);border-radius:8px;font-size:13px;color:#ff8b9f;display:none;"><i class="bi bi-folder"></i> <span id="meggy-add-course-path"></span></div>' +
+              '<div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">' +
+                '<button class="meggy-header-btn" id="meggy-add-course-cancel">Cancelar</button>' +
+                '<button class="meggy-header-btn" id="meggy-add-course-confirm" disabled style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;opacity:0.5;"><i class="bi bi-check-lg"></i> Adicionar como Curso</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+          const shellRoot = document.getElementById('meggy-shell') || document.getElementById('meggy-root') || document.body;
+          shellRoot.appendChild(modal);
+          document.getElementById('meggy-add-course-close').onclick = () => { modal.style.display = 'none'; };
+          document.getElementById('meggy-add-course-cancel').onclick = () => { modal.style.display = 'none'; };
+        }
+        modal.style.display = 'flex';
+
+        let selectedPath = '';
+        const browser = document.getElementById('meggy-add-course-browser');
+        const selectedDiv = document.getElementById('meggy-add-course-selected');
+        const pathSpan = document.getElementById('meggy-add-course-path');
+        const confirmBtn = document.getElementById('meggy-add-course-confirm');
+
+        // ★ Navegador de pastas recursivo (usa gdiListAllFiles)
+        async function browseFolder(path) {
+          browser.innerHTML = '<div style="text-align:center;padding:20px;color:#9aa4b8;"><div class="spinner-border" style="color:#ff8b9f;"></div><div style="margin-top:8px;">Carregando...</div></div>';
+          if (!window.gdiListAllFiles) {
+            browser.innerHTML = '<div style="padding:20px;color:#ff8b9f;">gdiListAllFiles não disponível. Tente novamente.</div>';
+            return;
+          }
+          try {
+            const files = await window.gdiListAllFiles(path, '');
+            let html = '';
+            // Breadcrumb
+            const parts = path.split('/').filter(Boolean);
+            let bcHTML = '<div class="meggy-breadcrumb" style="margin-bottom:12px;font-size:12px;">';
+            bcHTML += '<a href="#" data-path="/" style="color:#5ddeda;">Drives</a> / ';
+            let cumPath = '';
+            for (let i = 0; i < parts.length; i++) {
+              cumPath += '/' + parts[i];
+              const label = parts[i].match(/^\d+:$/) ? (window.drive_names?.[+parts[i].slice(0,-1)] || parts[i]) : (function(){try{return decodeURIComponent(parts[i])}catch(_){return parts[i]}})();
+              const cp = cumPath + '/';
+              bcHTML += '<a href="#" data-path="' + cp + '" style="color:#5ddeda;">' + label + '</a>' + (i < parts.length - 1 ? ' / ' : '');
+            }
+            bcHTML += '</div>';
+            html += bcHTML;
+            // "Adicionar esta pasta como curso" button
+            if (path && path !== '/') {
+              html += '<div style="margin-bottom:12px;padding:10px 12px;background:rgba(255,139,159,0.08);border:1px solid rgba(255,139,159,0.3);border-radius:8px;display:flex;justify-content:space-between;align-items:center;">' +
+                '<span style="font-size:12px;color:#ff8b9f;"><i class="bi bi-folder2-open"></i> ' + (function(){try{return decodeURIComponent(path)}catch(_){return path}})() + '</span>' +
+                '<button class="meggy-header-btn select-folder-btn" data-path="' + path + '" style="font-size:12px;background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-check-lg"></i> Selecionar esta pasta</button>' +
+              '</div>';
+            }
+            // Pastas
+            const folders = files.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
+            if (folders.length === 0) {
+              html += '<div style="padding:20px;text-align:center;color:#6b7488;">Nenhuma subpasta encontrada.</div>';
+            } else {
+              html += '<div class="meggy-study-list">';
+              folders.forEach(f => {
+                const fp = path + encodeURIComponent(f.name) + '/';
+                html += '<div class="meggy-study-item folder-item" data-path="' + fp + '" style="cursor:pointer;">' +
+                  '<div class="meggy-study-item-icon"><i class="bi bi-folder" style="color:#ff8b9f;"></i></div>' +
+                  '<div class="meggy-study-item-body"><div class="meggy-study-item-title">' + Shell.views._esc(f.name) + '</div></div>' +
+                  '<i class="bi bi-chevron-right meggy-study-item-chevron"></i>' +
+                '</div>';
+              });
+              html += '</div>';
+            }
+            browser.innerHTML = html;
+            // Wire folder clicks
+            browser.querySelectorAll('.folder-item').forEach(item => {
+              item.onclick = () => browseFolder(item.dataset.path);
+            });
+            browser.querySelectorAll('.meggy-breadcrumb a').forEach(a => {
+              a.onclick = (e) => { e.preventDefault(); browseFolder(a.dataset.path); };
+            });
+            const selectBtn = browser.querySelector('.select-folder-btn');
+            if (selectBtn) {
+              selectBtn.onclick = () => {
+                selectedPath = selectBtn.dataset.path;
+                pathSpan.textContent = (function(){try{return decodeURIComponent(selectedPath)}catch(_){return selectedPath}})();
+                selectedDiv.style.display = 'block';
+                confirmBtn.disabled = false;
+                confirmBtn.style.opacity = '1';
+              };
+            }
+          } catch (e) {
+            browser.innerHTML = '<div style="padding:20px;color:#ff8b9f;">Erro: ' + (e.message || 'tente novamente') + '</div>';
+          }
+        }
+
+        // Start at drives root
+        browseFolder('/');
+
+        // ★ Confirm — POST /api/courses/add
+        confirmBtn.onclick = async () => {
+          if (!selectedPath) return;
+          confirmBtn.disabled = true;
+          confirmBtn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Adicionando...';
+          try {
+            // Extrair nome do curso do path
+            const parts = selectedPath.split('/').filter(Boolean);
+            const lastFolder = parts.length > 0 ? (function(){try{return decodeURIComponent(parts[parts.length-1])}catch(_){return parts[parts.length-1]}})() : 'Curso';
+            const r = await fetch('/api/courses/add', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                coursePath: selectedPath,
+                courseName: lastFolder,
+                icon: '📚',
+                color: '#ff8b9f'
+              })
+            });
+            const d = await r.json();
+            if (d.ok) {
+              modal.style.display = 'none';
+              // Recarregar view de cursos
+              Shell.views.cursos(parentEl);
+            } else {
+              alert('Erro ao adicionar curso: ' + (d.error || 'tente novamente'));
+              confirmBtn.disabled = false;
+              confirmBtn.innerHTML = '<i class="bi bi-check-lg"></i> Adicionar como Curso';
+            }
+          } catch (e) {
+            alert('Erro: ' + e.message);
+            confirmBtn.disabled = false;
+            confirmBtn.innerHTML = '<i class="bi bi-check-lg"></i> Adicionar como Curso';
+          }
+        };
+      },
+
       flashcards(el) {
         el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">🃏 Flashcards</h1></div>' +
           '<div id="meggy-flashcards-container"><div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando flashcards...</div></div></div>';
@@ -1461,25 +1773,9 @@
           const container = document.getElementById('meggy-flashcards-container');
           if (!container) return;
           if (withCards.length === 0) { Shell.views._renderGenerateHint(el, 'flashcards'); return; }
-          let html = '<div style="margin-bottom:16px;color:#9aa4b8;font-size:13px;">' + withCards.length + ' aula(s) com flashcards · clique para estudar</div>';
-          html += '<div class="meggy-study-list">';
-          withCards.forEach((e, i) => {
-            const date = e.date ? new Date(e.date).toLocaleDateString('pt-BR') : '';
-            const lessonName = Shell.views._esc(e.lessonName || 'Aula');
-            html += '<div class="meggy-study-item" data-idx="' + i + '" style="cursor:pointer;">' +
-              '<div class="meggy-study-item-icon">🃏</div>' +
-              '<div class="meggy-study-item-body">' +
-                '<div class="meggy-study-item-title">' + lessonName + '</div>' +
-                '<div class="meggy-study-item-meta">' + e.questions.length + ' flashcard(s)' + (date ? ' · ' + date : '') + '</div>' +
-              '</div>' +
-              '<i class="bi bi-chevron-right meggy-study-item-chevron"></i>' +
-            '</div>';
-          });
-          html += '</div>';
-          container.innerHTML = html;
-          container.querySelectorAll('.meggy-study-item').forEach(item => {
-            item.onclick = () => Shell.views._showFlashcardDeck(el, withCards[parseInt(item.dataset.idx, 10)]);
-          });
+          // ★ Agrupar por curso → disciplina → assunto
+          const tree = Shell.views._groupEntriesByHierarchy(withCards);
+          Shell.views._renderStudyTree(container, tree, 'flashcards', el, withCards);
         })();
       },
 
@@ -1545,25 +1841,9 @@
           const container = document.getElementById('meggy-questoes-container');
           if (!container) return;
           if (withQ.length === 0) { Shell.views._renderGenerateHint(el, 'questoes'); return; }
-          let html = '<div style="margin-bottom:16px;color:#9aa4b8;font-size:13px;">' + withQ.length + ' aula(s) com questões · clique para responder</div>';
-          html += '<div class="meggy-study-list">';
-          withQ.forEach((e, i) => {
-            const date = e.date ? new Date(e.date).toLocaleDateString('pt-BR') : '';
-            const lessonName = Shell.views._esc(e.lessonName || 'Aula');
-            html += '<div class="meggy-study-item" data-idx="' + i + '" style="cursor:pointer;">' +
-              '<div class="meggy-study-item-icon">❓</div>' +
-              '<div class="meggy-study-item-body">' +
-                '<div class="meggy-study-item-title">' + lessonName + '</div>' +
-                '<div class="meggy-study-item-meta">' + e.questions.length + ' questão(ões)' + (date ? ' · ' + date : '') + '</div>' +
-              '</div>' +
-              '<i class="bi bi-chevron-right meggy-study-item-chevron"></i>' +
-            '</div>';
-          });
-          html += '</div>';
-          container.innerHTML = html;
-          container.querySelectorAll('.meggy-study-item').forEach(item => {
-            item.onclick = () => Shell.views._showQuiz(el, withQ[parseInt(item.dataset.idx, 10)]);
-          });
+          // ★ Agrupar por curso → disciplina → assunto
+          const tree = Shell.views._groupEntriesByHierarchy(withQ);
+          Shell.views._renderStudyTree(container, tree, 'questoes', el, withQ);
         })();
       },
 
@@ -1674,26 +1954,9 @@
           const container = document.getElementById('meggy-resumos-container');
           if (!container) return;
           if (withSummary.length === 0) { Shell.views._renderGenerateHint(el, 'resumos'); return; }
-          let html = '<div style="margin-bottom:16px;color:#9aa4b8;font-size:13px;">' + withSummary.length + ' resumo(s) disponível(is) · clique para ler</div>';
-          html += '<div class="meggy-study-list">';
-          withSummary.forEach((e, i) => {
-            const date = e.date ? new Date(e.date).toLocaleDateString('pt-BR') : '';
-            const lessonName = Shell.views._esc(e.lessonName || 'Aula');
-            const preview = Shell.views._esc(e.summary.replace(/[#*`>]/g, '').replace(/\n/g, ' ').substring(0, 110)) + '...';
-            html += '<div class="meggy-study-item" data-idx="' + i + '" style="cursor:pointer;">' +
-              '<div class="meggy-study-item-icon">📚</div>' +
-              '<div class="meggy-study-item-body">' +
-                '<div class="meggy-study-item-title">' + lessonName + '</div>' +
-                '<div class="meggy-study-item-meta">' + preview + (date ? ' · ' + date : '') + '</div>' +
-              '</div>' +
-              '<i class="bi bi-chevron-right meggy-study-item-chevron"></i>' +
-            '</div>';
-          });
-          html += '</div>';
-          container.innerHTML = html;
-          container.querySelectorAll('.meggy-study-item').forEach(item => {
-            item.onclick = () => Shell.views._showSummary(el, withSummary[parseInt(item.dataset.idx, 10)]);
-          });
+          // ★ Agrupar por curso → disciplina → assunto
+          const tree = Shell.views._groupEntriesByHierarchy(withSummary);
+          Shell.views._renderStudyTree(container, tree, 'resumos', el, withSummary);
         })();
       },
 
