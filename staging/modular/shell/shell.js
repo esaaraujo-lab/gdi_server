@@ -193,8 +193,8 @@
       render() {
         const sections = [
           { title: 'Plataforma', ids: ['home', 'cursos', 'drives'] },
-          { title: 'Estudos', ids: ['progresso', 'questoes', 'flashcards'] },
-          { title: 'IA & Conta', ids: ['meggy-ai', 'config'] }
+          { title: 'Estudos', ids: ['progresso', 'questoes', 'flashcards', 'simulado', 'provas', 'redacao', 'cronograma', 'estatisticas', 'mapa-fracos'] },
+          { title: 'IA & Conta', ids: ['meggy-ai', 'resumos', 'conquistas', 'apps', 'config'] }
         ];
         let html = '';
         for (const sec of sections) {
@@ -238,7 +238,17 @@
         '/questoes': 'questoes',
         '/flashcards': 'flashcards',
         '/meggy-ai': 'meggy-ai',
-        '/config': 'config'
+        '/config': 'config',
+        '/simulado': 'simulado',
+        '/provas': 'provas',
+        '/redacao': 'redacao',
+        '/cronograma': 'cronograma',
+        '/estatisticas': 'estatisticas',
+        '/mapa-fracos': 'mapa-fracos',
+        '/conquistas': 'conquistas',
+        '/apps': 'apps',
+        '/resumos': 'resumos',
+        '/plano': 'plano'
       },
 
       init() {
@@ -278,11 +288,21 @@
         case 'home':      Shell.views.home(main); break;
         case 'cursos':    Shell.views.cursos(main); break;
         case 'drives':    Shell.views.drives(main); break;
-        case 'progresso': Shell.views.placeholder(main, 'Progresso', '📊', 'Fase 5'); break;
-        case 'questoes':  Shell.views.placeholder(main, 'Questões', '❓', 'Fase 5'); break;
-        case 'flashcards':Shell.views.placeholder(main, 'Flashcards', '🃏', 'Fase 5'); break;
-        case 'meggy-ai':  Shell.views.meggyAI(main); break;
-        case 'config':    Shell.views.placeholder(main, 'Configurações', '⚙️', 'Fase 5'); break;
+        case 'progresso': Shell.views._estudosView(main, 'progresso'); break;
+        case 'questoes':  Shell.views._estudosView(main, 'questoes'); break;
+        case 'flashcards':Shell.views._estudosView(main, 'flashcards'); break;
+        case 'meggy-ai':  Shell.openMeggyAIDrawer(); Shell.views.home(main); break;
+        case 'config':    Shell.views._estudosView(main, 'config'); break;
+        case 'simulado':  Shell.views._estudosView(main, 'simulado'); break;
+        case 'provas':    Shell.views._estudosView(main, 'provas'); break;
+        case 'redacao':   Shell.views._estudosView(main, 'redacao'); break;
+        case 'cronograma':Shell.views._estudosView(main, 'cronograma'); break;
+        case 'estatisticas':Shell.views._estudosView(main, 'estatisticas'); break;
+        case 'mapa-fracos':Shell.views._estudosView(main, 'mapa-fracos'); break;
+        case 'conquistas':Shell.views._estudosView(main, 'conquistas'); break;
+        case 'apps':      Shell.views._estudosView(main, 'apps'); break;
+        case 'resumos':   Shell.views._estudosView(main, 'resumos'); break;
+        case 'plano':     Shell.views._estudosView(main, 'plano'); break;
         default:          Shell.views.home(main);
       }
     },
@@ -569,7 +589,7 @@
         }
       },
 
-      // ═══ PÁGINA DE AULA — RÉPLICA 100% GDI + TODAS as features ═══
+      // ═══ PÁGINA DE AULA — RÉPLICA 100% GDI + finalizeNames + tabs materiais ═══
       _playVideoInline(link, name, playlist, currentIndex) {
         const main = document.getElementById('meggy-main');
         if (!main) return;
@@ -578,6 +598,16 @@
 
         let pl = playlist || [{ name: name, link: videoUrl, size: '', folder: '' }];
         let idx = currentIndex || 0;
+
+        // ★ finalizeNames — réplica do GDI (se há duplicação de nomes, prefixa com folderLabel)
+        const counts = {};
+        pl.forEach(v => { const o = v.origName || v.name; counts[o] = (counts[o] || 0) + 1; });
+        pl.forEach(v => {
+          const o = v.origName || v.name;
+          if (counts[o] > 1 && v.folder && v.name === o) {
+            v.name = v.folder + ' - ' + o;
+          }
+        });
 
         let resumePos = 0;
         try {
@@ -593,19 +623,15 @@
         Shell.state.playerPlaylist = pl;
         Shell.state.playerIndex = idx;
 
-        // ★ Contrair sidebar ao abrir vídeo
+        // Contrair sidebar
         document.body.classList.add('meggy-player-active');
-        // Adicionar botão expand se não existe
         if (!document.getElementById('meggy-sidebar-expand-btn')) {
           const expandBtn = document.createElement('button');
           expandBtn.id = 'meggy-sidebar-expand-btn';
           expandBtn.className = 'meggy-sidebar-expand-btn';
           expandBtn.innerHTML = '<i class="bi bi-chevron-right"></i>';
           expandBtn.title = 'Mostrar menu';
-          expandBtn.onclick = () => {
-            document.body.classList.remove('meggy-player-active');
-            expandBtn.remove();
-          };
+          expandBtn.onclick = () => { document.body.classList.remove('meggy-player-active'); expandBtn.remove(); };
           document.body.appendChild(expandBtn);
         }
 
@@ -650,8 +676,7 @@
                   ${isAudio ? `
                     <div class="meggy-audio-player">
                       <div class="meggy-audio-icon">🎵</div>
-                      <audio id="meggy-video" src="${videoUrl}" controls autoplay style="width:100%;">
-                      </audio>
+                      <audio id="meggy-video" src="${videoUrl}" controls autoplay style="width:100%;"></audio>
                     </div>
                   ` : `
                     <video id="meggy-video" src="${videoUrl}" controls autoplay playsinline
@@ -798,7 +823,7 @@
           item.onclick = () => { const i = parseInt(item.dataset.idx); if (i !== idx) switchTo(i); };
         });
 
-        // Interfolder
+        // Interfolder — com finalizeNames (réplica GDI)
         document.getElementById('gdi-interfolder-btn').onclick = async () => {
           const btn = document.getElementById('gdi-interfolder-btn');
           btn.innerHTML = '<div class="spinner-border spinner-border-sm"></div>';
@@ -814,16 +839,32 @@
               const batch = subFolders.slice(i, i + 6);
               const results = await Promise.all(batch.map(folder => {
                 const fpath = parentPath + encodeURIComponent(folder.name) + '/';
-                return window.gdiListAllFiles(fpath, '').then(files => files.filter(f => (f.mimeType||'').includes('video') || f.name.endsWith('.mp4')).filter(f => !f.name.includes('.part-')).map(f => ({name:f.name, link:f.link?(f.link.startsWith('http')?f.link:window.location.origin+f.link):'', size:f.size?(f.size/1024/1024).toFixed(1)+' MB':'', folder:folder.name}))).catch(() => []);
+                return window.gdiListAllFiles(fpath, '').then(files => files
+                  .filter(f => (f.mimeType||'').includes('video') || f.name.endsWith('.mp4'))
+                  .filter(f => !f.name.includes('.part-'))
+                  .map(f => ({
+                    name: f.name,
+                    origName: f.name,
+                    link: f.link ? (f.link.startsWith('http') ? f.link : window.location.origin + f.link) : '',
+                    size: f.size ? (f.size/1024/1024).toFixed(1)+' MB' : '',
+                    folder: folder.name,
+                    folderLabel: folder.name
+                  }))).catch(() => []);
               }));
               results.forEach(v => collected.push(...v));
               btn.innerHTML = `<div class="spinner-border spinner-border-sm"></div> ${collected.length}`;
             }
+            // ★ finalizeNames — réplica exata do GDI
             const seen = new Set();
-            pl = collected.filter(v => { const k = (v.folder||'')+'|'+v.name; if (seen.has(k)) return false; seen.add(k); return true; });
+            pl = collected.filter(v => { const k = (v.folder||'')+'|'+v.origName; if (seen.has(k)) return false; seen.add(k); return true; });
             pl.sort((a,b) => (a.folder||'').localeCompare(b.folder||'') || a.name.localeCompare(b.name));
+            // ★ Se há duplicação de nomes, prefixa com folderLabel
+            const cnts = {};
+            pl.forEach(v => { const o = v.origName || v.name; cnts[o] = (cnts[o]||0)+1; });
+            pl.forEach(v => { const o = v.origName || v.name; if (cnts[o] > 1 && v.folderLabel && v.name === o) v.name = v.folderLabel + ' - ' + o; });
+
             Shell.state.playerPlaylist = pl;
-            idx = pl.findIndex(v => v.name === name || v.link === videoUrl) || 0;
+            idx = pl.findIndex(v => v.origName === name || v.link === videoUrl);
             if (idx === -1) idx = 0;
             document.getElementById('gdi-playlist-list').innerHTML = pl.map((v, i) => `<div class="gdi-playlist-item ${i === idx ? 'cur' : ''}" data-idx="${i}" title="${v.name}"><div><i class="bi ${i === idx ? 'bi-play-fill' : 'bi-film'} me-2"></i><span style="font-weight:${i === idx ? '600' : '400'};">${v.name}</span></div><span class="gdi-pl-size">${v.size || ''}</span></div>`).join('');
             plCountEl.textContent = `${idx + 1} / ${pl.length}`;
@@ -841,10 +882,10 @@
           };
         });
 
-        // ★ Meggy AI — abrir drawer lateral (não flutuante)
+        // Meggy AI drawer
         document.getElementById('gdi-meggy-ai-btn').onclick = () => Shell.openMeggyAIDrawer();
 
-        // ★ Materiais — estilo Alfacon (cards visuais) + busca em subpastas
+        // ★ Materiais — RÉPLICA EXATA do GDI (tabs + IA + body)
         async function loadMaterials() {
           const tabsEl = document.getElementById('gdi-mat-tabs');
           const bodyEl = document.getElementById('gdi-mat-body');
@@ -889,53 +930,119 @@
             const seen = new Set();
             const uniq = [];
             found.forEach(x => { if (!seen.has(x.name)) { seen.add(x.name); uniq.push(x); } });
+            // Cap em 12 (igual GDI)
+            const materials = uniq.slice(0, 12);
+
             tabsEl.innerHTML = '';
-            if (!uniq.length) {
+            if (!materials.length) {
               if (statusEl) statusEl.textContent = 'sem material';
-              bodyEl.innerHTML = '<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material encontrado.</div></div>';
+              bodyEl.innerHTML = '<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material encontrado para esta aula.</div></div>';
               return;
             }
-            if (statusEl) statusEl.textContent = uniq.length + ' material(is)';
+            if (statusEl) statusEl.textContent = materials.length + ' materiais';
 
-            // ★ Estilo Alfacon: grid de cards visuais
-            let cardsHTML = '<div class="alfacon-material-grid">';
-            uniq.forEach((m, i) => {
+            // ★ Renderizar tabs — RÉPLICA EXATA do GDI
+            // 1. Tabs de arquivos (Transcrição, Resumo IA, etc.)
+            materials.forEach((m, i) => {
               const ext = (m.name.split('.').pop() || '').toLowerCase();
-              const cardClass = ext === 'pdf' ? 'pdf' : (ext === 'md' || ext === 'txt') ? 'md' : 'txt';
-              const icon = ext === 'pdf' ? '📄' : (ext === 'md' || ext === 'txt') ? '📝' : '📋';
-              const label = ext === 'pdf' ? 'PDF' : (ext === 'md' ? 'Markdown' : ext === 'txt' ? 'Texto' : 'Arquivo');
-              const sizeStr = m.size ? (m.size/1024/1024).toFixed(1) + ' MB' : '';
-              cardsHTML += `<div class="alfacon-material-card ${cardClass}" data-mat-idx="${i}">
-                <div class="alfacon-material-icon">${icon}</div>
-                <div class="alfacon-material-name" title="${m.name}">${m.name}</div>
-                <div class="alfacon-material-meta">${label}${sizeStr ? ' · ' + sizeStr : ''}</div>
-              </div>`;
+              const isAi = m.name.toLowerCase().includes('ia') || m.name.toLowerCase().includes('resumo');
+              const isTransc = m.name.toLowerCase().includes('transcri') || ext === 'txt';
+              const label = isTransc ? 'Transcrição' : isAi ? 'Resumo IA' : m.name.substring(0, 15);
+              const icon = isTransc ? 'bi-card-text' : isAi ? 'bi-stars' : ext === 'pdf' ? 'bi-file-earmark-pdf' : 'bi-file-earmark-text';
+              const tab = document.createElement('div');
+              tab.className = 'gdi-mat-tab' + (i === 0 ? ' active' : '');
+              tab.dataset.mat = i;
+              tab.title = m.name;
+              tab.innerHTML = `<i class="bi ${icon}"></i><span>${label}</span>`;
+              tab.onclick = () => showMaterial(i);
+              tabsEl.appendChild(tab);
             });
-            cardsHTML += '</div>';
-            bodyEl.innerHTML = cardsHTML;
 
-            // Click num card → abrir viewer
-            bodyEl.querySelectorAll('.alfacon-material-card').forEach(card => {
-              card.onclick = () => {
-                const i = parseInt(card.dataset.matIdx);
-                const m = uniq[i];
-                let link = '';
-                if (m.link) {
-                  link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
-                  if (m.name.endsWith('.pdf') && !link.includes('inline=')) link += (link.includes('?') ? '&' : '?') + 'inline=true';
-                }
-                const isPdf = m.name.endsWith('.pdf');
-                const isText = m.name.endsWith('.md') || m.name.endsWith('.txt') || m.name.endsWith('.html');
-                let viewer = '';
-                if (link && isPdf) viewer = `<iframe src="${link}" style="width:100%;height:450px;border:none;background:#fff;"></iframe>`;
-                else if (link && isText) {
-                  viewer = `<div id="gdi-mat-text" style="width:100%;height:450px;overflow:auto;padding:16px;background:rgba(255,255,255,0.04);border-radius:8px;color:#e6edf3;font-size:13px;white-space:pre-wrap;">Carregando...</div>`;
-                  fetch(link).then(r => r.text()).then(txt => { const el = document.getElementById('gdi-mat-text'); if (el) el.textContent = txt; }).catch(() => { const el = document.getElementById('gdi-mat-text'); if (el) el.textContent = 'Erro.'; });
-                } else if (link) viewer = `<div style="text-align:center;padding:40px;"><a href="${link}" target="_blank" class="gdi-mode-btn"><i class="bi bi-download"></i> Abrir</a></div>`;
-                bodyEl.innerHTML = `<button class="alfacon-material-back" id="gdi-mat-back"><i class="bi bi-arrow-left"></i> Voltar aos materiais</button><div class="alfacon-material-viewer">${viewer}</div>`;
-                document.getElementById('gdi-mat-back').onclick = () => loadMaterials();
-              };
+            // 2. Tabs IA Meggy (sempre presentes — réplica GDI)
+            const isaTabs = [
+              { id: 'isa-summary', icon: 'bi-stars', label: 'Resumo Meggy' },
+              { id: 'isa-questions', icon: 'bi-patch-question', label: 'Questões Meggy' },
+              { id: 'isa-mindmap', icon: 'bi-capsule', label: 'Pílulas' },
+              { id: 'isa-flashcards', icon: 'bi-card-text', label: 'Flashcards' },
+            ];
+            isaTabs.forEach(it => {
+              const tab = document.createElement('div');
+              tab.className = 'gdi-mat-tab gdi-mat-isa';
+              tab.dataset.mat = it.id;
+              tab.innerHTML = `<i class="bi ${it.icon}"></i><span>${it.label}</span>`;
+              tab.onclick = () => showISAMaterial(it.id);
+              tabsEl.appendChild(tab);
             });
+
+            // ★ showMaterial — renderizar preview (réplica GDI)
+            function showMaterial(i) {
+              document.querySelectorAll('.gdi-mat-tab').forEach(t => t.classList.remove('active'));
+              document.querySelector(`.gdi-mat-tab[data-mat="${i}"]`)?.classList.add('active');
+              const m = materials[i];
+              let link = '';
+              if (m.link) {
+                link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
+                if (m.name.endsWith('.pdf') && !link.includes('inline=')) link += (link.includes('?') ? '&' : '?') + 'inline=true';
+              }
+              const ext = (m.name.split('.').pop() || '').toLowerCase();
+              if (ext === 'pdf' && link) {
+                bodyEl.innerHTML = `<iframe src="${link}" style="width:100%;height:calc(100dvh - 250px);border:none;background:#fff;"></iframe>`;
+              } else if ((ext === 'md' || ext === 'txt' || ext === 'html') && link) {
+                bodyEl.innerHTML = `<div id="gdi-mat-md" style="width:100%;height:calc(100dvh - 250px);overflow:auto;padding:16px;background:rgba(255,255,255,0.04);border-radius:8px;color:#e6edf3;font-size:13px;">Carregando...</div>`;
+                fetch(link).then(r => r.text()).then(txt => {
+                  const el = document.getElementById('gdi-mat-md');
+                  if (el) {
+                    // Renderizar markdown simples
+                    let html = txt
+                      .replace(/^### (.+)$/gm, '<h3 style="color:#ff8b9f;margin:12px 0 6px;">$1</h3>')
+                      .replace(/^## (.+)$/gm, '<h2 style="color:#ff8b9f;margin:16px 0 8px;">$1</h2>')
+                      .replace(/^# (.+)$/gm, '<h1 style="color:#ff8b9f;margin:20px 0 10px;">$1</h1>')
+                      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                      .replace(/^- (.+)$/gm, '<li>$1</li>')
+                      .replace(/\n/g, '<br>');
+                    el.innerHTML = html;
+                  }
+                }).catch(() => { const el = document.getElementById('gdi-mat-md'); if (el) el.textContent = 'Erro.'; });
+              } else if (link) {
+                bodyEl.innerHTML = `<div style="text-align:center;padding:40px;"><a href="${link}" target="_blank" class="gdi-mode-btn"><i class="bi bi-download"></i> Abrir material</a></div>`;
+              } else {
+                bodyEl.innerHTML = '<div class="gdi-mat-empty">Sem preview</div>';
+              }
+            }
+
+            // ★ showISAMaterial — gerar via IA (réplica GDI)
+            function showISAMaterial(type) {
+              document.querySelectorAll('.gdi-mat-tab').forEach(t => t.classList.remove('active'));
+              document.querySelector(`.gdi-mat-tab[data-mat="${type}"]`)?.classList.add('active');
+              const lessonName = Shell.state.playerPlaylist?.[Shell.state.playerIndex]?.name || '';
+              bodyEl.innerHTML = `<div style="padding:20px;text-align:center;"><div class="spinner-border" style="color:#ff8b9f;"></div><div style="margin-top:12px;color:#9aa4b8;">Gerando ${type.replace('isa-','')} com Meggy AI...</div></div>`;
+              (async () => {
+                try {
+                  let endpoint = '/api/ai';
+                  let payload = { message: '', messages: [] };
+                  if (type === 'isa-summary') payload.message = `Gere um resumo detalhado da aula: ${lessonName}`;
+                  else if (type === 'isa-questions') payload.message = `Gere 5 questões de múltipla escolha sobre: ${lessonName}`;
+                  else if (type === 'isa-mindmap') payload.message = `Crie pílulas de conhecimento (tópicos curtos) sobre: ${lessonName}`;
+                  else if (type === 'isa-flashcards') payload.message = `Crie 10 flashcards (frente/verso) sobre: ${lessonName}`;
+                  const r = await fetch(endpoint, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+                  const d = await r.json();
+                  const text = d.response || d.markdown || 'Sem resposta';
+                  let html = text
+                    .replace(/^### (.+)$/gm, '<h3 style="color:#ff8b9f;margin:12px 0 6px;">$1</h3>')
+                    .replace(/^## (.+)$/gm, '<h2 style="color:#ff8b9f;margin:16px 0 8px;">$1</h2>')
+                    .replace(/^# (.+)$/gm, '<h1 style="color:#ff8b9f;margin:20px 0 10px;">$1</h1>')
+                    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/^- (.+)$/gm, '<li>$1</li>')
+                    .replace(/\n/g, '<br>');
+                  bodyEl.innerHTML = `<div style="width:100%;height:calc(100dvh - 250px);overflow:auto;padding:16px;color:#e6edf3;font-size:13px;">${html}</div>`;
+                } catch (e) {
+                  bodyEl.innerHTML = `<div class="gdi-mat-empty">Erro: ${e.message}</div>`;
+                }
+              })();
+            }
+
+            // Auto-clicar primeiro material
+            if (materials.length > 0) showMaterial(0);
           } catch (e) {
             console.error('[Shell] loadMaterials:', e);
             tabsEl.innerHTML = '';
@@ -984,7 +1091,7 @@
         }
       },
 
-      // ═══ Meggy AI Drawer (menu lateral, não flutuante) ═══
+      // ═══ Meggy AI Drawer ═══
       meggyAIDrawerOpen: false,
       openMeggyAIDrawer() {
         let drawer = document.getElementById('meggy-ai-drawer');
@@ -1038,90 +1145,102 @@
               <button class="meggy-ai-action-btn" data-action="mindmap"><i class="bi bi-diagram-3"></i>Mapa Mental</button>
               <button class="meggy-ai-action-btn" data-action="coach"><i class="bi bi-magic"></i>Coach IA</button>
             </div>
-            <div style="font-size:12px;color:#6b7488;text-align:center;padding:16px;">
-              Clique numa ação para gerar material com IA.
-            </div>
           `;
-          body.querySelectorAll('.meggy-ai-action-btn').forEach(btn => {
-            btn.onclick = () => Shell.meggyAIAction(btn.dataset.action);
-          });
+          body.querySelectorAll('.meggy-ai-action-btn').forEach(btn => { btn.onclick = () => Shell.meggyAIAction(btn.dataset.action); });
         } else if (tab === 'chat') {
           body.innerHTML = `
             <div class="meggy-ai-chat-messages" id="meggy-ai-messages"></div>
             <div class="meggy-ai-chat-input">
-              <textarea id="meggy-ai-input" placeholder="Pergunte algo sobre a aula..." rows="2"></textarea>
+              <textarea id="meggy-ai-input" placeholder="Pergunte algo..." rows="2"></textarea>
               <button id="meggy-ai-send"><i class="bi bi-send"></i></button>
             </div>
           `;
-          const sendBtn = document.getElementById('meggy-ai-send');
-          const input = document.getElementById('meggy-ai-input');
           const send = async () => {
-            const msg = input.value.trim();
+            const msg = document.getElementById('meggy-ai-input').value.trim();
             if (!msg) return;
             const msgs = document.getElementById('meggy-ai-messages');
             msgs.innerHTML += `<div class="meggy-ai-msg user">${msg}</div>`;
-            input.value = '';
+            document.getElementById('meggy-ai-input').value = '';
             msgs.innerHTML += `<div class="meggy-ai-msg bot" id="meggy-ai-typing">🐾 Pensando...</div>`;
             msgs.scrollTop = msgs.scrollHeight;
             try {
               const r = await fetch('/api/ai', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: msg, messages: []}) });
               const d = await r.json();
               document.getElementById('meggy-ai-typing').textContent = d.response || 'Sem resposta';
-            } catch (e) {
-              document.getElementById('meggy-ai-typing').textContent = 'Erro: ' + e.message;
-            }
+            } catch (e) { document.getElementById('meggy-ai-typing').textContent = 'Erro: ' + e.message; }
             msgs.scrollTop = msgs.scrollHeight;
           };
-          sendBtn.onclick = send;
-          input.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
+          document.getElementById('meggy-ai-send').onclick = send;
+          document.getElementById('meggy-ai-input').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
         } else if (tab === 'resumos') {
-          body.innerHTML = `<div style="text-align:center;padding:20px;"><button class="meggy-ai-action-btn" style="width:100%;" id="meggy-gen-resumo"><i class="bi bi-file-earmark-text"></i>Gerar Resumo da Aula</button><div id="meggy-resumo-out" style="margin-top:16px;text-align:left;font-size:13px;color:#9aa4b8;"></div></div>`;
+          body.innerHTML = `<div style="padding:20px;"><button class="meggy-ai-action-btn" style="width:100%;" id="meggy-gen-resumo"><i class="bi bi-file-earmark-text"></i>Gerar Resumo</button><div id="meggy-resumo-out" style="margin-top:16px;font-size:13px;color:#9aa4b8;"></div></div>`;
           document.getElementById('meggy-gen-resumo').onclick = () => Shell.meggyAIAction('resumo');
         } else if (tab === 'questoes') {
-          body.innerHTML = `<div style="text-align:center;padding:20px;"><button class="meggy-ai-action-btn" style="width:100%;" id="meggy-gen-questoes"><i class="bi bi-patch-question"></i>Gerar Questões</button><div id="meggy-questoes-out" style="margin-top:16px;text-align:left;font-size:13px;color:#9aa4b8;"></div></div>`;
+          body.innerHTML = `<div style="padding:20px;"><button class="meggy-ai-action-btn" style="width:100%;" id="meggy-gen-questoes"><i class="bi bi-patch-question"></i>Gerar Questões</button><div id="meggy-questoes-out" style="margin-top:16px;font-size:13px;color:#9aa4b8;"></div></div>`;
           document.getElementById('meggy-gen-questoes').onclick = () => Shell.meggyAIAction('questoes');
         } else if (tab === 'flashcards') {
-          body.innerHTML = `<div style="text-align:center;padding:20px;"><button class="meggy-ai-action-btn" style="width:100%;" id="meggy-gen-flash"><i class="bi bi-card-text"></i>Gerar Flashcards</button><div id="meggy-flash-out" style="margin-top:16px;text-align:left;font-size:13px;color:#9aa4b8;"></div></div>`;
+          body.innerHTML = `<div style="padding:20px;"><button class="meggy-ai-action-btn" style="width:100%;" id="meggy-gen-flash"><i class="bi bi-card-text"></i>Gerar Flashcards</button><div id="meggy-flash-out" style="margin-top:16px;font-size:13px;color:#9aa4b8;"></div></div>`;
           document.getElementById('meggy-gen-flash').onclick = () => Shell.meggyAIAction('flashcards');
         }
       },
       async meggyAIAction(action) {
         const body = document.getElementById('meggy-ai-body');
-        const lessonPath = Shell.state.currentFolderPath || '';
         const lessonName = Shell.state.playerPlaylist?.[Shell.state.playerIndex]?.name || '';
         const outId = action === 'resumo' ? 'meggy-resumo-out' : action === 'questoes' ? 'meggy-questoes-out' : action === 'flashcards' ? 'meggy-flash-out' : null;
         const outEl = outId ? document.getElementById(outId) : null;
-        if (outEl) { outEl.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Gerando...'; }
+        if (outEl) outEl.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Gerando...';
         try {
           let endpoint = '/api/ai';
           let payload = { message: '', messages: [] };
-          if (action === 'resumo') {
-            payload.message = `Gere um resumo detalhado da aula: ${lessonName}. Path: ${lessonPath}`;
-          } else if (action === 'pilulas') {
-            endpoint = '/api/ai/coach';
-            payload = { action: 'analyze', lessonPath, lessonName };
-          } else if (action === 'questoes') {
-            payload.message = `Gere 5 questões de múltipla escolha sobre: ${lessonName}`;
-          } else if (action === 'flashcards') {
-            payload.message = `Crie 10 flashcards (frente/verso) sobre: ${lessonName}`;
-          } else if (action === 'mindmap') {
-            payload.message = `Crie um mapa mental em markdown sobre: ${lessonName}`;
-          } else if (action === 'coach') {
-            endpoint = '/api/ai/coach';
-            payload = { action: 'analyze' };
-          }
+          if (action === 'resumo') payload.message = `Gere um resumo detalhado da aula: ${lessonName}`;
+          else if (action === 'pilulas') { endpoint = '/api/ai/coach'; payload = { action: 'analyze' }; }
+          else if (action === 'questoes') payload.message = `Gere 5 questões de múltipla escolha sobre: ${lessonName}`;
+          else if (action === 'flashcards') payload.message = `Crie 10 flashcards sobre: ${lessonName}`;
+          else if (action === 'mindmap') payload.message = `Crie um mapa mental em markdown sobre: ${lessonName}`;
+          else if (action === 'coach') { endpoint = '/api/ai/coach'; payload = { action: 'analyze' }; }
           const r = await fetch(endpoint, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
           const d = await r.json();
           const text = d.response || d.markdown || d.summary || JSON.stringify(d).substring(0, 500);
-          if (outEl) {
-            outEl.innerHTML = `<div style="background:rgba(255,255,255,0.04);padding:12px;border-radius:8px;white-space:pre-wrap;">${text}</div>`;
-          } else {
-            body.innerHTML = `<div style="padding:16px;font-size:13px;color:#e6edf3;white-space:pre-wrap;">${text}</div>`;
-          }
+          if (outEl) outEl.innerHTML = `<div style="background:rgba(255,255,255,0.04);padding:12px;border-radius:8px;white-space:pre-wrap;">${text}</div>`;
+          else body.innerHTML = `<div style="padding:16px;font-size:13px;color:#e6edf3;white-space:pre-wrap;">${text}</div>`;
         } catch (e) {
           if (outEl) outEl.innerHTML = 'Erro: ' + e.message;
           else body.innerHTML = 'Erro: ' + e.message;
         }
+      },
+
+      // ═══ Views de Estudos (placeholder com lazy load do GDIndex) ═══
+      _estudosView(el, feature) {
+        el.innerHTML = `<div class="meggy-placeholder"><div class="meggy-placeholder-icon">📚</div><div class="meggy-placeholder-title">${feature}</div><div class="meggy-placeholder-desc">Carregando módulo de estudos...</div><button class="meggy-header-btn" id="meggy-load-estudos" style="margin-top:16px;"><i class="bi bi-cloud-download"></i> Carregar</button></div>`;
+        document.getElementById('meggy-load-estudos').onclick = async () => {
+          const btn = document.getElementById('meggy-load-estudos');
+          btn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Carregando GDIndex...';
+          const ok = await Shell.loadFullGDIndex();
+          if (ok && window.__gdiStudy) {
+            // Mapear feature para função
+            const map = {
+              'progresso': () => window.__gdiStudy.panel?.renderHome?.(el),
+              'questoes': () => window.__gdiStudy.questions?.renderQuestoes?.(el),
+              'simulado': () => window.__gdiStudy.questions?.renderSimulado?.(el),
+              'cronograma': () => window.__gdiStudy.questions?.renderCronograma?.(el),
+              'provas': () => window.__gdiStudy.advanced?.renderProvas?.(el),
+              'redacao': () => window.__gdiStudy.advanced?.renderRedacao?.(el),
+              'estatisticas': () => window.__gdiStudy.panel?.renderStats?.(el),
+              'mapa-fracos': () => window.__gdiStudy.advanced?.renderRadar?.(el),
+              'conquistas': () => window.__gdiStudy.panel?.renderAchievements?.(el),
+              'apps': () => window.__gdiStudy.panel?.renderApps?.(el),
+              'resumos': () => window.__gdiMeggy?.summaries?.renderResumos?.(el),
+              'plano': () => window.__gdiStudy.plan?.renderAll?.(el),
+            };
+            if (map[feature]) {
+              try { map[feature](); } catch (e) { el.innerHTML = `<div class="meggy-placeholder">⚠️ ${e.message}</div>`; }
+            } else {
+              el.innerHTML = `<div class="meggy-placeholder">⚠️ Feature não encontrada: ${feature}</div>`;
+            }
+          } else {
+            el.innerHTML = '<div class="meggy-placeholder">⚠️ Falha ao carregar GDIndex</div>';
+          }
+        };
       },
 
       meggyAI(el) {
