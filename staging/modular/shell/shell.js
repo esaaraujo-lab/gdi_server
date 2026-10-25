@@ -1010,11 +1010,14 @@
                   }
 
                   // Sem cache — gerar via /api/ai
+                  const courseName = lessonPath.split('/').filter(Boolean).slice(-1)[0] || '';
+                  const driveName = window.drive_names && window.drive_names[+(lessonPath.split('/')[1] || '0').replace(':','')] || '';
+                  const ctx = 'Aula: ' + lessonName + ' | Curso: ' + courseName + ' | Drive: ' + driveName;
                   let msg = '';
-                  if (type === 'isa-summary') msg = `Gere um resumo completo e detalhado da aula "${lessonName}" (pasta: ${lessonPath}). Estruture em tópicos com exemplos.`;
-                  else if (type === 'isa-questions') msg = `Gere 5 questões de múltipla escolha sobre a aula "${lessonName}". Inclua 4 alternativas (A, B, C, D), a resposta correta e uma explicação.`;
-                  else if (type === 'isa-mindmap') msg = `Crie pílulas de conhecimento (tópicos curtos e diretos) sobre a aula "${lessonName}". Formato: bullet points.`;
-                  else if (type === 'isa-flashcards') msg = `Crie 10 flashcards sobre a aula "${lessonName}". Formato: FRENTE: pergunta \n VERSO: resposta.`;
+                  if (type === 'isa-summary') msg = 'Voce e a Meggy, uma tutora de estudos. Gere um RESUMO COMPLETO e DETALHADO da seguinte aula:\n\n' + ctx + '\n\nEstruture em secoes com topicos, exemplos e pontos-chave. Use markdown (##, **negrito**, - listas).';
+                  else if (type === 'isa-questions') msg = 'Voce e a Meggy. Gere 5 questoes de multipla escolha sobre:\n\n' + ctx + '\n\nPara cada: 4 alternativas (A,B,C,D), resposta correta e explicacao. Use markdown.';
+                  else if (type === 'isa-mindmap') msg = 'Voce e a Meggy. Crie PILULAS DE CONHECIMENTO sobre:\n\n' + ctx + '\n\nFormato: bullet points curtos. Use markdown.';
+                  else if (type === 'isa-flashcards') msg = 'Voce e a Meggy. Crie 10 flashcards sobre:\n\n' + ctx + '\n\nFormato: FRENTE: pergunta\nVERSO: resposta. Use markdown.';
 
                   const r = await fetch('/api/ai', {
                     method: 'POST',
