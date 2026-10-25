@@ -1034,69 +1034,81 @@
 
             function showISA(type) {
               document.querySelectorAll('.gdi-mat-tab').forEach(t => { t.classList.remove('active'); t.style.background = 'rgba(124,77,255,0.08)'; t.style.borderColor = 'rgba(124,77,255,0.2)'; t.style.color = '#a78bfa'; });
-              const activeTab = document.querySelector(`.gdi-mat-tab[data-mat="${type}"]`);
+              const activeTab = document.querySelector('.gdi-mat-tab[data-mat="' + type + '"]');
               if (activeTab) { activeTab.classList.add('active'); activeTab.style.background = '#7c4dff'; activeTab.style.borderColor = '#7c4dff'; activeTab.style.color = '#fff'; }
               const lessonName = Shell.state.playerPlaylist?.[Shell.state.playerIndex]?.name || '';
               const lessonPath = Shell.state.currentFolderPath || '';
-              bodyEl.innerHTML = `<div style="padding:20px;text-align:center;"><div class="spinner-border" style="color:#7c4dff;"></div><div style="margin-top:12px;color:#a78bfa;">Gerando ${type.replace('isa-','')} com Meggy AI...</div></div>`;
+
+              // ★ Loading UI (replica de produção: pink spinner + "Não feche esta aba")
+              function setLoading(msg) {
+                bodyEl.innerHTML = '<div class="gdi-mat-isa-loading" style="max-width:560px;margin:0 auto;padding:30px 20px;">' +
+                  '<div class="gdi-mat-isa-spin"></div>' +
+                  '<div style="text-align:center;font-size:13px;line-height:1.6;color:#e6edf3;">' + msg + '</div>' +
+                  '<div style="margin-top:14px;font-size:11px;color:#8b949e;font-style:italic;">' +
+                    '<i class="bi bi-info-circle"></i> Não feche esta aba — a geração continua em segundo plano.' +
+                  '</div>' +
+                '</div>';
+              }
+
+              setLoading('🐩 Meggy está lendo o material e criando conteúdo…<br>⏱️ Tempo estimado: 30-60 segundos.');
+
               (async () => {
                 try {
-                  // ★ Tentar cache primeiro (como produção: GET /api/ai/summaries?key=...)
+                  const isaField = type.replace('isa-', ''); // summary | questions | mindmap | flashcards
+                  const cacheKey = lessonPath + lessonName;
+
+                  // ─── 1. Cache check (GET /api/ai/cache?key=...) ───
                   let cached = null;
                   try {
-                    const cacheKey = lessonPath + lessonName;
-                    const cacheResp = await fetch('/api/ai/summaries?key=' + encodeURIComponent(cacheKey), { headers: { 'Accept': 'application/json' } });
+                    const cacheResp = await fetch('/api/ai/cache?key=' + encodeURIComponent(cacheKey), { headers: { 'Accept': 'application/json' }, credentials: 'include' });
                     if (cacheResp.ok) {
                       const cacheData = await cacheResp.json();
-                      if (cacheData && cacheData[type.replace('isa-','')]) {
-                        cached = cacheData[type.replace('isa-','')];
-                      }
+                      if (cacheData && cacheData.cached) cached = cacheData.cached;
                     }
                   } catch (e) { /* cache miss é normal */ }
 
-                  if (cached) {
-                    // Tem cache — mostrar
-                    renderISAResult(type, cached);
+                  // Se o tipo específico já está no cache, mostra direto
+                  if (cached && cached[isaField]) {
+                    Shell._renderISAResult(type, cached[isaField], bodyEl, lessonName, true, cached);
                     return;
                   }
 
-                  // Sem cache — gerar via /api/ai
-                  const courseName = lessonPath.split('/').filter(Boolean).slice(-1)[0] || '';
-                  const driveName = window.drive_names && window.drive_names[+(lessonPath.split('/')[1] || '0').replace(':','')] || '';
-                  
-                  // ★ Extrair conteúdo dos materiais (PDFs/MDs/TXTs) da pasta
+                  // ─── 2. Extrair materiais (MD/TXT/PDF) ───
+                  setLoading('📖 Extraindo material da aula…');
                   let materialContent = '';
+                  let materialsList = [];
                   try {
                     if (window.gdiListAllFiles && lessonPath) {
                       const files = await window.gdiListAllFiles(lessonPath, '');
-                      const materials = files.filter(f => {
+                      materialsList = files.filter(f => {
                         const ext = (f.name.split('.').pop() || '').toLowerCase();
                         return ext === 'pdf' || ext === 'md' || ext === 'txt' || ext === 'html';
                       });
-                      for (const m of materials.slice(0, 3)) {
+                      // ★ Transcription-priority: arquivos com "transcri" primeiro
+                      materialsList.sort((a, b) => {
+                        const at = /transcri/i.test(a.name) ? 0 : 1;
+                        const bt = /transcri/i.test(b.name) ? 0 : 1;
+                        return at - bt;
+                      });
+                      for (const m of materialsList.slice(0, 3)) {
                         const ext = (m.name.split('.').pop() || '').toLowerCase();
                         if (ext === 'pdf') {
-                          // PDF: não dá para extrair sem pdfjs — incluir link para a IA saber que existe
                           materialContent += '\n[Material PDF: ' + m.name + ' (' + (m.size ? (m.size/1024/1024).toFixed(1) + 'MB' : '') + ')]';
-                        } else {
-                          // MD/TXT/HTML: buscar o conteúdo
-                          if (m.link) {
-                            try {
-                              const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
-                              const resp = await fetch(link);
-                              if (resp.ok) {
-                                const text = await resp.text();
-                                // Cap em 30000 chars por arquivo
-                                materialContent += '\n\n--- ' + m.name + ' ---\n' + text.substring(0, 30000);
-                              }
-                            } catch (e) { /* skip */ }
-                          }
+                        } else if (m.link) {
+                          try {
+                            const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
+                            const resp = await fetch(link);
+                            if (resp.ok) {
+                              const text = await resp.text();
+                              materialContent += '\n\n--- ' + m.name + ' ---\n' + text.substring(0, 30000);
+                            }
+                          } catch (e) { /* skip */ }
                         }
                       }
                     }
                   } catch (e) { console.warn('[Shell] material extract:', e); }
-                  
-                  // ★ Também buscar em subpastas se não encontrou nada
+
+                  // ★ Subpastas se não encontrou nada
                   if (!materialContent && window.gdiListAllFiles && lessonPath) {
                     try {
                       const files = await window.gdiListAllFiles(lessonPath, '');
@@ -1124,75 +1136,203 @@
                       }
                     } catch (e) { /* skip */ }
                   }
-                  
-                  // Cap total em 80000 chars (limite do CF Workers)
+
                   if (materialContent.length > 80000) {
                     materialContent = materialContent.substring(0, 80000) + '\n[...truncado...]';
                   }
-                  
+
+                  const courseName = lessonPath.split('/').filter(Boolean).slice(-1)[0] || '';
+                  const driveName = window.drive_names && window.drive_names[+(lessonPath.split('/')[1] || '0').replace(':','')] || '';
                   const ctx = 'Aula: ' + lessonName + '\nCurso: ' + courseName + '\nDrive: ' + driveName;
                   const hasContent = materialContent.length > 100;
-                  let msg = '';
-                  if (type === 'isa-summary') {
-                    msg = hasContent 
-                      ? 'Voce e a Meggy, uma tutora de estudos. Gere um RESUMO COMPLETO e DETALHADO da aula baseado no material abaixo:\n\n' + ctx + '\n\nMATERIAL DA AULA:\n' + materialContent + '\n\nEstruture em secoes com topicos, exemplos e pontos-chave. Use markdown (##, ###, **negrito**, - listas). Minimo 2000 caracteres.'
-                      : 'Voce e a Meggy, uma tutora de estudos. Gere um RESUMO sobre a aula: ' + ctx + '. Use markdown.';
-                  }
-                  else if (type === 'isa-questions') {
-                    msg = hasContent
-                      ? 'Voce e a Meggy. Gere 5 questoes de multipla escolha baseadas no material:\n\n' + ctx + '\n\nMATERIAL:\n' + materialContent + '\n\nPara cada: 4 alternativas (A,B,C,D), resposta correta e explicacao. Use markdown.'
-                      : 'Voce e a Meggy. Gere 5 questoes sobre: ' + ctx + '. Use markdown.';
-                  }
-                  else if (type === 'isa-mindmap') {
-                    msg = hasContent
-                      ? 'Voce e a Meggy. Crie PILULAS DE CONHECIMENTO baseadas no material:\n\n' + ctx + '\n\nMATERIAL:\n' + materialContent + '\n\nFormato: bullet points curtos. Use markdown.'
-                      : 'Voce e a Meggy. Crie pilulas sobre: ' + ctx + '. Use markdown.';
-                  }
-                  else if (type === 'isa-flashcards') {
-                    msg = hasContent
-                      ? 'Voce e a Meggy. Crie 10 flashcards baseados no material:\n\n' + ctx + '\n\nMATERIAL:\n' + materialContent + '\n\nFormato: FRENTE: pergunta\nVERSO: resposta. Use markdown.'
-                      : 'Voce e a Meggy. Crie 10 flashcards sobre: ' + ctx + '. Use markdown.';
+
+                  // ─── 3. generateAll: gerar resumo + pílulas + questões em paralelo ───
+                  // Produção gera TUDO de uma vez (Promise.allSettled). Se o usuário pediu só um tipo,
+                  // ainda assim geramos todos (mais eficiente — cache fica completo p/ próximas abas).
+                  setLoading('✨ Gerando resumo + pílulas + questões em cadeia…<br>Isto pode levar 30-60s.');
+
+                  const textSlice = hasContent ? materialContent : ctx;
+                  const sliceCap = hasContent ? 80000 : 2000;
+
+                  // ★ Prompts (replica de produção — meggy-cache.js:785-821)
+                  const RESUMO_PROMPTS = [
+                    // Nível 7 (rico)
+                    'Você é um professor especialista em concursos públicos. Leia TODO o material abaixo e crie um RESUMO PROFUNDO E DETALHADO em Markdown.\n\nREQUISITOS:\n- Mínimo 2000 caracteres (NÃO seja breve)\n- Estruture com ## títulos e ### subtítulos\n- Para CADA tópico: explique o conceito, dê EXEMPLOS práticos, e destaque pegadinhas de prova\n- Use **negrito** para palavras-chave e dispositivos legais\n- Use listas com marcadores para enumerações\n- Inclua uma seção ## Pegadinhas de Prova no final\n- Inclua uma seção ## Resumo Rápido com 5-10 bullets dos pontos mais importantes\n\nNÃO omita nenhum tema. Seja PROFUNDO, não conciso.\n\nMaterial:\n' + textSlice.slice(0, sliceCap),
+                    // Nível 5 (médio)
+                    'Crie um resumo DETALHADO em Markdown deste material. Use ## títulos, **negrito** e - bullets. Inclua ## Pegadinhas de Prova no final. Material:\n' + textSlice.slice(0, 20000),
+                    // Nível 3 (simples)
+                    'Crie um resumo em Markdown deste material. Use ## títulos e bullets. Material:\n' + textSlice.slice(0, 10000)
+                  ];
+                  const PILULAS_PROMPT = 'Crie "Pílulas" deste material — pontos-chave para revisão rápida ANTES da prova. Formato Markdown:\n# Pílulas de Revisão\n\n## Conceitos Essenciais\n- **Conceito 1**: explicação curta com exemplo\n- **Conceito 2**: explicação curta\n\n## Pegadinhas Rápidas\n- ⚠️ Pegadinha 1\n- ⚠️ Pegadinha 2\n\n## Mnemônicos\n- Dica para memorizar\n\nMáximo 20 bullets no total. Seja OBJETIVO mas COMPLETO.\n\nConteúdo:\n' + textSlice.slice(0, 15000);
+                  const QUESTOES_PROMPT = 'Você é um examinador de concurso público brasileiro experiente. Baseado neste material, gere 10 questões de concurso em JSON array. Misture:\n- 6 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"legalText":"...","explanation":"...","fundamentacao":"..."}\n- 4 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"legalText":"...","explanation":"...","fundamentacao":"..."}\n\nCAMPOS:\n- statement: enunciado claro, contexto completo\n- legalText: o dispositivo legal aplicável (ex: "art. 5º, CF")\n- explanation: explicação técnica do acerto/erro\n- fundamentacao: fundamentação didática completa\n\nSem comentários, só JSON.\n\n' + textSlice.slice(0, 60000);
+
+                  // ★ Helper: chama /api/ai com fallback de prompt (3 níveis para resumo)
+                  async function callIsa(prompt, kind) {
+                    const r = await fetch('/api/ai', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ message: prompt, messages: [], kind: kind })
+                    });
+                    if (!r.ok) throw new Error('AI HTTP ' + r.status);
+                    const d = await r.json();
+                    return d.response || d.markdown || d.summary || '';
                   }
 
-                  const r = await fetch('/api/ai', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: msg, messages: [] })
+                  // ★ Helper: parse robusto de JSON array de questões (replica meggy-utils.parseJsonArray)
+                  function parseQuestions(resp) {
+                    if (!resp) return [];
+                    let arr = null;
+                    try { arr = JSON.parse(resp); } catch (_) {
+                      // regex extraction of first [...]
+                      const m = resp.match(/\[[\s\S]*\]/);
+                      if (m) { try { arr = JSON.parse(m[0]); } catch (__) { arr = null; } }
+                    }
+                    if (!Array.isArray(arr)) return [];
+                    return arr.map(q => {
+                      if (q.type === 'tf' || (!q.options && q.correct !== undefined)) {
+                        return {
+                          type: 'tf', statement: String(q.statement || ''), options: ['Certo', 'Errado'],
+                          correct: Math.max(0, Math.min(1, Number(q.correct) || 0)),
+                          explanation: String(q.explanation || ''),
+                          legalText: String(q.legalText || q.fundamentacao || ''),
+                          fundamentacao: String(q.fundamentacao || '')
+                        };
+                      }
+                      if (Array.isArray(q.options)) {
+                        return {
+                          type: 'mc', statement: String(q.statement || ''), options: q.options.map(String),
+                          correct: Math.max(0, Math.min((q.options.length || 4) - 1, Number(q.correct) || 0)),
+                          explanation: String(q.explanation || ''),
+                          legalText: String(q.legalText || q.fundamentacao || ''),
+                          fundamentacao: String(q.fundamentacao || '')
+                        };
+                      }
+                      return null;
+                    }).filter(Boolean);
+                  }
+
+                  // ★ Helper: autoCreateFlashcards (replica meggy-cache.js:187)
+                  function autoCreateFlashcards(questions) {
+                    return questions.map(q => {
+                      let back = '';
+                      if (q.type === 'mc' && q.options) {
+                        const letter = String.fromCharCode(65 + q.correct) + ') ';
+                        back = letter + (q.options[q.correct] || '');
+                      } else {
+                        back = (q.correct === 1 || q.correct === '1') ? 'Certo' : 'Errado';
+                      }
+                      if (q.explanation) back += '\n\n💡 ' + q.explanation;
+                      if (q.legalText) back += '\n\n⚖️ ' + q.legalText;
+                      if (q.fundamentacao) back += '\n\n📚 ' + q.fundamentacao;
+                      return { f: q.statement, b: back, subject: lessonName, type: q.type };
+                    });
+                  }
+
+                  // ★ Helper: save to material folder (replica meggy-summaries.js saveSummaryToLessonFolder)
+                  async function saveToFolder(materialType, fileName, content) {
+                    try {
+                      await fetch('/api/materials/save-in-folder', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ lessonPath, materialType, fileName, content })
+                      });
+                    } catch (e) { console.warn('[Shell] saveToFolder:', e); }
+                  }
+
+                  // ★ Safe filename fragment
+                  function safeName(s) {
+                    return String(s || '').replace(/[/\\?%*:|"<>]/g, '_').trim().slice(0, 120) || 'aula';
+                  }
+
+                  // ─── PARALLEL GENERATION (Promise.allSettled) ───
+                  const tasks = [];
+                  // Task 1: resumo (3-level auto-retry)
+                  tasks.push((async () => {
+                    for (let i = 0; i < RESUMO_PROMPTS.length; i++) {
+                      try {
+                        setLoading(i === 0 ? '✨ Gerando resumo profundo…' : i === 1 ? '✨ Tentando resumo médio…' : '✨ Tentando resumo simples…');
+                        const r = await callIsa(RESUMO_PROMPTS[i], 'resumo');
+                        if (r && r.length > 200) return { field: 'summary', value: r };
+                      } catch (e) { /* try next level */ }
+                    }
+                    return { field: 'summary', value: null };
+                  })());
+                  // Task 2: pílulas
+                  tasks.push((async () => {
+                    try { setLoading('💊 Gerando pílulas de revisão…'); return { field: 'mindmap', value: await callIsa(PILULAS_PROMPT, 'mindmap') }; }
+                    catch (e) { return { field: 'mindmap', value: null }; }
+                  })());
+                  // Task 3: questões (JSON)
+                  tasks.push((async () => {
+                    try { setLoading('❓ Gerando questões…'); const r = await callIsa(QUESTOES_PROMPT, 'questoes'); return { field: 'questions', value: parseQuestions(r), raw: r }; }
+                    catch (e) { return { field: 'questions', value: [] }; }
+                  })());
+
+                  const results = await Promise.allSettled(tasks);
+                  const gen = { summary: null, mindmap: null, questions: [], flashcards: [] };
+                  results.forEach(r => {
+                    if (r.status === 'fulfilled' && r.value) {
+                      gen[r.value.field] = r.value.value;
+                      if (r.value.field === 'questions' && r.value.value && r.value.value.length) {
+                        gen.flashcards = autoCreateFlashcards(r.value.value);
+                      }
+                    }
                   });
-                  const d = await r.json();
-                  const text = d.response || d.markdown || d.summary || 'Sem resposta da IA.';
-                  renderISAResult(type, text);
+
+                  // ─── 4. Save to cache (POST /api/ai/cache) ───
+                  setLoading('💾 Salvando no cache do Drive…');
+                  try {
+                    await fetch('/api/ai/cache', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        key: cacheKey,
+                        summary: gen.summary,
+                        questions: gen.questions.length ? gen.questions : null,
+                        mindmap: gen.mindmap,
+                        lessonName: lessonName
+                      })
+                    });
+                  } catch (e) { console.warn('[Shell] cache save:', e); }
+
+                  // ─── 5. Save to material folder (POST /api/materials/save-in-folder) ───
+                  setLoading('📁 Salvando materiais na pasta da aula…');
+                  const user = (window.GDIUser && window.GDIUser.state && window.GDIUser.state.user) || 'meggy';
+                  const safeLesson = safeName(lessonName);
+                  const ts = Date.now();
+                  if (gen.summary) {
+                    await saveToFolder('resumo', user + '_' + safeLesson + '.md', gen.summary);
+                  }
+                  if (gen.mindmap) {
+                    await saveToFolder('resumo', user + '_pilulas_' + safeLesson + '.md', gen.mindmap);
+                  }
+                  if (gen.questions && gen.questions.length) {
+                    await saveToFolder('questoes', user + '_' + safeName(courseName || lessonName) + '.json', JSON.stringify(gen.questions, null, 2));
+                  }
+
+                  // ─── 6. Render requested type ───
+                  const cached2 = { summary: gen.summary, questions: gen.questions.length ? gen.questions : null, mindmap: gen.mindmap, lessonName: lessonName };
+                  let toShow = gen[isaField];
+                  if (type === 'isa-flashcards') toShow = gen.flashcards.length ? gen.flashcards : null;
+                  if (isaField === 'questions' && (!toShow || !toShow.length)) toShow = null;
+                  if (!toShow && isaField !== 'flashcards') toShow = 'Não foi possível gerar este conteúdo. Tente novamente.';
+
+                  if (type === 'isa-flashcards') {
+                    // Flashcards usa render especial (flip deck)
+                    Shell._renderFlashcardDeck(bodyEl, { flashcards: gen.flashcards, lessonName: lessonName, questions: gen.questions });
+                  } else {
+                    Shell._renderISAResult(type, toShow, bodyEl, lessonName, false, cached2);
+                  }
                 } catch (e) {
-                  bodyEl.innerHTML = `<div style="padding:20px;color:#ff8b9f;">⚠️ Erro: ${e.message}<br><br><button class="gdi-mode-btn" onclick="Shell.state.playerPlaylist && Shell.views._playVideoInline(Shell.state.playerPlaylist[Shell.state.playerIndex].link, Shell.state.playerPlaylist[Shell.state.playerIndex].name, Shell.state.playerPlaylist, Shell.state.playerIndex)">Tentar novamente</button></div>`;
+                  console.error('[Shell] showISA:', e);
+                  bodyEl.innerHTML = '<div style="padding:20px;color:#ff8b9f;text-align:center;">' +
+                    '<div style="font-size:36px;margin-bottom:12px;">⚠️</div>' +
+                    '<div style="font-weight:600;margin-bottom:8px;">Erro ao gerar conteúdo</div>' +
+                    '<div style="font-size:13px;color:#9aa4b8;margin-bottom:16px;">' + (e.message || 'Tente novamente.') + '</div>' +
+                    '<button class="meggy-header-btn" onclick="Shell.state.playerPlaylist && Shell.views._playVideoInline(Shell.state.playerPlaylist[Shell.state.playerIndex].link, Shell.state.playerPlaylist[Shell.state.playerIndex].name, Shell.state.playerPlaylist, Shell.state.playerIndex)" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-arrow-clockwise"></i> Tentar novamente</button>' +
+                  '</div>';
                 }
               })();
-            }
-
-            function renderISAResult(type, text) {
-              let h = text;
-              if (typeof h === 'string') {
-                h = h.replace(/^### (.+)$/gm, '<h3 style="color:#ff8b9f;margin:12px 0 6px;">$1</h3>')
-                     .replace(/^## (.+)$/gm, '<h2 style="color:#ff8b9f;margin:16px 0 8px;">$1</h2>')
-                     .replace(/^# (.+)$/gm, '<h1 style="color:#ff8b9f;margin:20px 0 10px;">$1</h1>')
-                     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-                     .replace(/^- (.+)$/gm, '<li style="margin-left:20px;">$1</li>')
-                     .replace(/^(\d+)\. (.+)$/gm, '<li style="margin-left:20px;">$1. $2</li>')
-                     .replace(/\n/g, '<br>');
-              }
-              const typeLabel = type === 'isa-summary' ? 'Resumo' : type === 'isa-questions' ? 'Questões' : type === 'isa-mindmap' ? 'Pílulas' : 'Flashcards';
-              // ★ Guardar para download/salvar
-              window._lastIsaText = text;
-              window._lastIsaType = type;
-              bodyEl.innerHTML = '<div style="width:100%;height:100%;overflow:auto;padding:16px;">' +
-                '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding:10px 14px;background:rgba(124,77,255,.08);border:1px solid rgba(124,77,255,.2);border-radius:12px;flex-wrap:wrap;gap:8px;">' +
-                  '<span style="font-size:14px;font-weight:600;color:#a78bfa;">⭐ ' + typeLabel + ' Meggy</span>' +
-                  '<div style="display:flex;gap:6px;">' +
-                    '<button onclick="navigator.clipboard.writeText(document.getElementById(\'gdi-isa-text\').innerText);this.textContent=\'✓ Copiado!\'" style="font-size:12px;padding:4px 10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#c9d1d9;border-radius:6px;cursor:pointer;"><i class="bi bi-clipboard"></i> Copiar</button>' +
-                    '<button onclick="window._downloadIsaAsPdf(\''+typeLabel+'\')" style="font-size:12px;padding:4px 10px;background:rgba(255,139,159,0.12);border:1px solid rgba(255,139,159,0.3);color:#ff8b9f;border-radius:6px;cursor:pointer;"><i class="bi bi-download"></i> PDF</button>' +
-                  '</div>' +
-                '</div>' +
-                '<div id="gdi-isa-text" style="color:#e6edf3;font-size:14px;line-height:1.6;">' + h + '</div>' +
-              '</div>';
             }
 
             if (materials.length > 0) showMaterial(0);
@@ -1738,59 +1878,356 @@
         el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">' + title + '</h1></div><div class="meggy-placeholder"><div class="meggy-placeholder-icon">' + title.split(' ')[0] + '</div><div class="meggy-placeholder-title">' + title.replace(/^\S+\s/, '') + '</div><div class="meggy-placeholder-desc">Em breve.</div></div>';
       },
 
+    // ═══ ISA Render Helpers (replica de produção — gdi-meggy.js) ═══
+
+    // renderMd: usa marked.js + DOMPurify se disponíveis, senão fallback escape+br
+    _renderMd(txt) {
+      if (!txt || typeof txt !== 'string') return '';
+      if (window.marked) {
+        try {
+          const html = window.marked.parse(txt);
+          if (window.DOMPurify) {
+            try { return window.DOMPurify.sanitize(html); } catch (_) {}
+          }
+          // Fallback sem DOMPurify: escape + br
+          return Shell._esc(txt).replace(/\n/g, '<br>');
+        } catch (_) {}
+      }
+      return Shell._esc(txt).replace(/\n/g, '<br>');
+    },
+
+    // _renderISAResult: toolbar production-faithful (gradient pink→cyan, 4 buttons, cache badge, chain badge)
+    _renderISAResult(type, content, bodyEl, lessonName, fromCache, fullCache) {
+      const isaField = type.replace('isa-', '');
+      const typeLabel = type === 'isa-summary' ? 'Resumo' : type === 'isa-questions' ? 'Questões' : type === 'isa-mindmap' ? 'Pílulas' : 'Flashcards';
+      const icon = type === 'isa-summary' ? 'bi-stars' : type === 'isa-questions' ? 'bi-patch-question' : type === 'isa-mindmap' ? 'bi-capsule' : 'bi-card-text';
+      window._lastIsaText = typeof content === 'string' ? content : '';
+      window._lastIsaType = type;
+      window._lastIsaLabel = typeLabel;
+      window._lastIsaLesson = lessonName;
+
+      const cacheBadge = fromCache
+        ? '<span class="meggy-cache-badge"><i class="bi bi-cloud-check"></i> do cache do Drive</span>'
+        : '<span class="meggy-cache-badge"><i class="bi bi-check2-circle"></i> salvo no Drive + pasta da aula</span>';
+
+      // Chain badge (verde) — mostra o que foi gerado em cadeia
+      let chainBadge = '';
+      if (fullCache) {
+        const parts = [];
+        if (fullCache.summary) parts.push('✓ Resumo');
+        if (fullCache.mindmap) parts.push('✓ Pílulas');
+        if (fullCache.questions && fullCache.questions.length) parts.push('✓ ' + fullCache.questions.length + ' questões + flashcards');
+        if (parts.length > 1) {
+          chainBadge = '<div class="meggy-chain-badge"><i class="bi bi-check-circle-fill"></i> <b>Gerado em cadeia:</b> ' + parts.join(' · ') + '</div>';
+        }
+      }
+
+      // TTS state
+      let ttsPlaying = false;
+      let ttsUtter = null;
+
+      function renderBody() {
+        if (type === 'isa-questions' && Array.isArray(content)) {
+          // Questões: render como lista estática (quiz interativo fica na aba Questões)
+          let h = '';
+          content.forEach((q, i) => {
+            const isTF = q.type === 'tf';
+            const correctText = isTF ? ((q.correct === 1 || q.correct === '1') ? 'Certo' : 'Errado') : (q.options && q.options[q.correct] ? String.fromCharCode(65 + q.correct) + ') ' + q.options[q.correct] : '');
+            h += '<div style="margin-bottom:16px;padding:14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;">';
+            h += '<div class="meggy-quiz-type-badge">' + (isTF ? 'CEBRASPE — Certo ou Errado' : 'Múltipla Escolha') + ' · Q' + (i+1) + '</div>';
+            h += '<div style="color:#f0f6fc;font-size:14px;line-height:1.6;margin-bottom:10px;">' + Shell._esc(q.statement) + '</div>';
+            if (q.options && !isTF) {
+              h += '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">';
+              q.options.forEach((opt, oi) => {
+                const isCorrect = (oi === q.correct);
+                h += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;' + (isCorrect ? 'background:rgba(93,222,218,0.12);border:1px solid rgba(93,222,218,0.3);' : 'background:rgba(255,255,255,0.02);') + '"><b style="color:' + (isCorrect ? '#5ddeda' : '#ff8b9f') + ';">' + String.fromCharCode(65 + oi) + ')</b><span style="color:#e6edf3;font-size:13px;">' + Shell._esc(opt) + '</span>' + (isCorrect ? ' <i class="bi bi-check-circle" style="color:#5ddeda;"></i>' : '') + '</div>';
+              });
+              h += '</div>';
+            } else if (isTF) {
+              h += '<div style="display:flex;gap:8px;margin-bottom:10px;"><span style="padding:6px 12px;border-radius:6px;' + ((q.correct === 1 || q.correct === '1') ? 'background:rgba(93,222,218,0.12);border:1px solid rgba(93,222,218,0.3);color:#5ddeda;' : 'background:rgba(255,255,255,0.02);color:#9aa4b8;') + '"><b>✓ Certo</b></span><span style="padding:6px 12px;border-radius:6px;' + ((q.correct === 0 || q.correct === '0') ? 'background:rgba(255,139,159,0.12);border:1px solid rgba(255,139,159,0.3);color:#ff8b9f;' : 'background:rgba(255,255,255,0.02);color:#9aa4b8;') + '"><b>✗ Errado</b></span></div>';
+            }
+            if (q.explanation) h += '<div style="font-size:12px;color:#c9d1d9;margin-bottom:6px;"><b>💡 Explicação:</b> ' + Shell._esc(q.explanation) + '</div>';
+            if (q.legalText) h += '<div style="font-size:11px;color:#9aa4b8;border-left:2px solid #ff8b9f;padding-left:8px;margin-bottom:4px;">📜 ' + Shell._esc(q.legalText) + '</div>';
+            if (q.fundamentacao) h += '<div style="font-size:11px;color:#9aa4b8;"><b>📚 Fundamentação:</b> ' + Shell._esc(q.fundamentacao) + '</div>';
+            h += '</div>';
+          });
+          return h;
+        }
+        if (type === 'isa-flashcards' && Array.isArray(content)) {
+          let h = '';
+          content.forEach((c, i) => {
+            h += '<div style="margin-bottom:12px;padding:14px;background:linear-gradient(135deg,rgba(255,139,159,0.06),rgba(93,222,218,0.06));border:1px solid rgba(255,139,159,0.2);border-radius:10px;">';
+            h += '<div style="font-size:11px;color:#ff8b9f;font-weight:700;margin-bottom:6px;">🃏 CARTÃO ' + (i+1) + '</div>';
+            h += '<div style="color:#f0f6fc;font-size:14px;margin-bottom:8px;"><b>F:</b> ' + Shell._esc(c.f) + '</div>';
+            h += '<div style="color:#5ddeda;font-size:13px;white-space:pre-wrap;"><b>V:</b> ' + Shell._esc(c.b) + '</div>';
+            h += '</div>';
+          });
+          return h;
+        }
+        // String (resumo, pílulas)
+        return Shell._renderMd(content);
+      }
+
+      bodyEl.innerHTML = '<div class="gdi-mat-isa-result" style="max-width:760px;margin:0 auto;">' +
+        chainBadge +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;padding:12px 16px;background:linear-gradient(135deg,rgba(255,139,159,.12),rgba(93,222,218,.06));border:1px solid rgba(255,139,159,.2);border-radius:14px;flex-wrap:wrap;">' +
+          '<div style="display:flex;align-items:center;gap:8px;min-width:0;">' +
+            '<i class="bi ' + icon + '" style="color:#ff8b9f;font-size:20px;flex:none;"></i>' +
+            '<b style="color:#f0f6fc;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + typeLabel + ' Meggy 🐩 · ' + Shell._esc(lessonName || '') + '</b>' +
+          '</div>' +
+          '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
+            cacheBadge +
+            (type === 'isa-summary' || type === 'isa-mindmap' ? '<button id="gdi-isa-regen" title="Regerar" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#e6edf3;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;"><i class="bi bi-arrow-clockwise"></i> Regerar</button>' : '') +
+            '<button id="gdi-isa-dl" title="Baixar em PDF" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#e6edf3;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;"><i class="bi bi-file-earmark-pdf"></i> PDF</button>' +
+            '<button id="gdi-isa-copy" title="Copiar" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#e6edf3;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;"><i class="bi bi-clipboard"></i> Copiar</button>' +
+            (type === 'isa-summary' || type === 'isa-mindmap' ? '<button id="gdi-isa-tts" title="Ouvir em voz alta" style="background:#ff8b9f;border:none;color:#000;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;font-weight:600;"><i class="bi bi-volume-up"></i> Ouvir</button>' : '') +
+          '</div>' +
+        '</div>' +
+        '<div class="gdi-isa-summary-body" id="gdi-isa-summary-text" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:20px 24px;">' +
+          renderBody() +
+        '</div>' +
+      '</div>';
+
+      // Wire buttons
+      const dl = bodyEl.querySelector('#gdi-isa-dl');
+      if (dl) dl.onclick = () => window._downloadIsaAsPdf(typeLabel);
+      const copy = bodyEl.querySelector('#gdi-isa-copy');
+      if (copy) copy.onclick = () => {
+        const text = bodyEl.querySelector('#gdi-isa-summary-text').innerText;
+        navigator.clipboard.writeText(text).then(() => { copy.innerHTML = '<i class="bi bi-check2"></i> Copiado!'; setTimeout(() => { copy.innerHTML = '<i class="bi bi-clipboard"></i> Copiar'; }, 2000); });
+      };
+      const regen = bodyEl.querySelector('#gdi-isa-regen');
+      if (regen) regen.onclick = () => {
+        // Limpar cache e regerar
+        (async () => {
+          try {
+            const cacheKey = (Shell.state.currentFolderPath || '') + (Shell.state.playerPlaylist?.[Shell.state.playerIndex]?.name || '');
+            await fetch('/api/ai/cache', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ key: cacheKey, summary: null, questions: null, mindmap: null, lessonName: '' }) });
+          } catch (e) {}
+          // Re-trigger showISA
+          const tabs = document.querySelectorAll('.gdi-mat-tab');
+          const isaTab = Array.from(tabs).find(t => t.dataset.mat === type);
+          if (isaTab) isaTab.click();
+        })();
+      };
+      const tts = bodyEl.querySelector('#gdi-isa-tts');
+      if (tts && ('speechSynthesis' in window)) {
+        tts.onclick = () => {
+          if (ttsPlaying) {
+            window.speechSynthesis.cancel();
+            ttsPlaying = false;
+            tts.innerHTML = '<i class="bi bi-volume-up"></i> Ouvir';
+          } else {
+            const text = bodyEl.querySelector('#gdi-isa-summary-text').innerText;
+            ttsUtter = new SpeechSynthesisUtterance(text.substring(0, 32000));
+            ttsUtter.lang = 'pt-BR';
+            ttsUtter.rate = 1.0;
+            ttsUtter.onend = () => { ttsPlaying = false; tts.innerHTML = '<i class="bi bi-volume-up"></i> Ouvir'; };
+            window.speechSynthesis.speak(ttsUtter);
+            ttsPlaying = true;
+            tts.innerHTML = '<i class="bi bi-stop-circle"></i> Parar';
+          }
+        };
+      }
+    },
+
+    // _renderFlashcardDeck: sessão de estudo com SRS (replica runFlashcardSession)
+    _renderFlashcardDeck(bodyEl, data) {
+      const cards = (data && data.flashcards) || [];
+      const lessonName = (data && data.lessonName) || '';
+      if (cards.length === 0) {
+        bodyEl.innerHTML = '<div class="gdi-mat-isa-result" style="text-align:center;padding:40px;">' +
+          '<div style="font-size:48px;margin-bottom:12px;">🃏</div>' +
+          '<div style="color:#ff8b9f;font-weight:600;margin-bottom:8px;">Nenhum flashcard gerado</div>' +
+          '<div style="color:#9aa4b8;font-size:13px;">Os flashcards são criados automaticamente a partir das questões geradas.</div>' +
+        '</div>';
+        return;
+      }
+      let idx = 0;
+      let hits = 0, misses = 0;
+      let flipped = false;
+
+      function draw() {
+        const c = cards[idx];
+        if (!c) return;
+        flipped = false;
+        const front = Shell._esc(String(c.f || '').slice(0, 300));
+        const backHtml = Shell._esc(String(c.b || '').slice(0, 400)).replace(/\n/g, '<br>');
+        bodyEl.innerHTML = '<div class="gdi-mat-isa-result" style="max-width:760px;margin:0 auto;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">' +
+            '<span style="color:#8b949e;font-size:12px;">' + Shell._esc(lessonName) + ' · ' + (idx + 1) + '/' + cards.length + '</span>' +
+            '<span style="color:#8b949e;font-size:12px;">✓ ' + hits + ' ✗ ' + misses + '</span>' +
+          '</div>' +
+          '<div style="position:relative;perspective:1500px;height:340px;max-width:560px;margin:0 auto;cursor:pointer;" id="meggy-fc-card">' +
+            '<div style="position:absolute;inset:0;transform-style:preserve-3d;transition:transform .55s cubic-bezier(.4,0,.2,1);" id="meggy-fc-inner">' +
+              '<div class="meggy-flashcard-face meggy-flashcard-front" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:18px 16px;border-radius:12px;background:linear-gradient(135deg,rgba(255,139,159,.14),rgba(192,38,211,.08));border:1.5px solid rgba(255,139,159,.4);backface-visibility:hidden;">' +
+                '<div style="font-size:10px;font-weight:700;letter-spacing:.08em;color:#ff8b9f;text-transform:uppercase;display:flex;align-items:center;gap:4px;"><i class="bi bi-question-circle"></i> PERGUNTA</div>' +
+                '<div style="font-size:16px;line-height:1.55;color:#f0f6fc;text-align:center;">' + front + '</div>' +
+                '<div style="font-size:10px;color:#8b949e;font-style:italic;"><i class="bi bi-arrow-repeat"></i> clique para virar</div>' +
+              '</div>' +
+              '<div class="meggy-flashcard-face meggy-flashcard-back" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:18px 16px;border-radius:12px;background:linear-gradient(135deg,rgba(93,222,218,.14),rgba(63,185,80,.08));border:1.5px solid rgba(93,222,218,.4);transform:rotateY(180deg);backface-visibility:hidden;">' +
+                '<div style="font-size:10px;font-weight:700;letter-spacing:.08em;color:#5ddeda;text-transform:uppercase;display:flex;align-items:center;gap:4px;"><i class="bi bi-check-circle"></i> RESPOSTA</div>' +
+                '<div style="font-size:14px;line-height:1.55;color:#e6edf3;text-align:left;overflow-y:auto;max-height:240px;">' + backHtml + '</div>' +
+                '<div style="font-size:10px;color:#8b949e;font-style:italic;"><i class="bi bi-arrow-repeat"></i> clique para voltar</div>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div id="meggy-fc-grade-panel"></div>' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;padding-top:14px;margin-top:10px;border-top:1px solid rgba(255,255,255,.08);">' +
+            '<button class="meggy-header-btn" id="meggy-fc-prev" ' + (idx === 0 ? 'disabled' : '') + ' style="font-size:13px;"><i class="bi bi-chevron-left"></i> Anterior</button>' +
+            '<button class="meggy-header-btn" id="meggy-fc-next" style="font-size:13px;background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">' + (idx < cards.length - 1 ? 'Próximo' : 'Finalizar') + ' <i class="bi bi-chevron-right"></i></button>' +
+          '</div>' +
+        '</div>';
+
+        const card = bodyEl.querySelector('#meggy-fc-card');
+        const inner = bodyEl.querySelector('#meggy-fc-inner');
+        const gradePanel = bodyEl.querySelector('#meggy-fc-grade-panel');
+
+        card.onclick = () => {
+          flipped = !flipped;
+          inner.style.transform = flipped ? 'rotateY(180deg)' : '';
+          if (flipped && !gradePanel.innerHTML) {
+            // Reveal SRS grade panel after flip
+            gradePanel.innerHTML = '<div class="meggy-fc-grade">' +
+              '<p>Como foi?</p>' +
+              '<div class="meggy-fc-grade-btns">' +
+                '<button class="meggy-fc-grade-btn again" data-grade="1"><i class="bi bi-arrow-counterclockwise"></i> Não sabia<br><small>+1d</small></button>' +
+                '<button class="meggy-fc-grade-btn hard" data-grade="2"><i class="bi bi-dash-circle"></i> Quase<br><small>+3d</small></button>' +
+                '<button class="meggy-fc-grade-btn good" data-grade="3"><i class="bi bi-check-circle"></i> Sabia<br><small>+3d</small></button>' +
+                '<button class="meggy-fc-grade-btn easy" data-grade="4"><i class="bi bi-stars"></i> Fácil<br><small>+10d</small></button>' +
+              '</div>' +
+              '<div class="meggy-fc-shortcuts">Atalhos: 1 2 3 4 · Espaço vira</div>' +
+            '</div>';
+            gradePanel.querySelectorAll('.meggy-fc-grade-btn').forEach(btn => {
+              btn.onclick = (e) => {
+                e.stopPropagation();
+                const grade = parseInt(btn.dataset.grade, 10);
+                if (grade <= 2) misses++; else hits++;
+                next();
+              };
+            });
+          } else if (!flipped) {
+            gradePanel.innerHTML = '';
+          }
+        };
+
+        function next() {
+          if (idx < cards.length - 1) { idx++; draw(); }
+          else { showResult(); }
+        }
+        bodyEl.querySelector('#meggy-fc-next').onclick = next;
+        bodyEl.querySelector('#meggy-fc-prev').onclick = () => { if (idx > 0) { idx--; draw(); } };
+
+        // Keyboard shortcuts
+        if (bodyEl._fcKeyHandler) document.removeEventListener('keydown', bodyEl._fcKeyHandler);
+        bodyEl._fcKeyHandler = (e) => {
+          if (e.key === ' ') { e.preventDefault(); card.click(); }
+          else if (e.key === '1' || e.key === '2' || e.key === '3' || e.key === '4') {
+            const btn = gradePanel.querySelector('.meggy-fc-grade-btn[data-grade="' + e.key + '"]');
+            if (btn) btn.click();
+          } else if (e.key === 'ArrowRight') { next(); }
+          else if (e.key === 'ArrowLeft') { if (idx > 0) { idx--; draw(); } }
+        };
+        document.addEventListener('keydown', bodyEl._fcKeyHandler);
+      }
+
+      function showResult() {
+        if (bodyEl._fcKeyHandler) { document.removeEventListener('keydown', bodyEl._fcKeyHandler); bodyEl._fcKeyHandler = null; }
+        const total = cards.length;
+        const pct = total > 0 ? Math.round(hits / total * 100) : 0;
+        bodyEl.innerHTML = '<div class="gdi-mat-isa-result" style="max-width:760px;margin:0 auto;text-align:center;padding:40px 20px;">' +
+          '<div style="font-size:48px;margin-bottom:12px;">' + (pct >= 60 ? '🎉' : '📚') + '</div>' +
+          '<h3 style="color:#ff8b9f;font-family:Poppins,sans-serif;">Sessão concluída!</h3>' +
+          '<p style="color:#e6edf3;font-size:16px;margin-top:8px;"><b style="color:' + (pct >= 60 ? '#3fb950' : '#ff8b8b') + ';">' + hits + '/' + total + '</b> · ' + pct + '% acerto</p>' +
+          '<p style="color:#8b949e;font-size:12px;">Matéria: ' + Shell._esc(lessonName) + '</p>' +
+          '<div style="display:flex;gap:8px;justify-content:center;margin-top:18px;flex-wrap:wrap;">' +
+            '<button class="meggy-header-btn" onclick="Shell.state.playerPlaylist && Shell.views._playVideoInline(Shell.state.playerPlaylist[Shell.state.playerIndex].link, Shell.state.playerPlaylist[Shell.state.playerIndex].name, Shell.state.playerPlaylist, Shell.state.playerIndex)" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-arrow-repeat"></i> Voltar ao player</button>' +
+          '</div>' +
+        '</div>';
+      }
+
+      draw();
+    },
+
   };
 
   // ─── Export to window ───
-  // ★ Função para baixar MD como PDF (abre janela de impressão)
+  // ★ Função para baixar MD como PDF (replica de produção — downloadAsPdf gdi-meggy.js:761)
   window._downloadMdAsPdf = function(name) {
     const text = window._lastMdText || '';
+    const lesson = name || 'Resumo';
+    const html = (window.marked && window.DOMPurify) ? window.DOMPurify.sanitize(window.marked.parse(text)) : (function(t){ return t.replace(/^### (.+)$/gm, '<h3>$1</h3>').replace(/^## (.+)$/gm, '<h2>$1</h2>').replace(/^# (.+)$/gm, '<h1>$1</h1>').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/^- (.+)$/gm, '<li>$1</li>').replace(/\n/g, '<br>'); })(text);
     const w = window.open('', '_blank');
-    w.document.write('<html><head><title>' + name + '</title><style>');
-    w.document.write('body{font-family:Arial,sans-serif;max-width:800px;margin:40px auto;padding:20px;color:#333;line-height:1.6;}');
-    w.document.write('h1{color:#ff8b9f;border-bottom:2px solid #ff8b9f;padding-bottom:10px;}');
-    w.document.write('h2{color:#c026d3;margin-top:24px;}');
-    w.document.write('h3{color:#5ddeda;}');
-    w.document.write('li{margin-left:20px;}');
-    w.document.write('strong{color:#222;}');
-    w.document.write('@media print{body{margin:0;}}');
+    if (!w) { alert('Permita pop-ups para baixar o PDF'); return; }
+    w.document.write('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>' + lesson + ' — Resumo Meggy</title><style>');
+    w.document.write('@page{margin:2cm;size:A4;}');
+    w.document.write('*{box-sizing:border-box;}');
+    w.document.write('body{font-family:Georgia,"Times New Roman",serif;color:#1a1a1a;line-height:1.7;max-width:210mm;margin:0 auto;padding:20px;}');
+    w.document.write('h1{font-family:Helvetica,sans-serif;font-size:22px;color:#c026d3;border-bottom:2px solid #ff8b9f;padding-bottom:8px;margin-bottom:6px;}');
+    w.document.write('.meta{font-family:Helvetica,sans-serif;font-size:11px;color:#666;margin-bottom:24px;}');
+    w.document.write('h2{font-family:Helvetica,sans-serif;font-size:17px;color:#1a1a1a;margin-top:24px;border-left:3px solid #ff8b9f;padding-left:10px;}');
+    w.document.write('h3{font-family:Helvetica,sans-serif;font-size:14px;color:#333;margin-top:18px;}');
+    w.document.write('h4{font-family:Helvetica,sans-serif;font-size:12px;color:#666;text-transform:uppercase;letter-spacing:.05em;}');
+    w.document.write('p{margin:8px 0;text-align:justify;}');
+    w.document.write('ul,ol{margin:8px 0;padding-left:24px;}');
+    w.document.write('li{margin:4px 0;}');
+    w.document.write('code{background:#f4f4f4;padding:2px 6px;border-radius:3px;font-family:"Courier New",monospace;font-size:12px;}');
+    w.document.write('pre{background:#f4f4f4;padding:12px;border-radius:6px;overflow-x:auto;font-size:11px;}');
+    w.document.write('blockquote{border-left:3px solid #ff8b9f;margin:12px 0;padding:4px 16px;color:#555;font-style:italic;}');
+    w.document.write('strong{color:#1a1a1a;}');
+    w.document.write('table{border-collapse:collapse;width:100%;margin:10px 0;}');
+    w.document.write('th,td{border:1px solid #ddd;padding:8px;text-align:left;}');
+    w.document.write('th{background:#f4f4f4;font-weight:600;}');
+    w.document.write('@media print{body{padding:0;}}');
     w.document.write('</style></head><body>');
-    // Converter MD simples para HTML
-    let html = text.replace(/^### (.+)$/gm, '<h3>$1</h3>')
-      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-      .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/^- (.+)$/gm, '<li>$1</li>')
-      .replace(/\n\n/g, '</p><p>')
-      .replace(/\n/g, '<br>');
-    w.document.write('<p>' + html + '</p>');
+    w.document.write('<h1>' + lesson + '</h1>');
+    w.document.write('<div class="meta">Resumo gerado pela Meggy 🐩 · ' + new Date().toLocaleDateString('pt-BR') + '</div>');
+    w.document.write(html);
+    w.document.write('<script>window.onload=function(){setTimeout(function(){window.print();},300);};</script>');
     w.document.write('</body></html>');
     w.document.close();
-    setTimeout(function() { w.print(); }, 500);
   };
 
   window.MeggyShell = Shell;
+  // ★ _downloadIsaAsPdf (replica de produção — mesmo formato A4 + Georgia serif)
   window._downloadIsaAsPdf = function(label) {
     const text = window._lastIsaText || '';
+    const lesson = window._lastIsaLesson || label || 'Conteúdo';
+    const typeLabel = label || 'Resumo';
+    const isQuestions = (window._lastIsaType === 'isa-questions');
+    const isFlashcards = (window._lastIsaType === 'isa-flashcards');
+    let html;
+    if (isQuestions && Array.isArray(window._lastIsaText)) {
+      // Não usado — questions são renderizadas como HTML no _renderISAResult
+      html = '<p>Ver na tela.</p>';
+    } else if (isFlashcards && Array.isArray(window._lastIsaText)) {
+      html = '<p>Ver na tela.</p>';
+    } else {
+      html = (window.marked && window.DOMPurify) ? window.DOMPurify.sanitize(window.marked.parse(text)) : (function(t){ return t.replace(/^### (.+)$/gm, '<h3>$1</h3>').replace(/^## (.+)$/gm, '<h2>$1</h2>').replace(/^# (.+)$/gm, '<h1>$1</h1>').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/^- (.+)$/gm, '<li>$1</li>').replace(/\n/g, '<br>'); })(text);
+    }
     const w = window.open('', '_blank');
-    w.document.write('<html><head><title>Meggy - ' + label + '</title><style>');
-    w.document.write('body{font-family:Arial,sans-serif;max-width:800px;margin:40px auto;padding:20px;color:#333;line-height:1.6;}');
-    w.document.write('h1{color:#ff8b9f;border-bottom:2px solid #ff8b9f;padding-bottom:10px;}');
-    w.document.write('h2{color:#c026d3;margin-top:24px;}');
-    w.document.write('h3{color:#5ddeda;}');
-    w.document.write('li{margin-left:20px;}');
-    w.document.write('strong{color:#222;}');
-    w.document.write('@media print{body{margin:0;}}');
+    if (!w) { alert('Permita pop-ups para baixar o PDF'); return; }
+    w.document.write('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>' + lesson + ' — ' + typeLabel + ' Meggy</title><style>');
+    w.document.write('@page{margin:2cm;size:A4;}');
+    w.document.write('*{box-sizing:border-box;}');
+    w.document.write('body{font-family:Georgia,"Times New Roman",serif;color:#1a1a1a;line-height:1.7;max-width:210mm;margin:0 auto;padding:20px;}');
+    w.document.write('h1{font-family:Helvetica,sans-serif;font-size:22px;color:#c026d3;border-bottom:2px solid #ff8b9f;padding-bottom:8px;margin-bottom:6px;}');
+    w.document.write('.meta{font-family:Helvetica,sans-serif;font-size:11px;color:#666;margin-bottom:24px;}');
+    w.document.write('h2{font-family:Helvetica,sans-serif;font-size:17px;color:#1a1a1a;margin-top:24px;border-left:3px solid #ff8b9f;padding-left:10px;}');
+    w.document.write('h3{font-family:Helvetica,sans-serif;font-size:14px;color:#333;margin-top:18px;}');
+    w.document.write('p{margin:8px 0;text-align:justify;}');
+    w.document.write('ul,ol{margin:8px 0;padding-left:24px;}');
+    w.document.write('li{margin:4px 0;}');
+    w.document.write('blockquote{border-left:3px solid #ff8b9f;margin:12px 0;padding:4px 16px;color:#555;font-style:italic;}');
+    w.document.write('strong{color:#1a1a1a;}');
+    w.document.write('@media print{body{padding:0;}}');
     w.document.write('</style></head><body>');
-    let html = text.replace(/^### (.+)$/gm, '<h3>$1</h3>')
-      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-      .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/^- (.+)$/gm, '<li>$1</li>')
-      .replace(/\n\n/g, '</p><p>')
-      .replace(/\n/g, '<br>');
-    w.document.write('<p>' + html + '</p></body></html>');
+    w.document.write('<h1>' + typeLabel + ' · ' + lesson + '</h1>');
+    w.document.write('<div class="meta">' + typeLabel + ' gerado pela Meggy 🐩 · ' + new Date().toLocaleDateString('pt-BR') + '</div>');
+    w.document.write(html);
+    w.document.write('<script>window.onload=function(){setTimeout(function(){window.print();},300);};</script>');
+    w.document.write('</body></html>');
     w.document.close();
-    setTimeout(function() { w.print(); }, 500);
   };
 
   window.Shell = Shell; // ★ Alias para onclick inline
