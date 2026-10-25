@@ -252,6 +252,10 @@
       const view = Shell.router.routes[path] || 'home';
       Shell.state.currentView = view;
       Shell.sidebar.updateActive(path);
+      // ★ Fechar Meggy AI drawer ao trocar de aba (só fica aberto na aba meggy-ai)
+      if (view !== 'meggy-ai' && Shell.meggyAIDrawerOpen) {
+        Shell.closeMeggyAIDrawer();
+      }
 
       const main = document.getElementById('meggy-main');
       if (!main) return;
