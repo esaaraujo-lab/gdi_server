@@ -996,14 +996,26 @@ body.meggy-focus-mode #meggy-main {
   align-items: flex-start;
 }
 
-.gdi-study.mode-fv .gdi-study-right,
-.gdi-study.mode-fm .gdi-study-left {
-  display: none;
-}
-
-.gdi-study.mode-fv .gdi-study-grid,
-.gdi-study.mode-fm .gdi-study-grid {
+/* ★ C1: Modo foco — usar visibility/position (NÃO display:none) para manter iframes vivos */
+.gdi-study-grid.mode-fv {
   grid-template-columns: 1fr;
+}
+.gdi-study-grid.mode-fv .gdi-study-right {
+  visibility: hidden;
+  position: absolute;
+  width: 0; height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.gdi-study-grid.mode-fm {
+  grid-template-columns: 1fr;
+}
+.gdi-study-grid.mode-fm .gdi-study-left {
+  visibility: hidden;
+  position: absolute;
+  width: 0; height: 0;
+  overflow: hidden;
+  pointer-events: none;
 }
 
 .gdi-study-left {
@@ -2668,6 +2680,247 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 }
 [data-bs-theme="light"] .meggy-summary-body { color: #1f2328; }
 [data-bs-theme="light"] .meggy-quiz-feedback-expl { color: #59636e; }
+
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE RESPONSIVENESS — A1/A2/A3/A5/A6
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ★ A2: Sidebar overlay — z-index fix (overlay inside shell, between header and sidebar) */
+.meggy-sidebar-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 50;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.meggy-sidebar-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ★ A6: Safe area insets for iPhone notch */
+@supports (padding: env(safe-area-inset-top)) {
+  .meggy-header {
+    padding-top: env(safe-area-inset-top);
+    height: calc(56px + env(safe-area-inset-top));
+  }
+  .meggy-sidebar {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  #meggy-main {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* ★ A6: Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .meggy-flashcard { transition: none !important; }
+  .gdi-mat-isa-spin { animation: none !important; }
+}
+
+/* ═══ Mobile breakpoint (≤768px) ═══ */
+@media (max-width: 768px) {
+  /* A2: Sidebar width */
+  #meggy-sidebar { width: min(260px, 85vw) !important; }
+
+  /* A3: Touch targets ≥44px */
+  .meggy-mobile-menu-btn {
+    min-width: 44px; min-height: 44px;
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 8px;
+  }
+  .meggy-header-btn {
+    min-height: 44px; min-width: 44px;
+    padding: 8px 12px;
+    justify-content: center;
+  }
+  .meggy-sidebar-item {
+    min-height: 44px;
+    padding: 12px 20px;
+  }
+  .meggy-breadcrumb a {
+    padding: 6px 8px;
+    border-radius: 6px;
+    min-height: 32px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* A5: Global mobile polish */
+  .meggy-header { padding: 0 12px !important; }
+  .meggy-search { max-width: 200px !important; }
+  #meggy-main { padding: 16px 10px !important; }
+  .meggy-cards-grid { grid-template-columns: 1fr !important; gap: 10px !important; }
+  .meggy-card { padding: 14px !important; }
+  .meggy-card-icon { font-size: 28px !important; }
+  .meggy-card-title { font-size: 14px !important; }
+  .meggy-card-meta { font-size: 11px !important; }
+  .meggy-view-title { font-size: 18px !important; }
+  .meggy-placeholder { padding: 40px 16px !important; }
+  .meggy-placeholder-icon { font-size: 40px !important; }
+  .meggy-loading { padding: 24px 16px !important; }
+
+  /* A1: Mobile video page — stack vertically */
+  .gdi-study { padding: 8px 10px 24px !important; }
+
+  /* Stack grid: video on top, materials below */
+  .gdi-study-grid,
+  .gdi-study-grid.mode-fv,
+  .gdi-study-grid.mode-fm {
+    grid-template-columns: 1fr !important;
+  }
+  /* Never hide panels on mobile — show everything stacked */
+  .gdi-study-grid.mode-fv .gdi-study-right,
+  .gdi-study-grid.mode-fm .gdi-study-left {
+    visibility: visible !important;
+    position: static !important;
+    width: auto !important;
+    height: auto !important;
+    overflow: visible !important;
+    pointer-events: auto !important;
+  }
+
+  /* Modes bar: horizontal scroll */
+  .gdi-study-bar {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 8px !important;
+    margin-bottom: 10px !important;
+  }
+  .gdi-study-bar::-webkit-scrollbar { display: none; }
+  .gdi-study-modes { flex-shrink: 0; }
+  .gdi-mode-btn, .gdi-watched-btn {
+    padding: 8px 12px !important;
+    font-size: 12px !important;
+    white-space: nowrap;
+    min-height: 40px;
+  }
+  .gdi-mode-btn .bi, .gdi-watched-btn .bi { font-size: 14px !important; }
+
+  /* Breadcrumb: smaller font */
+  .gdi-bc { font-size: 11px !important; }
+
+  /* Video player: full-width */
+  .gdi-player-wrap {
+    max-width: 100% !important;
+    border-radius: 10px !important;
+  }
+  .gdi-player-wrap video { max-height: 56vw; }
+
+  /* Video controls bar: wrap to 2 rows */
+  .gdi-study-left > div[style*="display:flex;gap:8px;flex-wrap:wrap;"] {
+    gap: 6px !important;
+  }
+  .gdi-study-left .gdi-mode-btn {
+    flex: 1 1 calc(50% - 6px);
+    justify-content: center;
+    min-height: 40px;
+    font-size: 12px !important;
+  }
+
+  /* Notes: smaller */
+  .gdi-notes { padding: 8px !important; }
+  .gdi-notes textarea { font-size: 12px !important; min-height: 60px; }
+
+  /* Playlist: collapse height */
+  #gdi-playlist-wrap { padding: 6px !important; }
+  #gdi-playlist-body { max-height: 180px !important; }
+
+  /* Material tabs: horizontal scroll */
+  #gdi-mat-tabs {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 4px;
+  }
+  #gdi-mat-tabs::-webkit-scrollbar { display: none; }
+  .gdi-mat-tab {
+    flex-shrink: 0;
+    padding: 8px 12px !important;
+    font-size: 12px !important;
+    min-height: 40px;
+  }
+
+  /* Material body: shorter when stacked */
+  #gdi-mat-body, .gdi-mat-body {
+    height: 70vh !important;
+    min-height: 320px !important;
+  }
+
+  /* ISA result: full-width */
+  .gdi-mat-isa-result {
+    max-width: 100% !important;
+    padding: 10px 12px !important;
+  }
+  .gdi-isa-summary-body {
+    padding: 12px 14px !important;
+    font-size: 13px !important;
+  }
+
+  /* Flashcard deck: smaller on mobile */
+  .meggy-flashcard-deck { max-width: 100% !important; }
+  .meggy-flashcard { min-height: 260px !important; }
+  .meggy-flashcard-text { font-size: 14px !important; }
+  .meggy-flashcard-nav { max-width: 100% !important; }
+
+  /* Quiz: full-width */
+  .meggy-quiz-card { max-width: 100% !important; padding: 14px !important; }
+  .meggy-quiz-statement { font-size: 14px !important; }
+  .meggy-quiz-option { padding: 10px 12px !important; }
+  .meggy-quiz-option-text { font-size: 13px !important; }
+  .meggy-quiz-skip { width: 44px; height: 44px; }
+
+  /* Summary: full-width */
+  .meggy-summary-card { max-width: 100% !important; }
+  .meggy-summary-body { padding: 14px !important; font-size: 13px !important; max-height: calc(100vh - 180px) !important; }
+
+  /* Study list: full-width */
+  .meggy-study-list { max-width: 100% !important; }
+  .meggy-study-item { padding: 12px !important; }
+
+  /* SRS grade panel: 2x2 grid on mobile */
+  .meggy-fc-grade-btns { grid-template-columns: 1fr 1fr !important; }
+
+  /* Meggy AI drawer: full-width */
+  .meggy-ai-drawer { width: 100% !important; max-width: 100% !important; }
+}
+
+/* ═══ Small phone (≤480px) ═══ */
+@media (max-width: 480px) {
+  .gdi-study { padding: 6px 8px 20px !important; }
+  .gdi-mode-btn, .gdi-watched-btn {
+    padding: 7px 10px !important;
+    font-size: 11px !important;
+  }
+  .gdi-player-wrap video { max-height: 52vw; }
+  #gdi-mat-body { height: 65vh !important; }
+  .meggy-card-icon { font-size: 24px !important; }
+  .meggy-view-title { font-size: 16px !important; }
+  .meggy-flashcard { min-height: 220px !important; }
+}
+
+/* ═══ Tablet (769px–1024px) ═══ */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .gdi-study-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .gdi-study { padding: 12px 14px 32px; }
+  .meggy-cards-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)) !important; }
+}
+
+/* ═══ Landscape phone ═══ */
+@media (max-width: 900px) and (orientation: landscape) {
+  .gdi-player-wrap video { max-height: 70vh; }
+  #gdi-mat-body { height: 60vh !important; }
+}
 
 
 
