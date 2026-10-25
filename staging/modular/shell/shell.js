@@ -1103,164 +1103,7 @@
         }
       },
 
-      // ═══ Meggy AI Drawer ═══
-      meggyAIDrawerOpen: false,
-      openMeggyAIDrawer() {
-        let drawer = document.getElementById('meggy-ai-drawer');
-        if (!drawer) {
-          drawer = document.createElement('div');
-          drawer.id = 'meggy-ai-drawer';
-          drawer.className = 'meggy-ai-drawer';
-          drawer.innerHTML = `
-            <div class="meggy-ai-drawer-header">
-              <div class="meggy-ai-drawer-title">🐩 Meggy AI</div>
-              <button class="meggy-ai-drawer-close" id="meggy-ai-close"><i class="bi bi-x"></i></button>
-            </div>
-            <div class="meggy-ai-drawer-tabs">
-              <button class="meggy-ai-drawer-tab active" data-aitab="actions">⚡ Ações</button>
-              <button class="meggy-ai-drawer-tab" data-aitab="chat">💬 Chat</button>
-            </div>
-            <div class="meggy-ai-drawer-body" id="meggy-ai-body"></div>
-          `;
-          document.body.appendChild(drawer);
-          document.getElementById('meggy-ai-close').onclick = () => Shell.closeMeggyAIDrawer();
-          drawer.querySelectorAll('.meggy-ai-drawer-tab').forEach(tab => {
-            tab.onclick = () => {
-              drawer.querySelectorAll('.meggy-ai-drawer-tab').forEach(t => t.classList.remove('active'));
-              tab.classList.add('active');
-              Shell.renderMeggyAITab(tab.dataset.aitab);
-            };
-          });
-        }
-        drawer.classList.add('open');
-        Shell.meggyAIDrawerOpen = true;
-        Shell.renderMeggyAITab('actions');
-      },
-      closeMeggyAIDrawer() {
-        const drawer = document.getElementById('meggy-ai-drawer');
-        if (drawer) drawer.classList.remove('open');
-        Shell.meggyAIDrawerOpen = false;
-      },
-      renderMeggyAITab(tab) {
-        const body = document.getElementById('meggy-ai-body');
-        if (!body) return;
-        if (tab === 'actions') {
-          body.innerHTML = `<div class="meggy-ai-action-grid">
-            <button class="meggy-ai-action-btn" data-action="resumo"><i class="bi bi-file-earmark-text"></i>Gerar Resumo</button>
-            <button class="meggy-ai-action-btn" data-action="pilulas"><i class="bi bi-capsule"></i>Pílulas</button>
-            <button class="meggy-ai-action-btn" data-action="questoes"><i class="bi bi-patch-question"></i>Questões</button>
-            <button class="meggy-ai-action-btn" data-action="flashcards"><i class="bi bi-card-text"></i>Flashcards</button>
-          </div>`;
-          body.querySelectorAll('.meggy-ai-action-btn').forEach(btn => { btn.onclick = () => Shell.meggyAIAction(btn.dataset.action); });
-        } else if (tab === 'chat') {
-          body.innerHTML = `<div class="meggy-ai-chat-messages" id="meggy-ai-messages"></div>
-            <div class="meggy-ai-chat-input"><textarea id="meggy-ai-input" placeholder="Pergunte..." rows="2"></textarea><button id="meggy-ai-send"><i class="bi bi-send"></i></button></div>`;
-          const send = async () => {
-            const msg = document.getElementById('meggy-ai-input').value.trim();
-            if (!msg) return;
-            const msgs = document.getElementById('meggy-ai-messages');
-            msgs.innerHTML += `<div class="meggy-ai-msg user">${msg}</div>`;
-            document.getElementById('meggy-ai-input').value = '';
-            msgs.innerHTML += `<div class="meggy-ai-msg bot" id="meggy-ai-typing">🐾 Pensando...</div>`;
-            msgs.scrollTop = msgs.scrollHeight;
-            try { const r = await fetch('/api/ai', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: msg, messages: []}) }); const d = await r.json(); document.getElementById('meggy-ai-typing').textContent = d.response || 'Sem resposta'; } catch (e) { document.getElementById('meggy-ai-typing').textContent = 'Erro: ' + e.message; }
-            msgs.scrollTop = msgs.scrollHeight;
-          };
-          document.getElementById('meggy-ai-send').onclick = send;
-          document.getElementById('meggy-ai-input').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
-        }
-      },
-      async meggyAIAction(action) {
-        const body = document.getElementById('meggy-ai-body');
-        const lessonName = Shell.state.playerPlaylist?.[Shell.state.playerIndex]?.name || '';
-        body.innerHTML = '<div style="padding:20px;text-align:center;"><div class="spinner-border" style="color:#ff8b9f;"></div><div style="margin-top:12px;color:#9aa4b8;">Gerando...</div></div>';
-        try {
-          let msg = '';
-          if (action === 'resumo') msg = `Gere um resumo detalhado da aula: ${lessonName}`;
-          else if (action === 'pilulas') msg = `Crie pílulas de conhecimento sobre: ${lessonName}`;
-          else if (action === 'questoes') msg = `Gere 5 questões de múltipla escolha sobre: ${lessonName}`;
-          else if (action === 'flashcards') msg = `Crie 10 flashcards sobre: ${lessonName}`;
-          const r = await fetch('/api/ai', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: msg, messages: []}) });
-          const d = await r.json();
-          const text = d.response || d.markdown || 'Sem resposta';
-          let h = text.replace(/^### (.+)$/gm,'<h3 style="color:#ff8b9f;margin:12px 0 6px;">$1</h3>').replace(/^## (.+)$/gm,'<h2 style="color:#ff8b9f;margin:16px 0 8px;">$1</h2>').replace(/^# (.+)$/gm,'<h1 style="color:#ff8b9f;margin:20px 0 10px;">$1</h1>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/^- (.+)$/gm,'<li>$1</li>').replace(/\n/g,'<br>');
-          body.innerHTML = `<div style="padding:16px;font-size:13px;color:#e6edf3;">${h}</div>`;
-        } catch (e) { body.innerHTML = 'Erro: ' + e.message; }
-      },
 
-      // meggyAI(el) removido — drawer agora é aberto via openMeggyAIDrawer()
-
-      placeholder(el, title, icon, phase) {
-        el.innerHTML = `
-          <div class="meggy-view-header">
-            <h1 class="meggy-view-title">${icon} ${title}</h1>
-          </div>
-          <div class="meggy-placeholder">
-            <div class="meggy-placeholder-icon">${icon}</div>
-            <div class="meggy-placeholder-title">${title}</div>
-            <div class="meggy-placeholder-desc">Esta seção será migrada em breve.</div>
-            <div class="meggy-placeholder-phase">${phase || 'Fase 5'} do plano de unificação</div>
-          </div>
-        `;
-      },
-
-      // ═══ _estudosView — placeholder com lazy load do GDIndex ═══
-      _estudosView(el, feature) {
-        const titles = {
-          'progresso': '📊 Progresso', 'questoes': '❓ Questões', 'flashcards': '🃏 Flashcards',
-          'simulado': '📝 Simulado', 'provas': '📄 Provas', 'redacao': '✍️ Redação',
-          'cronograma': '📅 Cronograma', 'estatisticas': '📈 Estatísticas', 'mapa-fracos': '🎯 Mapa de Fracos',
-          'conquistas': '🏆 Conquistas', 'apps': '📱 Apps', 'resumos': '📚 Resumos',
-          'plano': '📋 Plano', 'config': '⚙️ Configurações'
-        };
-        const title = titles[feature] || feature;
-        el.innerHTML = `
-          <div class="meggy-view-header">
-            <h1 class="meggy-view-title">${title}</h1>
-          </div>
-          <div class="meggy-placeholder">
-            <div class="meggy-placeholder-icon">${title.split(' ')[0]}</div>
-            <div class="meggy-placeholder-title">${title.replace(/^\S+\s/, '')}</div>
-            <div class="meggy-placeholder-desc">Carregue o módulo completo do GDIndex para acessar esta funcionalidade.</div>
-            <button class="meggy-header-btn" id="meggy-load-estudos-${feature}" style="margin-top:16px;">
-              <i class="bi bi-cloud-download"></i> Carregar GDIndex
-            </button>
-          </div>
-        `;
-        const btn = document.getElementById('meggy-load-estudos-' + feature);
-        if (btn) {
-          btn.onclick = async () => {
-            btn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Carregando...';
-            btn.disabled = true;
-            const ok = await Shell.loadFullGDIndex();
-            if (ok && window.__gdiStudy) {
-              const map = {
-                'progresso': () => window.__gdiStudy.panel?.renderHome?.(el),
-                'questoes': () => window.__gdiStudy.questions?.renderQuestoes?.(el),
-                'simulado': () => window.__gdiStudy.questions?.renderSimulado?.(el),
-                'cronograma': () => window.__gdiStudy.questions?.renderCronograma?.(el),
-                'provas': () => window.__gdiStudy.advanced?.renderProvas?.(el),
-                'redacao': () => window.__gdiStudy.advanced?.renderRedacao?.(el),
-                'estatisticas': () => window.__gdiStudy.panel?.renderStats?.(el),
-                'mapa-fracos': () => window.__gdiStudy.advanced?.renderRadar?.(el),
-                'conquistas': () => window.__gdiStudy.panel?.renderAchievements?.(el),
-                'apps': () => window.__gdiStudy.panel?.renderApps?.(el),
-                'resumos': () => window.__gdiMeggy?.summaries?.renderResumos?.(el),
-                'plano': () => window.__gdiStudy.plan?.renderAll?.(el),
-                'config': () => { el.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">⚙️</div><div class="meggy-placeholder-title">Configurações</div><div class="meggy-placeholder-desc">Em breve.</div></div>'; }
-              };
-              if (map[feature]) {
-                try { map[feature](); } catch (e) { el.innerHTML = `<div class="meggy-placeholder">⚠️ ${e.message}</div>`; }
-              } else {
-                el.innerHTML = '<div class="meggy-placeholder">⚠️ Funcionalidade não disponível</div>';
-              }
-            } else {
-              btn.innerHTML = '⚠️ Falhou — tentar novamente';
-              btn.disabled = false;
-            }
-          };
-        }
-      }
     },
 
     // ─── Actions ───
@@ -1285,11 +1128,173 @@
       if (confirm('Deseja sair?')) {
         window.location.href = '/logout';
       }
-    }
+    },
+
+    // ═══ Meggy AI Drawer ═══
+    meggyAIDrawerOpen: false,
+    openMeggyAIDrawer() {
+      let drawer = document.getElementById('meggy-ai-drawer');
+      if (!drawer) {
+        drawer = document.createElement('div');
+        drawer.id = 'meggy-ai-drawer';
+        drawer.className = 'meggy-ai-drawer';
+        drawer.innerHTML = `
+        <div class="meggy-ai-drawer-header">
+          <div class="meggy-ai-drawer-title">🐩 Meggy AI</div>
+          <button class="meggy-ai-drawer-close" id="meggy-ai-close"><i class="bi bi-x"></i></button>
+        </div>
+        <div class="meggy-ai-drawer-tabs">
+          <button class="meggy-ai-drawer-tab active" data-aitab="actions">⚡ Ações</button>
+          <button class="meggy-ai-drawer-tab" data-aitab="chat">💬 Chat</button>
+        </div>
+        <div class="meggy-ai-drawer-body" id="meggy-ai-body"></div>
+        `;
+        document.body.appendChild(drawer);
+        document.getElementById('meggy-ai-close').onclick = () => Shell.closeMeggyAIDrawer();
+        drawer.querySelectorAll('.meggy-ai-drawer-tab').forEach(tab => {
+        tab.onclick = () => {
+          drawer.querySelectorAll('.meggy-ai-drawer-tab').forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+          Shell.renderMeggyAITab(tab.dataset.aitab);
+        };
+        });
+      }
+      drawer.classList.add('open');
+      Shell.meggyAIDrawerOpen = true;
+      Shell.renderMeggyAITab('actions');
+    },
+    closeMeggyAIDrawer() {
+      const drawer = document.getElementById('meggy-ai-drawer');
+      if (drawer) drawer.classList.remove('open');
+      Shell.meggyAIDrawerOpen = false;
+    },
+    renderMeggyAITab(tab) {
+      const body = document.getElementById('meggy-ai-body');
+      if (!body) return;
+      if (tab === 'actions') {
+        body.innerHTML = `<div class="meggy-ai-action-grid">
+        <button class="meggy-ai-action-btn" data-action="resumo"><i class="bi bi-file-earmark-text"></i>Gerar Resumo</button>
+        <button class="meggy-ai-action-btn" data-action="pilulas"><i class="bi bi-capsule"></i>Pílulas</button>
+        <button class="meggy-ai-action-btn" data-action="questoes"><i class="bi bi-patch-question"></i>Questões</button>
+        <button class="meggy-ai-action-btn" data-action="flashcards"><i class="bi bi-card-text"></i>Flashcards</button>
+        </div>`;
+        body.querySelectorAll('.meggy-ai-action-btn').forEach(btn => { btn.onclick = () => Shell.meggyAIAction(btn.dataset.action); });
+      } else if (tab === 'chat') {
+        body.innerHTML = `<div class="meggy-ai-chat-messages" id="meggy-ai-messages"></div>
+        <div class="meggy-ai-chat-input"><textarea id="meggy-ai-input" placeholder="Pergunte..." rows="2"></textarea><button id="meggy-ai-send"><i class="bi bi-send"></i></button></div>`;
+        const send = async () => {
+        const msg = document.getElementById('meggy-ai-input').value.trim();
+        if (!msg) return;
+        const msgs = document.getElementById('meggy-ai-messages');
+        msgs.innerHTML += `<div class="meggy-ai-msg user">${msg}</div>`;
+        document.getElementById('meggy-ai-input').value = '';
+        msgs.innerHTML += `<div class="meggy-ai-msg bot" id="meggy-ai-typing">🐾 Pensando...</div>`;
+        msgs.scrollTop = msgs.scrollHeight;
+        try { const r = await fetch('/api/ai', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: msg, messages: []}) }); const d = await r.json(); document.getElementById('meggy-ai-typing').textContent = d.response || 'Sem resposta'; } catch (e) { document.getElementById('meggy-ai-typing').textContent = 'Erro: ' + e.message; }
+        msgs.scrollTop = msgs.scrollHeight;
+        };
+        document.getElementById('meggy-ai-send').onclick = send;
+        document.getElementById('meggy-ai-input').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
+      }
+    },
+    async meggyAIAction(action) {
+      const body = document.getElementById('meggy-ai-body');
+      const lessonName = Shell.state.playerPlaylist?.[Shell.state.playerIndex]?.name || '';
+      body.innerHTML = '<div style="padding:20px;text-align:center;"><div class="spinner-border" style="color:#ff8b9f;"></div><div style="margin-top:12px;color:#9aa4b8;">Gerando...</div></div>';
+      try {
+        let msg = '';
+        if (action === 'resumo') msg = `Gere um resumo detalhado da aula: ${lessonName}`;
+        else if (action === 'pilulas') msg = `Crie pílulas de conhecimento sobre: ${lessonName}`;
+        else if (action === 'questoes') msg = `Gere 5 questões de múltipla escolha sobre: ${lessonName}`;
+        else if (action === 'flashcards') msg = `Crie 10 flashcards sobre: ${lessonName}`;
+        const r = await fetch('/api/ai', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: msg, messages: []}) });
+        const d = await r.json();
+        const text = d.response || d.markdown || 'Sem resposta';
+        let h = text.replace(/^### (.+)$/gm,'<h3 style="color:#ff8b9f;margin:12px 0 6px;">$1</h3>').replace(/^## (.+)$/gm,'<h2 style="color:#ff8b9f;margin:16px 0 8px;">$1</h2>').replace(/^# (.+)$/gm,'<h1 style="color:#ff8b9f;margin:20px 0 10px;">$1</h1>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/^- (.+)$/gm,'<li>$1</li>').replace(/\n/g,'<br>');
+        body.innerHTML = `<div style="padding:16px;font-size:13px;color:#e6edf3;">${h}</div>`;
+      } catch (e) { body.innerHTML = 'Erro: ' + e.message; }
+    },
+
+    // meggyAI(el) removido — drawer agora é aberto via openMeggyAIDrawer()
+
+    placeholder(el, title, icon, phase) {
+      el.innerHTML = `
+        <div class="meggy-view-header">
+        <h1 class="meggy-view-title">${icon} ${title}</h1>
+        </div>
+        <div class="meggy-placeholder">
+        <div class="meggy-placeholder-icon">${icon}</div>
+        <div class="meggy-placeholder-title">${title}</div>
+        <div class="meggy-placeholder-desc">Esta seção será migrada em breve.</div>
+        <div class="meggy-placeholder-phase">${phase || 'Fase 5'} do plano de unificação</div>
+        </div>
+      `;
+    },
+
+    // ═══ _estudosView — placeholder com lazy load do GDIndex ═══
+    _estudosView(el, feature) {
+      const titles = {
+        'progresso': '📊 Progresso', 'questoes': '❓ Questões', 'flashcards': '🃏 Flashcards',
+        'simulado': '📝 Simulado', 'provas': '📄 Provas', 'redacao': '✍️ Redação',
+        'cronograma': '📅 Cronograma', 'estatisticas': '📈 Estatísticas', 'mapa-fracos': '🎯 Mapa de Fracos',
+        'conquistas': '🏆 Conquistas', 'apps': '📱 Apps', 'resumos': '📚 Resumos',
+        'plano': '📋 Plano', 'config': '⚙️ Configurações'
+      };
+      const title = titles[feature] || feature;
+      el.innerHTML = `
+        <div class="meggy-view-header">
+        <h1 class="meggy-view-title">${title}</h1>
+        </div>
+        <div class="meggy-placeholder">
+        <div class="meggy-placeholder-icon">${title.split(' ')[0]}</div>
+        <div class="meggy-placeholder-title">${title.replace(/^\S+\s/, '')}</div>
+        <div class="meggy-placeholder-desc">Carregue o módulo completo do GDIndex para acessar esta funcionalidade.</div>
+        <button class="meggy-header-btn" id="meggy-load-estudos-${feature}" style="margin-top:16px;">
+          <i class="bi bi-cloud-download"></i> Carregar GDIndex
+        </button>
+        </div>
+      `;
+      const btn = document.getElementById('meggy-load-estudos-' + feature);
+      if (btn) {
+        btn.onclick = async () => {
+        btn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Carregando...';
+        btn.disabled = true;
+        const ok = await Shell.loadFullGDIndex();
+        if (ok && window.__gdiStudy) {
+          const map = {
+            'progresso': () => window.__gdiStudy.panel?.renderHome?.(el),
+            'questoes': () => window.__gdiStudy.questions?.renderQuestoes?.(el),
+            'simulado': () => window.__gdiStudy.questions?.renderSimulado?.(el),
+            'cronograma': () => window.__gdiStudy.questions?.renderCronograma?.(el),
+            'provas': () => window.__gdiStudy.advanced?.renderProvas?.(el),
+            'redacao': () => window.__gdiStudy.advanced?.renderRedacao?.(el),
+            'estatisticas': () => window.__gdiStudy.panel?.renderStats?.(el),
+            'mapa-fracos': () => window.__gdiStudy.advanced?.renderRadar?.(el),
+            'conquistas': () => window.__gdiStudy.panel?.renderAchievements?.(el),
+            'apps': () => window.__gdiStudy.panel?.renderApps?.(el),
+            'resumos': () => window.__gdiMeggy?.summaries?.renderResumos?.(el),
+            'plano': () => window.__gdiStudy.plan?.renderAll?.(el),
+            'flashcards': () => window.__gdiMeggy?.flashcards?.renderThemeCardsPaginated?.(el),
+                'config': () => { el.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">⚙️</div><div class="meggy-placeholder-title">Configurações</div><div class="meggy-placeholder-desc">Em breve.</div></div>'; }
+          };
+          if (map[feature]) {
+            try { map[feature](); } catch (e) { el.innerHTML = `<div class="meggy-placeholder">⚠️ ${e.message}</div>`; }
+          } else {
+            el.innerHTML = '<div class="meggy-placeholder">⚠️ Funcionalidade não disponível</div>';
+          }
+        } else {
+          btn.innerHTML = '⚠️ Falhou — tentar novamente';
+          btn.disabled = false;
+        }
+        };
+      }
+    },
+
   };
 
   // ─── Export to window ───
   window.MeggyShell = Shell;
+
 
   // ─── Auto-init ───
   if (document.readyState === 'loading') {
@@ -1300,6 +1305,7 @@
 
   console.log('[Meggy Shell] script loaded, waiting for modules...');
 })();
+
 
 
 
