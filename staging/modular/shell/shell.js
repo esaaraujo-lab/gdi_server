@@ -652,6 +652,7 @@
         const fileSize = pl[idx]?.size || '';
         const iconClass = isAudio ? 'bi-music-note-beamed' : 'bi-camera-video-fill';
 
+        const mode = Shell.state.layoutMode || 'rows';
         // ★ Layout ALFACON — rows/cols/focus-video/focus-study
         main.innerHTML = `
           <div class="gdi-study alfacon-layout mode-rows" id="gdi-study" data-layout-mode="rows">
@@ -1087,7 +1088,7 @@
           }
         };
         document.addEventListener('keydown', keyHandler);
-        main._cleanupKeyboard = () => { document.removeEventListener('keydown', keyHandler); document.body.classList.remove('meggy-player-active'); const eb = document.getElementById('meggy-sidebar-expand-btn'); if (eb) eb.remove(); };
+        main._cleanupKeyboard = () => { document.removeEventListener('keydown', keyHandler); document.body.classList.remove('meggy-player-active'); };
 
         main.scrollTop = 0;
         if (pl.length <= 1 && Shell.state.currentFolderPath) {
