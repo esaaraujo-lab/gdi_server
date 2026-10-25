@@ -95,33 +95,8 @@
       root.appendChild(overlay);
       root.appendChild(shell);
 
-      // ★ Bloquear Área do Aluno antiga (study-panel.js) — não deve abrir sobre o shell nativo
-      try {
-        // Override __gdiOpenCentral (alias usado pelo botão "Área do Aluno" do GDIndex)
-        window.__gdiOpenCentral = function() {
-          console.log('[Meggy Shell] __gdiOpenCentral bloqueado — shell nativo já está ativo');
-          Shell.router.navigate('/cursos');
-        };
-        // Override panel.openPanel se existir
-        if (window.__gdiStudy && window.__gdiStudy.panel) {
-          window.__gdiStudy.panel.openPanel = function() {
-            console.log('[Meggy Shell] __gdiStudy.panel.openPanel bloqueado — shell nativo já está ativo');
-            Shell.router.navigate('/cursos');
-          };
-        }
-        // Esconder qualquer elemento .gdi-central-box que apareça
-        const observer = new MutationObserver(() => {
-          document.querySelectorAll('.gdi-central-box, #gdi-central-panel, [class*="gdi-central"]').forEach(el => {
-            if (el.id !== 'meggy-shell' && !el.closest('#meggy-shell')) {
-              el.style.display = 'none';
-            }
-          });
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
-        console.log('[Meggy Shell] ✓ Área do Aluno antiga bloqueada');
-      } catch (e) {
-        console.warn('[Meggy Shell] falha ao bloquear área do aluno antiga:', e);
-      }
+      // ★ Área do Aluno antiga REMOVIDA — study-panel.js não é mais carregado
+      console.log('[Meggy Shell] ✓ Área do Aluno antiga removida (study-panel.js não carregado)');
 
       // Bind events
       document.getElementById('meggy-menu-btn').onclick = () => Shell.toggleSidebar();
@@ -417,7 +392,7 @@
               const container = document.getElementById('meggy-cursos-container');
               container.innerHTML = '';
               const wrapper = document.createElement('div');
-              wrapper.className = 'gdi-central-box';
+              wrapper.className = 'meggy-cursos-wrapper';
               wrapper.style.cssText = 'max-width:none;padding:0;background:transparent;border:none;';
               container.appendChild(wrapper);
               window.__gdiStudy.courses.renderCursos(wrapper);
@@ -1213,46 +1188,7 @@
         } catch (e) { body.innerHTML = 'Erro: ' + e.message; }
       },
 
-      meggyAI(el) {
-        el.innerHTML = `
-          <div class="meggy-view-header">
-            <h1 class="meggy-view-title">🤖 Meggy AI</h1>
-          </div>
-          <div id="meggy-ai-container">
-            <div class="meggy-loading">
-              <div class="spinner-border"></div>
-              <div>Carregando Meggy AI...</div>
-            </div>
-          </div>
-        `;
-        try {
-          if (window.__gdiMeggy && window.__gdiMeggy.widget) {
-            // Try to open the widget
-            if (window.__gdiMeggy.widget.open) {
-              window.__gdiMeggy.widget.open();
-              document.getElementById('meggy-ai-container').innerHTML = `
-                <div class="meggy-placeholder">
-                  <div class="meggy-placeholder-icon">🤖</div>
-                  <div class="meggy-placeholder-title">Meggy AI aberta</div>
-                  <div class="meggy-placeholder-desc">O widget da Meggy AI foi aberto.</div>
-                  <div class="meggy-placeholder-phase">Integração completa do drawer na Fase 4</div>
-                </div>`;
-            } else {
-              throw new Error('widget.open não disponível');
-            }
-          } else {
-            throw new Error('window.__gdiMeggy.widget não disponível');
-          }
-        } catch (e) {
-          document.getElementById('meggy-ai-container').innerHTML = `
-            <div class="meggy-placeholder">
-              <div class="meggy-placeholder-icon">🤖</div>
-              <div class="meggy-placeholder-title">Meggy AI</div>
-              <div class="meggy-placeholder-desc">${e.message}</div>
-              <div class="meggy-placeholder-phase">Integração completa do drawer na Fase 4</div>
-            </div>`;
-        }
-      },
+      // meggyAI(el) removido — drawer agora é aberto via openMeggyAIDrawer()
 
       placeholder(el, title, icon, phase) {
         el.innerHTML = `
@@ -1364,6 +1300,7 @@
 
   console.log('[Meggy Shell] script loaded, waiting for modules...');
 })();
+
 
 
 
