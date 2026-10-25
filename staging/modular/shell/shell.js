@@ -41,6 +41,8 @@
       Shell.state.modulesReady = true;
       Shell.mount();
       Shell.router.init();
+      // ★ Preload marked.js + DOMPurify para renderização de markdown rico
+      Shell._ensureMdLibs();
     },
 
     // ─── Mount: create DOM ───
@@ -1681,9 +1683,11 @@
         })();
       },
 
-      _showSummary(el, entry) {
+      async _showSummary(el, entry) {
         const lessonName = Shell.views._esc(entry.lessonName || 'Aula');
-        const html = Shell.views._mdToHtml(entry.summary);
+        // ★ Garantir que marked.js está carregado antes de renderizar
+        await Shell._ensureMdLibs();
+        const html = Shell._renderMd(entry.summary);
         window._lastIsaText = entry.summary;
         window._lastMdText = entry.summary;
         window._lastMdName = entry.lessonName || 'resumo';
@@ -1693,13 +1697,13 @@
           '</div>' +
           '<div class="meggy-summary-card">' +
             '<div class="meggy-summary-toolbar">' +
-              '<span class="meggy-summary-badge">⭐ Resumo Meggy</span>' +
+              '<span class="meggy-summary-badge">⭐ Resumo Meggy 🐩</span>' +
               '<div style="display:flex;gap:6px;">' +
                 '<button class="meggy-header-btn" onclick="navigator.clipboard.writeText(window._lastIsaText);this.textContent=\'✓ Copiado!\'" style="font-size:12px;"><i class="bi bi-clipboard"></i> Copiar</button>' +
                 '<button class="meggy-header-btn" onclick="window._downloadMdAsPdf(window._lastMdName)" style="font-size:12px;background:rgba(255,139,159,0.12);border:1px solid rgba(255,139,159,0.3);color:#ff8b9f;"><i class="bi bi-download"></i> PDF</button>' +
               '</div>' +
             '</div>' +
-            '<div class="meggy-summary-body">' + html + '</div>' +
+            '<div class="meggy-summary-body gdi-isa-summary-body">' + html + '</div>' +
           '</div>';
         el.scrollTop = 0;
       },
@@ -1880,7 +1884,38 @@
 
     // ═══ ISA Render Helpers (replica de produção — gdi-meggy.js) ═══
 
+    // _ensureMdLibs: carrega marked.js + DOMPurify dinamicamente se não estiverem presentes
+    // (permite que o shell use markdown rico mesmo sem o worker ter os CDNs no HTML)
+    _mdLibsLoading: false,
+    _mdLibsLoaded: false,
+    _ensureMdLibs() {
+      if (Shell._mdLibsLoaded) return Promise.resolve();
+      if (Shell._mdLibsLoading) return Shell._mdLibsLoading;
+      Shell._mdLibsLoading = new Promise((resolve) => {
+        let pending = 0;
+        function done() { pending--; if (pending <= 0) { Shell._mdLibsLoaded = true; resolve(); } }
+        function loadScript(src) {
+          if (document.querySelector('script[src="' + src + '"]')) { done(); return; }
+          const s = document.createElement('script');
+          s.src = src;
+          s.onload = done;
+          s.onerror = done;
+          document.head.appendChild(s);
+        }
+        if (!window.marked) { pending++; loadScript('https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js'); }
+        if (!window.DOMPurify) { pending++; loadScript('https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js'); }
+        if (pending === 0) { Shell._mdLibsLoaded = true; resolve(); }
+      });
+      return Shell._mdLibsLoading;
+    },
+
     // renderMd: usa marked.js + DOMPurify se disponíveis, senão fallback escape+br
+    async _renderMdAsync(txt) {
+      if (!txt || typeof txt !== 'string') return '';
+      await Shell._ensureMdLibs();
+      return Shell._renderMd(txt);
+    },
+
     _renderMd(txt) {
       if (!txt || typeof txt !== 'string') return '';
       if (window.marked) {
@@ -1897,7 +1932,7 @@
     },
 
     // _renderISAResult: toolbar production-faithful (gradient pink→cyan, 4 buttons, cache badge, chain badge)
-    _renderISAResult(type, content, bodyEl, lessonName, fromCache, fullCache) {
+    async _renderISAResult(type, content, bodyEl, lessonName, fromCache, fullCache) {
       const isaField = type.replace('isa-', '');
       const typeLabel = type === 'isa-summary' ? 'Resumo' : type === 'isa-questions' ? 'Questões' : type === 'isa-mindmap' ? 'Pílulas' : 'Flashcards';
       const icon = type === 'isa-summary' ? 'bi-stars' : type === 'isa-questions' ? 'bi-patch-question' : type === 'isa-mindmap' ? 'bi-capsule' : 'bi-card-text';
@@ -1905,6 +1940,11 @@
       window._lastIsaType = type;
       window._lastIsaLabel = typeLabel;
       window._lastIsaLesson = lessonName;
+
+      // ★ Garantir marked.js carregado para renderizar markdown rico
+      if (typeof content === 'string') {
+        await Shell._ensureMdLibs();
+      }
 
       const cacheBadge = fromCache
         ? '<span class="meggy-cache-badge"><i class="bi bi-cloud-check"></i> do cache do Drive</span>'
