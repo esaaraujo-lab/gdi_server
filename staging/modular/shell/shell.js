@@ -1286,35 +1286,29 @@
                     }
                   });
 
-                  // ─── 4. Save to cache (POST /api/ai/cache) ───
-                  setLoading('💾 Salvando no cache do Drive…');
-                  try {
-                    await fetch('/api/ai/cache', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        key: cacheKey,
-                        summary: gen.summary,
-                        questions: gen.questions.length ? gen.questions : null,
-                        mindmap: gen.mindmap,
-                        lessonName: lessonName
-                      })
-                    });
-                  } catch (e) { console.warn('[Shell] cache save:', e); }
-
-                  // ─── 5. Save to material folder (POST /api/materials/save-in-folder) ───
-                  // ★ Fire-and-forget (não bloqueia o render — Drive saves podem ser lentos)
+                  // ─── 4. Save to cache + material folder (fire-and-forget, não bloqueia render) ───
                   const user = (window.GDIUser && window.GDIUser.state && window.GDIUser.state.user) || 'meggy';
                   const safeLesson = safeName(lessonName);
-                  if (gen.summary) {
-                    saveToFolder('resumo', user + '_' + safeLesson + '.md', gen.summary);
-                  }
-                  if (gen.mindmap) {
-                    saveToFolder('resumo', user + '_pilulas_' + safeLesson + '.md', gen.mindmap);
-                  }
-                  if (gen.questions && gen.questions.length) {
-                    saveToFolder('questoes', user + '_' + safeName(courseName || lessonName) + '.json', JSON.stringify(gen.questions, null, 2));
-                  }
+                  // ★ Fire-and-forget: salva cache + material folder em background
+                  (async () => {
+                    try {
+                      await fetch('/api/ai/cache', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          key: cacheKey,
+                          summary: gen.summary,
+                          questions: gen.questions.length ? gen.questions : null,
+                          mindmap: gen.mindmap,
+                          lessonName: lessonName
+                        })
+                      });
+                    } catch (e) { console.warn('[Shell] cache save:', e); }
+                    // Save to material folder
+                    if (gen.summary) saveToFolder('resumo', user + '_' + safeLesson + '.md', gen.summary);
+                    if (gen.mindmap) saveToFolder('resumo', user + '_pilulas_' + safeLesson + '.md', gen.mindmap);
+                    if (gen.questions && gen.questions.length) saveToFolder('questoes', user + '_' + safeName(courseName || lessonName) + '.json', JSON.stringify(gen.questions, null, 2));
+                  })();
 
                   // ─── 6. Render requested type ───
                   const cached2 = { summary: gen.summary, questions: gen.questions.length ? gen.questions : null, mindmap: gen.mindmap, lessonName: lessonName };
