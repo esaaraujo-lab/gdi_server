@@ -1057,9 +1057,12 @@
               (async () => {
                 try {
                   const isaField = type.replace('isa-', ''); // summary | questions | mindmap | flashcards
-                  // ★ Normalizar cacheKey: URL-encode espaços para match com chaves salvas pelo GDIndex/battalion
-                  const cacheKeyRaw = lessonPath + lessonName;
-                  const cacheKey = cacheKeyRaw.replace(/ /g, '%20');
+                  // ★ Normalizar cacheKey: decode→re-encode para match consistente com chaves do GDIndex/battalion
+                  // (lessonPath pode ter encoding parcial — alguns %20, alguns espaços raw, alguns ç raw)
+                  let _rawKey;
+                  try { _rawKey = decodeURIComponent(lessonPath + lessonName); } catch(_) { _rawKey = lessonPath + lessonName; }
+                  const cacheKey = encodeURI(_rawKey); // encodeURI: %20 para espaços, %C3%A7 para ç, mantém / :
+                  const cacheKeyRaw = lessonPath + lessonName; // fallback para cache antigo com encoding parcial
 
                   // ─── 1. Cache check (GET /api/ai/cache?key=...) ───
                   // ★ Tentar ambas as chaves (encoded e raw) para compatibilidade com cache antigo
