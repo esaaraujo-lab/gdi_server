@@ -2684,6 +2684,107 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 
 
 /* ═══════════════════════════════════════════════════════════════
+   STUDY TREE — Accordion (curso → disciplina → assunto → lessons)
+   ═══════════════════════════════════════════════════════════════ */
+.meggy-tree {
+  max-width: 720px;
+}
+.meggy-tree-node {
+  margin-bottom: 6px;
+}
+.meggy-tree-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+.meggy-tree-head:hover {
+  background: rgba(255, 139, 159, 0.06);
+  border-color: rgba(255, 139, 159, 0.2);
+}
+.meggy-tree-chevron {
+  font-size: 14px;
+  color: #6b7488;
+  transition: transform 0.15s;
+  flex-shrink: 0;
+}
+.meggy-tree-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.meggy-tree-label {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: #e6edf3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.meggy-tree-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: #9aa4b8;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 2px 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.meggy-tree-children {
+  margin-left: 20px;
+  margin-top: 6px;
+  padding-left: 10px;
+  border-left: 2px solid rgba(255, 139, 159, 0.15);
+}
+.meggy-tree-curso > .meggy-tree-head { background: rgba(255, 139, 159, 0.04); }
+.meggy-tree-disciplina > .meggy-tree-head { background: rgba(93, 222, 218, 0.03); }
+.meggy-tree-assunto > .meggy-tree-head { background: rgba(167, 139, 250, 0.03); }
+
+/* ═══ MODAL OVERLAY ═══ */
+.meggy-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 10002;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  backdrop-filter: blur(4px);
+}
+.meggy-modal-content {
+  background: #0d1119;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  max-height: 90vh;
+  overflow-y: auto;
+  width: 100%;
+  box-shadow: 0 20px 60px -10px rgba(0, 0, 0, 0.7);
+}
+.meggy-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.meggy-modal-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #e6edf3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.meggy-modal-title i { color: #ff8b9f; }
+
+
+/* ═══════════════════════════════════════════════════════════════
    MOBILE RESPONSIVENESS — A1/A2/A3/A5/A6
    ═══════════════════════════════════════════════════════════════ */
 
