@@ -598,18 +598,17 @@
         // Construir breadcrumb da pasta atual
         const folderPath = Shell.state.currentFolderPath || '';
         const parts = folderPath.split('/').filter(Boolean);
-        let bcHTML = '<li><a href="/" title="Home" data-nav="/">Home</a></li><li class="gdi-bc-sep">/</li>';
+        let bcHTML = '<li><a href="/" title="Home" data-nav="/" data-bc-type="home">Home</a></li><li class="gdi-bc-sep">/</li>';
         let cumPath = '';
         for (let i = 0; i < parts.length; i++) {
           cumPath += '/' + parts[i];
+          const cumPathEncoded = cumPath.split('/').map((seg, si) => si === 0 ? '' : encodeURIComponent(seg)).join('/');
           const isLast = i === parts.length - 1;
           const label = parts[i].match(/^\d+:$/) ? (window.drive_names?.[+parts[i].slice(0,-1)] || parts[i]) : decodeURIComponent(parts[i]);
           const short = label.length > 20 ? label.slice(0,17) + '…' : label;
-          if (isLast) {
-            bcHTML += `<li><a href="${cumPath}/" title="${label}" data-nav="${cumPath}/">${short}</a></li><li class="gdi-bc-sep">/</li>`;
-          } else {
-            bcHTML += `<li><a href="${cumPath}/" title="${label}" data-nav="${cumPath}/">${short}</a></li><li class="gdi-bc-sep">/</li>`;
-          }
+          // data-nav = caminho DECODIFICADO (para _renderDrives)
+          // href = caminho CODIFICADO (para URL válida)
+          bcHTML += `<li><a href="${cumPathEncoded}/" title="${label}" data-nav="${cumPath}/" data-bc-type="folder">${short}</a></li><li class="gdi-bc-sep">/</li>`;
         }
         const shortName = name.length > 20 ? name.slice(0,17) + '…' : name;
         bcHTML += `<li class="gdi-bc-cur" title="${name}">${shortName}</li>`;
@@ -851,9 +850,21 @@
           items.style.display = items.style.display === 'none' ? 'block' : 'none';
         };
 
-        // ─── Breadcrumb navigation ───
+        // ─── Breadcrumb navigation — navegar para pasta (não router.navigate) ───
         document.querySelectorAll('.gdi-bc a[data-nav]').forEach(a => {
-          a.onclick = (e) => { e.preventDefault(); Shell.router.navigate(a.dataset.nav); };
+          a.onclick = (e) => {
+            e.preventDefault();
+            const navPath = a.dataset.nav;
+            const bcType = a.dataset.bcType;
+            if (bcType === 'home') {
+              // Voltar para Home do shell
+              Shell.router.navigate('/');
+            } else {
+              // Navegar para pasta no drives view
+              Shell.router.navigate('/drives');
+              setTimeout(() => Shell.views._renderDrives(navPath), 50);
+            }
+          };
         });
 
         // ─── Material (PDFs + .md + .txt) — carregamento AUTOMÁTICO (réplica GDI) ───
@@ -896,18 +907,48 @@
             materials.forEach((m, i) => {
               const tab = document.createElement('button');
               tab.className = 'gdi-mat-tab' + (i === 0 ? ' active' : '');
-              tab.innerHTML = `<i class="bi bi-file-earmark-pdf"></i> ${m.name}`;
+              const icon = m.name.endsWith('.md') || m.name.endsWith('.txt') ? 'bi-file-earmark-text' : 'bi-file-earmark-pdf';
+              tab.innerHTML = `<i class="bi ${icon}"></i> ${m.name}`;
               tab.onclick = () => {
                 document.querySelectorAll('.gdi-mat-tab').forEach(t => t.classList.remove('active'));
                 tab.classList.add('active');
-                const link = m.link ? (m.link.startsWith('http') ? m.link : window.location.origin + m.link) : '';
+                // Construir link — adicionar &inline=true para PDFs mostrar em iframe
+                let link = '';
+                if (m.link) {
+                  link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
+                  // Adicionar &inline=true para PDFs (mostra em vez de baixar)
+                  if (m.name.endsWith('.pdf') && !link.includes('inline=')) {
+                    link += (link.includes('?') ? '&' : '?') + 'inline=true';
+                  }
+                }
+                const isPdf = m.name.endsWith('.pdf');
+                const isText = m.name.endsWith('.md') || m.name.endsWith('.txt');
+                let viewerHTML = '';
+                if (link && isPdf) {
+                  // PDF: iframe com inline=true
+                  viewerHTML = `<iframe src="${link}" style="width:100%;height:400px;border:1px solid rgba(255,255,255,0.09);border-radius:8px;background:#fff;" title="${m.name}"></iframe>`;
+                } else if (link && isText) {
+                  // .md/.txt: fetch + mostrar como texto
+                  viewerHTML = `<div id="gdi-mat-text" style="width:100%;height:400px;overflow:auto;padding:12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:8px;color:#e6edf3;font-size:13px;white-space:pre-wrap;">Carregando...</div>`;
+                  fetch(link).then(r => r.text()).then(txt => {
+                    const el = document.getElementById('gdi-mat-text');
+                    if (el) el.textContent = txt;
+                  }).catch(() => {
+                    const el = document.getElementById('gdi-mat-text');
+                    if (el) el.textContent = 'Erro ao carregar.';
+                  });
+                } else if (link) {
+                  viewerHTML = `<div class="gdi-mat-empty"><a href="${link}" target="_blank" class="gdi-mode-btn"><i class="bi bi-download"></i> Abrir material</a></div>`;
+                } else {
+                  viewerHTML = '<div class="gdi-mat-empty">Sem preview</div>';
+                }
                 bodyEl.innerHTML = `
                   <div class="gdi-mat-viewer">
                     <div class="gdi-mat-viewer-head">
-                      <span><i class="bi bi-file-earmark-pdf"></i> ${m.name}</span>
-                      ${link ? `<a href="${link}" target="_blank" class="gdi-mode-btn"><i class="bi bi-download"></i> Abrir</a>` : ''}
+                      <span><i class="bi ${icon}"></i> ${m.name}</span>
+                      ${link ? `<a href="${link}" target="_blank" class="gdi-mode-btn"><i class="bi bi-box-arrow-up-right"></i> Abrir</a>` : ''}
                     </div>
-                    ${link ? `<iframe src="${link}" style="width:100%;height:400px;border:1px solid rgba(255,255,255,0.09);border-radius:8px;background:#fff;" title="${m.name}"></iframe>` : '<div class="gdi-mat-empty">Sem preview</div>'}
+                    ${viewerHTML}
                   </div>
                 `;
               };
