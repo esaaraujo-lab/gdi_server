@@ -1406,43 +1406,60 @@ body.meggy-focus-mode #meggy-main {
 
 
 /* ═══ Sidebar contraída ao abrir vídeo (modo cinema) ═══ */
+/* ★ P4: Sidebar retrátil — só ícones, expand no hover */
 body.meggy-player-active #meggy-sidebar {
-  width: 0;
-  overflow: hidden;
-  border-right: none;
-  padding: 0;
-  transition: width 0.25s ease;
+  width: 60px;
+  overflow: visible;
+  border-right: 1px solid rgba(255,255,255,0.09);
+  padding: 16px 0;
+  transition: width 0.2s ease;
+}
+
+body.meggy-player-active #meggy-sidebar:hover {
+  width: 260px;
 }
 
 body.meggy-player-active #meggy-main {
   padding: 14px 16px 40px;
 }
 
-/* Toggle button para re-expandir sidebar */
+/* Esconder labels quando colapsada */
+body.meggy-player-active #meggy-sidebar .meggy-sidebar-item span {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  white-space: nowrap;
+}
+
+body.meggy-player-active #meggy-sidebar:hover .meggy-sidebar-item span {
+  opacity: 1;
+}
+
+/* Esconder section titles e badges */
+body.meggy-player-active #meggy-sidebar .meggy-sidebar-section,
+body.meggy-player-active #meggy-sidebar .meggy-sidebar-badge {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+body.meggy-player-active #meggy-sidebar:hover .meggy-sidebar-section,
+body.meggy-player-active #meggy-sidebar:hover .meggy-sidebar-badge {
+  opacity: 1;
+}
+
+/* Centralizar icones quando colapsada */
+body.meggy-player-active #meggy-sidebar .meggy-sidebar-item {
+  justify-content: center;
+  padding: 12px 0;
+}
+
+body.meggy-player-active #meggy-sidebar:hover .meggy-sidebar-item {
+  justify-content: flex-start;
+  padding: 10px 20px;
+}
+
+/* Remover botão expand (não precisa mais — hover cuida) */
 .meggy-sidebar-expand-btn {
-  display: none;
-  position: fixed;
-  left: 0;
-  top: 56px;
-  z-index: 10001;
-  background: rgba(22,27,38,0.9);
-  border: 1px solid rgba(255,255,255,0.09);
-  border-left: none;
-  border-radius: 0 8px 8px 0;
-  color: #9aa4b8;
-  padding: 10px 6px;
-  cursor: pointer;
-  font-size: 18px;
-  transition: 0.15s;
-}
-
-.meggy-sidebar-expand-btn:hover {
-  background: rgba(255,139,159,0.12);
-  color: #ff8b9f;
-}
-
-body.meggy-player-active .meggy-sidebar-expand-btn {
-  display: block;
+  display: none !important;
 }
 
 /* ═══ Player de áudio ═══ */
