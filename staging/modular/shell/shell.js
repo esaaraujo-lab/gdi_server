@@ -1663,32 +1663,58 @@
             return;
           }
           try {
-            const files = await window.gdiListAllFiles(path, '');
             let html = '';
             // Breadcrumb
             const parts = path.split('/').filter(Boolean);
             let bcHTML = '<div class="meggy-breadcrumb" style="margin-bottom:12px;font-size:12px;">';
-            bcHTML += '<a href="#" data-path="/" style="color:#5ddeda;">Drives</a> / ';
+            bcHTML += '<a href="#" data-path="/" style="color:#5ddeda;">Drives</a>';
             let cumPath = '';
             for (let i = 0; i < parts.length; i++) {
               cumPath += '/' + parts[i];
               const label = parts[i].match(/^\d+:$/) ? (window.drive_names?.[+parts[i].slice(0,-1)] || parts[i]) : (function(){try{return decodeURIComponent(parts[i])}catch(_){return parts[i]}})();
               const cp = cumPath + '/';
-              bcHTML += '<a href="#" data-path="' + cp + '" style="color:#5ddeda;">' + label + '</a>' + (i < parts.length - 1 ? ' / ' : '');
+              bcHTML += ' / <a href="#" data-path="' + cp + '" style="color:#5ddeda;">' + label + '</a>';
             }
             bcHTML += '</div>';
             html += bcHTML;
-            // "Adicionar esta pasta como curso" button
-            if (path && path !== '/') {
+
+            // "Adicionar esta pasta como curso" button (só se não for root)
+            if (path && path !== '/' && parts.length > 1) {
               html += '<div style="margin-bottom:12px;padding:10px 12px;background:rgba(255,139,159,0.08);border:1px solid rgba(255,139,159,0.3);border-radius:8px;display:flex;justify-content:space-between;align-items:center;">' +
                 '<span style="font-size:12px;color:#ff8b9f;"><i class="bi bi-folder2-open"></i> ' + (function(){try{return decodeURIComponent(path)}catch(_){return path}})() + '</span>' +
                 '<button class="meggy-header-btn select-folder-btn" data-path="' + path + '" style="font-size:12px;background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-check-lg"></i> Selecionar esta pasta</button>' +
               '</div>';
             }
-            // Pastas
+
+            // Se root, listar drives disponíveis
+            if (path === '/' || path === '') {
+              const drives = window.drive_names || [];
+              if (drives.length === 0) {
+                html += '<div style="padding:20px;text-align:center;color:#6b7488;">Nenhum drive disponível.</div>';
+              } else {
+                html += '<div class="meggy-study-list">';
+                drives.forEach((name, i) => {
+                  const dp = '/' + i + ':/';
+                  html += '<div class="meggy-study-item folder-item" data-path="' + dp + '" style="cursor:pointer;">' +
+                    '<div class="meggy-study-item-icon"><i class="bi bi-hdd" style="color:#5ddeda;"></i></div>' +
+                    '<div class="meggy-study-item-body"><div class="meggy-study-item-title">' + Shell.views._esc(name || ('Drive ' + i)) + '</div></div>' +
+                    '<i class="bi bi-chevron-right meggy-study-item-chevron"></i>' +
+                  '</div>';
+                });
+                html += '</div>';
+              }
+              browser.innerHTML = html;
+              browser.querySelectorAll('.folder-item').forEach(item => {
+                item.onclick = () => browseFolder(item.dataset.path);
+              });
+              return;
+            }
+
+            // Listar pastas do drive
+            const files = await window.gdiListAllFiles(path, '');
             const folders = files.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
             if (folders.length === 0) {
-              html += '<div style="padding:20px;text-align:center;color:#6b7488;">Nenhuma subpasta encontrada.</div>';
+              html += '<div style="padding:20px;text-align:center;color:#6b7488;">Nenhuma subpasta encontrada. Você pode selecionar esta pasta como curso.</div>';
             } else {
               html += '<div class="meggy-study-list">';
               folders.forEach(f => {
