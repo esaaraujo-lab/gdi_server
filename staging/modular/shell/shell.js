@@ -978,21 +978,72 @@
               const activeTab = document.querySelector(`.gdi-mat-tab[data-mat="${type}"]`);
               if (activeTab) { activeTab.classList.add('active'); activeTab.style.background = '#7c4dff'; activeTab.style.borderColor = '#7c4dff'; activeTab.style.color = '#fff'; }
               const lessonName = Shell.state.playerPlaylist?.[Shell.state.playerIndex]?.name || '';
-              bodyEl.innerHTML = `<div style="padding:20px;text-align:center;"><div class="spinner-border" style="color:#ff8b9f;"></div><div style="margin-top:12px;color:#9aa4b8;">Gerando com Meggy AI...</div></div>`;
+              const lessonPath = Shell.state.currentFolderPath || '';
+              bodyEl.innerHTML = `<div style="padding:20px;text-align:center;"><div class="spinner-border" style="color:#7c4dff;"></div><div style="margin-top:12px;color:#a78bfa;">Gerando ${type.replace('isa-','')} com Meggy AI...</div></div>`;
               (async () => {
                 try {
+                  // ★ Tentar cache primeiro (como produção: GET /api/ai/summaries?key=...)
+                  let cached = null;
+                  try {
+                    const cacheKey = lessonPath + lessonName;
+                    const cacheResp = await fetch('/api/ai/summaries?key=' + encodeURIComponent(cacheKey), { headers: { 'Accept': 'application/json' } });
+                    if (cacheResp.ok) {
+                      const cacheData = await cacheResp.json();
+                      if (cacheData && cacheData[type.replace('isa-','')]) {
+                        cached = cacheData[type.replace('isa-','')];
+                      }
+                    }
+                  } catch (e) { /* cache miss é normal */ }
+
+                  if (cached) {
+                    // Tem cache — mostrar
+                    renderISAResult(type, cached);
+                    return;
+                  }
+
+                  // Sem cache — gerar via /api/ai
                   let msg = '';
-                  if (type === 'isa-summary') msg = `Gere um resumo detalhado da aula: ${lessonName}`;
-                  else if (type === 'isa-questions') msg = `Gere 5 questões de múltipla escolha sobre: ${lessonName}`;
-                  else if (type === 'isa-mindmap') msg = `Crie pílulas de conhecimento sobre: ${lessonName}`;
-                  else if (type === 'isa-flashcards') msg = `Crie 10 flashcards sobre: ${lessonName}`;
-                  const r = await fetch('/api/ai', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: msg, messages: []}) });
+                  if (type === 'isa-summary') msg = `Gere um resumo completo e detalhado da aula "${lessonName}" (pasta: ${lessonPath}). Estruture em tópicos com exemplos.`;
+                  else if (type === 'isa-questions') msg = `Gere 5 questões de múltipla escolha sobre a aula "${lessonName}". Inclua 4 alternativas (A, B, C, D), a resposta correta e uma explicação.`;
+                  else if (type === 'isa-mindmap') msg = `Crie pílulas de conhecimento (tópicos curtos e diretos) sobre a aula "${lessonName}". Formato: bullet points.`;
+                  else if (type === 'isa-flashcards') msg = `Crie 10 flashcards sobre a aula "${lessonName}". Formato: FRENTE: pergunta \n VERSO: resposta.`;
+
+                  const r = await fetch('/api/ai', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: msg, messages: [] })
+                  });
                   const d = await r.json();
-                  const text = d.response || d.markdown || 'Sem resposta';
-                  let h = text.replace(/^### (.+)$/gm,'<h3 style="color:#ff8b9f;margin:12px 0 6px;">$1</h3>').replace(/^## (.+)$/gm,'<h2 style="color:#ff8b9f;margin:16px 0 8px;">$1</h2>').replace(/^# (.+)$/gm,'<h1 style="color:#ff8b9f;margin:20px 0 10px;">$1</h1>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/^- (.+)$/gm,'<li>$1</li>').replace(/\n/g,'<br>');
-                  bodyEl.innerHTML = `<div style="width:100%;height:100%;overflow:auto;padding:16px;color:#e6edf3;font-size:13px;">${h}</div>`;
-                } catch (e) { bodyEl.innerHTML = `<div style="padding:20px;color:#ff8b9f;">Erro: ${e.message}</div>`; }
+                  const text = d.response || d.markdown || d.summary || 'Sem resposta da IA.';
+                  renderISAResult(type, text);
+                } catch (e) {
+                  bodyEl.innerHTML = `<div style="padding:20px;color:#ff8b9f;">⚠️ Erro: ${e.message}<br><br><button class="gdi-mode-btn" onclick="Shell.state.playerPlaylist && Shell.views._playVideoInline(Shell.state.playerPlaylist[Shell.state.playerIndex].link, Shell.state.playerPlaylist[Shell.state.playerIndex].name, Shell.state.playerPlaylist, Shell.state.playerIndex)">Tentar novamente</button></div>`;
+                }
               })();
+            }
+
+            function renderISAResult(type, text) {
+              // Renderizar markdown
+              let h = text;
+              if (typeof h === 'string') {
+                h = h.replace(/^### (.+)$/gm, '<h3 style="color:#ff8b9f;margin:12px 0 6px;">$1</h3>')
+                     .replace(/^## (.+)$/gm, '<h2 style="color:#ff8b9f;margin:16px 0 8px;">$1</h2>')
+                     .replace(/^# (.+)$/gm, '<h1 style="color:#ff8b9f;margin:20px 0 10px;">$1</h1>')
+                     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                     .replace(/^- (.+)$/gm, '<li style="margin-left:20px;">$1</li>')
+                     .replace(/^(\d+)\. (.+)$/gm, '<li style="margin-left:20px;">$1. $2</li>')
+                     .replace(/\n/g, '<br>');
+              }
+              const typeLabel = type === 'isa-summary' ? 'Resumo' : type === 'isa-questions' ? 'Questões' : type === 'isa-mindmap' ? 'Pílulas' : 'Flashcards';
+              bodyEl.innerHTML = `<div style="width:100%;height:100%;overflow:auto;padding:16px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding:10px 14px;background:rgba(124,77,255,.08);border:1px solid rgba(124,77,255,.2);border-radius:12px;flex-wrap:wrap;gap:8px;">
+                  <span style="font-size:14px;font-weight:600;color:#a78bfa;">⭐ ${typeLabel} Meggy</span>
+                  <div style="display:flex;gap:6px;">
+                    <button class="gdi-mode-btn" onclick="navigator.clipboard.writeText(document.getElementById('gdi-isa-text').innerText);this.textContent='✓ Copiado!'" style="font-size:12px;"><i class="bi bi-clipboard"></i> Copiar</button>
+                  </div>
+                </div>
+                <div id="gdi-isa-text" style="color:#e6edf3;font-size:14px;line-height:1.6;">${h}</div>
+              </div>`;
             }
 
             if (materials.length > 0) showMaterial(0);
