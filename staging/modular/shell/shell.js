@@ -652,27 +652,26 @@
         const fileSize = pl[idx]?.size || '';
         const iconClass = isAudio ? 'bi-music-note-beamed' : 'bi-camera-video-fill';
 
+        // ★ Layout ALFACON — rows/cols/focus-video/focus-study
         main.innerHTML = `
-          <div class="gdi-study" id="gdi-study">
-            <div class="gdi-study-bar">
-              <div class="gdi-study-bc"><ol class="gdi-bc">${bcHTML}</ol></div>
-              <div class="gdi-study-modes">
-                <button class="gdi-mode-btn active" data-mode="split"><i class="bi bi-layout-split"></i><span class="d-none d-md-inline">Dividido</span></button>
-                <button class="gdi-mode-btn" data-mode="fv"><i class="bi bi-lightning-charge-fill"></i><span class="d-none d-md-inline">Foco na aula</span></button>
-                <button class="gdi-mode-btn" data-mode="fm"><i class="bi bi-file-earmark-pdf-fill"></i><span class="d-none d-md-inline">Foco no material</span></button>
-                <button class="gdi-watched-btn" id="gdi-watched-btn" data-b="1"><i class="bi bi-eye"></i><span>Assistido</span></button>
-              </div>
-            </div>
-            <div class="gdi-study-grid" id="gdi-study-grid">
-              <section class="gdi-study-left" id="gdi-slot-left">
-                <div class="gdi-study-head">
-                  <i class="bi ${iconClass} gdi-icon-video" style="font-size:22px;"></i>
-                  <div class="gdi-study-title">
-                    <div class="gdi-file-header-name" id="gdi-file-header-name">${name}</div>
-                    <div class="gdi-file-header-meta" id="gdi-file-header-meta">${fileSize}</div>
+          <div class="gdi-study alfacon-layout mode-rows" id="gdi-study" data-layout-mode="rows">
+            <div class="alfacon-layout-grid">
+              <div class="alfacon-layout-left" id="lesson_video_container">
+                <div class="alfacon-video-header">
+                  <div class="alfacon-lesson-info">
+                    <div class="alfacon-lesson-icon">${isAudio ? '🎵' : '🎬'}</div>
+                    <div>
+                      <div class="gdi-file-header-name" id="gdi-file-header-name">${name}</div>
+                      <div class="gdi-file-header-meta" id="gdi-file-header-meta">${fileSize}</div>
+                    </div>
+                  </div>
+                  <div class="alfacon-layout-controls">
+                    <button class="gdi-mode-btn ${mode === 'rows' ? 'active' : ''}" data-layout="rows" title="Linhas"><i class="bi bi-list"></i></button>
+                    <button class="gdi-mode-btn ${mode === 'cols' ? 'active' : ''}" data-layout="cols" title="Colunas"><i class="bi bi-layout-split"></i></button>
+                    <button class="gdi-mode-btn ${mode === 'focus-video' ? 'active' : ''}" data-layout="focus-video" title="Foco na aula"><i class="bi bi-lightning-charge-fill"></i></button>
                   </div>
                 </div>
-                <div class="gdi-player-wrap" style="width:100%;">
+                <div class="gdi-player-wrap">
                   ${isAudio ? `
                     <div class="meggy-audio-player">
                       <div class="meggy-audio-icon">🎵</div>
@@ -680,7 +679,7 @@
                     </div>
                   ` : `
                     <video id="meggy-video" src="${videoUrl}" controls autoplay playsinline
-                      style="width:100%;max-height:none;border-radius:8px;background:#000;"
+                      style="width:100%;border-radius:12px;background:#000;aspect-ratio:16/9;max-height:80vh;"
                       onerror="this.style.display='none';document.getElementById('meggy-player-error').style.display='block'">
                     </video>
                     <div id="meggy-player-error" style="display:none;padding:40px;text-align:center;color:#ff8b9f;">
@@ -689,42 +688,47 @@
                     </div>
                   `}
                 </div>
-                <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+                <div class="alfacon-lesson-controls">
+                  <button class="gdi-mode-btn" id="gdi-watched-btn" data-b="1"><i class="bi bi-eye"></i> Marcar Como Assistido</button>
                   <button class="gdi-mode-btn" id="gdi-prev-btn" ${idx === 0 ? 'disabled' : ''}><i class="bi bi-chevron-left"></i> Anterior</button>
                   <button class="gdi-mode-btn" id="gdi-next-btn" ${idx >= pl.length - 1 ? 'disabled' : ''}>Próxima <i class="bi bi-chevron-right"></i></button>
-                  <a class="gdi-mode-btn" href="${videoUrl}" download="${name}" target="_blank"><i class="bi bi-download"></i> Download</a>
+                  <a class="gdi-mode-btn" href="${videoUrl}" download="${name}" target="_blank"><i class="bi bi-download"></i></a>
                   <button class="gdi-mode-btn" id="gdi-interfolder-btn"><i class="bi bi-collection"></i> Interfolder</button>
-                  <button class="gdi-mode-btn" id="gdi-meggy-ai-btn" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;"><i class="bi bi-robot"></i> Meggy AI</button>
+                  <button class="gdi-mode-btn" id="gdi-meggy-ai-btn" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;"><i class="bi bi-robot"></i> Meggy</button>
                 </div>
-                <div class="gdi-notes" id="gdi-notes">
-                  <div class="gdi-notes-head"><strong>📝 Minhas anotações</strong></div>
-                  <textarea id="gdi-note-input" rows="2" placeholder="Digite sua anotação para esta aula…"></textarea>
-                  <div class="gdi-notes-actions">
-                    <span id="gdi-note-time" style="cursor:pointer;">00:00</span>
-                    <button id="gdi-note-save"><i class="bi bi-save me-1"></i>Salvar</button>
-                  </div>
-                  <div id="gdi-notes-list"><div class="gdi-notes-empty">Nenhuma anotação ainda.</div></div>
-                </div>
-                <div id="gdi-playlist-wrap">
-                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:6px;flex-wrap:wrap;">
-                    <button id="gdi-pl-toggle" class="gdi-mode-btn" style="padding:4px 10px;font-size:12px;flex:1;justify-content:flex-start;min-width:0;">
-                      <i class="bi bi-collection-play me-2"></i><strong>Playlist</strong>
-                      <span id="gdi-pl-count" style="font-size:11px;color:#8b949e;margin-left:6px;">${idx + 1} / ${pl.length}</span>
-                      <i id="gdi-pl-chev" class="bi bi-chevron-down" style="margin-left:auto;"></i>
-                    </button>
-                  </div>
-                  <div id="gdi-playlist-body" style="overflow-y:auto;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:6px;background:rgba(0,0,0,0.2);max-height:240px;display:none;">
+                <div class="alfacon-card" id="alfacon-playlist-card">
+                  <button class="alfacon-collapse-btn" id="alfacon-playlist-toggle">
+                    <span class="alfacon-collapse-icon"><i class="bi bi-education-outline"></i></span>
+                    <span class="alfacon-collapse-title">Aulas da disciplina</span>
+                    <span id="gdi-pl-count" style="font-size:11px;color:#6b7488;margin-left:6px;">${idx + 1} / ${pl.length}</span>
+                    <i class="bi bi-chevron-down" id="gdi-pl-chev" style="margin-left:auto;"></i>
+                  </button>
+                  <div class="alfacon-collapse-body" id="gdi-playlist-body" style="display:none;">
                     <div id="gdi-playlist-list">
                       ${pl.map((v, i) => `<div class="gdi-playlist-item ${i === idx ? 'cur' : ''}" data-idx="${i}" title="${v.name}"><div><i class="bi ${i === idx ? 'bi-play-fill' : 'bi-film'} me-2"></i><span style="font-weight:${i === idx ? '600' : '400'};">${v.name}</span></div><span class="gdi-pl-size">${v.size || ''}</span></div>`).join('')}
                     </div>
                   </div>
                 </div>
-              </section>
-              <aside class="gdi-study-right" id="gdi-slot-right" data-m9="1">
-                <div class="gdi-mat-head"><strong><i class="bi bi-journal-bookmark-fill" style="color:#ff8b9f;"></i> Materiais da aula</strong><span id="gdi-mat-status">buscando…</span></div>
-                <div class="gdi-mat-tabs" id="gdi-mat-tabs"><span class="gdi-mat-loading">Buscando…</span></div>
-                <div class="gdi-mat-body" id="gdi-mat-body"></div>
-              </aside>
+                <div class="alfacon-card" id="alfacon-annotations">
+                  <div class="alfacon-annotations-header">📝 Anotações</div>
+                  <textarea id="gdi-note-input" rows="2" placeholder="Digite sua anotação para esta aula…" style="width:100%;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:8px;padding:8px;color:#e6edf3;font-family:inherit;font-size:13px;resize:vertical;outline:none;"></textarea>
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+                    <span id="gdi-note-time" style="cursor:pointer;font-size:12px;color:#5ddeda;">00:00</span>
+                    <button id="gdi-note-save" style="background:rgba(255,139,159,0.12);border:1px solid rgba(255,139,159,0.3);color:#ff8b9f;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;"><i class="bi bi-save me-1"></i>Salvar</button>
+                  </div>
+                  <div id="gdi-notes-list" style="margin-top:8px;"></div>
+                </div>
+              </div>
+              <div class="alfacon-layout-right" id="gdi-slot-right">
+                <div class="alfacon-material-header" id="material_header">
+                  <div class="alfacon-material-tabs" id="gdi-mat-tabs"><span class="gdi-mat-loading">Buscando…</span></div>
+                  <div class="alfacon-layout-controls-right">
+                    <button class="gdi-mode-btn" data-layout="focus-study" title="Foco no material"><i class="bi bi-lightning-charge-fill"></i></button>
+                  </div>
+                </div>
+                <div class="alfacon-material-body" id="gdi-mat-body"></div>
+                <div class="alfacon-material-status" id="gdi-mat-status">buscando…</div>
+              </div>
             </div>
           </div>
         `;
