@@ -1057,7 +1057,8 @@
               (async () => {
                 try {
                   const isaField = type.replace('isa-', ''); // summary | questions | mindmap | flashcards
-                  const cacheKey = lessonPath + lessonName;
+                  // ★ Normalizar cacheKey: URL-encode espaços para match com chaves salvas pelo GDIndex/battalion
+                  const cacheKey = (lessonPath + lessonName).replace(/ /g, '%20');
 
                   // ─── 1. Cache check (GET /api/ai/cache?key=...) ───
                   let cached = null;
@@ -2040,7 +2041,7 @@
         // Limpar cache e regerar
         (async () => {
           try {
-            const cacheKey = (Shell.state.currentFolderPath || '') + (Shell.state.playerPlaylist?.[Shell.state.playerIndex]?.name || '');
+            const cacheKey = ((Shell.state.currentFolderPath || '') + (Shell.state.playerPlaylist?.[Shell.state.playerIndex]?.name || '')).replace(/ /g, '%20');
             await fetch('/api/ai/cache', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ key: cacheKey, summary: null, questions: null, mindmap: null, lessonName: '' }) });
           } catch (e) {}
           // Re-trigger showISA
