@@ -265,7 +265,7 @@
         'study/study-insights.js',
         'study/study-plan.js',
         'study/study-notifications.js',
-        'study/study-panel.js'
+        // 'study/study-panel.js'  // ★ STAGING: removido — shell nativo substitui
       ];
 
       // loadChain: carrega módulos SEQUENCIALMENTE (preserva ordem de dependência
@@ -392,4 +392,5 @@
   }
 
 })();
+
 
