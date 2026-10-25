@@ -801,9 +801,25 @@
             const grid = document.getElementById('gdi-study-grid');
             const right = document.getElementById('gdi-slot-right');
             const left = document.querySelector('.gdi-study-left');
-            if (btn.dataset.mode === 'fv') { grid.style.gridTemplateColumns = '1fr'; right.style.display = 'none'; }
-            else if (btn.dataset.mode === 'fm') { grid.style.gridTemplateColumns = '1fr'; left.style.display = 'none'; }
-            else { grid.style.gridTemplateColumns = '1fr 1fr'; right.style.display = ''; left.style.display = ''; }
+            const mode = btn.dataset.mode;
+            // ★ Usar CSS classes em vez de display:none (não destrói o conteúdo)
+            if (mode === 'fv') { 
+              grid.style.gridTemplateColumns = '1fr'; 
+              right.style.display = 'none';
+              left.style.display = '';
+            } else if (mode === 'fm') { 
+              grid.style.gridTemplateColumns = '1fr'; 
+              left.style.display = 'none';
+              right.style.display = '';
+              // Re-carregar materiais se voltou
+              if (!document.querySelector('.gdi-mat-tab.active')) setTimeout(loadMaterials, 100);
+            } else { 
+              grid.style.gridTemplateColumns = '1fr 1fr'; 
+              right.style.display = ''; 
+              left.style.display = '';
+              // Re-carregar materiais se voltou
+              if (!document.querySelector('.gdi-mat-tab.active')) setTimeout(loadMaterials, 100);
+            }
           };
         });
 
@@ -975,9 +991,10 @@
               // ★ Classificação precisa (não usar includes('ia') — pega 'material')
               const lowName = m.name.toLowerCase();
               const isTransc = lowName.includes('transcri') || ext === 'txt';
-              const isAiResumo = lowName.startsWith('resumo') || lowName.includes('resumo_ia') || lowName.includes('resumo-ia') || lowName.match(/^resumo[_-]?ia/);
+              const isAiResumo = lowName.startsWith('resumo') || lowName.includes('resumo_ia') || lowName.includes('resumo-ia') || lowName.includes('ia') && lowName.includes('resumo');
               const isEbook = lowName.includes('ebook') || lowName.includes('apostila');
-              const label = isTransc ? 'Transcrição' : isAiResumo ? 'Resumo IA' : isEbook ? 'Ebook' : m.name.replace(/\.[^.]+$/, '').substring(0, 15);
+              // ★ PDF genérico = "Material", só mostra nome se for IA/transcrição/ebook
+              const label = isTransc ? 'Transcrição' : isAiResumo ? 'Resumo de IA' : isEbook ? 'Ebook' : ext === 'pdf' ? 'Material' : m.name.replace(/\.[^.]+$/, '').substring(0, 15);
               const icon = isTransc ? 'bi-card-text' : isAiResumo ? 'bi-stars' : isEbook ? 'bi-book' : ext === 'pdf' ? 'bi-file-earmark-pdf' : 'bi-file-earmark-text';
               const tab = document.createElement('button');
               tab.className = 'gdi-mat-tab' + (i === 0 ? ' active' : '');
@@ -1012,7 +1029,18 @@
               if (ext === 'pdf' && link) bodyEl.innerHTML = `<iframe src="${link}" style="width:100%;height:100%;border:none;border-radius:16px;"></iframe>`;
               else if ((ext === 'md' || ext === 'txt' || ext === 'html') && link) {
                 bodyEl.innerHTML = `<div id="gdi-mat-md" style="width:100%;height:100%;overflow:auto;padding:16px;color:#e6edf3;font-size:13px;">Carregando...</div>`;
-                fetch(link).then(r => r.text()).then(txt => { const el = document.getElementById('gdi-mat-md'); if (el) { let h = txt.replace(/^### (.+)$/gm,'<h3 style="color:#ff8b9f;margin:12px 0 6px;">$1</h3>').replace(/^## (.+)$/gm,'<h2 style="color:#ff8b9f;margin:16px 0 8px;">$1</h2>').replace(/^# (.+)$/gm,'<h1 style="color:#ff8b9f;margin:20px 0 10px;">$1</h1>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/^- (.+)$/gm,'<li>$1</li>').replace(/\n/g,'<br>'); el.innerHTML = h; } }).catch(() => { const el = document.getElementById('gdi-mat-md'); if (el) el.textContent = 'Erro.'; });
+                fetch(link).then(r => r.text()).then(txt => { 
+                  const el = document.getElementById('gdi-mat-md'); 
+                  if (el) { 
+                    let h = txt.replace(/^### (.+)$/gm,'<h3 style="color:#ff8b9f;margin:12px 0 6px;">$1</h3>').replace(/^## (.+)$/gm,'<h2 style="color:#ff8b9f;margin:16px 0 8px;">$1</h2>').replace(/^# (.+)$/gm,'<h1 style="color:#ff8b9f;margin:20px 0 10px;">$1</h1>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/^- (.+)$/gm,'<li>$1</li>').replace(/\n/g,'<br>');
+                    // ★ Botão Baixar PDF
+                    h = '<div style="margin-bottom:12px;padding:8px 12px;background:rgba(255,139,159,0.08);border:1px solid rgba(255,139,159,0.2);border-radius:8px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:12px;color:#9aa4b8;"><i class="bi bi-file-earmark-text"></i> ' + m.name + '</span><button onclick="window._downloadMdAsPdf(\''+m.name+'\')" style="background:rgba(255,139,159,0.12);border:1px solid rgba(255,139,159,0.3);color:#ff8b9f;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;"><i class="bi bi-download"></i> Baixar PDF</button></div>' + h;
+                    el.innerHTML = h;
+                    // ★ Guardar texto para download
+                    window._lastMdText = txt;
+                    window._lastMdName = m.name;
+                  } 
+                }).catch(() => { const el = document.getElementById('gdi-mat-md'); if (el) el.textContent = 'Erro.'; });
               } else if (link) bodyEl.innerHTML = `<div style="text-align:center;padding:40px;"><a href="${link}" target="_blank" class="gdi-mode-btn"><i class="bi bi-download"></i> Abrir</a></div>`;
               else bodyEl.innerHTML = '<div style="text-align:center;padding:40px;color:#6b7488;">Sem preview</div>';
             }
@@ -1154,7 +1182,6 @@
             }
 
             function renderISAResult(type, text) {
-              // Renderizar markdown
               let h = text;
               if (typeof h === 'string') {
                 h = h.replace(/^### (.+)$/gm, '<h3 style="color:#ff8b9f;margin:12px 0 6px;">$1</h3>')
@@ -1166,15 +1193,19 @@
                      .replace(/\n/g, '<br>');
               }
               const typeLabel = type === 'isa-summary' ? 'Resumo' : type === 'isa-questions' ? 'Questões' : type === 'isa-mindmap' ? 'Pílulas' : 'Flashcards';
-              bodyEl.innerHTML = `<div style="width:100%;height:100%;overflow:auto;padding:16px;">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding:10px 14px;background:rgba(124,77,255,.08);border:1px solid rgba(124,77,255,.2);border-radius:12px;flex-wrap:wrap;gap:8px;">
-                  <span style="font-size:14px;font-weight:600;color:#a78bfa;">⭐ ${typeLabel} Meggy</span>
-                  <div style="display:flex;gap:6px;">
-                    <button class="gdi-mode-btn" onclick="navigator.clipboard.writeText(document.getElementById('gdi-isa-text').innerText);this.textContent='✓ Copiado!'" style="font-size:12px;"><i class="bi bi-clipboard"></i> Copiar</button>
-                  </div>
-                </div>
-                <div id="gdi-isa-text" style="color:#e6edf3;font-size:14px;line-height:1.6;">${h}</div>
-              </div>`;
+              // ★ Guardar para download/salvar
+              window._lastIsaText = text;
+              window._lastIsaType = type;
+              bodyEl.innerHTML = '<div style="width:100%;height:100%;overflow:auto;padding:16px;">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding:10px 14px;background:rgba(124,77,255,.08);border:1px solid rgba(124,77,255,.2);border-radius:12px;flex-wrap:wrap;gap:8px;">' +
+                  '<span style="font-size:14px;font-weight:600;color:#a78bfa;">⭐ ' + typeLabel + ' Meggy</span>' +
+                  '<div style="display:flex;gap:6px;">' +
+                    '<button onclick="navigator.clipboard.writeText(document.getElementById(\'gdi-isa-text\').innerText);this.textContent=\'✓ Copiado!\'" style="font-size:12px;padding:4px 10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#c9d1d9;border-radius:6px;cursor:pointer;"><i class="bi bi-clipboard"></i> Copiar</button>' +
+                    '<button onclick="window._downloadIsaAsPdf(\''+typeLabel+'\')" style="font-size:12px;padding:4px 10px;background:rgba(255,139,159,0.12);border:1px solid rgba(255,139,159,0.3);color:#ff8b9f;border-radius:6px;cursor:pointer;"><i class="bi bi-download"></i> PDF</button>' +
+                  '</div>' +
+                '</div>' +
+                '<div id="gdi-isa-text" style="color:#e6edf3;font-size:14px;line-height:1.6;">' + h + '</div>' +
+              '</div>';
             }
 
             if (materials.length > 0) showMaterial(0);
@@ -1404,7 +1435,58 @@
   };
 
   // ─── Export to window ───
+  // ★ Função para baixar MD como PDF (abre janela de impressão)
+  window._downloadMdAsPdf = function(name) {
+    const text = window._lastMdText || '';
+    const w = window.open('', '_blank');
+    w.document.write('<html><head><title>' + name + '</title><style>');
+    w.document.write('body{font-family:Arial,sans-serif;max-width:800px;margin:40px auto;padding:20px;color:#333;line-height:1.6;}');
+    w.document.write('h1{color:#ff8b9f;border-bottom:2px solid #ff8b9f;padding-bottom:10px;}');
+    w.document.write('h2{color:#c026d3;margin-top:24px;}');
+    w.document.write('h3{color:#5ddeda;}');
+    w.document.write('li{margin-left:20px;}');
+    w.document.write('strong{color:#222;}');
+    w.document.write('@media print{body{margin:0;}}');
+    w.document.write('</style></head><body>');
+    // Converter MD simples para HTML
+    let html = text.replace(/^### (.+)$/gm, '<h3>$1</h3>')
+      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+      .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/^- (.+)$/gm, '<li>$1</li>')
+      .replace(/\n\n/g, '</p><p>')
+      .replace(/\n/g, '<br>');
+    w.document.write('<p>' + html + '</p>');
+    w.document.write('</body></html>');
+    w.document.close();
+    setTimeout(function() { w.print(); }, 500);
+  };
+
   window.MeggyShell = Shell;
+  window._downloadIsaAsPdf = function(label) {
+    const text = window._lastIsaText || '';
+    const w = window.open('', '_blank');
+    w.document.write('<html><head><title>Meggy - ' + label + '</title><style>');
+    w.document.write('body{font-family:Arial,sans-serif;max-width:800px;margin:40px auto;padding:20px;color:#333;line-height:1.6;}');
+    w.document.write('h1{color:#ff8b9f;border-bottom:2px solid #ff8b9f;padding-bottom:10px;}');
+    w.document.write('h2{color:#c026d3;margin-top:24px;}');
+    w.document.write('h3{color:#5ddeda;}');
+    w.document.write('li{margin-left:20px;}');
+    w.document.write('strong{color:#222;}');
+    w.document.write('@media print{body{margin:0;}}');
+    w.document.write('</style></head><body>');
+    let html = text.replace(/^### (.+)$/gm, '<h3>$1</h3>')
+      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+      .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/^- (.+)$/gm, '<li>$1</li>')
+      .replace(/\n\n/g, '</p><p>')
+      .replace(/\n/g, '<br>');
+    w.document.write('<p>' + html + '</p></body></html>');
+    w.document.close();
+    setTimeout(function() { w.print(); }, 500);
+  };
+
   window.Shell = Shell; // ★ Alias para onclick inline
 
 
@@ -1417,6 +1499,7 @@
 
   console.log('[Meggy Shell] script loaded, waiting for modules...');
 })();
+
 
 
 
