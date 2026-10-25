@@ -589,7 +589,7 @@
         }
       },
 
-      // ═══ PÁGINA DE AULA — RÉPLICA 100% GDI + finalizeNames + tabs materiais ═══
+      // ═══ PÁGINA DE VÍDEO — Layout Alfacon exato (vídeo + materiais lado a lado) ═══
       _playVideoInline(link, name, playlist, currentIndex) {
         const main = document.getElementById('meggy-main');
         if (!main) return;
@@ -599,15 +599,10 @@
         let pl = playlist || [{ name: name, link: videoUrl, size: '', folder: '' }];
         let idx = currentIndex || 0;
 
-        // ★ finalizeNames — réplica do GDI (se há duplicação de nomes, prefixa com folderLabel)
+        // ★ finalizeNames — se há duplicação de nomes, prefixa com folder
         const counts = {};
         pl.forEach(v => { const o = v.origName || v.name; counts[o] = (counts[o] || 0) + 1; });
-        pl.forEach(v => {
-          const o = v.origName || v.name;
-          if (counts[o] > 1 && v.folder && v.name === o) {
-            v.name = v.folder + ' - ' + o;
-          }
-        });
+        pl.forEach(v => { const o = v.origName || v.name; if (counts[o] > 1 && v.folder && v.name === o) v.name = v.folder + ' - ' + o; });
 
         let resumePos = 0;
         try {
@@ -623,113 +618,102 @@
         Shell.state.playerPlaylist = pl;
         Shell.state.playerIndex = idx;
 
-        // Contrair sidebar
+        // ★ Sidebar retrátil
         document.body.classList.add('meggy-player-active');
-        if (!document.getElementById('meggy-sidebar-expand-btn')) {
-          const expandBtn = document.createElement('button');
-          expandBtn.id = 'meggy-sidebar-expand-btn';
-          expandBtn.className = 'meggy-sidebar-expand-btn';
-          expandBtn.innerHTML = '<i class="bi bi-chevron-right"></i>';
-          expandBtn.title = 'Mostrar menu';
-          expandBtn.onclick = () => { document.body.classList.remove('meggy-player-active'); expandBtn.remove(); };
-          document.body.appendChild(expandBtn);
-        }
 
         // Breadcrumb
         const folderPath = Shell.state.currentFolderPath || '';
         const parts = folderPath.split('/').filter(Boolean);
-        let bcHTML = '<li><a href="/" title="Home" data-nav="/" data-bc-type="home">Home</a></li><li class="gdi-bc-sep">/</li>';
+        let bcHTML = '<li><a href="/" data-nav="/" data-bc-type="home">Home</a></li><li class="gdi-bc-sep">/</li>';
         let cumPath = '';
         for (let i = 0; i < parts.length; i++) {
           cumPath += '/' + parts[i];
-          const cumPathEncoded = cumPath.split('/').map((seg, si) => si === 0 ? '' : encodeURIComponent(seg)).join('/');
           const label = parts[i].match(/^\d+:$/) ? (window.drive_names?.[+parts[i].slice(0,-1)] || parts[i]) : decodeURIComponent(parts[i]);
           const short = label.length > 20 ? label.slice(0,17) + '…' : label;
-          bcHTML += `<li><a href="${cumPathEncoded}/" title="${label}" data-nav="${cumPath}/" data-bc-type="folder">${short}</a></li><li class="gdi-bc-sep">/</li>`;
+          const encoded = cumPath.split('/').map((s,si) => si === 0 ? '' : encodeURIComponent(s)).join('/');
+          bcHTML += `<li><a href="${encoded}/" data-nav="${cumPath}/" data-bc-type="folder">${short}</a></li><li class="gdi-bc-sep">/</li>`;
         }
-        const shortName = name.length > 20 ? name.slice(0,17) + '…' : name;
-        bcHTML += `<li class="gdi-bc-cur" title="${name}">${shortName}</li>`;
+        bcHTML += `<li class="gdi-bc-cur">${name.length > 20 ? name.slice(0,17)+'…' : name}</li>`;
         const fileSize = pl[idx]?.size || '';
-        const iconClass = isAudio ? 'bi-music-note-beamed' : 'bi-camera-video-fill';
 
-        const mode = Shell.state.layoutMode || 'rows';
-        // ★ Layout ALFACON — rows/cols/focus-video/focus-study
+        // ★ Layout Alfacon: 2 colunas (vídeo | materiais) com modes rows/cols/focus
         main.innerHTML = `
-          <div class="gdi-study alfacon-layout mode-rows" id="gdi-study" data-layout-mode="rows">
-            <div class="alfacon-layout-grid">
-              <div class="alfacon-layout-left" id="lesson_video_container">
-                <div class="alfacon-video-header">
-                  <div class="alfacon-lesson-info">
-                    <div class="alfacon-lesson-icon">${isAudio ? '🎵' : '🎬'}</div>
-                    <div>
-                      <div class="gdi-file-header-name" id="gdi-file-header-name">${name}</div>
-                      <div class="gdi-file-header-meta" id="gdi-file-header-meta">${fileSize}</div>
-                    </div>
-                  </div>
-                  <div class="alfacon-layout-controls">
-                    <button class="gdi-mode-btn ${mode === 'rows' ? 'active' : ''}" data-layout="rows" title="Linhas"><i class="bi bi-list"></i></button>
-                    <button class="gdi-mode-btn ${mode === 'cols' ? 'active' : ''}" data-layout="cols" title="Colunas"><i class="bi bi-layout-split"></i></button>
-                    <button class="gdi-mode-btn ${mode === 'focus-video' ? 'active' : ''}" data-layout="focus-video" title="Foco na aula"><i class="bi bi-lightning-charge-fill"></i></button>
+          <div class="gdi-study" id="gdi-study" style="max-width:1600px;margin:0 auto;padding:14px 16px 40px;">
+            <div class="gdi-study-bar" style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+              <div class="gdi-study-bc"><ol class="gdi-bc" style="list-style:none;padding:0;margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px;">${bcHTML}</ol></div>
+              <div class="gdi-study-modes" style="display:flex;gap:6px;">
+                <button class="gdi-mode-btn active" data-mode="split"><i class="bi bi-layout-split"></i> Dividido</button>
+                <button class="gdi-mode-btn" data-mode="fv"><i class="bi bi-lightning-charge-fill"></i> Foco aula</button>
+                <button class="gdi-mode-btn" data-mode="fm"><i class="bi bi-file-earmark-pdf-fill"></i> Foco material</button>
+                <button class="gdi-watched-btn" id="gdi-watched-btn" data-b="1"><i class="bi bi-eye"></i> Assistido</button>
+              </div>
+            </div>
+            <div class="gdi-study-grid" id="gdi-study-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:flex-start;">
+              <section class="gdi-study-left" style="display:flex;flex-direction:column;gap:12px;min-width:0;">
+                <div style="display:flex;align-items:center;gap:12px;">
+                  <i class="bi ${isAudio ? 'bi-music-note-beamed' : 'bi-camera-video-fill'}" style="font-size:22px;color:#ff8b9f;"></i>
+                  <div style="flex:1;min-width:0;">
+                    <div id="gdi-file-header-name" style="font-size:15px;font-weight:600;color:#e6edf3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${name}</div>
+                    <div id="gdi-file-header-meta" style="font-size:12px;color:#6b7488;">${fileSize}</div>
                   </div>
                 </div>
-                <div class="gdi-player-wrap">
+                <div class="gdi-player-wrap" style="background:#000;border:1px solid rgba(255,255,255,0.09);border-radius:16px;overflow:hidden;max-width:860px;width:100%;box-shadow:0 10px 30px -12px rgba(0,0,0,0.55);">
                   ${isAudio ? `
-                    <div class="meggy-audio-player">
-                      <div class="meggy-audio-icon">🎵</div>
+                    <div style="padding:20px;text-align:center;">
+                      <div style="font-size:48px;margin-bottom:12px;">🎵</div>
                       <audio id="meggy-video" src="${videoUrl}" controls autoplay style="width:100%;"></audio>
                     </div>
                   ` : `
                     <video id="meggy-video" src="${videoUrl}" controls autoplay playsinline
-                      style="width:100%;border-radius:12px;background:#000;aspect-ratio:16/9;max-height:80vh;"
+                      style="display:block;width:100%;max-height:none;"
                       onerror="this.style.display='none';document.getElementById('meggy-player-error').style.display='block'">
                     </video>
                     <div id="meggy-player-error" style="display:none;padding:40px;text-align:center;color:#ff8b9f;">
-                      ⚠️ Não foi possível carregar.<br>
-                      <a href="${videoUrl}" target="_blank" style="color:#5ddeda;">Abrir em nova aba</a>
+                      ⚠️ Não carregou. <a href="${videoUrl}" target="_blank" style="color:#5ddeda;">Abrir</a>
                     </div>
                   `}
                 </div>
-                <div class="alfacon-lesson-controls">
-                  <button class="gdi-mode-btn" id="gdi-watched-btn" data-b="1"><i class="bi bi-eye"></i> Marcar Como Assistido</button>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
                   <button class="gdi-mode-btn" id="gdi-prev-btn" ${idx === 0 ? 'disabled' : ''}><i class="bi bi-chevron-left"></i> Anterior</button>
                   <button class="gdi-mode-btn" id="gdi-next-btn" ${idx >= pl.length - 1 ? 'disabled' : ''}>Próxima <i class="bi bi-chevron-right"></i></button>
                   <a class="gdi-mode-btn" href="${videoUrl}" download="${name}" target="_blank"><i class="bi bi-download"></i></a>
                   <button class="gdi-mode-btn" id="gdi-interfolder-btn"><i class="bi bi-collection"></i> Interfolder</button>
-                  <button class="gdi-mode-btn" id="gdi-meggy-ai-btn" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;"><i class="bi bi-robot"></i> Meggy</button>
+                  <button class="gdi-mode-btn" id="gdi-meggy-ai-btn" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-robot"></i> Meggy</button>
                 </div>
-                <div class="alfacon-card" id="alfacon-playlist-card">
-                  <button class="alfacon-collapse-btn" id="alfacon-playlist-toggle">
-                    <span class="alfacon-collapse-icon"><i class="bi bi-education-outline"></i></span>
-                    <span class="alfacon-collapse-title">Aulas da disciplina</span>
-                    <span id="gdi-pl-count" style="font-size:11px;color:#6b7488;margin-left:6px;">${idx + 1} / ${pl.length}</span>
-                    <i class="bi bi-chevron-down" id="gdi-pl-chev" style="margin-left:auto;"></i>
-                  </button>
-                  <div class="alfacon-collapse-body" id="gdi-playlist-body" style="display:none;">
-                    <div id="gdi-playlist-list">
-                      ${pl.map((v, i) => `<div class="gdi-playlist-item ${i === idx ? 'cur' : ''}" data-idx="${i}" title="${v.name}"><div><i class="bi ${i === idx ? 'bi-play-fill' : 'bi-film'} me-2"></i><span style="font-weight:${i === idx ? '600' : '400'};">${v.name}</span></div><span class="gdi-pl-size">${v.size || ''}</span></div>`).join('')}
-                    </div>
-                  </div>
-                </div>
-                <div class="alfacon-card" id="alfacon-annotations">
-                  <div class="alfacon-annotations-header">📝 Anotações</div>
-                  <textarea id="gdi-note-input" rows="2" placeholder="Digite sua anotação para esta aula…" style="width:100%;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:8px;padding:8px;color:#e6edf3;font-family:inherit;font-size:13px;resize:vertical;outline:none;"></textarea>
+                <div class="gdi-notes" style="background:rgba(255,255,255,0.043);border:1px solid rgba(255,255,255,0.09);border-radius:10px;padding:12px;">
+                  <div style="font-size:14px;font-weight:600;color:#e6edf3;margin-bottom:8px;">📝 Anotações</div>
+                  <textarea id="gdi-note-input" rows="2" placeholder="Digite sua anotação..." style="width:100%;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:6px;padding:8px;color:#e6edf3;font-family:inherit;font-size:13px;resize:vertical;outline:none;"></textarea>
                   <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
                     <span id="gdi-note-time" style="cursor:pointer;font-size:12px;color:#5ddeda;">00:00</span>
-                    <button id="gdi-note-save" style="background:rgba(255,139,159,0.12);border:1px solid rgba(255,139,159,0.3);color:#ff8b9f;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;"><i class="bi bi-save me-1"></i>Salvar</button>
+                    <button id="gdi-note-save" style="background:rgba(255,139,159,0.12);border:1px solid rgba(255,139,159,0.3);color:#ff8b9f;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;"><i class="bi bi-save"></i> Salvar</button>
                   </div>
                   <div id="gdi-notes-list" style="margin-top:8px;"></div>
                 </div>
-              </div>
-              <div class="alfacon-layout-right" id="gdi-slot-right">
-                <div class="alfacon-material-header" id="material_header">
-                  <div class="alfacon-material-tabs" id="gdi-mat-tabs"><span class="gdi-mat-loading">Buscando…</span></div>
-                  <div class="alfacon-layout-controls-right">
-                    <button class="gdi-mode-btn" data-layout="focus-study" title="Foco no material"><i class="bi bi-lightning-charge-fill"></i></button>
+                <div id="gdi-playlist-wrap" style="background:rgba(255,255,255,0.043);border:1px solid rgba(255,255,255,0.09);border-radius:10px;padding:8px;">
+                  <button id="gdi-pl-toggle" class="gdi-mode-btn" style="width:100%;justify-content:flex-start;padding:8px 10px;font-size:12px;">
+                    <i class="bi bi-collection-play me-2"></i><strong>Playlist</strong>
+                    <span id="gdi-pl-count" style="font-size:11px;color:#9aa4b8;margin-left:6px;">${idx + 1} / ${pl.length}</span>
+                    <i id="gdi-pl-chev" class="bi bi-chevron-down" style="margin-left:auto;"></i>
+                  </button>
+                  <div id="gdi-playlist-body" style="overflow-y:auto;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:6px;background:rgba(0,0,0,0.2);max-height:240px;display:none;margin-top:6px;">
+                    <div id="gdi-playlist-list">
+                      ${pl.map((v, i) => `<div class="gdi-playlist-item ${i === idx ? 'cur' : ''}" data-idx="${i}" title="${v.name}" style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:12px;color:${i === idx ? '#ff8b9f' : '#9aa4b8'};${i === idx ? 'background:rgba(255,139,159,0.12);' : ''}"><div style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><i class="bi ${i === idx ? 'bi-play-fill' : 'bi-film'} me-2"></i><span style="font-weight:${i === idx ? '600' : '400'};">${v.name}</span></div><span class="gdi-pl-size" style="font-size:10px;color:#6b7488;margin-left:8px;">${v.size || ''}</span></div>`).join('')}
+                    </div>
                   </div>
                 </div>
-                <div class="alfacon-material-body" id="gdi-mat-body"></div>
-                <div class="alfacon-material-status" id="gdi-mat-status">buscando…</div>
-              </div>
+              </section>
+              <aside class="gdi-study-right" id="gdi-slot-right" style="display:flex;flex-direction:column;gap:8px;min-width:0;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <div id="gdi-mat-tabs" style="display:flex;flex-wrap:wrap;gap:6px;flex:1;">
+                    <span style="font-size:12px;color:#6b7488;padding:8px;">Buscando materiais…</span>
+                  </div>
+                </div>
+                <div style="font-size:11px;color:#6b7488;padding:2px 0;">
+                  <strong><i class="bi bi-journal-bookmark-fill" style="color:#ff8b9f;"></i> Materiais da aula</strong>
+                  <span id="gdi-mat-status" style="margin-left:8px;">buscando…</span>
+                </div>
+                <div id="gdi-mat-body" style="background:rgba(22,27,38,0.72);border:1px solid rgba(255,255,255,0.09);border-radius:16px;min-height:420px;height:calc(100vh - 250px);overflow:hidden;"></div>
+              </aside>
             </div>
           </div>
         `;
@@ -747,15 +731,6 @@
           try { window.GDIUser?.setResume?.(videoUrl, video.currentTime, video.duration || 0); } catch (e) {}
         };
 
-        const showResumeToast = (pos) => {
-          const toast = document.createElement('div');
-          toast.className = 'meggy-toast-resume';
-          toast.innerHTML = `<i class="bi bi-clock-history"></i> Retomando de <b>&nbsp;${formatTime(pos)}</b><button class="meggy-toast-btn">Recomeçar</button>`;
-          main.appendChild(toast);
-          toast.querySelector('.meggy-toast-btn').onclick = () => { video.currentTime = 0; toast.remove(); };
-          setTimeout(() => { toast.classList.add('meggy-toast-out'); setTimeout(() => toast.remove(), 250); }, 7000);
-        };
-
         function formatTime(s) {
           if (!isFinite(s)) return '00:00';
           s = Math.floor(s);
@@ -767,7 +742,12 @@
           video.addEventListener('loadedmetadata', () => {
             if (resumePos > 10 && video.duration && resumePos < video.duration * 0.9) {
               video.currentTime = resumePos;
-              showResumeToast(resumePos);
+              const toast = document.createElement('div');
+              toast.className = 'meggy-toast-resume';
+              toast.innerHTML = `<i class="bi bi-clock-history"></i> Retomando de <b>&nbsp;${formatTime(resumePos)}</b><button class="meggy-toast-btn">Recomeçar</button>`;
+              main.appendChild(toast);
+              toast.querySelector('.meggy-toast-btn').onclick = () => { video.currentTime = 0; toast.remove(); };
+              setTimeout(() => { toast.classList.add('meggy-toast-out'); setTimeout(() => toast.remove(), 250); }, 7000);
             }
           });
           video.addEventListener('timeupdate', () => { timeEl.textContent = formatTime(video.currentTime); saveResume(); });
@@ -779,16 +759,16 @@
           const v = pl[newIdx];
           idx = newIdx;
           Shell.state.playerIndex = idx;
-          const newUrl = v.link.startsWith('http') ? v.link : (window.location.origin + v.link);
-          video.src = newUrl;
+          video.src = v.link.startsWith('http') ? v.link : (window.location.origin + v.link);
           video.play().catch(() => {});
           document.getElementById('gdi-file-header-name').textContent = v.name;
           document.getElementById('gdi-file-header-meta').textContent = v.size || '';
           plCountEl.textContent = `${idx + 1} / ${pl.length}`;
           document.querySelectorAll('.gdi-playlist-item').forEach((el, i) => {
-            el.classList.toggle('cur', i === idx);
-            const icon = el.querySelector('i'); if (icon) icon.className = `bi ${i === idx ? 'bi-play-fill' : 'bi-film'} me-2`;
-            const span = el.querySelector('span'); if (span) span.style.fontWeight = i === idx ? '600' : '400';
+            const isCur = i === idx;
+            el.style.color = isCur ? '#ff8b9f' : '#9aa4b8';
+            el.style.background = isCur ? 'rgba(255,139,159,0.12)' : '';
+            const span = el.querySelector('span'); if (span) span.style.fontWeight = isCur ? '600' : '400';
           });
           document.getElementById('gdi-prev-btn').disabled = idx === 0;
           document.getElementById('gdi-next-btn').disabled = idx >= pl.length - 1;
@@ -800,7 +780,12 @@
           btn.onclick = () => {
             document.querySelectorAll('.gdi-mode-btn[data-mode]').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            document.getElementById('gdi-study').className = 'gdi-study mode-' + btn.dataset.mode;
+            const grid = document.getElementById('gdi-study-grid');
+            const right = document.getElementById('gdi-slot-right');
+            const left = document.querySelector('.gdi-study-left');
+            if (btn.dataset.mode === 'fv') { grid.style.gridTemplateColumns = '1fr'; right.style.display = 'none'; }
+            else if (btn.dataset.mode === 'fm') { grid.style.gridTemplateColumns = '1fr'; left.style.display = 'none'; }
+            else { grid.style.gridTemplateColumns = '1fr 1fr'; right.style.display = ''; left.style.display = ''; }
           };
         });
 
@@ -809,7 +794,7 @@
           const w = this.dataset.b === '1';
           this.dataset.b = w ? '0' : '1';
           this.classList.toggle('done', !w);
-          this.innerHTML = !w ? '<i class="bi bi-eye-fill"></i><span>Assistida ✓</span>' : '<i class="bi bi-eye"></i><span>Assistido</span>';
+          this.innerHTML = !w ? '<i class="bi bi-eye-fill"></i> Assistida ✓' : '<i class="bi bi-eye"></i> Assistido';
           try { if (window.GDIUser?.setWatched) window.GDIUser.setWatched(videoUrl, !w); } catch (e) {}
         };
 
@@ -828,7 +813,19 @@
           item.onclick = () => { const i = parseInt(item.dataset.idx); if (i !== idx) switchTo(i); };
         });
 
-        // Interfolder — com finalizeNames (réplica GDI)
+        // Breadcrumb
+        document.querySelectorAll('.gdi-bc a[data-nav]').forEach(a => {
+          a.onclick = (e) => {
+            e.preventDefault();
+            if (a.dataset.bcType === 'home') Shell.router.navigate('/');
+            else { Shell.router.navigate('/drives'); setTimeout(() => Shell.views._renderDrives(a.dataset.nav), 50); }
+          };
+        });
+
+        // Meggy AI
+        document.getElementById('gdi-meggy-ai-btn').onclick = () => Shell.openMeggyAIDrawer();
+
+        // ★ Interfolder — com finalizeNames
         document.getElementById('gdi-interfolder-btn').onclick = async () => {
           const btn = document.getElementById('gdi-interfolder-btn');
           btn.innerHTML = '<div class="spinner-border spinner-border-sm"></div>';
@@ -847,56 +844,35 @@
                 return window.gdiListAllFiles(fpath, '').then(files => files
                   .filter(f => (f.mimeType||'').includes('video') || f.name.endsWith('.mp4'))
                   .filter(f => !f.name.includes('.part-'))
-                  .map(f => ({
-                    name: f.name,
-                    origName: f.name,
-                    link: f.link ? (f.link.startsWith('http') ? f.link : window.location.origin + f.link) : '',
-                    size: f.size ? (f.size/1024/1024).toFixed(1)+' MB' : '',
-                    folder: folder.name,
-                    folderLabel: folder.name
-                  }))).catch(() => []);
+                  .map(f => ({name:f.name, origName:f.name, link:f.link?(f.link.startsWith('http')?f.link:window.location.origin+f.link):'', size:f.size?(f.size/1024/1024).toFixed(1)+' MB':'', folder:folder.name, folderLabel:folder.name}))).catch(() => []);
               }));
               results.forEach(v => collected.push(...v));
               btn.innerHTML = `<div class="spinner-border spinner-border-sm"></div> ${collected.length}`;
             }
-            // ★ finalizeNames — réplica exata do GDI
             const seen = new Set();
             pl = collected.filter(v => { const k = (v.folder||'')+'|'+v.origName; if (seen.has(k)) return false; seen.add(k); return true; });
             pl.sort((a,b) => (a.folder||'').localeCompare(b.folder||'') || a.name.localeCompare(b.name));
-            // ★ Se há duplicação de nomes, prefixa com folderLabel
+            // finalizeNames
             const cnts = {};
             pl.forEach(v => { const o = v.origName || v.name; cnts[o] = (cnts[o]||0)+1; });
             pl.forEach(v => { const o = v.origName || v.name; if (cnts[o] > 1 && v.folderLabel && v.name === o) v.name = v.folderLabel + ' - ' + o; });
-
             Shell.state.playerPlaylist = pl;
             idx = pl.findIndex(v => v.origName === name || v.link === videoUrl);
             if (idx === -1) idx = 0;
-            document.getElementById('gdi-playlist-list').innerHTML = pl.map((v, i) => `<div class="gdi-playlist-item ${i === idx ? 'cur' : ''}" data-idx="${i}" title="${v.name}"><div><i class="bi ${i === idx ? 'bi-play-fill' : 'bi-film'} me-2"></i><span style="font-weight:${i === idx ? '600' : '400'};">${v.name}</span></div><span class="gdi-pl-size">${v.size || ''}</span></div>`).join('');
+            document.getElementById('gdi-playlist-list').innerHTML = pl.map((v, i) => `<div class="gdi-playlist-item ${i === idx ? 'cur' : ''}" data-idx="${i}" title="${v.name}" style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:12px;color:${i === idx ? '#ff8b9f' : '#9aa4b8'};${i === idx ? 'background:rgba(255,139,159,0.12);' : ''}"><div style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><i class="bi ${i === idx ? 'bi-play-fill' : 'bi-film'} me-2"></i><span style="font-weight:${i === idx ? '600' : '400'};">${v.name}</span></div><span class="gdi-pl-size" style="font-size:10px;color:#6b7488;margin-left:8px;">${v.size || ''}</span></div>`).join('');
             plCountEl.textContent = `${idx + 1} / ${pl.length}`;
             document.querySelectorAll('.gdi-playlist-item').forEach(item => { item.onclick = () => { const i = parseInt(item.dataset.idx); if (i !== idx) switchTo(i); }; });
             btn.innerHTML = `<i class="bi bi-check"></i> ${pl.length}`;
           } catch (e) { console.error(e); btn.innerHTML = '⚠️'; }
         };
 
-        // Breadcrumb
-        document.querySelectorAll('.gdi-bc a[data-nav]').forEach(a => {
-          a.onclick = (e) => {
-            e.preventDefault();
-            if (a.dataset.bcType === 'home') Shell.router.navigate('/');
-            else { Shell.router.navigate('/drives'); setTimeout(() => Shell.views._renderDrives(a.dataset.nav), 50); }
-          };
-        });
-
-        // Meggy AI drawer
-        document.getElementById('gdi-meggy-ai-btn').onclick = () => Shell.openMeggyAIDrawer();
-
-        // ★ Materiais — RÉPLICA EXATA do GDI (tabs + IA + body)
+        // ★ Materiais — busca em pasta + subpastas + pasta pai (réplica GDI)
         async function loadMaterials() {
           const tabsEl = document.getElementById('gdi-mat-tabs');
           const bodyEl = document.getElementById('gdi-mat-body');
           const statusEl = document.getElementById('gdi-mat-status');
           if (!tabsEl || !bodyEl) return;
-          tabsEl.innerHTML = '<span class="gdi-mat-loading">Buscando materiais…</span>';
+          tabsEl.innerHTML = '<span style="font-size:12px;color:#6b7488;padding:8px;">Buscando…</span>';
           if (statusEl) statusEl.textContent = 'buscando…';
           bodyEl.innerHTML = '';
           try {
@@ -904,7 +880,7 @@
             if (!folderPath || !window.gdiListAllFiles) {
               tabsEl.innerHTML = '';
               if (statusEl) statusEl.textContent = 'sem material';
-              bodyEl.innerHTML = '<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material.</div></div>';
+              bodyEl.innerHTML = '<div style="text-align:center;padding:40px;color:#6b7488;"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material.</div></div>';
               return;
             }
             const isMaterial = (x) => {
@@ -913,8 +889,10 @@
               return ext === 'pdf' || mt.includes('pdf') || ext === 'md' || mt.includes('markdown') || ext === 'txt' || mt === 'text/plain' || ext === 'html' || mt.includes('html');
             };
             let found = [];
+            // 1. Pasta atual
             const here = await window.gdiListAllFiles(folderPath, '');
             found = here.filter(isMaterial);
+            // 2. Subpastas (até 20, para no 1º)
             if (!found.length) {
               const subs = here.filter(x => x.mimeType === 'application/vnd.google-apps.folder').slice(0, 20);
               for (const sf of subs) {
@@ -924,6 +902,7 @@
                 if (found.length) break;
               }
             }
+            // 3. Pasta pai
             if (!found.length) {
               const parts = folderPath.split('/').filter(Boolean);
               const parentPath = '/' + parts.slice(0, -1).join('/') + '/';
@@ -932,127 +911,93 @@
                 found = parentFiles.filter(isMaterial);
               }
             }
+            // Dedupe
             const seen = new Set();
             const uniq = [];
             found.forEach(x => { if (!seen.has(x.name)) { seen.add(x.name); uniq.push(x); } });
-            // Cap em 12 (igual GDI)
             const materials = uniq.slice(0, 12);
 
             tabsEl.innerHTML = '';
             if (!materials.length) {
               if (statusEl) statusEl.textContent = 'sem material';
-              bodyEl.innerHTML = '<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material encontrado para esta aula.</div></div>';
+              bodyEl.innerHTML = '<div style="text-align:center;padding:40px;color:#6b7488;"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material encontrado.</div></div>';
               return;
             }
-            if (statusEl) statusEl.textContent = materials.length + ' materiais';
+            if (statusEl) statusEl.textContent = materials.length + ' material(is)';
 
-            // ★ Renderizar tabs — RÉPLICA EXATA do GDI
-            // 1. Tabs de arquivos (Transcrição, Resumo IA, etc.)
+            // Tabs (botões verticais como Alfacon)
             materials.forEach((m, i) => {
               const ext = (m.name.split('.').pop() || '').toLowerCase();
               const isAi = m.name.toLowerCase().includes('ia') || m.name.toLowerCase().includes('resumo');
               const isTransc = m.name.toLowerCase().includes('transcri') || ext === 'txt';
-              const label = isTransc ? 'Transcrição' : isAi ? 'Resumo IA' : m.name.substring(0, 15);
+              const label = isTransc ? 'Transcrição' : isAi ? 'Resumo IA' : m.name.substring(0, 12);
               const icon = isTransc ? 'bi-card-text' : isAi ? 'bi-stars' : ext === 'pdf' ? 'bi-file-earmark-pdf' : 'bi-file-earmark-text';
-              const tab = document.createElement('div');
+              const tab = document.createElement('button');
               tab.className = 'gdi-mat-tab' + (i === 0 ? ' active' : '');
+              tab.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:4px;min-width:80px;padding:10px 8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);border-radius:10px;cursor:pointer;font-size:11px;font-weight:500;color:#9aa4b8;text-align:center;font-family:inherit;transition:0.15s;';
               tab.dataset.mat = i;
-              tab.title = m.name;
-              tab.innerHTML = `<i class="bi ${icon}"></i><span>${label}</span>`;
+              tab.innerHTML = `<i class="bi ${icon}" style="font-size:24px;"></i><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:72px;font-size:10px;">${label}</span>`;
+              tab.onmouseenter = () => { tab.style.background = 'rgba(255,255,255,0.08)'; tab.style.color = '#e6edf3'; };
+              tab.onmouseleave = () => { if (!tab.classList.contains('active')) { tab.style.background = 'rgba(255,255,255,0.04)'; tab.style.color = '#9aa4b8'; } };
               tab.onclick = () => showMaterial(i);
               tabsEl.appendChild(tab);
             });
 
-            // 2. Tabs IA Meggy (sempre presentes — réplica GDI)
-            const isaTabs = [
-              { id: 'isa-summary', icon: 'bi-stars', label: 'Resumo Meggy' },
-              { id: 'isa-questions', icon: 'bi-patch-question', label: 'Questões Meggy' },
-              { id: 'isa-mindmap', icon: 'bi-capsule', label: 'Pílulas' },
-              { id: 'isa-flashcards', icon: 'bi-card-text', label: 'Flashcards' },
-            ];
-            isaTabs.forEach(it => {
-              const tab = document.createElement('div');
+            // ISA tabs (Meggy)
+            [{id:'isa-summary',icon:'bi-stars',label:'Resumo Meggy'},{id:'isa-questions',icon:'bi-patch-question',label:'Questões'},{id:'isa-mindmap',icon:'bi-capsule',label:'Pílulas'},{id:'isa-flashcards',icon:'bi-card-text',label:'Flashcards'}].forEach(it => {
+              const tab = document.createElement('button');
               tab.className = 'gdi-mat-tab gdi-mat-isa';
+              tab.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:4px;min-width:80px;padding:10px 8px;background:rgba(192,38,211,0.06);border:1px solid rgba(192,38,211,0.1);border-radius:10px;cursor:pointer;font-size:11px;font-weight:500;color:#c026d3;text-align:center;font-family:inherit;transition:0.15s;';
               tab.dataset.mat = it.id;
-              tab.innerHTML = `<i class="bi ${it.icon}"></i><span>${it.label}</span>`;
-              tab.onclick = () => showISAMaterial(it.id);
+              tab.innerHTML = `<i class="bi ${it.icon}" style="font-size:24px;"></i><span style="font-size:10px;">${it.label}</span>`;
+              tab.onclick = () => showISA(it.id);
               tabsEl.appendChild(tab);
             });
 
-            // ★ showMaterial — renderizar preview (réplica GDI)
             function showMaterial(i) {
-              document.querySelectorAll('.gdi-mat-tab').forEach(t => t.classList.remove('active'));
-              document.querySelector(`.gdi-mat-tab[data-mat="${i}"]`)?.classList.add('active');
+              document.querySelectorAll('.gdi-mat-tab').forEach(t => { t.classList.remove('active'); t.style.background = 'rgba(255,255,255,0.04)'; t.style.color = '#9aa4b8'; });
+              const activeTab = document.querySelector(`.gdi-mat-tab[data-mat="${i}"]`);
+              if (activeTab) { activeTab.classList.add('active'); activeTab.style.background = 'linear-gradient(135deg,rgba(255,139,159,0.15),rgba(192,38,211,0.1))'; activeTab.style.color = '#ff8b9f'; }
               const m = materials[i];
               let link = '';
-              if (m.link) {
-                link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
-                if (m.name.endsWith('.pdf') && !link.includes('inline=')) link += (link.includes('?') ? '&' : '?') + 'inline=true';
-              }
+              if (m.link) { link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link); if (m.name.endsWith('.pdf') && !link.includes('inline=')) link += (link.includes('?') ? '&' : '?') + 'inline=true'; }
               const ext = (m.name.split('.').pop() || '').toLowerCase();
-              if (ext === 'pdf' && link) {
-                bodyEl.innerHTML = `<iframe src="${link}" style="width:100%;height:calc(100dvh - 250px);border:none;background:#fff;"></iframe>`;
-              } else if ((ext === 'md' || ext === 'txt' || ext === 'html') && link) {
-                bodyEl.innerHTML = `<div id="gdi-mat-md" style="width:100%;height:calc(100dvh - 250px);overflow:auto;padding:16px;background:rgba(255,255,255,0.04);border-radius:8px;color:#e6edf3;font-size:13px;">Carregando...</div>`;
-                fetch(link).then(r => r.text()).then(txt => {
-                  const el = document.getElementById('gdi-mat-md');
-                  if (el) {
-                    // Renderizar markdown simples
-                    let html = txt
-                      .replace(/^### (.+)$/gm, '<h3 style="color:#ff8b9f;margin:12px 0 6px;">$1</h3>')
-                      .replace(/^## (.+)$/gm, '<h2 style="color:#ff8b9f;margin:16px 0 8px;">$1</h2>')
-                      .replace(/^# (.+)$/gm, '<h1 style="color:#ff8b9f;margin:20px 0 10px;">$1</h1>')
-                      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-                      .replace(/^- (.+)$/gm, '<li>$1</li>')
-                      .replace(/\n/g, '<br>');
-                    el.innerHTML = html;
-                  }
-                }).catch(() => { const el = document.getElementById('gdi-mat-md'); if (el) el.textContent = 'Erro.'; });
-              } else if (link) {
-                bodyEl.innerHTML = `<div style="text-align:center;padding:40px;"><a href="${link}" target="_blank" class="gdi-mode-btn"><i class="bi bi-download"></i> Abrir material</a></div>`;
-              } else {
-                bodyEl.innerHTML = '<div class="gdi-mat-empty">Sem preview</div>';
-              }
+              if (ext === 'pdf' && link) bodyEl.innerHTML = `<iframe src="${link}" style="width:100%;height:100%;border:none;border-radius:16px;"></iframe>`;
+              else if ((ext === 'md' || ext === 'txt' || ext === 'html') && link) {
+                bodyEl.innerHTML = `<div id="gdi-mat-md" style="width:100%;height:100%;overflow:auto;padding:16px;color:#e6edf3;font-size:13px;">Carregando...</div>`;
+                fetch(link).then(r => r.text()).then(txt => { const el = document.getElementById('gdi-mat-md'); if (el) { let h = txt.replace(/^### (.+)$/gm,'<h3 style="color:#ff8b9f;margin:12px 0 6px;">$1</h3>').replace(/^## (.+)$/gm,'<h2 style="color:#ff8b9f;margin:16px 0 8px;">$1</h2>').replace(/^# (.+)$/gm,'<h1 style="color:#ff8b9f;margin:20px 0 10px;">$1</h1>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/^- (.+)$/gm,'<li>$1</li>').replace(/\n/g,'<br>'); el.innerHTML = h; } }).catch(() => { const el = document.getElementById('gdi-mat-md'); if (el) el.textContent = 'Erro.'; });
+              } else if (link) bodyEl.innerHTML = `<div style="text-align:center;padding:40px;"><a href="${link}" target="_blank" class="gdi-mode-btn"><i class="bi bi-download"></i> Abrir</a></div>`;
+              else bodyEl.innerHTML = '<div style="text-align:center;padding:40px;color:#6b7488;">Sem preview</div>';
             }
 
-            // ★ showISAMaterial — gerar via IA (réplica GDI)
-            function showISAMaterial(type) {
-              document.querySelectorAll('.gdi-mat-tab').forEach(t => t.classList.remove('active'));
-              document.querySelector(`.gdi-mat-tab[data-mat="${type}"]`)?.classList.add('active');
+            function showISA(type) {
+              document.querySelectorAll('.gdi-mat-tab').forEach(t => { t.classList.remove('active'); t.style.background = 'rgba(255,255,255,0.04)'; t.style.color = '#9aa4b8'; });
+              const activeTab = document.querySelector(`.gdi-mat-tab[data-mat="${type}"]`);
+              if (activeTab) { activeTab.classList.add('active'); activeTab.style.background = 'linear-gradient(135deg,rgba(192,38,211,0.2),rgba(255,139,159,0.1))'; }
               const lessonName = Shell.state.playerPlaylist?.[Shell.state.playerIndex]?.name || '';
-              bodyEl.innerHTML = `<div style="padding:20px;text-align:center;"><div class="spinner-border" style="color:#ff8b9f;"></div><div style="margin-top:12px;color:#9aa4b8;">Gerando ${type.replace('isa-','')} com Meggy AI...</div></div>`;
+              bodyEl.innerHTML = `<div style="padding:20px;text-align:center;"><div class="spinner-border" style="color:#ff8b9f;"></div><div style="margin-top:12px;color:#9aa4b8;">Gerando com Meggy AI...</div></div>`;
               (async () => {
                 try {
-                  let endpoint = '/api/ai';
-                  let payload = { message: '', messages: [] };
-                  if (type === 'isa-summary') payload.message = `Gere um resumo detalhado da aula: ${lessonName}`;
-                  else if (type === 'isa-questions') payload.message = `Gere 5 questões de múltipla escolha sobre: ${lessonName}`;
-                  else if (type === 'isa-mindmap') payload.message = `Crie pílulas de conhecimento (tópicos curtos) sobre: ${lessonName}`;
-                  else if (type === 'isa-flashcards') payload.message = `Crie 10 flashcards (frente/verso) sobre: ${lessonName}`;
-                  const r = await fetch(endpoint, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+                  let msg = '';
+                  if (type === 'isa-summary') msg = `Gere um resumo detalhado da aula: ${lessonName}`;
+                  else if (type === 'isa-questions') msg = `Gere 5 questões de múltipla escolha sobre: ${lessonName}`;
+                  else if (type === 'isa-mindmap') msg = `Crie pílulas de conhecimento sobre: ${lessonName}`;
+                  else if (type === 'isa-flashcards') msg = `Crie 10 flashcards sobre: ${lessonName}`;
+                  const r = await fetch('/api/ai', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: msg, messages: []}) });
                   const d = await r.json();
                   const text = d.response || d.markdown || 'Sem resposta';
-                  let html = text
-                    .replace(/^### (.+)$/gm, '<h3 style="color:#ff8b9f;margin:12px 0 6px;">$1</h3>')
-                    .replace(/^## (.+)$/gm, '<h2 style="color:#ff8b9f;margin:16px 0 8px;">$1</h2>')
-                    .replace(/^# (.+)$/gm, '<h1 style="color:#ff8b9f;margin:20px 0 10px;">$1</h1>')
-                    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-                    .replace(/^- (.+)$/gm, '<li>$1</li>')
-                    .replace(/\n/g, '<br>');
-                  bodyEl.innerHTML = `<div style="width:100%;height:calc(100dvh - 250px);overflow:auto;padding:16px;color:#e6edf3;font-size:13px;">${html}</div>`;
-                } catch (e) {
-                  bodyEl.innerHTML = `<div class="gdi-mat-empty">Erro: ${e.message}</div>`;
-                }
+                  let h = text.replace(/^### (.+)$/gm,'<h3 style="color:#ff8b9f;margin:12px 0 6px;">$1</h3>').replace(/^## (.+)$/gm,'<h2 style="color:#ff8b9f;margin:16px 0 8px;">$1</h2>').replace(/^# (.+)$/gm,'<h1 style="color:#ff8b9f;margin:20px 0 10px;">$1</h1>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/^- (.+)$/gm,'<li>$1</li>').replace(/\n/g,'<br>');
+                  bodyEl.innerHTML = `<div style="width:100%;height:100%;overflow:auto;padding:16px;color:#e6edf3;font-size:13px;">${h}</div>`;
+                } catch (e) { bodyEl.innerHTML = `<div style="padding:20px;color:#ff8b9f;">Erro: ${e.message}</div>`; }
               })();
             }
 
-            // Auto-clicar primeiro material
             if (materials.length > 0) showMaterial(0);
           } catch (e) {
             console.error('[Shell] loadMaterials:', e);
             tabsEl.innerHTML = '';
             if (statusEl) statusEl.textContent = 'erro';
-            bodyEl.innerHTML = '<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Erro.</div></div>';
+            bodyEl.innerHTML = `<div style="text-align:center;padding:40px;color:#ff8b9f;">Erro: ${e.message}</div>`;
           }
         }
         setTimeout(loadMaterials, 500);
@@ -1092,7 +1037,7 @@
 
         main.scrollTop = 0;
         if (pl.length <= 1 && Shell.state.currentFolderPath) {
-          setTimeout(() => document.getElementById('gdi-interfolder-btn')?.click(), 1000);
+          setTimeout(() => document.getElementById('gdi-interfolder-btn')?.click(), 1500);
         }
       },
 
@@ -1112,9 +1057,6 @@
             <div class="meggy-ai-drawer-tabs">
               <button class="meggy-ai-drawer-tab active" data-aitab="actions">⚡ Ações</button>
               <button class="meggy-ai-drawer-tab" data-aitab="chat">💬 Chat</button>
-              <button class="meggy-ai-drawer-tab" data-aitab="resumos">📝 Resumos</button>
-              <button class="meggy-ai-drawer-tab" data-aitab="questoes">❓ Questões</button>
-              <button class="meggy-ai-drawer-tab" data-aitab="flashcards">🃏 Flashcards</button>
             </div>
             <div class="meggy-ai-drawer-body" id="meggy-ai-body"></div>
           `;
@@ -1141,25 +1083,16 @@
         const body = document.getElementById('meggy-ai-body');
         if (!body) return;
         if (tab === 'actions') {
-          body.innerHTML = `
-            <div class="meggy-ai-action-grid">
-              <button class="meggy-ai-action-btn" data-action="resumo"><i class="bi bi-file-earmark-text"></i>Gerar Resumo</button>
-              <button class="meggy-ai-action-btn" data-action="pilulas"><i class="bi bi-capsule"></i>Pílulas</button>
-              <button class="meggy-ai-action-btn" data-action="questoes"><i class="bi bi-patch-question"></i>Questões</button>
-              <button class="meggy-ai-action-btn" data-action="flashcards"><i class="bi bi-card-text"></i>Flashcards</button>
-              <button class="meggy-ai-action-btn" data-action="mindmap"><i class="bi bi-diagram-3"></i>Mapa Mental</button>
-              <button class="meggy-ai-action-btn" data-action="coach"><i class="bi bi-magic"></i>Coach IA</button>
-            </div>
-          `;
+          body.innerHTML = `<div class="meggy-ai-action-grid">
+            <button class="meggy-ai-action-btn" data-action="resumo"><i class="bi bi-file-earmark-text"></i>Gerar Resumo</button>
+            <button class="meggy-ai-action-btn" data-action="pilulas"><i class="bi bi-capsule"></i>Pílulas</button>
+            <button class="meggy-ai-action-btn" data-action="questoes"><i class="bi bi-patch-question"></i>Questões</button>
+            <button class="meggy-ai-action-btn" data-action="flashcards"><i class="bi bi-card-text"></i>Flashcards</button>
+          </div>`;
           body.querySelectorAll('.meggy-ai-action-btn').forEach(btn => { btn.onclick = () => Shell.meggyAIAction(btn.dataset.action); });
         } else if (tab === 'chat') {
-          body.innerHTML = `
-            <div class="meggy-ai-chat-messages" id="meggy-ai-messages"></div>
-            <div class="meggy-ai-chat-input">
-              <textarea id="meggy-ai-input" placeholder="Pergunte algo..." rows="2"></textarea>
-              <button id="meggy-ai-send"><i class="bi bi-send"></i></button>
-            </div>
-          `;
+          body.innerHTML = `<div class="meggy-ai-chat-messages" id="meggy-ai-messages"></div>
+            <div class="meggy-ai-chat-input"><textarea id="meggy-ai-input" placeholder="Pergunte..." rows="2"></textarea><button id="meggy-ai-send"><i class="bi bi-send"></i></button></div>`;
           const send = async () => {
             const msg = document.getElementById('meggy-ai-input').value.trim();
             if (!msg) return;
@@ -1168,84 +1101,29 @@
             document.getElementById('meggy-ai-input').value = '';
             msgs.innerHTML += `<div class="meggy-ai-msg bot" id="meggy-ai-typing">🐾 Pensando...</div>`;
             msgs.scrollTop = msgs.scrollHeight;
-            try {
-              const r = await fetch('/api/ai', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: msg, messages: []}) });
-              const d = await r.json();
-              document.getElementById('meggy-ai-typing').textContent = d.response || 'Sem resposta';
-            } catch (e) { document.getElementById('meggy-ai-typing').textContent = 'Erro: ' + e.message; }
+            try { const r = await fetch('/api/ai', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: msg, messages: []}) }); const d = await r.json(); document.getElementById('meggy-ai-typing').textContent = d.response || 'Sem resposta'; } catch (e) { document.getElementById('meggy-ai-typing').textContent = 'Erro: ' + e.message; }
             msgs.scrollTop = msgs.scrollHeight;
           };
           document.getElementById('meggy-ai-send').onclick = send;
           document.getElementById('meggy-ai-input').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
-        } else if (tab === 'resumos') {
-          body.innerHTML = `<div style="padding:20px;"><button class="meggy-ai-action-btn" style="width:100%;" id="meggy-gen-resumo"><i class="bi bi-file-earmark-text"></i>Gerar Resumo</button><div id="meggy-resumo-out" style="margin-top:16px;font-size:13px;color:#9aa4b8;"></div></div>`;
-          document.getElementById('meggy-gen-resumo').onclick = () => Shell.meggyAIAction('resumo');
-        } else if (tab === 'questoes') {
-          body.innerHTML = `<div style="padding:20px;"><button class="meggy-ai-action-btn" style="width:100%;" id="meggy-gen-questoes"><i class="bi bi-patch-question"></i>Gerar Questões</button><div id="meggy-questoes-out" style="margin-top:16px;font-size:13px;color:#9aa4b8;"></div></div>`;
-          document.getElementById('meggy-gen-questoes').onclick = () => Shell.meggyAIAction('questoes');
-        } else if (tab === 'flashcards') {
-          body.innerHTML = `<div style="padding:20px;"><button class="meggy-ai-action-btn" style="width:100%;" id="meggy-gen-flash"><i class="bi bi-card-text"></i>Gerar Flashcards</button><div id="meggy-flash-out" style="margin-top:16px;font-size:13px;color:#9aa4b8;"></div></div>`;
-          document.getElementById('meggy-gen-flash').onclick = () => Shell.meggyAIAction('flashcards');
         }
       },
       async meggyAIAction(action) {
         const body = document.getElementById('meggy-ai-body');
         const lessonName = Shell.state.playerPlaylist?.[Shell.state.playerIndex]?.name || '';
-        const outId = action === 'resumo' ? 'meggy-resumo-out' : action === 'questoes' ? 'meggy-questoes-out' : action === 'flashcards' ? 'meggy-flash-out' : null;
-        const outEl = outId ? document.getElementById(outId) : null;
-        if (outEl) outEl.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Gerando...';
+        body.innerHTML = '<div style="padding:20px;text-align:center;"><div class="spinner-border" style="color:#ff8b9f;"></div><div style="margin-top:12px;color:#9aa4b8;">Gerando...</div></div>';
         try {
-          let endpoint = '/api/ai';
-          let payload = { message: '', messages: [] };
-          if (action === 'resumo') payload.message = `Gere um resumo detalhado da aula: ${lessonName}`;
-          else if (action === 'pilulas') { endpoint = '/api/ai/coach'; payload = { action: 'analyze' }; }
-          else if (action === 'questoes') payload.message = `Gere 5 questões de múltipla escolha sobre: ${lessonName}`;
-          else if (action === 'flashcards') payload.message = `Crie 10 flashcards sobre: ${lessonName}`;
-          else if (action === 'mindmap') payload.message = `Crie um mapa mental em markdown sobre: ${lessonName}`;
-          else if (action === 'coach') { endpoint = '/api/ai/coach'; payload = { action: 'analyze' }; }
-          const r = await fetch(endpoint, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+          let msg = '';
+          if (action === 'resumo') msg = `Gere um resumo detalhado da aula: ${lessonName}`;
+          else if (action === 'pilulas') msg = `Crie pílulas de conhecimento sobre: ${lessonName}`;
+          else if (action === 'questoes') msg = `Gere 5 questões de múltipla escolha sobre: ${lessonName}`;
+          else if (action === 'flashcards') msg = `Crie 10 flashcards sobre: ${lessonName}`;
+          const r = await fetch('/api/ai', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: msg, messages: []}) });
           const d = await r.json();
-          const text = d.response || d.markdown || d.summary || JSON.stringify(d).substring(0, 500);
-          if (outEl) outEl.innerHTML = `<div style="background:rgba(255,255,255,0.04);padding:12px;border-radius:8px;white-space:pre-wrap;">${text}</div>`;
-          else body.innerHTML = `<div style="padding:16px;font-size:13px;color:#e6edf3;white-space:pre-wrap;">${text}</div>`;
-        } catch (e) {
-          if (outEl) outEl.innerHTML = 'Erro: ' + e.message;
-          else body.innerHTML = 'Erro: ' + e.message;
-        }
-      },
-
-      // ═══ Views de Estudos (placeholder com lazy load do GDIndex) ═══
-      _estudosView(el, feature) {
-        el.innerHTML = `<div class="meggy-placeholder"><div class="meggy-placeholder-icon">📚</div><div class="meggy-placeholder-title">${feature}</div><div class="meggy-placeholder-desc">Carregando módulo de estudos...</div><button class="meggy-header-btn" id="meggy-load-estudos" style="margin-top:16px;"><i class="bi bi-cloud-download"></i> Carregar</button></div>`;
-        document.getElementById('meggy-load-estudos').onclick = async () => {
-          const btn = document.getElementById('meggy-load-estudos');
-          btn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Carregando GDIndex...';
-          const ok = await Shell.loadFullGDIndex();
-          if (ok && window.__gdiStudy) {
-            // Mapear feature para função
-            const map = {
-              'progresso': () => window.__gdiStudy.panel?.renderHome?.(el),
-              'questoes': () => window.__gdiStudy.questions?.renderQuestoes?.(el),
-              'simulado': () => window.__gdiStudy.questions?.renderSimulado?.(el),
-              'cronograma': () => window.__gdiStudy.questions?.renderCronograma?.(el),
-              'provas': () => window.__gdiStudy.advanced?.renderProvas?.(el),
-              'redacao': () => window.__gdiStudy.advanced?.renderRedacao?.(el),
-              'estatisticas': () => window.__gdiStudy.panel?.renderStats?.(el),
-              'mapa-fracos': () => window.__gdiStudy.advanced?.renderRadar?.(el),
-              'conquistas': () => window.__gdiStudy.panel?.renderAchievements?.(el),
-              'apps': () => window.__gdiStudy.panel?.renderApps?.(el),
-              'resumos': () => window.__gdiMeggy?.summaries?.renderResumos?.(el),
-              'plano': () => window.__gdiStudy.plan?.renderAll?.(el),
-            };
-            if (map[feature]) {
-              try { map[feature](); } catch (e) { el.innerHTML = `<div class="meggy-placeholder">⚠️ ${e.message}</div>`; }
-            } else {
-              el.innerHTML = `<div class="meggy-placeholder">⚠️ Feature não encontrada: ${feature}</div>`;
-            }
-          } else {
-            el.innerHTML = '<div class="meggy-placeholder">⚠️ Falha ao carregar GDIndex</div>';
-          }
-        };
+          const text = d.response || d.markdown || 'Sem resposta';
+          let h = text.replace(/^### (.+)$/gm,'<h3 style="color:#ff8b9f;margin:12px 0 6px;">$1</h3>').replace(/^## (.+)$/gm,'<h2 style="color:#ff8b9f;margin:16px 0 8px;">$1</h2>').replace(/^# (.+)$/gm,'<h1 style="color:#ff8b9f;margin:20px 0 10px;">$1</h1>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/^- (.+)$/gm,'<li>$1</li>').replace(/\n/g,'<br>');
+          body.innerHTML = `<div style="padding:16px;font-size:13px;color:#e6edf3;">${h}</div>`;
+        } catch (e) { body.innerHTML = 'Erro: ' + e.message; }
       },
 
       meggyAI(el) {
@@ -1341,4 +1219,5 @@
 
   console.log('[Meggy Shell] script loaded, waiting for modules...');
 })();
+
 
