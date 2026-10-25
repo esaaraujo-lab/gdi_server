@@ -1012,12 +1012,96 @@
                   // Sem cache — gerar via /api/ai
                   const courseName = lessonPath.split('/').filter(Boolean).slice(-1)[0] || '';
                   const driveName = window.drive_names && window.drive_names[+(lessonPath.split('/')[1] || '0').replace(':','')] || '';
-                  const ctx = 'Aula: ' + lessonName + ' | Curso: ' + courseName + ' | Drive: ' + driveName;
+                  
+                  // ★ Extrair conteúdo dos materiais (PDFs/MDs/TXTs) da pasta
+                  let materialContent = '';
+                  try {
+                    if (window.gdiListAllFiles && lessonPath) {
+                      const files = await window.gdiListAllFiles(lessonPath, '');
+                      const materials = files.filter(f => {
+                        const ext = (f.name.split('.').pop() || '').toLowerCase();
+                        return ext === 'pdf' || ext === 'md' || ext === 'txt' || ext === 'html';
+                      });
+                      for (const m of materials.slice(0, 3)) {
+                        const ext = (m.name.split('.').pop() || '').toLowerCase();
+                        if (ext === 'pdf') {
+                          // PDF: não dá para extrair sem pdfjs — incluir link para a IA saber que existe
+                          materialContent += '\n[Material PDF: ' + m.name + ' (' + (m.size ? (m.size/1024/1024).toFixed(1) + 'MB' : '') + ')]';
+                        } else {
+                          // MD/TXT/HTML: buscar o conteúdo
+                          if (m.link) {
+                            try {
+                              const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
+                              const resp = await fetch(link);
+                              if (resp.ok) {
+                                const text = await resp.text();
+                                // Cap em 30000 chars por arquivo
+                                materialContent += '\n\n--- ' + m.name + ' ---\n' + text.substring(0, 30000);
+                              }
+                            } catch (e) { /* skip */ }
+                          }
+                        }
+                      }
+                    }
+                  } catch (e) { console.warn('[Shell] material extract:', e); }
+                  
+                  // ★ Também buscar em subpastas se não encontrou nada
+                  if (!materialContent && window.gdiListAllFiles && lessonPath) {
+                    try {
+                      const files = await window.gdiListAllFiles(lessonPath, '');
+                      const subs = files.filter(f => f.mimeType === 'application/vnd.google-apps.folder').slice(0, 5);
+                      for (const sf of subs) {
+                        const fp = lessonPath + encodeURIComponent(sf.name) + '/';
+                        const subFiles = await window.gdiListAllFiles(fp, '');
+                        const subMats = subFiles.filter(f => {
+                          const ext = (f.name.split('.').pop() || '').toLowerCase();
+                          return ext === 'md' || ext === 'txt';
+                        });
+                        for (const m of subMats.slice(0, 2)) {
+                          if (m.link) {
+                            try {
+                              const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
+                              const resp = await fetch(link);
+                              if (resp.ok) {
+                                const text = await resp.text();
+                                materialContent += '\n\n--- ' + m.name + ' ---\n' + text.substring(0, 20000);
+                              }
+                            } catch (e) { /* skip */ }
+                          }
+                        }
+                        if (materialContent) break;
+                      }
+                    } catch (e) { /* skip */ }
+                  }
+                  
+                  // Cap total em 80000 chars (limite do CF Workers)
+                  if (materialContent.length > 80000) {
+                    materialContent = materialContent.substring(0, 80000) + '\n[...truncado...]';
+                  }
+                  
+                  const ctx = 'Aula: ' + lessonName + '\nCurso: ' + courseName + '\nDrive: ' + driveName;
+                  const hasContent = materialContent.length > 100;
                   let msg = '';
-                  if (type === 'isa-summary') msg = 'Voce e a Meggy, uma tutora de estudos. Gere um RESUMO COMPLETO e DETALHADO da seguinte aula:\n\n' + ctx + '\n\nEstruture em secoes com topicos, exemplos e pontos-chave. Use markdown (##, **negrito**, - listas).';
-                  else if (type === 'isa-questions') msg = 'Voce e a Meggy. Gere 5 questoes de multipla escolha sobre:\n\n' + ctx + '\n\nPara cada: 4 alternativas (A,B,C,D), resposta correta e explicacao. Use markdown.';
-                  else if (type === 'isa-mindmap') msg = 'Voce e a Meggy. Crie PILULAS DE CONHECIMENTO sobre:\n\n' + ctx + '\n\nFormato: bullet points curtos. Use markdown.';
-                  else if (type === 'isa-flashcards') msg = 'Voce e a Meggy. Crie 10 flashcards sobre:\n\n' + ctx + '\n\nFormato: FRENTE: pergunta\nVERSO: resposta. Use markdown.';
+                  if (type === 'isa-summary') {
+                    msg = hasContent 
+                      ? 'Voce e a Meggy, uma tutora de estudos. Gere um RESUMO COMPLETO e DETALHADO da aula baseado no material abaixo:\n\n' + ctx + '\n\nMATERIAL DA AULA:\n' + materialContent + '\n\nEstruture em secoes com topicos, exemplos e pontos-chave. Use markdown (##, ###, **negrito**, - listas). Minimo 2000 caracteres.'
+                      : 'Voce e a Meggy, uma tutora de estudos. Gere um RESUMO sobre a aula: ' + ctx + '. Use markdown.';
+                  }
+                  else if (type === 'isa-questions') {
+                    msg = hasContent
+                      ? 'Voce e a Meggy. Gere 5 questoes de multipla escolha baseadas no material:\n\n' + ctx + '\n\nMATERIAL:\n' + materialContent + '\n\nPara cada: 4 alternativas (A,B,C,D), resposta correta e explicacao. Use markdown.'
+                      : 'Voce e a Meggy. Gere 5 questoes sobre: ' + ctx + '. Use markdown.';
+                  }
+                  else if (type === 'isa-mindmap') {
+                    msg = hasContent
+                      ? 'Voce e a Meggy. Crie PILULAS DE CONHECIMENTO baseadas no material:\n\n' + ctx + '\n\nMATERIAL:\n' + materialContent + '\n\nFormato: bullet points curtos. Use markdown.'
+                      : 'Voce e a Meggy. Crie pilulas sobre: ' + ctx + '. Use markdown.';
+                  }
+                  else if (type === 'isa-flashcards') {
+                    msg = hasContent
+                      ? 'Voce e a Meggy. Crie 10 flashcards baseados no material:\n\n' + ctx + '\n\nMATERIAL:\n' + materialContent + '\n\nFormato: FRENTE: pergunta\nVERSO: resposta. Use markdown.'
+                      : 'Voce e a Meggy. Crie 10 flashcards sobre: ' + ctx + '. Use markdown.';
+                  }
 
                   const r = await fetch('/api/ai', {
                     method: 'POST',
