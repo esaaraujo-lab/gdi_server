@@ -1058,15 +1058,19 @@
                 try {
                   const isaField = type.replace('isa-', ''); // summary | questions | mindmap | flashcards
                   // ★ Normalizar cacheKey: URL-encode espaços para match com chaves salvas pelo GDIndex/battalion
-                  const cacheKey = (lessonPath + lessonName).replace(/ /g, '%20');
+                  const cacheKeyRaw = lessonPath + lessonName;
+                  const cacheKey = cacheKeyRaw.replace(/ /g, '%20');
 
                   // ─── 1. Cache check (GET /api/ai/cache?key=...) ───
+                  // ★ Tentar ambas as chaves (encoded e raw) para compatibilidade com cache antigo
                   let cached = null;
                   try {
-                    const cacheResp = await fetch('/api/ai/cache?key=' + encodeURIComponent(cacheKey), { headers: { 'Accept': 'application/json' }, credentials: 'include' });
-                    if (cacheResp.ok) {
-                      const cacheData = await cacheResp.json();
-                      if (cacheData && cacheData.cached) cached = cacheData.cached;
+                    for (const k of [cacheKey, cacheKeyRaw]) {
+                      const cacheResp = await fetch('/api/ai/cache?key=' + encodeURIComponent(k), { headers: { 'Accept': 'application/json' }, credentials: 'include' });
+                      if (cacheResp.ok) {
+                        const cacheData = await cacheResp.json();
+                        if (cacheData && cacheData.cached) { cached = cacheData.cached; break; }
+                      }
                     }
                   } catch (e) { /* cache miss é normal */ }
 
