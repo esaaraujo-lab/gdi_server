@@ -862,6 +862,7 @@ body.meggy-focus-mode #meggy-main {
 .gdi-study {
   max-width: 1600px;
   margin: 0 auto;
+  padding: 14px 16px 40px;
 }
 
 .gdi-study-bar {
@@ -869,8 +870,8 @@ body.meggy-focus-mode #meggy-main {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.09);
+  padding: 0;
+  border-bottom: none;
   margin-bottom: 16px;
   flex-wrap: wrap;
 }
@@ -925,11 +926,11 @@ body.meggy-focus-mode #meggy-main {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(255,255,255,0.045);
-  border: 1px solid rgba(255,255,255,0.09);
+  background: transparent;
+  border: none;
   color: #9aa4b8;
-  border-radius: 8px;
-  padding: 6px 12px;
+  border-radius: 999px;
+  padding: 6px 14px;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -940,7 +941,6 @@ body.meggy-focus-mode #meggy-main {
 
 .gdi-mode-btn:hover:not(:disabled) {
   background: rgba(255,255,255,0.08);
-  border-color: rgba(255,255,255,0.16);
   color: #e6edf3;
 }
 
@@ -950,9 +950,9 @@ body.meggy-focus-mode #meggy-main {
 }
 
 .gdi-mode-btn.active {
-  background: rgba(255,139,159,0.12);
-  border-color: rgba(255,139,159,0.3);
-  color: #ff8b9f;
+  background: linear-gradient(135deg, #ff8b9f 0%, #c026d3 55%, #5ddeda 130%);
+  border: none;
+  color: #fff;
 }
 
 .gdi-watched-btn.watched {
@@ -964,7 +964,7 @@ body.meggy-focus-mode #meggy-main {
 /* ─── Grid: player (left) + material (right) ─── */
 .gdi-study-grid {
   display: grid;
-  grid-template-columns: 1fr 340px;
+  grid-template-columns: 1fr 1fr;
   gap: 16px;
   align-items: flex-start;
 }
@@ -1029,6 +1029,8 @@ body.meggy-focus-mode #meggy-main {
   padding: 16px;
   max-height: 70vh;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .gdi-mat-head {
@@ -1086,11 +1088,7 @@ body.meggy-focus-mode #meggy-main {
 
 /* ─── Foot: Anotações + Playlist ─── */
 .gdi-study-foot {
-  display: grid;
-  grid-template-columns: 1fr 340px;
-  gap: 16px;
-  margin-top: 16px;
-  align-items: flex-start;
+  display: none; /* ★ Produção não tem foot — playlist e notas em overlay */
 }
 
 .gdi-study-notes {
