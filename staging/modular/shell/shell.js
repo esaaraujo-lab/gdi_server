@@ -1885,6 +1885,12 @@
 
     // ═══ ISA Render Helpers (replica de produção — gdi-meggy.js) ═══
 
+    // _esc: escape HTML (usado por _renderISAResult, _renderFlashcardDeck)
+    _esc(s) {
+      if (s == null) return '';
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    },
+
     // _ensureMdLibs: carrega marked.js + DOMPurify dinamicamente se não estiverem presentes
     // (permite que o shell use markdown rico mesmo sem o worker ter os CDNs no HTML)
     _mdLibsLoading: false,
