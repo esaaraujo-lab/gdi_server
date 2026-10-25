@@ -261,8 +261,8 @@
         case 'cursos':    Shell.views.cursos(main); break;
         case 'drives':    Shell.views.drives(main); break;
         case 'progresso': Shell._estudosView(main, 'progresso'); break;
-        case 'questoes':  Shell._estudosView(main, 'questoes'); break;
-        case 'flashcards':Shell._estudosView(main, 'flashcards'); break;
+        case 'questoes':  Shell.views.questoes(main); break;
+        case 'flashcards':Shell.views.flashcards(main); break;
         case 'meggy-ai':  
           Shell.openMeggyAIDrawer(); 
           // Mostrar mensagem na main pane
@@ -278,7 +278,7 @@
         case 'mapa-fracos':Shell._estudosView(main, 'mapa-fracos'); break;
         case 'conquistas':Shell._estudosView(main, 'conquistas'); break;
         case 'apps':      Shell._estudosView(main, 'apps'); break;
-        case 'resumos':   Shell._estudosView(main, 'resumos'); break;
+        case 'resumos':   Shell.views.resumos(main); break;
         case 'plano':     Shell._estudosView(main, 'plano'); break;
         default:          Shell.views.home(main);
       }
@@ -383,20 +383,7 @@
         `;
 
         (async () => {
-          // Need full GDIndex for renderCursos (gdi-study.js module)
-          if (!window.__gdiStudy) {
-            const ok = await Shell.loadFullGDIndex();
-            if (!ok) {
-              document.getElementById('meggy-cursos-container').innerHTML = `
-                <div class="meggy-placeholder">
-                  <div class="meggy-placeholder-icon">⚠️</div>
-                  <div class="meggy-placeholder-title">Não foi possível carregar os cursos</div>
-                  <div class="meggy-placeholder-desc">Tente novamente em alguns segundos.</div>
-                </div>`;
-              return;
-            }
-          }
-          // Now render
+          // ★ Render direto via API — shell nativo não precisa do GDIndex
           try {
             if (window.__gdiStudy && window.__gdiStudy.courses && window.__gdiStudy.courses.renderCursos) {
               const container = document.getElementById('meggy-cursos-container');
@@ -407,25 +394,25 @@
               container.appendChild(wrapper);
               window.__gdiStudy.courses.renderCursos(wrapper);
             } else {
-              // ★ Fallback: listar cursos via API /api/courses/list
+              // ★ Listar cursos via API /api/courses/list
               const container = document.getElementById('meggy-cursos-container');
               try {
-                const r = await fetch('/api/courses/list', { headers: { 'Accept': 'application/json' } });
+                const r = await fetch('/api/courses/list', { headers: { 'Accept': 'application/json' }, credentials: 'include' });
                 if (r.ok) {
                   const data = await r.json();
                   const courses = data.courses || data || [];
                   if (Array.isArray(courses) && courses.length > 0) {
                     container.innerHTML = '<div class="meggy-cards-grid">' +
                       courses.map(c => {
-                        const name = c.name || c.key || c.coursePath || 'Curso';
-                        const key = c.key || c.coursePath || '';
-                        const watched = c.watched || 0;
-                        const total = c.totalLessons || c.total || 0;
-                        const progress = total > 0 ? Math.round(watched/total*100) : 0;
-                        return `<div class="meggy-card" data-course="${key}">
-                          <div class="meggy-card-icon">📚</div>
+                        // ★ API retorna: {coursePath, courseName, pdfCount, icon, color, addedAt}
+                        const name = c.courseName || c.name || c.key || c.coursePath || 'Curso';
+                        const key = c.coursePath || c.key || '';
+                        const pdfCount = c.pdfCount || c.totalLessons || c.total || 0;
+                        const addedAt = c.addedAt ? new Date(c.addedAt).toLocaleDateString('pt-BR') : '';
+                        return `<div class="meggy-card" data-course="${key}" style="cursor:pointer;">
+                          <div class="meggy-card-icon">${c.icon || '📚'}</div>
                           <div class="meggy-card-title">${name}</div>
-                          <div class="meggy-card-meta">${watched}/${total} aulas · ${progress}%</div>
+                          <div class="meggy-card-meta">${pdfCount} PDFs${addedAt ? ' · add ' + addedAt : ''}</div>
                         </div>`;
                       }).join('') + '</div>';
                     container.querySelectorAll('.meggy-card[data-course]').forEach(card => {
@@ -438,13 +425,13 @@
                       };
                     });
                   } else {
-                    container.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">📚</div><div class="meggy-placeholder-title">Nenhum curso adicionado</div><div class="meggy-placeholder-desc">Vá em Explorar Drives para adicionar cursos.</div></div>';
+                    container.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">📚</div><div class="meggy-placeholder-title">Nenhum curso adicionado</div><div class="meggy-placeholder-desc">Vá em Explorar Drives para adicionar cursos.</div><button class="meggy-header-btn" onclick="Shell.router.navigate(\'/drives\')" style="margin-top:16px;"><i class="bi bi-cloud"></i> Explorar Drives</button></div>';
                   }
                 } else {
-                  container.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">📚</div><div class="meggy-placeholder-title">Nenhum curso adicionado</div><div class="meggy-placeholder-desc">Vá em Explorar Drives para adicionar cursos.</div></div>';
+                  container.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">📚</div><div class="meggy-placeholder-title">Nenhum curso adicionado</div><div class="meggy-placeholder-desc">Vá em Explorar Drives para adicionar cursos.</div><button class="meggy-header-btn" onclick="Shell.router.navigate(\'/drives\')" style="margin-top:16px;"><i class="bi bi-cloud"></i> Explorar Drives</button></div>';
                 }
               } catch (apiErr) {
-                container.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">📚</div><div class="meggy-placeholder-title">Nenhum curso adicionado</div><div class="meggy-placeholder-desc">Vá em Explorar Drives para adicionar cursos.</div></div>';
+                container.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">⚠️</div><div class="meggy-placeholder-title">Erro de conexão</div><div class="meggy-placeholder-desc">' + (apiErr.message || 'Tente novamente em alguns segundos.') + '</div></div>';
               }
             }
           } catch (e) {
@@ -1257,6 +1244,323 @@
         }
       },
 
+      // ═══ Estudos — views funcionais (cache + Meggy AI) ═══
+
+      async _loadStudyCache() {
+        try {
+          const r = await fetch('/api/ai/cache/list', { headers: { 'Accept': 'application/json' }, credentials: 'include' });
+          if (!r.ok) return [];
+          const d = await r.json();
+          return (d && d.entries) ? d.entries : [];
+        } catch (e) {
+          console.warn('[Shell] _loadStudyCache:', e);
+          return [];
+        }
+      },
+
+      _mdToHtml(text) {
+        if (!text || typeof text !== 'string') return '';
+        let s = String(text);
+        s = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return s.replace(/^#### (.+)$/gm, '<h4 style="color:#5ddeda;margin:10px 0 4px;font-size:14px;">$1</h4>')
+                .replace(/^### (.+)$/gm, '<h3 style="color:#ff8b9f;margin:12px 0 6px;">$1</h3>')
+                .replace(/^## (.+)$/gm, '<h2 style="color:#ff8b9f;margin:16px 0 8px;">$1</h2>')
+                .replace(/^# (.+)$/gm, '<h1 style="color:#ff8b9f;margin:20px 0 10px;font-size:20px;">$1</h1>')
+                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.+?)\*/g, '<em>$1</em>')
+                .replace(/^- (.+)$/gm, '<li style="margin-left:20px;">$1</li>')
+                .replace(/^(\d+)\. (.+)$/gm, '<li style="margin-left:20px;">$1. $2</li>')
+                .replace(/```([\s\S]*?)```/g, '<pre style="background:rgba(0,0,0,.3);padding:10px;border-radius:6px;overflow:auto;font-size:12px;">$1</pre>')
+                .replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,.3);padding:1px 4px;border-radius:3px;font-size:12px;">$1</code>')
+                .replace(/\n\n/g, '</p><p style="margin:8px 0;">')
+                .replace(/\n/g, '<br>');
+      },
+
+      _esc(s) {
+        if (s == null) return '';
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      },
+
+      _renderGenerateHint(el, feature) {
+        const titles = { flashcards: 'Flashcards', questoes: 'Questões', resumos: 'Resumos' };
+        const icons = { flashcards: '🃏', questoes: '❓', resumos: '📚' };
+        el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">' + (icons[feature]||'') + ' ' + (titles[feature]||feature) + '</h1></div>' +
+          '<div class="meggy-placeholder">' +
+            '<div class="meggy-placeholder-icon">' + (icons[feature]||'📝') + '</div>' +
+            '<div class="meggy-placeholder-title">Nenhum ' + (titles[feature]||'conteúdo') + ' gerado ainda</div>' +
+            '<div class="meggy-placeholder-desc">Para gerar ' + (titles[feature]||'conteúdo') + ', abra uma aula no player e use a Meggy AI.<br>Os conteúdos gerados aparecem aqui automaticamente.</div>' +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:16px;">' +
+              '<button class="meggy-header-btn" onclick="Shell.router.navigate(\'/cursos\')" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-collection-play"></i> Abrir uma aula</button>' +
+              '<button class="meggy-header-btn" onclick="Shell.openMeggyAIDrawer()"><i class="bi bi-robot"></i> Meggy AI</button>' +
+            '</div>' +
+          '</div>';
+      },
+
+      flashcards(el) {
+        el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">🃏 Flashcards</h1></div>' +
+          '<div id="meggy-flashcards-container"><div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando flashcards...</div></div></div>';
+        (async () => {
+          const entries = await Shell.views._loadStudyCache();
+          const withCards = entries.filter(e => e.questions && Array.isArray(e.questions) && e.questions.length > 0);
+          const container = document.getElementById('meggy-flashcards-container');
+          if (!container) return;
+          if (withCards.length === 0) { Shell.views._renderGenerateHint(el, 'flashcards'); return; }
+          let html = '<div style="margin-bottom:16px;color:#9aa4b8;font-size:13px;">' + withCards.length + ' aula(s) com flashcards · clique para estudar</div>';
+          html += '<div class="meggy-study-list">';
+          withCards.forEach((e, i) => {
+            const date = e.date ? new Date(e.date).toLocaleDateString('pt-BR') : '';
+            const lessonName = Shell.views._esc(e.lessonName || 'Aula');
+            html += '<div class="meggy-study-item" data-idx="' + i + '" style="cursor:pointer;">' +
+              '<div class="meggy-study-item-icon">🃏</div>' +
+              '<div class="meggy-study-item-body">' +
+                '<div class="meggy-study-item-title">' + lessonName + '</div>' +
+                '<div class="meggy-study-item-meta">' + e.questions.length + ' flashcard(s)' + (date ? ' · ' + date : '') + '</div>' +
+              '</div>' +
+              '<i class="bi bi-chevron-right meggy-study-item-chevron"></i>' +
+            '</div>';
+          });
+          html += '</div>';
+          container.innerHTML = html;
+          container.querySelectorAll('.meggy-study-item').forEach(item => {
+            item.onclick = () => Shell.views._showFlashcardDeck(el, withCards[parseInt(item.dataset.idx, 10)]);
+          });
+        })();
+      },
+
+      _showFlashcardDeck(el, entry) {
+        const questions = entry.questions || [];
+        const lessonName = Shell.views._esc(entry.lessonName || 'Aula');
+        let current = 0;
+        const renderCard = () => {
+          const q = questions[current];
+          if (!q) return;
+          const isMC = q.type === 'mc';
+          const front = Shell.views._esc(q.statement || '');
+          let back = '';
+          if (isMC && Array.isArray(q.options)) {
+            const correctIdx = typeof q.correct === 'number' ? q.correct : parseInt(q.correct, 10);
+            const correctText = q.options[correctIdx] || '';
+            back = '<div style="font-weight:700;color:#5ddeda;margin-bottom:8px;">✓ ' + Shell.views._esc(correctText) + '</div>';
+          } else {
+            const tfCorrect = (q.correct === 1 || q.correct === '1' || q.correct === true);
+            back = '<div style="font-weight:700;color:' + (tfCorrect ? '#5ddeda' : '#ff8b9f') + ';margin-bottom:8px;">' + (tfCorrect ? '✓ Certo' : '✗ Errado') + '</div>';
+          }
+          if (q.explanation) back += '<div style="font-size:13px;color:#c9d1d9;margin-bottom:8px;">' + Shell.views._esc(q.explanation) + '</div>';
+          if (q.legalText) back += '<div style="font-size:12px;color:#9aa4b8;border-left:2px solid #ff8b9f;padding-left:8px;margin-top:6px;">📜 ' + Shell.views._esc(q.legalText) + '</div>';
+          el.innerHTML = '<div class="meggy-view-header">' +
+              '<button class="meggy-header-btn" onclick="Shell.views.flashcards(document.getElementById(\'meggy-main\'))" style="font-size:13px;"><i class="bi bi-arrow-left"></i> Voltar</button>' +
+              '<h1 class="meggy-view-title" style="font-size:16px;">🃏 ' + lessonName + '</h1>' +
+            '</div>' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:13px;color:#9aa4b8;">' +
+              '<span>Cartão ' + (current + 1) + ' de ' + questions.length + '</span>' +
+              '<span style="color:#ff8b9f;">Clique no cartão para virar</span>' +
+            '</div>' +
+            '<div class="meggy-flashcard-deck">' +
+              '<div class="meggy-flashcard" id="meggy-flashcard-card" onclick="this.classList.toggle(\'flipped\')">' +
+                '<div class="meggy-flashcard-face meggy-flashcard-front">' +
+                  '<div class="meggy-flashcard-label">PERGUNTA</div>' +
+                  '<div class="meggy-flashcard-text">' + front + '</div>' +
+                  '<div class="meggy-flashcard-hint"><i class="bi bi-arrow-repeat"></i> Clique para ver a resposta</div>' +
+                '</div>' +
+                '<div class="meggy-flashcard-face meggy-flashcard-back">' +
+                  '<div class="meggy-flashcard-label">RESPOSTA</div>' +
+                  '<div class="meggy-flashcard-text">' + back + '</div>' +
+                  '<div class="meggy-flashcard-hint"><i class="bi bi-arrow-repeat"></i> Clique para voltar</div>' +
+                '</div>' +
+              '</div>' +
+            '</div>' +
+            '<div class="meggy-flashcard-nav">' +
+              '<button class="meggy-header-btn" id="meggy-fc-prev" ' + (current === 0 ? 'disabled' : '') + '><i class="bi bi-chevron-left"></i> Anterior</button>' +
+              '<button class="meggy-header-btn" id="meggy-fc-next" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">Próximo <i class="bi bi-chevron-right"></i></button>' +
+            '</div>';
+          document.getElementById('meggy-fc-prev').onclick = () => { if (current > 0) { current--; renderCard(); } };
+          document.getElementById('meggy-fc-next').onclick = () => { if (current < questions.length - 1) { current++; renderCard(); } else { Shell.views.flashcards(el); } };
+          el.scrollTop = 0;
+        };
+        renderCard();
+      },
+
+      questoes(el) {
+        el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">❓ Questões</h1></div>' +
+          '<div id="meggy-questoes-container"><div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando questões...</div></div></div>';
+        (async () => {
+          const entries = await Shell.views._loadStudyCache();
+          const withQ = entries.filter(e => e.questions && Array.isArray(e.questions) && e.questions.length > 0);
+          const container = document.getElementById('meggy-questoes-container');
+          if (!container) return;
+          if (withQ.length === 0) { Shell.views._renderGenerateHint(el, 'questoes'); return; }
+          let html = '<div style="margin-bottom:16px;color:#9aa4b8;font-size:13px;">' + withQ.length + ' aula(s) com questões · clique para responder</div>';
+          html += '<div class="meggy-study-list">';
+          withQ.forEach((e, i) => {
+            const date = e.date ? new Date(e.date).toLocaleDateString('pt-BR') : '';
+            const lessonName = Shell.views._esc(e.lessonName || 'Aula');
+            html += '<div class="meggy-study-item" data-idx="' + i + '" style="cursor:pointer;">' +
+              '<div class="meggy-study-item-icon">❓</div>' +
+              '<div class="meggy-study-item-body">' +
+                '<div class="meggy-study-item-title">' + lessonName + '</div>' +
+                '<div class="meggy-study-item-meta">' + e.questions.length + ' questão(ões)' + (date ? ' · ' + date : '') + '</div>' +
+              '</div>' +
+              '<i class="bi bi-chevron-right meggy-study-item-chevron"></i>' +
+            '</div>';
+          });
+          html += '</div>';
+          container.innerHTML = html;
+          container.querySelectorAll('.meggy-study-item').forEach(item => {
+            item.onclick = () => Shell.views._showQuiz(el, withQ[parseInt(item.dataset.idx, 10)]);
+          });
+        })();
+      },
+
+      _showQuiz(el, entry) {
+        const questions = entry.questions || [];
+        const lessonName = Shell.views._esc(entry.lessonName || 'Aula');
+        Shell.__lastQuizQuestions = questions;
+        Shell.__lastQuizLessonName = entry.lessonName || 'Aula';
+        let current = 0;
+        let score = 0;
+        let answered = 0;
+        const renderQ = () => {
+          const q = questions[current];
+          if (!q) return;
+          const isMC = q.type === 'mc';
+          const statement = Shell.views._esc(q.statement || '');
+          let optionsHTML = '';
+          if (isMC && Array.isArray(q.options)) {
+            const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
+            optionsHTML = q.options.map((opt, idx) => {
+              return '<div class="meggy-quiz-option" data-idx="' + idx + '">' +
+                '<span class="meggy-quiz-option-letter">' + (letters[idx] || (idx + 1)) + '</span>' +
+                '<span class="meggy-quiz-option-text">' + Shell.views._esc(opt) + '</span>' +
+              '</div>';
+            }).join('');
+          } else {
+            optionsHTML = '<div class="meggy-quiz-option" data-idx="1"><span class="meggy-quiz-option-letter">✓</span><span class="meggy-quiz-option-text">Certo</span></div>' +
+              '<div class="meggy-quiz-option" data-idx="0"><span class="meggy-quiz-option-letter">✗</span><span class="meggy-quiz-option-text">Errado</span></div>';
+          }
+          el.innerHTML = '<div class="meggy-view-header">' +
+              '<button class="meggy-header-btn" onclick="Shell.views.questoes(document.getElementById(\'meggy-main\'))" style="font-size:13px;"><i class="bi bi-arrow-left"></i> Voltar</button>' +
+              '<h1 class="meggy-view-title" style="font-size:16px;">❓ ' + lessonName + '</h1>' +
+            '</div>' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:13px;color:#9aa4b8;">' +
+              '<span>Questão ' + (current + 1) + ' de ' + questions.length + '</span>' +
+              '<span>Acertos: <strong id="meggy-quiz-score" style="color:#5ddeda;">' + score + '</strong>/' + answered + '</span>' +
+            '</div>' +
+            '<div class="meggy-quiz-card">' +
+              '<div class="meggy-quiz-statement">' + statement + '</div>' +
+              (q.legalText ? '<div style="font-size:12px;color:#9aa4b8;border-left:2px solid #ff8b9f;padding-left:8px;margin:8px 0;">📜 ' + Shell.views._esc(q.legalText) + '</div>' : '') +
+              '<div class="meggy-quiz-options" id="meggy-quiz-options">' + optionsHTML + '</div>' +
+              '<div class="meggy-quiz-feedback" id="meggy-quiz-feedback" style="display:none;"></div>' +
+            '</div>' +
+            '<div class="meggy-flashcard-nav">' +
+              '<button class="meggy-header-btn" id="meggy-q-prev" ' + (current === 0 ? 'disabled' : '') + '><i class="bi bi-chevron-left"></i> Anterior</button>' +
+              '<button class="meggy-header-btn" id="meggy-q-next" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">' + (current < questions.length - 1 ? 'Próxima' : 'Finalizar') + ' <i class="bi bi-chevron-right"></i></button>' +
+            '</div>';
+          const correctIdx = isMC ? (typeof q.correct === 'number' ? q.correct : parseInt(q.correct, 10)) : ((q.correct === 1 || q.correct === '1' || q.correct === true) ? 1 : 0);
+          let isAnswered = false;
+          const opts = document.querySelectorAll('#meggy-quiz-options .meggy-quiz-option');
+          opts.forEach(opt => {
+            opt.onclick = () => {
+              if (isAnswered) return;
+              isAnswered = true;
+              const chosen = parseInt(opt.dataset.idx, 10);
+              const isCorrect = (chosen === correctIdx);
+              if (isCorrect) score++;
+              answered++;
+              opts.forEach((o, i) => {
+                if (i === correctIdx) o.classList.add('correct');
+                else if (i === chosen) o.classList.add('wrong');
+                o.style.cursor = 'default';
+              });
+              const fb = document.getElementById('meggy-quiz-feedback');
+              fb.style.display = 'block';
+              fb.innerHTML = '<div class="meggy-quiz-feedback-' + (isCorrect ? 'correct' : 'wrong') + '">' + (isCorrect ? '✓ Correto!' : '✗ Incorreto') + '</div>' +
+                (q.explanation ? '<div class="meggy-quiz-feedback-expl">' + Shell.views._esc(q.explanation) + '</div>' : '') +
+                (q.fundamentacao ? '<div class="meggy-quiz-feedback-fund"><strong>Fundamentação:</strong> ' + Shell.views._esc(q.fundamentacao) + '</div>' : '');
+              const scoreEl = document.getElementById('meggy-quiz-score');
+              if (scoreEl) scoreEl.textContent = String(score);
+              document.getElementById('meggy-q-next').innerHTML = (current < questions.length - 1 ? 'Próxima <i class="bi bi-chevron-right"></i>' : 'Finalizar <i class="bi bi-check"></i>');
+            };
+          });
+          document.getElementById('meggy-q-prev').onclick = () => { if (current > 0) { current--; renderQ(); } };
+          document.getElementById('meggy-q-next').onclick = () => {
+            if (current < questions.length - 1) { current++; renderQ(); }
+            else { Shell.views._showQuizResult(el, Shell.__lastQuizLessonName, score, questions.length); }
+          };
+          el.scrollTop = 0;
+        };
+        renderQ();
+      },
+
+      _showQuizResult(el, lessonName, score, total) {
+        const pct = total > 0 ? Math.round(score / total * 100) : 0;
+        const emoji = pct >= 80 ? '🏆' : pct >= 50 ? '👍' : '📚';
+        el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title" style="font-size:16px;">❓ ' + Shell.views._esc(lessonName) + '</h1></div>' +
+          '<div class="meggy-quiz-result">' +
+            '<div class="meggy-quiz-result-emoji">' + emoji + '</div>' +
+            '<div class="meggy-quiz-result-score">' + score + ' / ' + total + '</div>' +
+            '<div class="meggy-quiz-result-pct">' + pct + '% de acerto</div>' +
+            '<div class="meggy-quiz-result-msg">' + (pct >= 80 ? 'Excelente! Você dominou esta aula.' : pct >= 50 ? 'Bom trabalho! Continue praticando.' : 'Revise o conteúdo e tente novamente.') + '</div>' +
+            '<div style="display:flex;gap:8px;justify-content:center;margin-top:20px;flex-wrap:wrap;">' +
+              '<button class="meggy-header-btn" onclick="Shell.views.questoes(document.getElementById(\'meggy-main\'))"><i class="bi bi-list"></i> Outras aulas</button>' +
+              '<button class="meggy-header-btn" onclick="Shell.views._showQuiz(document.getElementById(\'meggy-main\'), {lessonName: Shell.__lastQuizLessonName||\'Aula\', questions: Shell.__lastQuizQuestions||[]})" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-arrow-repeat"></i> Refazer</button>' +
+            '</div>' +
+          '</div>';
+      },
+
+      resumos(el) {
+        el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">📚 Resumos</h1></div>' +
+          '<div id="meggy-resumos-container"><div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando resumos...</div></div></div>';
+        (async () => {
+          const entries = await Shell.views._loadStudyCache();
+          const withSummary = entries.filter(e => e.summary && typeof e.summary === 'string' && e.summary.length > 50);
+          const container = document.getElementById('meggy-resumos-container');
+          if (!container) return;
+          if (withSummary.length === 0) { Shell.views._renderGenerateHint(el, 'resumos'); return; }
+          let html = '<div style="margin-bottom:16px;color:#9aa4b8;font-size:13px;">' + withSummary.length + ' resumo(s) disponível(is) · clique para ler</div>';
+          html += '<div class="meggy-study-list">';
+          withSummary.forEach((e, i) => {
+            const date = e.date ? new Date(e.date).toLocaleDateString('pt-BR') : '';
+            const lessonName = Shell.views._esc(e.lessonName || 'Aula');
+            const preview = Shell.views._esc(e.summary.replace(/[#*`>]/g, '').replace(/\n/g, ' ').substring(0, 110)) + '...';
+            html += '<div class="meggy-study-item" data-idx="' + i + '" style="cursor:pointer;">' +
+              '<div class="meggy-study-item-icon">📚</div>' +
+              '<div class="meggy-study-item-body">' +
+                '<div class="meggy-study-item-title">' + lessonName + '</div>' +
+                '<div class="meggy-study-item-meta">' + preview + (date ? ' · ' + date : '') + '</div>' +
+              '</div>' +
+              '<i class="bi bi-chevron-right meggy-study-item-chevron"></i>' +
+            '</div>';
+          });
+          html += '</div>';
+          container.innerHTML = html;
+          container.querySelectorAll('.meggy-study-item').forEach(item => {
+            item.onclick = () => Shell.views._showSummary(el, withSummary[parseInt(item.dataset.idx, 10)]);
+          });
+        })();
+      },
+
+      _showSummary(el, entry) {
+        const lessonName = Shell.views._esc(entry.lessonName || 'Aula');
+        const html = Shell.views._mdToHtml(entry.summary);
+        window._lastIsaText = entry.summary;
+        window._lastMdText = entry.summary;
+        window._lastMdName = entry.lessonName || 'resumo';
+        el.innerHTML = '<div class="meggy-view-header">' +
+            '<button class="meggy-header-btn" onclick="Shell.views.resumos(document.getElementById(\'meggy-main\'))" style="font-size:13px;"><i class="bi bi-arrow-left"></i> Voltar</button>' +
+            '<h1 class="meggy-view-title" style="font-size:16px;">📚 ' + lessonName + '</h1>' +
+          '</div>' +
+          '<div class="meggy-summary-card">' +
+            '<div class="meggy-summary-toolbar">' +
+              '<span class="meggy-summary-badge">⭐ Resumo Meggy</span>' +
+              '<div style="display:flex;gap:6px;">' +
+                '<button class="meggy-header-btn" onclick="navigator.clipboard.writeText(window._lastIsaText);this.textContent=\'✓ Copiado!\'" style="font-size:12px;"><i class="bi bi-clipboard"></i> Copiar</button>' +
+                '<button class="meggy-header-btn" onclick="window._downloadMdAsPdf(window._lastMdName)" style="font-size:12px;background:rgba(255,139,159,0.12);border:1px solid rgba(255,139,159,0.3);color:#ff8b9f;"><i class="bi bi-download"></i> PDF</button>' +
+              '</div>' +
+            '</div>' +
+            '<div class="meggy-summary-body">' + html + '</div>' +
+          '</div>';
+        el.scrollTop = 0;
+      },
 
     },
 
