@@ -934,11 +934,11 @@
               const icon = isTransc ? 'bi-card-text' : isAi ? 'bi-stars' : ext === 'pdf' ? 'bi-file-earmark-pdf' : 'bi-file-earmark-text';
               const tab = document.createElement('button');
               tab.className = 'gdi-mat-tab' + (i === 0 ? ' active' : '');
-              tab.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:4px;min-width:80px;padding:10px 8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);border-radius:10px;cursor:pointer;font-size:11px;font-weight:500;color:#9aa4b8;text-align:center;font-family:inherit;transition:0.15s;';
+              tab.style.cssText = 'display:inline-flex;flex-direction:row;align-items:center;gap:6px;padding:7px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:999px;cursor:pointer;font-size:13px;font-weight:500;color:#c9d1d9;font-family:inherit;transition:all 0.15s;white-space:nowrap;';
               tab.dataset.mat = i;
-              tab.innerHTML = `<i class="bi ${icon}" style="font-size:24px;"></i><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:72px;font-size:10px;">${label}</span>`;
-              tab.onmouseenter = () => { tab.style.background = 'rgba(255,255,255,0.08)'; tab.style.color = '#e6edf3'; };
-              tab.onmouseleave = () => { if (!tab.classList.contains('active')) { tab.style.background = 'rgba(255,255,255,0.04)'; tab.style.color = '#9aa4b8'; } };
+              tab.innerHTML = `<i class="bi ${icon}" style="font-size:16px;"></i><span style="font-size:13px;font-weight:600;">${label}</span>`;
+              tab.onmouseenter = () => { if (!tab.classList.contains('active')) { tab.style.background = 'rgba(255,255,255,0.13)'; tab.style.color = '#fff'; } };
+              tab.onmouseleave = () => { if (!tab.classList.contains('active')) { tab.style.background = 'rgba(255,255,255,0.06)'; tab.style.color = '#c9d1d9'; } };
               tab.onclick = () => showMaterial(i);
               tabsEl.appendChild(tab);
             });
@@ -947,17 +947,17 @@
             [{id:'isa-summary',icon:'bi-stars',label:'Resumo Meggy'},{id:'isa-questions',icon:'bi-patch-question',label:'Questões'},{id:'isa-mindmap',icon:'bi-capsule',label:'Pílulas'},{id:'isa-flashcards',icon:'bi-card-text',label:'Flashcards'}].forEach(it => {
               const tab = document.createElement('button');
               tab.className = 'gdi-mat-tab gdi-mat-isa';
-              tab.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:4px;min-width:80px;padding:10px 8px;background:rgba(192,38,211,0.06);border:1px solid rgba(192,38,211,0.1);border-radius:10px;cursor:pointer;font-size:11px;font-weight:500;color:#c026d3;text-align:center;font-family:inherit;transition:0.15s;';
+              tab.style.cssText = 'display:inline-flex;flex-direction:row;align-items:center;gap:6px;padding:7px 12px;background:rgba(124,77,255,0.08);border:1px solid rgba(124,77,255,0.2);border-radius:999px;cursor:pointer;font-size:13px;font-weight:500;color:#a78bfa;font-family:inherit;transition:all 0.15s;white-space:nowrap;';
               tab.dataset.mat = it.id;
-              tab.innerHTML = `<i class="bi ${it.icon}" style="font-size:24px;"></i><span style="font-size:10px;">${it.label}</span>`;
+              tab.innerHTML = `<i class="bi ${it.icon}" style="font-size:16px;"></i><span style="font-size:13px;font-weight:600;">${it.label}</span>`;
               tab.onclick = () => showISA(it.id);
               tabsEl.appendChild(tab);
             });
 
             function showMaterial(i) {
-              document.querySelectorAll('.gdi-mat-tab').forEach(t => { t.classList.remove('active'); t.style.background = 'rgba(255,255,255,0.04)'; t.style.color = '#9aa4b8'; });
+              document.querySelectorAll('.gdi-mat-tab').forEach(t => { t.classList.remove('active'); t.style.background = 'rgba(255,255,255,0.06)'; t.style.borderColor = 'rgba(255,255,255,0.12)'; t.style.color = '#c9d1d9'; });
               const activeTab = document.querySelector(`.gdi-mat-tab[data-mat="${i}"]`);
-              if (activeTab) { activeTab.classList.add('active'); activeTab.style.background = 'linear-gradient(135deg,rgba(255,139,159,0.15),rgba(192,38,211,0.1))'; activeTab.style.color = '#ff8b9f'; }
+              if (activeTab) { activeTab.classList.add('active'); activeTab.style.background = '#1f6feb'; activeTab.style.borderColor = '#1f6feb'; activeTab.style.color = '#fff'; }
               const m = materials[i];
               let link = '';
               if (m.link) { link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link); if (m.name.endsWith('.pdf') && !link.includes('inline=')) link += (link.includes('?') ? '&' : '?') + 'inline=true'; }
@@ -971,9 +971,9 @@
             }
 
             function showISA(type) {
-              document.querySelectorAll('.gdi-mat-tab').forEach(t => { t.classList.remove('active'); t.style.background = 'rgba(255,255,255,0.04)'; t.style.color = '#9aa4b8'; });
+              document.querySelectorAll('.gdi-mat-tab').forEach(t => { t.classList.remove('active'); t.style.background = 'rgba(124,77,255,0.08)'; t.style.borderColor = 'rgba(124,77,255,0.2)'; t.style.color = '#a78bfa'; });
               const activeTab = document.querySelector(`.gdi-mat-tab[data-mat="${type}"]`);
-              if (activeTab) { activeTab.classList.add('active'); activeTab.style.background = 'linear-gradient(135deg,rgba(192,38,211,0.2),rgba(255,139,159,0.1))'; }
+              if (activeTab) { activeTab.classList.add('active'); activeTab.style.background = '#7c4dff'; activeTab.style.borderColor = '#7c4dff'; activeTab.style.color = '#fff'; }
               const lessonName = Shell.state.playerPlaylist?.[Shell.state.playerIndex]?.name || '';
               bodyEl.innerHTML = `<div style="padding:20px;text-align:center;"><div class="spinner-border" style="color:#ff8b9f;"></div><div style="margin-top:12px;color:#9aa4b8;">Gerando com Meggy AI...</div></div>`;
               (async () => {
