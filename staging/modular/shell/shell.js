@@ -569,18 +569,16 @@
         }
       },
 
-      // ═══ PÁGINA DE AULA — RÉPLICA 100% GDI ═══
-      // Estrutura idêntica à produção:
-      // gdi-study > gdi-study-bar > gdi-study-grid (left: player+notes+playlist | right: materiais)
+      // ═══ PÁGINA DE AULA — RÉPLICA 100% GDI + TODAS as features ═══
       _playVideoInline(link, name, playlist, currentIndex) {
         const main = document.getElementById('meggy-main');
         if (!main) return;
         const videoUrl = link.startsWith('http') ? link : (window.location.origin + link);
+        const isAudio = name.endsWith('.mp3') || name.endsWith('.m4a') || name.endsWith('.wav') || name.endsWith('.ogg') || name.endsWith('.aac');
 
         let pl = playlist || [{ name: name, link: videoUrl, size: '', folder: '' }];
         let idx = currentIndex || 0;
 
-        // Resume
         let resumePos = 0;
         try {
           if (window.GDIUser && window.GDIUser.state && window.GDIUser.state.resume) {
@@ -594,6 +592,22 @@
         Shell.state.currentView = 'player';
         Shell.state.playerPlaylist = pl;
         Shell.state.playerIndex = idx;
+
+        // ★ Contrair sidebar ao abrir vídeo
+        document.body.classList.add('meggy-player-active');
+        // Adicionar botão expand se não existe
+        if (!document.getElementById('meggy-sidebar-expand-btn')) {
+          const expandBtn = document.createElement('button');
+          expandBtn.id = 'meggy-sidebar-expand-btn';
+          expandBtn.className = 'meggy-sidebar-expand-btn';
+          expandBtn.innerHTML = '<i class="bi bi-chevron-right"></i>';
+          expandBtn.title = 'Mostrar menu';
+          expandBtn.onclick = () => {
+            document.body.classList.remove('meggy-player-active');
+            expandBtn.remove();
+          };
+          document.body.appendChild(expandBtn);
+        }
 
         // Breadcrumb
         const folderPath = Shell.state.currentFolderPath || '';
@@ -609,81 +623,81 @@
         }
         const shortName = name.length > 20 ? name.slice(0,17) + '…' : name;
         bcHTML += `<li class="gdi-bc-cur" title="${name}">${shortName}</li>`;
-
         const fileSize = pl[idx]?.size || '';
+        const iconClass = isAudio ? 'bi-music-note-beamed' : 'bi-camera-video-fill';
 
-        // ★ Estrutura 100% idêntica ao GDI
         main.innerHTML = `
           <div class="gdi-study" id="gdi-study">
             <div class="gdi-study-bar">
               <div class="gdi-study-bc"><ol class="gdi-bc">${bcHTML}</ol></div>
               <div class="gdi-study-modes">
-                <button class="gdi-mode-btn active" data-mode="split" title="Tela dividida (vídeo + material)"><i class="bi bi-layout-split"></i><span class="d-none d-md-inline">Dividido</span></button>
-                <button class="gdi-mode-btn" data-mode="fv" title="Foco na aula (vídeo em largura total)"><i class="bi bi-lightning-charge-fill"></i><span class="d-none d-md-inline">Foco na aula</span></button>
-                <button class="gdi-mode-btn" data-mode="fm" title="Foco no material (só PDF, zoom automático)"><i class="bi bi-file-earmark-pdf-fill"></i><span class="d-none d-md-inline">Foco no material</span></button>
-                <button class="gdi-watched-btn" id="gdi-watched-btn" title="Marcar esta aula como assistida" data-b="1"><i class="bi bi-eye"></i><span>Assistido</span></button>
+                <button class="gdi-mode-btn active" data-mode="split"><i class="bi bi-layout-split"></i><span class="d-none d-md-inline">Dividido</span></button>
+                <button class="gdi-mode-btn" data-mode="fv"><i class="bi bi-lightning-charge-fill"></i><span class="d-none d-md-inline">Foco na aula</span></button>
+                <button class="gdi-mode-btn" data-mode="fm"><i class="bi bi-file-earmark-pdf-fill"></i><span class="d-none d-md-inline">Foco no material</span></button>
+                <button class="gdi-watched-btn" id="gdi-watched-btn" data-b="1"><i class="bi bi-eye"></i><span>Assistido</span></button>
               </div>
             </div>
             <div class="gdi-study-grid" id="gdi-study-grid">
               <section class="gdi-study-left" id="gdi-slot-left">
                 <div class="gdi-study-head">
-                  <i class="bi bi-camera-video-fill gdi-icon-video" style="font-size:22px;"></i>
+                  <i class="bi ${iconClass} gdi-icon-video" style="font-size:22px;"></i>
                   <div class="gdi-study-title">
                     <div class="gdi-file-header-name" id="gdi-file-header-name">${name}</div>
                     <div class="gdi-file-header-meta" id="gdi-file-header-meta">${fileSize}</div>
                   </div>
                 </div>
                 <div class="gdi-player-wrap" style="width:100%;">
-                  <video id="meggy-video" src="${videoUrl}" controls autoplay playsinline
-                    style="width:100%;max-height:none;border-radius:8px;background:#000;"
-                    onerror="this.style.display='none';document.getElementById('meggy-player-error').style.display='block'">
-                  </video>
-                  <div id="meggy-player-error" style="display:none;padding:40px;text-align:center;color:#ff8b9f;">
-                    ⚠️ Não foi possível carregar o vídeo.<br>
-                    <a href="${videoUrl}" target="_blank" style="color:#5ddeda;">Abrir em nova aba</a>
-                  </div>
+                  ${isAudio ? `
+                    <div class="meggy-audio-player">
+                      <div class="meggy-audio-icon">🎵</div>
+                      <audio id="meggy-video" src="${videoUrl}" controls autoplay style="width:100%;">
+                      </audio>
+                    </div>
+                  ` : `
+                    <video id="meggy-video" src="${videoUrl}" controls autoplay playsinline
+                      style="width:100%;max-height:none;border-radius:8px;background:#000;"
+                      onerror="this.style.display='none';document.getElementById('meggy-player-error').style.display='block'">
+                    </video>
+                    <div id="meggy-player-error" style="display:none;padding:40px;text-align:center;color:#ff8b9f;">
+                      ⚠️ Não foi possível carregar.<br>
+                      <a href="${videoUrl}" target="_blank" style="color:#5ddeda;">Abrir em nova aba</a>
+                    </div>
+                  `}
                 </div>
                 <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
-                  <button class="gdi-mode-btn" id="gdi-prev-btn" title="Aula anterior" ${idx === 0 ? 'disabled' : ''}><i class="bi bi-chevron-left"></i> Anterior</button>
-                  <button class="gdi-mode-btn" id="gdi-next-btn" title="Próxima aula" ${idx >= pl.length - 1 ? 'disabled' : ''}>Próxima <i class="bi bi-chevron-right"></i></button>
-                  <a class="gdi-mode-btn" href="${videoUrl}" download="${name}" target="_blank" title="Download"><i class="bi bi-download"></i> Download</a>
-                  <button class="gdi-mode-btn" id="gdi-interfolder-btn" title="Carregar vídeos de todas as subpastas"><i class="bi bi-collection"></i> Interfolder</button>
+                  <button class="gdi-mode-btn" id="gdi-prev-btn" ${idx === 0 ? 'disabled' : ''}><i class="bi bi-chevron-left"></i> Anterior</button>
+                  <button class="gdi-mode-btn" id="gdi-next-btn" ${idx >= pl.length - 1 ? 'disabled' : ''}>Próxima <i class="bi bi-chevron-right"></i></button>
+                  <a class="gdi-mode-btn" href="${videoUrl}" download="${name}" target="_blank"><i class="bi bi-download"></i> Download</a>
+                  <button class="gdi-mode-btn" id="gdi-interfolder-btn"><i class="bi bi-collection"></i> Interfolder</button>
+                  <button class="gdi-mode-btn" id="gdi-meggy-ai-btn" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;"><i class="bi bi-robot"></i> Meggy AI</button>
                 </div>
                 <div class="gdi-notes" id="gdi-notes">
-                  <div class="gdi-notes-head"><strong>📝 Minhas anotações</strong><span id="gdi-notes-count" style="font-size:11px;color:#8b949e;"></span></div>
+                  <div class="gdi-notes-head"><strong>📝 Minhas anotações</strong></div>
                   <textarea id="gdi-note-input" rows="2" placeholder="Digite sua anotação para esta aula…"></textarea>
                   <div class="gdi-notes-actions">
-                    <span id="gdi-note-time" title="Clique para ir a este momento do vídeo" style="cursor:pointer;">00:00</span>
+                    <span id="gdi-note-time" style="cursor:pointer;">00:00</span>
                     <button id="gdi-note-save"><i class="bi bi-save me-1"></i>Salvar</button>
                   </div>
-                  <div id="gdi-notes-list"><div class="gdi-notes-empty">Nenhuma anotação ainda. Digite acima e salve.</div></div>
+                  <div id="gdi-notes-list"><div class="gdi-notes-empty">Nenhuma anotação ainda.</div></div>
                 </div>
                 <div id="gdi-playlist-wrap">
                   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:6px;flex-wrap:wrap;">
-                    <button id="gdi-pl-toggle" class="gdi-mode-btn" style="padding:4px 10px;font-size:12px;flex:1;justify-content:flex-start;min-width:0;" title="Mostrar/ocultar a playlist">
-                      <i class="bi bi-collection-play me-2"></i><strong style="font-size:13px;">Playlist</strong>
+                    <button id="gdi-pl-toggle" class="gdi-mode-btn" style="padding:4px 10px;font-size:12px;flex:1;justify-content:flex-start;min-width:0;">
+                      <i class="bi bi-collection-play me-2"></i><strong>Playlist</strong>
                       <span id="gdi-pl-count" style="font-size:11px;color:#8b949e;margin-left:6px;">${idx + 1} / ${pl.length}</span>
                       <i id="gdi-pl-chev" class="bi bi-chevron-down" style="margin-left:auto;"></i>
                     </button>
-                    <button id="gdi-pl-filter" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Esconder aulas já assistidas"><i class="bi bi-funnel"></i></button>
-                    <button id="gdi-pl-reload" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Descartar cache e reescanear"><i class="bi bi-arrow-clockwise"></i></button>
-                    <button id="gdi-pl-json" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Baixar playlist.json"><i class="bi bi-filetype-json"></i></button>
                   </div>
                   <div id="gdi-playlist-body" style="overflow-y:auto;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:6px;background:rgba(0,0,0,0.2);max-height:240px;display:none;">
                     <div id="gdi-playlist-list">
-                      ${pl.map((v, i) => `
-                        <div class="gdi-playlist-item ${i === idx ? 'cur' : ''}" data-idx="${i}" title="${v.name}">
-                          <div><i class="bi ${i === idx ? 'bi-play-fill' : 'bi-film'} me-2"></i><span style="font-weight:${i === idx ? '600' : '400'};">${v.name}</span></div>
-                          <span class="gdi-pl-size">${v.size || ''}</span>
-                        </div>
-                      `).join('')}
+                      ${pl.map((v, i) => `<div class="gdi-playlist-item ${i === idx ? 'cur' : ''}" data-idx="${i}" title="${v.name}"><div><i class="bi ${i === idx ? 'bi-play-fill' : 'bi-film'} me-2"></i><span style="font-weight:${i === idx ? '600' : '400'};">${v.name}</span></div><span class="gdi-pl-size">${v.size || ''}</span></div>`).join('')}
                     </div>
                   </div>
                 </div>
               </section>
               <aside class="gdi-study-right" id="gdi-slot-right" data-m9="1">
                 <div class="gdi-mat-head"><strong><i class="bi bi-journal-bookmark-fill" style="color:#ff8b9f;"></i> Materiais da aula</strong><span id="gdi-mat-status">buscando…</span></div>
-                <div class="gdi-mat-tabs" id="gdi-mat-tabs"><span class="gdi-mat-loading">Buscando PDFs da aula…</span></div>
+                <div class="gdi-mat-tabs" id="gdi-mat-tabs"><span class="gdi-mat-loading">Buscando…</span></div>
                 <div class="gdi-mat-body" id="gdi-mat-body"></div>
               </aside>
             </div>
@@ -694,7 +708,6 @@
         const timeEl = document.getElementById('gdi-note-time');
         const plCountEl = document.getElementById('gdi-pl-count');
 
-        // ─── Resume tracking ───
         let lastSave = 0;
         const saveResume = () => {
           if (!video?.currentTime) return;
@@ -707,7 +720,7 @@
         const showResumeToast = (pos) => {
           const toast = document.createElement('div');
           toast.className = 'meggy-toast-resume';
-          toast.innerHTML = `<i class="bi bi-clock-history"></i> Retomando de <b>&nbsp;${formatTime(pos)}</b><button class="meggy-toast-btn" type="button">Recomeçar</button>`;
+          toast.innerHTML = `<i class="bi bi-clock-history"></i> Retomando de <b>&nbsp;${formatTime(pos)}</b><button class="meggy-toast-btn">Recomeçar</button>`;
           main.appendChild(toast);
           toast.querySelector('.meggy-toast-btn').onclick = () => { video.currentTime = 0; toast.remove(); };
           setTimeout(() => { toast.classList.add('meggy-toast-out'); setTimeout(() => toast.remove(), 250); }, 7000);
@@ -720,65 +733,60 @@
           return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${m}:${String(sec).padStart(2,'0')}`;
         }
 
-        video.addEventListener('loadedmetadata', () => {
-          if (resumePos > 10 && video.duration && resumePos < video.duration * 0.9) {
-            video.currentTime = resumePos;
-            showResumeToast(resumePos);
-          }
-        });
-        video.addEventListener('timeupdate', () => { timeEl.textContent = formatTime(video.currentTime); saveResume(); });
-        video.addEventListener('ended', () => { if (idx < pl.length - 1) switchTo(idx + 1); });
+        if (video) {
+          video.addEventListener('loadedmetadata', () => {
+            if (resumePos > 10 && video.duration && resumePos < video.duration * 0.9) {
+              video.currentTime = resumePos;
+              showResumeToast(resumePos);
+            }
+          });
+          video.addEventListener('timeupdate', () => { timeEl.textContent = formatTime(video.currentTime); saveResume(); });
+          video.addEventListener('ended', () => { if (idx < pl.length - 1) switchTo(idx + 1); });
+        }
 
         function switchTo(newIdx) {
           if (newIdx < 0 || newIdx >= pl.length) return;
           const v = pl[newIdx];
           idx = newIdx;
           Shell.state.playerIndex = idx;
-          video.src = v.link.startsWith('http') ? v.link : (window.location.origin + v.link);
+          const newUrl = v.link.startsWith('http') ? v.link : (window.location.origin + v.link);
+          video.src = newUrl;
           video.play().catch(() => {});
           document.getElementById('gdi-file-header-name').textContent = v.name;
           document.getElementById('gdi-file-header-meta').textContent = v.size || '';
           plCountEl.textContent = `${idx + 1} / ${pl.length}`;
           document.querySelectorAll('.gdi-playlist-item').forEach((el, i) => {
             el.classList.toggle('cur', i === idx);
-            const icon = el.querySelector('i');
-            if (icon) icon.className = `bi ${i === idx ? 'bi-play-fill' : 'bi-film'} me-2`;
-            const span = el.querySelector('span');
-            if (span) span.style.fontWeight = i === idx ? '600' : '400';
+            const icon = el.querySelector('i'); if (icon) icon.className = `bi ${i === idx ? 'bi-play-fill' : 'bi-film'} me-2`;
+            const span = el.querySelector('span'); if (span) span.style.fontWeight = i === idx ? '600' : '400';
           });
           document.getElementById('gdi-prev-btn').disabled = idx === 0;
           document.getElementById('gdi-next-btn').disabled = idx >= pl.length - 1;
-          const bcCur = main.querySelector('.gdi-bc-cur');
-          if (bcCur) { bcCur.textContent = v.name.length > 20 ? v.name.slice(0,17) + '…' : v.name; bcCur.title = v.name; }
-          resumePos = 0;
           main.scrollTop = 0;
         }
 
-        // ─── Modos (Dividido / Foco aula / Foco material) ───
+        // Modos
         document.querySelectorAll('.gdi-mode-btn[data-mode]').forEach(btn => {
           btn.onclick = () => {
             document.querySelectorAll('.gdi-mode-btn[data-mode]').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            const mode = btn.dataset.mode;
-            const study = document.getElementById('gdi-study');
-            study.classList.remove('mode-split', 'mode-fv', 'mode-fm');
-            study.classList.add('mode-' + mode);
+            document.getElementById('gdi-study').className = 'gdi-study mode-' + btn.dataset.mode;
           };
         });
 
-        // ─── Assistido ───
+        // Assistido
         document.getElementById('gdi-watched-btn').onclick = function() {
           const w = this.dataset.b === '1';
           this.dataset.b = w ? '0' : '1';
-          this.classList.toggle('watched', !w);
+          this.classList.toggle('done', !w);
+          this.innerHTML = !w ? '<i class="bi bi-eye-fill"></i><span>Assistida ✓</span>' : '<i class="bi bi-eye"></i><span>Assistido</span>';
           try { if (window.GDIUser?.setWatched) window.GDIUser.setWatched(videoUrl, !w); } catch (e) {}
         };
 
-        // ─── Prev/Next ───
         document.getElementById('gdi-prev-btn').onclick = () => { if (idx > 0) switchTo(idx - 1); };
         document.getElementById('gdi-next-btn').onclick = () => { if (idx < pl.length - 1) switchTo(idx + 1); };
 
-        // ─── Playlist toggle (dropdown) ───
+        // Playlist dropdown
         const plBody = document.getElementById('gdi-playlist-body');
         const plChev = document.getElementById('gdi-pl-chev');
         document.getElementById('gdi-pl-toggle').onclick = () => {
@@ -786,129 +794,90 @@
           plBody.style.display = isOpen ? 'none' : 'block';
           plChev.className = isOpen ? 'bi bi-chevron-down' : 'bi bi-chevron-up';
         };
-
-        // ─── Playlist item click ───
         document.querySelectorAll('.gdi-playlist-item').forEach(item => {
           item.onclick = () => { const i = parseInt(item.dataset.idx); if (i !== idx) switchTo(i); };
         });
 
-        // ─── Interfolder ───
+        // Interfolder
         document.getElementById('gdi-interfolder-btn').onclick = async () => {
           const btn = document.getElementById('gdi-interfolder-btn');
-          btn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Carregando...';
-          btn.disabled = true;
+          btn.innerHTML = '<div class="spinner-border spinner-border-sm"></div>';
           try {
             const currentPath = Shell.state.currentFolderPath || '';
-            if (!currentPath || !window.gdiListAllFiles) { btn.innerHTML = '⚠️'; return; }
+            if (!currentPath || !window.gdiListAllFiles) return;
             const parts = currentPath.split('/').filter(Boolean);
             const parentPath = '/' + parts.slice(0, -1).join('/') + '/';
             const parentFiles = await window.gdiListAllFiles(parentPath, '');
             const subFolders = parentFiles.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
             const collected = [];
-            const BATCH = 6;
-            for (let i = 0; i < subFolders.length; i += BATCH) {
-              const batch = subFolders.slice(i, i + BATCH);
+            for (let i = 0; i < subFolders.length; i += 6) {
+              const batch = subFolders.slice(i, i + 6);
               const results = await Promise.all(batch.map(folder => {
                 const fpath = parentPath + encodeURIComponent(folder.name) + '/';
-                return window.gdiListAllFiles(fpath, '').then(files => files
-                  .filter(f => (f.mimeType||'').includes('video') || f.name.endsWith('.mp4'))
-                  .filter(f => !f.name.includes('.part-'))
-                  .map(f => ({
-                    name: f.name,
-                    link: f.link ? (f.link.startsWith('http') ? f.link : window.location.origin + f.link) : '',
-                    size: f.size ? (f.size/1024/1024).toFixed(1)+' MB' : '',
-                    folder: folder.name
-                  }))).catch(() => []);
+                return window.gdiListAllFiles(fpath, '').then(files => files.filter(f => (f.mimeType||'').includes('video') || f.name.endsWith('.mp4')).filter(f => !f.name.includes('.part-')).map(f => ({name:f.name, link:f.link?(f.link.startsWith('http')?f.link:window.location.origin+f.link):'', size:f.size?(f.size/1024/1024).toFixed(1)+' MB':'', folder:folder.name}))).catch(() => []);
               }));
               results.forEach(v => collected.push(...v));
-              btn.innerHTML = `<div class="spinner-border spinner-border-sm"></div> ${collected.length} vídeos`;
+              btn.innerHTML = `<div class="spinner-border spinner-border-sm"></div> ${collected.length}`;
             }
             const seen = new Set();
             pl = collected.filter(v => { const k = (v.folder||'')+'|'+v.name; if (seen.has(k)) return false; seen.add(k); return true; });
             pl.sort((a,b) => (a.folder||'').localeCompare(b.folder||'') || a.name.localeCompare(b.name));
             Shell.state.playerPlaylist = pl;
-            idx = pl.findIndex(v => v.name === name || v.link === videoUrl);
+            idx = pl.findIndex(v => v.name === name || v.link === videoUrl) || 0;
             if (idx === -1) idx = 0;
-            Shell.state.playerIndex = idx;
-            const listEl = document.getElementById('gdi-playlist-list');
-            listEl.innerHTML = pl.map((v, i) => `
-              <div class="gdi-playlist-item ${i === idx ? 'cur' : ''}" data-idx="${i}" title="${v.name}">
-                <div><i class="bi ${i === idx ? 'bi-play-fill' : 'bi-film'} me-2"></i><span style="font-weight:${i === idx ? '600' : '400'};">${v.name}</span></div>
-                <span class="gdi-pl-size">${v.size || ''}</span>
-              </div>
-            `).join('');
+            document.getElementById('gdi-playlist-list').innerHTML = pl.map((v, i) => `<div class="gdi-playlist-item ${i === idx ? 'cur' : ''}" data-idx="${i}" title="${v.name}"><div><i class="bi ${i === idx ? 'bi-play-fill' : 'bi-film'} me-2"></i><span style="font-weight:${i === idx ? '600' : '400'};">${v.name}</span></div><span class="gdi-pl-size">${v.size || ''}</span></div>`).join('');
             plCountEl.textContent = `${idx + 1} / ${pl.length}`;
-            document.querySelectorAll('.gdi-playlist-item').forEach(item => {
-              item.onclick = () => { const i = parseInt(item.dataset.idx); if (i !== idx) switchTo(i); };
-            });
-            btn.innerHTML = `<i class="bi bi-check"></i> ${pl.length} vídeos`;
-            btn.disabled = false;
-          } catch (e) { console.error('[Meggy Shell] interfolder:', e); btn.innerHTML = '⚠️'; }
+            document.querySelectorAll('.gdi-playlist-item').forEach(item => { item.onclick = () => { const i = parseInt(item.dataset.idx); if (i !== idx) switchTo(i); }; });
+            btn.innerHTML = `<i class="bi bi-check"></i> ${pl.length}`;
+          } catch (e) { console.error(e); btn.innerHTML = '⚠️'; }
         };
 
-        // ─── Breadcrumb ───
+        // Breadcrumb
         document.querySelectorAll('.gdi-bc a[data-nav]').forEach(a => {
           a.onclick = (e) => {
             e.preventDefault();
-            const navPath = a.dataset.nav;
-            const bcType = a.dataset.bcType;
-            if (bcType === 'home') {
-              Shell.router.navigate('/');
-            } else {
-              Shell.router.navigate('/drives');
-              setTimeout(() => Shell.views._renderDrives(navPath), 50);
-            }
+            if (a.dataset.bcType === 'home') Shell.router.navigate('/');
+            else { Shell.router.navigate('/drives'); setTimeout(() => Shell.views._renderDrives(a.dataset.nav), 50); }
           };
         });
 
-        // ─── Materiais — RÉPLICA 100% GDI (com subpastas) ───
+        // ★ Meggy AI — abrir drawer lateral (não flutuante)
+        document.getElementById('gdi-meggy-ai-btn').onclick = () => Shell.openMeggyAIDrawer();
+
+        // ★ Materiais — estilo Alfacon (cards visuais) + busca em subpastas
         async function loadMaterials() {
           const tabsEl = document.getElementById('gdi-mat-tabs');
           const bodyEl = document.getElementById('gdi-mat-body');
           const statusEl = document.getElementById('gdi-mat-status');
           if (!tabsEl || !bodyEl) return;
-
-          tabsEl.innerHTML = '<span class="gdi-mat-loading">Buscando PDFs da aula…</span>';
+          tabsEl.innerHTML = '<span class="gdi-mat-loading">Buscando materiais…</span>';
           if (statusEl) statusEl.textContent = 'buscando…';
           bodyEl.innerHTML = '';
-
           try {
             const folderPath = Shell.state.currentFolderPath || '';
             if (!folderPath || !window.gdiListAllFiles) {
               tabsEl.innerHTML = '';
               if (statusEl) statusEl.textContent = 'sem material';
-              bodyEl.innerHTML = '<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material encontrado.</div></div>';
+              bodyEl.innerHTML = '<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material.</div></div>';
               return;
             }
-
-            // ★ Réplica exata do GDI isMaterial()
             const isMaterial = (x) => {
               const ext = (x.fileExtension || ((x.name||'').split('.').pop() || '')).toLowerCase();
               const mt = (x.mimeType || '').toLowerCase();
-              if (ext === 'pdf' || mt.includes('pdf')) return true;
-              if (ext === 'md' || mt.includes('markdown')) return true;
-              if (ext === 'txt' || mt === 'text/plain') return true;
-              if (ext === 'html' || mt.includes('html')) return true;
-              return false;
+              return ext === 'pdf' || mt.includes('pdf') || ext === 'md' || mt.includes('markdown') || ext === 'txt' || mt === 'text/plain' || ext === 'html' || mt.includes('html');
             };
-
-            // 1. Lista arquivos da pasta da aula
             let found = [];
             const here = await window.gdiListAllFiles(folderPath, '');
             found = here.filter(isMaterial);
-
-            // 2. Se vazio: lista SUBPASTAS (até 20) e procura dentro
             if (!found.length) {
               const subs = here.filter(x => x.mimeType === 'application/vnd.google-apps.folder').slice(0, 20);
               for (const sf of subs) {
                 const fp = folderPath + encodeURIComponent(sf.name) + '/';
                 const subFiles = await window.gdiListAllFiles(fp, '');
                 found = found.concat(subFiles.filter(isMaterial));
-                if (found.length) break; // para no primeiro material encontrado
+                if (found.length) break;
               }
             }
-
-            // 3. Se ainda vazio: procura na pasta PAI
             if (!found.length) {
               const parts = folderPath.split('/').filter(Boolean);
               const parentPath = '/' + parts.slice(0, -1).join('/') + '/';
@@ -917,87 +886,66 @@
                 found = parentFiles.filter(isMaterial);
               }
             }
-
-            // 4. Dedupe por nome
             const seen = new Set();
             const uniq = [];
-            found.forEach(x => {
-              if (!seen.has(x.name)) { seen.add(x.name); uniq.push(x); }
-            });
-
+            found.forEach(x => { if (!seen.has(x.name)) { seen.add(x.name); uniq.push(x); } });
             tabsEl.innerHTML = '';
             if (!uniq.length) {
               if (statusEl) statusEl.textContent = 'sem material';
-              bodyEl.innerHTML = '<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material encontrado para esta aula.</div></div>';
+              bodyEl.innerHTML = '<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material encontrado.</div></div>';
               return;
             }
-
             if (statusEl) statusEl.textContent = uniq.length + ' material(is)';
 
-            // Renderizar tabs
+            // ★ Estilo Alfacon: grid de cards visuais
+            let cardsHTML = '<div class="alfacon-material-grid">';
             uniq.forEach((m, i) => {
-              const tab = document.createElement('button');
-              tab.className = 'gdi-mat-tab' + (i === 0 ? ' active' : '');
-              const icon = m.name.endsWith('.pdf') ? 'bi-file-earmark-pdf'
-                         : (m.name.endsWith('.md') || m.name.endsWith('.txt')) ? 'bi-file-earmark-text'
-                         : 'bi-file-earmark-code';
-              tab.innerHTML = `<i class="bi ${icon}"></i> ${m.name}`;
-              tab.onclick = () => {
-                document.querySelectorAll('.gdi-mat-tab').forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
+              const ext = (m.name.split('.').pop() || '').toLowerCase();
+              const cardClass = ext === 'pdf' ? 'pdf' : (ext === 'md' || ext === 'txt') ? 'md' : 'txt';
+              const icon = ext === 'pdf' ? '📄' : (ext === 'md' || ext === 'txt') ? '📝' : '📋';
+              const label = ext === 'pdf' ? 'PDF' : (ext === 'md' ? 'Markdown' : ext === 'txt' ? 'Texto' : 'Arquivo');
+              const sizeStr = m.size ? (m.size/1024/1024).toFixed(1) + ' MB' : '';
+              cardsHTML += `<div class="alfacon-material-card ${cardClass}" data-mat-idx="${i}">
+                <div class="alfacon-material-icon">${icon}</div>
+                <div class="alfacon-material-name" title="${m.name}">${m.name}</div>
+                <div class="alfacon-material-meta">${label}${sizeStr ? ' · ' + sizeStr : ''}</div>
+              </div>`;
+            });
+            cardsHTML += '</div>';
+            bodyEl.innerHTML = cardsHTML;
+
+            // Click num card → abrir viewer
+            bodyEl.querySelectorAll('.alfacon-material-card').forEach(card => {
+              card.onclick = () => {
+                const i = parseInt(card.dataset.matIdx);
+                const m = uniq[i];
                 let link = '';
                 if (m.link) {
                   link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
-                  if (m.name.endsWith('.pdf') && !link.includes('inline=')) {
-                    link += (link.includes('?') ? '&' : '?') + 'inline=true';
-                  }
+                  if (m.name.endsWith('.pdf') && !link.includes('inline=')) link += (link.includes('?') ? '&' : '?') + 'inline=true';
                 }
                 const isPdf = m.name.endsWith('.pdf');
                 const isText = m.name.endsWith('.md') || m.name.endsWith('.txt') || m.name.endsWith('.html');
-                let viewerHTML = '';
-                if (link && isPdf) {
-                  viewerHTML = `<iframe src="${link}" style="width:100%;height:400px;border:1px solid rgba(255,255,255,0.09);border-radius:8px;background:#fff;" title="${m.name}"></iframe>`;
-                } else if (link && isText) {
-                  viewerHTML = `<div id="gdi-mat-text" style="width:100%;height:400px;overflow:auto;padding:12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:8px;color:#e6edf3;font-size:13px;white-space:pre-wrap;">Carregando...</div>`;
-                  fetch(link).then(r => r.text()).then(txt => {
-                    const el = document.getElementById('gdi-mat-text');
-                    if (el) el.textContent = txt;
-                  }).catch(() => {
-                    const el = document.getElementById('gdi-mat-text');
-                    if (el) el.textContent = 'Erro ao carregar.';
-                  });
-                } else if (link) {
-                  viewerHTML = `<div class="gdi-mat-empty"><a href="${link}" target="_blank" class="gdi-mode-btn"><i class="bi bi-download"></i> Abrir material</a></div>`;
-                } else {
-                  viewerHTML = '<div class="gdi-mat-empty">Sem preview</div>';
-                }
-                bodyEl.innerHTML = `
-                  <div class="gdi-mat-viewer">
-                    <div class="gdi-mat-viewer-head">
-                      <span><i class="bi ${icon}"></i> ${m.name}</span>
-                      ${link ? `<a href="${link}" target="_blank" class="gdi-mode-btn"><i class="bi bi-box-arrow-up-right"></i> Abrir</a>` : ''}
-                    </div>
-                    ${viewerHTML}
-                  </div>
-                `;
+                let viewer = '';
+                if (link && isPdf) viewer = `<iframe src="${link}" style="width:100%;height:450px;border:none;background:#fff;"></iframe>`;
+                else if (link && isText) {
+                  viewer = `<div id="gdi-mat-text" style="width:100%;height:450px;overflow:auto;padding:16px;background:rgba(255,255,255,0.04);border-radius:8px;color:#e6edf3;font-size:13px;white-space:pre-wrap;">Carregando...</div>`;
+                  fetch(link).then(r => r.text()).then(txt => { const el = document.getElementById('gdi-mat-text'); if (el) el.textContent = txt; }).catch(() => { const el = document.getElementById('gdi-mat-text'); if (el) el.textContent = 'Erro.'; });
+                } else if (link) viewer = `<div style="text-align:center;padding:40px;"><a href="${link}" target="_blank" class="gdi-mode-btn"><i class="bi bi-download"></i> Abrir</a></div>`;
+                bodyEl.innerHTML = `<button class="alfacon-material-back" id="gdi-mat-back"><i class="bi bi-arrow-left"></i> Voltar aos materiais</button><div class="alfacon-material-viewer">${viewer}</div>`;
+                document.getElementById('gdi-mat-back').onclick = () => loadMaterials();
               };
-              tabsEl.appendChild(tab);
             });
-            // Auto-clicar primeiro
-            if (uniq.length > 0) {
-              const firstTab = tabsEl.querySelector('.gdi-mat-tab');
-              if (firstTab) firstTab.click();
-            }
           } catch (e) {
-            console.error('[Meggy Shell] loadMaterials:', e);
+            console.error('[Shell] loadMaterials:', e);
             tabsEl.innerHTML = '';
             if (statusEl) statusEl.textContent = 'erro';
-            bodyEl.innerHTML = '<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Erro ao carregar materiais.</div></div>';
+            bodyEl.innerHTML = '<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Erro.</div></div>';
           }
         }
         setTimeout(loadMaterials, 500);
 
-        // ─── Anotações ───
+        // Anotações
         const notesInput = document.getElementById('gdi-note-input');
         const notesKey = 'meggy-notes-' + videoUrl;
         try { notesInput.value = localStorage.getItem(notesKey) || ''; } catch (e) {}
@@ -1010,12 +958,9 @@
           list.appendChild(note);
           notesInput.value = '';
         };
-        timeEl.onclick = () => {
-          const t = parseFloat(prompt('Ir para (segundos):', '0')) || 0;
-          video.currentTime = t;
-        };
+        timeEl.onclick = () => { const t = parseFloat(prompt('Ir para (segundos):', '0')) || 0; video.currentTime = t; };
 
-        // ─── Atalhos ───
+        // Atalhos
         const keyHandler = (e) => {
           if (['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)) return;
           switch (e.key) {
@@ -1024,23 +969,158 @@
             case 'ArrowLeft': video.currentTime = Math.max(0, video.currentTime - 10); break;
             case 'ArrowUp': e.preventDefault(); video.volume = Math.min(1, video.volume + 0.1); break;
             case 'ArrowDown': e.preventDefault(); video.volume = Math.max(0, video.volume - 0.1); break;
-            case 'f': case 'F':
-              if (document.fullscreenElement) document.exitFullscreen();
-              else video.requestFullscreen?.().catch(() => {});
-              break;
+            case 'f': case 'F': if (document.fullscreenElement) document.exitFullscreen(); else video.requestFullscreen?.().catch(() => {}); break;
             case 'm': case 'M': video.muted = !video.muted; break;
             case 'n': case 'N': if (idx < pl.length - 1) switchTo(idx + 1); break;
             case 'p': case 'P': if (idx > 0) switchTo(idx - 1); break;
           }
         };
         document.addEventListener('keydown', keyHandler);
-        main._cleanupKeyboard = () => document.removeEventListener('keydown', keyHandler);
+        main._cleanupKeyboard = () => { document.removeEventListener('keydown', keyHandler); document.body.classList.remove('meggy-player-active'); const eb = document.getElementById('meggy-sidebar-expand-btn'); if (eb) eb.remove(); };
 
         main.scrollTop = 0;
-
-        // Auto-load interfolder se playlist tem só 1 vídeo
         if (pl.length <= 1 && Shell.state.currentFolderPath) {
           setTimeout(() => document.getElementById('gdi-interfolder-btn')?.click(), 1000);
+        }
+      },
+
+      // ═══ Meggy AI Drawer (menu lateral, não flutuante) ═══
+      meggyAIDrawerOpen: false,
+      openMeggyAIDrawer() {
+        let drawer = document.getElementById('meggy-ai-drawer');
+        if (!drawer) {
+          drawer = document.createElement('div');
+          drawer.id = 'meggy-ai-drawer';
+          drawer.className = 'meggy-ai-drawer';
+          drawer.innerHTML = `
+            <div class="meggy-ai-drawer-header">
+              <div class="meggy-ai-drawer-title">🐩 Meggy AI</div>
+              <button class="meggy-ai-drawer-close" id="meggy-ai-close"><i class="bi bi-x"></i></button>
+            </div>
+            <div class="meggy-ai-drawer-tabs">
+              <button class="meggy-ai-drawer-tab active" data-aitab="actions">⚡ Ações</button>
+              <button class="meggy-ai-drawer-tab" data-aitab="chat">💬 Chat</button>
+              <button class="meggy-ai-drawer-tab" data-aitab="resumos">📝 Resumos</button>
+              <button class="meggy-ai-drawer-tab" data-aitab="questoes">❓ Questões</button>
+              <button class="meggy-ai-drawer-tab" data-aitab="flashcards">🃏 Flashcards</button>
+            </div>
+            <div class="meggy-ai-drawer-body" id="meggy-ai-body"></div>
+          `;
+          document.body.appendChild(drawer);
+          document.getElementById('meggy-ai-close').onclick = () => Shell.closeMeggyAIDrawer();
+          drawer.querySelectorAll('.meggy-ai-drawer-tab').forEach(tab => {
+            tab.onclick = () => {
+              drawer.querySelectorAll('.meggy-ai-drawer-tab').forEach(t => t.classList.remove('active'));
+              tab.classList.add('active');
+              Shell.renderMeggyAITab(tab.dataset.aitab);
+            };
+          });
+        }
+        drawer.classList.add('open');
+        Shell.meggyAIDrawerOpen = true;
+        Shell.renderMeggyAITab('actions');
+      },
+      closeMeggyAIDrawer() {
+        const drawer = document.getElementById('meggy-ai-drawer');
+        if (drawer) drawer.classList.remove('open');
+        Shell.meggyAIDrawerOpen = false;
+      },
+      renderMeggyAITab(tab) {
+        const body = document.getElementById('meggy-ai-body');
+        if (!body) return;
+        if (tab === 'actions') {
+          body.innerHTML = `
+            <div class="meggy-ai-action-grid">
+              <button class="meggy-ai-action-btn" data-action="resumo"><i class="bi bi-file-earmark-text"></i>Gerar Resumo</button>
+              <button class="meggy-ai-action-btn" data-action="pilulas"><i class="bi bi-capsule"></i>Pílulas</button>
+              <button class="meggy-ai-action-btn" data-action="questoes"><i class="bi bi-patch-question"></i>Questões</button>
+              <button class="meggy-ai-action-btn" data-action="flashcards"><i class="bi bi-card-text"></i>Flashcards</button>
+              <button class="meggy-ai-action-btn" data-action="mindmap"><i class="bi bi-diagram-3"></i>Mapa Mental</button>
+              <button class="meggy-ai-action-btn" data-action="coach"><i class="bi bi-magic"></i>Coach IA</button>
+            </div>
+            <div style="font-size:12px;color:#6b7488;text-align:center;padding:16px;">
+              Clique numa ação para gerar material com IA.
+            </div>
+          `;
+          body.querySelectorAll('.meggy-ai-action-btn').forEach(btn => {
+            btn.onclick = () => Shell.meggyAIAction(btn.dataset.action);
+          });
+        } else if (tab === 'chat') {
+          body.innerHTML = `
+            <div class="meggy-ai-chat-messages" id="meggy-ai-messages"></div>
+            <div class="meggy-ai-chat-input">
+              <textarea id="meggy-ai-input" placeholder="Pergunte algo sobre a aula..." rows="2"></textarea>
+              <button id="meggy-ai-send"><i class="bi bi-send"></i></button>
+            </div>
+          `;
+          const sendBtn = document.getElementById('meggy-ai-send');
+          const input = document.getElementById('meggy-ai-input');
+          const send = async () => {
+            const msg = input.value.trim();
+            if (!msg) return;
+            const msgs = document.getElementById('meggy-ai-messages');
+            msgs.innerHTML += `<div class="meggy-ai-msg user">${msg}</div>`;
+            input.value = '';
+            msgs.innerHTML += `<div class="meggy-ai-msg bot" id="meggy-ai-typing">🐾 Pensando...</div>`;
+            msgs.scrollTop = msgs.scrollHeight;
+            try {
+              const r = await fetch('/api/ai', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: msg, messages: []}) });
+              const d = await r.json();
+              document.getElementById('meggy-ai-typing').textContent = d.response || 'Sem resposta';
+            } catch (e) {
+              document.getElementById('meggy-ai-typing').textContent = 'Erro: ' + e.message;
+            }
+            msgs.scrollTop = msgs.scrollHeight;
+          };
+          sendBtn.onclick = send;
+          input.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
+        } else if (tab === 'resumos') {
+          body.innerHTML = `<div style="text-align:center;padding:20px;"><button class="meggy-ai-action-btn" style="width:100%;" id="meggy-gen-resumo"><i class="bi bi-file-earmark-text"></i>Gerar Resumo da Aula</button><div id="meggy-resumo-out" style="margin-top:16px;text-align:left;font-size:13px;color:#9aa4b8;"></div></div>`;
+          document.getElementById('meggy-gen-resumo').onclick = () => Shell.meggyAIAction('resumo');
+        } else if (tab === 'questoes') {
+          body.innerHTML = `<div style="text-align:center;padding:20px;"><button class="meggy-ai-action-btn" style="width:100%;" id="meggy-gen-questoes"><i class="bi bi-patch-question"></i>Gerar Questões</button><div id="meggy-questoes-out" style="margin-top:16px;text-align:left;font-size:13px;color:#9aa4b8;"></div></div>`;
+          document.getElementById('meggy-gen-questoes').onclick = () => Shell.meggyAIAction('questoes');
+        } else if (tab === 'flashcards') {
+          body.innerHTML = `<div style="text-align:center;padding:20px;"><button class="meggy-ai-action-btn" style="width:100%;" id="meggy-gen-flash"><i class="bi bi-card-text"></i>Gerar Flashcards</button><div id="meggy-flash-out" style="margin-top:16px;text-align:left;font-size:13px;color:#9aa4b8;"></div></div>`;
+          document.getElementById('meggy-gen-flash').onclick = () => Shell.meggyAIAction('flashcards');
+        }
+      },
+      async meggyAIAction(action) {
+        const body = document.getElementById('meggy-ai-body');
+        const lessonPath = Shell.state.currentFolderPath || '';
+        const lessonName = Shell.state.playerPlaylist?.[Shell.state.playerIndex]?.name || '';
+        const outId = action === 'resumo' ? 'meggy-resumo-out' : action === 'questoes' ? 'meggy-questoes-out' : action === 'flashcards' ? 'meggy-flash-out' : null;
+        const outEl = outId ? document.getElementById(outId) : null;
+        if (outEl) { outEl.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Gerando...'; }
+        try {
+          let endpoint = '/api/ai';
+          let payload = { message: '', messages: [] };
+          if (action === 'resumo') {
+            payload.message = `Gere um resumo detalhado da aula: ${lessonName}. Path: ${lessonPath}`;
+          } else if (action === 'pilulas') {
+            endpoint = '/api/ai/coach';
+            payload = { action: 'analyze', lessonPath, lessonName };
+          } else if (action === 'questoes') {
+            payload.message = `Gere 5 questões de múltipla escolha sobre: ${lessonName}`;
+          } else if (action === 'flashcards') {
+            payload.message = `Crie 10 flashcards (frente/verso) sobre: ${lessonName}`;
+          } else if (action === 'mindmap') {
+            payload.message = `Crie um mapa mental em markdown sobre: ${lessonName}`;
+          } else if (action === 'coach') {
+            endpoint = '/api/ai/coach';
+            payload = { action: 'analyze' };
+          }
+          const r = await fetch(endpoint, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+          const d = await r.json();
+          const text = d.response || d.markdown || d.summary || JSON.stringify(d).substring(0, 500);
+          if (outEl) {
+            outEl.innerHTML = `<div style="background:rgba(255,255,255,0.04);padding:12px;border-radius:8px;white-space:pre-wrap;">${text}</div>`;
+          } else {
+            body.innerHTML = `<div style="padding:16px;font-size:13px;color:#e6edf3;white-space:pre-wrap;">${text}</div>`;
+          }
+        } catch (e) {
+          if (outEl) outEl.innerHTML = 'Erro: ' + e.message;
+          else body.innerHTML = 'Erro: ' + e.message;
         }
       },
 
