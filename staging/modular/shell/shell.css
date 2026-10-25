@@ -1748,3 +1748,75 @@ body.meggy-player-active .meggy-sidebar-expand-btn {
 .alfacon-material-back:hover {
   color: #ff8b9f;
 }
+
+/* ═══ Materiais tabs — RÉPLICA EXATA GDI ═══ */
+.gdi-mat-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.gdi-mat-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 74px;
+  padding: 8px 6px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: 0.15s;
+  font-size: 11px;
+  color: #9aa4b8;
+  text-align: center;
+}
+
+.gdi-mat-tab:hover {
+  background: rgba(255,255,255,0.08);
+  color: #e6edf3;
+}
+
+.gdi-mat-tab.active {
+  background: rgba(255,139,159,0.15);
+  border-color: rgba(255,139,159,0.3);
+  color: #ff8b9f;
+}
+
+.gdi-mat-tab i {
+  font-size: 18px;
+}
+
+.gdi-mat-tab span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 70px;
+}
+
+.gdi-mat-tab.gdi-mat-isa {
+  background: rgba(192,38,211,0.08);
+  border-color: rgba(192,38,211,0.15);
+}
+
+.gdi-mat-tab.gdi-mat-isa:hover {
+  background: rgba(192,38,211,0.15);
+}
+
+.gdi-mat-tab.gdi-mat-isa.active {
+  background: rgba(192,38,211,0.2);
+  border-color: rgba(192,38,211,0.4);
+  color: #c026d3;
+}
+
+.gdi-mat-body {
+  min-height: 400px;
+}
+
+.gdi-mat-loading {
+  font-size: 12px;
+  color: #6b7488;
+  padding: 8px;
+}
