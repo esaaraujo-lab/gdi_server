@@ -2316,8 +2316,8 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   justify-content: space-between;
   align-items: center;
   padding: 12px 18px;
-  background: rgba(124, 77, 255, 0.06);
-  border-bottom: 1px solid rgba(124, 77, 255, 0.15);
+  background: linear-gradient(135deg, rgba(255, 139, 159, 0.12), rgba(93, 222, 218, 0.06));
+  border-bottom: 1px solid rgba(255, 139, 159, 0.2);
   flex-wrap: wrap;
   gap: 8px;
 }
@@ -2325,8 +2325,293 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 .meggy-summary-badge {
   font-size: 13px;
   font-weight: 600;
-  color: #a78bfa;
+  color: #ff8b9f;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   RICH MARKDOWN — .gdi-isa-summary-body (replicado de produção)
+   Usado em resumos, pílulas e qualquer markdown renderizado
+   ═══════════════════════════════════════════════════════════ */
+.gdi-isa-summary-body {
+  color: #e6edf3;
+  font-size: 14px;
+  line-height: 1.8;
+}
+.gdi-isa-summary-body h1,
+.gdi-isa-summary-body h2,
+.gdi-isa-summary-body h3,
+.gdi-isa-summary-body h4 {
+  color: #f0f6fc;
+  font-family: 'Poppins', system-ui, sans-serif;
+  margin: 18px 0 8px;
+  line-height: 1.3;
+}
+.gdi-isa-summary-body h1 {
+  font-size: 20px;
+  border-bottom: 2px solid #ff8b9f;
+  padding-bottom: 6px;
+}
+.gdi-isa-summary-body h2 {
+  font-size: 17px;
+  color: #ff8b9f;
+  border-left: 3px solid #ff8b9f;
+  padding-left: 10px;
+}
+.gdi-isa-summary-body h3 {
+  font-size: 15px;
+  color: #5ddeda;
+}
+.gdi-isa-summary-body h4 {
+  font-size: 13px;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.gdi-isa-summary-body p {
+  margin: 0 0 10px;
+  text-align: justify;
+}
+.gdi-isa-summary-body ul,
+.gdi-isa-summary-body ol {
+  margin: 0 0 12px;
+  padding-left: 24px;
+}
+.gdi-isa-summary-body li {
+  margin: 4px 0;
+}
+.gdi-isa-summary-body code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+}
+.gdi-isa-summary-body pre {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+.gdi-isa-summary-body pre code {
+  background: transparent;
+  padding: 0;
+}
+.gdi-isa-summary-body strong {
+  color: #5ddeda;
+  font-weight: 600;
+}
+.gdi-isa-summary-body em {
+  color: #e6edf3;
+  font-style: italic;
+}
+.gdi-isa-summary-body blockquote {
+  border-left: 3px solid #ff8b9f;
+  margin: 10px 0;
+  padding: 4px 14px;
+  color: #8b949e;
+  font-style: italic;
+  background: rgba(255, 139, 159, 0.06);
+  border-radius: 0 8px 8px 0;
+}
+.gdi-isa-summary-body table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 10px 0;
+}
+.gdi-isa-summary-body th,
+.gdi-isa-summary-body td {
+  border: 1px solid #21262d;
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 13px;
+}
+.gdi-isa-summary-body th {
+  background: rgba(255, 255, 255, 0.08);
+  font-weight: 600;
+}
+.gdi-isa-summary-body hr {
+  border: 0;
+  border-top: 1px solid #21262d;
+  margin: 16px 0;
+}
+.gdi-isa-summary-body a {
+  color: #5ddeda;
+  text-decoration: underline;
+}
+.gdi-isa-summary-body img {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+/* ─── Loading spinner (replicado de produção) ─── */
+.gdi-mat-isa-loading {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 30px;
+  text-align: center;
+  color: #8b949e;
+  font-size: 14px;
+}
+.gdi-mat-isa-spin {
+  width: 30px;
+  height: 30px;
+  border: 3px solid rgba(255, 255, 255, 0.12);
+  border-top-color: #ff8b9f;
+  border-radius: 50%;
+  animation: gdi-mat-isa-spin 1s linear infinite;
+}
+@keyframes gdi-mat-isa-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── ISA result container ─── */
+.gdi-mat-isa-result {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 14px 18px;
+  background: #161b22;
+  color: #e6edf3;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ─── Chain generated badge ─── */
+.meggy-chain-badge {
+  background: rgba(63, 185, 80, 0.1);
+  border: 1px solid rgba(63, 185, 80, 0.3);
+  border-radius: 10px;
+  padding: 8px 14px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #3fb950;
+  flex-wrap: wrap;
+}
+
+/* ─── Cache badge ─── */
+.meggy-cache-badge {
+  font-size: 11px;
+  color: #8b949e;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.meggy-cache-badge i {
+  color: #3fb950;
+}
+
+/* ─── Quiz type badge ─── */
+.meggy-quiz-type-badge {
+  color: #5ddeda;
+  font-size: 11px;
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* ─── Quiz skip button (round gradient) ─── */
+.meggy-quiz-skip {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 0;
+  cursor: pointer;
+  background: linear-gradient(135deg, #ff8b9f, #c026d3);
+  color: #fff;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 20px -4px rgba(255, 139, 159, 0.5);
+  transition: transform 0.15s;
+}
+.meggy-quiz-skip:hover {
+  transform: scale(1.08);
+}
+
+/* ─── Flashcard SRS grade panel ─── */
+.meggy-fc-grade {
+  margin-top: 20px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  text-align: center;
+  max-width: 560px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.meggy-fc-grade p {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: #e6edf3;
+  font-weight: 600;
+}
+.meggy-fc-grade-btns {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.meggy-fc-grade-btn {
+  padding: 12px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.15s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #e6edf3;
+}
+.meggy-fc-grade-btn:hover {
+  transform: translateY(-2px);
+}
+.meggy-fc-grade-btn small {
+  font-size: 10px;
+  opacity: 0.7;
+  font-weight: 400;
+}
+.meggy-fc-grade-btn.again { background: rgba(255, 107, 107, 0.12); border-color: rgba(255, 107, 107, 0.3); color: #ff6b6b; }
+.meggy-fc-grade-btn.hard  { background: rgba(255, 179, 71, 0.12); border-color: rgba(255, 179, 71, 0.3); color: #ffb347; }
+.meggy-fc-grade-btn.good  { background: rgba(93, 222, 218, 0.12); border-color: rgba(93, 222, 218, 0.3); color: #5ddeda; }
+.meggy-fc-grade-btn.easy  { background: rgba(63, 185, 80, 0.12); border-color: rgba(63, 185, 80, 0.3); color: #3fb950; }
+
+.meggy-fc-shortcuts {
+  font-size: 10px;
+  color: #8b949e;
+  margin-top: 8px;
+}
+
+/* ─── Light theme overrides for rich markdown ─── */
+[data-bs-theme="light"] .gdi-isa-summary-body { color: #1f2328; }
+[data-bs-theme="light"] .gdi-isa-summary-body h1,
+[data-bs-theme="light"] .gdi-isa-summary-body h2,
+[data-bs-theme="light"] .gdi-isa-summary-body h3,
+[data-bs-theme="light"] .gdi-isa-summary-body h4 { color: #1f2328; }
+[data-bs-theme="light"] .gdi-isa-summary-body h2 { color: #d6336c; border-left-color: #d6336c; }
+[data-bs-theme="light"] .gdi-isa-summary-body h3 { color: #0d6efd; }
+[data-bs-theme="light"] .gdi-isa-summary-body strong { color: #0d6efd; }
+[data-bs-theme="light"] .gdi-isa-summary-body code { background: rgba(0, 0, 0, 0.06); }
+[data-bs-theme="light"] .gdi-isa-summary-body pre { background: rgba(0, 0, 0, 0.04); }
+[data-bs-theme="light"] .gdi-isa-summary-body blockquote { background: rgba(255, 139, 159, 0.04); color: #59636e; }
+[data-bs-theme="light"] .gdi-isa-summary-body th { background: rgba(0, 0, 0, 0.04); }
+[data-bs-theme="light"] .gdi-isa-summary-body th,
+[data-bs-theme="light"] .gdi-isa-summary-body td { border-color: #d0d7de; }
+[data-bs-theme="light"] .gdi-mat-isa-result { background: #f6f8fa; color: #1f2328; }
+[data-bs-theme="light"] .meggy-chain-badge { color: #1a7f37; }
 
 .meggy-summary-body {
   padding: 22px 26px;
