@@ -1358,62 +1358,50 @@
 
     // ═══ _estudosView — placeholder com lazy load do GDIndex ═══
     _estudosView(el, feature) {
-      const titles = {
-        'progresso': '📊 Progresso', 'questoes': '❓ Questões', 'flashcards': '🃏 Flashcards',
-        'simulado': '📝 Simulado', 'provas': '📄 Provas', 'redacao': '✍️ Redação',
-        'cronograma': '📅 Cronograma', 'estatisticas': '📈 Estatísticas', 'mapa-fracos': '🎯 Mapa de Fracos',
-        'conquistas': '🏆 Conquistas', 'apps': '📱 Apps', 'resumos': '📚 Resumos',
-        'plano': '📋 Plano', 'config': '⚙️ Configurações'
-      };
-      const title = titles[feature] || feature;
-      el.innerHTML = `
-        <div class="meggy-view-header">
-        <h1 class="meggy-view-title">${title}</h1>
-        </div>
-        <div class="meggy-placeholder">
-        <div class="meggy-placeholder-icon">${title.split(' ')[0]}</div>
-        <div class="meggy-placeholder-title">${title.replace(/^\S+\s/, '')}</div>
-        <div class="meggy-placeholder-desc">Carregue o módulo completo do GDIndex para acessar esta funcionalidade.</div>
-        <button class="meggy-header-btn" id="meggy-load-estudos-${feature}" style="margin-top:16px;">
-          <i class="bi bi-cloud-download"></i> Carregar GDIndex
-        </button>
-        </div>
-      `;
-      const btn = document.getElementById('meggy-load-estudos-' + feature);
-      if (btn) {
-        btn.onclick = async () => {
-        btn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Carregando...';
-        btn.disabled = true;
-        const ok = await Shell.loadFullGDIndex();
-        if (ok && window.__gdiStudy) {
-          const map = {
-            'progresso': () => window.__gdiStudy.panel?.renderHome?.(el),
-            'questoes': () => window.__gdiStudy.questions?.renderQuestoes?.(el),
-            'simulado': () => window.__gdiStudy.questions?.renderSimulado?.(el),
-            'cronograma': () => window.__gdiStudy.questions?.renderCronograma?.(el),
-            'provas': () => window.__gdiStudy.advanced?.renderProvas?.(el),
-            'redacao': () => window.__gdiStudy.advanced?.renderRedacao?.(el),
-            'estatisticas': () => window.__gdiStudy.panel?.renderStats?.(el),
-            'mapa-fracos': () => window.__gdiStudy.advanced?.renderRadar?.(el),
-            'conquistas': () => window.__gdiStudy.panel?.renderAchievements?.(el),
-            'apps': () => window.__gdiStudy.panel?.renderApps?.(el),
-            'resumos': () => window.__gdiMeggy?.summaries?.renderResumos?.(el),
-            'plano': () => window.__gdiStudy.plan?.renderAll?.(el),
-            'flashcards': () => window.__gdiMeggy?.flashcards?.renderThemeCardsPaginated?.(el),
-                'config': () => { el.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">⚙️</div><div class="meggy-placeholder-title">Configurações</div><div class="meggy-placeholder-desc">Em breve.</div></div>'; }
-          };
-          if (map[feature]) {
-            try { map[feature](); } catch (e) { el.innerHTML = `<div class="meggy-placeholder">⚠️ ${e.message}</div>`; }
-          } else {
-            el.innerHTML = '<div class="meggy-placeholder">⚠️ Funcionalidade não disponível</div>';
-          }
-        } else {
-          btn.innerHTML = '⚠️ Falhou — tentar novamente';
-          btn.disabled = false;
-        }
+        const titles = {
+          'progresso': '📊 Progresso', 'questoes': '❓ Questões', 'flashcards': '🃏 Flashcards',
+          'simulado': '📝 Simulado', 'provas': '📄 Provas', 'redacao': '✍️ Redação',
+          'cronograma': '📅 Cronograma', 'estatisticas': '📈 Estatísticas', 'mapa-fracos': '🎯 Mapa de Fracos',
+          'conquistas': '🏆 Conquistas', 'apps': '📱 Apps', 'resumos': '📚 Resumos',
+          'plano': '📋 Plano', 'config': '⚙️ Configurações'
         };
-      }
-    },
+        const title = titles[feature] || feature;
+        
+        // ★ Renderizar conteúdo NATIVO (sem GDIndex)
+        if (feature === 'progresso') {
+          const d = (window.GDIUser && window.GDIUser.state) || {};
+          const watched = d.watched ? Object.keys(d.watched).length : 0;
+          const history = d.history ? d.history.length : 0;
+          el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">📊 Progresso</h1></div><div class="meggy-cards-grid"><div class="meggy-card" style="cursor:default;"><div class="meggy-card-icon">🎬</div><div class="meggy-card-title">' + watched + '</div><div class="meggy-card-meta">Aulas assistidas</div></div><div class="meggy-card" style="cursor:default;"><div class="meggy-card-icon">📺</div><div class="meggy-card-title">' + history + '</div><div class="meggy-card-meta">No histórico</div></div></div>';
+          return;
+        }
+        if (feature === 'questoes' || feature === 'simulado' || feature === 'flashcards' || feature === 'resumos') {
+          el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">' + title + '</h1></div><div class="meggy-placeholder"><div class="meggy-placeholder-icon">' + title.split(' ')[0] + '</div><div class="meggy-placeholder-title">' + title.replace(/^\S+\s/, '') + '</div><div class="meggy-placeholder-desc">Use a Meggy AI para gerar conteúdo.</div><button class="meggy-header-btn" onclick="Shell.openMeggyAIDrawer()" style="margin-top:16px;background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-robot"></i> Abrir Meggy AI</button></div>';
+          return;
+        }
+        if (feature === 'config') {
+          el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">⚙️ Configurações</h1></div><div style="max-width:500px;margin:0 auto;"><div class="meggy-card" style="cursor:default;"><div class="meggy-card-title">🎨 Tema</div><div class="meggy-card-meta"><button class="meggy-header-btn" onclick="Shell.toggleTheme()">Alternar tema</button></div></div><div class="meggy-card" style="cursor:default;margin-top:12px;"><div class="meggy-card-title">📦 Versão</div><div class="meggy-card-meta">Meggy STAGING</div></div><div class="meggy-card" style="cursor:default;margin-top:12px;"><div class="meggy-card-title">🚪 Conta</div><div class="meggy-card-meta"><button class="meggy-header-btn" onclick="Shell.logout()">Sair</button></div></div></div>';
+          return;
+        }
+        if (feature === 'apps') {
+          el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">📱 Apps</h1></div><div class="meggy-cards-grid"><a class="meggy-card" href="https://github.com/esaaraujo-lab/gdi_server/releases/latest" target="_blank"><div class="meggy-card-icon">🖥️</div><div class="meggy-card-title">Windows/Linux</div><div class="meggy-card-meta">Desktop</div></a><a class="meggy-card" href="https://github.com/esaaraujo-lab/gdi_server/releases/latest" target="_blank"><div class="meggy-card-icon">📱</div><div class="meggy-card-title">Android</div><div class="meggy-card-meta">APK</div></a><a class="meggy-card" href="https://github.com/esaaraujo-lab/gdi_server/releases/latest" target="_blank"><div class="meggy-card-icon">📺</div><div class="meggy-card-title">Roku</div><div class="meggy-card-meta">BrightScript</div></a></div>';
+          return;
+        }
+        if (feature === 'conquistas') {
+          const d = (window.GDIUser && window.GDIUser.state) || {};
+          const watched = d.watched ? Object.keys(d.watched).length : 0;
+          const ach = [
+            {icon:'🎬',name:'Primeira aula',done:watched>=1},
+            {icon:'🔥',name:'Streak 3',done:watched>=3},
+            {icon:'⚡',name:'Streak 7',done:watched>=7},
+            {icon:'🏆',name:'Streak 30',done:watched>=30},
+          ];
+          el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">🏆 Conquistas</h1></div><div class="meggy-cards-grid">' + ach.map(a => '<div class="meggy-card" style="opacity:'+(a.done?'1':'0.5')+';cursor:default;"><div class="meggy-card-icon">'+(a.done?a.icon:'🔒')+'</div><div class="meggy-card-title">'+a.name+'</div></div>').join('') + '</div>';
+          return;
+        }
+        // Outras abas (provas, redacao, etc) — placeholder
+        el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">' + title + '</h1></div><div class="meggy-placeholder"><div class="meggy-placeholder-icon">' + title.split(' ')[0] + '</div><div class="meggy-placeholder-title">' + title.replace(/^\S+\s/, '') + '</div><div class="meggy-placeholder-desc">Em breve.</div></div>';
+      },
 
   };
 
