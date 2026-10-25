@@ -263,21 +263,21 @@
         case 'home':      Shell.views.home(main); break;
         case 'cursos':    Shell.views.cursos(main); break;
         case 'drives':    Shell.views.drives(main); break;
-        case 'progresso': Shell.views._estudosView(main, 'progresso'); break;
-        case 'questoes':  Shell.views._estudosView(main, 'questoes'); break;
-        case 'flashcards':Shell.views._estudosView(main, 'flashcards'); break;
+        case 'progresso': Shell._estudosView(main, 'progresso'); break;
+        case 'questoes':  Shell._estudosView(main, 'questoes'); break;
+        case 'flashcards':Shell._estudosView(main, 'flashcards'); break;
         case 'meggy-ai':  Shell.openMeggyAIDrawer(); break;
-        case 'config':    Shell.views._estudosView(main, 'config'); break;
-        case 'simulado':  Shell.views._estudosView(main, 'simulado'); break;
-        case 'provas':    Shell.views._estudosView(main, 'provas'); break;
-        case 'redacao':   Shell.views._estudosView(main, 'redacao'); break;
-        case 'cronograma':Shell.views._estudosView(main, 'cronograma'); break;
-        case 'estatisticas':Shell.views._estudosView(main, 'estatisticas'); break;
-        case 'mapa-fracos':Shell.views._estudosView(main, 'mapa-fracos'); break;
-        case 'conquistas':Shell.views._estudosView(main, 'conquistas'); break;
-        case 'apps':      Shell.views._estudosView(main, 'apps'); break;
-        case 'resumos':   Shell.views._estudosView(main, 'resumos'); break;
-        case 'plano':     Shell.views._estudosView(main, 'plano'); break;
+        case 'config':    Shell._estudosView(main, 'config'); break;
+        case 'simulado':  Shell._estudosView(main, 'simulado'); break;
+        case 'provas':    Shell._estudosView(main, 'provas'); break;
+        case 'redacao':   Shell._estudosView(main, 'redacao'); break;
+        case 'cronograma':Shell._estudosView(main, 'cronograma'); break;
+        case 'estatisticas':Shell._estudosView(main, 'estatisticas'); break;
+        case 'mapa-fracos':Shell._estudosView(main, 'mapa-fracos'); break;
+        case 'conquistas':Shell._estudosView(main, 'conquistas'); break;
+        case 'apps':      Shell._estudosView(main, 'apps'); break;
+        case 'resumos':   Shell._estudosView(main, 'resumos'); break;
+        case 'plano':     Shell._estudosView(main, 'plano'); break;
         default:          Shell.views.home(main);
       }
     },
@@ -919,10 +919,36 @@
                 found = parentFiles.filter(isMaterial);
               }
             }
-            // Dedupe
-            const seen = new Set();
+            // ★ Dedup por nome similar (STAGING FIX).
+            // Normalização: lowercase + remove tudo que não é letra a-z
+            //   (isso remove dígitos, espaços, hífens, prefixes tipo "1 - ", "2 - ", acentos).
+            // Exemplos:
+            //   "1 - Dir adm"    → "diradm"
+            //   "2 - dir admin"  → "diradmin"
+            //   "Dir adm 2"      → "diradm"   (mesmo normalizado — dedup por exact-match)
+            // Regra de dedup (mantém o 1º, descarta os repetidos):
+            //   1) nome exato repetido         → descarta
+            //   2) normalização igual          → descarta
+            //   3) um normalizado é prefixo do outro (min 5 chars) → descarta
+            //      (captura "diradm" vs "diradmin": diradmin.startsWith(diradm) === true)
+            const normalizeName = (name) => (name || '').toLowerCase().replace(/[^a-z]/g, '');
+            const seenExact = new Set();
+            const seenNorm = [];
             const uniq = [];
-            found.forEach(x => { if (!seen.has(x.name)) { seen.add(x.name); uniq.push(x); } });
+            found.forEach(x => {
+              if (seenExact.has(x.name)) return;          // (1) exact name dedup
+              const norm = normalizeName(x.name);
+              if (!norm) { seenExact.add(x.name); uniq.push(x); return; }
+              const isDup = seenNorm.some(n =>
+                n === norm ||                              // (2) exact normalized dedup
+                (n.length >= 5 && norm.length >= 5 &&      // (3) prefix-match dedup
+                 (n.startsWith(norm) || norm.startsWith(n)))
+              );
+              if (isDup) return;
+              seenExact.add(x.name);
+              seenNorm.push(norm);
+              uniq.push(x);
+            });
             const materials = uniq.slice(0, 12);
 
             tabsEl.innerHTML = '';
