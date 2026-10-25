@@ -1494,10 +1494,11 @@ body.meggy-player-active #meggy-sidebar:hover .meggy-sidebar-item {
   width: 420px;
   background: rgba(13,17,25,0.98);
   border-left: 1px solid rgba(255,255,255,0.09);
-  z-index: 9998;
+  z-index: 10001;
   display: none;
   flex-direction: column;
   backdrop-filter: blur(18px);
+  box-shadow: -10px 0 40px -10px rgba(0,0,0,0.5);
 }
 
 .meggy-ai-drawer.open {
