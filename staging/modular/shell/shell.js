@@ -1443,7 +1443,7 @@
             '</div>' +
             '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:13px;color:#9aa4b8;">' +
               '<span>Questão ' + (current + 1) + ' de ' + questions.length + '</span>' +
-              '<span>Acertos: <strong id="meggy-quiz-score" style="color:#5ddeda;">' + score + '</strong>/' + answered + '</span>' +
+              '<span>Acertos: <strong id="meggy-quiz-score" style="color:#5ddeda;">' + score + '</strong>/<span id="meggy-quiz-answered">' + answered + '</span></span>' +
             '</div>' +
             '<div class="meggy-quiz-card">' +
               '<div class="meggy-quiz-statement">' + statement + '</div>' +
@@ -1478,6 +1478,8 @@
                 (q.fundamentacao ? '<div class="meggy-quiz-feedback-fund"><strong>Fundamentação:</strong> ' + Shell.views._esc(q.fundamentacao) + '</div>' : '');
               const scoreEl = document.getElementById('meggy-quiz-score');
               if (scoreEl) scoreEl.textContent = String(score);
+              const answeredEl = document.getElementById('meggy-quiz-answered');
+              if (answeredEl) answeredEl.textContent = String(answered);
               document.getElementById('meggy-q-next').innerHTML = (current < questions.length - 1 ? 'Próxima <i class="bi bi-chevron-right"></i>' : 'Finalizar <i class="bi bi-check"></i>');
             };
           });
