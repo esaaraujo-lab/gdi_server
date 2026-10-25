@@ -1769,116 +1769,41 @@ body.meggy-player-active #meggy-sidebar:hover .meggy-sidebar-item {
 
 /* ═══ Materiais tabs — RÉPLICA EXATA GDI ═══ */
 /* ═══ Materiais — Layout Alfacon (botões verticais grandes) ═══ */
-.gdi-mat-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 12px;
-  padding: 0;
-}
 
-.gdi-mat-tab {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  min-width: 80px;
-  padding: 10px 8px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 10px;
-  cursor: pointer;
-  transition: 0.15s;
-  font-size: 11px;
-  font-weight: 500;
-  color: #9aa4b8;
-  text-align: center;
-  font-family: inherit;
-}
-
-.gdi-mat-tab:hover {
-  background: rgba(255,255,255,0.08);
-  color: #e6edf3;
-  transform: translateY(-1px);
-}
-
-.gdi-mat-tab.active {
-  background: linear-gradient(135deg, rgba(255,139,159,0.15), rgba(192,38,211,0.1));
-  border-color: rgba(255,139,159,0.3);
-  color: #ff8b9f;
-}
-
-.gdi-mat-tab i {
-  font-size: 24px;
-  margin-bottom: 2px;
-}
-
-.gdi-mat-tab span {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 72px;
-  font-size: 10px;
-}
-
-.gdi-mat-tab.gdi-mat-isa {
-  background: rgba(192,38,211,0.06);
-  border-color: rgba(192,38,211,0.1);
-  color: #c026d3;
-}
-
-.gdi-mat-tab.gdi-mat-isa:hover {
-  background: rgba(192,38,211,0.12);
-}
-
-.gdi-mat-tab.gdi-mat-isa.active {
-  background: linear-gradient(135deg, rgba(192,38,211,0.2), rgba(255,139,159,0.1));
-  border-color: rgba(192,38,211,0.4);
-  color: #c026d3;
-}
-
-.gdi-mat-body {
-  background: rgba(22,27,38,0.72);
-  border: 1px solid rgba(255,255,255,0.09);
-  border-radius: 16px;
-  padding: 0;
-  min-height: 420px;
-  height: 420px;
-  overflow: hidden;
-}
-
-.gdi-mat-body iframe {
-  width: 100%;
-  height: 100%;
-  border: none;
-  border-radius: 16px;
-}
-
-.gdi-mat-body > div {
-  height: 100%;
-  overflow: auto;
-}
-
-.gdi-mat-loading {
-  font-size: 12px;
-  color: #6b7488;
-  padding: 8px;
-}
-
-
-/* iframe dentro do body — preenche tudo */
-.gdi-mat-body iframe {
-  width: 100%;
-  height: 100%;
-  border: none;
-  border-radius: 16px;
-}
-
-.gdi-mat-body > div {
-  height: 100%;
-  overflow: auto;
-}
+/* ═══ CSS EXATO DA PRODUÇÃO (gdi-core.js inline) ═══ */
+.gdi-mat-head{display:flex;align-items:center;justify-content:space-between;font-size:14px;color:var(--ferreto-text,#e6edf3);}
+.gdi-mat-head strong{display:flex;align-items:center;gap:6px;}
+#gdi-mat-status{font-size:11px;color:var(--ferreto-text-muted,#8b949e);}
+.gdi-mat-tabs{display:flex;flex-wrap:wrap;gap:6px;}
+.gdi-mat-tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  min-width:74px;padding:7px 8px;border-radius:10px;cursor:pointer;user-select:none;
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#c9d1d9;transition:all .15s;
+  font-family:inherit;text-align:center;}
+.gdi-mat-tab i{font-size:20px;}
+.gdi-mat-tab span{font-size:10px;font-weight:600;letter-spacing:.02em;}
+.gdi-mat-tab:hover{background:rgba(255,255,255,.13);color:#fff;}
+.gdi-mat-tab.active{background:var(--bs-primary,#1f6feb);border-color:var(--bs-primary,#1f6feb);color:#fff;}
+.gdi-mat-tab.gdi-mat-isa{background:rgba(124,77,255,.08);border-color:rgba(124,77,255,.2);color:#a78bfa;}
+.gdi-mat-tab.gdi-mat-isa:hover{background:rgba(124,77,255,.15);color:#c4b5fd;}
+.gdi-mat-tab.gdi-mat-isa.active{background:#7c4dff;border-color:#7c4dff;color:#fff;}
+.gdi-mat-body{height:calc(100dvh - 250px);min-height:420px;border:1px solid rgba(255,255,255,.12);
+  border-radius:12px;overflow:hidden;background:#161b22;position:relative;}
+.gdi-mat-body iframe{width:100%;height:100%;border:none;border-radius:12px;}
+.gdi-mat-body > div{height:100%;overflow:auto;padding:16px;}
+body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
+.gdi-mat-empty{text-align:center;padding:40px 16px;color:#484f58;}
+.gdi-mat-empty i{font-size:34px;display:block;margin-bottom:12px;}
+.gdi-mat-loading{font-size:12px;color:#8b949e;padding:8px;}
+.gdi-notes{border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:10px;background:rgba(0,0,0,.18);}
+.gdi-notes-head{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--ferreto-text,#e6edf3);margin-bottom:6px;flex-wrap:wrap;gap:6px;}
+#gdi-note-input{width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:8px;
+  color:var(--ferreto-text,#e6edf3);padding:8px;font-size:13px;resize:vertical;min-height:44px;font-family:inherit;outline:none;}
+.gdi-notes-actions{display:flex;align-items:center;gap:8px;margin-top:6px;}
+#gdi-note-time{font-size:11px;color:var(--ferreto-primary,#7aa2ff);font-variant-numeric:tabular-nums;cursor:pointer;}
+#gdi-note-save{margin-left:auto;background:var(--bs-primary,#1f6feb);border:0;color:#fff;border-radius:7px;
+  padding:5px 12px;font-size:12px;cursor:pointer;font-family:inherit;}
+#gdi-notes-list{margin-top:8px;max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;}
+.gdi-notes-empty{color:var(--ferreto-text-muted,#8b949e);font-size:12px;text-align:center;padding:6px;}
 
 /* ═══ Layout ALFACON — página de aula ═══ */
 .alfacon-layout {
