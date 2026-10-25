@@ -1298,18 +1298,17 @@
                   } catch (e) { console.warn('[Shell] cache save:', e); }
 
                   // ─── 5. Save to material folder (POST /api/materials/save-in-folder) ───
-                  setLoading('📁 Salvando materiais na pasta da aula…');
+                  // ★ Fire-and-forget (não bloqueia o render — Drive saves podem ser lentos)
                   const user = (window.GDIUser && window.GDIUser.state && window.GDIUser.state.user) || 'meggy';
                   const safeLesson = safeName(lessonName);
-                  const ts = Date.now();
                   if (gen.summary) {
-                    await saveToFolder('resumo', user + '_' + safeLesson + '.md', gen.summary);
+                    saveToFolder('resumo', user + '_' + safeLesson + '.md', gen.summary);
                   }
                   if (gen.mindmap) {
-                    await saveToFolder('resumo', user + '_pilulas_' + safeLesson + '.md', gen.mindmap);
+                    saveToFolder('resumo', user + '_pilulas_' + safeLesson + '.md', gen.mindmap);
                   }
                   if (gen.questions && gen.questions.length) {
-                    await saveToFolder('questoes', user + '_' + safeName(courseName || lessonName) + '.json', JSON.stringify(gen.questions, null, 2));
+                    saveToFolder('questoes', user + '_' + safeName(courseName || lessonName) + '.json', JSON.stringify(gen.questions, null, 2));
                   }
 
                   // ─── 6. Render requested type ───
