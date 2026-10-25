@@ -928,10 +928,13 @@
             // Tabs (botões verticais como Alfacon)
             materials.forEach((m, i) => {
               const ext = (m.name.split('.').pop() || '').toLowerCase();
-              const isAi = m.name.toLowerCase().includes('ia') || m.name.toLowerCase().includes('resumo');
-              const isTransc = m.name.toLowerCase().includes('transcri') || ext === 'txt';
-              const label = isTransc ? 'Transcrição' : isAi ? 'Resumo IA' : m.name.substring(0, 12);
-              const icon = isTransc ? 'bi-card-text' : isAi ? 'bi-stars' : ext === 'pdf' ? 'bi-file-earmark-pdf' : 'bi-file-earmark-text';
+              // ★ Classificação precisa (não usar includes('ia') — pega 'material')
+              const lowName = m.name.toLowerCase();
+              const isTransc = lowName.includes('transcri') || ext === 'txt';
+              const isAiResumo = lowName.startsWith('resumo') || lowName.includes('resumo_ia') || lowName.includes('resumo-ia') || lowName.match(/^resumo[_-]?ia/);
+              const isEbook = lowName.includes('ebook') || lowName.includes('apostila');
+              const label = isTransc ? 'Transcrição' : isAiResumo ? 'Resumo IA' : isEbook ? 'Ebook' : m.name.replace(/\.[^.]+$/, '').substring(0, 15);
+              const icon = isTransc ? 'bi-card-text' : isAiResumo ? 'bi-stars' : isEbook ? 'bi-book' : ext === 'pdf' ? 'bi-file-earmark-pdf' : 'bi-file-earmark-text';
               const tab = document.createElement('button');
               tab.className = 'gdi-mat-tab' + (i === 0 ? ' active' : '');
               tab.style.cssText = 'display:inline-flex;flex-direction:row;align-items:center;gap:6px;padding:7px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:999px;cursor:pointer;font-size:13px;font-weight:500;color:#c9d1d9;font-family:inherit;transition:all 0.15s;white-space:nowrap;';
