@@ -291,7 +291,7 @@
         case 'progresso': Shell.views._estudosView(main, 'progresso'); break;
         case 'questoes':  Shell.views._estudosView(main, 'questoes'); break;
         case 'flashcards':Shell.views._estudosView(main, 'flashcards'); break;
-        case 'meggy-ai':  Shell.openMeggyAIDrawer(); Shell.views.home(main); break;
+        case 'meggy-ai':  Shell.openMeggyAIDrawer(); break;
         case 'config':    Shell.views._estudosView(main, 'config'); break;
         case 'simulado':  Shell.views._estudosView(main, 'simulado'); break;
         case 'provas':    Shell.views._estudosView(main, 'provas'); break;
@@ -422,12 +422,45 @@
               container.appendChild(wrapper);
               window.__gdiStudy.courses.renderCursos(wrapper);
             } else {
-              document.getElementById('meggy-cursos-container').innerHTML = `
-                <div class="meggy-placeholder">
-                  <div class="meggy-placeholder-icon">📚</div>
-                  <div class="meggy-placeholder-title">Módulo de cursos indisponível</div>
-                  <div class="meggy-placeholder-desc">window.__gdiStudy.courses não encontrado após load.</div>
-                </div>`;
+              // ★ Fallback: listar cursos via API /api/courses/list
+              const container = document.getElementById('meggy-cursos-container');
+              try {
+                const r = await fetch('/api/courses/list', { headers: { 'Accept': 'application/json' } });
+                if (r.ok) {
+                  const data = await r.json();
+                  const courses = data.courses || data || [];
+                  if (Array.isArray(courses) && courses.length > 0) {
+                    container.innerHTML = '<div class="meggy-cards-grid">' +
+                      courses.map(c => {
+                        const name = c.name || c.key || c.coursePath || 'Curso';
+                        const key = c.key || c.coursePath || '';
+                        const watched = c.watched || 0;
+                        const total = c.totalLessons || c.total || 0;
+                        const progress = total > 0 ? Math.round(watched/total*100) : 0;
+                        return `<div class="meggy-card" data-course="${key}">
+                          <div class="meggy-card-icon">📚</div>
+                          <div class="meggy-card-title">${name}</div>
+                          <div class="meggy-card-meta">${watched}/${total} aulas · ${progress}%</div>
+                        </div>`;
+                      }).join('') + '</div>';
+                    container.querySelectorAll('.meggy-card[data-course]').forEach(card => {
+                      card.onclick = () => {
+                        const cp = card.dataset.course;
+                        if (cp) {
+                          Shell.router.navigate('/drives');
+                          setTimeout(() => Shell.views._renderDrives(cp), 50);
+                        }
+                      };
+                    });
+                  } else {
+                    container.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">📚</div><div class="meggy-placeholder-title">Nenhum curso adicionado</div><div class="meggy-placeholder-desc">Vá em Explorar Drives para adicionar cursos.</div></div>';
+                  }
+                } else {
+                  container.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">📚</div><div class="meggy-placeholder-title">Nenhum curso adicionado</div><div class="meggy-placeholder-desc">Vá em Explorar Drives para adicionar cursos.</div></div>';
+                }
+              } catch (apiErr) {
+                container.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">📚</div><div class="meggy-placeholder-title">Nenhum curso adicionado</div><div class="meggy-placeholder-desc">Vá em Explorar Drives para adicionar cursos.</div></div>';
+              }
             }
           } catch (e) {
             console.error('[Shell] cursos view:', e);
@@ -1233,6 +1266,64 @@
             <div class="meggy-placeholder-phase">${phase || 'Fase 5'} do plano de unificação</div>
           </div>
         `;
+      },
+
+      // ═══ _estudosView — placeholder com lazy load do GDIndex ═══
+      _estudosView(el, feature) {
+        const titles = {
+          'progresso': '📊 Progresso', 'questoes': '❓ Questões', 'flashcards': '🃏 Flashcards',
+          'simulado': '📝 Simulado', 'provas': '📄 Provas', 'redacao': '✍️ Redação',
+          'cronograma': '📅 Cronograma', 'estatisticas': '📈 Estatísticas', 'mapa-fracos': '🎯 Mapa de Fracos',
+          'conquistas': '🏆 Conquistas', 'apps': '📱 Apps', 'resumos': '📚 Resumos',
+          'plano': '📋 Plano', 'config': '⚙️ Configurações'
+        };
+        const title = titles[feature] || feature;
+        el.innerHTML = `
+          <div class="meggy-view-header">
+            <h1 class="meggy-view-title">${title}</h1>
+          </div>
+          <div class="meggy-placeholder">
+            <div class="meggy-placeholder-icon">${title.split(' ')[0]}</div>
+            <div class="meggy-placeholder-title">${title.replace(/^\S+\s/, '')}</div>
+            <div class="meggy-placeholder-desc">Carregue o módulo completo do GDIndex para acessar esta funcionalidade.</div>
+            <button class="meggy-header-btn" id="meggy-load-estudos-${feature}" style="margin-top:16px;">
+              <i class="bi bi-cloud-download"></i> Carregar GDIndex
+            </button>
+          </div>
+        `;
+        const btn = document.getElementById('meggy-load-estudos-' + feature);
+        if (btn) {
+          btn.onclick = async () => {
+            btn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Carregando...';
+            btn.disabled = true;
+            const ok = await Shell.loadFullGDIndex();
+            if (ok && window.__gdiStudy) {
+              const map = {
+                'progresso': () => window.__gdiStudy.panel?.renderHome?.(el),
+                'questoes': () => window.__gdiStudy.questions?.renderQuestoes?.(el),
+                'simulado': () => window.__gdiStudy.questions?.renderSimulado?.(el),
+                'cronograma': () => window.__gdiStudy.questions?.renderCronograma?.(el),
+                'provas': () => window.__gdiStudy.advanced?.renderProvas?.(el),
+                'redacao': () => window.__gdiStudy.advanced?.renderRedacao?.(el),
+                'estatisticas': () => window.__gdiStudy.panel?.renderStats?.(el),
+                'mapa-fracos': () => window.__gdiStudy.advanced?.renderRadar?.(el),
+                'conquistas': () => window.__gdiStudy.panel?.renderAchievements?.(el),
+                'apps': () => window.__gdiStudy.panel?.renderApps?.(el),
+                'resumos': () => window.__gdiMeggy?.summaries?.renderResumos?.(el),
+                'plano': () => window.__gdiStudy.plan?.renderAll?.(el),
+                'config': () => { el.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">⚙️</div><div class="meggy-placeholder-title">Configurações</div><div class="meggy-placeholder-desc">Em breve.</div></div>'; }
+              };
+              if (map[feature]) {
+                try { map[feature](); } catch (e) { el.innerHTML = `<div class="meggy-placeholder">⚠️ ${e.message}</div>`; }
+              } else {
+                el.innerHTML = '<div class="meggy-placeholder">⚠️ Funcionalidade não disponível</div>';
+              }
+            } else {
+              btn.innerHTML = '⚠️ Falhou — tentar novamente';
+              btn.disabled = false;
+            }
+          };
+        }
       }
     },
 
@@ -1273,5 +1364,6 @@
 
   console.log('[Meggy Shell] script loaded, waiting for modules...');
 })();
+
 
 
