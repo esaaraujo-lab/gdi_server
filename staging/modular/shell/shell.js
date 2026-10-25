@@ -2042,7 +2042,9 @@
         // Limpar cache e regerar
         (async () => {
           try {
-            const cacheKey = ((Shell.state.currentFolderPath || '') + (Shell.state.playerPlaylist?.[Shell.state.playerIndex]?.name || '')).replace(/ /g, '%20');
+            const _rk = (Shell.state.currentFolderPath || '') + (Shell.state.playerPlaylist?.[Shell.state.playerIndex]?.name || '');
+            let _drk; try { _drk = decodeURIComponent(_rk); } catch(_) { _drk = _rk; }
+            const cacheKey = encodeURI(_drk);
             await fetch('/api/ai/cache', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ key: cacheKey, summary: null, questions: null, mindmap: null, lessonName: '' }) });
           } catch (e) {}
           // Re-trigger showISA
