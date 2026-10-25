@@ -1212,3 +1212,61 @@ body.meggy-focus-mode #meggy-main {
     align-items: flex-start;
   }
 }
+
+/* ─── Materiais tabs + viewer (réplica GDI) ─── */
+.gdi-mat-loading {
+  font-size: 12px;
+  color: #6b7488;
+  padding: 8px;
+}
+
+.gdi-mat-tab {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  color: #9aa4b8;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: 0.15s;
+  font-family: inherit;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gdi-mat-tab:hover {
+  background: rgba(255,255,255,0.08);
+  color: #e6edf3;
+}
+
+.gdi-mat-tab.active {
+  background: rgba(255,139,159,0.12);
+  border-color: rgba(255,139,159,0.3);
+  color: #ff8b9f;
+}
+
+.gdi-mat-viewer {
+  margin-top: 12px;
+}
+
+.gdi-mat-viewer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+
+.gdi-mat-viewer-head span {
+  font-size: 12px;
+  color: #9aa4b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
