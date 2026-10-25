@@ -639,7 +639,7 @@
                 </div>
                 <div class="gdi-player-wrap" style="width:100%;">
                   <video id="meggy-video" src="${videoUrl}" controls autoplay playsinline
-                    style="width:100%;max-height:60vh;border-radius:8px;background:#000;"
+                    style="width:100%;max-height:none;border-radius:8px;background:#000;"
                     onerror="this.style.display='none';document.getElementById('meggy-player-error').style.display='block'">
                   </video>
                   <div id="meggy-player-error" style="display:none;padding:40px;text-align:center;color:#ff8b9f;">
