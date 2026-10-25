@@ -123,22 +123,10 @@
     // ─── Lazy load full GDIndex (app.min.js + 24 modules) when needed ───
     gdindexLoaded: false,
     async loadFullGDIndex() {
-      if (Shell.gdindexLoaded) return true;
-      console.log('[Meggy Shell] lazy loading full GDIndex (app.min.js + gdi-extras-loader.js)...');
-      try {
-        // Load app.min.js (134KB) — provides full GDIStorage, GDIUser, player, etc.
-        await Shell._loadScript('/app.min.js?v=17');
-        // Load gdi-extras-loader.js — loads 24 modules (gdi-core, gdi-ui, gdi-study, gdi-meggy, etc.)
-        await Shell._loadScript('/gdi-extras.js?v=151');
-        // Wait for modules to register (gdi-extras-loader has its own bootstrap)
-        await new Promise(r => setTimeout(r, 2000));
-        Shell.gdindexLoaded = true;
-        console.log('[Meggy Shell] ✓ full GDIndex loaded (app.min.js + 24 modules)');
-        return true;
-      } catch (e) {
-        console.error('[Meggy Shell] full GDIndex load failed:', e);
-        return false;
-      }
+      // ★ DESATIVADO — carregar GDIndex quebra o shell (sobrescreve variáveis, carrega study-panel.js)
+      // O shell nativo não precisa do GDIndex — tudo funciona via API + gdi-utils.js
+      console.log('[Meggy Shell] loadFullGDIndex desativado — shell nativo não precisa de GDIndex');
+      return false;
     },
 
     _loadScript(src) {
