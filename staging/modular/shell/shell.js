@@ -1767,7 +1767,9 @@
         </div>
         <div class="meggy-ai-drawer-body" id="meggy-ai-body"></div>
         `;
-        document.body.appendChild(drawer);
+        // ★ Append to shell root (z-index 10001 > shell 9999) — não ao body
+        const shellRoot = document.getElementById('meggy-shell') || document.getElementById('meggy-root') || document.body;
+        shellRoot.appendChild(drawer);
         document.getElementById('meggy-ai-close').onclick = () => Shell.closeMeggyAIDrawer();
         drawer.querySelectorAll('.meggy-ai-drawer-tab').forEach(tab => {
         tab.onclick = () => {
@@ -2073,24 +2075,148 @@
         })();
       };
       const tts = bodyEl.querySelector('#gdi-isa-tts');
-      if (tts && ('speechSynthesis' in window)) {
+      if (tts) {
         tts.onclick = () => {
           if (ttsPlaying) {
-            window.speechSynthesis.cancel();
+            // Parar
+            if (window.speechSynthesis) window.speechSynthesis.cancel();
+            if (window._meggyTtsAudio) { window._meggyTtsAudio.pause(); window._meggyTtsAudio = null; }
             ttsPlaying = false;
             tts.innerHTML = '<i class="bi bi-volume-up"></i> Ouvir';
-          } else {
-            const text = bodyEl.querySelector('#gdi-isa-summary-text').innerText;
-            ttsUtter = new SpeechSynthesisUtterance(text.substring(0, 32000));
-            ttsUtter.lang = 'pt-BR';
-            ttsUtter.rate = 1.0;
-            ttsUtter.onend = () => { ttsPlaying = false; tts.innerHTML = '<i class="bi bi-volume-up"></i> Ouvir'; };
-            window.speechSynthesis.speak(ttsUtter);
-            ttsPlaying = true;
-            tts.innerHTML = '<i class="bi bi-stop-circle"></i> Parar';
+            return;
           }
+          const text = bodyEl.querySelector('#gdi-isa-summary-text').innerText;
+          if (!text || !text.trim()) return;
+          ttsPlaying = true;
+          tts.innerHTML = '<i class="bi bi-stop-circle"></i> Parar';
+          Shell._speakNatural(text, function() {
+            ttsPlaying = false;
+            tts.innerHTML = '<i class="bi bi-volume-up"></i> Ouvir';
+          });
         };
       }
+    },
+
+    // ═══ _speakNatural: TTS com voz natural pt-BR ═══
+    // Estratégia: usa speechSynthesis do navegador com seleção da melhor voz pt-BR.
+    // - Espera vozes carregarem (voiceschanged event)
+    // - Prefere vozes Google (mais naturais no Chrome) > Microsoft > outras
+    // - Limpa markdown do texto
+    // - Divide em frases (navegadores cortam utterances muito longas)
+    // - Fala sequencialmente com chain de onend
+    _ttsVoiceCache: null,
+    _getBestPtBrVoice() {
+      if (Shell._ttsVoiceCache) return Shell._ttsVoiceCache;
+      if (!('speechSynthesis' in window)) return null;
+      var voices = speechSynthesis.getVoices();
+      if (!voices || voices.length === 0) return null;
+      // Filtrar vozes portuguesas
+      var ptVoices = voices.filter(function(v) {
+        return v.lang === 'pt-BR' || v.lang === 'pt-PT' || v.lang === 'pt_BR' || v.lang.startsWith('pt');
+      });
+      if (ptVoices.length === 0) return null;
+      // Prioridade: Google (mais natural) > Microsoft (natural) > Lucia > outras
+      var priority = [
+        /google.*portuguese/i, /google.*pt/i,
+        /microsoft.*maria/i, /microsoft.*lucia/i, /microsoft.*daniel/i,
+        /natural/i, /neural/i,
+        /lucia/i, /felipe/i, /maria/i
+      ];
+      for (var i = 0; i < priority.length; i++) {
+        var match = ptVoices.find(function(v) { return priority[i].test(v.name); });
+        if (match) { Shell._ttsVoiceCache = match; return match; }
+      }
+      // Fallback: primeira voz pt-BR
+      Shell._ttsVoiceCache = ptVoices[0];
+      return ptVoices[0];
+    },
+
+    _cleanTextForTTS(text) {
+      // Remove markdown e caracteres que seriam lidos literalmente
+      return text
+        .replace(/^#{1,6}\s+/gm, '')        // headers
+        .replace(/\*\*(.+?)\*\*/g, '$1')    // bold
+        .replace(/\*(.+?)\*/g, '$1')        // italic
+        .replace(/`{1,3}(.+?)`{1,3}/g, '$1') // code
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // links
+        .replace(/^[-*•]\s+/gm, '')         // bullets
+        .replace(/^\d+\.\s+/gm, '')         // numbered lists
+        .replace(/>\s+/gm, '')              // blockquotes
+        .replace(/---+/g, '')               // hr
+        .replace(/\|/g, ' ')               // table pipes
+        .replace(/\n{3,}/g, '\n\n')         // collapse newlines
+        .replace(/\s+/g, ' ')
+        .trim();
+    },
+
+    _splitIntoSentences(text, maxLen) {
+      maxLen = maxLen || 200;
+      var sentences = text.match(/[^.!?…]+[.!?…]+/g) || [text];
+      var chunks = [];
+      var current = '';
+      for (var i = 0; i < sentences.length; i++) {
+        if ((current + sentences[i]).length <= maxLen) {
+          current += sentences[i];
+        } else {
+          if (current) chunks.push(current.trim());
+          // Hard-split if single sentence is too long
+          if (sentences[i].length > maxLen) {
+            var parts = sentences[i].match(new RegExp('[\\s\\S]{1,' + maxLen + '}', 'g')) || [];
+            chunks.push.apply(chunks, parts);
+            current = '';
+          } else {
+            current = sentences[i];
+          }
+        }
+      }
+      if (current) chunks.push(current.trim());
+      return chunks.filter(function(c) { return c.length > 0; });
+    },
+
+    async _speakNatural(text, onDone) {
+      var cleaned = Shell._cleanTextForTTS(text);
+      if (!cleaned) { if (onDone) onDone(); return; }
+
+      // Verificar se speechSynthesis está disponível
+      if (!('speechSynthesis' in window)) {
+        if (onDone) onDone();
+        return;
+      }
+
+      // Esperar vozes carregarem se ainda não carregaram
+      var voices = speechSynthesis.getVoices();
+      if (!voices || voices.length === 0) {
+        await new Promise(function(resolve) {
+          speechSynthesis.onvoiceschanged = function() { resolve(); };
+          setTimeout(resolve, 3000); // timeout 3s
+        });
+      }
+
+      var voice = Shell._getBestPtBrVoice();
+      var chunks = Shell._splitIntoSentences(cleaned, 200);
+
+      function speakChunk(idx) {
+        if (idx >= chunks.length) {
+          if (onDone) onDone();
+          return;
+        }
+        var utter = new SpeechSynthesisUtterance(chunks[idx]);
+        if (voice) {
+          utter.voice = voice;
+          utter.lang = voice.lang;
+        } else {
+          utter.lang = 'pt-BR';
+        }
+        utter.rate = 0.95;  // levemente mais lento para clareza
+        utter.pitch = 1.0;
+        utter.volume = 1.0;
+        utter.onend = function() { speakChunk(idx + 1); };
+        utter.onerror = function() { speakChunk(idx + 1); };
+        speechSynthesis.speak(utter);
+      }
+
+      speechSynthesis.cancel(); // parar qualquer fala anterior
+      speakChunk(0);
     },
 
     // _renderFlashcardDeck: sessão de estudo com SRS (replica runFlashcardSession)
