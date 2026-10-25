@@ -1049,12 +1049,12 @@ body.meggy-focus-mode #meggy-main {
 
 /* ─── Right panel: Materiais ─── */
 .gdi-study-right {
-  background: rgba(22,27,38,0.72);
-  border: 1px solid rgba(255,255,255,0.09);
-  border-radius: 12px;
-  padding: 16px;
-  max-height: 70vh;
-  overflow-y: auto;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  max-height: none;
+  overflow: visible;
   display: flex;
   flex-direction: column;
 }
@@ -1064,8 +1064,8 @@ body.meggy-focus-mode #meggy-main {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 .gdi-mat-head strong {
@@ -1083,8 +1083,9 @@ body.meggy-focus-mode #meggy-main {
 
 .gdi-mat-empty {
   text-align: center;
-  padding: 30px 16px;
+  padding: 40px 16px;
   color: #6b7488;
+  background: transparent;
 }
 
 .gdi-mat-empty i {
@@ -1264,7 +1265,7 @@ body.meggy-focus-mode #meggy-main {
 }
 
 .gdi-mat-tab:hover {
-  background: rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.06);
   color: #e6edf3;
 }
 
@@ -1753,66 +1754,65 @@ body.meggy-player-active .meggy-sidebar-expand-btn {
 .gdi-mat-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 12px;
+  gap: 6px;
+  margin-bottom: 16px;
+  padding: 0;
 }
 
 .gdi-mat-tab {
-  display: flex;
-  flex-direction: column;
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
-  min-width: 74px;
-  padding: 8px 6px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 8px;
+  gap: 6px;
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  border-radius: 999px;
   cursor: pointer;
   transition: 0.15s;
-  font-size: 11px;
+  font-size: 13px;
+  font-weight: 500;
   color: #9aa4b8;
   text-align: center;
+  font-family: inherit;
 }
 
 .gdi-mat-tab:hover {
-  background: rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.06);
   color: #e6edf3;
 }
 
 .gdi-mat-tab.active {
-  background: rgba(255,139,159,0.15);
-  border-color: rgba(255,139,159,0.3);
-  color: #ff8b9f;
+  background: linear-gradient(135deg, #ff8b9f 0%, #c026d3 55%, #5ddeda 130%);
+  color: #fff;
 }
 
 .gdi-mat-tab i {
-  font-size: 18px;
+  font-size: 15px;
 }
 
 .gdi-mat-tab span {
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 70px;
 }
 
 .gdi-mat-tab.gdi-mat-isa {
-  background: rgba(192,38,211,0.08);
-  border-color: rgba(192,38,211,0.15);
-}
-
-.gdi-mat-tab.gdi-mat-isa:hover {
-  background: rgba(192,38,211,0.15);
-}
-
-.gdi-mat-tab.gdi-mat-isa.active {
-  background: rgba(192,38,211,0.2);
-  border-color: rgba(192,38,211,0.4);
+  background: transparent;
+  border: none;
   color: #c026d3;
 }
 
+.gdi-mat-tab.gdi-mat-isa:hover {
+  background: rgba(192,38,211,0.1);
+  color: #c026d3;
+}
+
+.gdi-mat-tab.gdi-mat-isa.active {
+  background: linear-gradient(135deg, #c026d3 0%, #ff8b9f 100%);
+  color: #fff;
+}
+
 .gdi-mat-body {
-  min-height: 400px;
+  min-height: 300px;
+  padding: 0;
 }
 
 .gdi-mat-loading {
