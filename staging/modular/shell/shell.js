@@ -656,15 +656,9 @@
                 </div>
               </section>
               <aside class="gdi-study-right" id="gdi-slot-right" data-m9="1">
-                <div class="gdi-mat-head"><strong><i class="bi bi-journal-bookmark-fill" style="color:var(--ferreto-primary,#ff8b9f);"></i> Materiais da aula</strong><span id="gdi-mat-status">sem material</span></div>
-                <div class="gdi-mat-tabs" id="gdi-mat-tabs"></div>
-                <div class="gdi-mat-body" id="gdi-mat-body">
-                  <div class="gdi-mat-empty">
-                    <i class="bi bi-file-earmark-x" style="font-size:34px;"></i>
-                    <div id="gdi-mat-empty-text">Nenhum material encontrado para esta aula.</div>
-                    <button class="gdi-mode-btn" id="gdi-load-material" style="margin-top:12px;"><i class="bi bi-folder"></i> Carregar Materiais</button>
-                  </div>
-                </div>
+                <div class="gdi-mat-head"><strong><i class="bi bi-journal-bookmark-fill" style="color:var(--ferreto-primary,#ff8b9f);"></i> Materiais da aula</strong><span id="gdi-mat-status">buscando…</span></div>
+                <div class="gdi-mat-tabs" id="gdi-mat-tabs"><span class="gdi-mat-loading">Buscando PDFs da aula…</span></div>
+                <div class="gdi-mat-body" id="gdi-mat-body"></div>
               </aside>
             </div>
             <div class="gdi-study-foot">
@@ -862,35 +856,77 @@
           a.onclick = (e) => { e.preventDefault(); Shell.router.navigate(a.dataset.nav); };
         });
 
-        // ─── Material (PDFs) ───
-        document.getElementById('gdi-load-material').onclick = async () => {
-          const btn = document.getElementById('gdi-load-material');
-          btn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Carregando...';
+        // ─── Material (PDFs + .md + .txt) — carregamento AUTOMÁTICO (réplica GDI) ───
+        async function loadMaterials() {
+          const tabsEl = document.getElementById('gdi-mat-tabs');
+          const bodyEl = document.getElementById('gdi-mat-body');
+          const statusEl = document.getElementById('gdi-mat-status');
+          if (!tabsEl || !bodyEl) return;
+
+          tabsEl.innerHTML = '<span class="gdi-mat-loading">Buscando PDFs da aula…</span>';
+          if (statusEl) statusEl.textContent = 'buscando…';
+          bodyEl.innerHTML = '';
+
           try {
             const currentPath = Shell.state.currentFolderPath || '';
-            if (!currentPath || !window.gdiListAllFiles) { btn.innerHTML = '⚠️'; return; }
-            const files = await window.gdiListAllFiles(currentPath, '');
-            const pdfs = files.filter(f => (f.mimeType||'').includes('pdf') || f.name.endsWith('.pdf'));
-            const matBody = document.getElementById('gdi-mat-body');
-            if (!pdfs.length) {
-              document.getElementById('gdi-mat-status').textContent = 'sem material';
-              matBody.innerHTML = '<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material encontrado para esta aula.</div></div>';
-            } else {
-              document.getElementById('gdi-mat-status').textContent = pdfs.length + ' material(is)';
-              matBody.innerHTML = pdfs.map(p => `
-                <div class="gdi-mat-item" data-pdf="${p.link || ''}" style="padding:8px;border-radius:6px;cursor:pointer;background:rgba(255,255,255,0.04);margin-bottom:6px;">
-                  <i class="bi bi-file-earmark-pdf"></i> ${p.name}
-                  <span style="float:right;color:#6b7488;font-size:11px;">${p.size ? (p.size/1024/1024).toFixed(1)+' MB' : ''}</span>
-                </div>
-              `).join('');
-              matBody.querySelectorAll('[data-pdf]').forEach(el => {
-                el.onclick = () => { const link = el.dataset.pdf; if (link) window.open(link.startsWith('http') ? link : window.location.origin + link, '_blank'); };
-                el.onmouseenter = () => el.style.background = 'rgba(255,139,159,0.12)';
-                el.onmouseleave = () => el.style.background = 'rgba(255,255,255,0.04)';
-              });
+            if (!currentPath || !window.gdiListAllFiles) {
+              tabsEl.innerHTML = '';
+              if (statusEl) statusEl.textContent = 'sem material';
+              bodyEl.innerHTML = '<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material encontrado para esta aula.</div></div>';
+              return;
             }
-          } catch (e) { console.error('[Meggy Shell] material:', e); }
-        };
+            const files = await window.gdiListAllFiles(currentPath, '');
+            // ★ Réplica GDI: PDFs + .md + .txt (transcrições)
+            const isMaterial = (x) => {
+              const ext = (x.fileExtension || ((x.name||'').split('.').pop() || '')).toLowerCase();
+              const mt = (x.mimeType || '').toLowerCase();
+              if (ext === 'pdf' || mt.includes('pdf')) return true;
+              if (ext === 'md' || ext === 'txt') return true;
+              return false;
+            };
+            const materials = files.filter(isMaterial);
+            tabsEl.innerHTML = '';
+            if (!materials.length) {
+              if (statusEl) statusEl.textContent = 'sem material';
+              bodyEl.innerHTML = '<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material encontrado para esta aula.</div></div>';
+              return;
+            }
+            if (statusEl) statusEl.textContent = materials.length + ' material(is)';
+            // Renderizar como tabs (1 tab por material) + body com link
+            materials.forEach((m, i) => {
+              const tab = document.createElement('button');
+              tab.className = 'gdi-mat-tab' + (i === 0 ? ' active' : '');
+              tab.innerHTML = `<i class="bi bi-file-earmark-pdf"></i> ${m.name}`;
+              tab.onclick = () => {
+                document.querySelectorAll('.gdi-mat-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                const link = m.link ? (m.link.startsWith('http') ? m.link : window.location.origin + m.link) : '';
+                bodyEl.innerHTML = `
+                  <div class="gdi-mat-viewer">
+                    <div class="gdi-mat-viewer-head">
+                      <span><i class="bi bi-file-earmark-pdf"></i> ${m.name}</span>
+                      ${link ? `<a href="${link}" target="_blank" class="gdi-mode-btn"><i class="bi bi-download"></i> Abrir</a>` : ''}
+                    </div>
+                    ${link ? `<iframe src="${link}" style="width:100%;height:400px;border:1px solid rgba(255,255,255,0.09);border-radius:8px;background:#fff;" title="${m.name}"></iframe>` : '<div class="gdi-mat-empty">Sem preview</div>'}
+                  </div>
+                `;
+              };
+              tabsEl.appendChild(tab);
+            });
+            // Auto-clicar primeiro material
+            if (materials.length > 0) {
+              const firstTab = tabsEl.querySelector('.gdi-mat-tab');
+              if (firstTab) firstTab.click();
+            }
+          } catch (e) {
+            console.error('[Meggy Shell] loadMaterials:', e);
+            tabsEl.innerHTML = '';
+            if (statusEl) statusEl.textContent = 'erro';
+            bodyEl.innerHTML = '<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Erro ao carregar materiais.</div></div>';
+          }
+        }
+        // Carregar materiais automaticamente (como o GDI faz)
+        setTimeout(loadMaterials, 500);
 
         // ─── Anotações ───
         const notesInput = document.getElementById('gdi-notes-input');
