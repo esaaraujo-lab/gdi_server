@@ -64,7 +64,7 @@
     'study/study-notifications.js',  // ★ v1.0.140: Notificações + busca nas notas
     'gdi-player-enhancer.js',        // ★ v1.0.138: Speed memory + keyboard shortcuts + resume prompt
     'gdi-ai-providers.js',           // ★ v157: Pollinations + Groq + OCR + TTS (providers extras)
-    'study/study-panel.js'           // LAST — shell + home + drives + nav
+    // 'study/study-panel.js'        // ★ STAGING: removido — shell nativo substitui Área do Aluno antiga
   ];
 
   // Também carrega os 2 Web Workers que agora suportam a plataforma:
