@@ -955,9 +955,35 @@ body.meggy-focus-mode #meggy-main {
   color: #fff;
 }
 
+/* Botão Assistido — mesmo estilo do gdi-mode-btn */
+.gdi-watched-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: #9aa4b8;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.gdi-watched-btn:hover {
+  background: rgba(255,255,255,0.08);
+  color: #e6edf3;
+}
+
+.gdi-watched-btn.done {
+  background: rgba(63,185,80,0.15);
+  color: #3fb950;
+}
+
 .gdi-watched-btn.watched {
-  background: rgba(63,185,80,0.12);
-  border-color: rgba(63,185,80,0.3);
+  background: rgba(63,185,80,0.15);
   color: #3fb950;
 }
 
@@ -1375,4 +1401,350 @@ body.meggy-focus-mode #meggy-main {
   background: rgba(63,185,80,0.12);
   border: 1px solid rgba(63,185,80,0.3);
   color: #3fb950;
+}
+
+
+/* ═══ Sidebar contraída ao abrir vídeo (modo cinema) ═══ */
+body.meggy-player-active #meggy-sidebar {
+  width: 0;
+  overflow: hidden;
+  border-right: none;
+  padding: 0;
+  transition: width 0.25s ease;
+}
+
+body.meggy-player-active #meggy-main {
+  padding: 14px 16px 40px;
+}
+
+/* Toggle button para re-expandir sidebar */
+.meggy-sidebar-expand-btn {
+  display: none;
+  position: fixed;
+  left: 0;
+  top: 56px;
+  z-index: 10001;
+  background: rgba(22,27,38,0.9);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  color: #9aa4b8;
+  padding: 10px 6px;
+  cursor: pointer;
+  font-size: 18px;
+  transition: 0.15s;
+}
+
+.meggy-sidebar-expand-btn:hover {
+  background: rgba(255,139,159,0.12);
+  color: #ff8b9f;
+}
+
+body.meggy-player-active .meggy-sidebar-expand-btn {
+  display: block;
+}
+
+/* ═══ Player de áudio ═══ */
+.meggy-audio-player {
+  background: rgba(22,27,38,0.72);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 12px;
+}
+
+.meggy-audio-player audio {
+  width: 100%;
+}
+
+.meggy-audio-icon {
+  font-size: 48px;
+  text-align: center;
+  margin-bottom: 12px;
+  color: #5ddeda;
+}
+
+/* ═══ Meggy AI drawer (menu lateral, não flutuante) ═══ */
+.meggy-ai-drawer {
+  position: fixed;
+  right: 0;
+  top: 56px;
+  bottom: 0;
+  width: 420px;
+  background: rgba(13,17,25,0.98);
+  border-left: 1px solid rgba(255,255,255,0.09);
+  z-index: 9998;
+  display: none;
+  flex-direction: column;
+  backdrop-filter: blur(18px);
+}
+
+.meggy-ai-drawer.open {
+  display: flex;
+}
+
+.meggy-ai-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.09);
+  flex-shrink: 0;
+}
+
+.meggy-ai-drawer-title {
+  font-family: 'Poppins', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #ff8b9f 0%, #c026d3 55%, #5ddeda 130%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.meggy-ai-drawer-close {
+  background: none;
+  border: none;
+  color: #9aa4b8;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.meggy-ai-drawer-close:hover {
+  color: #ff8b9f;
+}
+
+.meggy-ai-drawer-tabs {
+  display: flex;
+  border-bottom: 1px solid rgba(255,255,255,0.09);
+  flex-shrink: 0;
+}
+
+.meggy-ai-drawer-tab {
+  flex: 1;
+  padding: 10px 8px;
+  background: transparent;
+  border: none;
+  color: #6b7488;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  font-family: inherit;
+  transition: 0.15s;
+}
+
+.meggy-ai-drawer-tab:hover {
+  color: #e6edf3;
+}
+
+.meggy-ai-drawer-tab.active {
+  color: #ff8b9f;
+  border-bottom-color: #ff8b9f;
+}
+
+.meggy-ai-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.meggy-ai-action-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.meggy-ai-action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 12px;
+  padding: 16px 8px;
+  color: #9aa4b8;
+  cursor: pointer;
+  transition: 0.15s;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.meggy-ai-action-btn:hover {
+  background: rgba(255,139,159,0.12);
+  border-color: rgba(255,139,159,0.3);
+  color: #ff8b9f;
+  transform: translateY(-2px);
+}
+
+.meggy-ai-action-btn i {
+  font-size: 24px;
+}
+
+.meggy-ai-chat-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+  min-height: 200px;
+}
+
+.meggy-ai-msg {
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  max-width: 85%;
+  word-wrap: break-word;
+}
+
+.meggy-ai-msg.user {
+  background: linear-gradient(135deg, #ff8b9f 0%, #c026d3 55%);
+  color: #fff;
+  align-self: flex-end;
+}
+
+.meggy-ai-msg.bot {
+  background: rgba(255,255,255,0.06);
+  color: #e6edf3;
+  align-self: flex-start;
+}
+
+.meggy-ai-chat-input {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid rgba(255,255,255,0.09);
+}
+
+.meggy-ai-chat-input textarea {
+  flex: 1;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #e6edf3;
+  font-family: inherit;
+  font-size: 13px;
+  resize: none;
+  outline: none;
+  min-height: 40px;
+  max-height: 120px;
+}
+
+.meggy-ai-chat-input button {
+  background: linear-gradient(135deg, #ff8b9f 0%, #c026d3 55%);
+  border: none;
+  color: #fff;
+  border-radius: 8px;
+  padding: 0 16px;
+  cursor: pointer;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+/* ═══ Materiais estilo Alfacon (cards visuais) ═══ */
+.alfacon-material-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.alfacon-material-card {
+  background: linear-gradient(135deg, rgba(255,139,159,0.08), rgba(93,222,218,0.05));
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 14px;
+  padding: 20px 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.alfacon-material-card:hover {
+  border-color: #ff8b9f;
+  background: linear-gradient(135deg, rgba(255,139,159,0.15), rgba(93,222,218,0.1));
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px -8px rgba(0,0,0,0.5);
+}
+
+.alfacon-material-icon {
+  font-size: 36px;
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.06);
+}
+
+.alfacon-material-card.pdf .alfacon-material-icon {
+  background: rgba(255,99,99,0.15);
+}
+
+.alfacon-material-card.md .alfacon-material-icon {
+  background: rgba(93,222,218,0.15);
+}
+
+.alfacon-material-card.txt .alfacon-material-icon {
+  background: rgba(255,193,7,0.15);
+}
+
+.alfacon-material-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e6edf3;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.alfacon-material-meta {
+  font-size: 11px;
+  color: #6b7488;
+}
+
+.alfacon-material-viewer {
+  margin-top: 16px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.09);
+}
+
+.alfacon-material-viewer iframe {
+  width: 100%;
+  height: 450px;
+  border: none;
+  background: #fff;
+}
+
+.alfacon-material-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: #9aa4b8;
+  cursor: pointer;
+  font-size: 13px;
+  margin-bottom: 12px;
+  font-family: inherit;
+}
+
+.alfacon-material-back:hover {
+  color: #ff8b9f;
 }
