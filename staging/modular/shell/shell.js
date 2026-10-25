@@ -236,6 +236,11 @@
 
     // ─── Render current view ───
     renderView() {
+      // ★ Se há pendingPath (deep link), usar ele
+      if (Shell.state.pendingPath) {
+        window.history.replaceState({path: Shell.state.pendingPath}, '', Shell.state.pendingPath);
+        Shell.state.pendingPath = null;
+      }
       const path = Shell.router.currentPath();
       const view = Shell.router.routes[path] || 'home';
       Shell.state.currentView = view;
@@ -258,7 +263,12 @@
         case 'progresso': Shell._estudosView(main, 'progresso'); break;
         case 'questoes':  Shell._estudosView(main, 'questoes'); break;
         case 'flashcards':Shell._estudosView(main, 'flashcards'); break;
-        case 'meggy-ai':  Shell.openMeggyAIDrawer(); break;
+        case 'meggy-ai':  
+          Shell.openMeggyAIDrawer(); 
+          // Mostrar mensagem na main pane
+          const mainEl = document.getElementById('meggy-main');
+          if (mainEl) mainEl.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">🤖 Meggy AI</h1></div><div class="meggy-placeholder"><div class="meggy-placeholder-icon">🤖</div><div class="meggy-placeholder-title">Meggy AI aberta!</div><div class="meggy-placeholder-desc">O drawer está aberto à direita. Use as abas Ações e Chat.</div></div>';
+          break;
         case 'config':    Shell._estudosView(main, 'config'); break;
         case 'simulado':  Shell._estudosView(main, 'simulado'); break;
         case 'provas':    Shell._estudosView(main, 'provas'); break;
@@ -1395,6 +1405,7 @@
 
   // ─── Export to window ───
   window.MeggyShell = Shell;
+  window.Shell = Shell; // ★ Alias para onclick inline
 
 
   // ─── Auto-init ───
@@ -1406,6 +1417,7 @@
 
   console.log('[Meggy Shell] script loaded, waiting for modules...');
 })();
+
 
 
 
