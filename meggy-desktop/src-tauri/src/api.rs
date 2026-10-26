@@ -461,19 +461,27 @@ pub async fn fetch_text(url: String) -> Result<String, String> {
     resp.text().await.map_err(|e| e.to_string())
 }
 
-/// ★ v1.4.5: Extract text from a PDF URL using pdf-extract crate.
+/// ★ v1.4.7: Extract text from a PDF URL using pdf-extract crate.
 /// Downloads the PDF to a temp file, extracts text (cap 50K chars), returns it.
 /// Used by ISA generation when no transcription exists — falls back to PDF material.
+/// v1.4.7 fixes: (1) follows redirects, (2) catches panics with catch_unwind,
+/// (3) validates content-type is PDF before extracting.
 #[tauri::command]
-pub async fn extract_pdf_text(url: String) -> Result<String, String> {
-    // Download PDF to temp file
+pub async fn extract_pdf_text(url: String, state: State<'_, AppState>) -> Result<String, String> {
+    // Download PDF — follow redirects (download.aspx may 302 to Google Drive)
+    // Also send session cookie in case the worker requires auth
+    let cookie = state.cookie.lock().unwrap().clone();
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(60))
+        .redirect(reqwest::redirect::Policy::limited(10))
         .build()
         .map_err(|e| e.to_string())?;
 
-    let resp = client
-        .get(&url)
+    let mut req = client.get(&url);
+    if let Some(c) = &cookie {
+        req = req.header("Cookie", c);
+    }
+    let resp = req
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -482,27 +490,46 @@ pub async fn extract_pdf_text(url: String) -> Result<String, String> {
         return Err(format!("HTTP {}", resp.status()));
     }
 
+    // Validate content-type is actually PDF (not HTML login redirect)
+    let ct = resp.headers().get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    if !ct.contains("pdf") && !ct.contains("octet-stream") {
+        // Got HTML or something else — probably auth redirect
+        return Err("Não é um PDF (possível redirect de login)".to_string());
+    }
+
     let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+
+    // Validate it starts with %PDF magic bytes
+    if bytes.len() < 5 || &bytes[..5] != b"%PDF-" {
+        return Err("Arquivo não é um PDF válido".to_string());
+    }
 
     // Write to temp file
     let mut tmp = tempfile::NamedTempFile::new().map_err(|e| e.to_string())?;
     std::fs::write(tmp.path(), &bytes).map_err(|e| e.to_string())?;
 
-    // Extract text using pdf-extract (runs in blocking thread)
+    // Extract text using pdf-extract — catch panics (some PDFs cause panics)
     let path = tmp.path().to_path_buf();
-    let text = tokio::task::spawn_blocking(move || {
-        pdf_extract::extract_text(&path)
+    let text_result = tokio::task::spawn_blocking(move || {
+        std::panic::catch_unwind(|| {
+            pdf_extract::extract_text(&path)
+        })
     })
     .await
-    .map_err(|e| e.to_string())?
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| format!("Task join error: {}", e))?;
 
-    // Cap at 50K chars
-    let truncated = if text.len() > 50000 {
-        text[..50000].to_string()
-    } else {
-        text
-    };
-
-    Ok(truncated)
+    match text_result {
+        Ok(Ok(text)) => {
+            let truncated = if text.len() > 50000 {
+                text[..50000].to_string()
+            } else {
+                text
+            };
+            Ok(truncated)
+        }
+        Ok(Err(e)) => Err(format!("PDF extract error: {}", e)),
+        Err(_) => Err("PDF extract panicked (possible scanned/image PDF)".to_string()),
+    }
 }
