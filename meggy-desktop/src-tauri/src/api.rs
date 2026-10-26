@@ -17,7 +17,7 @@ impl Default for AppState {
     fn default() -> Self {
         Self {
             client: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
+                .timeout(std::time::Duration::from_secs(120))
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .unwrap(),
@@ -400,6 +400,9 @@ pub async fn ai_cache_save(
 
 /// POST /api/ai — generate ISA content (summary / questions / mindmap).
 /// `kind` is forwarded so the worker can route to the right provider.
+/// ★ v1.4.8: Don't send kind=questoes (routes to heavy models that timeout).
+/// Use kind=resumo for all — the prompt itself tells the AI what to generate.
+/// ★ v1.4.8: Retry up to 3 times (backends can be intermittent).
 #[tauri::command]
 pub async fn ai_generate(
     state: State<'_, AppState>,
@@ -409,33 +412,60 @@ pub async fn ai_generate(
     let cookie = state.cookie.lock().unwrap().clone();
     let cookie = cookie.ok_or("Not logged in")?;
 
+    let effective_kind = if kind.as_deref() == Some("questoes") {
+        Some("resumo".to_string())
+    } else {
+        kind
+    };
+
     let body = serde_json::json!({
         "message": message,
         "messages": [],
-        "kind": kind
+        "kind": effective_kind
     });
 
-    let resp = state
-        .client
-        .post(format!("{}/api/ai", BASE_URL))
-        .header("Cookie", &cookie)
-        .header("Content-Type", "application/json")
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    let mut last_err = String::new();
+    for attempt in 1..=3u32 {
+        let resp = state
+            .client
+            .post(format!("{}/api/ai", BASE_URL))
+            .header("Cookie", &cookie)
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await;
 
-    if !resp.status().is_success() {
-        return Err(format!("HTTP {}", resp.status()));
+        match resp {
+            Ok(r) => {
+                if !r.status().is_success() {
+                    last_err = format!("HTTP {}", r.status());
+                    if attempt < 3 {
+                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                        continue;
+                    }
+                    return Err(last_err);
+                }
+                let json: serde_json::Value = r.json().await.map_err(|e| e.to_string())?;
+                let response = json["response"]
+                    .as_str()
+                    .or_else(|| json["markdown"].as_str())
+                    .or_else(|| json["summary"].as_str())
+                    .unwrap_or("")
+                    .to_string();
+                if !response.is_empty() {
+                    return Ok(response);
+                }
+                last_err = "Resposta vazia da IA".to_string();
+            }
+            Err(e) => {
+                last_err = e.to_string();
+            }
+        }
+        if attempt < 3 {
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        }
     }
-
-    let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-    Ok(json["response"]
-        .as_str()
-        .or_else(|| json["markdown"].as_str())
-        .or_else(|| json["summary"].as_str())
-        .unwrap_or("Sem resposta")
-        .to_string())
+    Err(last_err)
 }
 
 /// Fetch arbitrary text content from a URL (for MD/TXT/HTML material files).
