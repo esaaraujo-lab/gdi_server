@@ -266,7 +266,7 @@
         case 'questoes':  Shell.views.questoes(main); break;
         case 'flashcards':Shell.views.flashcards(main); break;
         case 'meggy-ai':
-          Shell.meggyAIChat(main);
+          Shell.views.meggyAIChat(main);
           break;
         case 'config':    Shell._estudosView(main, 'config'); break;
         case 'simulado':  Shell._estudosView(main, 'simulado'); break;
@@ -2026,6 +2026,46 @@
         el.scrollTop = 0;
       },
 
+      // ★ meggyAIChat: chat da Meggy AI no painel principal (main pane)
+      meggyAIChat(el) {
+        el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">🤖 Meggy AI</h1></div>' +
+          '<div class="meggy-chat-main">' +
+            '<div class="meggy-chat-messages" id="meggy-chat-messages">' +
+              '<div class="meggy-ai-msg bot">Oi! Sou a <b>Meggy</b> 🐩 — sua poodle tutora de estudos.<br><br>' +
+                'Posso ajudar com:<br>• Explicar um tema da aula<br>• Tirar dúvidas<br>• Sugerir um plano de estudos<br><br>' +
+                'Para gerar resumos, questões e flashcards, abra uma aula e use as abas <b>Resumo Meggy</b>, <b>Questões</b>, <b>Pílulas</b> ou <b>Flashcards</b> no player. 🐾' +
+              '</div>' +
+            '</div>' +
+            '<div class="meggy-chat-input-bar">' +
+              '<textarea id="meggy-chat-input" placeholder="Pergunte algo à Meggy..." rows="2"></textarea>' +
+              '<button id="meggy-chat-send" title="Enviar"><i class="bi bi-send"></i></button>' +
+            '</div>' +
+          '</div>';
+        Shell._ensureMdLibs();
+        var send = async function() {
+          var input = document.getElementById('meggy-chat-input');
+          var msg = input.value.trim();
+          if (!msg) return;
+          var msgs = document.getElementById('meggy-chat-messages');
+          msgs.insertAdjacentHTML('beforeend', '<div class="meggy-ai-msg user">' + Shell._esc(msg) + '</div>');
+          input.value = '';
+          msgs.insertAdjacentHTML('beforeend', '<div class="meggy-ai-msg bot" id="meggy-chat-typing">🐾 Pensando...</div>');
+          msgs.scrollTop = msgs.scrollHeight;
+          try {
+            var r = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg, messages: [] }) });
+            var d = await r.json();
+            var resp = d.response || 'Sem resposta';
+            var html = resp;
+            if (window.marked) { try { html = window.marked.parse(resp); if (window.DOMPurify) html = window.DOMPurify.sanitize(html); } catch (_) {} }
+            var t = document.getElementById('meggy-chat-typing');
+            if (t) t.innerHTML = html;
+          } catch (e) { var t = document.getElementById('meggy-chat-typing'); if (t) t.textContent = 'Erro: ' + e.message; }
+          msgs.scrollTop = msgs.scrollHeight;
+        };
+        document.getElementById('meggy-chat-send').onclick = send;
+        document.getElementById('meggy-chat-input').onkeydown = function(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
+      },
+
     },
 
     // ─── Actions ───
@@ -2132,64 +2172,7 @@
     },
 
     // meggyAI(el) removido — drawer agora é aberto via openMeggyAIDrawer()
-
-    // ★ meggyAIChat: chat da Meggy AI no painel principal (main pane), não em drawer
-    meggyAIChat(el) {
-      el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">🤖 Meggy AI</h1></div>' +
-        '<div class="meggy-chat-main">' +
-          '<div class="meggy-chat-messages" id="meggy-chat-messages">' +
-            '<div class="meggy-ai-msg bot">Oi! Sou a <b>Meggy</b> 🐩 — sua poodle tutora de estudos.<br><br>' +
-              'Posso ajudar com:<br>' +
-              '• Explicar um tema da aula<br>' +
-              '• Tirar dúvidas<br>' +
-              '• Sugerir um plano de estudos<br><br>' +
-              'Para gerar resumos, questões e flashcards, abra uma aula e use as abas <b>Resumo Meggy</b>, <b>Questões</b>, <b>Pílulas</b> ou <b>Flashcards</b> no player. 🐾' +
-            '</div>' +
-          '</div>' +
-          '<div class="meggy-chat-input-bar">' +
-            '<textarea id="meggy-chat-input" placeholder="Pergunte algo à Meggy..." rows="2"></textarea>' +
-            '<button id="meggy-chat-send" title="Enviar"><i class="bi bi-send"></i></button>' +
-          '</div>' +
-        '</div>';
-
-      // ★ Garantir marked.js carregado para renderizar respostas em markdown
-      Shell._ensureMdLibs();
-
-      const send = async () => {
-        const input = document.getElementById('meggy-chat-input');
-        const msg = input.value.trim();
-        if (!msg) return;
-        const msgs = document.getElementById('meggy-chat-messages');
-        msgs.insertAdjacentHTML('beforeend', '<div class="meggy-ai-msg user">' + Shell._esc(msg) + '</div>');
-        input.value = '';
-        msgs.insertAdjacentHTML('beforeend', '<div class="meggy-ai-msg bot" id="meggy-chat-typing">🐾 Pensando...</div>');
-        msgs.scrollTop = msgs.scrollHeight;
-        try {
-          const r = await fetch('/api/ai', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: msg, messages: [] })
-          });
-          const d = await r.json();
-          const resp = d.response || 'Sem resposta';
-          let html = resp;
-          if (window.marked) {
-            try { html = window.marked.parse(resp); if (window.DOMPurify) html = window.DOMPurify.sanitize(html); } catch (_) {}
-          }
-          const typing = document.getElementById('meggy-chat-typing');
-          if (typing) typing.innerHTML = html;
-        } catch (e) {
-          const typing = document.getElementById('meggy-chat-typing');
-          if (typing) typing.textContent = 'Erro: ' + e.message;
-        }
-        msgs.scrollTop = msgs.scrollHeight;
-      };
-
-      document.getElementById('meggy-chat-send').onclick = send;
-      document.getElementById('meggy-chat-input').onkeydown = (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-      };
-    },
+    // (meggyAIChat movido para dentro de Shell.views — ver acima)
 
     placeholder(el, title, icon, phase) {
       el.innerHTML = `
