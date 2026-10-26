@@ -332,3 +332,131 @@ pub async fn get_user_state(state: State<'_, AppState>) -> Result<serde_json::Va
 
     resp.json().await.map_err(|e| e.to_string())
 }
+
+// ─────────────────────────────────────────────────────────────────
+// v1.4.4 — Inline player support (AI cache, AI generate, fetch text)
+// ─────────────────────────────────────────────────────────────────
+
+/// GET /api/ai/cache?key=<key>
+/// Returns the cached ISA payload (or { cached: null } on miss).
+#[tauri::command]
+pub async fn ai_cache_get(
+    state: State<'_, AppState>,
+    key: String,
+) -> Result<serde_json::Value, String> {
+    let cookie = state.cookie.lock().unwrap().clone();
+    let cookie = cookie.unwrap_or_default();
+
+    let resp = state
+        .client
+        .get(format!("{}/api/ai/cache", BASE_URL))
+        .header("Cookie", &cookie)
+        .header("Accept", "application/json")
+        .query(&[("key", key.as_str())])
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 404 / 401 etc. → return empty cached object (cache miss)
+    if !resp.status().is_success() {
+        return Ok(serde_json::json!({ "cached": null }));
+    }
+    resp.json().await.map_err(|e| e.to_string())
+}
+
+/// POST /api/ai/cache — fire-and-forget save (summary / questions / mindmap).
+#[tauri::command]
+pub async fn ai_cache_save(
+    state: State<'_, AppState>,
+    key: String,
+    summary: Option<String>,
+    questions: Option<serde_json::Value>,
+    mindmap: Option<String>,
+    lesson_name: Option<String>,
+) -> Result<bool, String> {
+    let cookie = state.cookie.lock().unwrap().clone();
+    let cookie = cookie.ok_or("Not logged in")?;
+
+    let body = serde_json::json!({
+        "key": key,
+        "summary": summary,
+        "questions": questions,
+        "mindmap": mindmap,
+        "lessonName": lesson_name.unwrap_or_default()
+    });
+
+    let resp = state
+        .client
+        .post(format!("{}/api/ai/cache", BASE_URL))
+        .header("Cookie", &cookie)
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(resp.status().is_success())
+}
+
+/// POST /api/ai — generate ISA content (summary / questions / mindmap).
+/// `kind` is forwarded so the worker can route to the right provider.
+#[tauri::command]
+pub async fn ai_generate(
+    state: State<'_, AppState>,
+    message: String,
+    kind: Option<String>,
+) -> Result<String, String> {
+    let cookie = state.cookie.lock().unwrap().clone();
+    let cookie = cookie.ok_or("Not logged in")?;
+
+    let body = serde_json::json!({
+        "message": message,
+        "messages": [],
+        "kind": kind
+    });
+
+    let resp = state
+        .client
+        .post(format!("{}/api/ai", BASE_URL))
+        .header("Cookie", &cookie)
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+
+    let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    Ok(json["response"]
+        .as_str()
+        .or_else(|| json["markdown"].as_str())
+        .or_else(|| json["summary"].as_str())
+        .unwrap_or("Sem resposta")
+        .to_string())
+}
+
+/// Fetch arbitrary text content from a URL (for MD/TXT/HTML material files).
+/// The download links produced by worker.js are self-contained (encrypted id +
+/// expiry + MAC) and don't require the session cookie, but we still send it to
+/// be safe.  We follow redirects here since the file host may 302.
+#[tauri::command]
+pub async fn fetch_text(url: String) -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+    resp.text().await.map_err(|e| e.to_string())
+}
