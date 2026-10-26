@@ -2173,41 +2173,64 @@
           try {
             // Construir prompt completo com conteúdo dos anexos
             var fullMsg = msg;
-            var hasImageOcr = false;
+            var filesProcessed = 0;
+            var filesFailed = 0;
             for (var i = 0; i < attachedFiles.length; i++) {
               var f = attachedFiles[i];
-              if (f.text) {
-                fullMsg += '\n\n--- Arquivo: ' + f.name + ' ---\n' + f.text.substring(0, 30000);
+              var typing = document.getElementById('meggy-chat-typing');
+              if (typing) typing.innerHTML = '📄 Processando arquivo ' + Shell._esc(f.name) + '...';
+              
+              if (f.text && f.text.length > 30) {
+                // Texto extraído com sucesso
+                fullMsg += '\n\n--- Arquivo: ' + f.name + ' ---\n' + f.text.substring(0, 40000);
+                filesProcessed++;
               } else if (f.dataUrl) {
                 // Imagem: fazer OCR via /api/ai/ocr
-                hasImageOcr = true;
-                var typing = document.getElementById('meggy-chat-typing');
                 if (typing) typing.innerHTML = '🔍 Fazendo OCR da imagem ' + Shell._esc(f.name) + '...';
                 try {
                   var b64 = f.dataUrl.split(',')[1];
                   var ocrR = await fetch('/api/ai/ocr', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
                     body: JSON.stringify({ image: b64, prompt: 'Transcreva TODO o texto desta imagem (redação manuscrita, documento, etc). Responda apenas com o texto transcrito.' })
                   });
                   var ocrD = await ocrR.json();
                   if (ocrD.ok && ocrD.response) {
                     fullMsg += '\n\n--- Imagem: ' + f.name + ' (OCR) ---\n' + ocrD.response;
+                    filesProcessed++;
                   } else {
                     fullMsg += '\n\n[Imagem ' + f.name + ': OCR falhou - ' + (ocrD.error || 'erro desconhecido') + ']';
+                    filesFailed++;
                   }
                 } catch (ocrErr) {
                   fullMsg += '\n\n[Imagem ' + f.name + ': erro de OCR - ' + ocrErr.message + ']';
+                  filesFailed++;
                 }
+              } else {
+                // Arquivo sem texto extraído
+                fullMsg += '\n\n[Arquivo ' + f.name + ': não foi possível extrair texto. O arquivo pode ser escaneado ou estar em formato não suportado.]';
+                filesFailed++;
               }
             }
 
-            // Enviar para /api/ai
+            // Se há anexos mas nenhum foi processado com sucesso, avisar
+            if (attachedFiles.length > 0 && filesProcessed === 0) {
+              var t_warn = document.getElementById('meggy-chat-typing');
+              if (t_warn) t_warn.innerHTML = '⚠️ Não foi possível ler o conteúdo dos arquivos anexados. ' + (filesFailed > 0 ? filesFailed + ' arquivo(s) falharam.' : '') + '<br><br>O PDF pode ser escaneado (imagem em vez de texto). Tente:<br>• Converter para texto<br>• Tirar foto e enviar como imagem<br>• Copiar e colar o texto diretamente';
+              attachedFiles = [];
+              renderAttachments();
+              msgs.scrollTop = msgs.scrollHeight;
+              return;
+            }
+
+            // Enviar para /api/ai (handleAi = Promise.any paralelo, rápido)
             var typing2 = document.getElementById('meggy-chat-typing');
-            if (typing2) typing2.innerHTML = '🐾 Pensando...';
+            if (typing2) typing2.innerHTML = '🐾 Lendo ' + filesProcessed + ' arquivo(s) e pensando...';
             var r = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ message: fullMsg, messages: [] }) });
             var d = await r.json();
-            var resp = d.response || 'Sem resposta';
+            var resp = d.response || 'Sem resposta da IA. Tente novamente.';
+            if (!d.ok && d.error) resp = '⚠️ Erro: ' + d.error;
             var html = resp;
             if (window.marked) { try { html = window.marked.parse(resp); if (window.DOMPurify) html = window.DOMPurify.sanitize(html); } catch (_) {} }
             var t = document.getElementById('meggy-chat-typing');
@@ -2382,32 +2405,49 @@
               throw new Error('Texto muito curto (mínimo 50 caracteres). Envie um arquivo ou cole o texto.');
             }
 
-            // Enviar para /api/ai/redacao (endpoint existente que funciona)
+            // Enviar para /api/ai (handleAi = Promise.any paralelo, rápido) em vez de /api/ai/redacao (callUnifiedAi sequencial, lento)
             resultDiv.innerHTML = '<div style="text-align:center;padding:20px;"><div class="spinner-border" style="color:#ff8b9f;"></div><div style="margin-top:10px;color:#9aa4b8;">✍️ Corrigindo redação...</div></div>';
-            r = await fetch('/api/ai/redacao', {
+            var BANCA_CRITERIA = {
+              'CEBRASPE (CESPE)': 'CEBRASPE/CESPE escala 0-10: adequação ao tema, estrutura, desenvolvimento, coesão, gramática. Desclassifica se fuga ao tema.',
+              'FGV': 'FGV 0-10: conteúdo (0-5), estrutura (0-3), linguagem (0-2).',
+              'VUNESP': 'VUNESP 0-10: tema/conteúdo (0-4), estrutura (0-3), norma culta (0-3).',
+              'ENEM (5 competências)': 'ENEM 5 competências (0-200 cada, total 0-1000).',
+              'FUVEST (dissertativa)': 'FUVEST 0-100: conteúdo (0-50), estrutura (0-30), linguagem (0-20).',
+              'default': 'Critérios gerais de concurso público brasileiro.'
+            };
+            var criterios = BANCA_CRITERIA[banca] || BANCA_CRITERIA['default'];
+            var redacaoPrompt = 'Você é um corretor de redações experiente. Corrija esta redação (banca: ' + banca + ', tipo: ' + tipo + ').\n\nCRITÉRIOS: ' + criterios + '\n\nFORMATO Markdown:\n## Nota Geral: X/10\n## Avaliação por Critério\n## Comentários por Parágrafo (cite o trecho)\n## Pontos Fortes\n## Pontos Fracos\n## Sugestões de Melhoria\n## Versão Reescrita\n\nREDAÇÃO (' + essayText.length + ' chars):\n\n' + essayText.slice(0, 30000);
+            r = await fetch('/api/ai', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               credentials: 'include',
-              body: JSON.stringify({ text: essayText, banca: banca, tipo: tipo })
+              body: JSON.stringify({ message: redacaoPrompt, messages: [], kind: 'resumo' })
             });
             var d = await r.json();
             if (d.ok) {
-              var html = d.correction || 'Sem correção';
+              var correction = d.response || 'Sem correção';
+              var scoreMatch = correction.match(/nota\s*geral\s*:?\s*(\d+[,.]?\d*)/i);
+              var score = scoreMatch ? scoreMatch[1] : '—';
+              var html = correction;
               await Shell._ensureMdLibs();
-              if (window.marked) { try { html = window.marked.parse(d.correction); if (window.DOMPurify) html = window.DOMPurify.sanitize(html); } catch (_) {} }
-              var ocrBadge = d.ocrUsed ? ' <span style="font-size:11px;color:#5ddeda;">🔍 OCR usado</span>' : '';
-              var scoreBadge = d.score && d.score !== '—' ? ' <span style="font-size:11px;color:#3fb950;">Nota: ' + d.score + '</span>' : '';
-              var savedBadge = d.saved ? ' <span style="font-size:11px;color:#9aa4b8;">💾 Salvo no Drive</span>' : '';
-              resultDiv.innerHTML = '<div style="margin-bottom:10px;font-size:12px;color:#9aa4b8;">✓ Correção concluída' + ocrBadge + scoreBadge + savedBadge + '</div>' +
+              if (window.marked) { try { html = window.marked.parse(correction); if (window.DOMPurify) html = window.DOMPurify.sanitize(html); } catch (_) {} }
+              var ocrBadge = selectedFile && (selectedFile.type.startsWith('image/') || selectedFile.type === 'application/pdf') ? ' <span style="font-size:11px;color:#5ddeda;">🔍 Texto extraído</span>' : '';
+              var scoreBadge = score && score !== '—' ? ' <span style="font-size:11px;color:#3fb950;">Nota: ' + score + '</span>' : '';
+              resultDiv.innerHTML = '<div style="margin-bottom:10px;font-size:12px;color:#9aa4b8;">✓ Correção concluída' + ocrBadge + scoreBadge + '</div>' +
                 '<div class="gdi-isa-summary-body">' + html + '</div>' +
                 '<div style="margin-top:12px;display:flex;gap:8px;">' +
                   '<button class="meggy-header-btn" onclick="navigator.clipboard.writeText(document.getElementById(\'meggy-redacao-result\').innerText);this.textContent=\'✓ Copiado!\'"><i class="bi bi-clipboard"></i> Copiar</button>' +
                   '<button class="meggy-header-btn" onclick="window._downloadIsaAsPdf(\'Correção Redação\')" style="background:rgba(255,139,159,0.12);border:1px solid rgba(255,139,159,0.3);color:#ff8b9f;"><i class="bi bi-download"></i> PDF</button>' +
                 '</div>';
               // Store for PDF download
-              window._lastIsaText = d.correction;
+              window._lastIsaText = correction;
               window._lastIsaLesson = 'Correção Redação ' + banca;
               window._lastIsaLabel = 'Correção Redação';
+              // Tentar salvar no Drive via /api/ai/essay/save
+              try {
+                var md = '---\nbanca: "' + banca + '"\ntipo: "' + tipo + '"\ndata: ' + new Date().toISOString() + '\nscore: ' + score + '\n---\n\n# Redação Corrigida\n\n## Original\n\n' + essayText.slice(0, 30000) + '\n\n## Correção\n\n' + correction + '\n';
+                await fetch('/api/ai/essay/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ markdown: md, banca: banca, tipo: tipo, score: score }) });
+              } catch(_) {}
             } else {
               resultDiv.innerHTML = '<div style="color:#ff8b9f;">⚠️ Erro: ' + Shell._esc(d.error || 'tente novamente') + '</div>';
             }
