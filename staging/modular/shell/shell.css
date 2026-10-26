@@ -2840,6 +2840,34 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 }
 .meggy-chat-input-bar button:hover { transform: scale(1.05); }
 
+/* ★ Chat attachments chips */
+.meggy-chat-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px;
+  background: rgba(255, 139, 159, 0.04);
+  border: 1px solid rgba(255, 139, 159, 0.15);
+  border-top: none;
+}
+.meggy-chat-att-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(255, 139, 159, 0.1);
+  border: 1px solid rgba(255, 139, 159, 0.25);
+  border-radius: 999px;
+  font-size: 12px;
+  color: #ff8b9f;
+}
+.meggy-chat-att-remove {
+  cursor: pointer;
+  opacity: 0.7;
+  margin-left: 2px;
+}
+.meggy-chat-att-remove:hover { opacity: 1; }
+
 /* ═══ MODAL OVERLAY ═══ */
 .meggy-modal-overlay {
   position: fixed;
