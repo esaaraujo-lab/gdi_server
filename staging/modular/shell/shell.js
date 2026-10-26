@@ -2225,10 +2225,24 @@
             }
 
             // Enviar para /api/ai (handleAi = Promise.any paralelo, rápido)
+            // ★ Fallback: se /api/ai falhar, tentar mini-service z-ai (porta 3011 via XTransformPort)
             var typing2 = document.getElementById('meggy-chat-typing');
             if (typing2) typing2.innerHTML = '🐾 Lendo ' + filesProcessed + ' arquivo(s) e pensando...';
-            var r = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ message: fullMsg, messages: [] }) });
-            var d = await r.json();
+            var r, d;
+            try {
+              r = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ message: fullMsg, messages: [] }) });
+              d = await r.json();
+              if (!d.ok || !d.response || d.response === 'Sem resposta da IA. Tente novamente.') throw new Error('worker AI failed');
+            } catch (workerErr) {
+              // ★ Fallback: tentar mini-service z-ai na porta 3011
+              if (typing2) typing2.innerHTML = '🐾 Tentando backend alternativo...';
+              try {
+                r = await fetch('/api/ai?XTransformPort=3011', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: fullMsg, messages: [] }) });
+                d = await r.json();
+              } catch (fallbackErr) {
+                d = { ok: false, error: 'Não foi possível conectar à IA. Tente novamente. (' + (workerErr.message || '') + ')' };
+              }
+            }
             var resp = d.response || 'Sem resposta da IA. Tente novamente.';
             if (!d.ok && d.error) resp = '⚠️ Erro: ' + d.error;
             var html = resp;
@@ -2417,13 +2431,27 @@
             };
             var criterios = BANCA_CRITERIA[banca] || BANCA_CRITERIA['default'];
             var redacaoPrompt = 'Você é um corretor de redações experiente. Corrija esta redação (banca: ' + banca + ', tipo: ' + tipo + ').\n\nCRITÉRIOS: ' + criterios + '\n\nFORMATO Markdown:\n## Nota Geral: X/10\n## Avaliação por Critério\n## Comentários por Parágrafo (cite o trecho)\n## Pontos Fortes\n## Pontos Fracos\n## Sugestões de Melhoria\n## Versão Reescrita\n\nREDAÇÃO (' + essayText.length + ' chars):\n\n' + essayText.slice(0, 30000);
-            r = await fetch('/api/ai', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'include',
-              body: JSON.stringify({ message: redacaoPrompt, messages: [], kind: 'resumo' })
-            });
-            var d = await r.json();
+            // ★ Tentar /api/ai do worker primeiro, fallback para mini-service z-ai (porta 3011)
+            var d;
+            try {
+              r = await fetch('/api/ai', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+                body: JSON.stringify({ message: redacaoPrompt, messages: [], kind: 'resumo' })
+              });
+              d = await r.json();
+              if (!d.ok || !d.response) throw new Error('worker AI failed');
+            } catch (workerErr) {
+              // Fallback: mini-service z-ai
+              try {
+                r = await fetch('/api/ai?XTransformPort=3011', {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ message: redacaoPrompt, messages: [] })
+                });
+                d = await r.json();
+              } catch (fbErr) {
+                d = { ok: false, error: 'Não foi possível conectar à IA. Tente novamente.' };
+              }
+            }
             if (d.ok) {
               var correction = d.response || 'Sem correção';
               var scoreMatch = correction.match(/nota\s*geral\s*:?\s*(\d+[,.]?\d*)/i);
