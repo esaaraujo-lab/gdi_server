@@ -266,7 +266,7 @@
         case 'questoes':  Shell.views.questoes(main); break;
         case 'flashcards':Shell.views.flashcards(main); break;
         case 'meggy-ai':
-          Shell.views.meggyAIChat(main);
+          Shell.meggyAIChat(main);
           break;
         case 'config':    Shell._estudosView(main, 'config'); break;
         case 'simulado':  Shell._estudosView(main, 'simulado'); break;
