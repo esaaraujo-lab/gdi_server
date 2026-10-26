@@ -2225,26 +2225,23 @@
             }
 
             // Enviar para /api/ai (handleAi = Promise.any paralelo, rápido)
-            // ★ Fallback: se /api/ai falhar, tentar mini-service z-ai (porta 3011 via XTransformPort)
+            // ★ Retry: tentar até 3 vezes se a IA falhar (backends podem ser intermitentes)
             var typing2 = document.getElementById('meggy-chat-typing');
             if (typing2) typing2.innerHTML = '🐾 Lendo ' + filesProcessed + ' arquivo(s) e pensando...';
-            var r, d;
-            try {
-              r = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ message: fullMsg, messages: [] }) });
-              d = await r.json();
-              if (!d.ok || !d.response || d.response === 'Sem resposta da IA. Tente novamente.') throw new Error('worker AI failed');
-            } catch (workerErr) {
-              // ★ Fallback: tentar mini-service z-ai na porta 3011
-              if (typing2) typing2.innerHTML = '🐾 Tentando backend alternativo...';
+            var r, d = { ok: false, response: '', error: '' };
+            for (var attempt = 1; attempt <= 3; attempt++) {
               try {
-                r = await fetch('/api/ai?XTransformPort=3011', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: fullMsg, messages: [] }) });
+                if (typing2) typing2.innerHTML = '🐾 Processando' + (attempt > 1 ? ' (tentativa ' + attempt + ')' : '') + '...';
+                r = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ message: fullMsg, messages: [] }) });
                 d = await r.json();
-              } catch (fallbackErr) {
-                d = { ok: false, error: 'Não foi possível conectar à IA. Tente novamente. (' + (workerErr.message || '') + ')' };
+                if (d.ok && d.response) break; // sucesso
+              } catch (retryErr) {
+                d = { ok: false, error: retryErr.message };
               }
+              if (attempt < 3) await new Promise(function(r){ setTimeout(r, 2000); }); // espera 2s antes de tentar de novo
             }
-            var resp = d.response || 'Sem resposta da IA. Tente novamente.';
-            if (!d.ok && d.error) resp = '⚠️ Erro: ' + d.error;
+            var resp = d.response || 'Sem resposta da IA. Tente novamente em alguns instantes.';
+            if (!d.ok && d.error) resp = '⚠️ Erro: ' + d.error + '\n\nTente novamente — os backends de IA podem estar sobrecarregados.';
             var html = resp;
             if (window.marked) { try { html = window.marked.parse(resp); if (window.DOMPurify) html = window.DOMPurify.sanitize(html); } catch (_) {} }
             var t = document.getElementById('meggy-chat-typing');
@@ -2431,26 +2428,21 @@
             };
             var criterios = BANCA_CRITERIA[banca] || BANCA_CRITERIA['default'];
             var redacaoPrompt = 'Você é um corretor de redações experiente. Corrija esta redação (banca: ' + banca + ', tipo: ' + tipo + ').\n\nCRITÉRIOS: ' + criterios + '\n\nFORMATO Markdown:\n## Nota Geral: X/10\n## Avaliação por Critério\n## Comentários por Parágrafo (cite o trecho)\n## Pontos Fortes\n## Pontos Fracos\n## Sugestões de Melhoria\n## Versão Reescrita\n\nREDAÇÃO (' + essayText.length + ' chars):\n\n' + essayText.slice(0, 30000);
-            // ★ Tentar /api/ai do worker primeiro, fallback para mini-service z-ai (porta 3011)
-            var d;
-            try {
-              r = await fetch('/api/ai', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-                body: JSON.stringify({ message: redacaoPrompt, messages: [], kind: 'resumo' })
-              });
-              d = await r.json();
-              if (!d.ok || !d.response) throw new Error('worker AI failed');
-            } catch (workerErr) {
-              // Fallback: mini-service z-ai
+            // ★ Retry: tentar até 3 vezes se a IA falhar (backends podem ser intermitentes)
+            var d = { ok: false, response: '', error: '' };
+            for (var attempt = 1; attempt <= 3; attempt++) {
               try {
-                r = await fetch('/api/ai?XTransformPort=3011', {
-                  method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ message: redacaoPrompt, messages: [] })
+                resultDiv.innerHTML = '<div style="text-align:center;padding:20px;"><div class="spinner-border" style="color:#ff8b9f;"></div><div style="margin-top:10px;color:#9aa4b8;">✍️ Corrigindo redação' + (attempt > 1 ? ' (tentativa ' + attempt + ')' : '') + '...</div></div>';
+                r = await fetch('/api/ai', {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+                  body: JSON.stringify({ message: redacaoPrompt, messages: [], kind: 'resumo' })
                 });
                 d = await r.json();
-              } catch (fbErr) {
-                d = { ok: false, error: 'Não foi possível conectar à IA. Tente novamente.' };
+                if (d.ok && d.response) break;
+              } catch (retryErr) {
+                d = { ok: false, error: retryErr.message };
               }
+              if (attempt < 3) await new Promise(function(r){ setTimeout(r, 2000); });
             }
             if (d.ok) {
               var correction = d.response || 'Sem correção';
