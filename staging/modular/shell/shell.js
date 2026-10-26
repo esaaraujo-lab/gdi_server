@@ -2338,36 +2338,57 @@
 
           try {
             var r;
+            // Extrair texto do arquivo se necessário
+            var essayText = text;
             if (selectedFile) {
-              // Se for PDF, extrair texto no client (pdf.js) e enviar como JSON
               if (selectedFile.type === 'application/pdf' || /\.pdf$/i.test(selectedFile.name)) {
                 var url = URL.createObjectURL(selectedFile);
                 var pdfText = await Shell._extractPdfText(url);
                 URL.revokeObjectURL(url);
                 if (!pdfText || pdfText.length < 50) {
-                  throw new Error('Não foi possível extrair texto do PDF. Tente enviar como imagem.');
+                  throw new Error('Não foi possível extrair texto do PDF. Tente enviar como imagem ou cole o texto manualmente.');
                 }
-                r = await fetch('/api/ai/redacao/correct-full', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ text: pdfText, banca: banca, tipo: tipo })
-                });
-              } else {
-                // Imagem ou texto: enviar como multipart
-                var fd = new FormData();
-                fd.append('file', selectedFile);
-                fd.append('banca', banca);
-                fd.append('tipo', tipo);
-                r = await fetch('/api/ai/redacao/correct-full', { method: 'POST', body: fd });
+                essayText = pdfText;
+              } else if (selectedFile.type.startsWith('image/')) {
+                // Imagem: tentar OCR com Tesseract.js (client-side)
+                resultDiv.innerHTML = '<div style="text-align:center;padding:20px;"><div class="spinner-border" style="color:#ff8b9f;"></div><div style="margin-top:10px;color:#9aa4b8;">🔍 Fazendo OCR da imagem (Tesseract.js)...</div></div>';
+                try {
+                  // Carregar Tesseract.js dinamicamente
+                  if (!window.Tesseract) {
+                    await new Promise(function(resolve, reject) {
+                      var s = document.createElement('script');
+                      s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+                      s.onload = resolve;
+                      s.onerror = reject;
+                      document.head.appendChild(s);
+                    });
+                  }
+                  var imgURL = URL.createObjectURL(selectedFile);
+                  var ocrResult = await window.Tesseract.recognize(imgURL, 'por', { logger: function(m) { console.log('[OCR]', m.status, m.progress); } });
+                  URL.revokeObjectURL(imgURL);
+                  essayText = ocrResult.data.text || '';
+                  if (essayText.length < 50) {
+                    throw new Error('OCR não conseguiu extrair texto suficiente da imagem. Tente uma imagem mais nítida ou cole o texto manualmente.');
+                  }
+                } catch (ocrErr) {
+                  throw new Error('OCR falhou: ' + ocrErr.message + '. Tente colar o texto manualmente.');
+                }
+              } else if (selectedFile.type.startsWith('text/')) {
+                essayText = await selectedFile.text();
               }
-            } else {
-              // Texto colado
-              r = await fetch('/api/ai/redacao/correct-full', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: text, banca: banca, tipo: tipo })
-              });
             }
+
+            if (!essayText || essayText.length < 50) {
+              throw new Error('Texto muito curto (mínimo 50 caracteres). Envie um arquivo ou cole o texto.');
+            }
+
+            // Enviar para /api/ai/redacao (endpoint existente que funciona)
+            resultDiv.innerHTML = '<div style="text-align:center;padding:20px;"><div class="spinner-border" style="color:#ff8b9f;"></div><div style="margin-top:10px;color:#9aa4b8;">✍️ Corrigindo redação...</div></div>';
+            r = await fetch('/api/ai/redacao', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text: essayText, banca: banca, tipo: tipo })
+            });
             var d = await r.json();
             if (d.ok) {
               var html = d.correction || 'Sem correção';
