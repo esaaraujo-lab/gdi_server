@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicehash/tauri/v2/crates/tauri-config-schema/schema.json",
   "productName": "Meggy",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "identifier": "com.meggy.desktop",
   "build": {
     "frontendDist": "../dist",
