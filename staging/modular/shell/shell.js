@@ -2232,11 +2232,14 @@
             for (var attempt = 1; attempt <= 3; attempt++) {
               try {
                 if (typing2) typing2.innerHTML = '🐾 Processando' + (attempt > 1 ? ' (tentativa ' + attempt + ')' : '') + '...';
-                r = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ message: fullMsg, messages: [] }) });
+                var _ctrl = new AbortController();
+                var _to = setTimeout(function() { _ctrl.abort(); }, 30000); // 30s timeout
+                r = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ message: fullMsg, messages: [] }), signal: _ctrl.signal });
+                clearTimeout(_to);
                 d = await r.json();
                 if (d.ok && d.response) break; // sucesso
               } catch (retryErr) {
-                d = { ok: false, error: retryErr.message };
+                d = { ok: false, error: retryErr.name === 'AbortError' ? 'Timeout' : retryErr.message };
               }
               if (attempt < 3) await new Promise(function(r){ setTimeout(r, 2000); }); // espera 2s antes de tentar de novo
             }
@@ -2433,14 +2436,17 @@
             for (var attempt = 1; attempt <= 3; attempt++) {
               try {
                 resultDiv.innerHTML = '<div style="text-align:center;padding:20px;"><div class="spinner-border" style="color:#ff8b9f;"></div><div style="margin-top:10px;color:#9aa4b8;">✍️ Corrigindo redação' + (attempt > 1 ? ' (tentativa ' + attempt + ')' : '') + '...</div></div>';
+                var _ctrl2 = new AbortController();
+                var _to2 = setTimeout(function() { _ctrl2.abort(); }, 30000);
                 r = await fetch('/api/ai', {
                   method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-                  body: JSON.stringify({ message: redacaoPrompt, messages: [], kind: 'resumo' })
+                  body: JSON.stringify({ message: redacaoPrompt, messages: [], kind: 'resumo' }), signal: _ctrl2.signal
                 });
+                clearTimeout(_to2);
                 d = await r.json();
                 if (d.ok && d.response) break;
               } catch (retryErr) {
-                d = { ok: false, error: retryErr.message };
+                d = { ok: false, error: retryErr.name === 'AbortError' ? 'Timeout' : retryErr.message };
               }
               if (attempt < 3) await new Promise(function(r){ setTimeout(r, 2000); });
             }
