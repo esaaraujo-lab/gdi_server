@@ -1100,87 +1100,105 @@
                     return;
                   }
 
-                  // ─── 2. Extrair materiais (MD/TXT/PDF com pdf.js) ───
-                  setLoading('📖 Extraindo material da aula…');
+                  // ─── 2. Extrair material: TRANSCRIÇÃO primeiro, PDF só se não houver ───
+                  setLoading('🔍 Procurando transcrição da aula…');
                   let materialContent = '';
-                  let materialsList = [];
+                  let materialSource = '';
                   try {
                     if (window.gdiListAllFiles && lessonPath) {
                       const files = await window.gdiListAllFiles(lessonPath, '');
-                      materialsList = files.filter(f => {
+                      const allMaterials = files.filter(f => {
                         const ext = (f.name.split('.').pop() || '').toLowerCase();
                         return ext === 'pdf' || ext === 'md' || ext === 'txt' || ext === 'html';
                       });
-                      // ★ Transcription-priority: arquivos com "transcri" primeiro
-                      materialsList.sort((a, b) => {
-                        const at = /transcri/i.test(a.name) ? 0 : 1;
-                        const bt = /transcri/i.test(b.name) ? 0 : 1;
-                        return at - bt;
+
+                      // ★ FASE 1: Procurar TRANSCRIÇÃO (arquivos com "transcri" no nome, ou .txt/.md)
+                      let transcriptionFiles = allMaterials.filter(f => {
+                        const ext = (f.name.split('.').pop() || '').toLowerCase();
+                        const lowName = f.name.toLowerCase();
+                        // Transcrição = nome tem "transcri" OU é .txt/.md (geralmente são transcrições)
+                        return lowName.includes('transcri') || ext === 'txt' || ext === 'md';
                       });
-                      for (const m of materialsList.slice(0, 3)) {
-                        const ext = (m.name.split('.').pop() || '').toLowerCase();
-                        if (ext === 'pdf') {
-                          // ★ Extrair texto do PDF usando pdf.js (não apenas placeholder)
-                          setLoading('📄 Extraindo texto do PDF: ' + m.name + '…');
-                          if (m.link) {
-                            const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
-                            const pdfText = await Shell._extractPdfText(link);
-                            if (pdfText && pdfText.length > 50) {
-                              materialContent += '\n\n--- ' + m.name + ' ---\n' + pdfText.substring(0, 40000);
-                            } else {
-                              materialContent += '\n[Material PDF: ' + m.name + ' (não foi possível extrair texto — pode ser escaneado)]';
-                            }
+
+                      // Se não achou na pasta principal, procurar em subpastas (especialmente "material")
+                      if (transcriptionFiles.length === 0) {
+                        const subs = files.filter(f => f.mimeType === 'application/vnd.google-apps.folder').slice(0, 5);
+                        for (const sf of subs) {
+                          const fp = lessonPath + encodeURIComponent(sf.name) + '/';
+                          const subFiles = await window.gdiListAllFiles(fp, '');
+                          const subTransc = subFiles.filter(f => {
+                            const ext = (f.name.split('.').pop() || '').toLowerCase();
+                            const lowName = f.name.toLowerCase();
+                            return lowName.includes('transcri') || ext === 'txt' || ext === 'md';
+                          });
+                          if (subTransc.length > 0) {
+                            transcriptionFiles = subTransc;
+                            break;
                           }
-                        } else if (m.link) {
-                          try {
-                            const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
-                            const resp = await fetch(link);
-                            if (resp.ok) {
-                              const text = await resp.text();
-                              materialContent += '\n\n--- ' + m.name + ' ---\n' + text.substring(0, 30000);
-                            }
-                          } catch (e) { /* skip */ }
                         }
                       }
-                    }
-                  } catch (e) { console.warn('[Shell] material extract:', e); }
 
-                  // ★ Subpastas (especialmente "material") se não encontrou conteúdo suficiente
-                  if (materialContent.length < 200 && window.gdiListAllFiles && lessonPath) {
-                    try {
-                      const files = await window.gdiListAllFiles(lessonPath, '');
-                      const subs = files.filter(f => f.mimeType === 'application/vnd.google-apps.folder').slice(0, 5);
-                      for (const sf of subs) {
-                        const fp = lessonPath + encodeURIComponent(sf.name) + '/';
-                        const subFiles = await window.gdiListAllFiles(fp, '');
-                        const subMats = subFiles.filter(f => {
-                          const ext = (f.name.split('.').pop() || '').toLowerCase();
-                          return ext === 'pdf' || ext === 'md' || ext === 'txt';
-                        });
-                        for (const m of subMats.slice(0, 3)) {
-                          const ext = (m.name.split('.').pop() || '').toLowerCase();
-                          if (ext === 'pdf' && m.link) {
-                            setLoading('📄 Extraindo PDF da subpasta: ' + m.name + '…');
-                            const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
-                            const pdfText = await Shell._extractPdfText(link);
-                            if (pdfText && pdfText.length > 50) {
-                              materialContent += '\n\n--- ' + m.name + ' ---\n' + pdfText.substring(0, 30000);
-                            }
-                          } else if (m.link) {
+                      // Se achou transcrição, usar SÓ ELA (não processa PDFs)
+                      if (transcriptionFiles.length > 0) {
+                        setLoading('📝 Transcrição encontrada! Lendo…');
+                        for (const m of transcriptionFiles.slice(0, 2)) {
+                          if (m.link) {
                             try {
                               const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
                               const resp = await fetch(link);
                               if (resp.ok) {
                                 const text = await resp.text();
-                                materialContent += '\n\n--- ' + m.name + ' ---\n' + text.substring(0, 20000);
+                                materialContent += '\n\n--- Transcrição: ' + m.name + ' ---\n' + text.substring(0, 60000);
                               }
                             } catch (e) { /* skip */ }
                           }
                         }
-                        if (materialContent.length > 200) break;
+                        if (materialContent.length > 100) {
+                          materialSource = 'transcrição';
+                        }
                       }
-                    } catch (e) { /* skip */ }
-                  }
+
+                      // ★ FASE 2: Se NÃO achou transcrição, extrair PDFs
+                      if (materialContent.length < 100) {
+                        setLoading('📄 Sem transcrição. Extraindo material em PDF…');
+                        let pdfFiles = allMaterials.filter(f => {
+                          const ext = (f.name.split('.').pop() || '').toLowerCase();
+                          return ext === 'pdf';
+                        });
+                        // Se não achou PDF na pasta principal, procurar em subpastas
+                        if (pdfFiles.length === 0) {
+                          const subs = files.filter(f => f.mimeType === 'application/vnd.google-apps.folder').slice(0, 5);
+                          for (const sf of subs) {
+                            const fp = lessonPath + encodeURIComponent(sf.name) + '/';
+                            const subFiles = await window.gdiListAllFiles(fp, '');
+                            const subPdfs = subFiles.filter(f => {
+                              const ext = (f.name.split('.').pop() || '').toLowerCase();
+                              return ext === 'pdf';
+                            });
+                            if (subPdfs.length > 0) {
+                              pdfFiles = subPdfs;
+                              break;
+                            }
+                          }
+                        }
+                        for (const m of pdfFiles.slice(0, 3)) {
+                          setLoading('📄 Extraindo texto do PDF: ' + m.name + '…');
+                          if (m.link) {
+                            const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
+                            const pdfText = await Shell._extractPdfText(link);
+                            if (pdfText && pdfText.length > 50) {
+                              materialContent += '\n\n--- Material PDF: ' + m.name + ' ---\n' + pdfText.substring(0, 40000);
+                            } else {
+                              materialContent += '\n[Material PDF: ' + m.name + ' (não foi possível extrair texto — pode ser escaneado)]';
+                            }
+                          }
+                        }
+                        if (materialContent.length > 100) {
+                          materialSource = 'PDF';
+                        }
+                      }
+                    }
+                  } catch (e) { console.warn('[Shell] material extract:', e); }
 
                   if (materialContent.length > 80000) {
                     materialContent = materialContent.substring(0, 80000) + '\n[...truncado...]';
@@ -1188,13 +1206,11 @@
 
                   const courseName = lessonPath.split('/').filter(Boolean).slice(-1)[0] || '';
                   const driveName = window.drive_names && window.drive_names[+(lessonPath.split('/')[1] || '0').replace(':','')] || '';
-                  const ctx = 'Aula: ' + lessonName + '\nCurso: ' + courseName + '\nDrive: ' + driveName;
+                  const ctx = 'Aula: ' + lessonName + '\nCurso: ' + courseName + '\nDrive: ' + driveName + (materialSource ? '\nFonte do material: ' + materialSource : '');
                   const hasContent = materialContent.length > 100;
 
                   // ─── 3. generateAll: gerar resumo + pílulas + questões em paralelo ───
-                  // Produção gera TUDO de uma vez (Promise.allSettled). Se o usuário pediu só um tipo,
-                  // ainda assim geramos todos (mais eficiente — cache fica completo p/ próximas abas).
-                  setLoading('✨ Gerando resumo + pílulas + questões em cadeia…<br>Isto pode levar 30-60s.');
+                  setLoading('✨ Gerando resumo + pílulas + questões' + (materialSource ? ' (fonte: ' + materialSource + ')' : '') + '…<br>Isto pode levar 30-60s.');
 
                   const textSlice = hasContent ? materialContent : ctx;
                   const sliceCap = hasContent ? 80000 : 2000;
