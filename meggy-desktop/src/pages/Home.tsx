@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { aiCacheGet, aiCacheSave, aiGenerate, fetchText } from "../lib/api";
+import { aiCacheGet, aiCacheSave, aiGenerate, fetchText, extractPdfText } from "../lib/api";
 
 interface Drive { index: number; name: string; }
 interface FileItem { name: string; mime_type: string; id: string; link: string | null; size: number; }
@@ -494,7 +494,7 @@ function PlayerView({
         return;
       }
 
-      // ─── 2. Extract material (transcriptions only — no PDF text extraction in desktop) ───
+      // ─── 2. Extract material: TRANSCRIÇÃO primeiro, PDF se não houver ───
       setIsaLoadingMsg("🔍 Procurando transcrição da aula…");
       let matContent = "";
       let matSource = "";
@@ -506,6 +506,7 @@ function PlayerView({
           return lowName.includes("transcri") || ext === "txt" || ext === "md";
         };
         let searchFiles = here.filter(isTransc);
+        // ★ Buscar transcrição em subpastas (especialmente "material")
         if (!searchFiles.length) {
           const subs = here.filter(f => f.mime_type === "application/vnd.google-apps.folder").slice(0, 5);
           for (const sf of subs) {
@@ -517,6 +518,7 @@ function PlayerView({
             } catch (_) { /* skip */ }
           }
         }
+        // ★ FASE 1: Se achou transcrição, usar SÓ ELA
         if (searchFiles.length) {
           setIsaLoadingMsg("📝 Transcrição encontrada! Lendo…");
           for (const m of searchFiles.slice(0, 2)) {
@@ -531,6 +533,44 @@ function PlayerView({
             }
           }
           if (matContent.length > 100) matSource = "transcrição";
+        }
+        // ★ FASE 2: Se NÃO achou transcrição, extrair PDFs
+        if (matContent.length < 100) {
+          setIsaLoadingMsg("📄 Sem transcrição. Extraindo material em PDF…");
+          let pdfFiles = here.filter(f => {
+            const ext = (f.name.split(".").pop() || "").toLowerCase();
+            return ext === "pdf";
+          });
+          // Buscar PDFs em subpastas se não achou na pasta principal
+          if (!pdfFiles.length) {
+            const subs = here.filter(f => f.mime_type === "application/vnd.google-apps.folder").slice(0, 5);
+            for (const sf of subs) {
+              const subPath = folderPath + encodeURIComponent(sf.name) + "/";
+              try {
+                const subFiles = await invoke<FileItem[]>("list_folder", { driveIndex: drive.index, path: subPath });
+                const subPdfs = subFiles.filter(f => {
+                  const ext = (f.name.split(".").pop() || "").toLowerCase();
+                  return ext === "pdf";
+                });
+                if (subPdfs.length) { pdfFiles = subPdfs; break; }
+              } catch (_) { /* skip */ }
+            }
+          }
+          for (const m of pdfFiles.slice(0, 3)) {
+            if (m.link) {
+              setIsaLoadingMsg("📄 Extraindo texto do PDF: " + m.name + "…");
+              try {
+                const link = m.link.startsWith("http") ? m.link : (BASE_URL + m.link);
+                const pdfText = await extractPdfText(link);
+                if (pdfText && pdfText.length > 50) {
+                  matContent += "\n\n--- Material PDF: " + m.name + " ---\n" + pdfText.substring(0, 40000);
+                }
+              } catch (e) {
+                console.warn("PDF extract failed:", m.name, e);
+              }
+            }
+          }
+          if (matContent.length > 100) matSource = "PDF";
         }
       } catch (e) { console.warn("material extract", e); }
 
