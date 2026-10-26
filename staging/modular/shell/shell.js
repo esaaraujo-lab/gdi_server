@@ -2027,43 +2027,374 @@
       },
 
       // ★ meggyAIChat: chat da Meggy AI no painel principal (main pane)
+      // v1.0.220: com anexo de arquivos (PDF/imagem/texto) + correção de redação
       meggyAIChat(el) {
-        el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">🤖 Meggy AI</h1></div>' +
+        el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">🤖 Meggy AI</h1>' +
+          '<button class="meggy-header-btn" id="meggy-redacao-btn" style="font-size:13px;background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-pencil-square"></i> Corrigir Redação</button>' +
+          '</div>' +
           '<div class="meggy-chat-main">' +
             '<div class="meggy-chat-messages" id="meggy-chat-messages">' +
               '<div class="meggy-ai-msg bot">Oi! Sou a <b>Meggy</b> 🐩 — sua poodle tutora de estudos.<br><br>' +
-                'Posso ajudar com:<br>• Explicar um tema da aula<br>• Tirar dúvidas<br>• Sugerir um plano de estudos<br><br>' +
+                'Posso ajudar com:<br>• Explicar um tema da aula<br>• Tirar dúvidas<br>• Sugerir um plano de estudos<br>• <b>Corrigir redações</b> (escritas ou manuscritas)<br><br>' +
                 'Para gerar resumos, questões e flashcards, abra uma aula e use as abas <b>Resumo Meggy</b>, <b>Questões</b>, <b>Pílulas</b> ou <b>Flashcards</b> no player. 🐾' +
               '</div>' +
             '</div>' +
+            '<div class="meggy-chat-attachments" id="meggy-chat-attachments" style="display:none;"></div>' +
             '<div class="meggy-chat-input-bar">' +
-              '<textarea id="meggy-chat-input" placeholder="Pergunte algo à Meggy..." rows="2"></textarea>' +
+              '<button id="meggy-chat-attach" title="Anexar arquivo (PDF, imagem, texto)" style="width:44px;height:44px;flex-shrink:0;border:none;border-radius:10px;background:rgba(255,255,255,0.06);color:#c9d1d9;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;"><i class="bi bi-paperclip"></i></button>' +
+              '<input type="file" id="meggy-chat-file-input" style="display:none;" accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.txt,.md,.html">' +
+              '<textarea id="meggy-chat-input" placeholder="Pergunte algo à Meggy... (ou anexe um arquivo com o clipe)" rows="2"></textarea>' +
               '<button id="meggy-chat-send" title="Enviar"><i class="bi bi-send"></i></button>' +
             '</div>' +
           '</div>';
         Shell._ensureMdLibs();
+
+        // ★ Estado de anexos
+        var attachedFiles = []; // [{name, type, size, text, dataUrl}]
+
+        // ★ Função para renderizar chips de anexos
+        function renderAttachments() {
+          var attDiv = document.getElementById('meggy-chat-attachments');
+          if (!attDiv) return;
+          if (attachedFiles.length === 0) { attDiv.style.display = 'none'; return; }
+          attDiv.style.display = 'flex';
+          attDiv.innerHTML = attachedFiles.map(function(f, i) {
+            var icon = f.type.startsWith('image/') ? 'bi-image' : f.type === 'application/pdf' ? 'bi-file-earmark-pdf' : 'bi-file-earmark-text';
+            return '<div class="meggy-chat-att-chip" data-i="' + i + '">' +
+              '<i class="bi ' + icon + '"></i> ' + Shell._esc(f.name) +
+              ' <span class="meggy-chat-att-remove" data-i="' + i + '"><i class="bi bi-x"></i></span>' +
+            '</div>';
+          }).join('');
+          attDiv.querySelectorAll('.meggy-chat-att-remove').forEach(function(x) {
+            x.onclick = function() {
+              var idx = parseInt(x.dataset.i, 10);
+              attachedFiles.splice(idx, 1);
+              renderAttachments();
+            };
+          });
+        }
+
+        // ★ Função para processar arquivo anexado
+        async function processFile(file) {
+          var name = file.name, type = file.type, size = file.size;
+          var text = '', dataUrl = '';
+          if (type.startsWith('text/') || /\.(txt|md|html)$/i.test(name)) {
+            // Texto: ler direto
+            text = await file.text();
+          } else if (type === 'application/pdf' || /\.pdf$/i.test(name)) {
+            // PDF: extrair texto com pdf.js
+            var url = URL.createObjectURL(file);
+            text = await Shell._extractPdfText(url);
+            URL.revokeObjectURL(url);
+            if (!text || text.length < 30) {
+              throw new Error('Não foi possível extrair texto do PDF. Pode ser escaneado — tente converter para imagem.');
+            }
+          } else if (type.startsWith('image/')) {
+            // Imagem: converter para base64 (para OCR no backend)
+            dataUrl = await new Promise(function(resolve, reject) {
+              var reader = new FileReader();
+              reader.onload = function() { resolve(reader.result); };
+              reader.onerror = reject;
+              reader.readAsDataURL(file);
+            });
+          } else {
+            throw new Error('Formato não suportado: ' + type);
+          }
+          attachedFiles.push({ name: name, type: type, size: size, text: text, dataUrl: dataUrl });
+          renderAttachments();
+        }
+
+        // ★ Botão anexar
+        var attachBtn = document.getElementById('meggy-chat-attach');
+        var fileInput = document.getElementById('meggy-chat-file-input');
+        if (attachBtn) attachBtn.onclick = function() { fileInput.click(); };
+        if (fileInput) fileInput.onchange = async function(e) {
+          var files = e.target.files;
+          for (var i = 0; i < files.length; i++) {
+            var f = files[i];
+            // Mostrar processando
+            var msgs = document.getElementById('meggy-chat-messages');
+            msgs.insertAdjacentHTML('beforeend', '<div class="meggy-ai-msg bot" id="meggy-att-processing">📄 Processando ' + Shell._esc(f.name) + '...</div>');
+            msgs.scrollTop = msgs.scrollHeight;
+            try {
+              await processFile(f);
+            } catch (err) {
+              var proc = document.getElementById('meggy-att-processing');
+              if (proc) proc.innerHTML = '⚠️ Erro ao processar <b>' + Shell._esc(f.name) + '</b>: ' + Shell._esc(err.message);
+              continue;
+            }
+            var proc2 = document.getElementById('meggy-att-processing');
+            if (proc2) proc2.remove();
+          }
+          fileInput.value = ''; // reset para permitir re-anexar
+        };
+
+        // ★ Drag & drop
+        var main = el.querySelector('.meggy-chat-main');
+        if (main) {
+          main.ondragover = function(e) { e.preventDefault(); main.style.border = '2px dashed #ff8b9f'; };
+          main.ondragleave = function(e) { e.preventDefault(); main.style.border = ''; };
+          main.ondrop = async function(e) {
+            e.preventDefault();
+            main.style.border = '';
+            var files = e.dataTransfer.files;
+            for (var i = 0; i < files.length; i++) {
+              var msgs = document.getElementById('meggy-chat-messages');
+              msgs.insertAdjacentHTML('beforeend', '<div class="meggy-ai-msg bot" id="meggy-att-processing">📄 Processando ' + Shell._esc(files[i].name) + '...</div>');
+              msgs.scrollTop = msgs.scrollHeight;
+              try { await processFile(files[i]); } catch (err) {
+                var p = document.getElementById('meggy-att-processing');
+                if (p) p.innerHTML = '⚠️ Erro: ' + Shell._esc(err.message);
+                continue;
+              }
+              var p2 = document.getElementById('meggy-att-processing');
+              if (p2) p2.remove();
+            }
+          };
+        }
+
+        // ★ Função principal de enviar mensagem
         var send = async function() {
           var input = document.getElementById('meggy-chat-input');
           var msg = input.value.trim();
-          if (!msg) return;
+          if (!msg && attachedFiles.length === 0) return;
           var msgs = document.getElementById('meggy-chat-messages');
-          msgs.insertAdjacentHTML('beforeend', '<div class="meggy-ai-msg user">' + Shell._esc(msg) + '</div>');
+
+          // Construir mensagem com anexos
+          var displayMsg = msg;
+          if (attachedFiles.length > 0) {
+            displayMsg = (msg ? msg + ' ' : '') + '[Arquivos anexados: ' + attachedFiles.map(function(f) { return f.name; }).join(', ') + ']';
+          }
+          msgs.insertAdjacentHTML('beforeend', '<div class="meggy-ai-msg user">' + Shell._esc(displayMsg) + '</div>');
           input.value = '';
           msgs.insertAdjacentHTML('beforeend', '<div class="meggy-ai-msg bot" id="meggy-chat-typing">🐾 Pensando...</div>');
           msgs.scrollTop = msgs.scrollHeight;
+
           try {
-            var r = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg, messages: [] }) });
+            // Construir prompt completo com conteúdo dos anexos
+            var fullMsg = msg;
+            var hasImageOcr = false;
+            for (var i = 0; i < attachedFiles.length; i++) {
+              var f = attachedFiles[i];
+              if (f.text) {
+                fullMsg += '\n\n--- Arquivo: ' + f.name + ' ---\n' + f.text.substring(0, 30000);
+              } else if (f.dataUrl) {
+                // Imagem: fazer OCR via /api/ai/ocr
+                hasImageOcr = true;
+                var typing = document.getElementById('meggy-chat-typing');
+                if (typing) typing.innerHTML = '🔍 Fazendo OCR da imagem ' + Shell._esc(f.name) + '...';
+                try {
+                  var b64 = f.dataUrl.split(',')[1];
+                  var ocrR = await fetch('/api/ai/ocr', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: b64, prompt: 'Transcreva TODO o texto desta imagem (redação manuscrita, documento, etc). Responda apenas com o texto transcrito.' })
+                  });
+                  var ocrD = await ocrR.json();
+                  if (ocrD.ok && ocrD.response) {
+                    fullMsg += '\n\n--- Imagem: ' + f.name + ' (OCR) ---\n' + ocrD.response;
+                  } else {
+                    fullMsg += '\n\n[Imagem ' + f.name + ': OCR falhou - ' + (ocrD.error || 'erro desconhecido') + ']';
+                  }
+                } catch (ocrErr) {
+                  fullMsg += '\n\n[Imagem ' + f.name + ': erro de OCR - ' + ocrErr.message + ']';
+                }
+              }
+            }
+
+            // Enviar para /api/ai
+            var typing2 = document.getElementById('meggy-chat-typing');
+            if (typing2) typing2.innerHTML = '🐾 Pensando...';
+            var r = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: fullMsg, messages: [] }) });
             var d = await r.json();
             var resp = d.response || 'Sem resposta';
             var html = resp;
             if (window.marked) { try { html = window.marked.parse(resp); if (window.DOMPurify) html = window.DOMPurify.sanitize(html); } catch (_) {} }
             var t = document.getElementById('meggy-chat-typing');
             if (t) t.innerHTML = html;
-          } catch (e) { var t = document.getElementById('meggy-chat-typing'); if (t) t.textContent = 'Erro: ' + e.message; }
+
+            // Limpar anexos após envio
+            attachedFiles = [];
+            renderAttachments();
+          } catch (e) {
+            var t2 = document.getElementById('meggy-chat-typing');
+            if (t2) t2.textContent = 'Erro: ' + e.message;
+          }
           msgs.scrollTop = msgs.scrollHeight;
         };
+
         document.getElementById('meggy-chat-send').onclick = send;
         document.getElementById('meggy-chat-input').onkeydown = function(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
+
+        // ★ Botão Corrigir Redação
+        var redBtn = document.getElementById('meggy-redacao-btn');
+        if (redBtn) redBtn.onclick = function() { Shell.views._showRedacaoDialog(el); };
+      },
+
+      // ★ _showRedacaoDialog: modal de correção de redação
+      _showRedacaoDialog(parentEl) {
+        var modal = document.getElementById('meggy-redacao-modal');
+        if (!modal) {
+          modal = document.createElement('div');
+          modal.id = 'meggy-redacao-modal';
+          modal.className = 'meggy-modal-overlay';
+          modal.innerHTML = '<div class="meggy-modal-content" style="max-width:700px;">' +
+            '<div class="meggy-modal-header">' +
+              '<div class="meggy-modal-title"><i class="bi bi-pencil-square"></i> Corrigir Redação</div>' +
+              '<button class="meggy-ai-drawer-close" id="meggy-redacao-close"><i class="bi bi-x"></i></button>' +
+            '</div>' +
+            '<div style="padding:20px;">' +
+              '<div style="margin-bottom:16px;">' +
+                '<label style="display:block;margin-bottom:6px;font-size:13px;color:#9aa4b8;font-weight:600;">Banca:</label>' +
+                '<select id="meggy-redacao-banca" style="width:100%;padding:10px 12px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e6edf3;font-size:14px;">' +
+                  '<option value="default">Selecione a banca...</option>' +
+                  '<option value="CEBRASPE (CESPE)">CEBRASPE (CESPE)</option>' +
+                  '<option value="FGV">FGV</option>' +
+                  '<option value="VUNESP">VUNESP</option>' +
+                  '<option value="ENEM (5 competências)">ENEM (5 competências)</option>' +
+                  '<option value="FUVEST (dissertativa)">FUVEST (dissertativa)</option>' +
+                '</select>' +
+              '</div>' +
+              '<div style="margin-bottom:16px;">' +
+                '<label style="display:block;margin-bottom:6px;font-size:13px;color:#9aa4b8;font-weight:600;">Tipo:</label>' +
+                '<select id="meggy-redacao-tipo" style="width:100%;padding:10px 12px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e6edf3;font-size:14px;">' +
+                  '<option value="dissertativa">Dissertativa</option>' +
+                  '<option value="narrativa">Narrativa</option>' +
+                  '<option value="descritiva">Descritiva</option>' +
+                  '<option value="carta">Carta</option>' +
+                  '<option value="artigo">Artigo</option>' +
+                '</select>' +
+              '</div>' +
+              '<div style="margin-bottom:16px;">' +
+                '<label style="display:block;margin-bottom:6px;font-size:13px;color:#9aa4b8;font-weight:600;">Anexar redação (PDF, imagem manuscrita, ou texto):</label>' +
+                '<div id="meggy-redacao-dropzone" style="border:2px dashed rgba(255,139,159,0.3);border-radius:12px;padding:30px;text-align:center;cursor:pointer;transition:all 0.15s;background:rgba(255,139,159,0.04);">' +
+                  '<i class="bi bi-cloud-upload" style="font-size:36px;color:#ff8b9f;"></i>' +
+                  '<div style="margin-top:10px;font-size:14px;color:#9aa4b8;">Clique ou arraste o arquivo aqui</div>' +
+                  '<div style="font-size:11px;color:#6b7488;margin-top:4px;">PDF, PNG, JPG, TXT (redação manuscrita escaneada também funciona)</div>' +
+                '</div>' +
+                '<input type="file" id="meggy-redacao-file" style="display:none;" accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.txt,.md,.html">' +
+                '<div id="meggy-redacao-fileinfo" style="display:none;margin-top:10px;padding:10px 12px;background:rgba(255,139,159,0.08);border:1px solid rgba(255,139,159,0.2);border-radius:8px;font-size:13px;color:#ff8b9f;"></div>' +
+              '</div>' +
+              '<div style="margin-bottom:16px;">' +
+                '<label style="display:block;margin-bottom:6px;font-size:13px;color:#9aa4b8;font-weight:600;">Ou cole o texto da redação:</label>' +
+                '<textarea id="meggy-redacao-text" placeholder="Cole aqui o texto da sua redação..." rows="6" style="width:100%;padding:12px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e6edf3;font-size:14px;font-family:inherit;resize:vertical;"></textarea>' +
+              '</div>' +
+              '<div id="meggy-redacao-result" style="display:none;margin-bottom:16px;max-height:300px;overflow-y:auto;padding:14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;font-size:13px;"></div>' +
+              '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
+                '<button class="meggy-header-btn" id="meggy-redacao-cancel">Cancelar</button>' +
+                '<button class="meggy-header-btn" id="meggy-redacao-submit" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-check-lg"></i> Corrigir Redação</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+          var shellRoot = document.getElementById('meggy-shell') || document.getElementById('meggy-root') || document.body;
+          shellRoot.appendChild(modal);
+          document.getElementById('meggy-redacao-close').onclick = function() { modal.style.display = 'none'; };
+          document.getElementById('meggy-redacao-cancel').onclick = function() { modal.style.display = 'none'; };
+        }
+        modal.style.display = 'flex';
+
+        var selectedFile = null;
+        var dropzone = document.getElementById('meggy-redacao-dropzone');
+        var fileInput = document.getElementById('meggy-redacao-file');
+        var fileInfo = document.getElementById('meggy-redacao-fileinfo');
+        var resultDiv = document.getElementById('meggy-redacao-result');
+        var submitBtn = document.getElementById('meggy-redacao-submit');
+
+        // Dropzone click
+        dropzone.onclick = function() { fileInput.click(); };
+        dropzone.ondragover = function(e) { e.preventDefault(); dropzone.style.borderColor = '#ff8b9f'; dropzone.style.background = 'rgba(255,139,159,0.1)'; };
+        dropzone.ondragleave = function(e) { e.preventDefault(); dropzone.style.borderColor = 'rgba(255,139,159,0.3)'; dropzone.style.background = 'rgba(255,139,159,0.04)'; };
+        dropzone.ondrop = function(e) {
+          e.preventDefault();
+          dropzone.style.borderColor = 'rgba(255,139,159,0.3)';
+          dropzone.style.background = 'rgba(255,139,159,0.04)';
+          if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
+        };
+        fileInput.onchange = function(e) { if (e.target.files.length > 0) handleFile(e.target.files[0]); };
+
+        function handleFile(f) {
+          selectedFile = f;
+          var sizeStr = (f.size / 1024).toFixed(1) + ' KB';
+          var icon = f.type.startsWith('image/') ? 'bi-image' : f.type === 'application/pdf' ? 'bi-file-earmark-pdf' : 'bi-file-earmark-text';
+          fileInfo.style.display = 'block';
+          fileInfo.innerHTML = '<i class="bi ' + icon + '"></i> <b>' + Shell._esc(f.name) + '</b> (' + sizeStr + ')';
+        }
+
+        // Submit
+        submitBtn.onclick = async function() {
+          var banca = document.getElementById('meggy-redacao-banca').value;
+          var tipo = document.getElementById('meggy-redacao-tipo').value;
+          var text = document.getElementById('meggy-redacao-text').value.trim();
+          if (!selectedFile && text.length < 50) {
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = '<div style="color:#ff8b9f;">⚠️ Envie um arquivo ou cole o texto (mínimo 50 caracteres).</div>';
+            return;
+          }
+
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Corrigindo...';
+          resultDiv.style.display = 'block';
+          resultDiv.innerHTML = '<div style="text-align:center;padding:20px;"><div class="spinner-border" style="color:#ff8b9f;"></div><div style="margin-top:10px;color:#9aa4b8;">' + (selectedFile ? '📄 Extraindo texto e corrigindo...' : '✍️ Corrigindo redação...') + '</div></div>';
+
+          try {
+            var r;
+            if (selectedFile) {
+              // Se for PDF, extrair texto no client (pdf.js) e enviar como JSON
+              if (selectedFile.type === 'application/pdf' || /\.pdf$/i.test(selectedFile.name)) {
+                var url = URL.createObjectURL(selectedFile);
+                var pdfText = await Shell._extractPdfText(url);
+                URL.revokeObjectURL(url);
+                if (!pdfText || pdfText.length < 50) {
+                  throw new Error('Não foi possível extrair texto do PDF. Tente enviar como imagem.');
+                }
+                r = await fetch('/api/ai/redacao/correct-full', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ text: pdfText, banca: banca, tipo: tipo })
+                });
+              } else {
+                // Imagem ou texto: enviar como multipart
+                var fd = new FormData();
+                fd.append('file', selectedFile);
+                fd.append('banca', banca);
+                fd.append('tipo', tipo);
+                r = await fetch('/api/ai/redacao/correct-full', { method: 'POST', body: fd });
+              }
+            } else {
+              // Texto colado
+              r = await fetch('/api/ai/redacao/correct-full', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: text, banca: banca, tipo: tipo })
+              });
+            }
+            var d = await r.json();
+            if (d.ok) {
+              var html = d.correction || 'Sem correção';
+              await Shell._ensureMdLibs();
+              if (window.marked) { try { html = window.marked.parse(d.correction); if (window.DOMPurify) html = window.DOMPurify.sanitize(html); } catch (_) {} }
+              var ocrBadge = d.ocrUsed ? ' <span style="font-size:11px;color:#5ddeda;">🔍 OCR usado</span>' : '';
+              var scoreBadge = d.score && d.score !== '—' ? ' <span style="font-size:11px;color:#3fb950;">Nota: ' + d.score + '</span>' : '';
+              var savedBadge = d.saved ? ' <span style="font-size:11px;color:#9aa4b8;">💾 Salvo no Drive</span>' : '';
+              resultDiv.innerHTML = '<div style="margin-bottom:10px;font-size:12px;color:#9aa4b8;">✓ Correção concluída' + ocrBadge + scoreBadge + savedBadge + '</div>' +
+                '<div class="gdi-isa-summary-body">' + html + '</div>' +
+                '<div style="margin-top:12px;display:flex;gap:8px;">' +
+                  '<button class="meggy-header-btn" onclick="navigator.clipboard.writeText(document.getElementById(\'meggy-redacao-result\').innerText);this.textContent=\'✓ Copiado!\'"><i class="bi bi-clipboard"></i> Copiar</button>' +
+                  '<button class="meggy-header-btn" onclick="window._downloadIsaAsPdf(\'Correção Redação\')" style="background:rgba(255,139,159,0.12);border:1px solid rgba(255,139,159,0.3);color:#ff8b9f;"><i class="bi bi-download"></i> PDF</button>' +
+                '</div>';
+              // Store for PDF download
+              window._lastIsaText = d.correction;
+              window._lastIsaLesson = 'Correção Redação ' + banca;
+              window._lastIsaLabel = 'Correção Redação';
+            } else {
+              resultDiv.innerHTML = '<div style="color:#ff8b9f;">⚠️ Erro: ' + Shell._esc(d.error || 'tente novamente') + '</div>';
+            }
+          } catch (e) {
+            resultDiv.innerHTML = '<div style="color:#ff8b9f;">⚠️ Erro: ' + Shell._esc(e.message) + '</div>';
+          }
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<i class="bi bi-check-lg"></i> Corrigir Redação';
+        };
       },
 
     },
