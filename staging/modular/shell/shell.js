@@ -62,7 +62,7 @@
             <i class="bi bi-list"></i>
           </button>
           <div class="meggy-header-logo" id="meggy-logo">
-            <span style="font-size:20px;">🐩</span> Meggy
+            <img src="/modular/shell/meggy-avatar.png" alt="Meggy" style="width:28px;height:28px;border-radius:50%;object-fit:cover;" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'"><span style="font-size:20px;display:none;">🐩</span> Meggy
           </div>
           <div class="meggy-header-search">
             <input type="search" placeholder="Buscar aulas, cursos, questões..." id="meggy-search-input" />
@@ -2056,7 +2056,7 @@
       // ★ meggyAIChat: chat da Meggy AI no painel principal (main pane)
       // v1.0.220: com anexo de arquivos (PDF/imagem/texto) + correção de redação
       meggyAIChat(el) {
-        el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">🤖 Meggy AI</h1>' +
+        el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title"><img src="/modular/shell/meggy-avatar.png" alt="Meggy" style="width:32px;height:32px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:8px;" onerror="this.style.display=\'none\'">Meggy AI</h1>' +
           '<button class="meggy-header-btn" id="meggy-redacao-btn" style="font-size:13px;background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-pencil-square"></i> Corrigir Redação</button>' +
           '</div>' +
           '<div class="meggy-chat-main">' +
