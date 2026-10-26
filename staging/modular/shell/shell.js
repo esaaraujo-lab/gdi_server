@@ -1103,7 +1103,7 @@
                     return;
                   }
 
-                  // ─── 2. Extrair materiais (MD/TXT/PDF) ───
+                  // ─── 2. Extrair materiais (MD/TXT/PDF com pdf.js) ───
                   setLoading('📖 Extraindo material da aula…');
                   let materialContent = '';
                   let materialsList = [];
@@ -1123,7 +1123,17 @@
                       for (const m of materialsList.slice(0, 3)) {
                         const ext = (m.name.split('.').pop() || '').toLowerCase();
                         if (ext === 'pdf') {
-                          materialContent += '\n[Material PDF: ' + m.name + ' (' + (m.size ? (m.size/1024/1024).toFixed(1) + 'MB' : '') + ')]';
+                          // ★ Extrair texto do PDF usando pdf.js (não apenas placeholder)
+                          setLoading('📄 Extraindo texto do PDF: ' + m.name + '…');
+                          if (m.link) {
+                            const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
+                            const pdfText = await Shell._extractPdfText(link);
+                            if (pdfText && pdfText.length > 50) {
+                              materialContent += '\n\n--- ' + m.name + ' ---\n' + pdfText.substring(0, 40000);
+                            } else {
+                              materialContent += '\n[Material PDF: ' + m.name + ' (não foi possível extrair texto — pode ser escaneado)]';
+                            }
+                          }
                         } else if (m.link) {
                           try {
                             const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
@@ -1138,8 +1148,8 @@
                     }
                   } catch (e) { console.warn('[Shell] material extract:', e); }
 
-                  // ★ Subpastas se não encontrou nada
-                  if (!materialContent && window.gdiListAllFiles && lessonPath) {
+                  // ★ Subpastas (especialmente "material") se não encontrou conteúdo suficiente
+                  if (materialContent.length < 200 && window.gdiListAllFiles && lessonPath) {
                     try {
                       const files = await window.gdiListAllFiles(lessonPath, '');
                       const subs = files.filter(f => f.mimeType === 'application/vnd.google-apps.folder').slice(0, 5);
@@ -1148,10 +1158,18 @@
                         const subFiles = await window.gdiListAllFiles(fp, '');
                         const subMats = subFiles.filter(f => {
                           const ext = (f.name.split('.').pop() || '').toLowerCase();
-                          return ext === 'md' || ext === 'txt';
+                          return ext === 'pdf' || ext === 'md' || ext === 'txt';
                         });
-                        for (const m of subMats.slice(0, 2)) {
-                          if (m.link) {
+                        for (const m of subMats.slice(0, 3)) {
+                          const ext = (m.name.split('.').pop() || '').toLowerCase();
+                          if (ext === 'pdf' && m.link) {
+                            setLoading('📄 Extraindo PDF da subpasta: ' + m.name + '…');
+                            const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
+                            const pdfText = await Shell._extractPdfText(link);
+                            if (pdfText && pdfText.length > 50) {
+                              materialContent += '\n\n--- ' + m.name + ' ---\n' + pdfText.substring(0, 30000);
+                            }
+                          } else if (m.link) {
                             try {
                               const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
                               const resp = await fetch(link);
@@ -1162,7 +1180,7 @@
                             } catch (e) { /* skip */ }
                           }
                         }
-                        if (materialContent) break;
+                        if (materialContent.length > 200) break;
                       }
                     } catch (e) { /* skip */ }
                   }
@@ -2045,14 +2063,11 @@
         drawer = document.createElement('div');
         drawer.id = 'meggy-ai-drawer';
         drawer.className = 'meggy-ai-drawer';
+        // ★ Chat-only (sem abas de Ações — gerar material só funciona na página de vídeo)
         drawer.innerHTML = `
         <div class="meggy-ai-drawer-header">
           <div class="meggy-ai-drawer-title">🐩 Meggy AI</div>
           <button class="meggy-ai-drawer-close" id="meggy-ai-close"><i class="bi bi-x"></i></button>
-        </div>
-        <div class="meggy-ai-drawer-tabs">
-          <button class="meggy-ai-drawer-tab active" data-aitab="actions">⚡ Ações</button>
-          <button class="meggy-ai-drawer-tab" data-aitab="chat">💬 Chat</button>
         </div>
         <div class="meggy-ai-drawer-body" id="meggy-ai-body"></div>
         `;
@@ -2060,17 +2075,11 @@
         const shellRoot = document.getElementById('meggy-shell') || document.getElementById('meggy-root') || document.body;
         shellRoot.appendChild(drawer);
         document.getElementById('meggy-ai-close').onclick = () => Shell.closeMeggyAIDrawer();
-        drawer.querySelectorAll('.meggy-ai-drawer-tab').forEach(tab => {
-        tab.onclick = () => {
-          drawer.querySelectorAll('.meggy-ai-drawer-tab').forEach(t => t.classList.remove('active'));
-          tab.classList.add('active');
-          Shell.renderMeggyAITab(tab.dataset.aitab);
-        };
-        });
       }
       drawer.classList.add('open');
       Shell.meggyAIDrawerOpen = true;
-      Shell.renderMeggyAITab('actions');
+      // ★ Render chat directly (sem abas)
+      Shell.renderMeggyAITab('chat');
     },
     closeMeggyAIDrawer() {
       const drawer = document.getElementById('meggy-ai-drawer');
@@ -2080,26 +2089,27 @@
     renderMeggyAITab(tab) {
       const body = document.getElementById('meggy-ai-body');
       if (!body) return;
-      if (tab === 'actions') {
-        body.innerHTML = `<div class="meggy-ai-action-grid">
-        <button class="meggy-ai-action-btn" data-action="resumo"><i class="bi bi-file-earmark-text"></i>Gerar Resumo</button>
-        <button class="meggy-ai-action-btn" data-action="pilulas"><i class="bi bi-capsule"></i>Pílulas</button>
-        <button class="meggy-ai-action-btn" data-action="questoes"><i class="bi bi-patch-question"></i>Questões</button>
-        <button class="meggy-ai-action-btn" data-action="flashcards"><i class="bi bi-card-text"></i>Flashcards</button>
-        </div>`;
-        body.querySelectorAll('.meggy-ai-action-btn').forEach(btn => { btn.onclick = () => Shell.meggyAIAction(btn.dataset.action); });
-      } else if (tab === 'chat') {
-        body.innerHTML = `<div class="meggy-ai-chat-messages" id="meggy-ai-messages"></div>
-        <div class="meggy-ai-chat-input"><textarea id="meggy-ai-input" placeholder="Pergunte..." rows="2"></textarea><button id="meggy-ai-send"><i class="bi bi-send"></i></button></div>`;
+      // ★ Chat-only (tab 'actions' removido — gerar material só na página de vídeo)
+      if (tab === 'chat' || tab === 'actions') {
+        body.innerHTML = '<div class="meggy-ai-chat-messages" id="meggy-ai-messages"><div class="meggy-ai-msg bot">Oi! Sou a <b>Meggy</b> 🐩 — sua poodle tutora de estudos.<br><br>Posso ajudar com:<br>• Explicar um tema da aula<br>• Tirar dúvidas<br>• Sugerir um plano de estudos<br><br>Para gerar resumos, questões e flashcards, abra uma aula e use as abas <b>Resumo Meggy</b>, <b>Questões</b>, <b>Pílulas</b> ou <b>Flashcards</b> no player. 🐾</div></div>' +
+        '<div class="meggy-ai-chat-input"><textarea id="meggy-ai-input" placeholder="Pergunte algo à Meggy..." rows="2"></textarea><button id="meggy-ai-send"><i class="bi bi-send"></i></button></div>';
         const send = async () => {
         const msg = document.getElementById('meggy-ai-input').value.trim();
         if (!msg) return;
         const msgs = document.getElementById('meggy-ai-messages');
-        msgs.innerHTML += `<div class="meggy-ai-msg user">${msg}</div>`;
+        msgs.innerHTML += '<div class="meggy-ai-msg user">' + Shell._esc(msg) + '</div>';
         document.getElementById('meggy-ai-input').value = '';
-        msgs.innerHTML += `<div class="meggy-ai-msg bot" id="meggy-ai-typing">🐾 Pensando...</div>`;
+        msgs.innerHTML += '<div class="meggy-ai-msg bot" id="meggy-ai-typing">🐾 Pensando...</div>';
         msgs.scrollTop = msgs.scrollHeight;
-        try { const r = await fetch('/api/ai', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: msg, messages: []}) }); const d = await r.json(); document.getElementById('meggy-ai-typing').textContent = d.response || 'Sem resposta'; } catch (e) { document.getElementById('meggy-ai-typing').textContent = 'Erro: ' + e.message; }
+        try {
+          const r = await fetch('/api/ai', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: msg, messages: []}) });
+          const d = await r.json();
+          const resp = d.response || 'Sem resposta';
+          // Render markdown if marked.js is available
+          let html = resp;
+          if (window.marked) { try { html = window.marked.parse(resp); if (window.DOMPurify) html = window.DOMPurify.sanitize(html); } catch(_) {} }
+          document.getElementById('meggy-ai-typing').innerHTML = html;
+        } catch (e) { document.getElementById('meggy-ai-typing').textContent = 'Erro: ' + e.message; }
         msgs.scrollTop = msgs.scrollHeight;
         };
         document.getElementById('meggy-ai-send').onclick = send;
@@ -2196,7 +2206,6 @@
     },
 
     // _ensureMdLibs: carrega marked.js + DOMPurify dinamicamente se não estiverem presentes
-    // (permite que o shell use markdown rico mesmo sem o worker ter os CDNs no HTML)
     _mdLibsLoading: false,
     _mdLibsLoaded: false,
     _ensureMdLibs() {
@@ -2218,6 +2227,57 @@
         if (pending === 0) { Shell._mdLibsLoaded = true; resolve(); }
       });
       return Shell._mdLibsLoading;
+    },
+
+    // ★ _ensurePdfLibs: carrega pdf.js dinamicamente para extração de texto de PDFs
+    _pdfLibsLoading: false,
+    _pdfLibsLoaded: false,
+    _ensurePdfLibs() {
+      if (Shell._pdfLibsLoaded) return Promise.resolve();
+      if (Shell._pdfLibsLoading) return Shell._pdfLibsLoading;
+      Shell._pdfLibsLoading = new Promise((resolve) => {
+        if (window.pdfjsLib) {
+          Shell._pdfLibsLoaded = true;
+          resolve();
+          return;
+        }
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+        s.onload = () => {
+          if (window.pdfjsLib) {
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+            Shell._pdfLibsLoaded = true;
+          }
+          resolve();
+        };
+        s.onerror = () => { resolve(); };
+        document.head.appendChild(s);
+      });
+      return Shell._pdfLibsLoading;
+    },
+
+    // ★ _extractPdfText: extrai texto de um PDF usando pdf.js (cap 30 páginas, 50K chars)
+    async _extractPdfText(url) {
+      try {
+        await Shell._ensurePdfLibs();
+        if (!window.pdfjsLib) return '';
+        const loadingTask = window.pdfjsLib.getDocument(url);
+        const pdf = await loadingTask.promise;
+        const maxPages = Math.min(pdf.numPages, 30);
+        let text = '';
+        for (let i = 1; i <= maxPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const pageText = content.items.map(item => item.str).join(' ');
+          text += pageText + '\n\n';
+          if (text.length > 50000) break; // cap 50K chars
+        }
+        try { pdf.destroy(); } catch(_) {}
+        return text;
+      } catch (e) {
+        console.warn('[Shell] PDF extract failed for', url, ':', e.message);
+        return '';
+      }
     },
 
     // renderMd: usa marked.js + DOMPurify se disponíveis, senão fallback escape+br
