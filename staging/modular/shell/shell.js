@@ -2205,7 +2205,7 @@
             // Enviar para /api/ai
             var typing2 = document.getElementById('meggy-chat-typing');
             if (typing2) typing2.innerHTML = '🐾 Pensando...';
-            var r = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: fullMsg, messages: [] }) });
+            var r = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ message: fullMsg, messages: [] }) });
             var d = await r.json();
             var resp = d.response || 'Sem resposta';
             var html = resp;
@@ -2387,6 +2387,7 @@
             r = await fetch('/api/ai/redacao', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
               body: JSON.stringify({ text: essayText, banca: banca, tipo: tipo })
             });
             var d = await r.json();
