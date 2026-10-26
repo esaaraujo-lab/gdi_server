@@ -784,6 +784,17 @@
           document.getElementById('gdi-prev-btn').disabled = idx === 0;
           document.getElementById('gdi-next-btn').disabled = idx >= pl.length - 1;
           main.scrollTop = 0;
+
+          // ★ v1.0.223: Limpar e recarregar materiais + ISA para a NOVA aula
+          const matTabs = document.getElementById('gdi-mat-tabs');
+          const matBody = document.getElementById('gdi-mat-body');
+          if (matTabs) matTabs.innerHTML = '';
+          if (matBody) matBody.innerHTML = '<div style="text-align:center;padding:30px;color:#6b7488;">Carregando materiais...</div>';
+          // Limpar estado ISA (forçar regeneração para a nova aula)
+          Shell.__lastQuizQuestions = null;
+          Shell.__lastQuizLessonName = null;
+          // Recarregar materiais da nova aula
+          setTimeout(loadMaterials, 200);
         }
 
         // Modos — usar CSS classes (visibility/position) em vez de display:none (C1: não destrói iframes)
