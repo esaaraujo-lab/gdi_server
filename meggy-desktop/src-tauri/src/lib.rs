@@ -80,6 +80,11 @@ pub fn run() {
             api::scan_course,
             api::save_user_state,
             api::get_user_state,
+            // v1.4.4 — inline player support
+            api::ai_cache_get,
+            api::ai_cache_save,
+            api::ai_generate,
+            api::fetch_text,
             auth::check_session,
             auth::logout,
             db::search_lessons,
