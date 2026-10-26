@@ -100,3 +100,8 @@ export async function aiGenerate(message: string, kind?: string) {
 export async function fetchText(url: string) {
   return invoke<string>("fetch_text", { url });
 }
+
+/** ★ v1.4.5: Extract text from a PDF URL using pdf-extract (Rust crate). */
+export async function extractPdfText(url: string) {
+  return invoke<string>("extract_pdf_text", { url });
+}
