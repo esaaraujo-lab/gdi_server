@@ -460,3 +460,49 @@ pub async fn fetch_text(url: String) -> Result<String, String> {
     }
     resp.text().await.map_err(|e| e.to_string())
 }
+
+/// ★ v1.4.5: Extract text from a PDF URL using pdf-extract crate.
+/// Downloads the PDF to a temp file, extracts text (cap 50K chars), returns it.
+/// Used by ISA generation when no transcription exists — falls back to PDF material.
+#[tauri::command]
+pub async fn extract_pdf_text(url: String) -> Result<String, String> {
+    // Download PDF to temp file
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+
+    let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+
+    // Write to temp file
+    let mut tmp = tempfile::NamedTempFile::new().map_err(|e| e.to_string())?;
+    std::fs::write(tmp.path(), &bytes).map_err(|e| e.to_string())?;
+
+    // Extract text using pdf-extract (runs in blocking thread)
+    let path = tmp.path().to_path_buf();
+    let text = tokio::task::spawn_blocking(move || {
+        pdf_extract::extract_text(&path)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?;
+
+    // Cap at 50K chars
+    let truncated = if text.len() > 50000 {
+        text[..50000].to_string()
+    } else {
+        text
+    };
+
+    Ok(truncated)
+}
