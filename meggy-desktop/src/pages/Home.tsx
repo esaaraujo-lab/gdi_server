@@ -963,18 +963,25 @@ function PlayerView({
           ext === "html" || mt.includes("html");
       };
       let found = here.filter(isMaterial);
-      if (!found.length) {
-        const subs = here.filter(x => x.mime_type === "application/vnd.google-apps.folder").slice(0, 20);
-        for (const sf of subs) {
-          const subPath = currentFolderPath + encodeURIComponent(sf.name) + "/";
-          try {
-            const subFiles = await invoke<FileItem[]>("list_folder", { driveIndex: drive.index, path: subPath });
-            if (myReqId !== loadMaterialsReqIdRef.current) return; // race guard
-            const subMats = subFiles.filter(isMaterial);
-            if (subMats.length) { found = found.concat(subMats); break; }
-          } catch (_) { /* skip */ }
-        }
+      // ★ v1.7.1: ALWAYS search subfolders (not just when found is empty).
+      // The old code only searched subfolders if the current folder had NO materials.
+      // But many courses have PDFs in BOTH the current folder AND a "material" subfolder.
+      // Now: always collect from subfolders too, then dedup.
+      const subs = here.filter(x => x.mime_type === "application/vnd.google-apps.folder").slice(0, 20);
+      for (const sf of subs) {
+        const subPath = currentFolderPath + encodeURIComponent(sf.name) + "/";
+        try {
+          const subFiles = await invoke<FileItem[]>("list_folder", { driveIndex: drive.index, path: subPath });
+          if (myReqId !== loadMaterialsReqIdRef.current) return; // race guard
+          const subMats = subFiles.filter(isMaterial);
+          if (subMats.length) {
+            // Tag with subfolder name for context
+            subMats.forEach(m => { (m as FileItem & { folder?: string }).folder = sf.name; });
+            found = found.concat(subMats);
+          }
+        } catch (_) { /* skip */ }
       }
+      // ★ v1.7.1: If still nothing found, search parent folder (fallback)
       if (!found.length) {
         const parts = currentFolderPath.split("/").filter(Boolean);
         const parentPath = "/" + parts.slice(0, -1).join("/") + "/";
@@ -986,6 +993,14 @@ function PlayerView({
           } catch (_) { /* skip */ }
         }
       }
+      // ★ v1.7.1: Dedup by link (same PDF might appear in folder + subfolder listing)
+      const seenLinks = new Set<string>();
+      found = found.filter(f => {
+        const key = f.link || f.id || f.name;
+        if (seenLinks.has(key)) return false;
+        seenLinks.add(key);
+        return true;
+      });
       if (myReqId !== loadMaterialsReqIdRef.current) return; // final race guard
       setMaterials(found.slice(0, 12));
     } catch (e) {
