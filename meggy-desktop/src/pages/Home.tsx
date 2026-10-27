@@ -337,13 +337,38 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
   }
 
   function openPlayer(file: FileItem) {
-    // Start with just the clicked file so playback starts immediately
-    setPlaylist([file]);
-    setPlayerIndex(0);
-    setView("player");
-    // ★ v1.5.9: Load interfolder — BUT DON'T reset playerIndex here
-    // The PlayerView's useEffect([playerVideoId, playlist]) will find the correct index
-    loadInterfolderPlaylist(file);
+    // ★ v1.7.0: Smart playlist — check if current folder has multiple media files.
+    // If YES → build playlist from current folder only (no interfolder needed).
+    // If NO (only 1 video) → use interfolder to load sibling folders.
+    const isMediaFile = (f: FileItem) => {
+      const isVid = (f.mime_type || "").includes("video") || f.name.endsWith(".mp4");
+      const isAud = (f.mime_type || "").includes("audio") || f.name.endsWith(".mp3") || f.name.endsWith(".m4a");
+      const clickedIsVideo = file.mime_type.startsWith("video/") || file.name.endsWith(".mp4");
+      const clickedIsAudio = file.mime_type.startsWith("audio/") || file.name.endsWith(".mp3") || file.name.endsWith(".m4a");
+      if (clickedIsVideo) return isVid;
+      if (clickedIsAudio) return isAud;
+      return isVid || isAud;
+    };
+    const folderMedia = files.filter(f => isMediaFile(f) && !f.name.includes(".part-"));
+    
+    if (folderMedia.length > 1) {
+      // ★ v1.7.0: Multiple videos in current folder — build playlist from this folder only
+      // Sort by name for logical order (Aula 01, Aula 02, ...)
+      folderMedia.sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { numeric: true }));
+      const clickedIdx = folderMedia.findIndex(f => 
+        f.id === file.id || f.link === file.link || f.name === file.name
+      );
+      setPlaylist(folderMedia);
+      setPlayerIndex(clickedIdx >= 0 ? clickedIdx : 0);
+      playerVideoIdRef.current = folderMedia[clickedIdx >= 0 ? clickedIdx : 0]?.id || file.id;
+      setView("player");
+    } else {
+      // ★ Only 1 video in folder — use interfolder to load sibling folders
+      setPlaylist([file]);
+      setPlayerIndex(0);
+      setView("player");
+      loadInterfolderPlaylist(file);
+    }
   }
 
   // ★ v1.5.8: Interfolder — carrega vídeos de pastas irmãs (adjacentes)
@@ -873,14 +898,15 @@ function PlayerView({
   onManageAI: () => void;
   onLoadInterfolder: (currentFile: FileItem) => Promise<void>;
 }) {
-  // ★ v1.6.9: Derived state pattern — update idx DURING render (not in useEffect)
-  // This prevents the video from restarting: when playlist changes, idx is updated
-  // in the SAME render cycle, so videoSrc never sees the wrong value → no DOM reload.
-  // The old useEffect([desiredIndex]) fired AFTER commit → browser saw wrong src → reloaded.
+  // ★ v1.7.0: Derived state via REF — only reacts to PROP changes, not manual switchTo.
+  // The v1.6.9 version used state (prevDesiredIndex) which switchTo also updated,
+  // causing the prop check to override manual switches on the next render.
+  // Now: lastPropDesiredRef only updates when the PROP desiredIndex changes (interfolder load),
+  // so switchTo's setIdx() is never overridden.
   const [idx, setIdx] = useState(initialIndex);
-  const [prevDesiredIndex, setPrevDesiredIndex] = useState(desiredIndex);
-  if (desiredIndex !== prevDesiredIndex) {
-    setPrevDesiredIndex(desiredIndex);
+  const lastPropDesiredRef = useRef<number>(desiredIndex);
+  if (desiredIndex !== lastPropDesiredRef.current) {
+    lastPropDesiredRef.current = desiredIndex;
     if (desiredIndex >= 0 && desiredIndex < playlist.length) {
       setIdx(desiredIndex);
     }
@@ -1067,9 +1093,8 @@ function PlayerView({
   function switchTo(newIdx: number) {
     if (newIdx < 0 || newIdx >= playlist.length) return;
     setIdx(newIdx);
-    // ★ v1.6.9: Also update prevDesiredIndex so the derived-state pattern
-    // doesn't override our manual switch on the next render.
-    setPrevDesiredIndex(newIdx);
+    // ★ v1.7.0: No need to update any ref — lastPropDesiredRef only tracks the PROP,
+    // so manual switches via setIdx are never overridden.
   }
 
   function saveNote() {
