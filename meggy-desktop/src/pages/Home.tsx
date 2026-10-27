@@ -858,6 +858,9 @@ function PlayerView({
   onLoadInterfolder: (currentFile: FileItem) => Promise<void>;
 }) {
   const [idx, setIdx] = useState(initialIndex);
+  // ★ v1.6.6: Track the "desired current video id" so switchTo updates it
+  // and the playlist-sync useEffect doesn't reset idx back to the original video
+  const desiredVideoIdRef = useRef<string>(playerVideoId);
   const [mode, setMode] = useState<"split" | "fv" | "fm">("split");
   const [materials, setMaterials] = useState<FileItem[]>([]);
   const [materialsLoading, setMaterialsLoading] = useState(false);
@@ -935,16 +938,31 @@ function PlayerView({
 
   useEffect(() => { loadMaterials(); }, [loadMaterials]);
 
-  // ★ v1.5.8: Fix playlist restart — find correct index by video ID when playlist changes
-  // This replaces the old useEffect([initialIndex]) which didn't fire when index stayed 0
+  // ★ v1.6.6: Sync desiredVideoIdRef when the parent's playerVideoId prop changes
+  // (happens when openPlayer is called with a new file, or interfolder loads)
   useEffect(() => {
-    if (playerVideoId && playlist.length > 0) {
-      const foundIdx = playlist.findIndex(v => v.id === playerVideoId);
+    if (playerVideoId && playerVideoId !== desiredVideoIdRef.current) {
+      desiredVideoIdRef.current = playerVideoId;
+    }
+  }, [playerVideoId]);
+
+  // ★ v1.6.6: When playlist changes (interfolder loads), find the desired video's index
+  // Uses desiredVideoIdRef (updated by switchTo) instead of stale playerVideoId prop
+  // This fixes "volta para a aula 1" — the old useEffect used playerVideoId which never
+  // updated after manual switches, causing it to reset idx back to the original video
+  useEffect(() => {
+    const desiredId = desiredVideoIdRef.current;
+    if (desiredId && playlist.length > 0) {
+      const foundIdx = playlist.findIndex(v => v.id === desiredId);
       if (foundIdx >= 0 && foundIdx !== idx) {
         setIdx(foundIdx);
+      } else if (foundIdx < 0 && idx >= playlist.length) {
+        // Desired video not in new playlist and current idx is out of bounds → go to 0
+        setIdx(0);
+        desiredVideoIdRef.current = playlist[0]?.id || "";
       }
     }
-  }, [playerVideoId, playlist]);
+  }, [playlist]); // ★ Only depend on playlist — NOT playerVideoId (avoids stale resets)
 
   // ★ v1.5.5: Load watched state from server on mount
   useEffect(() => {
@@ -1021,8 +1039,12 @@ function PlayerView({
   function switchTo(newIdx: number) {
     if (newIdx < 0 || newIdx >= playlist.length) return;
     setIdx(newIdx);
-    // Materials + ISA will reload via useEffect([videoSrc]) which triggers
-    // currentFolderPath update → loadMaterials → ISA cache check
+    // ★ v1.6.6: Update desiredVideoIdRef so the playlist-sync useEffect
+    // doesn't reset idx back to the original video after a manual switch
+    const newFile = playlist[newIdx];
+    if (newFile?.id) {
+      desiredVideoIdRef.current = newFile.id;
+    }
   }
 
   function saveNote() {
