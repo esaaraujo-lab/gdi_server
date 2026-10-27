@@ -53,3 +53,60 @@ export async function checkSession() {
 export async function logout() {
   return invoke<boolean>("logout");
 }
+
+// ═══ v1.4.4 — Inline player support ═══
+
+export interface IsaCache {
+  cached: {
+    summary?: string | null;
+    questions?: unknown[] | null;
+    mindmap?: string | null;
+    lessonName?: string | null;
+  } | null;
+}
+
+export async function aiCacheGet(key: string) {
+  return invoke<IsaCache>("ai_cache_get", { key });
+}
+
+export async function aiCacheSave(
+  key: string,
+  data: {
+    summary: string | null;
+    questions: unknown[] | null;
+    mindmap: string | null;
+    lessonName: string;
+  },
+) {
+  return invoke<boolean>("ai_cache_save", {
+    key,
+    summary: data.summary,
+    questions: data.questions,
+    mindmap: data.mindmap,
+    lessonName: data.lessonName,
+  });
+}
+
+export async function aiGenerate(message: string, kind?: string) {
+  return invoke<string>("ai_generate", { message, kind: kind ?? null });
+}
+
+export async function fetchText(url: string) {
+  return invoke<string>("fetch_text", { url });
+}
+
+export async function extractPdfText(url: string) {
+  return invoke<string>("extract_pdf_text", { url });
+}
+
+export async function downloadToTemp(url: string) {
+  return invoke<string>("download_to_temp", { url });
+}
+
+export async function saveUserState(data: Record<string, unknown>) {
+  return invoke<boolean>("save_user_state", { data });
+}
+
+export async function getUserState() {
+  return invoke<Record<string, unknown>>("get_user_state");
+}
