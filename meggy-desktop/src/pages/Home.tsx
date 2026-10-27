@@ -133,9 +133,11 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<"drives" | "browse" | "player">("drives");
+  const [view, setView] = useState<"home" | "drives" | "browse" | "player">("home");
   const [playlist, setPlaylist] = useState<FileItem[]>([]);
   const [playerIndex, setPlayerIndex] = useState(0);
+  const [userState, setUserState] = useState<Record<string, unknown>>({});
+  const [updateAvailable, setUpdateAvailable] = useState<string | null>(null);
 
   // ─── v1.5.0 — Local AI state ───
   // aiMode: "local" uses WebLLM (if configured); "cloud" uses /api/ai
@@ -193,7 +195,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
     setShowAIPopup(true);
   }
 
-  useEffect(() => { loadDrives(); }, []);
+  useEffect(() => { loadDrives(); loadUserState(); checkForUpdates(); }, []);
 
   async function loadDrives() {
     try {
@@ -202,6 +204,45 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
     } catch (e) {
       console.error("loadDrives", e);
       setError(String(e));
+    }
+  }
+
+  // ★ v1.6.0: Load user state (history, resume, watched) for "Continue Assistindo"
+  async function loadUserState() {
+    try {
+      const state = await getUserState();
+      setUserState(state as Record<string, unknown>);
+    } catch (_) { /* ignore */ }
+  }
+
+  // ★ v1.6.0: Check for app updates from GitHub releases
+  async function checkForUpdates() {
+    try {
+      const resp = await fetch("https://api.github.com/repos/esaaraujo-lab/gdi_server/releases?per_page=1");
+      const releases = await resp.json();
+      if (releases && releases[0]) {
+        const tag = releases[0].tag_name || "";
+        const versionMatch = tag.match(/v?([\d.]+)/);
+        if (versionMatch) {
+          const latestVersion = versionMatch[1];
+          const currentVersion = "1.6.0"; // Must match package.json
+          if (latestVersion !== currentVersion) {
+            setUpdateAvailable(latestVersion);
+          }
+        }
+      }
+    } catch (_) { /* ignore */ }
+  }
+
+  // ★ v1.6.0: Download and install update
+  async function downloadUpdate() {
+    if (!updateAvailable) return;
+    // Open the releases page in the default browser
+    try {
+      const { open } = await import("@tauri-apps/plugin-shell");
+      await open(`https://github.com/esaaraujo-lab/gdi_server/releases/tag/desktop-v${updateAvailable}`);
+    } catch (_) {
+      window.open(`https://github.com/esaaraujo-lab/gdi_server/releases/tag/desktop-v${updateAvailable}`, "_blank");
     }
   }
 
@@ -271,8 +312,8 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
     setPlaylist([file]);
     setPlayerIndex(0);
     setView("player");
-    // ★ v1.5.8: Load interfolder immediately (not setTimeout) to build full playlist
-    // The interfolder will find the current video and keep the correct index
+    // ★ v1.5.9: Load interfolder — BUT DON'T reset playerIndex here
+    // The PlayerView's useEffect([playerVideoId, playlist]) will find the correct index
     loadInterfolderPlaylist(file);
   }
 
@@ -354,11 +395,12 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
       });
       // Encontrar índice do vídeo atual
       const newIdx = deduped.findIndex(v => v.id === currentFile.id);
-      // ★ v1.5.7: Always replace playlist with interfolder result (even if same length)
-      // This ensures the full sorted playlist is shown with correct index
+      // ★ v1.5.9: Replace playlist but DON'T call setPlayerIndex here
+      // The PlayerView's useEffect([playerVideoId, playlist]) will set the correct idx
+      // Calling setPlayerIndex here causes the parent to re-render which resets the player
       if (deduped.length > 0) {
         setPlaylist(deduped);
-        setPlayerIndex(newIdx >= 0 ? newIdx : 0);
+        // Don't call setPlayerIndex — let PlayerView handle it via playerVideoId
       }
     } catch (e) {
       console.warn("Interfolder failed:", e);
@@ -449,6 +491,163 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+        {showAIPopup && (
+          <AIInstallPopup
+            onClose={handleClosePopup}
+            onChooseLocal={handleChooseLocal}
+            onChooseCloud={handleChooseCloud}
+          />
+        )}
+      </>
+    );
+  }
+
+  // ─── Home view (Área do Aluno) ───
+  if (view === "home") {
+    const history = (userState.history as Array<{ name?: string; path?: string; link?: string }>) || [];
+    const watched = (userState.watched as Record<string, boolean>) || {};
+    const resume = (userState.resume as Record<string, number>) || {};
+    const watchedCount = Object.keys(watched).length;
+    const recentHistory = history.slice(-6).reverse();
+
+    return (
+      <>
+        <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+          <Header
+            onBack={null}
+            onLogout={logout}
+            breadcrumb={null}
+            aiMode={aiMode}
+            localAiReady={localAiReady}
+            onToggleAI={handleToggleAI}
+            onManageAI={handleManageAI}
+          />
+          <div style={{ flex: 1, overflow: "auto", padding: "20px", maxWidth: "1200px", margin: "0 auto", width: "100%" }}>
+            {/* Update notification */}
+            {updateAvailable && (
+              <div style={{
+                background: "linear-gradient(135deg, rgba(63,185,80,0.15), rgba(93,222,218,0.1))",
+                border: "1px solid rgba(63,185,80,0.3)",
+                borderRadius: "12px", padding: "14px 18px", marginBottom: "20px",
+                display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap",
+              }}>
+                <div>
+                  <span style={{ color: "#3fb950", fontWeight: 700, fontSize: "14px" }}>🔄 Atualização disponível!</span>
+                  <span style={{ color: "var(--text-muted)", fontSize: "13px", marginLeft: "8px" }}>v{updateAvailable}</span>
+                </div>
+                <button onClick={downloadUpdate} style={{ ...btnStyle, background: "rgba(63,185,80,0.2)", borderColor: "rgba(63,185,80,0.4)", color: "#3fb950" }}>
+                  ⬇ Baixar e instalar
+                </button>
+              </div>
+            )}
+
+            {/* Continue Assistindo */}
+            {recentHistory.length > 0 && (
+              <div style={{ marginBottom: "28px" }}>
+                <h2 style={{ color: "var(--text)", fontSize: "18px", marginBottom: "14px" }}>▶ Continue assistindo</h2>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "12px" }}>
+                  {recentHistory.map((h, i) => {
+                    const name = h.name || h.path?.split("/").pop()?.replace(/\.\w+$/, "") || "Aula";
+                    const link = h.link || "";
+                    const resumePos = resume[link] || 0;
+                    const resumeStr = resumePos > 60 ? `${Math.floor(resumePos / 60)}:${String(Math.floor(resumePos % 60)).padStart(2, "0")}` : "";
+                    const isWatched = watched[link];
+                    return (
+                      <div
+                        key={i}
+                        onClick={async () => {
+                          if (!currentDrive || !h.path) return;
+                          // Navigate to the folder and open the video
+                          const pathParts = h.path.split("/").filter(Boolean);
+                          if (pathParts.length < 2) return;
+                          const driveIdx = parseInt(pathParts[0].replace(":", "")) || 0;
+                          const drive = drives.find(d => d.index === driveIdx);
+                          if (!drive) return;
+                          setCurrentDrive(drive);
+                          const folderPath = "/" + pathParts.slice(0, -1).join("/") + "/";
+                          setCurrentPath(folderPath);
+                          setView("browse");
+                          await loadFolder(drive, folderPath);
+                          // After folder loads, find the video
+                          setTimeout(() => {
+                            const fileItem: FileItem = {
+                              name: name + (h.name?.endsWith(".mp4") ? "" : ".mp4"),
+                              mime_type: "video/mp4",
+                              id: h.link || "",
+                              link: h.link || null,
+                              size: 0,
+                            };
+                            openPlayer(fileItem);
+                          }, 500);
+                        }}
+                        style={{
+                          background: "var(--surface)", borderRadius: "12px", padding: "14px",
+                          cursor: "pointer", transition: "all 0.2s", border: "2px solid transparent",
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--pink)"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = "transparent"; }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <div style={{
+                            width: "40px", height: "40px", borderRadius: "8px", flexShrink: 0,
+                            background: isWatched ? "rgba(63,185,80,0.15)" : "linear-gradient(135deg, rgba(255,139,159,0.15), rgba(192,38,211,0.1))",
+                            display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px",
+                          }}>{isWatched ? "✓" : "🎬"}</div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ color: "var(--text)", fontWeight: 600, fontSize: "13px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</div>
+                            <div style={{ color: "var(--text-muted)", fontSize: "11px" }}>
+                              {resumeStr ? `⏱ ${resumeStr}` : ""} {isWatched ? "✓ Assistido" : ""}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Quick stats */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "12px", marginBottom: "28px" }}>
+              <div style={{ background: "var(--surface)", borderRadius: "12px", padding: "18px", textAlign: "center" }}>
+                <div style={{ fontSize: "28px", marginBottom: "4px" }}>🎬</div>
+                <div style={{ color: "var(--text)", fontWeight: 700, fontSize: "20px" }}>{watchedCount}</div>
+                <div style={{ color: "var(--text-muted)", fontSize: "12px" }}>Aulas assistidas</div>
+              </div>
+              <div style={{ background: "var(--surface)", borderRadius: "12px", padding: "18px", textAlign: "center" }}>
+                <div style={{ fontSize: "28px", marginBottom: "4px" }}>📚</div>
+                <div style={{ color: "var(--text)", fontWeight: 700, fontSize: "20px" }}>{drives.length}</div>
+                <div style={{ color: "var(--text-muted)", fontSize: "12px" }}>Drives disponíveis</div>
+              </div>
+              <div
+                onClick={() => setView("drives")}
+                style={{ background: "var(--surface)", borderRadius: "12px", padding: "18px", textAlign: "center", cursor: "pointer", transition: "all 0.2s", border: "2px solid transparent" }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--pink)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "transparent"; }}
+              >
+                <div style={{ fontSize: "28px", marginBottom: "4px" }}>☁️</div>
+                <div style={{ color: "var(--pink)", fontWeight: 700, fontSize: "16px" }}>Explorar</div>
+                <div style={{ color: "var(--text-muted)", fontSize: "12px" }}>Navegar drives</div>
+              </div>
+            </div>
+
+            {/* Download apps */}
+            <div style={{ marginBottom: "20px" }}>
+              <h2 style={{ color: "var(--text)", fontSize: "16px", marginBottom: "12px" }}>📱 Apps Meggy</h2>
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <a href="https://github.com/esaaraujo-lab/gdi_server/releases/latest" target="_blank" rel="noreferrer" style={{ ...btnStyle, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                  🖥️ Windows/Linux
+                </a>
+                <a href="https://github.com/esaaraujo-lab/gdi_server/releases/latest" target="_blank" rel="noreferrer" style={{ ...btnStyle, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                  📱 Android APK
+                </a>
+                <a href="https://github.com/esaaraujo-lab/gdi_server/releases/latest" target="_blank" rel="noreferrer" style={{ ...btnStyle, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                  📺 Roku
+                </a>
+              </div>
+            </div>
           </div>
         </div>
         {showAIPopup && (
