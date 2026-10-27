@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
-use tauri::State;
+use tauri::{Manager, State};
 use tokio::process::{Child, Command};
 
 pub struct LlamaState {
@@ -196,43 +196,43 @@ pub struct GgufModel {
 pub async fn llama_models() -> Result<Vec<GgufModel>, String> {
     Ok(vec![
         GgufModel {
-            id: "qwen2.5-1.5b",
-            label: "Qwen 2.5 — 1.5B",
+            id: "qwen2.5-1.5b".to_string(),
+            label: "Qwen 2.5 — 1.5B".to_string(),
             size_mb: 1000,
             url: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf".to_string(),
             filename: "qwen2.5-1.5b-instruct-q4_k_m.gguf".to_string(),
             description: "Rápido (~1GB). Cabe 100% na VRAM de GPUs modestas (RX470). Respostas em ~2-5s.".to_string(),
-            emoji: "⚡",
+            emoji: "⚡".to_string(),
             recommended_gpu_layers: 28,
         },
         GgufModel {
-            id: "qwen2.5-3b",
-            label: "Qwen 2.5 — 3B",
+            id: "qwen2.5-3b".to_string(),
+            label: "Qwen 2.5 — 3B".to_string(),
             size_mb: 2000,
             url: "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf".to_string(),
             filename: "qwen2.5-3b-instruct-q4_k_m.gguf".to_string(),
             description: "Equilíbrio (~2GB). Offload parcial CPU/GPU. Boa qualidade, ~5-10s por resposta.".to_string(),
-            emoji: "⚖️",
+            emoji: "⚖️".to_string(),
             recommended_gpu_layers: 18,
         },
         GgufModel {
-            id: "llama-3.2-3b",
-            label: "Llama 3.2 — 3B",
+            id: "llama-3.2-3b".to_string(),
+            label: "Llama 3.2 — 3B".to_string(),
             size_mb: 2000,
             url: "https://huggingface.co/huggingface-llama/llama-3.2-3b-instruct-gguf/resolve/main/llama-3.2-3b-instruct-q4_k_m.gguf".to_string(),
             filename: "llama-3.2-3b-instruct-q4_k_m.gguf".to_string(),
             description: "Meta Llama 3.2 (~2GB). Ótima qualidade, suporta português bem.".to_string(),
-            emoji: "🦙",
+            emoji: "🦙".to_string(),
             recommended_gpu_layers: 14,
         },
         GgufModel {
-            id: "qwen2.5-7b",
-            label: "Qwen 2.5 — 7B",
+            id: "qwen2.5-7b".to_string(),
+            label: "Qwen 2.5 — 7B".to_string(),
             size_mb: 4500,
             url: "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m.gguf".to_string(),
             filename: "qwen2.5-7b-instruct-q4_k_m.gguf".to_string(),
             description: "Melhor qualidade (~4.5GB). Offload pesado CPU/GPU. ~10-20s por resposta.".to_string(),
-            emoji: "🎓",
+            emoji: "🎓".to_string(),
             recommended_gpu_layers: 10,
         },
     ])
