@@ -1,6 +1,6 @@
 [package]
 name = "meggy-desktop"
-version = "1.4.2"
+version = "1.6.2"
 description = "Meggy — App Nativo (Tauri 2.0)"
 authors = ["Meggy"]
 edition = "2021"
@@ -32,6 +32,8 @@ tauri-plugin-fs = "2"
 tauri-plugin-http = "2"
 tauri-plugin-process = "2"
 tauri-plugin-updater = "2"
+pdf-extract = "0.7"
+tempfile = "3"
 
 [features]
 default = ["custom-protocol"]
