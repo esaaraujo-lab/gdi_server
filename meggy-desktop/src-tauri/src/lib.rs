@@ -86,6 +86,7 @@ pub fn run() {
             api::ai_generate,
             api::fetch_text,
             api::extract_pdf_text,
+            api::download_to_temp,
             auth::check_session,
             auth::logout,
             db::search_lessons,
