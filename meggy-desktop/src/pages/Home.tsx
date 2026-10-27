@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { aiCacheGet, aiCacheSave, aiGenerate, fetchText, extractPdfText, downloadToTemp } from "../lib/api";
+import { aiCacheGet, aiCacheSave, aiGenerate, fetchText, extractPdfText, downloadToTemp, saveUserState, getUserState } from "../lib/api";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import {
   hasLocalAIConfigured,
@@ -273,10 +273,9 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
     setPlaylist(pl.length > 0 ? pl : [file]);
     setPlayerIndex(idx >= 0 ? idx : 0);
     setView("player");
-    // ★ v1.5.1: Se só há 1 vídeo na pasta, carregar interfolder automaticamente
-    if (pl.length <= 1) {
-      setTimeout(() => loadInterfolderPlaylist(file), 1500);
-    }
+    // ★ v1.5.5: Always load interfolder (to get full playlist with previous lessons)
+    // The interfolder will find the current video and set the correct index
+    setTimeout(() => loadInterfolderPlaylist(file), 1500);
   }
 
   // ★ v1.5.1: Interfolder — carrega vídeos de pastas irmãs (adjacentes)
@@ -496,6 +495,7 @@ function PlayerView({
   const [activeTab, setActiveTab] = useState<{ kind: "file" | "isa"; id: string }>({ kind: "file", id: "0" });
   const [isaCache, setIsaCache] = useState<Record<string, unknown> | null>(null);
   const [isaLoadingMsg, setIsaLoadingMsg] = useState<string | null>(null);
+  const [watchedSet, setWatchedSet] = useState<Set<string>>(new Set()); // ★ v1.5.5: watched videos
   const [isaError, setIsaError] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [notesList, setNotesList] = useState<{ time: string; text: string }[]>([]);
@@ -567,6 +567,29 @@ function PlayerView({
   useEffect(() => { loadMaterials(); }, [loadMaterials]);
 
   useEffect(() => { setIdx(initialIndex); }, [initialIndex]);
+
+  // ★ v1.5.5: Load watched state from server on mount
+  useEffect(() => {
+    getUserState().then((state) => {
+      const watched = (state as Record<string, unknown>)?.watched;
+      if (watched && typeof watched === "object") {
+        const ids = Object.keys(watched);
+        setWatchedSet(new Set(ids));
+      }
+    }).catch(() => { /* ignore */ });
+  }, []);
+
+  // ★ v1.5.5: Mark video as watched when played >50% or on ended
+  function markWatched() {
+    if (!currentFile) return;
+    const link = currentFile.link || "";
+    if (!link || watchedSet.has(link)) return;
+    const newSet = new Set(watchedSet);
+    newSet.add(link);
+    setWatchedSet(newSet);
+    // Save to server (fire-and-forget)
+    saveUserState({ watched: { [link]: true } }).catch(() => { /* ignore */ });
+  }
 
   // Reset ISA state + active tab on video change
   useEffect(() => {
@@ -1060,8 +1083,14 @@ function PlayerView({
                 autoPlay
                 playsInline
                 style={{ display: "block", width: "100%", maxHeight: "60vh", background: "#000" }}
-                onTimeUpdate={(e) => setCurrentTime((e.target as HTMLVideoElement).currentTime)}
-                onEnded={() => { if (idx < playlist.length - 1) switchTo(idx + 1); }}
+                onTimeUpdate={(e) => {
+                  const t = (e.target as HTMLVideoElement).currentTime;
+                  const d = (e.target as HTMLVideoElement).duration || 0;
+                  setCurrentTime(t);
+                  // ★ v1.5.5: Mark watched at 50% playback
+                  if (d > 0 && t / d > 0.5) markWatched();
+                }}
+                onEnded={() => { markWatched(); if (idx < playlist.length - 1) switchTo(idx + 1); }}
               />
             )}
           </div>
@@ -1128,7 +1157,10 @@ function PlayerView({
                 borderRadius: "10px", padding: "6px", background: "rgba(0,0,0,0.2)",
                 maxHeight: "240px", marginTop: "6px",
               }}>
-                {playlist.map((v, i) => (
+                {playlist.map((v, i) => {
+                  const vLink = v.link || "";
+                  const isWatched = watchedSet.has(vLink);
+                  return (
                   <div
                     key={v.id + i}
                     onClick={() => { if (i !== idx) switchTo(i); }}
@@ -1136,16 +1168,18 @@ function PlayerView({
                     style={{
                       display: "flex", justifyContent: "space-between", alignItems: "center",
                       padding: "6px 8px", borderRadius: "6px", cursor: "pointer", fontSize: "12px",
-                      color: i === idx ? "var(--pink)" : "var(--text-muted)",
+                      color: i === idx ? "var(--pink)" : isWatched ? "var(--teal)" : "var(--text-muted)",
                       background: i === idx ? "rgba(255,139,159,0.12)" : "transparent",
+                      opacity: isWatched && i !== idx ? 0.7 : 1,
                     }}
                   >
                     <div style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {i === idx ? "▶ " : "🎬 "}<span style={{ fontWeight: i === idx ? 600 : 400 }}>{v.name}</span>
+                      {i === idx ? "▶ " : isWatched ? "✓ " : "🎬 "}<span style={{ fontWeight: i === idx ? 600 : 400, textDecoration: isWatched && i !== idx ? "line-through" : "none" }}>{v.name}</span>
                     </div>
                     <span style={{ fontSize: "10px", color: "var(--text-muted)", marginLeft: "8px" }}>{v.size > 0 ? `${(v.size / 1024 / 1024).toFixed(1)}MB` : ""}</span>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
