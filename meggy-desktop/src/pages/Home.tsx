@@ -24,11 +24,13 @@ interface FileItem { name: string; mime_type: string; id: string; link: string |
 
 const BASE_URL = "https://educa.eu.org";
 
-// ─── Markdown → HTML (simple regex, escape-first) ───
+// ─── Markdown → HTML (v1.6.9: fixed HTML entity bug — don't double-escape &entities;) ───
 function mdToHtml(md: string): string {
   if (!md) return "";
+  // ★ v1.6.9: Escape < and > but DON'T escape & that's already part of an HTML entity
+  // The old code did .replace(/&/g, "&amp;") which turned &ccedil; into &amp;ccedil; (rendered as literal text)
   let h = md
-    .replace(/&/g, "&amp;")
+    .replace(/&(?!#?\w+;)/g, "&amp;")  // only escape & NOT followed by entity (word or #digits + ;)
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 
@@ -429,9 +431,13 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
         newIdx = deduped.findIndex(v => v.name === currentFile.name || v.name.endsWith(currentFile.name));
       }
       if (newIdx < 0) newIdx = 0;
-      // ★ v1.6.8: Pass the desired index directly to PlayerView via desiredIndex prop.
-      // This is more robust than searching by id in the child (which fails when id is empty
-      // or inconsistent between API calls). The child uses useEffect([desiredIndex]) to sync.
+      // ★ v1.6.9: Preserve the EXACT link of the currently playing video so videoSrc
+      // string stays identical after interfolder loads → video element doesn't reload.
+      // The interfolder API call may return a slightly different link format (extra query params,
+      // different encoding) which would change videoSrc and cause a reload.
+      if (deduped[newIdx] && currentFile.link) {
+        deduped[newIdx].link = currentFile.link;
+      }
       if (deduped.length > 0) {
         setPlaylist(deduped);
         setPlayerIndex(newIdx);
@@ -867,11 +873,18 @@ function PlayerView({
   onManageAI: () => void;
   onLoadInterfolder: (currentFile: FileItem) => Promise<void>;
 }) {
+  // ★ v1.6.9: Derived state pattern — update idx DURING render (not in useEffect)
+  // This prevents the video from restarting: when playlist changes, idx is updated
+  // in the SAME render cycle, so videoSrc never sees the wrong value → no DOM reload.
+  // The old useEffect([desiredIndex]) fired AFTER commit → browser saw wrong src → reloaded.
   const [idx, setIdx] = useState(initialIndex);
-  // ★ v1.6.8: desiredIndex is the authoritative position — set by the parent when
-  // the playlist changes (interfolder loads). This replaces the fragile desiredVideoIdRef
-  // approach which failed when file ids were empty or inconsistent between API calls.
-  const lastDesiredIndexRef = useRef<number>(initialIndex);
+  const [prevDesiredIndex, setPrevDesiredIndex] = useState(desiredIndex);
+  if (desiredIndex !== prevDesiredIndex) {
+    setPrevDesiredIndex(desiredIndex);
+    if (desiredIndex >= 0 && desiredIndex < playlist.length) {
+      setIdx(desiredIndex);
+    }
+  }
   const [mode, setMode] = useState<"split" | "fv" | "fm">("split");
   const [materials, setMaterials] = useState<FileItem[]>([]);
   const [materialsLoading, setMaterialsLoading] = useState(false);
@@ -891,6 +904,8 @@ function PlayerView({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isaGenRef = useRef<string>("");
+  // ★ v1.6.9: Race-condition guard for loadMaterials — only the latest call's result is applied
+  const loadMaterialsReqIdRef = useRef<number>(0);
 
   const currentFile = playlist[idx];
   const videoSrc = currentFile?.link ? `${BASE_URL}${currentFile.link}` : "";
@@ -901,6 +916,8 @@ function PlayerView({
   // ─── Load materials ───
   const loadMaterials = useCallback(async () => {
     if (!currentFolderPath) return;
+    // ★ v1.6.9: Assign a unique ID to this call; only apply results if still the latest
+    const myReqId = ++loadMaterialsReqIdRef.current;
     setMaterialsLoading(true);
     setMaterials([]);
     setActiveTab({ kind: "file", id: "0" });
@@ -910,6 +927,8 @@ function PlayerView({
         driveIndex: drive.index,
         path: currentFolderPath,
       });
+      // ★ Race guard: if a newer loadMaterials call started, discard our results
+      if (myReqId !== loadMaterialsReqIdRef.current) return;
       const isMaterial = (x: FileItem) => {
         const ext = (x.name.split(".").pop() || "").toLowerCase();
         const mt = (x.mime_type || "").toLowerCase();
@@ -924,6 +943,7 @@ function PlayerView({
           const subPath = currentFolderPath + encodeURIComponent(sf.name) + "/";
           try {
             const subFiles = await invoke<FileItem[]>("list_folder", { driveIndex: drive.index, path: subPath });
+            if (myReqId !== loadMaterialsReqIdRef.current) return; // race guard
             const subMats = subFiles.filter(isMaterial);
             if (subMats.length) { found = found.concat(subMats); break; }
           } catch (_) { /* skip */ }
@@ -935,39 +955,24 @@ function PlayerView({
         if (parentPath !== "/" && parentPath !== currentFolderPath) {
           try {
             const parentFiles = await invoke<FileItem[]>("list_folder", { driveIndex: drive.index, path: parentPath });
+            if (myReqId !== loadMaterialsReqIdRef.current) return; // race guard
             found = parentFiles.filter(isMaterial);
           } catch (_) { /* skip */ }
         }
       }
+      if (myReqId !== loadMaterialsReqIdRef.current) return; // final race guard
       setMaterials(found.slice(0, 12));
     } catch (e) {
       console.error("loadMaterials", e);
-      setMaterials([]);
+      if (myReqId === loadMaterialsReqIdRef.current) setMaterials([]);
     }
-    setMaterialsLoading(false);
+    if (myReqId === loadMaterialsReqIdRef.current) setMaterialsLoading(false);
   }, [drive.index, currentFolderPath]);
 
   useEffect(() => { loadMaterials(); }, [loadMaterials]);
 
-  // ★ v1.6.8: Sync idx when the parent's desiredIndex changes.
-  // This is the authoritative way to position the player — the parent calculates the
-  // correct index when the playlist changes (interfolder loads) and passes it here.
-  // Only update if desiredIndex actually changed AND is within bounds.
-  useEffect(() => {
-    if (desiredIndex !== lastDesiredIndexRef.current) {
-      lastDesiredIndexRef.current = desiredIndex;
-      if (desiredIndex >= 0 && desiredIndex < playlist.length && desiredIndex !== idx) {
-        setIdx(desiredIndex);
-      }
-    }
-  }, [desiredIndex, playlist.length]);
-
-  // ★ v1.6.8: Also clamp idx if playlist shrinks (safety net)
-  useEffect(() => {
-    if (idx >= playlist.length && playlist.length > 0) {
-      setIdx(playlist.length - 1);
-    }
-  }, [playlist.length, idx]);
+  // ★ v1.6.9: idx sync is now handled by derived state pattern (above, during render).
+  // No more useEffect([desiredIndex]) — that fired AFTER commit and caused video restart.
 
   // ★ v1.5.5: Load watched state from server on mount
   useEffect(() => {
@@ -991,6 +996,24 @@ function PlayerView({
     // Save to server (fire-and-forget)
     saveUserState({ watched: { [link]: true } }).catch(() => { /* ignore */ });
   }
+
+  // ★ v1.6.9: Save lesson to history (last 4) when video changes — for "Continue Assistindo"
+  useEffect(() => {
+    if (!currentFile || !videoSrc) return;
+    const folder = (currentFile as FileItem & { folder?: string }).folder;
+    const pathParts = currentFolderPath.split("/").filter(Boolean);
+    const fullPath = "/" + pathParts.join("/") + "/" + currentFile.name;
+    // Load existing history from userState, prepend current, keep last 4
+    getUserState().then((state) => {
+      const s = (state as Record<string, unknown>) || {};
+      const history = (s.history as Array<{ name?: string; path?: string; link?: string }>) || [];
+      // Don't add if it's already the most recent
+      if (history.length > 0 && history[history.length - 1]?.link === currentFile.link) return;
+      const entry = { name: currentFile.name, path: fullPath, link: currentFile.link || "" };
+      const newHistory = [...history, entry].slice(-4); // keep last 4
+      saveUserState({ history: newHistory }).catch(() => { /* ignore */ });
+    }).catch(() => { /* ignore */ });
+  }, [videoSrc]);
 
   // Reset ISA state + active tab on video change
   useEffect(() => {
@@ -1044,10 +1067,9 @@ function PlayerView({
   function switchTo(newIdx: number) {
     if (newIdx < 0 || newIdx >= playlist.length) return;
     setIdx(newIdx);
-    // ★ v1.6.8: Also update lastDesiredIndexRef so the useEffect([desiredIndex])
-    // doesn't override our manual switch. The parent's desiredIndex only changes
-    // when the parent explicitly wants to reposition (interfolder loads).
-    lastDesiredIndexRef.current = newIdx;
+    // ★ v1.6.9: Also update prevDesiredIndex so the derived-state pattern
+    // doesn't override our manual switch on the next render.
+    setPrevDesiredIndex(newIdx);
   }
 
   function saveNote() {
@@ -1480,6 +1502,7 @@ function PlayerView({
               </div>
             ) : (
               <video
+                key={videoSrc}
                 ref={videoRef}
                 src={videoSrc}
                 controls
@@ -1683,13 +1706,17 @@ function MaterialViewer({ file, content }: { file?: FileItem; content?: string }
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState<string>("");
 
+  // ★ v1.6.9: Cache PDFs by link — don't re-download the same PDF every time.
+  // The old code used [file] as dep (object reference changes every render) → re-downloaded.
+  // Now use file?.link as dep (string, stable) → only downloads when the actual PDF changes.
+  const pdfLinkKey = file?.link || "";
   useEffect(() => {
-    setPdfSrc("");
     setPdfError("");
-    if (!file) return;
+    if (!file) { setPdfSrc(""); return; }
     const ext = (file.name.split(".").pop() || "").toLowerCase();
-    if (ext !== "pdf" || !file.link) return;
-    // ★ v1.5.2: Download PDF via Rust (with cookie + redirects), display locally
+    if (ext !== "pdf" || !file.link) { setPdfSrc(""); return; }
+    // ★ v1.6.9: If we already have a pdfSrc for this link, don't re-download
+    if (pdfSrc && pdfLinkKey === file.link) return;
     setPdfLoading(true);
     const link = file.link.startsWith("http") ? file.link : (BASE_URL + file.link);
     const pdfLink = link.includes("inline=") ? link : link + (link.includes("?") ? "&" : "?") + "inline=true";
@@ -1703,7 +1730,7 @@ function MaterialViewer({ file, content }: { file?: FileItem; content?: string }
         setPdfError(String(e));
         setPdfLoading(false);
       });
-  }, [file]);
+  }, [pdfLinkKey]); // ★ v1.6.9: dep on link string, not file object reference
 
   if (!file) {
     return (
@@ -1789,6 +1816,63 @@ function MaterialViewer({ file, content }: { file?: FileItem; content?: string }
 // ═══════════════════════════════════════════════════════════════
 // ISAPanel — Resumo / Questões / Pílulas / Flashcards
 // ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// IsaToolbar — toolbar with PDF download + Copy buttons (v1.6.9)
+// ═══════════════════════════════════════════════════════════════
+function IsaToolbar({ content, lessonName, label }: { content: string; lessonName: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+
+  function downloadPdf() {
+    // ★ v1.6.9: Open a new window with styled HTML and trigger print-to-PDF
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${label} — ${lessonName}</title>
+      <style>
+        body { font-family: Georgia, serif; max-width: 800px; margin: 40px auto; padding: 20px; color: #1a1a1a; line-height: 1.7; }
+        h1 { color: #d6336c; border-bottom: 2px solid #d6336c; padding-bottom: 8px; }
+        h2 { color: #c026d3; margin-top: 28px; }
+        h3 { color: #6f42c1; }
+        pre { background: #f6f8fa; padding: 12px; border-radius: 6px; overflow: auto; font-size: 13px; }
+        code { background: #f6f8fa; padding: 2px 6px; border-radius: 3px; font-size: 13px; }
+        table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background: #f6f8fa; }
+        blockquote { border-left: 4px solid #d6336c; margin: 12px 0; padding: 8px 16px; background: #fff5f8; }
+        @media print { body { margin: 0; } }
+      </style></head><body><h1>🐩 Meggy — ${label}</h1><p><strong>Aula:</strong> ${lessonName}</p><hr>
+      ${mdToHtml(content)}</body></html>`;
+    const w = window.open("", "_blank");
+    if (w) {
+      w.document.write(html);
+      w.document.close();
+      setTimeout(() => { w.print(); }, 500);
+    }
+  }
+
+  async function copyContent() {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (_) { /* ignore */ }
+  }
+
+  return (
+    <div style={{
+      display: "flex", gap: "8px", padding: "8px 12px",
+      background: "rgba(255,255,255,0.04)", borderBottom: "1px solid rgba(255,255,255,0.08)",
+      alignItems: "center", flexShrink: 0,
+    }}>
+      <span style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: 600 }}>{label}</span>
+      <div style={{ marginLeft: "auto", display: "flex", gap: "6px" }}>
+        <button onClick={downloadPdf} title="Baixar como PDF" style={{ ...modeBtnStyle, padding: "4px 10px", fontSize: "12px" }}>📄 PDF</button>
+        <button onClick={copyContent} title="Copiar texto" style={{ ...modeBtnStyle, padding: "4px 10px", fontSize: "12px" }}>{copied ? "✓ Copiado" : "📋 Copiar"}</button>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ISAPanel — Inline Study Assistant panel (summary/questions/mindmap/flashcards)
+// ═══════════════════════════════════════════════════════════════
 function ISAPanel({
   type, cache, loadingMsg, error, lessonName, onRetry,
 }: {
@@ -1843,20 +1927,26 @@ function ISAPanel({
     const v = cache.summary as string | null | undefined;
     if (!v) return <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>Não foi possível gerar o resumo. Tente novamente.</div>;
     return (
-      <div
-        style={{ height: "100%", overflow: "auto", padding: "16px", color: "var(--text)", fontSize: "14px", lineHeight: 1.6 }}
-        dangerouslySetInnerHTML={{ __html: mdToHtml(v) }}
-      />
+      <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+        <IsaToolbar content={v} lessonName={lessonName} label="Resumo" />
+        <div
+          style={{ flex: 1, overflow: "auto", padding: "16px", color: "var(--text)", fontSize: "14px", lineHeight: 1.6 }}
+          dangerouslySetInnerHTML={{ __html: mdToHtml(v) }}
+        />
+      </div>
     );
   }
   if (type === "mindmap") {
     const v = cache.mindmap as string | null | undefined;
     if (!v) return <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>Não foi possível gerar pílulas. Tente novamente.</div>;
     return (
-      <div
-        style={{ height: "100%", overflow: "auto", padding: "16px", color: "var(--text)", fontSize: "14px", lineHeight: 1.6 }}
-        dangerouslySetInnerHTML={{ __html: mdToHtml(v) }}
-      />
+      <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+        <IsaToolbar content={v} lessonName={lessonName} label="Pílulas" />
+        <div
+          style={{ flex: 1, overflow: "auto", padding: "16px", color: "var(--text)", fontSize: "14px", lineHeight: 1.6 }}
+          dangerouslySetInnerHTML={{ __html: mdToHtml(v) }}
+        />
+      </div>
     );
   }
   if (type === "questions") {
