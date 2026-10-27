@@ -278,28 +278,49 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
     setTimeout(() => loadInterfolderPlaylist(file), 1500);
   }
 
-  // ★ v1.5.1: Interfolder — carrega vídeos de pastas irmãs (adjacentes)
+  // ★ v1.5.6: Interfolder — carrega vídeos de pastas irmãs (adjacentes)
+  // Filtros: (1) ignora pastas "audiocast", (2) se clicou vídeo → só vídeos, se clicou áudio → só áudios
   async function loadInterfolderPlaylist(currentFile: FileItem): Promise<void> {
     if (!currentDrive || !currentPath) return;
     try {
       const parts = currentPath.split("/").filter(Boolean);
-      if (parts.length < 2) return; // precisa de pelo menos drive + pasta pai
+      if (parts.length < 2) return;
       const parentPath = "/" + parts.slice(0, -1).join("/") + "/";
       const parentFiles = await invoke<FileItem[]>("list_folder", {
         driveIndex: currentDrive.index,
         path: parentPath,
       });
-      const subFolders = parentFiles.filter(f => f.mime_type === "application/vnd.google-apps.folder");
+      // ★ Filtro 1: Ignorar pastas "audiocast" (e variações)
+      const subFolders = parentFiles.filter(f =>
+        f.mime_type === "application/vnd.google-apps.folder" &&
+        !f.name.toLowerCase().includes("audiocast") &&
+        !f.name.toLowerCase().includes("audio cast") &&
+        !f.name.toLowerCase().includes("audio-cast")
+      );
+
+      // ★ Filtro 2: Determinar tipo de mídia do arquivo clicado
+      const clickedIsAudio = currentFile.mime_type.startsWith("audio/") ||
+        currentFile.name.endsWith(".mp3") || currentFile.name.endsWith(".m4a");
+      const clickedIsVideo = currentFile.mime_type.startsWith("video/") ||
+        currentFile.name.endsWith(".mp4");
+
+      const isMediaFile = (f: FileItem) => {
+        const isVid = (f.mime_type || "").includes("video") || f.name.endsWith(".mp4");
+        const isAud = (f.mime_type || "").includes("audio") || f.name.endsWith(".mp3") || f.name.endsWith(".m4a");
+        // Se clicou vídeo → só vídeos; se clicou áudio → só áudios; se não sei → ambos
+        if (clickedIsVideo) return isVid;
+        if (clickedIsAudio) return isAud;
+        return isVid || isAud;
+      };
+
       const collected: FileItem[] = [];
-      // Processar em batches de 6 (igual ao staging)
       for (let i = 0; i < subFolders.length; i += 6) {
         const batch = subFolders.slice(i, i + 6);
         const results = await Promise.all(batch.map(folder => {
           const fpath = parentPath + encodeURIComponent(folder.name) + "/";
           return invoke<FileItem[]>("list_folder", { driveIndex: currentDrive.index, path: fpath })
             .then(files => files
-              .filter(f => (f.mime_type || "").includes("video") || f.name.endsWith(".mp4") ||
-                           (f.mime_type || "").includes("audio") || f.name.endsWith(".mp3") || f.name.endsWith(".m4a"))
+              .filter(isMediaFile)
               .filter(f => !f.name.includes(".part-"))
               .map(f => ({ ...f, folder: folder.name } as FileItem & { folder?: string }))
             ).catch(() => []);
@@ -319,7 +340,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
         const fb = (b as FileItem & { folder?: string }).folder || "";
         return fa.localeCompare(fb) || a.name.localeCompare(b.name);
       });
-      // Finalize names: se mesmo nome em pastas diferentes, prefixar com folder
+      // Finalize names
       const cnts: Record<string, number> = {};
       deduped.forEach(v => { cnts[v.name] = (cnts[v.name] || 0) + 1; });
       deduped.forEach(v => {
@@ -330,11 +351,13 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
       });
       // Encontrar índice do vídeo atual
       const newIdx = deduped.findIndex(v => v.id === currentFile.id);
-      setPlaylist(deduped.length > 0 ? deduped : [currentFile]);
-      setPlayerIndex(newIdx >= 0 ? newIdx : 0);
+      // Só substituir a playlist se encontrou mais vídeos que a atual
+      if (deduped.length > playlist.length) {
+        setPlaylist(deduped);
+        setPlayerIndex(newIdx >= 0 ? newIdx : 0);
+      }
     } catch (e) {
       console.warn("Interfolder failed:", e);
-      // Manter playlist original se falhar
     }
   }
 
