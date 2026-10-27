@@ -1,6 +1,6 @@
 [package]
 name = "meggy-desktop"
-version = "1.8.1"
+version = "1.8.2"
 description = "Meggy — App Nativo (Tauri 2.0)"
 authors = ["Meggy"]
 edition = "2021"
