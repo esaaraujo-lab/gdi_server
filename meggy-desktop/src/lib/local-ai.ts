@@ -60,10 +60,11 @@ export function checkWebGPU(): boolean {
   return "gpu" in navigator;
 }
 
-// ★ v1.6.7: Thorough check — actually try to create a compute pipeline with a shader
-// that's similar to what WebLLM uses (workgroup_size(64), uniforms, storage buffers).
-// The old simple shader (`@workgroup_size(1) fn main() {}`) passed even on GPUs that
-// can't run WebLLM's `index_kernel`, causing "Invalid ShaderModule" errors later.
+// ★ v1.6.9: Lenient check — only verify basic WebGPU + compute pipeline creation.
+// The v1.6.7 strict check (complex shader with uniforms/storage buffers) was TOO strict
+// and rejected GPUs like the RX470 that CAN actually run WebLLM (just slower).
+// Now we use a simple shader and let WebLLM try — if it fails, we show a helpful error
+// but still let the user attempt to use local AI.
 export async function checkWebGPUCompute(): Promise<{ ok: boolean; error?: string }> {
   if (!checkWebGPU()) {
     return { ok: false, error: "WebGPU não disponível neste navegador." };
@@ -75,64 +76,28 @@ export async function checkWebGPUCompute(): Promise<{ ok: boolean; error?: strin
     if (!adapter) {
       return { ok: false, error: "Nenhuma GPU compatível encontrada. Verifique seus drivers." };
     }
-    // Request device with features WebLLM needs
-    const device = await adapter.requestDevice({
-      requiredFeatures: [] as string[],
-    });
+    const device = await adapter.requestDevice();
     if (!device) {
       return { ok: false, error: "Não foi possível criar dispositivo WebGPU." };
     }
-
-    // ★ Capture uncaptured errors — these are the "Invalid ShaderModule" errors
-    // that happen asynchronously during pipeline creation on some GPUs
-    let uncapturedError: string | null = null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (device as any).onuncapturederror = (ev: any) => {
-      uncapturedError = ev?.error?.message || String(ev?.error || "Unknown GPU error");
-    };
-
-    // ★ v1.6.7: Use a shader that's closer to what WebLLM actually compiles
-    // (workgroup_size(64), struct uniforms, storage buffers) — this catches
-    // GPUs that pass a trivial shader but fail on real WebLLM shaders
+    // ★ v1.6.9: Simple shader — just verify compute pipeline creation works at all.
+    // Don't try to match WebLLM's exact shader — that was too strict for older GPUs.
     const shaderCode = `
-      struct Params {
-        n: u32,
-        m: u32,
-      };
-      @group(0) @binding(0) var<uniform> params: Params;
-      @group(0) @binding(1) var<storage, read_write> output: array<f32>;
-
-      @compute @workgroup_size(64)
-      fn index_kernel(@builtin(global_invocation_id) gid: vec3<u32>) {
-        let idx: u32 = gid.x;
-        if (idx >= params.n) { return; }
-        output[idx] = f32(idx) * 1.0;
-      }
+      @compute @workgroup_size(1)
+      fn main(@builtin(global_invocation_id) id: vec3<u32>) {}
     `;
     const shaderModule = device.createShaderModule({ code: shaderCode });
-
-    // Create a compute pipeline — this is where "Invalid ShaderModule" errors surface
     let pipeline: unknown = null;
     try {
       pipeline = device.createComputePipeline({
         layout: "auto",
-        compute: { module: shaderModule, entryPoint: "index_kernel" },
+        compute: { module: shaderModule, entryPoint: "main" },
       });
     } catch (pipelineErr: unknown) {
       const msg = pipelineErr instanceof Error ? pipelineErr.message : String(pipelineErr);
       device.destroy();
-      return { ok: false, error: `GPU não compila shaders WebLLM: ${msg}. Atualize seus drivers de vídeo.` };
+      return { ok: false, error: `GPU não suporta compute shaders: ${msg}` };
     }
-
-    // ★ Check for async uncaptured errors that happened during pipeline creation
-    // Give the GPU a moment to flush any pending errors
-    await new Promise((r) => setTimeout(r, 100));
-
-    if (uncapturedError) {
-      device.destroy();
-      return { ok: false, error: `GPU reportou erro de shader: ${uncapturedError}. Atualize seus drivers de vídeo.` };
-    }
-
     if (!pipeline) {
       device.destroy();
       return { ok: false, error: "GPU não suporta compute shaders necessários para IA local." };
@@ -141,7 +106,7 @@ export async function checkWebGPUCompute(): Promise<{ ok: boolean; error?: strin
     return { ok: true };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    return { ok: false, error: `WebGPU compute falhou: ${msg}. Atualize seus drivers de GPU.` };
+    return { ok: false, error: `WebGPU compute falhou: ${msg}` };
   }
 }
 
