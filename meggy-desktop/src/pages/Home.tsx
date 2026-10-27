@@ -1,11 +1,22 @@
 // ═══════════════════════════════════════════════════════════════
-// Home Page — Grid de drives + navegação de pastas + player inline (v1.4.4)
+// Home Page — Grid de drives + navegação de pastas + player inline (v1.5.0)
 // Replica do _playVideoInline da web (layout Alfacon 2 colunas)
+// + IA Local (WebLLM via WebGPU) com fallback para nuvem
 // ═══════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { aiCacheGet, aiCacheSave, aiGenerate, fetchText, extractPdfText } from "../lib/api";
+import {
+  hasLocalAIConfigured,
+  isPopupDismissed,
+  dismissPopup,
+  setSelectedModel as localAiSetSelectedModel,
+  ensureModelLoaded,
+  localChat,
+  checkWebGPU,
+} from "../lib/local-ai";
+import AIInstallPopup from "../components/AIInstallPopup";
 
 interface Drive { index: number; name: string; }
 interface FileItem { name: string; mime_type: string; id: string; link: string | null; size: number; }
@@ -125,6 +136,62 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
   const [playlist, setPlaylist] = useState<FileItem[]>([]);
   const [playerIndex, setPlayerIndex] = useState(0);
 
+  // ─── v1.5.0 — Local AI state ───
+  // aiMode: "local" uses WebLLM (if configured); "cloud" uses /api/ai
+  const [aiMode, setAiMode] = useState<"local" | "cloud">(() => {
+    return hasLocalAIConfigured() ? "local" : "cloud";
+  });
+  const [localAiReady, setLocalAiReady] = useState<boolean>(hasLocalAIConfigured());
+  const [showAIPopup, setShowAIPopup] = useState<boolean>(false);
+
+  // Show the install popup on first launch (if not dismissed).
+  useEffect(() => {
+    if (!isPopupDismissed() && !hasLocalAIConfigured()) {
+      setShowAIPopup(true);
+    }
+    // Refresh localAiReady whenever popup closes (user may have chosen a model).
+  }, []);
+
+  function handleChooseLocal(modelId: string) {
+    localAiSetSelectedModel(modelId);
+    setLocalAiReady(true);
+    setAiMode("local");
+    dismissPopup();
+    setShowAIPopup(false);
+  }
+
+  function handleChooseCloud() {
+    // User explicitly chose cloud — keep current selection if any, but switch mode.
+    setAiMode("cloud");
+    dismissPopup();
+    setShowAIPopup(false);
+  }
+
+  function handleClosePopup() {
+    // "Ver depois" — dismiss without choosing.
+    dismissPopup();
+    setShowAIPopup(false);
+  }
+
+  function handleToggleAI() {
+    if (aiMode === "cloud") {
+      // Switching to local — requires a configured model.
+      if (localAiReady) {
+        setAiMode("local");
+      } else {
+        // No model yet — open the install popup.
+        setShowAIPopup(true);
+      }
+    } else {
+      setAiMode("cloud");
+    }
+  }
+
+  function handleManageAI() {
+    // Re-open the popup so user can install/uninstall/switch models.
+    setShowAIPopup(true);
+  }
+
   useEffect(() => { loadDrives(); }, []);
 
   async function loadDrives() {
@@ -215,80 +282,123 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
   // ─── Player view ───
   if (view === "player" && currentDrive && playlist.length > 0) {
     return (
-      <PlayerView
-        drive={currentDrive}
-        folderPath={currentPath}
-        playlist={playlist}
-        initialIndex={playerIndex}
-        onBack={backToBrowse}
-        onLogout={logout}
-        onNavigateBreadcrumb={navigateToBreadcrumb}
-        onHome={backToDrives}
-      />
+      <>
+        <PlayerView
+          drive={currentDrive}
+          folderPath={currentPath}
+          playlist={playlist}
+          initialIndex={playerIndex}
+          onBack={backToBrowse}
+          onLogout={logout}
+          onNavigateBreadcrumb={navigateToBreadcrumb}
+          onHome={backToDrives}
+          aiMode={aiMode}
+          localAiReady={localAiReady}
+          onToggleAI={handleToggleAI}
+          onManageAI={handleManageAI}
+        />
+        {showAIPopup && (
+          <AIInstallPopup
+            onClose={handleClosePopup}
+            onChooseLocal={handleChooseLocal}
+            onChooseCloud={handleChooseCloud}
+          />
+        )}
+      </>
     );
   }
 
   // ─── Browse view (folder listing) ───
   if (view === "browse") {
     return (
-      <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
-        <Header
-          onBack={backToDrives}
-          onLogout={logout}
-          breadcrumb={
-            <Breadcrumb
-              drive={currentDrive}
-              path={currentPath}
-              onCrumb={navigateToBreadcrumb}
-              onRoot={backToDrives}
-            />
-          }
-        />
-        <div style={{ flex: 1, overflow: "auto", padding: "20px" }}>
-          {error && (
-            <div style={{ textAlign: "center", padding: "20px", color: "var(--pink)", fontSize: "14px" }}>
-              ⚠️ {error}
-            </div>
-          )}
-          {loading ? (
-            <div style={{ textAlign: "center", padding: "40px", color: "var(--text-muted)" }}>Carregando...</div>
-          ) : files.length === 0 && !error ? (
-            <div style={{ textAlign: "center", padding: "40px", color: "var(--text-muted)" }}>Pasta vazia.</div>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "12px" }}>
-              {files.map((file) => (
-                <FileCard
-                  key={file.id}
-                  file={file}
-                  onClick={() => {
-                    const isFolder = file.mime_type === "application/vnd.google-apps.folder";
-                    const isVideo = file.mime_type.startsWith("video/") || file.name.endsWith(".mp4");
-                    const isAudio = file.mime_type.startsWith("audio/") || file.name.endsWith(".mp3") || file.name.endsWith(".m4a");
-                    if (isFolder) openFolder(file);
-                    else if (isVideo || isAudio) openPlayer(file);
-                  }}
-                />
-              ))}
-            </div>
-          )}
+      <>
+        <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+          <Header
+            onBack={backToDrives}
+            onLogout={logout}
+            breadcrumb={
+              <Breadcrumb
+                drive={currentDrive}
+                path={currentPath}
+                onCrumb={navigateToBreadcrumb}
+                onRoot={backToDrives}
+              />
+            }
+            aiMode={aiMode}
+            localAiReady={localAiReady}
+            onToggleAI={handleToggleAI}
+            onManageAI={handleManageAI}
+          />
+          <div style={{ flex: 1, overflow: "auto", padding: "20px" }}>
+            {error && (
+              <div style={{ textAlign: "center", padding: "20px", color: "var(--pink)", fontSize: "14px" }}>
+                ⚠️ {error}
+              </div>
+            )}
+            {loading ? (
+              <div style={{ textAlign: "center", padding: "40px", color: "var(--text-muted)" }}>Carregando...</div>
+            ) : files.length === 0 && !error ? (
+              <div style={{ textAlign: "center", padding: "40px", color: "var(--text-muted)" }}>Pasta vazia.</div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "12px" }}>
+                {files.map((file) => (
+                  <FileCard
+                    key={file.id}
+                    file={file}
+                    onClick={() => {
+                      const isFolder = file.mime_type === "application/vnd.google-apps.folder";
+                      const isVideo = file.mime_type.startsWith("video/") || file.name.endsWith(".mp4");
+                      const isAudio = file.mime_type.startsWith("audio/") || file.name.endsWith(".mp3") || file.name.endsWith(".m4a");
+                      if (isFolder) openFolder(file);
+                      else if (isVideo || isAudio) openPlayer(file);
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+        {showAIPopup && (
+          <AIInstallPopup
+            onClose={handleClosePopup}
+            onChooseLocal={handleChooseLocal}
+            onChooseCloud={handleChooseCloud}
+          />
+        )}
+      </>
     );
   }
 
   // ─── Drives view (root) ───
   return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
-      <Header onBack={null} onLogout={logout} breadcrumb={null} />
-      <div style={{ flex: 1, overflow: "auto", padding: "20px" }}>
-        <h2 style={{ color: "var(--text)", fontSize: "20px", marginBottom: "20px" }}>☁️ Drives disponíveis</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "16px" }}>
-          {drives.map((drive) => (
-            <DriveCard key={drive.index} drive={drive} onClick={() => openDrive(drive)} />
-          ))}
+    <>
+      <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+        <Header
+          onBack={null}
+          onLogout={logout}
+          breadcrumb={null}
+          aiMode={aiMode}
+          localAiReady={localAiReady}
+          onToggleAI={handleToggleAI}
+          onManageAI={handleManageAI}
+        />
+        <div style={{ flex: 1, overflow: "auto", padding: "20px" }}>
+          <h2 style={{ color: "var(--text)", fontSize: "20px", marginBottom: "20px" }}>☁️ Drives disponíveis</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "16px" }}>
+            {drives.map((drive) => (
+              <DriveCard key={drive.index} drive={drive} onClick={() => openDrive(drive)} />
+            ))}
+          </div>
         </div>
       </div>
-    </div>
+      {showAIPopup && (
+        <AIInstallPopup
+          onClose={handleClosePopup}
+          onChooseLocal={handleChooseLocal}
+          onChooseCloud={handleChooseCloud}
+        />
+      )}
+    </>
   );
 }
 
@@ -297,6 +407,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
 // ═══════════════════════════════════════════════════════════════
 function PlayerView({
   drive, folderPath, playlist, initialIndex, onBack, onLogout, onNavigateBreadcrumb, onHome,
+  aiMode, localAiReady, onToggleAI, onManageAI,
 }: {
   drive: Drive;
   folderPath: string;
@@ -306,6 +417,10 @@ function PlayerView({
   onLogout: () => void;
   onNavigateBreadcrumb: (i: number) => void;
   onHome: () => void;
+  aiMode: "local" | "cloud";
+  localAiReady: boolean;
+  onToggleAI: () => void;
+  onManageAI: () => void;
 }) {
   const [idx, setIdx] = useState(initialIndex);
   const [mode, setMode] = useState<"split" | "fv" | "fm">("split");
@@ -320,6 +435,7 @@ function PlayerView({
   const [currentTime, setCurrentTime] = useState(0);
   const [playlistOpen, setPlaylistOpen] = useState(false);
   const [materialContent, setMaterialContent] = useState<Record<number, string>>({});
+  const [aiSource, setAiSource] = useState<"local" | "cloud" | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isaGenRef = useRef<string>("");
@@ -388,6 +504,7 @@ function PlayerView({
     setIsaCache(null);
     setIsaError(null);
     setIsaLoadingMsg(null);
+    setAiSource(null);
     isaGenRef.current = videoSrc;
   }, [videoSrc]);
 
@@ -593,24 +710,57 @@ function PlayerView({
       const QUESTOES_PROMPT = `Você é um examinador de concurso público brasileiro experiente. Baseado neste material, gere 10 questões de concurso em JSON array. Misture:\n- 6 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"legalText":"...","explanation":"...","fundamentacao":"..."}\n- 4 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"legalText":"...","explanation":"...","fundamentacao":"..."}\n\nCAMPOS:\n- statement: enunciado claro, contexto completo\n- legalText: o dispositivo legal aplicável (ex: "art. 5º, CF")\n- explanation: explicação técnica do acerto/erro\n- fundamentacao: fundamentação didática completa\n\nSem comentários, só JSON.\n\n${textSlice.slice(0, 60000)}`;
 
       // ─── 4. Generate in parallel (Promise.allSettled) ───
-      setIsaLoadingMsg(`✨ Gerando resumo + pílulas + questões${matSource ? " (fonte: " + matSource + ")" : ""}…\nIsto pode levar 30-60s.`);
+      // ★ v1.5.0: When aiMode === "local" and a model is configured, try local AI first
+      // for each call. If local fails or returns <100 chars, fall back to cloud aiGenerate().
+      setIsaLoadingMsg(`✨ Gerando resumo + pílulas + questões${matSource ? " (fonte: " + matSource + ")" : ""}…${aiMode === "local" && localAiReady ? " (⚡ IA Local)" : ""}\nIsto pode levar 30-60s.`);
 
-      const callIsa = async (prompt: string, kind: string): Promise<string> => {
-        try { return await aiGenerate(prompt, kind); }
-        catch (e) { console.warn("callIsa", kind, e); return ""; }
+      type AiResult = { text: string; source: "local" | "cloud" };
+
+      const callAiWithFallback = async (prompt: string, kind: string): Promise<AiResult> => {
+        if (aiMode === "local" && localAiReady && checkWebGPU()) {
+          try {
+            // Local models have a smaller context window — truncate the prompt.
+            const shortPrompt = prompt.slice(0, 6000);
+            const loaded = await ensureModelLoaded();
+            if (loaded) {
+              const r = await localChat(shortPrompt, { maxTokens: 2048, temperature: 0.6 });
+              if (r.ok && r.text && r.text.length >= 100) {
+                return { text: r.text, source: "local" };
+              }
+            }
+          } catch (e) {
+            console.warn("local AI failed, falling back to cloud:", e);
+          }
+        }
+        // Cloud fallback with the full prompt.
+        const text = await aiGenerate(prompt, kind);
+        return { text, source: "cloud" };
       };
 
-      const [summaryR, mindmapR, questionsR] = await Promise.all([
-        (async (): Promise<string> => {
+      const callIsa = async (prompt: string, kind: string): Promise<AiResult> => {
+        try { return await callAiWithFallback(prompt, kind); }
+        catch (e) { console.warn("callIsa", kind, e); return { text: "", source: "cloud" }; }
+      };
+
+      const [summaryRes, mindmapRes, questionsRes] = await Promise.all([
+        (async (): Promise<AiResult> => {
           for (let i = 0; i < RESUMO_PROMPTS.length; i++) {
             const r = await callIsa(RESUMO_PROMPTS[i], "resumo");
-            if (r && r.length > 200) return r;
+            if (r.text && r.text.length > 200) return r;
           }
-          return "";
+          return { text: "", source: "cloud" };
         })(),
         callIsa(PILULAS_PROMPT, "mindmap"),
         callIsa(QUESTOES_PROMPT, "questoes"),
       ]);
+
+      const summaryR = summaryRes.text;
+      const mindmapR = mindmapRes.text;
+      const questionsR = questionsRes.text;
+
+      // ★ v1.5.0: Determine the AI source badge — if ANY call succeeded locally, show "local".
+      const sources = [summaryRes.source, mindmapRes.source, questionsRes.source];
+      setAiSource(sources.some((s) => s === "local") ? "local" : "cloud");
 
       if (isaGenRef.current !== myKey) return; // stale — user switched video
 
@@ -744,7 +894,30 @@ function PlayerView({
             >{isAudio ? "🎵" : "🎬"} {currentFile.name}</span>
           </div>
         </div>
-        <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
+        <div style={{ display: "flex", gap: "6px", flexShrink: 0, alignItems: "center" }}>
+          <button
+            onClick={onToggleAI}
+            title={aiMode === "local" ? "IA Local ativa (clique para alternar para nuvem)" : "IA da Nuvem ativa (clique para alternar para local)"}
+            style={{
+              ...modeBtnStyle,
+              background: aiMode === "local" ? "linear-gradient(135deg,#ff8b9f,#c026d3)" : "var(--surface-2)",
+              color: aiMode === "local" ? "#fff" : "var(--text)",
+              borderColor: aiMode === "local" ? "transparent" : "var(--border)",
+              opacity: aiMode === "local" && !localAiReady ? 0.6 : 1,
+            }}
+          >
+            {aiMode === "local" ? "⚡ IA Local" : "☁️ IA Nuvem"}
+          </button>
+          <button
+            onClick={onManageAI}
+            title="Gerenciar IA Local (instalar/desinstalar modelos)"
+            style={{
+              ...modeBtnStyle,
+              padding: "6px 10px",
+            }}
+          >
+            ⚙️
+          </button>
           <button onClick={() => setMode("split")} style={{ ...modeBtnStyle, background: mode === "split" ? "var(--pink)" : "var(--surface-2)", color: mode === "split" ? "#fff" : "var(--text)" }}>⊟ Dividido</button>
           <button onClick={() => setMode("fv")} style={{ ...modeBtnStyle, background: mode === "fv" ? "var(--pink)" : "var(--surface-2)", color: mode === "fv" ? "#fff" : "var(--text)" }}>⚡ Foco aula</button>
           <button onClick={() => setMode("fm")} style={{ ...modeBtnStyle, background: mode === "fm" ? "var(--pink)" : "var(--surface-2)", color: mode === "fm" ? "#fff" : "var(--text)" }}>📄 Foco material</button>
@@ -905,11 +1078,29 @@ function PlayerView({
             ))}
           </div>
           {/* Status */}
-          <div style={{ fontSize: "11px", color: "var(--text-muted)", padding: "2px 0" }}>
+          <div style={{ fontSize: "11px", color: "var(--text-muted)", padding: "2px 0", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
             <strong style={{ color: "var(--pink)" }}>📚 Materiais da aula</strong>
-            <span style={{ marginLeft: "8px" }}>
+            <span>
               {materialsLoading ? "buscando…" : materials.length > 0 ? `${materials.length} material(is)` : "sem material"}
             </span>
+            {/* ★ v1.5.0: AI source badge */}
+            {aiSource && (
+              <span
+                style={{
+                  padding: "2px 8px",
+                  borderRadius: "999px",
+                  fontSize: "10px",
+                  fontWeight: 600,
+                  marginLeft: "auto",
+                  background: aiSource === "local" ? "rgba(255,139,159,0.12)" : "rgba(139,148,158,0.12)",
+                  color: aiSource === "local" ? "var(--pink)" : "var(--text-muted)",
+                  border: aiSource === "local" ? "1px solid rgba(255,139,159,0.3)" : "1px solid rgba(139,148,158,0.2)",
+                }}
+                title={aiSource === "local" ? "Conteúdo gerado pela IA Local (WebLLM)" : "Conteúdo gerado pela IA da Nuvem"}
+              >
+                {aiSource === "local" ? "⚡ IA Local" : "☁️ IA Nuvem"}
+              </span>
+            )}
           </div>
           {/* Body */}
           <div style={{
@@ -1264,11 +1455,15 @@ function Breadcrumb({
 }
 
 function Header({
-  onBack, onLogout, breadcrumb,
+  onBack, onLogout, breadcrumb, aiMode, localAiReady, onToggleAI, onManageAI,
 }: {
   onBack: (() => void) | null;
   onLogout: () => void;
   breadcrumb: React.ReactNode;
+  aiMode: "local" | "cloud";
+  localAiReady: boolean;
+  onToggleAI: () => void;
+  onManageAI: () => void;
 }) {
   return (
     <div style={{
@@ -1283,7 +1478,29 @@ function Header({
         <span style={{ color: "var(--pink)", fontWeight: 700, fontSize: "18px", flexShrink: 0 }}>🐩 Meggy</span>
         {breadcrumb}
       </div>
-      <button onClick={onLogout} style={{ ...btnStyle, flexShrink: 0 }}>Sair</button>
+      <div style={{ display: "flex", gap: "6px", flexShrink: 0, alignItems: "center" }}>
+        <button
+          onClick={onToggleAI}
+          title={aiMode === "local" ? "IA Local ativa (clique para alternar para nuvem)" : "IA da Nuvem ativa (clique para alternar para local)"}
+          style={{
+            ...modeBtnStyle,
+            background: aiMode === "local" ? "linear-gradient(135deg,#ff8b9f,#c026d3)" : "var(--surface-2)",
+            color: aiMode === "local" ? "#fff" : "var(--text)",
+            borderColor: aiMode === "local" ? "transparent" : "var(--border)",
+            opacity: aiMode === "local" && !localAiReady ? 0.6 : 1,
+          }}
+        >
+          {aiMode === "local" ? "⚡ IA Local" : "☁️ IA Nuvem"}
+        </button>
+        <button
+          onClick={onManageAI}
+          title="Gerenciar IA Local (instalar/desinstalar modelos)"
+          style={{ ...modeBtnStyle, padding: "6px 10px" }}
+        >
+          ⚙️
+        </button>
+        <button onClick={onLogout} style={{ ...btnStyle, flexShrink: 0 }}>Sair</button>
+      </div>
     </div>
   );
 }
