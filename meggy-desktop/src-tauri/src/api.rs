@@ -17,7 +17,7 @@ impl Default for AppState {
     fn default() -> Self {
         Self {
             client: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
+                .timeout(std::time::Duration::from_secs(120))
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .unwrap(),
@@ -114,14 +114,39 @@ pub async fn list_folder(
 
     // Build URL: if a path is provided (e.g. "/0:/CURSO X/"), POST to it;
     // otherwise POST to the drive root "/{drive_index}://".
-    // The worker.js apiRequest handler uses the URL path (not the body id)
-    // to determine which folder to list.
+    // ★ v1.5.8: URL-encode each path segment to fix HTTP 400 with spaces/special chars
     let url = match &path {
         Some(p) if !p.is_empty() => {
-            // Ensure leading "/" and trailing "/"
             let p = if p.starts_with('/') { p.clone() } else { format!("/{}", p) };
             let p = if p.ends_with('/') { p } else { format!("{}/", p) };
-            format!("{}{}", BASE_URL, p)
+            // Split by / and percent-encode each segment (keep drive index like "0:" as-is)
+            let segments: Vec<&str> = p.split('/').filter(|s| !s.is_empty()).collect();
+            let encoded: Vec<String> = segments.iter().map(|s| {
+                // Don't encode drive index (e.g. "0:") — worker expects it raw
+                if s.chars().filter(|c| *c == ':').count() == 1 && s.ends_with(':') {
+                    s.to_string()
+                } else {
+                    // Check if already percent-encoded (has %xx patterns)
+                    if s.contains('%') && s.contains("20") {
+                        s.to_string() // Already encoded, keep as-is
+                    } else {
+                        // Percent-encode: spaces → %20, etc.
+                        let mut result = String::new();
+                        for byte in s.bytes() {
+                            match byte {
+                                b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b':' => {
+                                    result.push(byte as char);
+                                }
+                                _ => {
+                                    result.push_str(&format!("%{:02X}", byte));
+                                }
+                            }
+                        }
+                        result
+                    }
+                }
+            }).collect();
+            format!("{}/{}/", BASE_URL, encoded.join("/"))
         }
         _ => format!("{}/{}:/", BASE_URL, drive_index),
     };
@@ -331,4 +356,271 @@ pub async fn get_user_state(state: State<'_, AppState>) -> Result<serde_json::Va
         .map_err(|e| e.to_string())?;
 
     resp.json().await.map_err(|e| e.to_string())
+}
+
+// ─────────────────────────────────────────────────────────────────
+// v1.4.4 — Inline player support (AI cache, AI generate, fetch text)
+// ─────────────────────────────────────────────────────────────────
+
+/// GET /api/ai/cache?key=<key>
+/// Returns the cached ISA payload (or { cached: null } on miss).
+#[tauri::command]
+pub async fn ai_cache_get(
+    state: State<'_, AppState>,
+    key: String,
+) -> Result<serde_json::Value, String> {
+    let cookie = state.cookie.lock().unwrap().clone();
+    let cookie = cookie.unwrap_or_default();
+
+    let resp = state
+        .client
+        .get(format!("{}/api/ai/cache", BASE_URL))
+        .header("Cookie", &cookie)
+        .header("Accept", "application/json")
+        .query(&[("key", key.as_str())])
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 404 / 401 etc. → return empty cached object (cache miss)
+    if !resp.status().is_success() {
+        return Ok(serde_json::json!({ "cached": null }));
+    }
+    resp.json().await.map_err(|e| e.to_string())
+}
+
+/// POST /api/ai/cache — fire-and-forget save (summary / questions / mindmap).
+#[tauri::command]
+pub async fn ai_cache_save(
+    state: State<'_, AppState>,
+    key: String,
+    summary: Option<String>,
+    questions: Option<serde_json::Value>,
+    mindmap: Option<String>,
+    lesson_name: Option<String>,
+) -> Result<bool, String> {
+    let cookie = state.cookie.lock().unwrap().clone();
+    let cookie = cookie.ok_or("Not logged in")?;
+
+    let body = serde_json::json!({
+        "key": key,
+        "summary": summary,
+        "questions": questions,
+        "mindmap": mindmap,
+        "lessonName": lesson_name.unwrap_or_default()
+    });
+
+    let resp = state
+        .client
+        .post(format!("{}/api/ai/cache", BASE_URL))
+        .header("Cookie", &cookie)
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(resp.status().is_success())
+}
+
+/// POST /api/ai — generate ISA content (summary / questions / mindmap).
+/// `kind` is forwarded so the worker can route to the right provider.
+/// ★ v1.4.8: Don't send kind=questoes (routes to heavy models that timeout).
+/// Use kind=resumo for all — the prompt itself tells the AI what to generate.
+/// ★ v1.4.8: Retry up to 3 times (backends can be intermittent).
+#[tauri::command]
+pub async fn ai_generate(
+    state: State<'_, AppState>,
+    message: String,
+    kind: Option<String>,
+) -> Result<String, String> {
+    let cookie = state.cookie.lock().unwrap().clone();
+    let cookie = cookie.ok_or("Not logged in")?;
+
+    let effective_kind = if kind.as_deref() == Some("questoes") {
+        Some("resumo".to_string())
+    } else {
+        kind
+    };
+
+    let body = serde_json::json!({
+        "message": message,
+        "messages": [],
+        "kind": effective_kind
+    });
+
+    let mut last_err = String::new();
+    for attempt in 1..=3u32 {
+        let resp = state
+            .client
+            .post(format!("{}/api/ai", BASE_URL))
+            .header("Cookie", &cookie)
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await;
+
+        match resp {
+            Ok(r) => {
+                if !r.status().is_success() {
+                    last_err = format!("HTTP {}", r.status());
+                    if attempt < 3 {
+                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                        continue;
+                    }
+                    return Err(last_err);
+                }
+                let json: serde_json::Value = r.json().await.map_err(|e| e.to_string())?;
+                let response = json["response"]
+                    .as_str()
+                    .or_else(|| json["markdown"].as_str())
+                    .or_else(|| json["summary"].as_str())
+                    .unwrap_or("")
+                    .to_string();
+                if !response.is_empty() {
+                    return Ok(response);
+                }
+                last_err = "Resposta vazia da IA".to_string();
+            }
+            Err(e) => {
+                last_err = e.to_string();
+            }
+        }
+        if attempt < 3 {
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        }
+    }
+    Err(last_err)
+}
+
+/// Fetch arbitrary text content from a URL (for MD/TXT/HTML material files).
+/// The download links produced by worker.js are self-contained (encrypted id +
+/// expiry + MAC) and don't require the session cookie, but we still send it to
+/// be safe.  We follow redirects here since the file host may 302.
+#[tauri::command]
+pub async fn fetch_text(url: String) -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+    resp.text().await.map_err(|e| e.to_string())
+}
+
+/// ★ v1.4.7: Extract text from a PDF URL using pdf-extract crate.
+/// Downloads the PDF to a temp file, extracts text (cap 50K chars), returns it.
+/// Used by ISA generation when no transcription exists — falls back to PDF material.
+/// v1.4.7 fixes: (1) follows redirects, (2) catches panics with catch_unwind,
+/// (3) validates content-type is PDF before extracting.
+#[tauri::command]
+pub async fn extract_pdf_text(url: String, state: State<'_, AppState>) -> Result<String, String> {
+    // Download PDF — follow redirects (download.aspx may 302 to Google Drive)
+    // Also send session cookie in case the worker requires auth
+    let cookie = state.cookie.lock().unwrap().clone();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .redirect(reqwest::redirect::Policy::limited(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut req = client.get(&url);
+    if let Some(c) = &cookie {
+        req = req.header("Cookie", c);
+    }
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+
+    // Validate content-type is actually PDF (not HTML login redirect)
+    let ct = resp.headers().get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    if !ct.contains("pdf") && !ct.contains("octet-stream") {
+        // Got HTML or something else — probably auth redirect
+        return Err("Não é um PDF (possível redirect de login)".to_string());
+    }
+
+    let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+
+    // Validate it starts with %PDF magic bytes
+    if bytes.len() < 5 || &bytes[..5] != b"%PDF-" {
+        return Err("Arquivo não é um PDF válido".to_string());
+    }
+
+    // Write to temp file
+    let mut tmp = tempfile::NamedTempFile::new().map_err(|e| e.to_string())?;
+    std::fs::write(tmp.path(), &bytes).map_err(|e| e.to_string())?;
+
+    // Extract text using pdf-extract — catch panics (some PDFs cause panics)
+    let path = tmp.path().to_path_buf();
+    let text_result = tokio::task::spawn_blocking(move || {
+        std::panic::catch_unwind(|| {
+            pdf_extract::extract_text(&path)
+        })
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?;
+
+    match text_result {
+        Ok(Ok(text)) => {
+            let truncated = if text.len() > 50000 {
+                text[..50000].to_string()
+            } else {
+                text
+            };
+            Ok(truncated)
+        }
+        Ok(Err(e)) => Err(format!("PDF extract error: {}", e)),
+        Err(_) => Err("PDF extract panicked (possible scanned/image PDF)".to_string()),
+    }
+}
+
+/// ★ v1.5.2: Download a file (PDF) with session cookie + redirects, save to temp, return path.
+/// Used by MaterialViewer iframe — the iframe can't send cookies, so we download in Rust
+/// and return a local file path that the frontend converts to a viewable URL via convertFileSrc.
+#[tauri::command]
+pub async fn download_to_temp(url: String, state: State<'_, AppState>) -> Result<String, String> {
+    let cookie = state.cookie.lock().unwrap().clone();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .redirect(reqwest::redirect::Policy::limited(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut req = client.get(&url);
+    if let Some(c) = &cookie {
+        req = req.header("Cookie", c);
+    }
+    let resp = req.send().await.map_err(|e| e.to_string())?;
+
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+
+    let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+
+    // Save to a temp file with .pdf extension (important for iframe to recognize)
+    let tmp_dir = std::env::temp_dir();
+    let filename = format!("meggy_pdf_{}.pdf", std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis());
+    let filepath = tmp_dir.join(filename);
+    std::fs::write(&filepath, &bytes).map_err(|e| e.to_string())?;
+
+    Ok(filepath.to_string_lossy().to_string())
 }
