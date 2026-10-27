@@ -6,7 +6,8 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { aiCacheGet, aiCacheSave, aiGenerate, fetchText, extractPdfText } from "../lib/api";
+import { aiCacheGet, aiCacheSave, aiGenerate, fetchText, extractPdfText, downloadToTemp } from "../lib/api";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import {
   hasLocalAIConfigured,
   isPopupDismissed,
@@ -1216,6 +1217,32 @@ function PlayerView({
 // MaterialViewer — PDF iframe / MD rendered / fallback link
 // ═══════════════════════════════════════════════════════════════
 function MaterialViewer({ file, content }: { file?: FileItem; content?: string }) {
+  const [pdfSrc, setPdfSrc] = useState<string>("");
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfError, setPdfError] = useState<string>("");
+
+  useEffect(() => {
+    setPdfSrc("");
+    setPdfError("");
+    if (!file) return;
+    const ext = (file.name.split(".").pop() || "").toLowerCase();
+    if (ext !== "pdf" || !file.link) return;
+    // ★ v1.5.2: Download PDF via Rust (with cookie + redirects), display locally
+    setPdfLoading(true);
+    const link = file.link.startsWith("http") ? file.link : (BASE_URL + file.link);
+    const pdfLink = link.includes("inline=") ? link : link + (link.includes("?") ? "&" : "?") + "inline=true";
+    downloadToTemp(pdfLink)
+      .then((path) => {
+        const src = convertFileSrc(path);
+        setPdfSrc(src);
+        setPdfLoading(false);
+      })
+      .catch((e) => {
+        setPdfError(String(e));
+        setPdfLoading(false);
+      });
+  }, [file]);
+
   if (!file) {
     return (
       <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>
@@ -1226,12 +1253,30 @@ function MaterialViewer({ file, content }: { file?: FileItem; content?: string }
   }
   const ext = (file.name.split(".").pop() || "").toLowerCase();
   let link = file.link ? (file.link.startsWith("http") ? file.link : (BASE_URL + file.link)) : "";
-  if (ext === "pdf" && link && !link.includes("inline=")) {
-    link += (link.includes("?") ? "&" : "?") + "inline=true";
-  }
 
-  if (ext === "pdf" && link) {
-    return <iframe src={link} style={{ width: "100%", height: "100%", border: "none", borderRadius: "16px" }} title={file.name} />;
+  if (ext === "pdf") {
+    if (pdfLoading) {
+      return (
+        <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>
+          <div style={{ width: "40px", height: "40px", borderRadius: "50%", border: "3px solid rgba(255,139,159,0.3)", borderTopColor: "var(--pink)", margin: "0 auto 14px", animation: "meggy-spin 1s linear infinite" }} />
+          <div>Baixando PDF…</div>
+          <style>{`@keyframes meggy-spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      );
+    }
+    if (pdfError) {
+      return (
+        <div style={{ padding: "40px", textAlign: "center", color: "var(--pink)" }}>
+          <div style={{ fontSize: "34px", marginBottom: "8px" }}>⚠️</div>
+          <div>Erro ao carregar PDF: {pdfError}</div>
+          <a href={link} download={file.name} target="_blank" rel="noreferrer" style={{ ...modeBtnStyle, marginTop: "12px", textDecoration: "none", display: "inline-block" }}>⬇ Baixar</a>
+        </div>
+      );
+    }
+    if (pdfSrc) {
+      return <iframe src={pdfSrc} style={{ width: "100%", height: "100%", border: "none", borderRadius: "16px" }} title={file.name} />;
+    }
+    return <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>Carregando…</div>;
   }
   if ((ext === "md" || ext === "txt" || ext === "html") && link) {
     if (content === undefined) {
