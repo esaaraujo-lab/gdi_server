@@ -110,3 +110,13 @@ export async function extractPdfText(url: string) {
 export async function downloadToTemp(url: string) {
   return invoke<string>("download_to_temp", { url });
 }
+
+/** ★ v1.5.5: Save user state (watched, resume, history) to worker. */
+export async function saveUserState(data: Record<string, unknown>) {
+  return invoke<boolean>("save_user_state", { data });
+}
+
+/** ★ v1.5.5: Get user state from worker. */
+export async function getUserState() {
+  return invoke<Record<string, unknown>>("get_user_state");
+}
