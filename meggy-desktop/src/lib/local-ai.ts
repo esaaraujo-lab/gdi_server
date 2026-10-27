@@ -54,9 +54,51 @@ let engineInstance: any = null;
 let currentLoadedModelId: string | null = null;
 
 // ─── WebGPU detection ───
+// Basic check: does navigator.gpu exist?
 export function checkWebGPU(): boolean {
   if (typeof navigator === "undefined") return false;
   return "gpu" in navigator;
+}
+
+// ★ v1.5.3: Thorough check — actually try to create a compute pipeline.
+// Some GPUs have navigator.gpu but can't run compute shaders (shader compilation fails).
+// This is the real test that catches the "Invalid ShaderModule" error.
+export async function checkWebGPUCompute(): Promise<{ ok: boolean; error?: string }> {
+  if (!checkWebGPU()) {
+    return { ok: false, error: "WebGPU não disponível neste navegador." };
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const gpu = (navigator as any).gpu;
+    const adapter = await gpu.requestAdapter();
+    if (!adapter) {
+      return { ok: false, error: "Nenhuma GPU compatível encontrada. Verifique seus drivers." };
+    }
+    const device = await adapter.requestDevice();
+    if (!device) {
+      return { ok: false, error: "Não foi possível criar dispositivo WebGPU." };
+    }
+    // Try to create a simple compute shader — this is what WebLLM needs
+    const shaderCode = `
+      @compute @workgroup_size(1)
+      fn main(@builtin(global_invocation_id) id: vec3<u32>) {}
+    `;
+    const shaderModule = device.createShaderModule({ code: shaderCode });
+    // Create a compute pipeline — if this fails, WebLLM won't work
+    const pipeline = device.createComputePipeline({
+      layout: "auto",
+      compute: { module: shaderModule, entryPoint: "main" },
+    });
+    if (!pipeline) {
+      device.destroy();
+      return { ok: false, error: "GPU não suporta compute shaders necessários para IA local." };
+    }
+    device.destroy();
+    return { ok: true };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: `WebGPU compute falhou: ${msg}. Atualize seus drivers de GPU.` };
+  }
 }
 
 // ─── LocalStorage helpers ───
@@ -131,6 +173,12 @@ export async function loadModel(
 
   if (!checkWebGPU()) {
     throw new Error("WebGPU não disponível neste navegador/computador.");
+  }
+
+  // ★ v1.5.3: Validate compute shaders actually work (not just navigator.gpu exists)
+  const computeCheck = await checkWebGPUCompute();
+  if (!computeCheck.ok) {
+    throw new Error(computeCheck.error || "WebGPU compute não suportado. IA Local não funcionará.");
   }
 
   // Dynamic import — avoids bundling webllm when not used.
@@ -324,21 +372,25 @@ export async function tryLocalThenCloud(
 ): Promise<{ text: string; source: "local" | "cloud"; error?: string }> {
   const minChars = options.minChars ?? 100;
 
-  // Only attempt local if a model is configured AND WebGPU is available.
-  if (hasLocalAIConfigured() && checkWebGPU()) {
-    try {
-      options.onLocalStart?.();
-      const loaded = await ensureModelLoaded();
-      if (loaded) {
-        const r = await localChat(message, { maxTokens: 2048, temperature: 0.6 });
-        if (r.ok && r.text && r.text.length >= minChars) {
-          options.onLocalDone?.(r.text);
-          return { text: r.text, source: "local" };
+  // Only attempt local if a model is configured AND WebGPU compute works.
+  if (hasLocalAIConfigured()) {
+    const computeOk = await checkWebGPUCompute();
+    if (!computeOk.ok) {
+      console.warn("WebGPU compute not available, using cloud:", computeOk.error);
+    } else {
+      try {
+        options.onLocalStart?.();
+        const loaded = await ensureModelLoaded();
+        if (loaded) {
+          const r = await localChat(message, { maxTokens: 2048, temperature: 0.6 });
+          if (r.ok && r.text && r.text.length >= minChars) {
+            options.onLocalDone?.(r.text);
+            return { text: r.text, source: "local" };
+          }
         }
-        // Too short or empty — fall through to cloud.
+      } catch (e) {
+        console.warn("local AI failed, falling back to cloud:", e);
       }
-    } catch (e) {
-      console.warn("local AI failed, falling back to cloud:", e);
     }
   }
 
