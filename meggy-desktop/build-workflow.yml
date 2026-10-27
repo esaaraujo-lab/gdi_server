@@ -57,53 +57,42 @@ jobs:
           releaseBody: |
             ## 🐩 Meggy Desktop ${{ github.ref_name }}
 
-            **⚠️ IMPORTANTE — Falso positivo de antivírus:**
-            O Windows Defender e outros antivírus podem sinalizar este app como suspeito.
-            Isto é um **falso positivo** — o app é open-source e construído via GitHub Actions.
+            ### 📥 Downloads
 
-            **Para instalar:**
-            1. Baixe o arquivo `.msi` ou `.exe` (setup)
-            2. Se o Windows Defender bloquear: clique em **"Mais informações"** → **"Executar mesmo assim"**
-            3. Se o SmartScreen bloquear: clique em **"Mais informações"** → **"Executar mesmo assim"**
-            4. Se outro antivírus bloquear: adicione exceção para a pasta de instalação
+            **Windows:**
+            - [Instalador .exe (NSIS)](https://github.com/esaaraujo-lab/gdi_server/releases/download/${{ github.ref_name }}/Meggy_${{ github.ref_name | replace:'desktop-v','' }}_x64-setup.exe)
+            - [Instalador .msi](https://github.com/esaaraujo-lab/gdi_server/releases/download/${{ github.ref_name }}/Meggy_${{ github.ref_name | replace:'desktop-v','' }}_x64_en-US.msi)
 
-            **Código fonte:** https://github.com/esaaraujo-lab/gdi_server/meggy-desktop
-            **Build logs:** https://github.com/esaaraujo-lab/gdi_server/actions
+            **Linux:**
+            - [AppImage](https://github.com/esaaraujo-lab/gdi_server/releases/download/${{ github.ref_name }}/Meggy_${{ github.ref_name | replace:'desktop-v','' }}_amd64.AppImage)
+            - [.deb](https://github.com/esaaraujo-lab/gdi_server/releases/download/${{ github.ref_name }}/Meggy_${{ github.ref_name | replace:'desktop-v','' }}_amd64.deb)
+
+            ### 📱 Outros apps Meggy
+            - [Android APK](https://github.com/esaaraujo-lab/gdi_server/releases/latest) (procure pelo arquivo .apk)
+            - [Roku](https://github.com/esaaraujo-lab/gdi_server/releases/latest) (procure pelo arquivo .zip)
+
+            ### ⚠️ Windows Defender
+            O Windows Defender pode sinalizar este app como suspeito (falso positivo).
+            Clique em **"Mais informações"** → **"Executar mesmo assim"**.
+
+            ### 🔧 Código fonte
+            https://github.com/esaaraujo-lab/gdi_server/tree/main/meggy-desktop
           releaseDraft: false
           args: --target ${{ matrix.target }}
 
-      # ★ v1.4.9: Sign Windows executables with self-signed cert to reduce false positives
+      # ★ v1.5.9: Sign Windows executables with self-signed cert to reduce false positives
       - name: Sign Windows executables (self-signed)
         if: matrix.platform == 'windows-latest'
         shell: pwsh
         run: |
-          # Create a self-signed code signing certificate
-          $cert = New-SelfSignedCertificate `
-            -Type CodeSigningCert `
-            -Subject "CN=Meggy Desktop, O=esaaraujo-lab, C=BR" `
-            -KeyUsage DigitalSignature `
-            -FriendlyName "Meggy Desktop Code Signing" `
-            -CertStoreLocation "Cert:\CurrentUser\My" `
-            -HashAlgorithm SHA256 `
-            -NotAfter (Get-Date).AddYears(3)
-
-          # Export to PFX
+          $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=Meggy Desktop, O=esaaraujo-lab, C=BR" -KeyUsage DigitalSignature -FriendlyName "Meggy Desktop Code Signing" -CertStoreLocation "Cert:\CurrentUser\My" -HashAlgorithm SHA256 -NotAfter (Get-Date).AddYears(3)
           $pwd = ConvertTo-SecureString -String "meggy2024" -Force -AsPlainText
           Export-PfxCertificate -Cert $cert -FilePath "meggy-code-sign.pfx" -Password $pwd
-
-          # Trust the cert (import to Root)
           Import-PfxCertificate -FilePath "meggy-code-sign.pfx" -Password $pwd -CertStoreLocation "Cert:\LocalMachine\Root"
-
-          # Find and sign all .exe and .msi files in the output
           $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter "signtool.exe" | Where-Object { $_.FullName -match "x64" } | Select-Object -First 1
           if ($signtool) {
-            Write-Host "Found signtool: $($signtool.FullName)"
             $files = Get-ChildItem -Path "meggy-desktop/src-tauri/target/x86_64-pc-windows-msvc/release" -Recurse -Include "*.exe","*.msi" -ErrorAction SilentlyContinue
             foreach ($f in $files) {
-              Write-Host "Signing: $($f.FullName)"
               & $signtool.FullName sign /f "meggy-code-sign.pfx" /p "meggy2024" /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /v $f.FullName 2>&1
             }
-            Write-Host "✅ Signed $($files.Count) files"
-          } else {
-            Write-Host "⚠️ signtool not found — skipping code signing"
           }
