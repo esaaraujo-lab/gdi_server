@@ -54,6 +54,56 @@ jobs:
           projectPath: meggy-desktop
           tagName: ${{ github.ref_name }}
           releaseName: 'Meggy Desktop ${{ github.ref_name }}'
-          releaseBody: 'App nativo Meggy para desktop'
+          releaseBody: |
+            ## 🐩 Meggy Desktop ${{ github.ref_name }}
+
+            **⚠️ IMPORTANTE — Falso positivo de antivírus:**
+            O Windows Defender e outros antivírus podem sinalizar este app como suspeito.
+            Isto é um **falso positivo** — o app é open-source e construído via GitHub Actions.
+
+            **Para instalar:**
+            1. Baixe o arquivo `.msi` ou `.exe` (setup)
+            2. Se o Windows Defender bloquear: clique em **"Mais informações"** → **"Executar mesmo assim"**
+            3. Se o SmartScreen bloquear: clique em **"Mais informações"** → **"Executar mesmo assim"**
+            4. Se outro antivírus bloquear: adicione exceção para a pasta de instalação
+
+            **Código fonte:** https://github.com/esaaraujo-lab/gdi_server/meggy-desktop
+            **Build logs:** https://github.com/esaaraujo-lab/gdi_server/actions
           releaseDraft: false
           args: --target ${{ matrix.target }}
+
+      # ★ v1.4.9: Sign Windows executables with self-signed cert to reduce false positives
+      - name: Sign Windows executables (self-signed)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          # Create a self-signed code signing certificate
+          $cert = New-SelfSignedCertificate `
+            -Type CodeSigningCert `
+            -Subject "CN=Meggy Desktop, O=esaaraujo-lab, C=BR" `
+            -KeyUsage DigitalSignature `
+            -FriendlyName "Meggy Desktop Code Signing" `
+            -CertStoreLocation "Cert:\CurrentUser\My" `
+            -HashAlgorithm SHA256 `
+            -NotAfter (Get-Date).AddYears(3)
+
+          # Export to PFX
+          $pwd = ConvertTo-SecureString -String "meggy2024" -Force -AsPlainText
+          Export-PfxCertificate -Cert $cert -FilePath "meggy-code-sign.pfx" -Password $pwd
+
+          # Trust the cert (import to Root)
+          Import-PfxCertificate -FilePath "meggy-code-sign.pfx" -Password $pwd -CertStoreLocation "Cert:\LocalMachine\Root"
+
+          # Find and sign all .exe and .msi files in the output
+          $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter "signtool.exe" | Where-Object { $_.FullName -match "x64" } | Select-Object -First 1
+          if ($signtool) {
+            Write-Host "Found signtool: $($signtool.FullName)"
+            $files = Get-ChildItem -Path "meggy-desktop/src-tauri/target/x86_64-pc-windows-msvc/release" -Recurse -Include "*.exe","*.msi" -ErrorAction SilentlyContinue
+            foreach ($f in $files) {
+              Write-Host "Signing: $($f.FullName)"
+              & $signtool.FullName sign /f "meggy-code-sign.pfx" /p "meggy2024" /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /v $f.FullName 2>&1
+            }
+            Write-Host "✅ Signed $($files.Count) files"
+          } else {
+            Write-Host "⚠️ signtool not found — skipping code signing"
+          }
