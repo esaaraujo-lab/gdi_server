@@ -8,6 +8,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   LOCAL_AI_MODELS,
   checkWebGPU,
+  checkWebGPUCompute,
   loadModel,
   localChat,
   unloadModel,
@@ -52,32 +53,43 @@ export default function AIInstallPopup({ onClose, onChooseLocal, onChooseCloud }
 
   // ─── Initial checks ───
   useEffect(() => {
-    const gpu = checkWebGPU();
-    setWebgpuOk(gpu);
-
-    if (gpu) {
-      // Check cache status for each model (async, fire-and-forget).
-      LOCAL_AI_MODELS.forEach(async (m) => {
-        try {
-          const cached = await isModelCached(m.id);
-          setStatuses((prev) => ({
-            ...prev,
-            [m.id]: { ...initialStatus, cached, loaded: false },
-          }));
-        } catch (_) {
-          setStatuses((prev) => ({
-            ...prev,
-            [m.id]: { ...initialStatus, cached: false, loaded: false },
-          }));
-        }
-      });
-
-      // If a model is already selected in localStorage, pre-select it.
-      const saved = getSelectedModel();
-      if (saved && LOCAL_AI_MODELS.some((m) => m.id === saved)) {
-        setSelectedModelState(saved);
+    // ★ v1.5.3: Use thorough WebGPU compute check (not just navigator.gpu)
+    (async () => {
+      const gpu = checkWebGPU();
+      if (!gpu) {
+        setWebgpuOk(false);
+        return;
       }
-    }
+      // Thorough check — actually tries to create a compute pipeline
+      const compute = await checkWebGPUCompute();
+      setWebgpuOk(compute.ok);
+      if (!compute.ok) {
+        setTestError(compute.error || "WebGPU compute não suportado");
+      }
+      if (compute.ok) {
+        // Check cache status for each model
+        LOCAL_AI_MODELS.forEach(async (m) => {
+          try {
+            const cached = await isModelCached(m.id);
+            setStatuses((prev) => ({
+              ...prev,
+              [m.id]: { ...initialStatus, cached, loaded: false },
+            }));
+          } catch (_) {
+            setStatuses((prev) => ({
+              ...prev,
+              [m.id]: { ...initialStatus, cached: false, loaded: false },
+            }));
+          }
+        });
+
+        // If a model is already selected in localStorage, pre-select it.
+        const saved = getSelectedModel();
+        if (saved && LOCAL_AI_MODELS.some((m) => m.id === saved)) {
+          setSelectedModelState(saved);
+        }
+      }
+    })();
   }, []);
 
   const updateStatus = useCallback((modelId: string, patch: Partial<ModelStatus>) => {
@@ -221,10 +233,14 @@ export default function AIInstallPopup({ onClose, onChooseLocal, onChooseCloud }
           }}>
             <div style={{ fontSize: "32px", marginBottom: "10px" }}>⚠️</div>
             <div style={{ color: "var(--pink)", fontWeight: 600, marginBottom: "6px" }}>
-              Seu computador não suporta WebGPU.
+              IA Local não disponível neste computador.
             </div>
-            <div style={{ color: "var(--text-muted)", fontSize: "13px" }}>
-              Use a IA da nuvem (já configurada).
+            <div style={{ color: "var(--text-muted)", fontSize: "13px", lineHeight: 1.5 }}>
+              {testError || "WebGPU não suportado."}<br /><br />
+              Possíveis soluções:<br />
+              • Atualize os drivers da placa de vídeo<br />
+              • Use a IA da Nuvem (já configurada e funcionando)<br />
+              • A IA da Nuvem usa os mesmos modelos da plataforma web
             </div>
           </div>
         )}
