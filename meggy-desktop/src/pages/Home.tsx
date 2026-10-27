@@ -271,15 +271,20 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
     setPlaylist([file]);
     setPlayerIndex(0);
     setView("player");
-    // ★ v1.5.7: Load interfolder immediately (not setTimeout) to build full playlist
+    // ★ v1.5.8: Load interfolder immediately (not setTimeout) to build full playlist
     // The interfolder will find the current video and keep the correct index
     loadInterfolderPlaylist(file);
   }
 
-  // ★ v1.5.6: Interfolder — carrega vídeos de pastas irmãs (adjacentes)
+  // ★ v1.5.8: Interfolder — carrega vídeos de pastas irmãs (adjacentes)
   // Filtros: (1) ignora pastas "audiocast", (2) se clicou vídeo → só vídeos, se clicou áudio → só áudios
+  // Fix: use a ref to prevent playlist restart — the current video ID is tracked
+  // and the PlayerView finds the correct index when the playlist updates
+  const playerVideoIdRef = useRef<string>("");
+  
   async function loadInterfolderPlaylist(currentFile: FileItem): Promise<void> {
     if (!currentDrive || !currentPath) return;
+    playerVideoIdRef.current = currentFile.id; // ★ Track which video should be playing
     try {
       const parts = currentPath.split("/").filter(Boolean);
       if (parts.length < 2) return;
@@ -374,6 +379,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
           folderPath={currentPath}
           playlist={playlist}
           initialIndex={playerIndex}
+          playerVideoId={playerVideoIdRef.current}
           onBack={backToBrowse}
           onLogout={logout}
           onNavigateBreadcrumb={navigateToBreadcrumb}
@@ -493,13 +499,14 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
 // PlayerView — 2-column inline player (video | materials)
 // ═══════════════════════════════════════════════════════════════
 function PlayerView({
-  drive, folderPath, playlist, initialIndex, onBack, onLogout, onNavigateBreadcrumb, onHome,
+  drive, folderPath, playlist, initialIndex, playerVideoId, onBack, onLogout, onNavigateBreadcrumb, onHome,
   aiMode, localAiReady, onToggleAI, onManageAI, onLoadInterfolder,
 }: {
   drive: Drive;
   folderPath: string;
   playlist: FileItem[];
   initialIndex: number;
+  playerVideoId: string;
   onBack: () => void;
   onLogout: () => void;
   onNavigateBreadcrumb: (i: number) => void;
@@ -588,7 +595,16 @@ function PlayerView({
 
   useEffect(() => { loadMaterials(); }, [loadMaterials]);
 
-  useEffect(() => { setIdx(initialIndex); }, [initialIndex]);
+  // ★ v1.5.8: Fix playlist restart — find correct index by video ID when playlist changes
+  // This replaces the old useEffect([initialIndex]) which didn't fire when index stayed 0
+  useEffect(() => {
+    if (playerVideoId && playlist.length > 0) {
+      const foundIdx = playlist.findIndex(v => v.id === playerVideoId);
+      if (foundIdx >= 0 && foundIdx !== idx) {
+        setIdx(foundIdx);
+      }
+    }
+  }, [playerVideoId, playlist]);
 
   // ★ v1.5.5: Load watched state from server on mount
   useEffect(() => {
