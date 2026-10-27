@@ -502,6 +502,7 @@ function PlayerView({
   const [currentTime, setCurrentTime] = useState(0);
   const [playlistOpen, setPlaylistOpen] = useState(false);
   const [interfolderLoading, setInterfolderLoading] = useState(false);
+  const [currentFolderPath, setCurrentFolderPath] = useState(folderPath);
   const [materialContent, setMaterialContent] = useState<Record<number, string>>({});
   const [aiSource, setAiSource] = useState<"local" | "cloud" | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -516,7 +517,7 @@ function PlayerView({
 
   // ─── Load materials ───
   const loadMaterials = useCallback(async () => {
-    if (!folderPath) return;
+    if (!currentFolderPath) return;
     setMaterialsLoading(true);
     setMaterials([]);
     setActiveTab({ kind: "file", id: "0" });
@@ -524,7 +525,7 @@ function PlayerView({
     try {
       const here = await invoke<FileItem[]>("list_folder", {
         driveIndex: drive.index,
-        path: folderPath,
+        path: currentFolderPath,
       });
       const isMaterial = (x: FileItem) => {
         const ext = (x.name.split(".").pop() || "").toLowerCase();
@@ -537,7 +538,7 @@ function PlayerView({
       if (!found.length) {
         const subs = here.filter(x => x.mime_type === "application/vnd.google-apps.folder").slice(0, 20);
         for (const sf of subs) {
-          const subPath = folderPath + encodeURIComponent(sf.name) + "/";
+          const subPath = currentFolderPath + encodeURIComponent(sf.name) + "/";
           try {
             const subFiles = await invoke<FileItem[]>("list_folder", { driveIndex: drive.index, path: subPath });
             const subMats = subFiles.filter(isMaterial);
@@ -546,9 +547,9 @@ function PlayerView({
         }
       }
       if (!found.length) {
-        const parts = folderPath.split("/").filter(Boolean);
+        const parts = currentFolderPath.split("/").filter(Boolean);
         const parentPath = "/" + parts.slice(0, -1).join("/") + "/";
-        if (parentPath !== "/" && parentPath !== folderPath) {
+        if (parentPath !== "/" && parentPath !== currentFolderPath) {
           try {
             const parentFiles = await invoke<FileItem[]>("list_folder", { driveIndex: drive.index, path: parentPath });
             found = parentFiles.filter(isMaterial);
@@ -561,7 +562,7 @@ function PlayerView({
       setMaterials([]);
     }
     setMaterialsLoading(false);
-  }, [drive.index, folderPath]);
+  }, [drive.index, currentFolderPath]);
 
   useEffect(() => { loadMaterials(); }, [loadMaterials]);
 
@@ -574,6 +575,26 @@ function PlayerView({
     setIsaLoadingMsg(null);
     setAiSource(null);
     isaGenRef.current = videoSrc;
+
+    // ★ v1.5.4: Update currentFolderPath when video changes (interfolder playlists)
+    if (currentFile) {
+      // Check if the video has a "folder" property (set by interfolder)
+      const folderName = (currentFile as FileItem & { folder?: string }).folder;
+      if (folderName) {
+        // Video is from a different folder — build the path
+        const parts = folderPath.split("/").filter(Boolean);
+        const parentPath = "/" + parts.slice(0, -1).join("/") + "/";
+        const newFolderPath = parentPath + encodeURIComponent(folderName) + "/";
+        if (newFolderPath !== currentFolderPath) {
+          setCurrentFolderPath(newFolderPath);
+        }
+      } else {
+        // Video is from the original folder
+        if (folderPath !== currentFolderPath) {
+          setCurrentFolderPath(folderPath);
+        }
+      }
+    }
   }, [videoSrc]);
 
   // Load notes from localStorage on video change
@@ -586,17 +607,21 @@ function PlayerView({
     setNotesList([]);
   }, [videoSrc]);
 
+  // ─── ISA cache key (must update when video changes) ───
   const isaCacheKey = useMemo(() => {
     if (!currentFile) return "";
+    // Use the current folder path + file name for the cache key
     let raw: string;
-    try { raw = decodeURIComponent(folderPath + currentFile.name); }
-    catch (_) { raw = folderPath + currentFile.name; }
+    try { raw = decodeURIComponent(currentFolderPath + currentFile.name); }
+    catch (_) { raw = currentFolderPath + currentFile.name; }
     return encodeURI(raw);
-  }, [folderPath, currentFile]);
+  }, [currentFolderPath, currentFile]);
 
   function switchTo(newIdx: number) {
     if (newIdx < 0 || newIdx >= playlist.length) return;
     setIdx(newIdx);
+    // Materials + ISA will reload via useEffect([videoSrc]) which triggers
+    // currentFolderPath update → loadMaterials → ISA cache check
   }
 
   function saveNote() {
@@ -684,7 +709,7 @@ function PlayerView({
       let matContent = "";
       let matSource = "";
       try {
-        const here = await invoke<FileItem[]>("list_folder", { driveIndex: drive.index, path: folderPath });
+        const here = await invoke<FileItem[]>("list_folder", { driveIndex: drive.index, path: currentFolderPath });
         const isTransc = (f: FileItem) => {
           const ext = (f.name.split(".").pop() || "").toLowerCase();
           const lowName = f.name.toLowerCase();
@@ -695,7 +720,7 @@ function PlayerView({
         if (!searchFiles.length) {
           const subs = here.filter(f => f.mime_type === "application/vnd.google-apps.folder").slice(0, 5);
           for (const sf of subs) {
-            const subPath = folderPath + encodeURIComponent(sf.name) + "/";
+            const subPath = currentFolderPath + encodeURIComponent(sf.name) + "/";
             try {
               const subFiles = await invoke<FileItem[]>("list_folder", { driveIndex: drive.index, path: subPath });
               const subTransc = subFiles.filter(isTransc);
@@ -730,7 +755,7 @@ function PlayerView({
           if (!pdfFiles.length) {
             const subs = here.filter(f => f.mime_type === "application/vnd.google-apps.folder").slice(0, 5);
             for (const sf of subs) {
-              const subPath = folderPath + encodeURIComponent(sf.name) + "/";
+              const subPath = currentFolderPath + encodeURIComponent(sf.name) + "/";
               try {
                 const subFiles = await invoke<FileItem[]>("list_folder", { driveIndex: drive.index, path: subPath });
                 const subPdfs = subFiles.filter(f => {
@@ -761,7 +786,7 @@ function PlayerView({
 
       if (matContent.length > 80000) matContent = matContent.substring(0, 80000) + "\n[...truncado...]";
 
-      const courseName = folderPath.split("/").filter(Boolean).slice(-1)[0] || "";
+      const courseName = currentFolderPath.split("/").filter(Boolean).slice(-1)[0] || "";
       const ctx = `Aula: ${currentFile?.name || ""}\nCurso: ${courseName}\nDrive: ${drive.name}` +
         (matSource ? `\nFonte do material: ${matSource}` : "");
       const hasContent = matContent.length > 100;
