@@ -105,3 +105,8 @@ export async function fetchText(url: string) {
 export async function extractPdfText(url: string) {
   return invoke<string>("extract_pdf_text", { url });
 }
+
+/** ★ v1.5.2: Download a file (PDF) with session cookie + redirects, save to temp, return path. */
+export async function downloadToTemp(url: string) {
+  return invoke<string>("download_to_temp", { url });
+}
