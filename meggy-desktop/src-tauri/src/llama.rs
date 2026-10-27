@@ -281,7 +281,7 @@ pub async fn llama_start(
     app: tauri::AppHandle,
 ) -> Result<String, String> {
     // Stop existing server if running
-    llama_stop(state.inner().clone(), app.clone()).await?;
+    llama_stop_impl(state.inner()).await;
 
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let os = std::env::consts::OS;
@@ -344,15 +344,20 @@ pub async fn llama_start(
     Ok(format!("llama-server rodando em http://127.0.0.1:{}", port))
 }
 
-/// Stop llama-server
-#[tauri::command]
-pub async fn llama_stop(state: State<'_, LlamaState>, _app: tauri::AppHandle) -> Result<bool, String> {
+/// Internal stop logic (callable from other commands without State wrapper)
+async fn llama_stop_impl(state: &LlamaState) {
     let mut child_guard = state.child.lock().unwrap();
     if let Some(mut child) = child_guard.take() {
         let _ = child.kill().await;
         let _ = child.wait().await;
     }
     *state.model_loaded.lock().unwrap() = None;
+}
+
+/// Stop llama-server
+#[tauri::command]
+pub async fn llama_stop(state: State<'_, LlamaState>, _app: tauri::AppHandle) -> Result<bool, String> {
+    llama_stop_impl(state.inner()).await;
     Ok(true)
 }
 
