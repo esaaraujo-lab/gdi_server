@@ -6,6 +6,7 @@
 mod api;
 mod auth;
 mod db;
+mod llama;
 mod scanner;
 
 use tauri::{Emitter, Manager};
@@ -15,6 +16,7 @@ use tauri_plugin_single_instance::init as init_single_instance;
 pub fn run() {
     tauri::Builder::default()
         .manage(api::AppState::default())
+        .manage(llama::LlamaState::default())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(
@@ -94,6 +96,17 @@ pub fn run() {
             db::save_summary,
             db::get_cached_flashcards,
             db::save_flashcards,
+            // v1.8.0 — llama.cpp integration (CPU/GPU offloading)
+            llama::llama_status,
+            llama::llama_binary_info,
+            llama::llama_binary_exists,
+            llama::llama_download_binary,
+            llama::llama_models,
+            llama::llama_download_model,
+            llama::llama_start,
+            llama::llama_stop,
+            llama::llama_chat,
+            llama::llama_list_models,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Meggy Desktop");
