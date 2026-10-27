@@ -18,6 +18,8 @@ import {
   checkWebGPU,
 } from "../lib/local-ai";
 import AIInstallPopup from "../components/AIInstallPopup";
+import LlamaManager from "../components/LlamaManager";
+import { llamaChat as llamaLocalChat } from "../lib/llama-bridge";
 
 interface Drive { index: number; name: string; }
 interface FileItem { name: string; mime_type: string; id: string; link: string | null; size: number; }
@@ -156,12 +158,14 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
   const [updateAvailable, setUpdateAvailable] = useState<string | null>(null);
 
   // ─── v1.5.0 — Local AI state ───
-  // aiMode: "local" uses WebLLM (if configured); "cloud" uses /api/ai
-  const [aiMode, setAiMode] = useState<"local" | "cloud">(() => {
+  // ★ v1.8.0: aiMode now has 3 options: "cloud" (worker), "local" (WebLLM), "llama" (llama.cpp)
+  const [aiMode, setAiMode] = useState<"local" | "cloud" | "llama">(() => {
     return hasLocalAIConfigured() ? "local" : "cloud";
   });
   const [localAiReady, setLocalAiReady] = useState<boolean>(hasLocalAIConfigured());
   const [showAIPopup, setShowAIPopup] = useState<boolean>(false);
+  const [showLlamaManager, setShowLlamaManager] = useState<boolean>(false);
+  const [llamaReady, setLlamaReady] = useState<boolean>(false);
 
   // Show the install popup on first launch (if not dismissed).
   useEffect(() => {
@@ -193,22 +197,40 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
   }
 
   function handleToggleAI() {
+    // ★ v1.8.0: Cycle through 3 modes: cloud → local (WebLLM) → llama (llama.cpp) → cloud
     if (aiMode === "cloud") {
-      // Switching to local — requires a configured model.
       if (localAiReady) {
         setAiMode("local");
       } else {
-        // No model yet — open the install popup.
         setShowAIPopup(true);
       }
+    } else if (aiMode === "local") {
+      // Switch to llama if ready, otherwise open LlamaManager
+      if (llamaReady) {
+        setAiMode("llama");
+      } else {
+        setShowLlamaManager(true);
+      }
     } else {
+      // llama → cloud
       setAiMode("cloud");
     }
   }
 
   function handleManageAI() {
-    // Re-open the popup so user can install/uninstall/switch models.
-    setShowAIPopup(true);
+    // ★ v1.8.0: Open the appropriate manager based on current mode
+    if (aiMode === "llama") {
+      setShowLlamaManager(true);
+    } else {
+      setShowAIPopup(true);
+    }
+  }
+
+  function handleChooseLlama(modelLabel: string) {
+    setLlamaReady(true);
+    setAiMode("llama");
+    setShowLlamaManager(false);
+    console.log("Llama ready:", modelLabel);
   }
 
   useEffect(() => { loadDrives(); loadUserState(); checkForUpdates(); }, []);
@@ -506,6 +528,12 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
             onChooseCloud={handleChooseCloud}
           />
         )}
+        {showLlamaManager && (
+          <LlamaManager
+            onClose={() => setShowLlamaManager(false)}
+            onReady={handleChooseLlama}
+          />
+        )}
       </>
     );
   }
@@ -742,7 +770,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "14px" }}>
                 {[
                   { icon: "☁️", title: "Explorar Drives", desc: "Navegue por todos os drives disponíveis", action: () => setView("drives"), color: "rgba(93,222,218,0.12)" },
-                  { icon: "🤖", title: "Meggy AI", desc: aiMode === "local" ? "IA Local ativa (offline)" : "IA da Nuvem ativa", action: () => handleManageAI(), color: "rgba(255,139,159,0.12)" },
+                  { icon: "🤖", title: "Meggy AI", desc: aiMode === "local" ? "WebLLM ativo (offline)" : aiMode === "llama" ? "llama.cpp ativo (CPU/GPU)" : "IA da Nuvem ativa", action: () => handleManageAI(), color: "rgba(255,139,159,0.12)" },
                   { icon: "📊", title: "Estatísticas", desc: `${watchedCount} aulas assistidas`, action: () => {}, color: "rgba(63,185,80,0.12)" },
                   { icon: "📱", title: "Apps Meggy", desc: "Baixar para outras plataformas", action: () => {
                     const el = document.getElementById("meggy-apps-section");
@@ -837,6 +865,12 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
             onChooseCloud={handleChooseCloud}
           />
         )}
+        {showLlamaManager && (
+          <LlamaManager
+            onClose={() => setShowLlamaManager(false)}
+            onReady={handleChooseLlama}
+          />
+        )}
       </>
     );
   }
@@ -871,6 +905,12 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
           onChooseCloud={handleChooseCloud}
         />
       )}
+      {showLlamaManager && (
+        <LlamaManager
+          onClose={() => setShowLlamaManager(false)}
+          onReady={handleChooseLlama}
+        />
+      )}
     </>
   );
 }
@@ -892,7 +932,7 @@ function PlayerView({
   onLogout: () => void;
   onNavigateBreadcrumb: (i: number) => void;
   onHome: () => void;
-  aiMode: "local" | "cloud";
+  aiMode: "local" | "cloud" | "llama";
   localAiReady: boolean;
   onToggleAI: () => void;
   onManageAI: () => void;
@@ -926,7 +966,7 @@ function PlayerView({
   const [interfolderLoading, setInterfolderLoading] = useState(false);
   const [currentFolderPath, setCurrentFolderPath] = useState(folderPath);
   const [materialContent, setMaterialContent] = useState<Record<number, string>>({});
-  const [aiSource, setAiSource] = useState<"local" | "cloud" | null>(null);
+  const [aiSource, setAiSource] = useState<"local" | "cloud" | "llama" | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isaGenRef = useRef<string>("");
@@ -1291,16 +1331,30 @@ function PlayerView({
       const QUESTOES_PROMPT = `Você é um examinador de concurso público brasileiro experiente. Baseado neste material, gere 10 questões de concurso em JSON array. Misture:\n- 6 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"legalText":"...","explanation":"...","fundamentacao":"..."}\n- 4 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"legalText":"...","explanation":"...","fundamentacao":"..."}\n\nCAMPOS:\n- statement: enunciado claro, contexto completo\n- legalText: o dispositivo legal aplicável (ex: "art. 5º, CF")\n- explanation: explicação técnica do acerto/erro\n- fundamentacao: fundamentação didática completa\n\nSem comentários, só JSON.\n\n${textSlice.slice(0, 60000)}`;
 
       // ─── 4. Generate in parallel (Promise.allSettled) ───
-      // ★ v1.5.0: When aiMode === "local" and a model is configured, try local AI first
-      // for each call. If local fails or returns <100 chars, fall back to cloud aiGenerate().
-      setIsaLoadingMsg(`✨ Gerando resumo + pílulas + questões${matSource ? " (fonte: " + matSource + ")" : ""}…${aiMode === "local" && localAiReady ? " (⚡ IA Local)" : ""}\nIsto pode levar 30-60s.`);
+      // ★ v1.8.0: 3 AI modes — "cloud" (worker), "local" (WebLLM), "llama" (llama.cpp)
+      // Each tries its local model first, falls back to cloud on failure.
+      const modeLabel = aiMode === "local" ? " (⚡ WebLLM)" : aiMode === "llama" ? " (🦙 llama.cpp)" : "";
+      setIsaLoadingMsg(`✨ Gerando resumo + pílulas + questões${matSource ? " (fonte: " + matSource + ")" : ""}…${modeLabel}\nIsto pode levar 30-90s.`);
 
-      type AiResult = { text: string; source: "local" | "cloud" };
+      type AiResult = { text: string; source: "local" | "cloud" | "llama" };
 
       const callAiWithFallback = async (prompt: string, kind: string): Promise<AiResult> => {
+        // ★ v1.8.0: llama.cpp mode — uses llama-server (CPU/GPU offloading)
+        if (aiMode === "llama") {
+          try {
+            const shortPrompt = prompt.slice(0, 12000); // llama.cpp can handle larger context
+            const r = await llamaLocalChat(shortPrompt);
+            if (r.ok && r.text && r.text.length >= 100) {
+              return { text: r.text, source: "llama" };
+            }
+            console.warn("llama.cpp failed, falling back to cloud:", r.error);
+          } catch (e) {
+            console.warn("llama.cpp failed, falling back to cloud:", e);
+          }
+        }
+        // ★ v1.5.0: WebLLM mode — uses WebGPU (if GPU supports it)
         if (aiMode === "local" && localAiReady && checkWebGPU()) {
           try {
-            // Local models have a smaller context window — truncate the prompt.
             const shortPrompt = prompt.slice(0, 6000);
             const loaded = await ensureModelLoaded();
             if (loaded) {
@@ -1478,16 +1532,16 @@ function PlayerView({
         <div style={{ display: "flex", gap: "6px", flexShrink: 0, alignItems: "center" }}>
           <button
             onClick={onToggleAI}
-            title={aiMode === "local" ? "IA Local ativa (clique para alternar para nuvem)" : "IA da Nuvem ativa (clique para alternar para local)"}
+            title={aiMode === "local" ? "WebLLM ativo (clique para llama.cpp)" : aiMode === "llama" ? "llama.cpp ativo (clique para nuvem)" : "IA da Nuvem ativa (clique para WebLLM)"}
             style={{
               ...modeBtnStyle,
-              background: aiMode === "local" ? "linear-gradient(135deg,#ff8b9f,#c026d3)" : "var(--surface-2)",
-              color: aiMode === "local" ? "#fff" : "var(--text)",
-              borderColor: aiMode === "local" ? "transparent" : "var(--border)",
+              background: aiMode === "local" ? "linear-gradient(135deg,#ff8b9f,#c026d3)" : aiMode === "llama" ? "linear-gradient(135deg,#5ddeda,#3fb950)" : "var(--surface-2)",
+              color: aiMode === "local" || aiMode === "llama" ? "#fff" : "var(--text)",
+              borderColor: aiMode === "local" || aiMode === "llama" ? "transparent" : "var(--border)",
               opacity: aiMode === "local" && !localAiReady ? 0.6 : 1,
             }}
           >
-            {aiMode === "local" ? "⚡ IA Local" : "☁️ IA Nuvem"}
+            {aiMode === "local" ? "⚡ WebLLM" : aiMode === "llama" ? "🦙 llama.cpp" : "☁️ IA Nuvem"}
           </button>
           <button
             onClick={onManageAI}
@@ -1706,7 +1760,7 @@ function PlayerView({
                 }}
                 title={aiSource === "local" ? "Conteúdo gerado pela IA Local (WebLLM)" : "Conteúdo gerado pela IA da Nuvem"}
               >
-                {aiSource === "local" ? "⚡ IA Local" : "☁️ IA Nuvem"}
+                {aiSource === "local" ? "⚡ WebLLM" : aiSource === "llama" ? "🦙 llama.cpp" : "☁️ IA Nuvem"}
               </span>
             )}
           </div>
@@ -2180,7 +2234,7 @@ function Header({
   onHome: (() => void) | null;
   onLogout: () => void;
   breadcrumb: React.ReactNode;
-  aiMode: "local" | "cloud";
+  aiMode: "local" | "cloud" | "llama";
   localAiReady: boolean;
   onToggleAI: () => void;
   onManageAI: () => void;
@@ -2204,16 +2258,16 @@ function Header({
       <div style={{ display: "flex", gap: "6px", flexShrink: 0, alignItems: "center" }}>
         <button
           onClick={onToggleAI}
-          title={aiMode === "local" ? "IA Local ativa (clique para alternar para nuvem)" : "IA da Nuvem ativa (clique para alternar para local)"}
+          title={aiMode === "local" ? "WebLLM ativo (clique para llama.cpp)" : aiMode === "llama" ? "llama.cpp ativo (clique para nuvem)" : "IA da Nuvem ativa (clique para WebLLM)"}
           style={{
             ...modeBtnStyle,
-            background: aiMode === "local" ? "linear-gradient(135deg,#ff8b9f,#c026d3)" : "var(--surface-2)",
-            color: aiMode === "local" ? "#fff" : "var(--text)",
-            borderColor: aiMode === "local" ? "transparent" : "var(--border)",
+            background: aiMode === "local" ? "linear-gradient(135deg,#ff8b9f,#c026d3)" : aiMode === "llama" ? "linear-gradient(135deg,#5ddeda,#3fb950)" : "var(--surface-2)",
+            color: aiMode === "local" || aiMode === "llama" ? "#fff" : "var(--text)",
+            borderColor: aiMode === "local" || aiMode === "llama" ? "transparent" : "var(--border)",
             opacity: aiMode === "local" && !localAiReady ? 0.6 : 1,
           }}
         >
-          {aiMode === "local" ? "⚡ IA Local" : "☁️ IA Nuvem"}
+          {aiMode === "local" ? "⚡ WebLLM" : aiMode === "llama" ? "🦙 llama.cpp" : "☁️ IA Nuvem"}
         </button>
         <button
           onClick={onManageAI}
