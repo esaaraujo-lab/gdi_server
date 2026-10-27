@@ -115,12 +115,23 @@ export default function AIInstallPopup({ onClose, onChooseLocal, onChooseCloud }
       setSelectedModelState(m.id);
     } catch (e: unknown) {
       const rawMsg = e instanceof Error ? e.message : String(e);
-      // ★ v1.7.0: Helpful error for WebGPU shader failures — suggest driver update, not "incompatible"
-      let msg = rawMsg;
-      if (rawMsg.includes("Invalid ShaderModule") || rawMsg.includes("index_kernel") || rawMsg.includes("compute stage")) {
-        msg = "Os shaders da IA Local falharam nesta GPU. Possíveis soluções:\n• Atualize os drivers de vídeo (AMD Adrenalin para Radeon, NVIDIA para GeForce)\n• Tente o modelo menor (Qwen 0.5B)\n• Use a IA da Nuvem (funciona em qualquer GPU)";
+      // ★ v1.7.2: Auto-fallback to cloud AI when WebGPU shaders fail (RX470, older GPUs).
+      // Instead of showing a scary blocking error, automatically switch to cloud mode
+      // and close the popup. The user can still use the app normally.
+      const isShaderError = rawMsg.includes("Invalid ShaderModule") ||
+        rawMsg.includes("index_kernel") ||
+        rawMsg.includes("compute stage") ||
+        rawMsg.includes("shader") ||
+        rawMsg.includes("ShaderModule");
+      if (isShaderError) {
+        // Clear the selected model — local AI won't work on this GPU
+        clearSelectedModel();
+        // Auto-switch to cloud AI
+        onChooseCloud();
+        return;
       }
-      updateStatus(m.id, { downloading: false, errorMsg: msg, progress: null });
+      // For other errors, show the message but don't block
+      updateStatus(m.id, { downloading: false, errorMsg: rawMsg, progress: null });
     }
   }
 
