@@ -563,3 +563,39 @@ pub async fn extract_pdf_text(url: String, state: State<'_, AppState>) -> Result
         Err(_) => Err("PDF extract panicked (possible scanned/image PDF)".to_string()),
     }
 }
+
+/// ★ v1.5.2: Download a file (PDF) with session cookie + redirects, save to temp, return path.
+/// Used by MaterialViewer iframe — the iframe can't send cookies, so we download in Rust
+/// and return a local file path that the frontend converts to a viewable URL via convertFileSrc.
+#[tauri::command]
+pub async fn download_to_temp(url: String, state: State<'_, AppState>) -> Result<String, String> {
+    let cookie = state.cookie.lock().unwrap().clone();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .redirect(reqwest::redirect::Policy::limited(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut req = client.get(&url);
+    if let Some(c) = &cookie {
+        req = req.header("Cookie", c);
+    }
+    let resp = req.send().await.map_err(|e| e.to_string())?;
+
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+
+    let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+
+    // Save to a temp file with .pdf extension (important for iframe to recognize)
+    let tmp_dir = std::env::temp_dir();
+    let filename = format!("meggy_pdf_{}.pdf", std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis());
+    let filepath = tmp_dir.join(filename);
+    std::fs::write(&filepath, &bytes).map_err(|e| e.to_string())?;
+
+    Ok(filepath.to_string_lossy().to_string())
+}
