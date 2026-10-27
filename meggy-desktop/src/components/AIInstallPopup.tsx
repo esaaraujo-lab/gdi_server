@@ -115,10 +115,10 @@ export default function AIInstallPopup({ onClose, onChooseLocal, onChooseCloud }
       setSelectedModelState(m.id);
     } catch (e: unknown) {
       const rawMsg = e instanceof Error ? e.message : String(e);
-      // ★ v1.6.7: Friendlier error for the common "Invalid ShaderModule" WebGPU failure
+      // ★ v1.7.0: Helpful error for WebGPU shader failures — suggest driver update, not "incompatible"
       let msg = rawMsg;
       if (rawMsg.includes("Invalid ShaderModule") || rawMsg.includes("index_kernel") || rawMsg.includes("compute stage")) {
-        msg = "Sua GPU não consegue compilar os shaders da IA Local. Provavelmente os drivers de vídeo estão desatualizados ou a GPU não é compatível. Recomendamos usar a IA da Nuvem (mais rápida e modelos melhores).";
+        msg = "Os shaders da IA Local falharam nesta GPU. Possíveis soluções:\n• Atualize os drivers de vídeo (AMD Adrenalin para Radeon, NVIDIA para GeForce)\n• Tente o modelo menor (Qwen 0.5B)\n• Use a IA da Nuvem (funciona em qualquer GPU)";
       }
       updateStatus(m.id, { downloading: false, errorMsg: msg, progress: null });
     }
