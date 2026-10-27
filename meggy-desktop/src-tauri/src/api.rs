@@ -592,6 +592,8 @@ pub async fn extract_pdf_text(url: String, state: State<'_, AppState>) -> Result
 /// ★ v1.5.2: Download a file (PDF) with session cookie + redirects, save to temp, return path.
 /// Used by MaterialViewer iframe — the iframe can't send cookies, so we download in Rust
 /// and return a local file path that the frontend converts to a viewable URL via convertFileSrc.
+/// ★ v1.6.9: Cache by URL hash — if the same URL was downloaded before, reuse the file.
+/// Also cleans up old meggy_pdf_*.pdf files (>24h old) to prevent temp dir bloat.
 #[tauri::command]
 pub async fn download_to_temp(url: String, state: State<'_, AppState>) -> Result<String, String> {
     let cookie = state.cookie.lock().unwrap().clone();
@@ -600,6 +602,28 @@ pub async fn download_to_temp(url: String, state: State<'_, AppState>) -> Result
         .redirect(reqwest::redirect::Policy::limited(10))
         .build()
         .map_err(|e| e.to_string())?;
+
+    // ★ v1.6.9: Stable filename based on URL hash — same URL = same file (cache hit)
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    url.hash(&mut hasher);
+    let url_hash = hasher.finish();
+    let tmp_dir = std::env::temp_dir();
+    let filename = format!("meggy_pdf_{}.pdf", url_hash);
+    let filepath = tmp_dir.join(&filename);
+
+    // ★ Cache hit: if file exists and is < 24h old, return it without re-downloading
+    if let Ok(meta) = std::fs::metadata(&filepath) {
+        if let Ok(modified) = meta.modified() {
+            if let Ok(elapsed) = modified.elapsed() {
+                if elapsed.as_secs() < 86400 {
+                    // File exists and is fresh — return cached path
+                    return Ok(filepath.to_string_lossy().to_string());
+                }
+            }
+        }
+    }
 
     let mut req = client.get(&url);
     if let Some(c) = &cookie {
@@ -613,14 +637,27 @@ pub async fn download_to_temp(url: String, state: State<'_, AppState>) -> Result
 
     let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
 
-    // Save to a temp file with .pdf extension (important for iframe to recognize)
-    let tmp_dir = std::env::temp_dir();
-    let filename = format!("meggy_pdf_{}.pdf", std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis());
-    let filepath = tmp_dir.join(filename);
+    // Save to temp file (overwrite if exists — same hash = same content)
     std::fs::write(&filepath, &bytes).map_err(|e| e.to_string())?;
+
+    // ★ v1.6.9: Cleanup old meggy_pdf_*.pdf files (>24h old) — fire and forget
+    if let Ok(entries) = std::fs::read_dir(&tmp_dir) {
+        for entry in entries.flatten() {
+            if let Some(name) = entry.file_name().to_str() {
+                if name.starts_with("meggy_pdf_") && name.ends_with(".pdf") && name != &filename {
+                    if let Ok(meta) = entry.metadata() {
+                        if let Ok(modified) = meta.modified() {
+                            if let Ok(elapsed) = modified.elapsed() {
+                                if elapsed.as_secs() > 86400 {
+                                    let _ = std::fs::remove_file(entry.path());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     Ok(filepath.to_string_lossy().to_string())
 }
