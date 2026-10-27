@@ -323,6 +323,17 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
     setPlayerIndex(0);
   }
 
+  // ★ v1.6.5: Voltar à tela inicial (Home) de qualquer view
+  function backToHome() {
+    setView("home");
+    setFiles([]);
+    setPlaylist([]);
+    setPlayerIndex(0);
+    setCurrentPath("");
+    setCurrentDrive(null);
+    setError(null);
+  }
+
   function openPlayer(file: FileItem) {
     // Start with just the clicked file so playback starts immediately
     setPlaylist([file]);
@@ -441,7 +452,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
           onBack={backToBrowse}
           onLogout={logout}
           onNavigateBreadcrumb={navigateToBreadcrumb}
-          onHome={backToDrives}
+          onHome={backToHome}
           aiMode={aiMode}
           localAiReady={localAiReady}
           onToggleAI={handleToggleAI}
@@ -466,6 +477,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
         <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
           <Header
             onBack={backToDrives}
+            onHome={backToHome}
             onLogout={logout}
             breadcrumb={
               <Breadcrumb
@@ -548,6 +560,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
         <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
           <Header
             onBack={null}
+            onHome={null}
             onLogout={logout}
             breadcrumb={null}
             aiMode={aiMode}
@@ -794,6 +807,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
       <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
         <Header
           onBack={null}
+          onHome={backToHome}
           onLogout={logout}
           breadcrumb={null}
           aiMode={aiMode}
@@ -2005,9 +2019,10 @@ function Breadcrumb({
 }
 
 function Header({
-  onBack, onLogout, breadcrumb, aiMode, localAiReady, onToggleAI, onManageAI,
+  onBack, onHome, onLogout, breadcrumb, aiMode, localAiReady, onToggleAI, onManageAI,
 }: {
   onBack: (() => void) | null;
+  onHome: (() => void) | null;
   onLogout: () => void;
   breadcrumb: React.ReactNode;
   aiMode: "local" | "cloud";
@@ -2024,6 +2039,9 @@ function Header({
       <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0, flex: 1 }}>
         {onBack && (
           <button onClick={onBack} style={{ ...btnStyle, flexShrink: 0 }}>← Voltar</button>
+        )}
+        {onHome && (
+          <button onClick={onHome} style={{ ...btnStyle, flexShrink: 0 }} title="Voltar à tela inicial">🏠 Home</button>
         )}
         <span style={{ color: "var(--pink)", fontWeight: 700, fontSize: "18px", flexShrink: 0 }}>🐩 Meggy</span>
         {breadcrumb}
