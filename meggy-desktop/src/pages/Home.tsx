@@ -123,6 +123,20 @@ function fmtTime(s: number): string {
     : `${m}:${String(sec).padStart(2, "0")}`;
 }
 
+// ─── Semantic version comparison (returns -1 / 0 / 1) ───
+function compareVersions(a: string, b: string): number {
+  const pa = (a || "0").split(".").map((n) => parseInt(n, 10) || 0);
+  const pb = (b || "0").split(".").map((n) => parseInt(n, 10) || 0);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const va = pa[i] || 0;
+    const vb = pb[i] || 0;
+    if (va > vb) return 1;
+    if (va < vb) return -1;
+  }
+  return 0;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Main Home component
 // ═══════════════════════════════════════════════════════════════
@@ -215,18 +229,20 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
     } catch (_) { /* ignore */ }
   }
 
-  // ★ v1.6.0: Check for app updates from GitHub releases
+  // ★ v1.6.3: Check for app updates from GitHub releases (uses dynamic __APP_VERSION__)
   async function checkForUpdates() {
     try {
       const resp = await fetch("https://api.github.com/repos/esaaraujo-lab/gdi_server/releases?per_page=1");
       const releases = await resp.json();
-      if (releases && releases[0]) {
+      if (releases && releases[0] && !releases[0].draft && !releases[0].prerelease) {
         const tag = releases[0].tag_name || "";
         const versionMatch = tag.match(/v?([\d.]+)/);
         if (versionMatch) {
           const latestVersion = versionMatch[1];
-          const currentVersion = "1.6.0"; // Must match package.json
-          if (latestVersion !== currentVersion) {
+          const currentVersion: string = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
+          // Semantic comparison: only show update if latest > current
+          const cmp = compareVersions(latestVersion, currentVersion);
+          if (cmp > 0) {
             setUpdateAvailable(latestVersion);
           }
         }
@@ -504,13 +520,28 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
     );
   }
 
-  // ─── Home view (Área do Aluno) ───
+  // ─── Home view (Área do Aluno — rich staging-style) ───
   if (view === "home") {
     const history = (userState.history as Array<{ name?: string; path?: string; link?: string }>) || [];
     const watched = (userState.watched as Record<string, boolean>) || {};
     const resume = (userState.resume as Record<string, number>) || {};
     const watchedCount = Object.keys(watched).length;
-    const recentHistory = history.slice(-6).reverse();
+    const recentHistory = history.slice(-8).reverse();
+    const appVersion: string = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.6.3";
+    const hour = new Date().getHours();
+    const greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
+
+    // Helper: decode path → { driveName, courseName }
+    function parsePath(path?: string): { driveName: string; courseName: string } {
+      if (!path) return { driveName: "", courseName: "" };
+      try {
+        const parts = path.split("/").filter(Boolean);
+        const driveIdx = parts[0] ? parseInt(parts[0].replace(":", ""), 10) : -1;
+        const driveName = driveIdx >= 0 ? (drives.find((d) => d.index === driveIdx)?.name || "") : "";
+        const courseName = parts[2] ? decodeURIComponent(parts[2]).replace(/\+/g, " ") : "";
+        return { driveName, courseName };
+      } catch (_) { return { driveName: "", courseName: "" }; }
+    }
 
     return (
       <>
@@ -524,13 +555,13 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
             onToggleAI={handleToggleAI}
             onManageAI={handleManageAI}
           />
-          <div style={{ flex: 1, overflow: "auto", padding: "20px", maxWidth: "1200px", margin: "0 auto", width: "100%" }}>
+          <div style={{ flex: 1, overflow: "auto", padding: "24px", maxWidth: "1280px", margin: "0 auto", width: "100%" }}>
             {/* Update notification */}
             {updateAvailable && (
               <div style={{
                 background: "linear-gradient(135deg, rgba(63,185,80,0.15), rgba(93,222,218,0.1))",
                 border: "1px solid rgba(63,185,80,0.3)",
-                borderRadius: "12px", padding: "14px 18px", marginBottom: "20px",
+                borderRadius: "14px", padding: "14px 20px", marginBottom: "24px",
                 display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap",
               }}>
                 <div>
@@ -543,34 +574,65 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
               </div>
             )}
 
-            {/* Continue Assistindo */}
+            {/* ── Hero / Welcome ── */}
+            <div style={{
+              background: "linear-gradient(135deg, rgba(255,139,159,0.12), rgba(192,38,211,0.08))",
+              border: "1px solid rgba(255,139,159,0.2)",
+              borderRadius: "18px",
+              padding: "28px 32px",
+              marginBottom: "28px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "20px",
+              flexWrap: "wrap",
+            }}>
+              <div>
+                <div style={{ fontSize: "14px", color: "var(--text-muted)", marginBottom: "4px" }}>🐩 Meggy Desktop · v{appVersion}</div>
+                <h1 style={{ fontSize: "28px", fontWeight: 800, color: "var(--text)", margin: 0, marginBottom: "6px" }}>
+                  {greeting}! 👋
+                </h1>
+                <p style={{ fontSize: "14px", color: "var(--text-muted)", margin: 0, maxWidth: "480px", lineHeight: 1.5 }}>
+                  Continue de onde parou ou explore novos cursos. Tudo offline, rápido e no seu ritmo.
+                </p>
+              </div>
+              <div style={{ fontSize: "56px", flexShrink: 0 }}>🐩</div>
+            </div>
+
+            {/* ── Continue Assistindo (rich cards with progress bars) ── */}
             {recentHistory.length > 0 && (
-              <div style={{ marginBottom: "28px" }}>
-                <h2 style={{ color: "var(--text)", fontSize: "18px", marginBottom: "14px" }}>▶ Continue assistindo</h2>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "12px" }}>
+              <div style={{ marginBottom: "32px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
+                  <span style={{ fontSize: "20px" }}>▶</span>
+                  <h2 style={{ color: "var(--text)", fontSize: "18px", fontWeight: 700, margin: 0 }}>Continue assistindo</h2>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "14px" }}>
                   {recentHistory.map((h, i) => {
-                    const name = h.name || h.path?.split("/").pop()?.replace(/\.\w+$/, "") || "Aula";
+                    const rawName = h.name || h.path?.split("/").pop()?.replace(/\.\w+$/, "") || "Aula";
+                    const name = decodeURIComponent(rawName).replace(/\+/g, " ");
                     const link = h.link || "";
                     const resumePos = resume[link] || 0;
                     const resumeStr = resumePos > 60 ? `${Math.floor(resumePos / 60)}:${String(Math.floor(resumePos % 60)).padStart(2, "0")}` : "";
                     const isWatched = watched[link];
+                    const { driveName, courseName } = parsePath(h.path);
+                    // Progress: watched=100%, has resume=~50% (visual), else 0%
+                    const progressPct = isWatched ? 100 : resumePos > 0 ? 45 : 0;
+                    const progressColor = isWatched ? "#3fb950" : resumePos > 0 ? "#ffd43b" : "#ff8b9f";
                     return (
                       <div
                         key={i}
                         onClick={async () => {
-                          if (!currentDrive || !h.path) return;
-                          // Navigate to the folder and open the video
+                          if (!h.path) return;
                           const pathParts = h.path.split("/").filter(Boolean);
                           if (pathParts.length < 2) return;
                           const driveIdx = parseInt(pathParts[0].replace(":", "")) || 0;
-                          const drive = drives.find(d => d.index === driveIdx);
+                          const drive = drives.find((d) => d.index === driveIdx);
                           if (!drive) return;
                           setCurrentDrive(drive);
                           const folderPath = "/" + pathParts.slice(0, -1).join("/") + "/";
                           setCurrentPath(folderPath);
                           setView("browse");
                           await loadFolder(drive, folderPath);
-                          // After folder loads, find the video
                           setTimeout(() => {
                             const fileItem: FileItem = {
                               name: name + (h.name?.endsWith(".mp4") ? "" : ".mp4"),
@@ -583,24 +645,33 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
                           }, 500);
                         }}
                         style={{
-                          background: "var(--surface)", borderRadius: "12px", padding: "14px",
-                          cursor: "pointer", transition: "all 0.2s", border: "2px solid transparent",
+                          background: "var(--surface)", borderRadius: "14px", padding: "16px",
+                          cursor: "pointer", transition: "all 0.2s",
+                          border: "1px solid rgba(255,255,255,0.08)",
                         }}
-                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--pink)"; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = "transparent"; }}
+                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(255,139,159,0.4)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; e.currentTarget.style.transform = "translateY(0)"; }}
                       >
-                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "10px" }}>
                           <div style={{
-                            width: "40px", height: "40px", borderRadius: "8px", flexShrink: 0,
-                            background: isWatched ? "rgba(63,185,80,0.15)" : "linear-gradient(135deg, rgba(255,139,159,0.15), rgba(192,38,211,0.1))",
-                            display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px",
+                            width: "42px", height: "42px", borderRadius: "10px", flexShrink: 0,
+                            background: isWatched ? "rgba(63,185,80,0.15)" : "linear-gradient(135deg, rgba(255,139,159,0.18), rgba(192,38,211,0.12))",
+                            display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px",
                           }}>{isWatched ? "✓" : "🎬"}</div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ color: "var(--text)", fontWeight: 600, fontSize: "13px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</div>
-                            <div style={{ color: "var(--text-muted)", fontSize: "11px" }}>
-                              {resumeStr ? `⏱ ${resumeStr}` : ""} {isWatched ? "✓ Assistido" : ""}
+                            <div style={{ color: "var(--text)", fontWeight: 600, fontSize: "14px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</div>
+                            <div style={{ color: "var(--text-muted)", fontSize: "11px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {driveName}{courseName ? " · " + courseName : ""}
                             </div>
                           </div>
+                        </div>
+                        {/* Progress bar */}
+                        <div style={{ height: "4px", background: "rgba(255,255,255,0.08)", borderRadius: "2px", overflow: "hidden", marginBottom: "6px" }}>
+                          <div style={{ height: "100%", width: `${progressPct}%`, background: progressColor, borderRadius: "2px", transition: "width 0.3s" }} />
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--text-muted)" }}>
+                          <span>{resumeStr ? `⏱ ${resumeStr}` : (resumePos > 0 ? "Em andamento" : "Não iniciado")}</span>
+                          <span>{isWatched ? "✓ Assistido" : `${progressPct}%`}</span>
                         </div>
                       </div>
                     );
@@ -609,44 +680,100 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
               </div>
             )}
 
-            {/* Quick stats */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "12px", marginBottom: "28px" }}>
-              <div style={{ background: "var(--surface)", borderRadius: "12px", padding: "18px", textAlign: "center" }}>
-                <div style={{ fontSize: "28px", marginBottom: "4px" }}>🎬</div>
-                <div style={{ color: "var(--text)", fontWeight: 700, fontSize: "20px" }}>{watchedCount}</div>
-                <div style={{ color: "var(--text-muted)", fontSize: "12px" }}>Aulas assistidas</div>
+            {/* ── Navigation cards grid (staging-style) ── */}
+            <div style={{ marginBottom: "32px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
+                <span style={{ fontSize: "20px" }}>🧭</span>
+                <h2 style={{ color: "var(--text)", fontSize: "18px", fontWeight: 700, margin: 0 }}>Navegação</h2>
               </div>
-              <div style={{ background: "var(--surface)", borderRadius: "12px", padding: "18px", textAlign: "center" }}>
-                <div style={{ fontSize: "28px", marginBottom: "4px" }}>📚</div>
-                <div style={{ color: "var(--text)", fontWeight: 700, fontSize: "20px" }}>{drives.length}</div>
-                <div style={{ color: "var(--text-muted)", fontSize: "12px" }}>Drives disponíveis</div>
-              </div>
-              <div
-                onClick={() => setView("drives")}
-                style={{ background: "var(--surface)", borderRadius: "12px", padding: "18px", textAlign: "center", cursor: "pointer", transition: "all 0.2s", border: "2px solid transparent" }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--pink)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "transparent"; }}
-              >
-                <div style={{ fontSize: "28px", marginBottom: "4px" }}>☁️</div>
-                <div style={{ color: "var(--pink)", fontWeight: 700, fontSize: "16px" }}>Explorar</div>
-                <div style={{ color: "var(--text-muted)", fontSize: "12px" }}>Navegar drives</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "14px" }}>
+                {[
+                  { icon: "☁️", title: "Explorar Drives", desc: "Navegue por todos os drives disponíveis", action: () => setView("drives"), color: "rgba(93,222,218,0.12)" },
+                  { icon: "🤖", title: "Meggy AI", desc: aiMode === "local" ? "IA Local ativa (offline)" : "IA da Nuvem ativa", action: () => handleManageAI(), color: "rgba(255,139,159,0.12)" },
+                  { icon: "📊", title: "Estatísticas", desc: `${watchedCount} aulas assistidas`, action: () => {}, color: "rgba(63,185,80,0.12)" },
+                  { icon: "📱", title: "Apps Meggy", desc: "Baixar para outras plataformas", action: () => {
+                    const el = document.getElementById("meggy-apps-section");
+                    if (el) el.scrollIntoView({ behavior: "smooth" });
+                  }, color: "rgba(192,38,211,0.12)" },
+                ].map((card, i) => (
+                  <div
+                    key={i}
+                    onClick={card.action}
+                    style={{
+                      background: "var(--surface)", borderRadius: "14px", padding: "20px",
+                      cursor: "pointer", transition: "all 0.2s",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(255,139,159,0.4)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; e.currentTarget.style.transform = "translateY(0)"; }}
+                  >
+                    <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: card.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "24px", marginBottom: "12px" }}>
+                      {card.icon}
+                    </div>
+                    <div style={{ color: "var(--text)", fontWeight: 700, fontSize: "15px", marginBottom: "4px" }}>{card.title}</div>
+                    <div style={{ color: "var(--text-muted)", fontSize: "12px", lineHeight: 1.4 }}>{card.desc}</div>
+                  </div>
+                ))}
               </div>
             </div>
 
-            {/* Download apps */}
-            <div style={{ marginBottom: "20px" }}>
-              <h2 style={{ color: "var(--text)", fontSize: "16px", marginBottom: "12px" }}>📱 Apps Meggy</h2>
-              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                <a href="https://github.com/esaaraujo-lab/gdi_server/releases/latest" target="_blank" rel="noreferrer" style={{ ...btnStyle, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                  🖥️ Windows/Linux
+            {/* ── Estatísticas (rich stat cards) ── */}
+            <div style={{ marginBottom: "32px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
+                <span style={{ fontSize: "20px" }}>📊</span>
+                <h2 style={{ color: "var(--text)", fontSize: "18px", fontWeight: 700, margin: 0 }}>Estatísticas</h2>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "14px" }}>
+                <div style={{ background: "var(--surface)", borderRadius: "14px", padding: "20px", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  <div style={{ width: "44px", height: "44px", borderRadius: "10px", background: "rgba(63,185,80,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px", marginBottom: "12px" }}>🎬</div>
+                  <div style={{ color: "var(--text)", fontWeight: 800, fontSize: "24px" }}>{watchedCount}</div>
+                  <div style={{ color: "var(--text-muted)", fontSize: "12px" }}>Aulas assistidas</div>
+                </div>
+                <div style={{ background: "var(--surface)", borderRadius: "14px", padding: "20px", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  <div style={{ width: "44px", height: "44px", borderRadius: "10px", background: "rgba(93,222,218,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px", marginBottom: "12px" }}>📚</div>
+                  <div style={{ color: "var(--text)", fontWeight: 800, fontSize: "24px" }}>{drives.length}</div>
+                  <div style={{ color: "var(--text-muted)", fontSize: "12px" }}>Drives disponíveis</div>
+                </div>
+                <div style={{ background: "var(--surface)", borderRadius: "14px", padding: "20px", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  <div style={{ width: "44px", height: "44px", borderRadius: "10px", background: "rgba(255,139,159,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px", marginBottom: "12px" }}>▶</div>
+                  <div style={{ color: "var(--text)", fontWeight: 800, fontSize: "24px" }}>{recentHistory.length}</div>
+                  <div style={{ color: "var(--text-muted)", fontSize: "12px" }}>Recentes</div>
+                </div>
+                <div
+                  onClick={() => setView("drives")}
+                  style={{ background: "linear-gradient(135deg, rgba(255,139,159,0.1), rgba(192,38,211,0.08))", borderRadius: "14px", padding: "20px", border: "1px solid rgba(255,139,159,0.2)", cursor: "pointer", transition: "all 0.2s" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.borderColor = "rgba(255,139,159,0.5)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.borderColor = "rgba(255,139,159,0.2)"; }}
+                >
+                  <div style={{ width: "44px", height: "44px", borderRadius: "10px", background: "rgba(255,139,159,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px", marginBottom: "12px" }}>🚀</div>
+                  <div style={{ color: "var(--pink)", fontWeight: 800, fontSize: "18px" }}>Explorar</div>
+                  <div style={{ color: "var(--text-muted)", fontSize: "12px" }}>Começar agora</div>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Apps Meggy ── */}
+            <div id="meggy-apps-section" style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
+                <span style={{ fontSize: "20px" }}>📱</span>
+                <h2 style={{ color: "var(--text)", fontSize: "18px", fontWeight: 700, margin: 0 }}>Apps Meggy</h2>
+              </div>
+              <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+                <a href="https://github.com/esaaraujo-lab/gdi_server/releases/latest" target="_blank" rel="noreferrer" style={{ ...btnStyle, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "8px", padding: "10px 18px" }}>
+                  🖥️ Windows / Linux
                 </a>
-                <a href="https://github.com/esaaraujo-lab/gdi_server/releases/latest" target="_blank" rel="noreferrer" style={{ ...btnStyle, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                <a href="https://github.com/esaaraujo-lab/gdi_server/releases/latest" target="_blank" rel="noreferrer" style={{ ...btnStyle, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "8px", padding: "10px 18px" }}>
                   📱 Android APK
                 </a>
-                <a href="https://github.com/esaaraujo-lab/gdi_server/releases/latest" target="_blank" rel="noreferrer" style={{ ...btnStyle, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                <a href="https://github.com/esaaraujo-lab/gdi_server/releases/latest" target="_blank" rel="noreferrer" style={{ ...btnStyle, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "8px", padding: "10px 18px" }}>
                   📺 Roku
                 </a>
               </div>
+            </div>
+
+            {/* Footer version */}
+            <div style={{ textAlign: "center", padding: "20px 0", color: "var(--text-muted)", fontSize: "12px", borderTop: "1px solid rgba(255,255,255,0.06)", marginTop: "12px" }}>
+              🐩 Meggy Desktop v{appVersion} · <a href="https://github.com/esaaraujo-lab/gdi_server" target="_blank" rel="noreferrer" style={{ color: "var(--text-muted)" }}>GitHub</a>
             </div>
           </div>
         </div>
