@@ -272,6 +272,70 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
     setPlaylist(pl.length > 0 ? pl : [file]);
     setPlayerIndex(idx >= 0 ? idx : 0);
     setView("player");
+    // ★ v1.5.1: Se só há 1 vídeo na pasta, carregar interfolder automaticamente
+    if (pl.length <= 1) {
+      setTimeout(() => loadInterfolderPlaylist(file), 1500);
+    }
+  }
+
+  // ★ v1.5.1: Interfolder — carrega vídeos de pastas irmãs (adjacentes)
+  async function loadInterfolderPlaylist(currentFile: FileItem): Promise<void> {
+    if (!currentDrive || !currentPath) return;
+    try {
+      const parts = currentPath.split("/").filter(Boolean);
+      if (parts.length < 2) return; // precisa de pelo menos drive + pasta pai
+      const parentPath = "/" + parts.slice(0, -1).join("/") + "/";
+      const parentFiles = await invoke<FileItem[]>("list_folder", {
+        driveIndex: currentDrive.index,
+        path: parentPath,
+      });
+      const subFolders = parentFiles.filter(f => f.mime_type === "application/vnd.google-apps.folder");
+      const collected: FileItem[] = [];
+      // Processar em batches de 6 (igual ao staging)
+      for (let i = 0; i < subFolders.length; i += 6) {
+        const batch = subFolders.slice(i, i + 6);
+        const results = await Promise.all(batch.map(folder => {
+          const fpath = parentPath + encodeURIComponent(folder.name) + "/";
+          return invoke<FileItem[]>("list_folder", { driveIndex: currentDrive.index, path: fpath })
+            .then(files => files
+              .filter(f => (f.mime_type || "").includes("video") || f.name.endsWith(".mp4") ||
+                           (f.mime_type || "").includes("audio") || f.name.endsWith(".mp3") || f.name.endsWith(".m4a"))
+              .filter(f => !f.name.includes(".part-"))
+              .map(f => ({ ...f, folder: folder.name } as FileItem & { folder?: string }))
+            ).catch(() => []);
+        }));
+        results.forEach(v => collected.push(...v));
+      }
+      // Dedup por id
+      const seen = new Set<string>();
+      const deduped = collected.filter(v => {
+        if (seen.has(v.id)) return false;
+        seen.add(v.id);
+        return true;
+      });
+      // Sort por folder + name
+      deduped.sort((a, b) => {
+        const fa = (a as FileItem & { folder?: string }).folder || "";
+        const fb = (b as FileItem & { folder?: string }).folder || "";
+        return fa.localeCompare(fb) || a.name.localeCompare(b.name);
+      });
+      // Finalize names: se mesmo nome em pastas diferentes, prefixar com folder
+      const cnts: Record<string, number> = {};
+      deduped.forEach(v => { cnts[v.name] = (cnts[v.name] || 0) + 1; });
+      deduped.forEach(v => {
+        const folder = (v as FileItem & { folder?: string }).folder;
+        if (cnts[v.name] > 1 && folder) {
+          v.name = folder + " - " + v.name;
+        }
+      });
+      // Encontrar índice do vídeo atual
+      const newIdx = deduped.findIndex(v => v.id === currentFile.id);
+      setPlaylist(deduped.length > 0 ? deduped : [currentFile]);
+      setPlayerIndex(newIdx >= 0 ? newIdx : 0);
+    } catch (e) {
+      console.warn("Interfolder failed:", e);
+      // Manter playlist original se falhar
+    }
   }
 
   async function logout() {
@@ -296,6 +360,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
           localAiReady={localAiReady}
           onToggleAI={handleToggleAI}
           onManageAI={handleManageAI}
+          onLoadInterfolder={loadInterfolderPlaylist}
         />
         {showAIPopup && (
           <AIInstallPopup
@@ -407,7 +472,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
 // ═══════════════════════════════════════════════════════════════
 function PlayerView({
   drive, folderPath, playlist, initialIndex, onBack, onLogout, onNavigateBreadcrumb, onHome,
-  aiMode, localAiReady, onToggleAI, onManageAI,
+  aiMode, localAiReady, onToggleAI, onManageAI, onLoadInterfolder,
 }: {
   drive: Drive;
   folderPath: string;
@@ -421,6 +486,7 @@ function PlayerView({
   localAiReady: boolean;
   onToggleAI: () => void;
   onManageAI: () => void;
+  onLoadInterfolder: (currentFile: FileItem) => Promise<void>;
 }) {
   const [idx, setIdx] = useState(initialIndex);
   const [mode, setMode] = useState<"split" | "fv" | "fm">("split");
@@ -434,6 +500,7 @@ function PlayerView({
   const [notesList, setNotesList] = useState<{ time: string; text: string }[]>([]);
   const [currentTime, setCurrentTime] = useState(0);
   const [playlistOpen, setPlaylistOpen] = useState(false);
+  const [interfolderLoading, setInterfolderLoading] = useState(false);
   const [materialContent, setMaterialContent] = useState<Record<number, string>>({});
   const [aiSource, setAiSource] = useState<"local" | "cloud" | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -1006,14 +1073,29 @@ function PlayerView({
           </div>
           {/* Playlist */}
           <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: "10px", padding: "8px" }}>
-            <button
-              onClick={() => setPlaylistOpen(!playlistOpen)}
-              style={{ ...modeBtnStyle, width: "100%", justifyContent: "flex-start", padding: "8px 10px", fontSize: "12px" }}
-            >
-              <strong>📋 Playlist</strong>
-              <span style={{ fontSize: "11px", color: "var(--text-muted)", marginLeft: "6px" }}>{idx + 1} / {playlist.length}</span>
-              <span style={{ marginLeft: "auto" }}>{playlistOpen ? "▲" : "▼"}</span>
-            </button>
+            <div style={{ display: "flex", gap: "6px", marginBottom: "6px" }}>
+              <button
+                onClick={() => setPlaylistOpen(!playlistOpen)}
+                style={{ ...modeBtnStyle, flex: 1, justifyContent: "flex-start", padding: "8px 10px", fontSize: "12px" }}
+              >
+                <strong>📋 Playlist</strong>
+                <span style={{ fontSize: "11px", color: "var(--text-muted)", marginLeft: "6px" }}>{idx + 1} / {playlist.length}</span>
+                <span style={{ marginLeft: "auto" }}>{playlistOpen ? "▲" : "▼"}</span>
+              </button>
+              <button
+                onClick={async () => {
+                  if (interfolderLoading || !currentFile) return;
+                  setInterfolderLoading(true);
+                  await onLoadInterfolder(currentFile);
+                  setInterfolderLoading(false);
+                  setPlaylistOpen(true);
+                }}
+                title="Carregar vídeos de pastas adjacentes (interfolder)"
+                style={{ ...modeBtnStyle, padding: "8px 10px", fontSize: "12px", whiteSpace: "nowrap", background: interfolderLoading ? "rgba(255,139,159,0.2)" : "rgba(255,139,159,0.08)", borderColor: "rgba(255,139,159,0.3)" }}
+              >
+                {interfolderLoading ? "⏳" : "📂"} Interfolder
+              </button>
+            </div>
             {playlistOpen && (
               <div style={{
                 overflowY: "auto", border: "1px solid rgba(255,255,255,0.12)",
