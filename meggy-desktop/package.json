@@ -1,6 +1,6 @@
 {
   "name": "meggy-desktop",
-  "version": "1.4.2",
+  "version": "1.6.1",
   "description": "Meggy — App Nativo (Tauri 2.0 + Rust + React)",
   "type": "module",
   "scripts": {
@@ -16,6 +16,7 @@
     "@tauri-apps/plugin-global-shortcut": "^2.0.0",
     "@tauri-apps/plugin-autostart": "^2.0.0",
     "@tauri-apps/plugin-store": "^2.0.0",
+    "@mlc-ai/web-llm": "^0.2.78",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.0.0",
