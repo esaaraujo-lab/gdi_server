@@ -240,12 +240,15 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
     await loadFolder(currentDrive, newPath);
   }
 
+  // ★ v1.5.7: navigateToBreadcrumb now exits player view and navigates
   function navigateToBreadcrumb(index: number) {
     if (!currentDrive) return;
     const parts = currentPath.split("/").filter(Boolean);
     if (index < 0 || index >= parts.length) return;
     const newPath = "/" + parts.slice(0, index + 1).join("/") + "/";
     setCurrentPath(newPath);
+    setView("browse"); // Exit player view
+    setPlaylist([]);
     loadFolder(currentDrive, newPath);
   }
 
@@ -264,18 +267,13 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
   }
 
   function openPlayer(file: FileItem) {
-    // Build playlist from videos/audios in current folder
-    const pl = files.filter(f =>
-      f.mime_type.startsWith("video/") || f.name.endsWith(".mp4") ||
-      f.mime_type.startsWith("audio/") || f.name.endsWith(".mp3") || f.name.endsWith(".m4a")
-    );
-    const idx = pl.findIndex(f => f.id === file.id);
-    setPlaylist(pl.length > 0 ? pl : [file]);
-    setPlayerIndex(idx >= 0 ? idx : 0);
+    // Start with just the clicked file so playback starts immediately
+    setPlaylist([file]);
+    setPlayerIndex(0);
     setView("player");
-    // ★ v1.5.5: Always load interfolder (to get full playlist with previous lessons)
-    // The interfolder will find the current video and set the correct index
-    setTimeout(() => loadInterfolderPlaylist(file), 1500);
+    // ★ v1.5.7: Load interfolder immediately (not setTimeout) to build full playlist
+    // The interfolder will find the current video and keep the correct index
+    loadInterfolderPlaylist(file);
   }
 
   // ★ v1.5.6: Interfolder — carrega vídeos de pastas irmãs (adjacentes)
@@ -351,8 +349,9 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
       });
       // Encontrar índice do vídeo atual
       const newIdx = deduped.findIndex(v => v.id === currentFile.id);
-      // Só substituir a playlist se encontrou mais vídeos que a atual
-      if (deduped.length > playlist.length) {
+      // ★ v1.5.7: Always replace playlist with interfolder result (even if same length)
+      // This ensures the full sorted playlist is shown with correct index
+      if (deduped.length > 0) {
         setPlaylist(deduped);
         setPlayerIndex(newIdx >= 0 ? newIdx : 0);
       }
@@ -965,13 +964,13 @@ function PlayerView({
     return (
       <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)" }}>
         Nenhum vídeo na playlist.
-        <button onClick={onBack} style={{ ...btnStyle, marginLeft: "12px" }}>← Voltar</button>
+        <button onClick={onHome} style={{ ...btnStyle, marginLeft: "12px" }}>🏠 Home</button>
       </div>
     );
   }
 
   const fileSize = currentFile.size > 0 ? `${(currentFile.size / 1024 / 1024).toFixed(1)} MB` : "";
-  const parts = folderPath.split("/").filter(Boolean);
+  const parts = currentFolderPath.split("/").filter(Boolean);
 
   // Build material tabs
   let materialCounter = 0;
@@ -1009,7 +1008,7 @@ function PlayerView({
         gap: "12px", flexWrap: "wrap",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0, flex: 1, flexWrap: "wrap" }}>
-          <button onClick={onBack} style={{ ...btnStyle, flexShrink: 0 }}>← Voltar</button>
+          <button onClick={onHome} style={{ ...btnStyle, flexShrink: 0 }}>🏠 Home</button>
           <span style={{ color: "var(--pink)", fontWeight: 700, fontSize: "18px", flexShrink: 0 }}>🐩 Meggy</span>
           <div style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap", minWidth: 0 }}>
             <button onClick={onHome} style={{ ...btnStyle, padding: "4px 8px", fontSize: "12px" }}>☁️ Drives</button>
