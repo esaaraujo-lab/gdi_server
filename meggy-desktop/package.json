@@ -1,6 +1,6 @@
 {
   "name": "meggy-desktop",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Meggy — App Nativo (Tauri 2.0 + Rust + React)",
   "type": "module",
   "scripts": {
