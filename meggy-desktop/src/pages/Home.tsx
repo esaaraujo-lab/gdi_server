@@ -420,14 +420,22 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
           v.name = folder + " - " + v.name;
         }
       });
-      // Encontrar índice do vídeo atual
-      const newIdx = deduped.findIndex(v => v.id === currentFile.id);
-      // ★ v1.5.9: Replace playlist but DON'T call setPlayerIndex here
-      // The PlayerView's useEffect([playerVideoId, playlist]) will set the correct idx
-      // Calling setPlayerIndex here causes the parent to re-render which resets the player
+      // Encontrar índice do vídeo atual — busca por id, depois por link, depois por name
+      let newIdx = deduped.findIndex(v => v.id === currentFile.id && currentFile.id);
+      if (newIdx < 0 && currentFile.link) {
+        newIdx = deduped.findIndex(v => v.link === currentFile.link);
+      }
+      if (newIdx < 0 && currentFile.name) {
+        newIdx = deduped.findIndex(v => v.name === currentFile.name || v.name.endsWith(currentFile.name));
+      }
+      if (newIdx < 0) newIdx = 0;
+      // ★ v1.6.8: Pass the desired index directly to PlayerView via desiredIndex prop.
+      // This is more robust than searching by id in the child (which fails when id is empty
+      // or inconsistent between API calls). The child uses useEffect([desiredIndex]) to sync.
       if (deduped.length > 0) {
         setPlaylist(deduped);
-        // Don't call setPlayerIndex — let PlayerView handle it via playerVideoId
+        setPlayerIndex(newIdx);
+        playerVideoIdRef.current = deduped[newIdx]?.id || currentFile.id;
       }
     } catch (e) {
       console.warn("Interfolder failed:", e);
@@ -448,6 +456,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
           folderPath={currentPath}
           playlist={playlist}
           initialIndex={playerIndex}
+          desiredIndex={playerIndex}
           playerVideoId={playerVideoIdRef.current}
           onBack={backToBrowse}
           onLogout={logout}
@@ -839,13 +848,14 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
 // PlayerView — 2-column inline player (video | materials)
 // ═══════════════════════════════════════════════════════════════
 function PlayerView({
-  drive, folderPath, playlist, initialIndex, playerVideoId, onBack, onLogout, onNavigateBreadcrumb, onHome,
+  drive, folderPath, playlist, initialIndex, desiredIndex, playerVideoId, onBack, onLogout, onNavigateBreadcrumb, onHome,
   aiMode, localAiReady, onToggleAI, onManageAI, onLoadInterfolder,
 }: {
   drive: Drive;
   folderPath: string;
   playlist: FileItem[];
   initialIndex: number;
+  desiredIndex: number;
   playerVideoId: string;
   onBack: () => void;
   onLogout: () => void;
@@ -858,9 +868,10 @@ function PlayerView({
   onLoadInterfolder: (currentFile: FileItem) => Promise<void>;
 }) {
   const [idx, setIdx] = useState(initialIndex);
-  // ★ v1.6.6: Track the "desired current video id" so switchTo updates it
-  // and the playlist-sync useEffect doesn't reset idx back to the original video
-  const desiredVideoIdRef = useRef<string>(playerVideoId);
+  // ★ v1.6.8: desiredIndex is the authoritative position — set by the parent when
+  // the playlist changes (interfolder loads). This replaces the fragile desiredVideoIdRef
+  // approach which failed when file ids were empty or inconsistent between API calls.
+  const lastDesiredIndexRef = useRef<number>(initialIndex);
   const [mode, setMode] = useState<"split" | "fv" | "fm">("split");
   const [materials, setMaterials] = useState<FileItem[]>([]);
   const [materialsLoading, setMaterialsLoading] = useState(false);
@@ -938,31 +949,25 @@ function PlayerView({
 
   useEffect(() => { loadMaterials(); }, [loadMaterials]);
 
-  // ★ v1.6.6: Sync desiredVideoIdRef when the parent's playerVideoId prop changes
-  // (happens when openPlayer is called with a new file, or interfolder loads)
+  // ★ v1.6.8: Sync idx when the parent's desiredIndex changes.
+  // This is the authoritative way to position the player — the parent calculates the
+  // correct index when the playlist changes (interfolder loads) and passes it here.
+  // Only update if desiredIndex actually changed AND is within bounds.
   useEffect(() => {
-    if (playerVideoId && playerVideoId !== desiredVideoIdRef.current) {
-      desiredVideoIdRef.current = playerVideoId;
-    }
-  }, [playerVideoId]);
-
-  // ★ v1.6.6: When playlist changes (interfolder loads), find the desired video's index
-  // Uses desiredVideoIdRef (updated by switchTo) instead of stale playerVideoId prop
-  // This fixes "volta para a aula 1" — the old useEffect used playerVideoId which never
-  // updated after manual switches, causing it to reset idx back to the original video
-  useEffect(() => {
-    const desiredId = desiredVideoIdRef.current;
-    if (desiredId && playlist.length > 0) {
-      const foundIdx = playlist.findIndex(v => v.id === desiredId);
-      if (foundIdx >= 0 && foundIdx !== idx) {
-        setIdx(foundIdx);
-      } else if (foundIdx < 0 && idx >= playlist.length) {
-        // Desired video not in new playlist and current idx is out of bounds → go to 0
-        setIdx(0);
-        desiredVideoIdRef.current = playlist[0]?.id || "";
+    if (desiredIndex !== lastDesiredIndexRef.current) {
+      lastDesiredIndexRef.current = desiredIndex;
+      if (desiredIndex >= 0 && desiredIndex < playlist.length && desiredIndex !== idx) {
+        setIdx(desiredIndex);
       }
     }
-  }, [playlist]); // ★ Only depend on playlist — NOT playerVideoId (avoids stale resets)
+  }, [desiredIndex, playlist.length]);
+
+  // ★ v1.6.8: Also clamp idx if playlist shrinks (safety net)
+  useEffect(() => {
+    if (idx >= playlist.length && playlist.length > 0) {
+      setIdx(playlist.length - 1);
+    }
+  }, [playlist.length, idx]);
 
   // ★ v1.5.5: Load watched state from server on mount
   useEffect(() => {
@@ -1039,12 +1044,10 @@ function PlayerView({
   function switchTo(newIdx: number) {
     if (newIdx < 0 || newIdx >= playlist.length) return;
     setIdx(newIdx);
-    // ★ v1.6.6: Update desiredVideoIdRef so the playlist-sync useEffect
-    // doesn't reset idx back to the original video after a manual switch
-    const newFile = playlist[newIdx];
-    if (newFile?.id) {
-      desiredVideoIdRef.current = newFile.id;
-    }
+    // ★ v1.6.8: Also update lastDesiredIndexRef so the useEffect([desiredIndex])
+    // doesn't override our manual switch. The parent's desiredIndex only changes
+    // when the parent explicitly wants to reposition (interfolder loads).
+    lastDesiredIndexRef.current = newIdx;
   }
 
   function saveNote() {
