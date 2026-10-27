@@ -114,14 +114,39 @@ pub async fn list_folder(
 
     // Build URL: if a path is provided (e.g. "/0:/CURSO X/"), POST to it;
     // otherwise POST to the drive root "/{drive_index}://".
-    // The worker.js apiRequest handler uses the URL path (not the body id)
-    // to determine which folder to list.
+    // ★ v1.5.8: URL-encode each path segment to fix HTTP 400 with spaces/special chars
     let url = match &path {
         Some(p) if !p.is_empty() => {
-            // Ensure leading "/" and trailing "/"
             let p = if p.starts_with('/') { p.clone() } else { format!("/{}", p) };
             let p = if p.ends_with('/') { p } else { format!("{}/", p) };
-            format!("{}{}", BASE_URL, p)
+            // Split by / and percent-encode each segment (keep drive index like "0:" as-is)
+            let segments: Vec<&str> = p.split('/').filter(|s| !s.is_empty()).collect();
+            let encoded: Vec<String> = segments.iter().map(|s| {
+                // Don't encode drive index (e.g. "0:") — worker expects it raw
+                if s.chars().filter(|c| *c == ':').count() == 1 && s.ends_with(':') {
+                    s.to_string()
+                } else {
+                    // Check if already percent-encoded (has %xx patterns)
+                    if s.contains('%') && s.contains("20") {
+                        s.to_string() // Already encoded, keep as-is
+                    } else {
+                        // Percent-encode: spaces → %20, etc.
+                        let mut result = String::new();
+                        for byte in s.bytes() {
+                            match byte {
+                                b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b':' => {
+                                    result.push(byte as char);
+                                }
+                                _ => {
+                                    result.push_str(&format!("%{:02X}", byte));
+                                }
+                            }
+                        }
+                        result
+                    }
+                }
+            }).collect();
+            format!("{}/{}/", BASE_URL, encoded.join("/"))
         }
         _ => format!("{}/{}:/", BASE_URL, drive_index),
     };
