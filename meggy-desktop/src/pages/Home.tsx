@@ -386,6 +386,8 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
     setCurrentPath("");
     setCurrentDrive(null);
     setError(null);
+    // ★ v1.9.2: Reload userState so "Continue Assistindo" shows fresh history/resume
+    loadUserState();
   }
 
   function openPlayer(file: FileItem) {
