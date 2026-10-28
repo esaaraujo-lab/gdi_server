@@ -710,7 +710,10 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
               flexWrap: "wrap",
             }}>
               <div>
-                <div style={{ fontSize: "14px", color: "var(--text-muted)", marginBottom: "4px" }}>🐩 Meggy Desktop · v{appVersion}</div>
+                <div style={{ fontSize: "14px", color: "var(--text-muted)", marginBottom: "4px", display: "flex", alignItems: "center", gap: "4px" }}>
+                  <img src="/meggy.png" alt="Meggy" style={{ width: "20px", height: "20px", borderRadius: "4px" }} />
+                  Meggy Desktop · v{appVersion}
+                </div>
                 <h1 style={{ fontSize: "28px", fontWeight: 800, color: "var(--text)", margin: 0, marginBottom: "6px" }}>
                   {greeting}! 👋
                 </h1>
@@ -718,7 +721,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
                   Continue de onde parou ou explore novos cursos. Tudo offline, rápido e no seu ritmo.
                 </p>
               </div>
-              <div style={{ fontSize: "56px", flexShrink: 0 }}>🐩</div>
+              <img src="/meggy.png" alt="Meggy" style={{ width: "80px", height: "80px", borderRadius: "16px", flexShrink: 0 }} />
             </div>
 
             {/* ── Continue Assistindo (rich cards with progress bars) ── */}
@@ -895,7 +898,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
 
             {/* Footer version */}
             <div style={{ textAlign: "center", padding: "20px 0", color: "var(--text-muted)", fontSize: "12px", borderTop: "1px solid rgba(255,255,255,0.06)", marginTop: "12px" }}>
-              🐩 Meggy Desktop v{appVersion} · <a href="https://github.com/esaaraujo-lab/gdi_server" target="_blank" rel="noreferrer" style={{ color: "var(--text-muted)" }}>GitHub</a>
+              <img src="/meggy.png" alt="Meggy" style={{ width: "16px", height: "16px", borderRadius: "3px", verticalAlign: "middle" }} /> Meggy Desktop v{appVersion} · <a href="https://github.com/esaaraujo-lab/gdi_server" target="_blank" rel="noreferrer" style={{ color: "var(--text-muted)" }}>GitHub</a>
             </div>
           </div>
         </div>
@@ -1567,7 +1570,10 @@ function PlayerView({
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0, flex: 1, flexWrap: "wrap" }}>
           <button onClick={onHome} style={{ ...btnStyle, flexShrink: 0 }}>🏠 Home</button>
-          <span style={{ color: "var(--pink)", fontWeight: 700, fontSize: "18px", flexShrink: 0 }}>🐩 Meggy</span>
+          <span style={{ color: "var(--pink)", fontWeight: 700, fontSize: "18px", flexShrink: 0, display: "flex", alignItems: "center", gap: "6px" }}>
+          <img src="/meggy.png" alt="Meggy" style={{ width: "24px", height: "24px", borderRadius: "4px" }} />
+          Meggy
+        </span>
           <div style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap", minWidth: 0 }}>
             <button onClick={onHome} style={{ ...btnStyle, padding: "4px 8px", fontSize: "12px" }}>☁️ Drives</button>
             {parts.map((part, i) => (
@@ -2329,7 +2335,10 @@ function Header({
         {onHome && (
           <button onClick={onHome} style={{ ...btnStyle, flexShrink: 0 }} title="Voltar à tela inicial">🏠 Home</button>
         )}
-        <span style={{ color: "var(--pink)", fontWeight: 700, fontSize: "18px", flexShrink: 0 }}>🐩 Meggy</span>
+        <span style={{ color: "var(--pink)", fontWeight: 700, fontSize: "18px", flexShrink: 0, display: "flex", alignItems: "center", gap: "6px" }}>
+          <img src="/meggy.png" alt="Meggy" style={{ width: "24px", height: "24px", borderRadius: "4px" }} />
+          Meggy
+        </span>
         {breadcrumb}
       </div>
       <div style={{ display: "flex", gap: "6px", flexShrink: 0, alignItems: "center" }}>
