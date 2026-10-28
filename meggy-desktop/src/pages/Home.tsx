@@ -1078,6 +1078,19 @@ function PlayerView({
     saveUserState({ watched: { [link]: true } }).catch(() => { /* ignore */ });
   }
 
+  // ★ v1.9.0: Save resume position to server (throttled — every 10s)
+  const lastResumeSaveRef = useRef<number>(0);
+  function saveResumePosition(position: number) {
+    if (!currentFile || !currentFile.link) return;
+    const now = Date.now();
+    // Throttle: only save every 10 seconds
+    if (now - lastResumeSaveRef.current < 10000) return;
+    lastResumeSaveRef.current = now;
+    const link = currentFile.link;
+    // Save resume position as { [link]: seconds } — merges with existing resume data
+    saveUserState({ resume: { [link]: Math.floor(position) } }).catch(() => { /* ignore */ });
+  }
+
   // ★ v1.6.9: Save lesson to history (last 4) when video changes — for "Continue Assistindo"
   useEffect(() => {
     if (!currentFile || !videoSrc) return;
@@ -1603,12 +1616,28 @@ function PlayerView({
                 autoPlay
                 playsInline
                 style={{ display: "block", width: "100%", maxHeight: "60vh", background: "#000" }}
+                onLoadedMetadata={(e) => {
+                  // ★ v1.9.0: Seek to saved resume position when video loads
+                  if (currentFile?.link) {
+                    getUserState().then((state) => {
+                      const s = (state as Record<string, unknown>) || {};
+                      const resume = (s.resume as Record<string, number>) || {};
+                      const pos = resume[currentFile.link!] || 0;
+                      if (pos > 5) {
+                        const media = e.target as HTMLVideoElement;
+                        media.currentTime = pos;
+                      }
+                    }).catch(() => { /* ignore */ });
+                  }
+                }}
                 onTimeUpdate={(e) => {
                   const t = (e.target as HTMLVideoElement).currentTime;
                   const d = (e.target as HTMLVideoElement).duration || 0;
                   setCurrentTime(t);
                   // ★ v1.5.5: Mark watched at 50% playback
                   if (d > 0 && t / d > 0.5) markWatched();
+                  // ★ v1.9.0: Save resume position to server every 10s (cross-platform Win/Android/Web)
+                  saveResumePosition(t);
                 }}
                 onEnded={() => { markWatched(); if (idx < playlist.length - 1) switchTo(idx + 1); }}
               />
