@@ -346,8 +346,14 @@ pub async fn llama_start(
 
 /// Internal stop logic (callable from other commands without State wrapper)
 async fn llama_stop_impl(state: &LlamaState) {
-    let mut child_guard = state.child.lock().unwrap();
-    if let Some(mut child) = child_guard.take() {
+    // ★ v1.8.3: Take child out of mutex in a block scope, then drop guard BEFORE await.
+    // MutexGuard is not Send — can't hold it across .await points.
+    let child = {
+        let mut guard = state.child.lock().unwrap();
+        guard.take()
+    };
+    // Guard is now dropped — safe to await
+    if let Some(mut child) = child {
         let _ = child.kill().await;
         let _ = child.wait().await;
     }
