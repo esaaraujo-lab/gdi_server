@@ -19,6 +19,7 @@ import {
 } from "../lib/local-ai";
 import AIInstallPopup from "../components/AIInstallPopup";
 import LlamaManager from "../components/LlamaManager";
+import MeggyChat from "../components/MeggyChat";
 import { llamaChat as llamaLocalChat } from "../lib/llama-bridge";
 
 interface Drive { index: number; name: string; }
@@ -196,6 +197,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
   const [showAIPopup, setShowAIPopup] = useState<boolean>(false);
   const [showLlamaManager, setShowLlamaManager] = useState<boolean>(false);
   const [llamaReady, setLlamaReady] = useState<boolean>(false);
+  const [showMeggyChat, setShowMeggyChat] = useState<boolean>(false);
 
   // Show the install popup on first launch (if not dismissed).
   useEffect(() => {
@@ -566,6 +568,13 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
             onReady={handleChooseLlama}
           />
         )}
+        {showMeggyChat && (
+          <MeggyChat
+            onClose={() => setShowMeggyChat(false)}
+            aiMode={aiMode}
+            localAiReady={localAiReady}
+          />
+        )}
       </>
     );
   }
@@ -802,7 +811,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "14px" }}>
                 {[
                   { icon: "☁️", title: "Explorar Drives", desc: "Navegue por todos os drives disponíveis", action: () => setView("drives"), color: "rgba(93,222,218,0.12)" },
-                  { icon: "🤖", title: "Meggy AI", desc: aiMode === "local" ? "WebLLM ativo (offline)" : aiMode === "llama" ? "llama.cpp ativo (CPU/GPU)" : "IA da Nuvem ativa", action: () => handleManageAI(), color: "rgba(255,139,159,0.12)" },
+                  { icon: "🤖", title: "Meggy AI", desc: aiMode === "local" ? "WebLLM ativo (offline)" : aiMode === "llama" ? "llama.cpp ativo (CPU/GPU)" : "IA da Nuvem ativa", action: () => setShowMeggyChat(true), color: "rgba(255,139,159,0.12)" },
                   { icon: "📊", title: "Estatísticas", desc: `${watchedCount} aulas assistidas`, action: () => {}, color: "rgba(63,185,80,0.12)" },
                   { icon: "📱", title: "Apps Meggy", desc: "Baixar para outras plataformas", action: () => {
                     const el = document.getElementById("meggy-apps-section");
@@ -901,6 +910,13 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
           <LlamaManager
             onClose={() => setShowLlamaManager(false)}
             onReady={handleChooseLlama}
+          />
+        )}
+        {showMeggyChat && (
+          <MeggyChat
+            onClose={() => setShowMeggyChat(false)}
+            aiMode={aiMode}
+            localAiReady={localAiReady}
           />
         )}
       </>
