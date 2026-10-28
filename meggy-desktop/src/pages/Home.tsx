@@ -1117,6 +1117,31 @@ function PlayerView({
     }).catch(() => { /* ignore */ });
   }, []);
 
+  // ★ v1.9.5: Save user state with CLIENT-SIDE MERGE — reads existing state, merges, sends full
+  // This is critical because the worker might overwrite (old version) instead of merging.
+  // Without this, saveUserState({resume:{link:60}}) would delete history & watched.
+  async function saveUserStateMerged(patch: Record<string, unknown>) {
+    try {
+      const existing = await getUserState();
+      const merged = { ...((existing as Record<string, unknown>) || {}) };
+      for (const key in patch) {
+        const val = patch[key];
+        if (val !== null && typeof val === "object" && !Array.isArray(val) &&
+            merged[key] && typeof merged[key] === "object" && !Array.isArray(merged[key])) {
+          // Deep merge objects (resume, watched)
+          (merged[key] as Record<string, unknown>) = {
+            ...(merged[key] as Record<string, unknown>),
+            ...val,
+          };
+        } else {
+          // Replace arrays (history) and primitives
+          merged[key] = val;
+        }
+      }
+      await saveUserState(merged);
+    } catch (_) { /* ignore */ }
+  }
+
   // ★ v1.5.5: Mark video as watched when played >50% or on ended
   function markWatched() {
     if (!currentFile) return;
@@ -1125,8 +1150,8 @@ function PlayerView({
     const newSet = new Set(watchedSet);
     newSet.add(link);
     setWatchedSet(newSet);
-    // Save to server (fire-and-forget)
-    saveUserState({ watched: { [link]: true } }).catch(() => { /* ignore */ });
+    // ★ v1.9.5: Use merged save to preserve history & resume
+    saveUserStateMerged({ watched: { [link]: true } }).catch(() => { /* ignore */ });
   }
 
   // ★ v1.9.0: Save resume position to server (throttled — every 10s)
@@ -1138,25 +1163,25 @@ function PlayerView({
     if (now - lastResumeSaveRef.current < 10000) return;
     lastResumeSaveRef.current = now;
     const link = currentFile.link;
-    // Save resume position as { [link]: seconds } — merges with existing resume data
-    saveUserState({ resume: { [link]: Math.floor(position) } }).catch(() => { /* ignore */ });
+    // ★ v1.9.5: Use merged save to preserve history & watched
+    saveUserStateMerged({ resume: { [link]: Math.floor(position) } }).catch(() => { /* ignore */ });
   }
 
-  // ★ v1.6.9: Save lesson to history (last 4) when video changes — for "Continue Assistindo"
+  // ★ v1.6.9: Save lesson to history (last 8) when video changes — for "Continue Assistindo"
   useEffect(() => {
     if (!currentFile || !videoSrc) return;
     const folder = (currentFile as FileItem & { folder?: string }).folder;
     const pathParts = currentFolderPath.split("/").filter(Boolean);
     const fullPath = "/" + pathParts.join("/") + "/" + currentFile.name;
-    // Load existing history from userState, prepend current, keep last 4
+    // ★ v1.9.5: Use merged save to preserve resume & watched
     getUserState().then((state) => {
       const s = (state as Record<string, unknown>) || {};
       const history = (s.history as Array<{ name?: string; path?: string; link?: string }>) || [];
       // Don't add if it's already the most recent
       if (history.length > 0 && history[history.length - 1]?.link === currentFile.link) return;
       const entry = { name: currentFile.name, path: fullPath, link: currentFile.link || "" };
-      const newHistory = [...history, entry].slice(-4); // keep last 4
-      saveUserState({ history: newHistory }).catch(() => { /* ignore */ });
+      const newHistory = [...history, entry].slice(-8); // ★ v1.9.5: keep last 8 (was 4)
+      saveUserStateMerged({ history: newHistory }).catch(() => { /* ignore */ });
     }).catch(() => { /* ignore */ });
   }, [videoSrc]);
 
