@@ -141,6 +141,36 @@ function compareVersions(a: string, b: string): number {
   return 0;
 }
 
+// ─── Strip AI chain-of-thought / reasoning from response (v1.9.1) ───
+// Some AI models (DeepSeek-R1, Qwen with thinking, etc.) return reasoning text
+// wrapped in §§...§§ or <think>...</think> or just prepend it before the actual answer.
+// This function removes those blocks and returns only the final answer.
+function stripAiReasoning(text: string): string {
+  if (!text) return "";
+  let cleaned = text;
+  // Remove §§...§§ blocks (DeepSeek-R1 style)
+  cleaned = cleaned.replace(/§§[\s\S]*?§§/g, "");
+  // Remove <think>...</think> blocks
+  cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/g, "");
+  // Remove <reasoning>...</reasoning> blocks
+  cleaned = cleaned.replace(/<reasoning>[\s\S]*?<\/reasoning>/g, "");
+  // If text starts with "Okay," or "Let's" (common CoT prefixes), find the first markdown header
+  // and trim everything before it
+  const mdHeaderMatch = cleaned.match(/^#{1,6}\s/m);
+  if (mdHeaderMatch && (cleaned.startsWith("Okay") || cleaned.startsWith("Let's") || cleaned.startsWith("First"))) {
+    const idx = cleaned.indexOf(mdHeaderMatch[0]);
+    if (idx > 0) cleaned = cleaned.substring(idx);
+  }
+  // If it starts with "Let me" or similar reasoning, and has a "---" separator, trim before it
+  if (cleaned.startsWith("Let me") || cleaned.startsWith("First") || cleaned.startsWith("Now")) {
+    const sepIdx = cleaned.indexOf("\n---\n");
+    if (sepIdx > 0 && sepIdx < cleaned.length / 2) {
+      cleaned = cleaned.substring(sepIdx + 5);
+    }
+  }
+  return cleaned.trim();
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Main Home component
 // ═══════════════════════════════════════════════════════════════
@@ -1402,9 +1432,9 @@ function PlayerView({
         callIsa(QUESTOES_PROMPT, "questoes"),
       ]);
 
-      const summaryR = summaryRes.text;
-      const mindmapR = mindmapRes.text;
-      const questionsR = questionsRes.text;
+      const summaryR = stripAiReasoning(summaryRes.text);
+      const mindmapR = stripAiReasoning(mindmapRes.text);
+      const questionsR = stripAiReasoning(questionsRes.text);
 
       // ★ v1.5.0: Determine the AI source badge — if ANY call succeeded locally, show "local".
       const sources = [summaryRes.source, mindmapRes.source, questionsRes.source];
@@ -1826,34 +1856,34 @@ function PlayerView({
 // ═══════════════════════════════════════════════════════════════
 function MaterialViewer({ file, content }: { file?: FileItem; content?: string }) {
   const [pdfSrc, setPdfSrc] = useState<string>("");
+  const [pdfLoadedLink, setPdfLoadedLink] = useState<string>("");
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState<string>("");
 
-  // ★ v1.6.9: Cache PDFs by link — don't re-download the same PDF every time.
-  // The old code used [file] as dep (object reference changes every render) → re-downloaded.
-  // Now use file?.link as dep (string, stable) → only downloads when the actual PDF changes.
   const pdfLinkKey = file?.link || "";
   useEffect(() => {
     setPdfError("");
-    if (!file) { setPdfSrc(""); return; }
+    if (!file) { setPdfSrc(""); setPdfLoadedLink(""); return; }
     const ext = (file.name.split(".").pop() || "").toLowerCase();
-    if (ext !== "pdf" || !file.link) { setPdfSrc(""); return; }
-    // ★ v1.6.9: If we already have a pdfSrc for this link, don't re-download
-    if (pdfSrc && pdfLinkKey === file.link) return;
+    if (ext !== "pdf" || !file.link) { setPdfSrc(""); setPdfLoadedLink(""); return; }
+    // ★ v1.9.1: Only skip download if we ALREADY loaded THIS exact link
+    if (pdfLoadedLink === file.link && pdfSrc) return;
     setPdfLoading(true);
+    setPdfSrc(""); // Clear old PDF while loading new one
     const link = file.link.startsWith("http") ? file.link : (BASE_URL + file.link);
     const pdfLink = link.includes("inline=") ? link : link + (link.includes("?") ? "&" : "?") + "inline=true";
     downloadToTemp(pdfLink)
       .then((path) => {
         const src = convertFileSrc(path);
         setPdfSrc(src);
+        setPdfLoadedLink(file.link!);
         setPdfLoading(false);
       })
       .catch((e) => {
         setPdfError(String(e));
         setPdfLoading(false);
       });
-  }, [pdfLinkKey]); // ★ v1.6.9: dep on link string, not file object reference
+  }, [pdfLinkKey]);
 
   if (!file) {
     return (
