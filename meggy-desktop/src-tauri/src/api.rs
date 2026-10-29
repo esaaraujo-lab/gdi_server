@@ -385,7 +385,7 @@ pub async fn get_user_state(state: State<'_, AppState>) -> Result<serde_json::Va
         return Ok(serde_json::json!({}));
     }
 
-    serde_json::from_str(&text).unwrap_or_else(|_| serde_json::json!({}))
+    Ok(serde_json::from_str(&text).unwrap_or_else(|_| serde_json::json!({})))
 }
 
 // ─────────────────────────────────────────────────────────────────
