@@ -349,7 +349,7 @@ pub async fn get_user_state(state: State<'_, AppState>) -> Result<serde_json::Va
 
     let resp = state
         .client
-        .get(format!("{}/userstate/get", BASE_URL))
+        .get(format!("{}/userstate", BASE_URL))
         .header("Cookie", &cookie)
         .send()
         .await
