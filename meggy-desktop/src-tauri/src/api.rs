@@ -329,17 +329,22 @@ pub async fn save_user_state(
     let cookie = state.cookie.lock().unwrap().clone();
     let cookie = cookie.ok_or("Not logged in")?;
 
+    let body = serde_json::to_string(&data).unwrap_or_default();
+    eprintln!("[save_user_state] body len: {} | keys: {:?}", body.len(), data.as_object().map(|m| m.keys().collect::<Vec<_>>()).unwrap_or_default());
+
     let resp = state
         .client
         .post(format!("{}/userstate/save", BASE_URL))
         .header("Cookie", &cookie)
         .header("Content-Type", "application/json")
-        .json(&data)
+        .body(body)
         .send()
         .await
         .map_err(|e| e.to_string())?;
 
-    Ok(resp.status().is_success())
+    let status = resp.status();
+    eprintln!("[save_user_state] HTTP {}", status);
+    Ok(status.is_success())
 }
 
 #[tauri::command]
@@ -355,7 +360,20 @@ pub async fn get_user_state(state: State<'_, AppState>) -> Result<serde_json::Va
         .await
         .map_err(|e| e.to_string())?;
 
-    resp.json().await.map_err(|e| e.to_string())
+    let status = resp.status();
+    let text = resp.text().await.map_err(|e| e.to_string())?;
+
+    eprintln!("[get_user_state] HTTP {} | body len: {} | cookie: {}", status, text.len(), &cookie[..cookie.len().min(30)]);
+
+    if !status.is_success() {
+        return Err(format!("HTTP {} : {}", status, &text[..text.len().min(200)]));
+    }
+
+    if text.is_empty() {
+        return Ok(serde_json::json!({}));
+    }
+
+    serde_json::from_str(&text).map_err(|e| format!("JSON parse error: {} | body: {}", e, &text[..text.len().min(200)]))
 }
 
 // ─────────────────────────────────────────────────────────────────
