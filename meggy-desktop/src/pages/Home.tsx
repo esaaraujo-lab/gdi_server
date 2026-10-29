@@ -281,8 +281,13 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
   async function loadUserState() {
     try {
       const state = await getUserState();
+      console.log("[loadUserState] state keys:", Object.keys(state || {}));
+      console.log("[loadUserState] history:", (state as Record<string, unknown>)?.history);
+      console.log("[loadUserState] resume:", (state as Record<string, unknown>)?.resume);
       setUserState(state as Record<string, unknown>);
-    } catch (_) { /* ignore */ }
+    } catch (e) {
+      console.error("[loadUserState] ERROR:", e);
+    }
   }
 
   // ★ v1.6.3: Check for app updates from GitHub releases (uses dynamic __APP_VERSION__)
@@ -1118,28 +1123,28 @@ function PlayerView({
   }, []);
 
   // ★ v1.9.5: Save user state with CLIENT-SIDE MERGE — reads existing state, merges, sends full
-  // This is critical because the worker might overwrite (old version) instead of merging.
-  // Without this, saveUserState({resume:{link:60}}) would delete history & watched.
   async function saveUserStateMerged(patch: Record<string, unknown>) {
     try {
       const existing = await getUserState();
+      console.log("[saveUserStateMerged] existing keys:", Object.keys(existing || {}));
       const merged = { ...((existing as Record<string, unknown>) || {}) };
       for (const key in patch) {
         const val = patch[key];
         if (val !== null && typeof val === "object" && !Array.isArray(val) &&
             merged[key] && typeof merged[key] === "object" && !Array.isArray(merged[key])) {
-          // Deep merge objects (resume, watched)
           (merged[key] as Record<string, unknown>) = {
             ...(merged[key] as Record<string, unknown>),
             ...val,
           };
         } else {
-          // Replace arrays (history) and primitives
           merged[key] = val;
         }
       }
+      console.log("[saveUserStateMerged] merged keys:", Object.keys(merged));
       await saveUserState(merged);
-    } catch (_) { /* ignore */ }
+    } catch (e) {
+      console.error("[saveUserStateMerged] ERROR:", e);
+    }
   }
 
   // ★ v1.5.5: Mark video as watched when played >50% or on ended
