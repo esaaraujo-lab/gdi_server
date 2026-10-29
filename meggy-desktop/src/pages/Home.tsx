@@ -1284,6 +1284,60 @@ function PlayerView({
   }, [idx, playlist.length]);
 
   // ─── Show ISA panel (cache check + parallel generate) ───
+  // ★ v1.9.9: Save generated ISA content as MD files to the lesson's folder on Drive
+  // Uses the /copy worker endpoint to create .md files in the lesson folder
+  async function saveIsaToFolder(gen: Record<string, unknown>, folderPath: string) {
+    if (!folderPath) return;
+    const lessonName = (gen.lessonName as string) || "Aula";
+    const baseName = lessonName.replace(/\.[^/.]+$/, ""); // remove extension
+
+    // Helper: POST to /copy to create a file in the lesson folder
+    async function saveMdFile(fileName: string, content: string) {
+      if (!content || content.length < 50) return; // skip empty/short
+      try {
+        const resp = await fetch(`${BASE_URL}/copy`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            path: folderPath,
+            fileName: fileName,
+            content: content,
+          }),
+        });
+        console.log(`[saveIsaToFolder] ${fileName}: HTTP ${resp.status}`);
+      } catch (e) {
+        console.warn(`[saveIsaToFolder] ${fileName} failed:`, e);
+      }
+    }
+
+    // Save summary as MD
+    if (gen.summary) {
+      await saveMdFile(`Resumo - ${baseName}.md`, gen.summary as string);
+    }
+    // Save pills as MD
+    if (gen.mindmap) {
+      await saveMdFile(`Pilulas - ${baseName}.md`, gen.mindmap as string);
+    }
+    // Save questions as MD
+    if (gen.questions) {
+      const qs = gen.questions as QuizQuestion[];
+      let md = `# Questões - ${baseName}\n\n`;
+      qs.forEach((q, i) => {
+        md += `## Questão ${i + 1}\n`;
+        md += `**${q.statement}**\n\n`;
+        q.options.forEach((opt, j) => {
+          const marker = q.correct === j ? "✓" : " ";
+          md += `${marker} ${String.fromCharCode(65 + j)}) ${opt}\n`;
+        });
+        md += `\n**Resposta:** ${q.correct}\n`;
+        if (q.explanation) md += `**Explicação:** ${q.explanation}\n`;
+        if (q.legalText) md += `**Base legal:** ${q.legalText}\n`;
+        md += `\n---\n\n`;
+      });
+      await saveMdFile(`Questoes - ${baseName}.md`, md);
+    }
+  }
+
   async function showISA(type: "summary" | "questions" | "mindmap" | "flashcards") {
     setActiveTab({ kind: "isa", id: type });
     setIsaError(null);
@@ -1522,6 +1576,9 @@ function PlayerView({
         mindmap: (gen.mindmap as string) || null,
         lessonName: (gen.lessonName as string) || "",
       }).catch(() => { /* ignore */ });
+
+      // ★ v1.9.9: Save generated content as MD files to the lesson's folder on Drive
+      saveIsaToFolder(gen, currentFolderPath).catch(() => { /* ignore */ });
 
       setIsaCache(gen);
       setIsaLoadingMsg(null);
@@ -2159,7 +2216,7 @@ function ISAPanel({
   if (type === "questions") {
     const qs = cache.questions as QuizQuestion[] | null | undefined;
     if (!qs || !qs.length) return <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>Não foi possível gerar questões. Tente novamente.</div>;
-    return <QuizView questions={qs} />;
+    return <QuizView questions={qs} onRegenerate={onRetry} />;
   }
   if (type === "flashcards") {
     const fs = cache.flashcards as { f: string; b: string; type?: string }[] | null | undefined;
@@ -2172,11 +2229,16 @@ function ISAPanel({
 // ═══════════════════════════════════════════════════════════════
 // QuizView — interactive quiz
 // ═══════════════════════════════════════════════════════════════
-function QuizView({ questions }: { questions: QuizQuestion[] }) {
+function QuizView({ questions, onRegenerate }: { questions: QuizQuestion[]; onRegenerate?: () => void }) {
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [submitted, setSubmitted] = useState(false);
 
   const score = questions.reduce((acc, q, i) => acc + (answers[i] === q.correct ? 1 : 0), 0);
+
+  function handleRestart() {
+    setSubmitted(false);
+    setAnswers({});
+  }
 
   return (
     <div style={{ height: "100%", overflow: "auto", padding: "16px" }}>
@@ -2185,8 +2247,15 @@ function QuizView({ questions }: { questions: QuizQuestion[] }) {
           padding: "12px 16px", background: "rgba(93,222,218,0.08)",
           border: "1px solid rgba(93,222,218,0.3)", borderRadius: "8px",
           marginBottom: "16px", color: "var(--teal)", fontWeight: 600,
+          display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px",
         }}>
-          🎯 Pontuação: {score} / {questions.length}
+          <span>🎯 Pontuação: {score} / {questions.length}</span>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            <button onClick={handleRestart} style={{ ...modeBtnStyle, fontSize: "12px" }}>↺ Reiniciar</button>
+            {onRegenerate && (
+              <button onClick={onRegenerate} style={{ ...modeBtnStyle, fontSize: "12px", background: "linear-gradient(135deg,#ff8b9f,#c026d3)", color: "#fff", border: "none" }}>🔄 Gerar mais questões</button>
+            )}
+          </div>
         </div>
       )}
       {questions.map((q, i) => {
@@ -2249,10 +2318,12 @@ function QuizView({ questions }: { questions: QuizQuestion[] }) {
           }}
         >Enviar respostas</button>
       ) : (
-        <button
-          onClick={() => { setSubmitted(false); setAnswers({}); }}
-          style={{ ...btnStyle, marginTop: "8px" }}
-        >↺ Refazer</button>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "8px" }}>
+          <button onClick={handleRestart} style={btnStyle}>↺ Reiniciar</button>
+          {onRegenerate && (
+            <button onClick={onRegenerate} style={{ ...btnStyle, background: "linear-gradient(135deg,#ff8b9f,#c026d3)", color: "#fff", border: "none" }}>🔄 Gerar mais questões</button>
+          )}
+        </div>
       )}
     </div>
   );
