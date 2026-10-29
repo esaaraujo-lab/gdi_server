@@ -2411,7 +2411,7 @@ function DriveCard({ drive, onClick }: { drive: Drive; onClick: () => void }) {
       onMouseLeave={(e) => { e.currentTarget.style.borderColor = "transparent"; e.currentTarget.style.background = "var(--surface)"; }}
     >
       <div style={{ fontSize: "32px", marginBottom: "8px" }}>{icons[drive.index] || "📁"}</div>
-      <div style={{ color: "var(--text)", fontWeight: 600, fontSize: "15px" }}>{drive.name}</div>
+      <div style={{ color: "var(--text)", fontWeight: 600, fontSize: "15px", wordBreak: "break-word", lineHeight: 1.3 }}>{drive.name}</div>
     </div>
   );
 }
@@ -2440,7 +2440,7 @@ function FileCard({ file, onClick }: { file: FileItem; onClick: () => void }) {
         display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px",
       }}>{icon}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ color: "var(--text)", fontWeight: 600, fontSize: "14px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{file.name}</div>
+        <div style={{ color: "var(--text)", fontWeight: 600, fontSize: "14px", wordBreak: "break-word", lineHeight: 1.3 }}>{file.name}</div>
         {sizeStr && <div style={{ color: "var(--text-muted)", fontSize: "12px" }}>{sizeStr}</div>}
         {isFolder && <div style={{ color: "var(--teal)", fontSize: "11px", marginTop: "2px" }}>Abrir pasta →</div>}
         {(isVideo || isAudio) && <div style={{ color: "var(--teal)", fontSize: "11px", marginTop: "2px" }}>▶ Reproduzir</div>}
