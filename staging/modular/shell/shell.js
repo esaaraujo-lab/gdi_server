@@ -2341,9 +2341,9 @@
           }
         }
 
-        render();
         const shellRoot = document.getElementById('meggy-shell') || document.getElementById('meggy-root') || document.body;
         shellRoot.appendChild(modal);
+        render(); // ★ FIX: render() DEPOIS do appendChild — getElementById precisa do modal no DOM
       },
 
       // ═══ Detail: curso montado de um concurso ═══
