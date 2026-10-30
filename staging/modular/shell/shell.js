@@ -2132,47 +2132,29 @@
           } else if (step === 3) {
             let discHTML = '';
             if (disciplinas && disciplinas.length > 0) {
-              discHTML = '<div style="margin-bottom:16px;"><div style="font-size:12px;color:#9aa4b8;margin-bottom:8px;">Disciplinas identificadas (' + disciplinas.length + '):</div><div style="display:flex;flex-direction:column;gap:6px;">';
+              discHTML = '<div style="margin-bottom:12px;"><div style="font-size:12px;color:#9aa4b8;margin-bottom:6px;">Disciplinas (' + disciplinas.length + '):</div><div style="display:flex;flex-wrap:wrap;gap:4px;">';
               disciplinas.forEach(d => {
                 const incColor = d.incidencia === 'altissima' ? '#ff6b6b' : d.incidencia === 'alta' ? '#ffd43b' : '#5ddeda';
-                discHTML += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:6px;">' +
-                  '<span style="flex:1;color:#e6edf3;font-size:13px;font-weight:500;">' + Shell._esc(d.nome) + '</span>' +
-                  (d.peso != null ? '<span style="background:rgba(93,222,218,0.12);color:#5ddeda;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;">' + Shell._esc(d.peso) + ' questões</span>' : '') +
-                  (d.incidencia ? '<span style="background:' + incColor + '22;color:' + incColor + ';padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;">' + Shell._esc(d.incidencia) + '</span>' : '') +
-                '</div>';
+                discHTML += '<span style="background:' + incColor + '22;color:' + incColor + ';padding:2px 8px;border-radius:999px;font-size:10px;font-weight:600;">' + Shell._esc(d.nome) + '</span>';
               });
               discHTML += '</div></div>';
             } else {
-              discHTML = '<div style="margin-bottom:16px;padding:10px;background:rgba(255,212,59,0.06);border:1px solid rgba(255,212,59,0.2);border-radius:8px;font-size:12px;color:#ffd43b;">⚠️ Edital não analisado. O scan vai tentar identificar as disciplinas pelos nomes das pastas.</div>';
-            }
-
-            const drives = window.drive_names || [];
-            let drivesHTML = '';
-            if (drives.length === 0) {
-              drivesHTML = '<div style="padding:20px;text-align:center;color:#6b7488;font-size:13px;">Nenhum drive disponível.</div>';
-            } else {
-              drivesHTML = '<div style="display:flex;flex-direction:column;gap:6px;">';
-              drives.forEach((name, i) => {
-                const dp = '/' + i + ':/';
-                const checked = selectedFolders.indexOf(dp) >= 0 ? 'checked' : '';
-                drivesHTML += '<label style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;cursor:pointer;">' +
-                  '<input type="checkbox" class="cw-drive-cb" data-path="' + Shell._esc(dp) + '" ' + checked + ' style="width:18px;height:18px;accent-color:#c026d3;" />' +
-                  '<span style="font-size:18px;">☁️</span>' +
-                  '<span style="flex:1;color:#e6edf3;font-size:13px;font-weight:500;">' + Shell._esc(name) + '</span>' +
-                  '<span style="color:#6b7488;font-size:11px;">' + Shell._esc(dp) + '</span>' +
-                '</label>';
-              });
-              drivesHTML += '</div>';
+              discHTML = '<div style="margin-bottom:12px;padding:8px;background:rgba(255,212,59,0.06);border:1px solid rgba(255,212,59,0.2);border-radius:8px;font-size:12px;color:#ffd43b;">⚠️ Edital não analisado. O scan vai identificar disciplinas pelos nomes das pastas.</div>';
             }
 
             bodyHTML =
-              '<div style="font-size:13px;color:#9aa4b8;margin-bottom:12px;">Selecione os drives onde estão suas aulas. O sistema vai escanear e vincular às disciplinas.</div>' +
+              '<div style="font-size:13px;color:#9aa4b8;margin-bottom:8px;">Selecione as pastas com suas aulas. Navegue até a pasta desejada e clique em "Adicionar".</div>' +
               discHTML +
-              '<div style="font-size:12px;color:#9aa4b8;margin-bottom:8px;">Drives disponíveis:</div>' +
-              drivesHTML;
+              '<div id="cw-folder-selected" style="margin-bottom:8px;font-size:12px;color:#9aa4b8;">Pastas selecionadas: <span id="cw-selected-count">' + selectedFolders.length + '</span></div>' +
+              '<div id="cw-folder-selected-list" style="margin-bottom:8px;">' + selectedFolders.map((p,i) => '<div style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:rgba(255,139,159,0.08);border:1px solid rgba(255,139,159,0.2);border-radius:6px;margin-bottom:4px;font-size:11px;color:#e6edf3;"><span style="flex:1;word-break:break-all;">' + Shell._esc(p) + '</span><button class="cw-remove-folder" data-idx="' + i + '" style="background:none;border:none;color:#ff6b6b;cursor:pointer;font-size:14px;">✕</button></div>').join('') + '</div>' +
+              '<div id="cw-breadcrumb" style="font-size:11px;color:#6b7488;margin-bottom:6px;word-break:break-all;"></div>' +
+              '<div id="cw-folder-list" style="max-height:260px;overflow-y:auto;border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:4px;"><div style="padding:20px;text-align:center;color:#6b7488;font-size:12px;">Carregando drives...</div></div>';
             footerHTML =
               '<button class="meggy-header-btn" id="cw-back">← Voltar</button>' +
-              '<button class="meggy-header-btn" id="cw-scan" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">📡 Escanear Drives</button>';
+              '<div style="display:flex;gap:8px;">' +
+                '<button class="meggy-header-btn" id="cw-add-folder">+ Adicionar pasta</button>' +
+                '<button class="meggy-header-btn" id="cw-scan" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">📡 Escanear</button>' +
+              '</div>';
           } else if (step === 4) {
             const r = scanResult || {};
             const totalFound = r.totalFound || 0;
@@ -2296,19 +2278,111 @@
           } else if (step === 3) {
             const backBtn = document.getElementById('cw-back');
             if (backBtn) backBtn.onclick = () => { step = 2; render(); };
-            modal.querySelectorAll('.cw-drive-cb').forEach(cb => {
-              cb.onchange = () => {
-                const p = cb.dataset.path;
-                if (cb.checked) {
-                  if (selectedFolders.indexOf(p) < 0) selectedFolders.push(p);
+
+            // Folder picker navegável
+            let currentBrowsePath = '';
+            const drives = window.drive_names || [];
+
+            function updateBreadcrumb() {
+              const bc = document.getElementById('cw-breadcrumb');
+              if (!bc) return;
+              if (!currentBrowsePath) {
+                bc.innerHTML = '<span style="color:#ff8b9f;cursor:pointer;" id="cw-bc-root">📁 Drives</span>';
+              } else {
+                const parts = currentBrowsePath.split('/').filter(Boolean);
+                let html = '<span style="color:#ff8b9f;cursor:pointer;" id="cw-bc-root">📁 Drives</span>';
+                let acc = '';
+                parts.forEach((p, i) => {
+                  acc += (i === 0 ? '/' : '/') + p;
+                  if (i === 0 && p.endsWith(':')) { acc = '/' + p + '/'; }
+                  else if (i === 0) { acc = '/' + p; }
+                  else { acc = acc + '/' + p; }
+                  html += ' / <span style="color:#9aa4b8;cursor:pointer;" class="cw-bc-part" data-path="' + Shell._esc(acc) + '">' + Shell._esc(decodeURIComponent(p)) + '</span>';
+                });
+                bc.innerHTML = html;
+              }
+              const rootBc = document.getElementById('cw-bc-root');
+              if (rootBc) rootBc.onclick = () => { currentBrowsePath = ''; browseFolder(''); };
+              modal.querySelectorAll('.cw-bc-part').forEach(el => {
+                el.onclick = () => { currentBrowsePath = el.dataset.path; browseFolder(currentBrowsePath); };
+              });
+            }
+
+            async function browseFolder(path) {
+              const listEl = document.getElementById('cw-folder-list');
+              if (!listEl) return;
+              listEl.innerHTML = '<div style="padding:20px;text-align:center;color:#6b7488;font-size:12px;"><div class="spinner-border spinner-border-sm"></div> Carregando...</div>';
+              updateBreadcrumb();
+              try {
+                if (!path) {
+                  // List drives
+                  let html = '';
+                  drives.forEach((name, i) => {
+                    const dp = '/' + i + ':/';
+                    html += '<div class="cw-folder-item" data-path="' + Shell._esc(dp) + '" style="display:flex;align-items:center;gap:8px;padding:10px;cursor:pointer;border-radius:6px;font-size:13px;color:#e6edf3;" onmouseover="this.style.background=\'rgba(255,255,255,0.04)\'" onmouseout="this.style.background=\'transparent\'">' +
+                      '<span style="font-size:18px;">☁️</span>' +
+                      '<span style="flex:1;">' + Shell._esc(name) + '</span>' +
+                      '<span style="color:#6b7488;font-size:11px;">' + Shell._esc(dp) + '</span>' +
+                    '</div>';
+                  });
+                  listEl.innerHTML = html || '<div style="padding:20px;text-align:center;color:#6b7488;">Nenhum drive.</div>';
                 } else {
-                  selectedFolders = selectedFolders.filter(x => x !== p);
+                  // List folder contents via worker API
+                  const r = await fetch(path, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ page_token: null, page_index: 0 })
+                  });
+                  if (!r.ok) { listEl.innerHTML = '<div style="padding:20px;text-align:center;color:#ff6b6b;">Erro ao carregar.</div>'; return; }
+                  const data = await r.json();
+                  const files = (data.data && data.data.files) || [];
+                  const folders = files.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
+                  if (folders.length === 0) {
+                    listEl.innerHTML = '<div style="padding:20px;text-align:center;color:#6b7488;font-size:12px;">Nenhuma subpasta aqui.</div>';
+                  } else {
+                    listEl.innerHTML = folders.map(f => {
+                      const subPath = path.endsWith('/') ? path + encodeURIComponent(f.name) + '/' : path + '/' + encodeURIComponent(f.name) + '/';
+                      return '<div class="cw-folder-item" data-path="' + Shell._esc(subPath) + '" style="display:flex;align-items:center;gap:8px;padding:10px;cursor:pointer;border-radius:6px;font-size:13px;color:#e6edf3;word-break:break-word;" onmouseover="this.style.background=\'rgba(255,255,255,0.04)\'" onmouseout="this.style.background=\'transparent\'">' +
+                        '<span style="font-size:18px;">📁</span>' +
+                        '<span style="flex:1;">' + Shell._esc(f.name) + '</span>' +
+                      '</div>';
+                    }).join('');
+                  }
                 }
+                // Click handlers
+                modal.querySelectorAll('.cw-folder-item').forEach(el => {
+                  el.onclick = () => { currentBrowsePath = el.dataset.path; browseFolder(currentBrowsePath); };
+                });
+              } catch (e) {
+                listEl.innerHTML = '<div style="padding:20px;text-align:center;color:#ff6b6b;">Erro: ' + Shell._esc(e.message) + '</div>';
+              }
+            }
+
+            // Add folder button
+            const addBtn = document.getElementById('cw-add-folder');
+            if (addBtn) addBtn.onclick = () => {
+              if (!currentBrowsePath) { alert('Navegue até uma pasta primeiro'); return; }
+              if (selectedFolders.indexOf(currentBrowsePath) < 0) {
+                selectedFolders.push(currentBrowsePath);
+                render();
+              } else {
+                alert('Pasta já selecionada');
+              }
+            };
+
+            // Remove folder buttons
+            modal.querySelectorAll('.cw-remove-folder').forEach(btn => {
+              btn.onclick = () => {
+                const idx = parseInt(btn.dataset.idx, 10);
+                selectedFolders.splice(idx, 1);
+                render();
               };
             });
+
+            // Scan button
             const scanBtn = document.getElementById('cw-scan');
             if (scanBtn) scanBtn.onclick = async () => {
-              if (selectedFolders.length === 0) { alert('Selecione ao menos um drive'); return; }
+              if (selectedFolders.length === 0) { alert('Adicione ao menos uma pasta'); return; }
               scanBtn.disabled = true;
               scanBtn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Escaneando...';
               try {
@@ -2325,14 +2399,17 @@
                 } else {
                   alert('Erro: ' + (d.error || 'tente novamente'));
                   scanBtn.disabled = false;
-                  scanBtn.innerHTML = '📡 Escanear Drives';
+                  scanBtn.innerHTML = '📡 Escanear';
                 }
               } catch (e) {
                 alert('Erro: ' + e.message);
                 scanBtn.disabled = false;
-                scanBtn.innerHTML = '📡 Escanear Drives';
+                scanBtn.innerHTML = '📡 Escanear';
               }
             };
+
+            // Start browsing
+            browseFolder('');
           } else if (step === 4) {
             const closeEarly = document.getElementById('cw-close-early');
             if (closeEarly) closeEarly.onclick = () => { closeModal(); Shell.views.concursos(el); };
