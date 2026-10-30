@@ -62,7 +62,7 @@
             <i class="bi bi-list"></i>
           </button>
           <div class="meggy-header-logo" id="meggy-logo">
-            <img src="/modular/shell/meggy-avatar.png" alt="Meggy" style="width:28px;height:28px;border-radius:50%;object-fit:cover;" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'"><span style="font-size:20px;display:none;">🐩</span> Meggy
+            <span style="font-size:20px;">🐩</span> Meggy
           </div>
           <div class="meggy-header-search">
             <input type="search" placeholder="Buscar aulas, cursos, questões..." id="meggy-search-input" />
@@ -203,6 +203,7 @@
         '/questoes': 'questoes',
         '/flashcards': 'flashcards',
         '/meggy-ai': 'meggy-ai',
+        '/concursos': 'concursos',
         '/config': 'config',
         '/simulado': 'simulado',
         '/provas': 'provas',
@@ -265,9 +266,13 @@
         case 'progresso': Shell._estudosView(main, 'progresso'); break;
         case 'questoes':  Shell.views.questoes(main); break;
         case 'flashcards':Shell.views.flashcards(main); break;
-        case 'meggy-ai':
-          Shell.views.meggyAIChat(main);
+        case 'meggy-ai':  
+          Shell.openMeggyAIDrawer(); 
+          // Mostrar mensagem na main pane
+          const mainEl = document.getElementById('meggy-main');
+          if (mainEl) mainEl.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">🤖 Meggy AI</h1></div><div class="meggy-placeholder"><div class="meggy-placeholder-icon">🤖</div><div class="meggy-placeholder-title">Meggy AI aberta!</div><div class="meggy-placeholder-desc">O drawer está aberto à direita. Use as abas Ações e Chat.</div></div>';
           break;
+        case 'concursos': Shell.views.concursos(main); break;
         case 'config':    Shell._estudosView(main, 'config'); break;
         case 'simulado':  Shell._estudosView(main, 'simulado'); break;
         case 'provas':    Shell._estudosView(main, 'provas'); break;
@@ -343,6 +348,11 @@
               <div class="meggy-card-icon">🤖</div>
               <div class="meggy-card-title">Meggy AI</div>
               <div class="meggy-card-meta">Chat, resumos, questões e flashcards</div>
+            </div>
+            <div class="meggy-card" data-nav="/concursos">
+              <div class="meggy-card-icon">📌</div>
+              <div class="meggy-card-title">Meus Concursos</div>
+              <div class="meggy-card-meta">Crie um curso baseado no edital</div>
             </div>
             <div class="meggy-card" data-nav="/progresso">
               <div class="meggy-card-icon">📊</div>
@@ -784,17 +794,6 @@
           document.getElementById('gdi-prev-btn').disabled = idx === 0;
           document.getElementById('gdi-next-btn').disabled = idx >= pl.length - 1;
           main.scrollTop = 0;
-
-          // ★ v1.0.223: Limpar e recarregar materiais + ISA para a NOVA aula
-          const matTabs = document.getElementById('gdi-mat-tabs');
-          const matBody = document.getElementById('gdi-mat-body');
-          if (matTabs) matTabs.innerHTML = '';
-          if (matBody) matBody.innerHTML = '<div style="text-align:center;padding:30px;color:#6b7488;">Carregando materiais...</div>';
-          // Limpar estado ISA (forçar regeneração para a nova aula)
-          Shell.__lastQuizQuestions = null;
-          Shell.__lastQuizLessonName = null;
-          // Recarregar materiais da nova aula
-          setTimeout(loadMaterials, 200);
         }
 
         // Modos — usar CSS classes (visibility/position) em vez de display:none (C1: não destrói iframes)
@@ -1111,105 +1110,87 @@
                     return;
                   }
 
-                  // ─── 2. Extrair material: TRANSCRIÇÃO primeiro, PDF só se não houver ───
-                  setLoading('🔍 Procurando transcrição da aula…');
+                  // ─── 2. Extrair materiais (MD/TXT/PDF com pdf.js) ───
+                  setLoading('📖 Extraindo material da aula…');
                   let materialContent = '';
-                  let materialSource = '';
+                  let materialsList = [];
                   try {
                     if (window.gdiListAllFiles && lessonPath) {
                       const files = await window.gdiListAllFiles(lessonPath, '');
-                      const allMaterials = files.filter(f => {
+                      materialsList = files.filter(f => {
                         const ext = (f.name.split('.').pop() || '').toLowerCase();
                         return ext === 'pdf' || ext === 'md' || ext === 'txt' || ext === 'html';
                       });
-
-                      // ★ FASE 1: Procurar TRANSCRIÇÃO (arquivos com "transcri" no nome, ou .txt/.md)
-                      let transcriptionFiles = allMaterials.filter(f => {
-                        const ext = (f.name.split('.').pop() || '').toLowerCase();
-                        const lowName = f.name.toLowerCase();
-                        // Transcrição = nome tem "transcri" OU é .txt/.md (geralmente são transcrições)
-                        return lowName.includes('transcri') || ext === 'txt' || ext === 'md';
+                      // ★ Transcription-priority: arquivos com "transcri" primeiro
+                      materialsList.sort((a, b) => {
+                        const at = /transcri/i.test(a.name) ? 0 : 1;
+                        const bt = /transcri/i.test(b.name) ? 0 : 1;
+                        return at - bt;
                       });
-
-                      // Se não achou na pasta principal, procurar em subpastas (especialmente "material")
-                      if (transcriptionFiles.length === 0) {
-                        const subs = files.filter(f => f.mimeType === 'application/vnd.google-apps.folder').slice(0, 5);
-                        for (const sf of subs) {
-                          const fp = lessonPath + encodeURIComponent(sf.name) + '/';
-                          const subFiles = await window.gdiListAllFiles(fp, '');
-                          const subTransc = subFiles.filter(f => {
-                            const ext = (f.name.split('.').pop() || '').toLowerCase();
-                            const lowName = f.name.toLowerCase();
-                            return lowName.includes('transcri') || ext === 'txt' || ext === 'md';
-                          });
-                          if (subTransc.length > 0) {
-                            transcriptionFiles = subTransc;
-                            break;
-                          }
-                        }
-                      }
-
-                      // Se achou transcrição, usar SÓ ELA (não processa PDFs)
-                      if (transcriptionFiles.length > 0) {
-                        setLoading('📝 Transcrição encontrada! Lendo…');
-                        for (const m of transcriptionFiles.slice(0, 2)) {
-                          if (m.link) {
-                            try {
-                              const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
-                              const resp = await fetch(link);
-                              if (resp.ok) {
-                                const text = await resp.text();
-                                materialContent += '\n\n--- Transcrição: ' + m.name + ' ---\n' + text.substring(0, 60000);
-                              }
-                            } catch (e) { /* skip */ }
-                          }
-                        }
-                        if (materialContent.length > 100) {
-                          materialSource = 'transcrição';
-                        }
-                      }
-
-                      // ★ FASE 2: Se NÃO achou transcrição, extrair PDFs
-                      if (materialContent.length < 100) {
-                        setLoading('📄 Sem transcrição. Extraindo material em PDF…');
-                        let pdfFiles = allMaterials.filter(f => {
-                          const ext = (f.name.split('.').pop() || '').toLowerCase();
-                          return ext === 'pdf';
-                        });
-                        // Se não achou PDF na pasta principal, procurar em subpastas
-                        if (pdfFiles.length === 0) {
-                          const subs = files.filter(f => f.mimeType === 'application/vnd.google-apps.folder').slice(0, 5);
-                          for (const sf of subs) {
-                            const fp = lessonPath + encodeURIComponent(sf.name) + '/';
-                            const subFiles = await window.gdiListAllFiles(fp, '');
-                            const subPdfs = subFiles.filter(f => {
-                              const ext = (f.name.split('.').pop() || '').toLowerCase();
-                              return ext === 'pdf';
-                            });
-                            if (subPdfs.length > 0) {
-                              pdfFiles = subPdfs;
-                              break;
-                            }
-                          }
-                        }
-                        for (const m of pdfFiles.slice(0, 3)) {
+                      for (const m of materialsList.slice(0, 3)) {
+                        const ext = (m.name.split('.').pop() || '').toLowerCase();
+                        if (ext === 'pdf') {
+                          // ★ Extrair texto do PDF usando pdf.js (não apenas placeholder)
                           setLoading('📄 Extraindo texto do PDF: ' + m.name + '…');
                           if (m.link) {
                             const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
                             const pdfText = await Shell._extractPdfText(link);
                             if (pdfText && pdfText.length > 50) {
-                              materialContent += '\n\n--- Material PDF: ' + m.name + ' ---\n' + pdfText.substring(0, 40000);
+                              materialContent += '\n\n--- ' + m.name + ' ---\n' + pdfText.substring(0, 40000);
                             } else {
                               materialContent += '\n[Material PDF: ' + m.name + ' (não foi possível extrair texto — pode ser escaneado)]';
                             }
                           }
-                        }
-                        if (materialContent.length > 100) {
-                          materialSource = 'PDF';
+                        } else if (m.link) {
+                          try {
+                            const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
+                            const resp = await fetch(link);
+                            if (resp.ok) {
+                              const text = await resp.text();
+                              materialContent += '\n\n--- ' + m.name + ' ---\n' + text.substring(0, 30000);
+                            }
+                          } catch (e) { /* skip */ }
                         }
                       }
                     }
                   } catch (e) { console.warn('[Shell] material extract:', e); }
+
+                  // ★ Subpastas (especialmente "material") se não encontrou conteúdo suficiente
+                  if (materialContent.length < 200 && window.gdiListAllFiles && lessonPath) {
+                    try {
+                      const files = await window.gdiListAllFiles(lessonPath, '');
+                      const subs = files.filter(f => f.mimeType === 'application/vnd.google-apps.folder').slice(0, 5);
+                      for (const sf of subs) {
+                        const fp = lessonPath + encodeURIComponent(sf.name) + '/';
+                        const subFiles = await window.gdiListAllFiles(fp, '');
+                        const subMats = subFiles.filter(f => {
+                          const ext = (f.name.split('.').pop() || '').toLowerCase();
+                          return ext === 'pdf' || ext === 'md' || ext === 'txt';
+                        });
+                        for (const m of subMats.slice(0, 3)) {
+                          const ext = (m.name.split('.').pop() || '').toLowerCase();
+                          if (ext === 'pdf' && m.link) {
+                            setLoading('📄 Extraindo PDF da subpasta: ' + m.name + '…');
+                            const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
+                            const pdfText = await Shell._extractPdfText(link);
+                            if (pdfText && pdfText.length > 50) {
+                              materialContent += '\n\n--- ' + m.name + ' ---\n' + pdfText.substring(0, 30000);
+                            }
+                          } else if (m.link) {
+                            try {
+                              const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
+                              const resp = await fetch(link);
+                              if (resp.ok) {
+                                const text = await resp.text();
+                                materialContent += '\n\n--- ' + m.name + ' ---\n' + text.substring(0, 20000);
+                              }
+                            } catch (e) { /* skip */ }
+                          }
+                        }
+                        if (materialContent.length > 200) break;
+                      }
+                    } catch (e) { /* skip */ }
+                  }
 
                   if (materialContent.length > 80000) {
                     materialContent = materialContent.substring(0, 80000) + '\n[...truncado...]';
@@ -1217,11 +1198,13 @@
 
                   const courseName = lessonPath.split('/').filter(Boolean).slice(-1)[0] || '';
                   const driveName = window.drive_names && window.drive_names[+(lessonPath.split('/')[1] || '0').replace(':','')] || '';
-                  const ctx = 'Aula: ' + lessonName + '\nCurso: ' + courseName + '\nDrive: ' + driveName + (materialSource ? '\nFonte do material: ' + materialSource : '');
+                  const ctx = 'Aula: ' + lessonName + '\nCurso: ' + courseName + '\nDrive: ' + driveName;
                   const hasContent = materialContent.length > 100;
 
                   // ─── 3. generateAll: gerar resumo + pílulas + questões em paralelo ───
-                  setLoading('✨ Gerando resumo + pílulas + questões' + (materialSource ? ' (fonte: ' + materialSource + ')' : '') + '…<br>Isto pode levar 30-60s.');
+                  // Produção gera TUDO de uma vez (Promise.allSettled). Se o usuário pediu só um tipo,
+                  // ainda assim geramos todos (mais eficiente — cache fica completo p/ próximas abas).
+                  setLoading('✨ Gerando resumo + pílulas + questões em cadeia…<br>Isto pode levar 30-60s.');
 
                   const textSlice = hasContent ? materialContent : ctx;
                   const sliceCap = hasContent ? 80000 : 2000;
@@ -2053,463 +2036,432 @@
         el.scrollTop = 0;
       },
 
-      // ★ meggyAIChat: chat da Meggy AI no painel principal (main pane)
-      // v1.0.220: com anexo de arquivos (PDF/imagem/texto) + correção de redação
-      meggyAIChat(el) {
-        el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title"><img src="/modular/shell/meggy-avatar.png" alt="Meggy" style="width:32px;height:32px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:8px;" onerror="this.style.display=\'none\'">Meggy AI</h1>' +
-          '<button class="meggy-header-btn" id="meggy-redacao-btn" style="font-size:13px;background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-pencil-square"></i> Corrigir Redação</button>' +
+      // ═══ Meus Concursos — feature baseada em edital ═══
+
+      concursos(el) {
+        el.innerHTML =
+          '<div class="meggy-view-header">' +
+            '<h1 class="meggy-view-title">📌 Meus Concursos</h1>' +
+            '<button class="meggy-header-btn" id="novo-concurso-btn" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;font-size:13px;">+ Novo Concurso</button>' +
           '</div>' +
-          '<div class="meggy-chat-main">' +
-            '<div class="meggy-chat-messages" id="meggy-chat-messages">' +
-              '<div class="meggy-ai-msg bot">Oi! Sou a <b>Meggy</b> 🐩 — sua poodle tutora de estudos.<br><br>' +
-                'Posso ajudar com:<br>• Explicar um tema da aula<br>• Tirar dúvidas<br>• Sugerir um plano de estudos<br>• <b>Corrigir redações</b> (escritas ou manuscritas)<br><br>' +
-                'Para gerar resumos, questões e flashcards, abra uma aula e use as abas <b>Resumo Meggy</b>, <b>Questões</b>, <b>Pílulas</b> ou <b>Flashcards</b> no player. 🐾' +
-              '</div>' +
-            '</div>' +
-            '<div class="meggy-chat-attachments" id="meggy-chat-attachments" style="display:none;"></div>' +
-            '<div class="meggy-chat-input-bar">' +
-              '<button id="meggy-chat-attach" title="Anexar arquivo (PDF, imagem, texto)" style="width:44px;height:44px;flex-shrink:0;border:none;border-radius:10px;background:rgba(255,255,255,0.06);color:#c9d1d9;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;"><i class="bi bi-paperclip"></i></button>' +
-              '<input type="file" id="meggy-chat-file-input" style="display:none;" accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.txt,.md,.html">' +
-              '<textarea id="meggy-chat-input" placeholder="Pergunte algo à Meggy... (ou anexe um arquivo com o clipe)" rows="2"></textarea>' +
-              '<button id="meggy-chat-send" title="Enviar"><i class="bi bi-send"></i></button>' +
-            '</div>' +
+          '<div id="concursos-container">' +
+            '<div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando...</div></div>' +
           '</div>';
-        Shell._ensureMdLibs();
 
-        // ★ Estado de anexos
-        var attachedFiles = []; // [{name, type, size, text, dataUrl}]
-
-        // ★ Função para renderizar chips de anexos
-        function renderAttachments() {
-          var attDiv = document.getElementById('meggy-chat-attachments');
-          if (!attDiv) return;
-          if (attachedFiles.length === 0) { attDiv.style.display = 'none'; return; }
-          attDiv.style.display = 'flex';
-          attDiv.innerHTML = attachedFiles.map(function(f, i) {
-            var icon = f.type.startsWith('image/') ? 'bi-image' : f.type === 'application/pdf' ? 'bi-file-earmark-pdf' : 'bi-file-earmark-text';
-            return '<div class="meggy-chat-att-chip" data-i="' + i + '">' +
-              '<i class="bi ' + icon + '"></i> ' + Shell._esc(f.name) +
-              ' <span class="meggy-chat-att-remove" data-i="' + i + '"><i class="bi bi-x"></i></span>' +
-            '</div>';
-          }).join('');
-          attDiv.querySelectorAll('.meggy-chat-att-remove').forEach(function(x) {
-            x.onclick = function() {
-              var idx = parseInt(x.dataset.i, 10);
-              attachedFiles.splice(idx, 1);
-              renderAttachments();
-            };
-          });
-        }
-
-        // ★ Função para processar arquivo anexado
-        async function processFile(file) {
-          var name = file.name, type = file.type, size = file.size;
-          var text = '', dataUrl = '';
-          if (type.startsWith('text/') || /\.(txt|md|html)$/i.test(name)) {
-            // Texto: ler direto
-            text = await file.text();
-          } else if (type === 'application/pdf' || /\.pdf$/i.test(name)) {
-            // PDF: extrair texto com pdf.js
-            var url = URL.createObjectURL(file);
-            text = await Shell._extractPdfText(url);
-            URL.revokeObjectURL(url);
-            if (!text || text.length < 30) {
-              throw new Error('Não foi possível extrair texto do PDF. Pode ser escaneado — tente converter para imagem.');
-            }
-          } else if (type.startsWith('image/')) {
-            // Imagem: converter para base64 (para OCR no backend)
-            dataUrl = await new Promise(function(resolve, reject) {
-              var reader = new FileReader();
-              reader.onload = function() { resolve(reader.result); };
-              reader.onerror = reject;
-              reader.readAsDataURL(file);
-            });
+        // Load concursos
+        fetch('/api/concursos/list').then(r => r.json()).then(data => {
+          const container = document.getElementById('concursos-container');
+          if (!container) return;
+          if (!data.ok || !data.concursos || data.concursos.length === 0) {
+            container.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">📌</div><div class="meggy-placeholder-title">Nenhum concurso criado</div><div class="meggy-placeholder-desc">Crie um novo concurso para montar um curso baseado no edital.</div></div>';
           } else {
-            throw new Error('Formato não suportado: ' + type);
+            container.innerHTML = '<div class="meggy-cards-grid">' + data.concursos.map(c => {
+              const progress = c.lessonCount > 0 ? c.lessonCount + ' aulas' : 'Sem aulas';
+              return '<div class="meggy-card" data-concurso-id="' + Shell._esc(c.id) + '">' +
+                '<div class="meggy-card-icon">📌</div>' +
+                '<div class="meggy-card-title">' + Shell._esc(c.name) + '</div>' +
+                '<div class="meggy-card-meta">' + progress + (c.examDate ? ' · 📅 ' + Shell._esc(c.examDate) : '') + '</div>' +
+              '</div>';
+            }).join('') + '</div>';
+
+            container.querySelectorAll('.meggy-card[data-concurso-id]').forEach(card => {
+              card.onclick = () => Shell.views.concursoDetail(el, card.dataset.concursoId);
+            });
           }
-          attachedFiles.push({ name: name, type: type, size: size, text: text, dataUrl: dataUrl });
-          renderAttachments();
-        }
+        }).catch(e => {
+          const c = document.getElementById('concursos-container');
+          if (c) c.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">⚠️</div><div class="meggy-placeholder-title">Erro</div><div class="meggy-placeholder-desc">' + Shell._esc(e.message) + '</div></div>';
+        });
 
-        // ★ Botão anexar
-        var attachBtn = document.getElementById('meggy-chat-attach');
-        var fileInput = document.getElementById('meggy-chat-file-input');
-        if (attachBtn) attachBtn.onclick = function() { fileInput.click(); };
-        if (fileInput) fileInput.onchange = async function(e) {
-          var files = e.target.files;
-          for (var i = 0; i < files.length; i++) {
-            var f = files[i];
-            // Mostrar processando
-            var msgs = document.getElementById('meggy-chat-messages');
-            msgs.insertAdjacentHTML('beforeend', '<div class="meggy-ai-msg bot" id="meggy-att-processing">📄 Processando ' + Shell._esc(f.name) + '...</div>');
-            msgs.scrollTop = msgs.scrollHeight;
-            try {
-              await processFile(f);
-            } catch (err) {
-              var proc = document.getElementById('meggy-att-processing');
-              if (proc) proc.innerHTML = '⚠️ Erro ao processar <b>' + Shell._esc(f.name) + '</b>: ' + Shell._esc(err.message);
-              continue;
-            }
-            var proc2 = document.getElementById('meggy-att-processing');
-            if (proc2) proc2.remove();
-          }
-          fileInput.value = ''; // reset para permitir re-anexar
-        };
-
-        // ★ Drag & drop
-        var main = el.querySelector('.meggy-chat-main');
-        if (main) {
-          main.ondragover = function(e) { e.preventDefault(); main.style.border = '2px dashed #ff8b9f'; };
-          main.ondragleave = function(e) { e.preventDefault(); main.style.border = ''; };
-          main.ondrop = async function(e) {
-            e.preventDefault();
-            main.style.border = '';
-            var files = e.dataTransfer.files;
-            for (var i = 0; i < files.length; i++) {
-              var msgs = document.getElementById('meggy-chat-messages');
-              msgs.insertAdjacentHTML('beforeend', '<div class="meggy-ai-msg bot" id="meggy-att-processing">📄 Processando ' + Shell._esc(files[i].name) + '...</div>');
-              msgs.scrollTop = msgs.scrollHeight;
-              try { await processFile(files[i]); } catch (err) {
-                var p = document.getElementById('meggy-att-processing');
-                if (p) p.innerHTML = '⚠️ Erro: ' + Shell._esc(err.message);
-                continue;
-              }
-              var p2 = document.getElementById('meggy-att-processing');
-              if (p2) p2.remove();
-            }
-          };
-        }
-
-        // ★ Função principal de enviar mensagem
-        var send = async function() {
-          var input = document.getElementById('meggy-chat-input');
-          var msg = input.value.trim();
-          if (!msg && attachedFiles.length === 0) return;
-          var msgs = document.getElementById('meggy-chat-messages');
-
-          // Construir mensagem com anexos
-          var displayMsg = msg;
-          if (attachedFiles.length > 0) {
-            displayMsg = (msg ? msg + ' ' : '') + '[Arquivos anexados: ' + attachedFiles.map(function(f) { return f.name; }).join(', ') + ']';
-          }
-          msgs.insertAdjacentHTML('beforeend', '<div class="meggy-ai-msg user">' + Shell._esc(displayMsg) + '</div>');
-          input.value = '';
-          msgs.insertAdjacentHTML('beforeend', '<div class="meggy-ai-msg bot" id="meggy-chat-typing">🐾 Pensando...</div>');
-          msgs.scrollTop = msgs.scrollHeight;
-
-          try {
-            // Construir prompt completo com conteúdo dos anexos
-            var fullMsg = msg;
-            var filesProcessed = 0;
-            var filesFailed = 0;
-            for (var i = 0; i < attachedFiles.length; i++) {
-              var f = attachedFiles[i];
-              var typing = document.getElementById('meggy-chat-typing');
-              if (typing) typing.innerHTML = '📄 Processando arquivo ' + Shell._esc(f.name) + '...';
-              
-              if (f.text && f.text.length > 30) {
-                // Texto extraído com sucesso
-                fullMsg += '\n\n--- Arquivo: ' + f.name + ' ---\n' + f.text.substring(0, 40000);
-                filesProcessed++;
-              } else if (f.dataUrl) {
-                // Imagem: fazer OCR via /api/ai/ocr
-                if (typing) typing.innerHTML = '🔍 Fazendo OCR da imagem ' + Shell._esc(f.name) + '...';
-                try {
-                  var b64 = f.dataUrl.split(',')[1];
-                  var ocrR = await fetch('/api/ai/ocr', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify({ image: b64, prompt: 'Transcreva TODO o texto desta imagem (redação manuscrita, documento, etc). Responda apenas com o texto transcrito.' })
-                  });
-                  var ocrD = await ocrR.json();
-                  if (ocrD.ok && ocrD.response) {
-                    fullMsg += '\n\n--- Imagem: ' + f.name + ' (OCR) ---\n' + ocrD.response;
-                    filesProcessed++;
-                  } else {
-                    fullMsg += '\n\n[Imagem ' + f.name + ': OCR falhou - ' + (ocrD.error || 'erro desconhecido') + ']';
-                    filesFailed++;
-                  }
-                } catch (ocrErr) {
-                  fullMsg += '\n\n[Imagem ' + f.name + ': erro de OCR - ' + ocrErr.message + ']';
-                  filesFailed++;
-                }
-              } else {
-                // Arquivo sem texto extraído
-                fullMsg += '\n\n[Arquivo ' + f.name + ': não foi possível extrair texto. O arquivo pode ser escaneado ou estar em formato não suportado.]';
-                filesFailed++;
-              }
-            }
-
-            // Se há anexos mas nenhum foi processado com sucesso, avisar
-            if (attachedFiles.length > 0 && filesProcessed === 0) {
-              var t_warn = document.getElementById('meggy-chat-typing');
-              if (t_warn) t_warn.innerHTML = '⚠️ Não foi possível ler o conteúdo dos arquivos anexados. ' + (filesFailed > 0 ? filesFailed + ' arquivo(s) falharam.' : '') + '<br><br>O PDF pode ser escaneado (imagem em vez de texto). Tente:<br>• Converter para texto<br>• Tirar foto e enviar como imagem<br>• Copiar e colar o texto diretamente';
-              attachedFiles = [];
-              renderAttachments();
-              msgs.scrollTop = msgs.scrollHeight;
-              return;
-            }
-
-            // Enviar para /api/ai (handleAi = Promise.any paralelo, rápido)
-            // ★ Retry: tentar até 3 vezes se a IA falhar (backends podem ser intermitentes)
-            var typing2 = document.getElementById('meggy-chat-typing');
-            if (typing2) typing2.innerHTML = '🐾 Lendo ' + filesProcessed + ' arquivo(s) e pensando...';
-            var r, d = { ok: false, response: '', error: '' };
-            for (var attempt = 1; attempt <= 3; attempt++) {
-              try {
-                if (typing2) typing2.innerHTML = '🐾 Processando' + (attempt > 1 ? ' (tentativa ' + attempt + ')' : '') + '...';
-                var _ctrl = new AbortController();
-                var _to = setTimeout(function() { _ctrl.abort(); }, 30000); // 30s timeout
-                r = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ message: fullMsg, messages: [] }), signal: _ctrl.signal });
-                clearTimeout(_to);
-                d = await r.json();
-                if (d.ok && d.response) break; // sucesso
-              } catch (retryErr) {
-                d = { ok: false, error: retryErr.name === 'AbortError' ? 'Timeout' : retryErr.message };
-              }
-              if (attempt < 3) await new Promise(function(r){ setTimeout(r, 2000); }); // espera 2s antes de tentar de novo
-            }
-            var resp = d.response || 'Sem resposta da IA. Tente novamente em alguns instantes.';
-            if (!d.ok && d.error) resp = '⚠️ Erro: ' + d.error + '\n\nTente novamente — os backends de IA podem estar sobrecarregados.';
-            var html = resp;
-            if (window.marked) { try { html = window.marked.parse(resp); if (window.DOMPurify) html = window.DOMPurify.sanitize(html); } catch (_) {} }
-            var t = document.getElementById('meggy-chat-typing');
-            if (t) t.innerHTML = html;
-
-            // Limpar anexos após envio
-            attachedFiles = [];
-            renderAttachments();
-          } catch (e) {
-            var t2 = document.getElementById('meggy-chat-typing');
-            if (t2) t2.textContent = 'Erro: ' + e.message;
-          }
-          msgs.scrollTop = msgs.scrollHeight;
-        };
-
-        document.getElementById('meggy-chat-send').onclick = send;
-        document.getElementById('meggy-chat-input').onkeydown = function(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
-
-        // ★ Botão Corrigir Redação
-        var redBtn = document.getElementById('meggy-redacao-btn');
-        if (redBtn) redBtn.onclick = function() { Shell.views._showRedacaoDialog(el); };
+        const novoBtn = document.getElementById('novo-concurso-btn');
+        if (novoBtn) novoBtn.onclick = () => Shell.views.showConcursoWizard(el);
       },
 
-      // ★ _showRedacaoDialog: modal de correção de redação
-      _showRedacaoDialog(parentEl) {
-        var modal = document.getElementById('meggy-redacao-modal');
-        if (!modal) {
-          modal = document.createElement('div');
-          modal.id = 'meggy-redacao-modal';
-          modal.className = 'meggy-modal-overlay';
-          modal.innerHTML = '<div class="meggy-modal-content" style="max-width:700px;">' +
-            '<div class="meggy-modal-header">' +
-              '<div class="meggy-modal-title"><i class="bi bi-pencil-square"></i> Corrigir Redação</div>' +
-              '<button class="meggy-ai-drawer-close" id="meggy-redacao-close"><i class="bi bi-x"></i></button>' +
-            '</div>' +
-            '<div style="padding:20px;">' +
-              '<div style="margin-bottom:16px;">' +
-                '<label style="display:block;margin-bottom:6px;font-size:13px;color:#9aa4b8;font-weight:600;">Banca:</label>' +
-                '<select id="meggy-redacao-banca" style="width:100%;padding:10px 12px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e6edf3;font-size:14px;">' +
-                  '<option value="default">Selecione a banca...</option>' +
-                  '<option value="CEBRASPE (CESPE)">CEBRASPE (CESPE)</option>' +
-                  '<option value="FGV">FGV</option>' +
-                  '<option value="VUNESP">VUNESP</option>' +
-                  '<option value="ENEM (5 competências)">ENEM (5 competências)</option>' +
-                  '<option value="FUVEST (dissertativa)">FUVEST (dissertativa)</option>' +
-                '</select>' +
+      // ═══ Wizard: criar concurso em 4 passos ═══
+      showConcursoWizard(el) {
+        let modal = document.getElementById('concurso-wizard');
+        if (modal) modal.remove();
+        modal = document.createElement('div');
+        modal.id = 'concurso-wizard';
+        modal.className = 'meggy-modal-overlay';
+        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:10002;padding:20px;';
+
+        let step = 1;
+        let concursoId = null;
+        let concursoName = '';
+        let selectedFolders = [];
+        let disciplinas = [];
+        let scanResult = null;
+
+        function closeModal() { if (modal && modal.parentNode) modal.parentNode.removeChild(modal); }
+
+        function render() {
+          const stepTitle = '📌 Novo Concurso — Passo ' + step + ' de 4';
+          let bodyHTML = '';
+          let footerHTML = '';
+
+          if (step === 1) {
+            bodyHTML =
+              '<div style="font-size:13px;color:#9aa4b8;margin-bottom:12px;">Dê um nome ao concurso e informe a data da prova. A Meggy 🐩 vai montar um curso personalizado com base no edital.</div>' +
+              '<div style="margin-bottom:12px;">' +
+                '<label style="display:block;font-size:12px;color:#9aa4b8;margin-bottom:6px;">Nome do concurso *</label>' +
+                '<input id="cw-name" type="text" placeholder="Ex: Concurso TJ-SP 2026" value="' + Shell._esc(concursoName) + '" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#e6edf3;font-size:14px;box-sizing:border-box;" />' +
               '</div>' +
-              '<div style="margin-bottom:16px;">' +
-                '<label style="display:block;margin-bottom:6px;font-size:13px;color:#9aa4b8;font-weight:600;">Tipo:</label>' +
-                '<select id="meggy-redacao-tipo" style="width:100%;padding:10px 12px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e6edf3;font-size:14px;">' +
-                  '<option value="dissertativa">Dissertativa</option>' +
-                  '<option value="narrativa">Narrativa</option>' +
-                  '<option value="descritiva">Descritiva</option>' +
-                  '<option value="carta">Carta</option>' +
-                  '<option value="artigo">Artigo</option>' +
-                '</select>' +
+              '<div style="margin-bottom:12px;">' +
+                '<label style="display:block;font-size:12px;color:#9aa4b8;margin-bottom:6px;">Data da prova</label>' +
+                '<input id="cw-examdate" type="date" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#e6edf3;font-size:14px;box-sizing:border-box;" />' +
               '</div>' +
-              '<div style="margin-bottom:16px;">' +
-                '<label style="display:block;margin-bottom:6px;font-size:13px;color:#9aa4b8;font-weight:600;">Anexar redação (PDF, imagem manuscrita, ou texto):</label>' +
-                '<div id="meggy-redacao-dropzone" style="border:2px dashed rgba(255,139,159,0.3);border-radius:12px;padding:30px;text-align:center;cursor:pointer;transition:all 0.15s;background:rgba(255,139,159,0.04);">' +
-                  '<i class="bi bi-cloud-upload" style="font-size:36px;color:#ff8b9f;"></i>' +
-                  '<div style="margin-top:10px;font-size:14px;color:#9aa4b8;">Clique ou arraste o arquivo aqui</div>' +
-                  '<div style="font-size:11px;color:#6b7488;margin-top:4px;">PDF, PNG, JPG, TXT (redação manuscrita escaneada também funciona)</div>' +
+              '<div style="margin-bottom:12px;">' +
+                '<label style="display:block;font-size:12px;color:#9aa4b8;margin-bottom:6px;">Horas de estudo por dia</label>' +
+                '<input id="cw-dailyhours" type="number" min="1" max="16" value="4" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#e6edf3;font-size:14px;box-sizing:border-box;" />' +
+              '</div>';
+            footerHTML =
+              '<button class="meggy-header-btn" id="cw-cancel">Cancelar</button>' +
+              '<button class="meggy-header-btn" id="cw-next" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">Criar e Continuar →</button>';
+          } else if (step === 2) {
+            bodyHTML =
+              '<div style="font-size:13px;color:#9aa4b8;margin-bottom:12px;">Cole abaixo o texto do edital (ou trecho relevante). A Meggy 🐩 vai identificar disciplinas, pesos e incidência.</div>' +
+              '<textarea id="cw-edital" placeholder="Cole aqui o texto do edital..." style="width:100%;min-height:240px;padding:12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#e6edf3;font-size:13px;font-family:monospace;box-sizing:border-box;resize:vertical;"></textarea>' +
+              '<div style="margin-top:8px;font-size:11px;color:#6b7488;">💡 Dica: você pode pular esta etapa. O scan vai identificar as disciplinas pelos nomes das pastas.</div>';
+            footerHTML =
+              '<button class="meggy-header-btn" id="cw-back">← Voltar</button>' +
+              '<div style="display:flex;gap:8px;">' +
+                '<button class="meggy-header-btn" id="cw-skip">Pular</button>' +
+                '<button class="meggy-header-btn" id="cw-analyze" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">🔍 Analisar Edital</button>' +
+              '</div>';
+          } else if (step === 3) {
+            let discHTML = '';
+            if (disciplinas && disciplinas.length > 0) {
+              discHTML = '<div style="margin-bottom:16px;"><div style="font-size:12px;color:#9aa4b8;margin-bottom:8px;">Disciplinas identificadas (' + disciplinas.length + '):</div><div style="display:flex;flex-direction:column;gap:6px;">';
+              disciplinas.forEach(d => {
+                const incColor = d.incidencia === 'altissima' ? '#ff6b6b' : d.incidencia === 'alta' ? '#ffd43b' : '#5ddeda';
+                discHTML += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:6px;">' +
+                  '<span style="flex:1;color:#e6edf3;font-size:13px;font-weight:500;">' + Shell._esc(d.nome) + '</span>' +
+                  (d.peso != null ? '<span style="background:rgba(93,222,218,0.12);color:#5ddeda;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;">' + Shell._esc(d.peso) + ' questões</span>' : '') +
+                  (d.incidencia ? '<span style="background:' + incColor + '22;color:' + incColor + ';padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;">' + Shell._esc(d.incidencia) + '</span>' : '') +
+                '</div>';
+              });
+              discHTML += '</div></div>';
+            } else {
+              discHTML = '<div style="margin-bottom:16px;padding:10px;background:rgba(255,212,59,0.06);border:1px solid rgba(255,212,59,0.2);border-radius:8px;font-size:12px;color:#ffd43b;">⚠️ Edital não analisado. O scan vai tentar identificar as disciplinas pelos nomes das pastas.</div>';
+            }
+
+            const drives = window.drive_names || [];
+            let drivesHTML = '';
+            if (drives.length === 0) {
+              drivesHTML = '<div style="padding:20px;text-align:center;color:#6b7488;font-size:13px;">Nenhum drive disponível.</div>';
+            } else {
+              drivesHTML = '<div style="display:flex;flex-direction:column;gap:6px;">';
+              drives.forEach((name, i) => {
+                const dp = '/' + i + ':/';
+                const checked = selectedFolders.indexOf(dp) >= 0 ? 'checked' : '';
+                drivesHTML += '<label style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;cursor:pointer;">' +
+                  '<input type="checkbox" class="cw-drive-cb" data-path="' + Shell._esc(dp) + '" ' + checked + ' style="width:18px;height:18px;accent-color:#c026d3;" />' +
+                  '<span style="font-size:18px;">☁️</span>' +
+                  '<span style="flex:1;color:#e6edf3;font-size:13px;font-weight:500;">' + Shell._esc(name) + '</span>' +
+                  '<span style="color:#6b7488;font-size:11px;">' + Shell._esc(dp) + '</span>' +
+                '</label>';
+              });
+              drivesHTML += '</div>';
+            }
+
+            bodyHTML =
+              '<div style="font-size:13px;color:#9aa4b8;margin-bottom:12px;">Selecione os drives onde estão suas aulas. O sistema vai escanear e vincular às disciplinas.</div>' +
+              discHTML +
+              '<div style="font-size:12px;color:#9aa4b8;margin-bottom:8px;">Drives disponíveis:</div>' +
+              drivesHTML;
+            footerHTML =
+              '<button class="meggy-header-btn" id="cw-back">← Voltar</button>' +
+              '<button class="meggy-header-btn" id="cw-scan" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">📡 Escanear Drives</button>';
+          } else if (step === 4) {
+            const r = scanResult || {};
+            const totalFound = r.totalFound || 0;
+            const totalMatched = r.totalMatched || 0;
+            const byDisc = r.byDiscipline || {};
+            let byDiscHTML = '';
+            const discNames = Object.keys(byDisc);
+            if (discNames.length > 0) {
+              byDiscHTML = '<div style="margin-top:16px;font-size:12px;color:#9aa4b8;margin-bottom:8px;">Aulas por disciplina:</div><div style="display:flex;flex-direction:column;gap:4px;">';
+              discNames.forEach(n => {
+                byDiscHTML += '<div style="display:flex;justify-content:space-between;padding:6px 10px;background:rgba(255,255,255,0.03);border-radius:6px;font-size:12px;"><span style="color:#e6edf3;">' + Shell._esc(n) + '</span><span style="color:#5ddeda;font-weight:600;">' + byDisc[n] + ' aulas</span></div>';
+              });
+              byDiscHTML += '</div>';
+            }
+
+            bodyHTML =
+              '<div style="text-align:center;padding:20px 0;">' +
+                '<div style="font-size:48px;margin-bottom:8px;">✅</div>' +
+                '<div style="font-size:18px;color:#e6edf3;font-weight:600;margin-bottom:4px;">Scan concluído!</div>' +
+                '<div style="font-size:13px;color:#9aa4b8;">' + Shell._esc(concursoName) + ' está pronto para estudo.</div>' +
+              '</div>' +
+              '<div style="display:flex;gap:12px;justify-content:center;margin-bottom:16px;">' +
+                '<div style="flex:1;padding:14px;background:rgba(93,222,218,0.08);border:1px solid rgba(93,222,218,0.2);border-radius:10px;text-align:center;">' +
+                  '<div style="font-size:24px;font-weight:700;color:#5ddeda;">' + totalFound + '</div>' +
+                  '<div style="font-size:11px;color:#9aa4b8;">Aulas encontradas</div>' +
                 '</div>' +
-                '<input type="file" id="meggy-redacao-file" style="display:none;" accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.txt,.md,.html">' +
-                '<div id="meggy-redacao-fileinfo" style="display:none;margin-top:10px;padding:10px 12px;background:rgba(255,139,159,0.08);border:1px solid rgba(255,139,159,0.2);border-radius:8px;font-size:13px;color:#ff8b9f;"></div>' +
+                '<div style="flex:1;padding:14px;background:rgba(255,139,159,0.08);border:1px solid rgba(255,139,159,0.2);border-radius:10px;text-align:center;">' +
+                  '<div style="font-size:24px;font-weight:700;color:#ff8b9f;">' + totalMatched + '</div>' +
+                  '<div style="font-size:11px;color:#9aa4b8;">Aulas vinculadas</div>' +
+                '</div>' +
               '</div>' +
-              '<div style="margin-bottom:16px;">' +
-                '<label style="display:block;margin-bottom:6px;font-size:13px;color:#9aa4b8;font-weight:600;">Ou cole o texto da redação:</label>' +
-                '<textarea id="meggy-redacao-text" placeholder="Cole aqui o texto da sua redação..." rows="6" style="width:100%;padding:12px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e6edf3;font-size:14px;font-family:inherit;resize:vertical;"></textarea>' +
+              byDiscHTML;
+            footerHTML =
+              '<button class="meggy-header-btn" id="cw-close-early">Fechar</button>' +
+              '<button class="meggy-header-btn" id="cw-view-course" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">📚 Ver Curso</button>';
+          }
+
+          modal.innerHTML =
+            '<div class="meggy-modal-content" style="max-width:600px;width:100%;max-height:90vh;overflow-y:auto;background:#161b22;border:1px solid rgba(255,255,255,0.08);border-radius:14px;">' +
+              '<div class="meggy-modal-header" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.06);">' +
+                '<div class="meggy-modal-title" style="font-size:15px;font-weight:600;color:#e6edf3;">' + stepTitle + '</div>' +
+                '<button id="cw-x" style="background:none;border:none;color:#9aa4b8;font-size:22px;cursor:pointer;line-height:1;padding:0 4px;">×</button>' +
               '</div>' +
-              '<div id="meggy-redacao-result" style="display:none;margin-bottom:16px;max-height:300px;overflow-y:auto;padding:14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;font-size:13px;"></div>' +
-              '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
-                '<button class="meggy-header-btn" id="meggy-redacao-cancel">Cancelar</button>' +
-                '<button class="meggy-header-btn" id="meggy-redacao-submit" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-check-lg"></i> Corrigir Redação</button>' +
-              '</div>' +
-            '</div>' +
-          '</div>';
-          var shellRoot = document.getElementById('meggy-shell') || document.getElementById('meggy-root') || document.body;
-          shellRoot.appendChild(modal);
-          document.getElementById('meggy-redacao-close').onclick = function() { modal.style.display = 'none'; };
-          document.getElementById('meggy-redacao-cancel').onclick = function() { modal.style.display = 'none'; };
+              '<div id="cw-body" style="padding:16px;">' + bodyHTML + '</div>' +
+              '<div id="cw-footer" style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">' + footerHTML + '</div>' +
+            '</div>';
+
+          // Close button (always present)
+          const xBtn = document.getElementById('cw-x');
+          if (xBtn) xBtn.onclick = closeModal;
+
+          // Step-specific wiring
+          if (step === 1) {
+            const cancelBtn = document.getElementById('cw-cancel');
+            if (cancelBtn) cancelBtn.onclick = closeModal;
+            const nextBtn = document.getElementById('cw-next');
+            if (nextBtn) nextBtn.onclick = async () => {
+              const name = (document.getElementById('cw-name').value || '').trim();
+              const examDate = document.getElementById('cw-examdate').value || '';
+              const dailyHours = parseInt(document.getElementById('cw-dailyhours').value, 10) || 4;
+              if (!name) { alert('Informe o nome do concurso'); return; }
+              nextBtn.disabled = true;
+              nextBtn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Criando...';
+              try {
+                const r = await fetch('/api/concursos/create', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ name, examDate, dailyHours })
+                });
+                const d = await r.json();
+                if (d.ok) {
+                  concursoId = d.concursoId;
+                  concursoName = name;
+                  step = 2;
+                  render();
+                } else {
+                  alert('Erro: ' + (d.error || 'tente novamente'));
+                  nextBtn.disabled = false;
+                  nextBtn.innerHTML = 'Criar e Continuar →';
+                }
+              } catch (e) {
+                alert('Erro: ' + e.message);
+                nextBtn.disabled = false;
+                nextBtn.innerHTML = 'Criar e Continuar →';
+              }
+            };
+          } else if (step === 2) {
+            const backBtn = document.getElementById('cw-back');
+            if (backBtn) backBtn.onclick = () => { step = 1; render(); };
+            const skipBtn = document.getElementById('cw-skip');
+            if (skipBtn) skipBtn.onclick = () => { step = 3; render(); };
+            const analyzeBtn = document.getElementById('cw-analyze');
+            if (analyzeBtn) analyzeBtn.onclick = async () => {
+              const editalText = (document.getElementById('cw-edital').value || '').trim();
+              if (!editalText) { alert('Cole o texto do edital'); return; }
+              if (editalText.length < 50) { alert('Texto muito curto. Cole ao menos um trecho relevante do edital.'); return; }
+              analyzeBtn.disabled = true;
+              analyzeBtn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Analisando...';
+              try {
+                const r = await fetch('/api/concursos/' + encodeURIComponent(concursoId) + '/analyze-edital', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ editalText })
+                });
+                const d = await r.json();
+                if (d.ok) {
+                  disciplinas = d.disciplinas || [];
+                  step = 3;
+                  render();
+                } else {
+                  alert('Erro: ' + (d.error || 'tente novamente'));
+                  analyzeBtn.disabled = false;
+                  analyzeBtn.innerHTML = '🔍 Analisar Edital';
+                }
+              } catch (e) {
+                alert('Erro: ' + e.message);
+                analyzeBtn.disabled = false;
+                analyzeBtn.innerHTML = '🔍 Analisar Edital';
+              }
+            };
+          } else if (step === 3) {
+            const backBtn = document.getElementById('cw-back');
+            if (backBtn) backBtn.onclick = () => { step = 2; render(); };
+            modal.querySelectorAll('.cw-drive-cb').forEach(cb => {
+              cb.onchange = () => {
+                const p = cb.dataset.path;
+                if (cb.checked) {
+                  if (selectedFolders.indexOf(p) < 0) selectedFolders.push(p);
+                } else {
+                  selectedFolders = selectedFolders.filter(x => x !== p);
+                }
+              };
+            });
+            const scanBtn = document.getElementById('cw-scan');
+            if (scanBtn) scanBtn.onclick = async () => {
+              if (selectedFolders.length === 0) { alert('Selecione ao menos um drive'); return; }
+              scanBtn.disabled = true;
+              scanBtn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Escaneando...';
+              try {
+                const r = await fetch('/api/concursos/' + encodeURIComponent(concursoId) + '/scan', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ folderPaths: selectedFolders })
+                });
+                const d = await r.json();
+                if (d.ok) {
+                  scanResult = d;
+                  step = 4;
+                  render();
+                } else {
+                  alert('Erro: ' + (d.error || 'tente novamente'));
+                  scanBtn.disabled = false;
+                  scanBtn.innerHTML = '📡 Escanear Drives';
+                }
+              } catch (e) {
+                alert('Erro: ' + e.message);
+                scanBtn.disabled = false;
+                scanBtn.innerHTML = '📡 Escanear Drives';
+              }
+            };
+          } else if (step === 4) {
+            const closeEarly = document.getElementById('cw-close-early');
+            if (closeEarly) closeEarly.onclick = () => { closeModal(); Shell.views.concursos(el); };
+            const viewBtn = document.getElementById('cw-view-course');
+            if (viewBtn) viewBtn.onclick = () => { closeModal(); Shell.views.concursoDetail(el, concursoId); };
+          }
         }
-        modal.style.display = 'flex';
 
-        var selectedFile = null;
-        var dropzone = document.getElementById('meggy-redacao-dropzone');
-        var fileInput = document.getElementById('meggy-redacao-file');
-        var fileInfo = document.getElementById('meggy-redacao-fileinfo');
-        var resultDiv = document.getElementById('meggy-redacao-result');
-        var submitBtn = document.getElementById('meggy-redacao-submit');
+        render();
+        const shellRoot = document.getElementById('meggy-shell') || document.getElementById('meggy-root') || document.body;
+        shellRoot.appendChild(modal);
+      },
 
-        // Dropzone click
-        dropzone.onclick = function() { fileInput.click(); };
-        dropzone.ondragover = function(e) { e.preventDefault(); dropzone.style.borderColor = '#ff8b9f'; dropzone.style.background = 'rgba(255,139,159,0.1)'; };
-        dropzone.ondragleave = function(e) { e.preventDefault(); dropzone.style.borderColor = 'rgba(255,139,159,0.3)'; dropzone.style.background = 'rgba(255,139,159,0.04)'; };
-        dropzone.ondrop = function(e) {
-          e.preventDefault();
-          dropzone.style.borderColor = 'rgba(255,139,159,0.3)';
-          dropzone.style.background = 'rgba(255,139,159,0.04)';
-          if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
-        };
-        fileInput.onchange = function(e) { if (e.target.files.length > 0) handleFile(e.target.files[0]); };
+      // ═══ Detail: curso montado de um concurso ═══
+      concursoDetail(el, concursoId) {
+        el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">📌 Carregando...</h1><button class="meggy-header-btn" onclick="Shell.router.navigate(\'/concursos\')">← Voltar</button></div><div class="meggy-loading"><div class="spinner-border"></div></div>';
 
-        function handleFile(f) {
-          selectedFile = f;
-          var sizeStr = (f.size / 1024).toFixed(1) + ' KB';
-          var icon = f.type.startsWith('image/') ? 'bi-image' : f.type === 'application/pdf' ? 'bi-file-earmark-pdf' : 'bi-file-earmark-text';
-          fileInfo.style.display = 'block';
-          fileInfo.innerHTML = '<i class="bi ' + icon + '"></i> <b>' + Shell._esc(f.name) + '</b> (' + sizeStr + ')';
-        }
-
-        // Submit
-        submitBtn.onclick = async function() {
-          var banca = document.getElementById('meggy-redacao-banca').value;
-          var tipo = document.getElementById('meggy-redacao-tipo').value;
-          var text = document.getElementById('meggy-redacao-text').value.trim();
-          if (!selectedFile && text.length < 50) {
-            resultDiv.style.display = 'block';
-            resultDiv.innerHTML = '<div style="color:#ff8b9f;">⚠️ Envie um arquivo ou cole o texto (mínimo 50 caracteres).</div>';
+        fetch('/api/concursos/' + encodeURIComponent(concursoId)).then(r => r.json()).then(data => {
+          if (!data.ok) {
+            el.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">⚠️</div><div class="meggy-placeholder-title">Erro</div><div class="meggy-placeholder-desc">' + Shell._esc(data.error || 'Concurso não encontrado') + '</div></div>';
             return;
           }
+          const c = data.concurso || {};
+          let html = '<div class="meggy-view-header">' +
+            '<h1 class="meggy-view-title">📌 ' + Shell._esc(c.name) + '</h1>' +
+            '<button class="meggy-header-btn" onclick="Shell.router.navigate(\'/concursos\')">← Voltar</button>' +
+          '</div>';
 
-          submitBtn.disabled = true;
-          submitBtn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Corrigindo...';
-          resultDiv.style.display = 'block';
-          resultDiv.innerHTML = '<div style="text-align:center;padding:20px;"><div class="spinner-border" style="color:#ff8b9f;"></div><div style="margin-top:10px;color:#9aa4b8;">' + (selectedFile ? '📄 Extraindo texto e corrigindo...' : '✍️ Corrigindo redação...') + '</div></div>';
-
-          try {
-            var r;
-            // Extrair texto do arquivo se necessário
-            var essayText = text;
-            if (selectedFile) {
-              if (selectedFile.type === 'application/pdf' || /\.pdf$/i.test(selectedFile.name)) {
-                var url = URL.createObjectURL(selectedFile);
-                var pdfText = await Shell._extractPdfText(url);
-                URL.revokeObjectURL(url);
-                if (!pdfText || pdfText.length < 50) {
-                  throw new Error('Não foi possível extrair texto do PDF. Tente enviar como imagem ou cole o texto manualmente.');
-                }
-                essayText = pdfText;
-              } else if (selectedFile.type.startsWith('image/')) {
-                // Imagem: tentar OCR com Tesseract.js (client-side)
-                resultDiv.innerHTML = '<div style="text-align:center;padding:20px;"><div class="spinner-border" style="color:#ff8b9f;"></div><div style="margin-top:10px;color:#9aa4b8;">🔍 Fazendo OCR da imagem (Tesseract.js)...</div></div>';
-                try {
-                  // Carregar Tesseract.js dinamicamente
-                  if (!window.Tesseract) {
-                    await new Promise(function(resolve, reject) {
-                      var s = document.createElement('script');
-                      s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-                      s.onload = resolve;
-                      s.onerror = reject;
-                      document.head.appendChild(s);
-                    });
-                  }
-                  var imgURL = URL.createObjectURL(selectedFile);
-                  var ocrResult = await window.Tesseract.recognize(imgURL, 'por', { logger: function(m) { console.log('[OCR]', m.status, m.progress); } });
-                  URL.revokeObjectURL(imgURL);
-                  essayText = ocrResult.data.text || '';
-                  if (essayText.length < 50) {
-                    throw new Error('OCR não conseguiu extrair texto suficiente da imagem. Tente uma imagem mais nítida ou cole o texto manualmente.');
-                  }
-                } catch (ocrErr) {
-                  throw new Error('OCR falhou: ' + ocrErr.message + '. Tente colar o texto manualmente.');
-                }
-              } else if (selectedFile.type.startsWith('text/')) {
-                essayText = await selectedFile.text();
-              }
-            }
-
-            if (!essayText || essayText.length < 50) {
-              throw new Error('Texto muito curto (mínimo 50 caracteres). Envie um arquivo ou cole o texto.');
-            }
-
-            // Enviar para /api/ai (handleAi = Promise.any paralelo, rápido) em vez de /api/ai/redacao (callUnifiedAi sequencial, lento)
-            resultDiv.innerHTML = '<div style="text-align:center;padding:20px;"><div class="spinner-border" style="color:#ff8b9f;"></div><div style="margin-top:10px;color:#9aa4b8;">✍️ Corrigindo redação...</div></div>';
-            var BANCA_CRITERIA = {
-              'CEBRASPE (CESPE)': 'CEBRASPE/CESPE escala 0-10: adequação ao tema, estrutura, desenvolvimento, coesão, gramática. Desclassifica se fuga ao tema.',
-              'FGV': 'FGV 0-10: conteúdo (0-5), estrutura (0-3), linguagem (0-2).',
-              'VUNESP': 'VUNESP 0-10: tema/conteúdo (0-4), estrutura (0-3), norma culta (0-3).',
-              'ENEM (5 competências)': 'ENEM 5 competências (0-200 cada, total 0-1000).',
-              'FUVEST (dissertativa)': 'FUVEST 0-100: conteúdo (0-50), estrutura (0-30), linguagem (0-20).',
-              'default': 'Critérios gerais de concurso público brasileiro.'
-            };
-            var criterios = BANCA_CRITERIA[banca] || BANCA_CRITERIA['default'];
-            var redacaoPrompt = 'Você é um corretor de redações experiente. Corrija esta redação (banca: ' + banca + ', tipo: ' + tipo + ').\n\nCRITÉRIOS: ' + criterios + '\n\nFORMATO Markdown:\n## Nota Geral: X/10\n## Avaliação por Critério\n## Comentários por Parágrafo (cite o trecho)\n## Pontos Fortes\n## Pontos Fracos\n## Sugestões de Melhoria\n## Versão Reescrita\n\nREDAÇÃO (' + essayText.length + ' chars):\n\n' + essayText.slice(0, 30000);
-            // ★ Retry: tentar até 3 vezes se a IA falhar (backends podem ser intermitentes)
-            var d = { ok: false, response: '', error: '' };
-            for (var attempt = 1; attempt <= 3; attempt++) {
-              try {
-                resultDiv.innerHTML = '<div style="text-align:center;padding:20px;"><div class="spinner-border" style="color:#ff8b9f;"></div><div style="margin-top:10px;color:#9aa4b8;">✍️ Corrigindo redação' + (attempt > 1 ? ' (tentativa ' + attempt + ')' : '') + '...</div></div>';
-                var _ctrl2 = new AbortController();
-                var _to2 = setTimeout(function() { _ctrl2.abort(); }, 30000);
-                r = await fetch('/api/ai', {
-                  method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-                  body: JSON.stringify({ message: redacaoPrompt, messages: [], kind: 'resumo' }), signal: _ctrl2.signal
-                });
-                clearTimeout(_to2);
-                d = await r.json();
-                if (d.ok && d.response) break;
-              } catch (retryErr) {
-                d = { ok: false, error: retryErr.name === 'AbortError' ? 'Timeout' : retryErr.message };
-              }
-              if (attempt < 3) await new Promise(function(r){ setTimeout(r, 2000); });
-            }
-            if (d.ok) {
-              var correction = d.response || 'Sem correção';
-              var scoreMatch = correction.match(/nota\s*geral\s*:?\s*(\d+[,.]?\d*)/i);
-              var score = scoreMatch ? scoreMatch[1] : '—';
-              var html = correction;
-              await Shell._ensureMdLibs();
-              if (window.marked) { try { html = window.marked.parse(correction); if (window.DOMPurify) html = window.DOMPurify.sanitize(html); } catch (_) {} }
-              var ocrBadge = selectedFile && (selectedFile.type.startsWith('image/') || selectedFile.type === 'application/pdf') ? ' <span style="font-size:11px;color:#5ddeda;">🔍 Texto extraído</span>' : '';
-              var scoreBadge = score && score !== '—' ? ' <span style="font-size:11px;color:#3fb950;">Nota: ' + score + '</span>' : '';
-              resultDiv.innerHTML = '<div style="margin-bottom:10px;font-size:12px;color:#9aa4b8;">✓ Correção concluída' + ocrBadge + scoreBadge + '</div>' +
-                '<div class="gdi-isa-summary-body">' + html + '</div>' +
-                '<div style="margin-top:12px;display:flex;gap:8px;">' +
-                  '<button class="meggy-header-btn" onclick="navigator.clipboard.writeText(document.getElementById(\'meggy-redacao-result\').innerText);this.textContent=\'✓ Copiado!\'"><i class="bi bi-clipboard"></i> Copiar</button>' +
-                  '<button class="meggy-header-btn" onclick="window._downloadIsaAsPdf(\'Correção Redação\')" style="background:rgba(255,139,159,0.12);border:1px solid rgba(255,139,159,0.3);color:#ff8b9f;"><i class="bi bi-download"></i> PDF</button>' +
-                '</div>';
-              // Store for PDF download
-              window._lastIsaText = correction;
-              window._lastIsaLesson = 'Correção Redação ' + banca;
-              window._lastIsaLabel = 'Correção Redação';
-              // Tentar salvar no Drive via /api/ai/essay/save
-              try {
-                var md = '---\nbanca: "' + banca + '"\ntipo: "' + tipo + '"\ndata: ' + new Date().toISOString() + '\nscore: ' + score + '\n---\n\n# Redação Corrigida\n\n## Original\n\n' + essayText.slice(0, 30000) + '\n\n## Correção\n\n' + correction + '\n';
-                await fetch('/api/ai/essay/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ markdown: md, banca: banca, tipo: tipo, score: score }) });
-              } catch(_) {}
-            } else {
-              resultDiv.innerHTML = '<div style="color:#ff8b9f;">⚠️ Erro: ' + Shell._esc(d.error || 'tente novamente') + '</div>';
-            }
-          } catch (e) {
-            resultDiv.innerHTML = '<div style="color:#ff8b9f;">⚠️ Erro: ' + Shell._esc(e.message) + '</div>';
+          // Tabs
+          html += '<div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;align-items:center;">';
+          html += '<button class="meggy-header-btn" id="tab-completo" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">📚 Curso Completo</button>';
+          if (data.intensivoCount > 0) {
+            html += '<button class="meggy-header-btn" id="tab-intensivo">⚡ Curso Intensivo (' + data.intensivoCount + ')</button>';
           }
-          submitBtn.disabled = false;
-          submitBtn.innerHTML = '<i class="bi bi-check-lg"></i> Corrigir Redação';
-        };
+          if (c.examDate) {
+            html += '<span style="margin-left:auto;color:#9aa4b8;font-size:12px;">📅 Prova: ' + Shell._esc(c.examDate) + '</span>';
+          }
+          html += '</div>';
+
+          // Disciplinas accordion
+          html += '<div id="concurso-content">';
+          if (!data.disciplinas || data.disciplinas.length === 0) {
+            html += '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">📭</div><div class="meggy-placeholder-title">Nenhuma disciplina</div><div class="meggy-placeholder-desc">Analise o edital e escaneie os drives para montar o curso.</div></div>';
+          } else {
+            data.disciplinas.forEach(d => {
+              const incidenciaColor = d.incidencia === 'altissima' ? '#ff6b6b' : d.incidencia === 'alta' ? '#ffd43b' : '#5ddeda';
+              const lessonCount = (d.lessons && d.lessons.length) || 0;
+              html += '<div class="meggy-tree-node" style="margin-bottom:12px;">';
+              html += '<div class="meggy-tree-head" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:12px;background:rgba(255,255,255,0.03);border-radius:8px;">';
+              html += '<span class="meggy-tree-chevron">▶</span>';
+              html += '<span style="font-size:16px;">📚</span>';
+              html += '<span style="font-weight:600;color:#e6edf3;flex:1;">' + Shell._esc(d.nome) + '</span>';
+              if (d.peso != null) html += '<span style="background:rgba(93,222,218,0.12);color:#5ddeda;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;">' + Shell._esc(d.peso) + ' questões</span>';
+              if (d.incidencia) html += '<span style="background:' + incidenciaColor + '22;color:' + incidenciaColor + ';padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;">' + Shell._esc(d.incidencia) + '</span>';
+              html += '<span style="color:#8b949e;font-size:12px;">' + lessonCount + ' aulas</span>';
+              html += '</div>';
+              // Lessons (hidden by default)
+              html += '<div class="meggy-tree-children" style="display:none;padding:8px 0 8px 28px;">';
+              if (lessonCount === 0) {
+                html += '<div style="color:#6b7488;font-size:12px;padding:8px;">Nenhuma aula encontrada para esta disciplina.</div>';
+              } else {
+                d.lessons.forEach(l => {
+                  const icon = (l.name || '').endsWith('.mp4') ? '🎬' : (l.name || '').endsWith('.pdf') ? '📄' : '🎵';
+                  const intensivoBadge = l.isIntensivo ? ' <span style="color:#ffd43b;font-size:10px;">⚡</span>' : '';
+                  html += '<div class="meggy-study-list" style="display:flex;align-items:center;gap:8px;padding:8px;cursor:pointer;border-radius:6px;" onmouseover="this.style.background=\'rgba(255,255,255,0.03)\'" onmouseout="this.style.background=\'transparent\'">';
+                  html += '<span style="font-size:16px;">' + icon + '</span>';
+                  html += '<span style="color:#e6edf3;font-size:13px;flex:1;word-break:break-word;">' + Shell._esc(l.name) + '</span>';
+                  if (l.topico) html += '<span style="color:#8b949e;font-size:11px;">' + Shell._esc(l.topico) + '</span>';
+                  html += intensivoBadge;
+                  html += '</div>';
+                });
+              }
+              html += '</div></div>';
+            });
+          }
+          html += '</div>';
+
+          el.innerHTML = html;
+
+          // Accordion toggle
+          el.querySelectorAll('.meggy-tree-head').forEach(head => {
+            head.onclick = function() {
+              const children = this.nextElementSibling;
+              const chevron = this.querySelector('.meggy-tree-chevron');
+              if (!children) return;
+              if (children.style.display === 'none') {
+                children.style.display = 'block';
+                if (chevron) chevron.textContent = '▼';
+              } else {
+                children.style.display = 'none';
+                if (chevron) chevron.textContent = '▶';
+              }
+            };
+          });
+
+          // Tab intensivo
+          const tabIntensivo = document.getElementById('tab-intensivo');
+          if (tabIntensivo) {
+            tabIntensivo.onclick = function() {
+              this.style.background = 'linear-gradient(135deg,#ff8b9f,#c026d3)';
+              this.style.color = '#fff';
+              this.style.border = 'none';
+              const tc = document.getElementById('tab-completo');
+              if (tc) { tc.style.background = ''; tc.style.color = ''; }
+              el.querySelectorAll('.meggy-tree-node').forEach(node => {
+                const lessons = node.querySelectorAll('.meggy-study-list');
+                let hasIntensivo = false;
+                lessons.forEach(l => {
+                  if (!l.innerHTML.includes('⚡')) { l.style.display = 'none'; }
+                  else { hasIntensivo = true; l.style.display = 'flex'; }
+                });
+                node.style.display = hasIntensivo ? 'block' : 'none';
+              });
+            };
+          }
+          const tabCompleto = document.getElementById('tab-completo');
+          if (tabCompleto) {
+            tabCompleto.onclick = function() {
+              this.style.background = 'linear-gradient(135deg,#ff8b9f,#c026d3)';
+              this.style.color = '#fff';
+              this.style.border = 'none';
+              if (tabIntensivo) { tabIntensivo.style.background = ''; tabIntensivo.style.color = ''; }
+              el.querySelectorAll('.meggy-tree-node').forEach(n => n.style.display = 'block');
+              el.querySelectorAll('.meggy-study-list').forEach(l => l.style.display = 'flex');
+            };
+          }
+        }).catch(e => {
+          el.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">⚠️</div><div class="meggy-placeholder-title">Erro</div><div class="meggy-placeholder-desc">' + Shell._esc(e.message) + '</div></div>';
+        });
       },
 
     },
@@ -2618,7 +2570,6 @@
     },
 
     // meggyAI(el) removido — drawer agora é aberto via openMeggyAIDrawer()
-    // (meggyAIChat movido para dentro de Shell.views — ver acima)
 
     placeholder(el, title, icon, phase) {
       el.innerHTML = `
