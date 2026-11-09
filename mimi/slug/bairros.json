@@ -1,0 +1,169 @@
+{
+  "version": "1.0.0",
+  "updated": "2025-11-09",
+  "total_cidades": 10,
+  "total_bairros": 100,
+  "description": "Bairros do Brasil para SEO local — MAISON de MiMi entrega em todos os estados e cidades. Acessível via jsdelivr CDN.",
+  "bairros": [
+    {
+      "cidade": "São Paulo",
+      "uf": "SP",
+      "bairros": [
+        "Pinheiros",
+        "Jardins",
+        "Vila Mariana",
+        "Moema",
+        "Itaim Bibi",
+        "Higienópolis",
+        "Perdizes",
+        "Brooklin",
+        "Vila Olímpia",
+        "Cambuci"
+      ]
+    },
+    {
+      "cidade": "Rio de Janeiro",
+      "uf": "RJ",
+      "bairros": [
+        "Copacabana",
+        "Ipanema",
+        "Leblon",
+        "Barra da Tijuca",
+        "Botafogo",
+        "Flamengo",
+        "Tijuca",
+        "Lagoa",
+        "Gávea",
+        "Jardim Botânico"
+      ]
+    },
+    {
+      "cidade": "Belo Horizonte",
+      "uf": "MG",
+      "bairros": [
+        "Savassi",
+        "Funcionários",
+        "Lourdes",
+        "Anchieta",
+        "Sion",
+        "Cidade Jardim",
+        "Belvedere",
+        "Santo Antônio",
+        "São Pedro",
+        "Mangabeiras"
+      ]
+    },
+    {
+      "cidade": "Salvador",
+      "uf": "BA",
+      "bairros": [
+        "Barra",
+        "Rio Vermelho",
+        "Ondina",
+        "Vitória",
+        "Graça",
+        "Pituba",
+        "Brotas",
+        "Itaigara",
+        "Stella Maris",
+        "Imbuí"
+      ]
+    },
+    {
+      "cidade": "Porto Alegre",
+      "uf": "RS",
+      "bairros": [
+        "Moinhos de Vento",
+        "Bela Vista",
+        "Tristeza",
+        "Petrópolis",
+        "Independência",
+        "Cidade Baixa",
+        "Menino Deus",
+        "Rio Branco",
+        "Mont Serrat",
+        "Santana"
+      ]
+    },
+    {
+      "cidade": "Curitiba",
+      "uf": "PR",
+      "bairros": [
+        "Batel",
+        "Jardim Botânico",
+        "Bigorrilho",
+        "Mercês",
+        "Centro Cívico",
+        "São Francisco",
+        "Ahú",
+        "Cabral",
+        "Vila Izabel",
+        "Cascatinha"
+      ]
+    },
+    {
+      "cidade": "Recife",
+      "uf": "PE",
+      "bairros": [
+        "Boa Viagem",
+        "Recife Antigo",
+        "Graças",
+        "Espinheiro",
+        "Jaqueira",
+        "Parnamirim",
+        "Aflitos",
+        "Derby",
+        "Ilha do Leite",
+        "Santo Antônio"
+      ]
+    },
+    {
+      "cidade": "Fortaleza",
+      "uf": "CE",
+      "bairros": [
+        "Meireles",
+        "Aldeota",
+        "Mucuripe",
+        "Dionísio Torres",
+        "João XXIII",
+        "Beira Mar",
+        "Papicu",
+        "Varjota",
+        "Cocó",
+        "Joaquim Távora"
+      ]
+    },
+    {
+      "cidade": "Brasília",
+      "uf": "DF",
+      "bairros": [
+        "Asa Sul",
+        "Asa Norte",
+        "Lago Sul",
+        "Lago Norte",
+        "Sudoeste",
+        "Octogonal",
+        "Águas Claras",
+        "Taguatinga",
+        "Sobradinho",
+        "Ceilândia"
+      ]
+    },
+    {
+      "cidade": "Goiânia",
+      "uf": "GO",
+      "bairros": [
+        "Setor Bueno",
+        "Marista",
+        "Jardim Goiás",
+        "Setor Oeste",
+        "Vila Nova",
+        "Bueno",
+        "Sudoeste",
+        "Centro",
+        "Norte Ferroviário",
+        "Campinas"
+      ]
+    }
+  ]
+}
