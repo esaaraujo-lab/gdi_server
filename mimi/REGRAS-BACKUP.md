@@ -171,6 +171,131 @@ export default function Client() {
 - Dados JSON: `esaaraujo-lab/gdi_server` (público, pasta `mimi/slug/`)
 - Regras de Ouro: `esaaraujo-lab/gdi_server` (pasta `mimi/`, arquivo `REGRAS-BACKUP.md`)
 
+### Regra 11 — Equipe de agentes autônoma (CEO/MASTER + sub-agentes watchdog)
+**SEMPRE** manter um sistema de agentes autônomo com:
+
+1. **AGENTE MASTER (CEO)** — coordena, audita e decide. Analisa propostas, decide o que deve ser feito, e lança agentes para construir mudanças/correções. Não para até a plataforma estar completa.
+2. **SUB-AGENTE WATCHDOG** — assume o controle se o MASTER der timeout. Acorda o MASTER ou outros agentes em timeout. Todos os sub-agentes têm essa função.
+3. **EQUIPE COMPLETA DE AGENTES**:
+   - **Desenvolvimento** — código, build, deploy, debug
+   - **Marketing** — SEO, copywriting, ganchos de conversão, redes sociais
+   - **Pagamento** — checkout, Pix, webhook, confirmação
+   - **Logística** — frete, Correios, JadLog, Braspress, rastreio
+   - **Envio** — etiquetas, tracking, notificação cliente
+   - **SEO** — sitemap, robots, JSON-LD, ping buscadores, ping IAs
+   - **QA/Testes** — Agent Browser, verificação após deploy
+   - **Anti-falsificação** — alertas, rastreabilidade, lotes
+4. **SEMPRE testar após deploy** — o MASTER dispara o agente de QA que verifica todas as rotas via Agent Browser. Se achar erro, o MASTER lança o agente de desenvolvimento para corrigir.
+5. **MASTER busca skills/LLMs no GitHub** quando necessário — se um agente precisa de uma skill que não existe, o MASTER busca no GitHub, instala, e adiciona à Regra 1.
+6. **Retornoalimentação** — o MASTER analisa resultados dos agentes e retroalimenta com memória persistente (armazenada no GitHub como JSON).
+
+**Implementação:**
+```typescript
+// MASTER agent — dispara sub-agentes, audita, decide
+async function masterAgent() {
+  while (!platformComplete) {
+    const issues = await audit();
+    if (issues.length > 0) {
+      for (const issue of issues) {
+        const agent = selectAgent(issue.type);
+        await launchAgent(agent, issue);
+      }
+    }
+    await sleep(60000); // 1 min
+  }
+}
+
+// Watchdog — acorda MASTER se der timeout
+async function watchdog() {
+  while (true) {
+    if (masterTimeout > 5 * 60 * 1000) { // 5 min
+      await wakeMaster();
+    }
+    await sleep(60000);
+  }
+}
+```
+
+### Regra 12 — Skills e LLMs auto-curáveis (registro na Regra 1)
+**TODA** skill, LLM ou agente adicionado ao sistema deve ser registrado na Regra 1 (carregar ferramentas). Isso garante:
+
+1. **Sistema autônomo e independente** — sem limite de tempo, se auto-curando se necessário
+2. **Retroalimentação com memória persistente** — armazenada no GitHub como JSON (`gdi_server/mimi/skills/`)
+3. **Controle de toda a equipe** — desenvolvimento, marketing, vendas, envio, checkout
+4. **Skills ilimitadas** — buscar quantas skills forem necessárias e mesclar para melhor resultado
+5. **Skills de SEO são essenciais** — sempre incluir skills de SEO na equipe
+
+**Registro de skills:**
+```json
+// gdi_server/mimi/skills/registry.json
+{
+  "skills": [
+    {
+      "name": "seo-optimizer",
+      "type": "seo",
+      "installed": "2025-11-09",
+      "source": "github.com/skill-creator/seo-optimizer",
+      "function": "Otimiza sitemap, JSON-LD, meta tags, ping buscadores"
+    },
+    {
+      "name": "prompt-reformer",
+      "type": "utility",
+      "installed": "2025-11-09",
+      "source": "internal",
+      "function": "Reformula prompts para tornar mais fácil para IA entender"
+    }
+  ]
+}
+```
+
+**Quando uma nova skill é necessária:**
+1. MASTER identifica a necessidade
+2. MASTER busca no GitHub (ou cria se não existir)
+3. MASTER instala a skill
+4. MASTER adiciona à Regra 1 (carregar ferramentas)
+5. MASTER registra no `registry.json` no GitHub
+
+### Regra 13 — Skill de reformulação de prompts
+**SEMPRE** ter uma skill que reformula prompts para torná-los mais fáceis para a IA e agentes entenderem. Esta skill:
+
+1. **Estrutura o prompt** — divide em objetivos, contexto, restrições, formato de saída
+2. **Remove ambiguidade** — clarifica termos vagos
+3. **Adiciona contexto** — inclui informações relevantes do projeto
+4. **Define formato de saída** — JSON, Markdown, código, etc.
+5. **Adiciona exemplos** — quando relevante
+
+**Implementação:**
+```typescript
+function reformulatePrompt(rawPrompt: string, context: ProjectContext): string {
+  return `
+## Objetivo
+${extractObjective(rawPrompt)}
+
+## Contexto do Projeto
+- Projeto: ${context.name}
+- Estado atual: ${context.state}
+- Regras de Ouro: ${context.rules}
+
+## Restrições
+${extractConstraints(rawPrompt)}
+
+## Formato de Saída Esperado
+${determineOutputFormat(rawPrompt)}
+
+## Prompt Original (reformulado)
+${rawPrompt}
+`;
+}
+```
+
+**Arquivos pesados por slug/classe/categoria:**
+- Cada marca = 1 arquivo JSON no GitHub (`gdi_server/mimi/slug/marcas/{slug}.json`)
+- Cada perfume = 1 arquivo JSON (`gdi_server/mimi/slug/perfumes/{slug}.json`)
+- Cada família olfativa = 1 arquivo JSON (`gdi_server/mimi/slug/familias/{slug}.json`)
+- Cada artigo = 1 arquivo JSON (`gdi_server/mimi/slug/artigos/{slug}.json`)
+
+**Vantagem:** arquivos pequenos e específicos, carregados por demanda via jsdelivr CDN, sem sobrecarregar o bundle do CF Pages.
+
 ---
 
 ## Detalhes das ferramentas
