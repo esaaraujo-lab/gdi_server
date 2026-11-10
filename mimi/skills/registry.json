@@ -1,0 +1,125 @@
+{
+  "version": "1.0.0",
+  "updated": "2025-11-09",
+  "description": "Registro de skills e LLMs do sistema autônomo MAISON de MiMi (Regra de Ouro #12). Cada skill é auto-curável, com retroalimentação e memória persistente.",
+  "skills": [
+    {
+      "name": "master-ceo",
+      "type": "orchestrator",
+      "installed": "2025-11-09",
+      "source": "internal",
+      "function": "MASTER (CEO) — coordena, audita e decide. Lança sub-agentes, não para até plataforma completa."
+    },
+    {
+      "name": "watchdog",
+      "type": "monitoring",
+      "installed": "2025-11-09",
+      "source": "internal",
+      "function": "Sub-agente que acorda o MASTER se der timeout. Todos os agentes têm essa função."
+    },
+    {
+      "name": "developer",
+      "type": "development",
+      "installed": "2025-11-09",
+      "source": "internal",
+      "function": "Desenvolvimento — código, build, deploy, debug"
+    },
+    {
+      "name": "marketing-seo",
+      "type": "marketing",
+      "installed": "2025-11-09",
+      "source": "internal",
+      "function": "Marketing — SEO, copywriting, ganchos de conversão, redes sociais"
+    },
+    {
+      "name": "payment",
+      "type": "checkout",
+      "installed": "2025-11-09",
+      "source": "internal",
+      "function": "Pagamento — checkout, Pix, webhook, confirmação"
+    },
+    {
+      "name": "logistics",
+      "type": "shipping",
+      "installed": "2025-11-09",
+      "source": "internal",
+      "function": "Logística — frete, Correios, JadLog, Braspress, rastreio"
+    },
+    {
+      "name": "fulfillment",
+      "type": "shipping",
+      "installed": "2025-11-09",
+      "source": "internal",
+      "function": "Envio — etiquetas, tracking, notificação cliente"
+    },
+    {
+      "name": "seo-optimizer",
+      "type": "seo",
+      "installed": "2025-11-09",
+      "source": "internal",
+      "function": "SEO — sitemap, robots, JSON-LD, ping buscadores, ping IAs"
+    },
+    {
+      "name": "qa-tester",
+      "type": "testing",
+      "installed": "2025-11-09",
+      "source": "internal",
+      "function": "QA/Testes — Agent Browser, verificação após deploy"
+    },
+    {
+      "name": "anti-fake",
+      "type": "security",
+      "installed": "2025-11-09",
+      "source": "internal",
+      "function": "Anti-falsificação — alertas, rastreabilidade, lotes"
+    },
+    {
+      "name": "prompt-reformer",
+      "type": "utility",
+      "installed": "2025-11-09",
+      "source": "internal",
+      "function": "Reformula prompts para tornar mais fácil para IA entender (Regra #13)"
+    },
+    {
+      "name": "github-cdn",
+      "type": "infrastructure",
+      "installed": "2025-11-09",
+      "source": "internal",
+      "function": "Gerencia JSONs no GitHub gdi_server via jsdelivr CDN (Regra #10)"
+    },
+    {
+      "name": "device-tier",
+      "type": "personalization",
+      "installed": "2025-11-09",
+      "source": "internal",
+      "function": "Detecta dispositivo (Apple/Android/feature) e adapta conteúdo (Regra #9)"
+    }
+  ],
+  "llms": [
+    {
+      "name": "glm-5.2",
+      "provider": "z-ai",
+      "function": "LLM principal para agentes"
+    },
+    {
+      "name": "glm-5.3-flash",
+      "provider": "z-ai",
+      "function": "LLM rápido para VLM e visão"
+    }
+  ],
+  "rules": [
+    "Regra 1: Carregar ferramentas (ECC + FreeLLMAPI + Harness2)",
+    "Regra 2: Sempre backup e commit GitHub",
+    "Regra 3: Backup primeiro em exceção",
+    "Regra 4: Nunca reverter layout",
+    "Regra 5: Baixar do GitHub se perdido",
+    "Regra 6: Checklist pré-deploy",
+    "Regra 7: Recuperação de desastre",
+    "Regra 8: Backup no início E final",
+    "Regra 9: Light/dark + mobile + socioeconômico",
+    "Regra 10: jsdelivr via GitHub para conteúdo pesado",
+    "Regra 11: Equipe de agentes autônoma (CEO/MASTER + watchdog)",
+    "Regra 12: Skills auto-curáveis (registro na Regra 1)",
+    "Regra 13: Skill de reformulação de prompts"
+  ]
+}

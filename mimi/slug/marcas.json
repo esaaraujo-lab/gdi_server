@@ -1,0 +1,419 @@
+{
+  "version": "1.0.0",
+  "updated": "2025-11-09",
+  "total_marcas": 26,
+  "description": "Catálogo de marcas MAISON de MiMi — 26 marcas (árabes, nicho, body splash) com história completa, keywords SEO, e imagens. Acessível via jsdelivr CDN do GitHub gdi_server. Cada marca tem slug próprio para SEO.",
+  "marcas": [
+    {
+      "slug": "lattafa",
+      "name": "Lattafa Perfumes",
+      "country": "EAU",
+      "founded": 2014,
+      "category": "arabe",
+      "story": "Fundada em 2014 nos Emirados Árabes Unidos, a Lattafa Perfumes revolucionou o mercado de perfumes árabes ao combinar tradição milenar do oud com acessibilidade. Conhecida mundialmente por Khamrah (dupe do By Kilian Angel's Share), Badee Al Oud (dupe do Initio Oud for Greatness) e Yara, a marca tornou-se viral no TikTok 2024-2025.",
+      "keywords": [
+        "Lattafa",
+        "perfume árabe Lattafa",
+        "Khamrah",
+        "Badee Al Oud",
+        "Yara Lattafa",
+        "dupe árabe"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Lattafa"
+    },
+    {
+      "slug": "armaf",
+      "name": "Armaf",
+      "country": "EAU",
+      "founded": 2015,
+      "category": "arabe",
+      "story": "Armaf é uma marca árabe dos Emirados Árabes Unidos, famosa pelo Club de Nuit Intense Man — o dupe mais aclamado do Creed Aventus. Com qualidade impressionante e fixação 10h+, a Armaf conquistou o mercado internacional como a marca árabe premium para iniciantes em perfumes de nicho.",
+      "keywords": [
+        "Armaf",
+        "Club de Nuit Intense",
+        "dupe Creed Aventus",
+        "perfume árabe Armaf"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Armaf"
+    },
+    {
+      "slug": "maison-alhambra",
+      "name": "Maison Alhambra",
+      "country": "EAU",
+      "founded": 2018,
+      "category": "arabe",
+      "story": "Maison Alhambra é a marca árabe mais refinada para dupes de luxo. Com Woody Oud (dupe do Tom Ford Oud Wood), Maître de Blue (dupe do Bleu de Chanel) e Léonie (dupe do YSL Libre), a Maison Alhambra oferece fragrâncias sofisticadas por uma fração do preço original.",
+      "keywords": [
+        "Maison Alhambra",
+        "Woody Oud",
+        "Maitre de Blue",
+        "dupe Tom Ford",
+        "perfume árabe premium"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Maison+Alhambra"
+    },
+    {
+      "slug": "afnan",
+      "name": "Afnan Perfumes",
+      "country": "EAU",
+      "founded": 2007,
+      "category": "arabe",
+      "story": "Afnan Perfumes é uma maison árabe fundada em 2007 nos Emirados. Conhecida pela linha Supremacy (Silver = dupe do Aventus, Not Only Intense = versão intensa) e por 9 PM (dupe do JPG Ultra Male), a Afnan combina tradição árabe com performance excepcional.",
+      "keywords": [
+        "Afnan",
+        "Supremacy Silver",
+        "Supremacy Not Only Intense",
+        "9 PM",
+        "dupe Aventus premium"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Afnan"
+    },
+    {
+      "slug": "al-haramain",
+      "name": "Al Haramain Perfumes",
+      "country": "EAU",
+      "founded": 1970,
+      "category": "arabe",
+      "story": "Al Haramain é uma das mais antigas maisons árabes, fundada em 1970. Com Amber Oud Rouge (dupe aclamado do Baccarat Rouge 540), a marca combina 50+ anos de tradição com inovação moderna. Cada frasco é uma obra de arte artesanal.",
+      "keywords": [
+        "Al Haramain",
+        "Amber Oud Rouge",
+        "dupe Baccarat Rouge 540",
+        "perfume árabe tradicional"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Al+Haramain"
+    },
+    {
+      "slug": "rasasi",
+      "name": "Rasasi Perfumes",
+      "country": "EAU",
+      "founded": 1979,
+      "category": "arabe",
+      "story": "Rasasi Perfumes foi fundada em 1979 nos Emirados Árabes e é uma das maisons árabes mais respeitadas. Hawas (aquático masculino) e Hawas Overdose são referências em fragrâncias árabes modernas. A marca combina perfumaria francesa com ingredientes orientais.",
+      "keywords": [
+        "Rasasi",
+        "Hawas",
+        "perfume árabe premium",
+        "perfume masculino árabe"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Rasasi"
+    },
+    {
+      "slug": "dior",
+      "name": "Christian Dior Parfums",
+      "country": "França",
+      "founded": 1947,
+      "category": "nicho",
+      "story": "Christian Dior fundou sua maison em 1947 com o lançamento simultâneo de Miss Dior — o primeiro perfume da marca. Sauvage (2015) tornou-se o perfume masculino mais vendido do mundo. A Dior representa o luxo parisiense atemporal com mestres perfumistas como François Demachy.",
+      "keywords": [
+        "Dior",
+        "Sauvage",
+        "Sauvage Elixir",
+        "Miss Dior",
+        "perfume Dior original",
+        "perfume importado Dior"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Dior"
+    },
+    {
+      "slug": "chanel",
+      "name": "Chanel Parfums",
+      "country": "França",
+      "founded": 1910,
+      "category": "nicho",
+      "story": "Coco Chanel revolucionou a perfumaria em 1921 com o Chanel No 5 — o primeiro perfume com aldeídos sintéticos. Bleu de Chanel (2010) definiu a elegância masculina moderna. A Chanel mantém o legado de Gabrielle 'Coco' Chanel com perfumistas exclusivos como Olivier Polge.",
+      "keywords": [
+        "Chanel",
+        "Bleu de Chanel",
+        "Chanel No 5",
+        "Coco Mademoiselle",
+        "perfume Chanel original"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Chanel"
+    },
+    {
+      "slug": "tom-ford",
+      "name": "Tom Ford Beauty",
+      "country": "EUA",
+      "founded": 2006,
+      "category": "nicho",
+      "story": "Tom Ford lançou sua linha Private Blend em 2006, revolucionando a perfumaria de nicho. Tobacco Vanille, Oud Wood e Black Orchid são ícones da coleção. Cada fragrância é uma obra de arte olfativa, com ingredientes raros e concentração intensa.",
+      "keywords": [
+        "Tom Ford",
+        "Tobacco Vanille",
+        "Oud Wood",
+        "Private Blend",
+        "perfume nicho Tom Ford"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Tom+Ford"
+    },
+    {
+      "slug": "creed",
+      "name": "Creed Perfumes",
+      "country": "França",
+      "founded": 1760,
+      "category": "nicho",
+      "story": "Creed é a maison de perfumaria mais antiga do mundo em operação contínua, fundada em 1760 em Paris. Aventus (2010) tornou-se uma lenda masculina. Com 260+ anos de história, a Creed criou fragrâncias para reis, rainhas e celebridades. Cada perfume é feito com ingredientes naturais raros.",
+      "keywords": [
+        "Creed",
+        "Aventus",
+        "perfume nicho Creed",
+        "perfume masculino luxo",
+        "Creed original"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Creed"
+    },
+    {
+      "slug": "initio",
+      "name": "Initio Parfums Privés",
+      "country": "França",
+      "founded": 2015,
+      "category": "nicho",
+      "story": "Initio Parfums Privés é uma maison francesa de nicho fundada em 2015, especializada em fragrâncias magnéticas com oud. Oud for Greatness tornou-se viral no TikTok 2024. A marca combina ingredientes raros com concentração intensa para criar fragrâncias hipnóticas.",
+      "keywords": [
+        "Initio",
+        "Oud for Greatness",
+        "Atomic Rose",
+        "perfume nicho Initio",
+        "oud perfume"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Initio"
+    },
+    {
+      "slug": "parfums-de-marly",
+      "name": "Parfums de Marly",
+      "country": "França",
+      "founded": 2009,
+      "category": "nicho",
+      "story": "Parfums de Marly foi fundada em 2009, inspirada nos cavalos árabes do Rei Luís XV. Layton (2015) tornou-se um best-seller global. A marca combina luxo francês com ingredientes nobres para criar fragrâncias opulentas e memoráveis.",
+      "keywords": [
+        "Parfums de Marly",
+        "Layton",
+        "Herod",
+        "perfume nicho francês",
+        "perfume luxo Parfums de Marly"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Parfums+de+Marly"
+    },
+    {
+      "slug": "maison-francis-kurkdjian",
+      "name": "Maison Francis Kurkdjian (MFK)",
+      "country": "França",
+      "founded": 2009,
+      "category": "nicho",
+      "story": "Maison Francis Kurkdjian foi fundada em 2009 pelo mestre perfumista Francis Kurkdjian, criador de Le Mâle (JPG). Baccarat Rouge 540 (2015) tornou-se o perfume mais desejado do TikTok 2024-2025. Cada fragrância é uma obra de arte olfativa do mestre mais premiado da atualidade.",
+      "keywords": [
+        "MFK",
+        "Baccarat Rouge 540",
+        "Maison Francis Kurkdjian",
+        "perfume nicho MFK",
+        "perfume viral TikTok"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=MFK"
+    },
+    {
+      "slug": "xerjoff",
+      "name": "Xerjoff",
+      "country": "Itália",
+      "founded": 2003,
+      "category": "nicho",
+      "story": "Xerjoff foi fundada em 2003 em Turim, Itália, por Sergio Momo. A marca combina ingredientes raros com frascos de cristal Murano. Naxos e 1861 são referências em perfumaria de nicho italiana. Cada fragrância é uma joia olfativa.",
+      "keywords": [
+        "Xerjoff",
+        "Naxos",
+        "1861",
+        "perfume nicho italiano",
+        "perfume luxo Xerjoff"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Xerjoff"
+    },
+    {
+      "slug": "yves-saint-laurent",
+      "name": "Yves Saint Laurent Beauty",
+      "country": "França",
+      "founded": 1961,
+      "category": "nicho",
+      "story": "Yves Saint Laurent fundou sua maison em 1961 e lançou seu primeiro perfume, Rive Gauche, em 1971. Black Opium (2014) e Libre (2019) são best-sellers globais. A YSL combina ousadia parisiense com ingredientes nobres como lavanda de Provence.",
+      "keywords": [
+        "YSL",
+        "Libre",
+        "Black Opium",
+        "perfume YSL original",
+        "perfume feminino YSL"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=YSL"
+    },
+    {
+      "slug": "victorias-secret",
+      "name": "Victoria's Secret",
+      "country": "EUA",
+      "founded": 1977,
+      "category": "body_splash",
+      "story": "Victoria's Secret foi fundada em 1977 em San Francisco. Bombshell é o body mist mais vendido do mundo. Bare Vanilla, Pure Seduction e Love Spell são clássicos atemporais. A marca combina sofisticação americana com fragrâncias envolventes para uso diário.",
+      "keywords": [
+        "Victoria's Secret",
+        "body splash VS",
+        "Bombshell",
+        "Bare Vanilla",
+        "Pure Seduction",
+        "body mist"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Victoria+Secret"
+    },
+    {
+      "slug": "al-wataniah",
+      "name": "Al Wataniah Perfumes",
+      "country": "EAU",
+      "founded": 2010,
+      "category": "arabe",
+      "story": "Al Wataniah é uma maison árabe dos Emirados conhecida por body splashes virais no TikTok. Sabah Al Ward é o body splash árabe mais hypado de 2025, combinando tangerina, cacau e baunilha em uma fragrância oriental floral envolvente.",
+      "keywords": [
+        "Al Wataniah",
+        "Sabah Al Ward",
+        "body splash árabe",
+        "perfume árabe viral"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Al+Wataniah"
+    },
+    {
+      "slug": "fabbrica-della-musa",
+      "name": "Fabbrica Della Musa",
+      "country": "Itália",
+      "founded": 2019,
+      "category": "nicho",
+      "story": "Fabbrica Della Musa é uma maison italiana de nicho fundada em 2019 em Milão. A marca é inspirada na musa da mitologia grega e combina tradição artesanal italiana com ingredientes raros. Conhecida por fragrâncias opulentas e frascos art-deco, é uma das maisons mais cobiçadas pelos colecionadores de nicho.",
+      "keywords": [
+        "Fabbrica Della Musa",
+        "perfume nicho italiano",
+        "perfume artesanal Itália",
+        "maison italiana nicho"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Fabbrica+Musa"
+    },
+    {
+      "slug": "opera-infernal",
+      "name": "Opera Infernal",
+      "country": "Itália",
+      "founded": 2021,
+      "category": "nicho",
+      "story": "Opera Infernal é uma marca italiana de perfumaria de nicho conhecida por fragrâncias dramáticas e teatrais. Inspirada na ópera italiana e nos infernos de Dante, cada perfume é uma experiência sensorial intensa. Para conhecedores que buscam fragrâncias ousadas e únicas.",
+      "keywords": [
+        "Opera Infernal",
+        "perfume nicho italiano",
+        "perfume teatral",
+        "perfume dramático",
+        "Dante perfume"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Opera+Infernal"
+    },
+    {
+      "slug": "carolina-herrera",
+      "name": "Carolina Herrera",
+      "country": "Venezuela",
+      "founded": 1980,
+      "category": "nicho",
+      "story": "Carolina Herrera nasceu na Venezuela e fundou sua maison em Nova York em 1980. Good Girl (2016) com seu frasco-salto alto tornou-se ícone feminino. A marca combina elegância latina com sofisticação americana.",
+      "keywords": [
+        "Carolina Herrera",
+        "Good Girl",
+        "CH perfume",
+        "perfume feminino Carolina Herrera"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Carolina+Herrera"
+    },
+    {
+      "slug": "versace",
+      "name": "Versace Parfums",
+      "country": "Itália",
+      "founded": 1981,
+      "category": "nicho",
+      "story": "Versace lançou sua linha de perfumes em 1981. Eros (2012) é um dos perfumes masculinos mais vendidos do mundo, com 1 milhão de buscas/mês no Google Brasil. A marca combina luxo italiano com sensualidade mediterrânea.",
+      "keywords": [
+        "Versace",
+        "Eros",
+        "Versace Eros",
+        "perfume masculino Versace",
+        "perfume italiano"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Versace"
+    },
+    {
+      "slug": "paco-rabanne",
+      "name": "Paco Rabanne Parfums",
+      "country": "Espanha",
+      "founded": 1966,
+      "category": "nicho",
+      "story": "Paco Rabanne lançou seu primeiro perfume, Calandre, em 1969. 1 Million (2008) e Invictus (2013) são best-sellers globais. A marca combina ousadia espanhola com frascos icônicos (lingote de ouro, troféu).",
+      "keywords": [
+        "Paco Rabanne",
+        "1 Million",
+        "Invictus",
+        "perfume masculino Paco Rabanne",
+        "perfume espanhol"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Paco+Rabanne"
+    },
+    {
+      "slug": "hermes",
+      "name": "Hermès Parfums",
+      "country": "França",
+      "founded": 1951,
+      "category": "nicho",
+      "story": "Hermès lançou seu primeiro perfume, Eau d'Hermès, em 1951. Terre d'Hermès (2006) é referência em perfumaria masculina amadeirada. A maison combina luxo artesanal francês com ingredientes nobres, criando fragrâncias atemporais.",
+      "keywords": [
+        "Hermès",
+        "Terre d'Hermès",
+        "perfume Hermès original",
+        "perfume masculino Hermès"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Hermes"
+    },
+    {
+      "slug": "guerlain",
+      "name": "Guerlain Parfums",
+      "country": "França",
+      "founded": 1828,
+      "category": "nicho",
+      "story": "Guerlain é uma das maisons de perfumaria mais antigas do mundo, fundada em 1828 por Pierre-François-Pascal Guerlain. Com quase 200 anos de história, criou clássicos como Shalimar (1925) e L'Homme Idéal. A marca combina tradição real (fornecedora de Napoleão III) com inovação moderna do perfumista Thierry Wasser.",
+      "keywords": [
+        "Guerlain",
+        "Shalimar",
+        "L'Homme Idéal",
+        "perfume nicho francês",
+        "perfume antigo Guerlain"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Guerlain"
+    },
+    {
+      "slug": "givenchy",
+      "name": "Givenchy Parfums",
+      "country": "França",
+      "founded": 1957,
+      "category": "nicho",
+      "story": "Givenchy lançou sua linha de perfumes em 1957 com L'Interdit, criado para Audrey Hepburn. Gentleman (1975) e Gentleman Boisée são referências masculinas. A maison combina elegância parisiense com sofisticação atemporal.",
+      "keywords": [
+        "Givenchy",
+        "Gentleman",
+        "L'Interdit",
+        "perfume Givenchy original",
+        "perfume francês Givenchy"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Givenchy"
+    },
+    {
+      "slug": "lancome",
+      "name": "Lancôme Parfums",
+      "country": "França",
+      "founded": 1935,
+      "category": "nicho",
+      "story": "Lancôme foi fundada em 1935 por Armand Petitjean. La Vie Est Belle (2012) é um dos perfumes femininos mais vendidos do mundo. A marca combina luxo francês com fragrâncias florais-gourmand acessíveis.",
+      "keywords": [
+        "Lancôme",
+        "La Vie Est Belle",
+        "perfume Lancôme",
+        "perfume feminino Lancôme"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Lancome"
+    }
+  ]
+}

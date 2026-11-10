@@ -1,0 +1,920 @@
+{
+  "version": "2.0.0",
+  "updated": "2025-11-09",
+  "total_marcas": 55,
+  "description": "Banco massivo de maisons de perfumaria de nicho e exclusiva — Opera Infernal, Fabbrica Della Musa, MFK, Creed, Tom Ford, Initio, Parfums de Marly, Xerjoff, Amouage, Byredo, Le Labo, Jo Malone, Diptyque, Frederic Malle, By Kilian e mais. Preços altos de mercado (não de marketplaces). Acessível via jsdelivr CDN.",
+  "marcas": [
+    {
+      "slug": "opera-infernal",
+      "name": "Opera Infernal",
+      "country": "Itália",
+      "founded": 2021,
+      "category": "nicho",
+      "story": "Opera Infernal é uma maison italiana de perfumaria de nicho fundada em 2021. Inspirada na ópera italiana e nos infernos de Dante Alighieri, cada perfume é uma experiência sensorial dramática e teatral. Para conhecedores que buscam fragrâncias ousadas, únicas e intensamente artísticas. A marca combina tradição artesanal italiana com ingredientes raros.",
+      "price_range": "R$ 800 - R$ 2.500",
+      "keywords": [
+        "Opera Infernal",
+        "perfume nicho italiano",
+        "perfume teatral",
+        "perfume dramático",
+        "Dante perfume",
+        "ópera italiana perfume"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Opera+Infernal"
+    },
+    {
+      "slug": "fabbrica-della-musa",
+      "name": "Fabbrica Della Musa",
+      "country": "Itália",
+      "founded": 2019,
+      "category": "nicho",
+      "story": "Fabbrica Della Musa é uma maison italiana de nicho fundada em 2019 em Milão. Inspirada na musa da mitologia grega, combina tradição artesanal italiana com ingredientes raros. Conhecida por fragrâncias opulentas e frascos art-deco, é uma das maisons mais cobiçadas pelos colecionadores de nicho.",
+      "price_range": "R$ 1.000 - R$ 3.000",
+      "keywords": [
+        "Fabbrica Della Musa",
+        "perfume nicho italiano",
+        "perfume artesanal Itália",
+        "maison italiana nicho",
+        "Milão perfume"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Fabbrica+Musa"
+    },
+    {
+      "slug": "maison-francis-kurkdjian",
+      "name": "Maison Francis Kurkdjian (MFK)",
+      "country": "França",
+      "founded": 2009,
+      "category": "nicho",
+      "story": "MFK foi fundada em 2009 pelo mestre perfumista Francis Kurkdjian, criador de Le Mâle (JPG). Baccarat Rouge 540 tornou-se o perfume mais desejado do TikTok 2024-2025. Cada fragrância é uma obra de arte olfativa do mestre mais premiado da atualidade.",
+      "price_range": "R$ 1.500 - R$ 4.000",
+      "keywords": [
+        "MFK",
+        "Baccarat Rouge 540",
+        "Maison Francis Kurkdjian",
+        "perfume nicho MFK",
+        "perfume viral TikTok"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=MFK"
+    },
+    {
+      "slug": "creed",
+      "name": "Creed Perfumes",
+      "country": "França",
+      "founded": 1760,
+      "category": "nicho",
+      "story": "Creed é a maison de perfumaria mais antiga do mundo em operação contínua, fundada em 1760 em Paris. Aventus (2010) tornou-se uma lenda masculina. Com 260+ anos de história, criou fragrâncias para reis, rainhas e celebridades. Ingredientes naturais raros.",
+      "price_range": "R$ 2.000 - R$ 5.000",
+      "keywords": [
+        "Creed",
+        "Aventus",
+        "perfume nicho Creed",
+        "perfume masculino luxo",
+        "Creed original"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Creed"
+    },
+    {
+      "slug": "tom-ford",
+      "name": "Tom Ford Beauty (Private Blend)",
+      "country": "EUA",
+      "founded": 2006,
+      "category": "nicho",
+      "story": "Tom Ford lançou a linha Private Blend em 2006, revolucionando a perfumaria de nicho. Tobacco Vanille, Oud Wood e Black Orchid são ícones. Cada fragrância é uma obra de arte olfativa com ingredientes raros e concentração intensa.",
+      "price_range": "R$ 1.500 - R$ 3.500",
+      "keywords": [
+        "Tom Ford",
+        "Tobacco Vanille",
+        "Oud Wood",
+        "Private Blend",
+        "perfume nicho Tom Ford"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Tom+Ford"
+    },
+    {
+      "slug": "initio",
+      "name": "Initio Parfums Privés",
+      "country": "França",
+      "founded": 2015,
+      "category": "nicho",
+      "story": "Initio é uma maison francesa de nicho especializada em fragrâncias magnéticas com oud. Oud for Greatness tornou-se viral no TikTok 2024. Combina ingredientes raros com concentração intensa para criar fragrâncias hipnóticas.",
+      "price_range": "R$ 1.800 - R$ 4.000",
+      "keywords": [
+        "Initio",
+        "Oud for Greatness",
+        "Atomic Rose",
+        "perfume nicho Initio",
+        "oud perfume"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Initio"
+    },
+    {
+      "slug": "parfums-de-marly",
+      "name": "Parfums de Marly",
+      "country": "França",
+      "founded": 2009,
+      "category": "nicho",
+      "story": "Parfums de Marly foi fundada em 2009, inspirada nos cavalos árabes do Rei Luís XV. Layton (2015) é best-seller global. Combina luxo francês com ingredientes nobres para criar fragrâncias opulentas e memoráveis.",
+      "price_range": "R$ 1.500 - R$ 3.500",
+      "keywords": [
+        "Parfums de Marly",
+        "Layton",
+        "Herod",
+        "perfume nicho francês",
+        "perfume luxo Parfums de Marly"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Parfums+de+Marly"
+    },
+    {
+      "slug": "xerjoff",
+      "name": "Xerjoff",
+      "country": "Itália",
+      "founded": 2003,
+      "category": "nicho",
+      "story": "Xerjoff foi fundada em 2003 em Turim por Sergio Momo. Combina ingredientes raros com frascos de cristal Murano. Naxos e 1861 são referências em perfumaria de nicho italiana. Cada fragrância é uma joia olfativa.",
+      "price_range": "R$ 1.800 - R$ 4.500",
+      "keywords": [
+        "Xerjoff",
+        "Naxos",
+        "1861",
+        "perfume nicho italiano",
+        "perfume luxo Xerjoff",
+        "cristal Murano"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Xerjoff"
+    },
+    {
+      "slug": "roja-parfums",
+      "name": "Roja Parfums",
+      "country": "Reino Unido",
+      "founded": 2011,
+      "category": "nicho",
+      "story": "Roja Parfums foi fundada por Roja Dove em 2011, no Reino Unido. Conhecida por fragrâncias ultra-luxuosas com ingredientes raros. Cada perfume é uma declaração de elegância e sofisticação britânica.",
+      "price_range": "R$ 2.000 - R$ 5.000",
+      "keywords": [
+        "Roja Parfums",
+        "Roja Dove",
+        "perfume nicho inglês",
+        "perfume luxo Reino Unido"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Roja+Parfums"
+    },
+    {
+      "slug": "amouage",
+      "name": "Amouage",
+      "country": "Omã",
+      "founded": 1983,
+      "category": "nicho",
+      "story": "Amouage é a maison de luxo de Omã, fundada em 1983 por ordem do Sultão. Combina ingredientes árabes tradicionais (oud, incenso, mirra) com perfumaria francesa. Reflection, Interlude e Jubilation XXV são ícones.",
+      "price_range": "R$ 1.500 - R$ 3.500",
+      "keywords": [
+        "Amouage",
+        "Reflection",
+        "Interlude",
+        "Jubilation XXV",
+        "perfume de luxo Omã",
+        "perfume árabe nicho"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Amouage"
+    },
+    {
+      "slug": "byredo",
+      "name": "Byredo",
+      "country": "Suécia",
+      "founded": 2006,
+      "category": "nicho",
+      "story": "Byredo foi fundada em 2006 por Ben Gorham em Estocolmo. Gypsy Water, Bal d'Afrique e Mojave Ghost são ícones. Combina minimalismo escandinavo com ingredientes nobres para criar fragrâncias únicas.",
+      "price_range": "R$ 1.000 - R$ 2.500",
+      "keywords": [
+        "Byredo",
+        "Gypsy Water",
+        "Bal d'Afrique",
+        "Mojave Ghost",
+        "perfume nicho sueco",
+        "perfume minimalista"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Byredo"
+    },
+    {
+      "slug": "le-labo",
+      "name": "Le Labo",
+      "country": "EUA",
+      "founded": 2006,
+      "category": "nicho",
+      "story": "Le Labo foi fundada em 2006 em Nova York. Santal 33 é um dos perfumes mais vendidos do mundo. Conhecida por fragrâncias minimalistas com rótulos personalizados. Cada perfume é misturado à mão na hora da compra.",
+      "price_range": "R$ 800 - R$ 2.000",
+      "keywords": [
+        "Le Labo",
+        "Santal 33",
+        "Another 13",
+        "perfume nicho americano",
+        "perfume Nova York"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Le+Labo"
+    },
+    {
+      "slug": "jo-malone",
+      "name": "Jo Malone London",
+      "country": "Reino Unido",
+      "founded": 1994,
+      "category": "nicho",
+      "story": "Jo Malone foi fundada em 1994 em Londres. Conhecida pela técnica de 'fragrância combinável' (layering). Wood Sage & Sea Salt e Lime Basil & Mandarin são clássicos. Elegância britânica atemporal.",
+      "price_range": "R$ 600 - R$ 1.500",
+      "keywords": [
+        "Jo Malone",
+        "Wood Sage Sea Salt",
+        "Lime Basil Mandarin",
+        "perfume nicho inglês",
+        "fragrância combinável"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Jo+Malone"
+    },
+    {
+      "slug": "diptyque",
+      "name": "Diptyque",
+      "country": "França",
+      "founded": 1961,
+      "category": "nicho",
+      "story": "Diptyque foi fundada em 1961 em Paris por Desmond Knox-Leet, Christiane Gautrot e Yves Coueslant. Philosykos, Tam Dao e Eau Rose são ícones. Combina arte, natureza e elegância parisiense.",
+      "price_range": "R$ 700 - R$ 1.800",
+      "keywords": [
+        "Diptyque",
+        "Philosykos",
+        "Tam Dao",
+        "Eau Rose",
+        "perfume nicho francês",
+        "vela Diptyque"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Diptyque"
+    },
+    {
+      "slug": "frederic-malle",
+      "name": "Frédéric Malle (Editions de Parfums)",
+      "country": "França",
+      "founded": 2000,
+      "category": "nicho",
+      "story": "Frédéric Malle fundou a Editions de Parfums em 2000, revolucionando a perfumaria ao dar aos perfumistas total liberdade criativa. Portrait of a Lady, Carnal Flower e Musc Ravageur são obras-primas. Cada perfume é 'publicado' como um livro.",
+      "price_range": "R$ 1.200 - R$ 3.000",
+      "keywords": [
+        "Frédéric Malle",
+        "Portrait of a Lady",
+        "Carnal Flower",
+        "Musc Ravageur",
+        "perfume nicho francês",
+        "Editions de Parfums"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Frederic+Malle"
+    },
+    {
+      "slug": "serge-lutens",
+      "name": "Serge Lutens",
+      "country": "França",
+      "founded": 2000,
+      "category": "nicho",
+      "story": "Serge Lutens lançou sua linha de perfumes em 2000 após anos como diretor de imagem da Shiseido. Chergui, Ambre Sultan e La Fille de Berlin são ícones. Combina estética gótica com ingredientes nobres.",
+      "price_range": "R$ 800 - R$ 2.000",
+      "keywords": [
+        "Serge Lutens",
+        "Chergui",
+        "Ambre Sultan",
+        "La Fille de Berlin",
+        "perfume nicho francês",
+        "perfume gótico"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Serge+Lutens"
+    },
+    {
+      "slug": "penhaligons",
+      "name": "Penhaligon's",
+      "country": "Reino Unido",
+      "founded": 1870,
+      "category": "nicho",
+      "story": "Penhaligon's é uma maison britânica fundada em 1870 por William Penhaligon, barbeiro da corte real. Conhecida por fragrâncias clássicas como Blenheim Bouquet e pela linha Portrait. Elegância vitoriana atemporal.",
+      "price_range": "R$ 800 - R$ 2.000",
+      "keywords": [
+        "Penhaligon's",
+        "Blenheim Bouquet",
+        "Portrait",
+        "perfume nicho inglês",
+        "perfume corte real britânica"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Penhaligons"
+    },
+    {
+      "slug": "nishane",
+      "name": "Nishane",
+      "country": "Turquia",
+      "founded": 2012,
+      "category": "nicho",
+      "story": "Nishane é uma maison turca de nicho fundada em 2012 em Istambul. Conhecida por fragrâncias que combinam tradição otomana com perfumaria moderna. Ani, Hacivat e Ege são aclamados internacionalmente.",
+      "price_range": "R$ 800 - R$ 2.000",
+      "keywords": [
+        "Nishane",
+        "Ani",
+        "Hacivat",
+        "Ege",
+        "perfume nicho turco",
+        "perfume Istambul"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Nishane"
+    },
+    {
+      "slug": "killian",
+      "name": "By Kilian (Kilian Paris)",
+      "country": "França",
+      "founded": 2007,
+      "category": "nicho",
+      "story": "By Kilian foi fundada por Kilian Hennessy (herdeiro da família Hennessy de conhaque) em 2007. Angel's Share tornou-se viral no TikTok. Combina luxo parisiense com ingredientes nobres e frascos art-deco.",
+      "price_range": "R$ 1.200 - R$ 3.000",
+      "keywords": [
+        "By Kilian",
+        "Kilian Paris",
+        "Angel's Share",
+        "perfume nicho francês",
+        "perfume Hennessy"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=By+Kilian"
+    },
+    {
+      "slug": "memo-paris",
+      "name": "Memo Paris",
+      "country": "França",
+      "founded": 2007,
+      "category": "nicho",
+      "story": "Memo Paris foi fundada em 2007 por Clara e John Molloy. Cada perfume é inspirado em uma viagem. African Leather, Irish Leather e Sherbat are aclamados. Combina wanderlust com perfumaria de luxo.",
+      "price_range": "R$ 1.000 - R$ 2.500",
+      "keywords": [
+        "Memo Paris",
+        "African Leather",
+        "Irish Leather",
+        "perfume nicho francês",
+        "perfume viagem"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Memo+Paris"
+    },
+    {
+      "slug": "ex-nihilo",
+      "name": "EX NIHILO",
+      "country": "França",
+      "founded": 2013,
+      "category": "nicho",
+      "story": "EX NIHILO foi fundada em 2013 em Paris. Conhecida por fragrâncias modernas e frascos minimalistas. Fleur Narcotique e Rose Hubris são aclamados. Combina luxo parisiense com estética contemporânea.",
+      "price_range": "R$ 900 - R$ 2.200",
+      "keywords": [
+        "EX NIHILO",
+        "Fleur Narcotique",
+        "Rose Hubris",
+        "perfume nicho francês",
+        "perfume Paris"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=EX+NIHILO"
+    },
+    {
+      "slug": "armaf",
+      "name": "Armaf",
+      "country": "Emirados Árabes",
+      "founded": 2015,
+      "category": "arabe_dupe",
+      "story": "Armaf é uma marca árabe dos Emirados, famosa pelo Club de Nuit Intense Man — o dupe mais aclamado do Creed Aventus. Qualidade impressionante e fixação 10h+.",
+      "price_range": "R$ 200 - R$ 500",
+      "keywords": [
+        "Armaf",
+        "Club de Nuit Intense",
+        "dupe Creed Aventus",
+        "perfume árabe Armaf"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Armaf"
+    },
+    {
+      "slug": "lattafa",
+      "name": "Lattafa Perfumes",
+      "country": "Emirados Árabes",
+      "founded": 2014,
+      "category": "arabe_dupe",
+      "story": "Lattafa revolucionou o mercado de perfumes árabes com Khamrah (dupe do Kilian Angel's Share) e Badee Al Oud (dupe do Initio Oud for Greatness). Viral no TikTok 2024-2025.",
+      "price_range": "R$ 150 - R$ 300",
+      "keywords": [
+        "Lattafa",
+        "Khamrah",
+        "Badee Al Oud",
+        "Yara",
+        "dupe árabe",
+        "perfume árabe viral"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Lattafa"
+    },
+    {
+      "slug": "maison-alhambra",
+      "name": "Maison Alhambra",
+      "country": "Emirados Árabes",
+      "founded": 2018,
+      "category": "arabe_dupe",
+      "story": "Maison Alhambra é a marca árabe mais refinada para dupes de luxo. Woody Oud (Tom Ford), Maître de Blue (Chanel) e Léonie (YSL Libre) são aclamados.",
+      "price_range": "R$ 200 - R$ 400",
+      "keywords": [
+        "Maison Alhambra",
+        "Woody Oud",
+        "Maitre de Blue",
+        "dupe Tom Ford",
+        "perfume árabe premium"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Maison+Alhambra"
+    },
+    {
+      "slug": "afnan",
+      "name": "Afnan Perfumes",
+      "country": "Emirados Árabes",
+      "founded": 2007,
+      "category": "arabe_dupe",
+      "story": "Afnan combina tradição árabe com performance excepcional. Supremacy Silver (Aventus) e 9 PM (Ultra Male) são referências.",
+      "price_range": "R$ 300 - R$ 600",
+      "keywords": [
+        "Afnan",
+        "Supremacy Silver",
+        "9 PM",
+        "dupe Aventus premium"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Afnan"
+    },
+    {
+      "slug": "al-haramain",
+      "name": "Al Haramain Perfumes",
+      "country": "Emirados Árabes",
+      "founded": 1970,
+      "category": "arabe_dupe",
+      "story": "Al Haramain é uma das maisons árabes mais antigas (1970). Amber Oud Rouge (dupe do Baccarat Rouge 540) é aclamado.",
+      "price_range": "R$ 200 - R$ 500",
+      "keywords": [
+        "Al Haramain",
+        "Amber Oud Rouge",
+        "dupe Baccarat Rouge 540"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Al+Haramain"
+    },
+    {
+      "slug": "rasasi",
+      "name": "Rasasi Perfumes",
+      "country": "Emirados Árabes",
+      "founded": 1979,
+      "category": "arabe_dupe",
+      "story": "Rasasi é uma das maisons árabes mais respeitadas. Hawas é referência em fragrância aquática masculina.",
+      "price_range": "R$ 300 - R$ 600",
+      "keywords": [
+        "Rasasi",
+        "Hawas",
+        "perfume árabe premium"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Rasasi"
+    },
+    {
+      "slug": "dior",
+      "name": "Christian Dior Parfums",
+      "country": "França",
+      "founded": 1947,
+      "category": "designer",
+      "story": "Christian Dior fundou sua maison em 1947 com Miss Dior. Sauvage é o perfume masculino mais vendido do mundo. Representa o luxo parisiense atemporal.",
+      "price_range": "R$ 600 - R$ 1.500",
+      "keywords": [
+        "Dior",
+        "Sauvage",
+        "Sauvage Elixir",
+        "Miss Dior",
+        "perfume Dior original"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Dior"
+    },
+    {
+      "slug": "chanel",
+      "name": "Chanel Parfums",
+      "country": "França",
+      "founded": 1910,
+      "category": "designer",
+      "story": "Coco Chanel revolucionou a perfumaria em 1921 com o Chanel No 5. Bleu de Chanel define a elegância masculina moderna.",
+      "price_range": "R$ 700 - R$ 1.500",
+      "keywords": [
+        "Chanel",
+        "Bleu de Chanel",
+        "Chanel No 5",
+        "Coco Mademoiselle"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Chanel"
+    },
+    {
+      "slug": "tom-ford-private-blend",
+      "name": "Tom Ford Private Blend",
+      "country": "EUA",
+      "founded": 2006,
+      "category": "nicho",
+      "story": "Linha de luxo da Tom Ford com ingredientes raros. Tobacco Vanille, Oud Wood, Black Orchid são ícones.",
+      "price_range": "R$ 1.500 - R$ 3.500",
+      "keywords": [
+        "Tom Ford Private Blend",
+        "Tobacco Vanille",
+        "Oud Wood",
+        "Black Orchid"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Tom+Ford+Private"
+    },
+    {
+      "slug": "ysl",
+      "name": "Yves Saint Laurent Beauty",
+      "country": "França",
+      "founded": 1961,
+      "category": "designer",
+      "story": "YSL fundou sua maison em 1961. Black Opium e Libre são best-sellers globais. Combina ousadia parisiense com ingredientes nobres.",
+      "price_range": "R$ 600 - R$ 1.500",
+      "keywords": [
+        "YSL",
+        "Libre",
+        "Black Opium",
+        "perfume YSL original"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=YSL"
+    },
+    {
+      "slug": "carolina-herrera",
+      "name": "Carolina Herrera",
+      "country": "Venezuela",
+      "founded": 1980,
+      "category": "designer",
+      "story": "Carolina Herrera fundou sua maison em Nova York em 1980. Good Girl com seu frasco-salto alto é ícone feminino.",
+      "price_range": "R$ 500 - R$ 1.200",
+      "keywords": [
+        "Carolina Herrera",
+        "Good Girl",
+        "CH perfume"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Carolina+Herrera"
+    },
+    {
+      "slug": "versace",
+      "name": "Versace Parfums",
+      "country": "Itália",
+      "founded": 1981,
+      "category": "designer",
+      "story": "Versace Eros é um dos perfumes masculinos mais vendidos do mundo, com 1 milhão de buscas/mês no Google Brasil.",
+      "price_range": "R$ 400 - R$ 1.000",
+      "keywords": [
+        "Versace",
+        "Eros",
+        "perfume masculino Versace"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Versace"
+    },
+    {
+      "slug": "paco-rabanne",
+      "name": "Paco Rabanne Parfums",
+      "country": "Espanha",
+      "founded": 1966,
+      "category": "designer",
+      "story": "Paco Rabanne lançou Calandre em 1969. 1 Million e Invictus são best-sellers globais com frascos icônicos.",
+      "price_range": "R$ 400 - R$ 1.000",
+      "keywords": [
+        "Paco Rabanne",
+        "1 Million",
+        "Invictus"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Paco+Rabanne"
+    },
+    {
+      "slug": "hermes",
+      "name": "Hermès Parfums",
+      "country": "França",
+      "founded": 1951,
+      "category": "designer",
+      "story": "Hermès lançou Eau d'Hermès em 1951. Terre d'Hermès é referência em perfumaria masculina amadeirada.",
+      "price_range": "R$ 700 - R$ 1.500",
+      "keywords": [
+        "Hermès",
+        "Terre d'Hermès",
+        "perfume Hermès original"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Hermes"
+    },
+    {
+      "slug": "guerlain",
+      "name": "Guerlain Parfums",
+      "country": "França",
+      "founded": 1828,
+      "category": "nicho",
+      "story": "Guerlain é uma das maisons mais antigas (1828). Shalimar (1925) e L'Homme Idéal são clássicos. Tradição real (fornecedora de Napoleão III).",
+      "price_range": "R$ 600 - R$ 2.000",
+      "keywords": [
+        "Guerlain",
+        "Shalimar",
+        "L'Homme Idéal",
+        "perfume nicho francês"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Guerlain"
+    },
+    {
+      "slug": "givenchy",
+      "name": "Givenchy Parfums",
+      "country": "França",
+      "founded": 1957,
+      "category": "designer",
+      "story": "Givenchy lançou L'Interdit em 1957 para Audrey Hepburn. Gentleman é referência masculina.",
+      "price_range": "R$ 500 - R$ 1.200",
+      "keywords": [
+        "Givenchy",
+        "Gentleman",
+        "L'Interdit"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Givenchy"
+    },
+    {
+      "slug": "lancome",
+      "name": "Lancôme Parfums",
+      "country": "França",
+      "founded": 1935,
+      "category": "designer",
+      "story": "Lancôme foi fundada em 1935. La Vie Est Belle é um dos perfumes femininos mais vendidos do mundo.",
+      "price_range": "R$ 500 - R$ 1.200",
+      "keywords": [
+        "Lancôme",
+        "La Vie Est Belle",
+        "perfume Lancôme"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Lancome"
+    },
+    {
+      "slug": "armani",
+      "name": "Giorgio Armani Beauty",
+      "country": "Itália",
+      "founded": 1982,
+      "category": "designer",
+      "story": "Armani lançou sua linha de perfumes em 1982. Acqua di Giò é um dos perfumes masculinos mais vendidos do mundo.",
+      "price_range": "R$ 500 - R$ 1.200",
+      "keywords": [
+        "Armani",
+        "Acqua di Giò",
+        "perfume Armani",
+        "perfume masculino Armani"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Armani"
+    },
+    {
+      "slug": "valentino",
+      "name": "Valentino Parfums",
+      "country": "Itália",
+      "founded": 1978,
+      "category": "designer",
+      "story": "Valentino lançou sua linha de perfumes em 1978. Valentino Donna e Uomo são referências de elegância italiana.",
+      "price_range": "R$ 500 - R$ 1.200",
+      "keywords": [
+        "Valentino",
+        "Donna",
+        "Uomo",
+        "perfume italiano Valentino"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Valentino"
+    },
+    {
+      "slug": "bvlgari",
+      "name": "Bvlgari Parfums",
+      "country": "Itália",
+      "founded": 1992,
+      "category": "designer",
+      "story": "Bvlgari lançou sua linha de perfumes em 1992. Conhecida por fragrâncias refinadas como Omnia e Goldea. Elegância joalheira italiana.",
+      "price_range": "R$ 500 - R$ 1.200",
+      "keywords": [
+        "Bvlgari",
+        "Omnia",
+        "Goldea",
+        "perfume italiano Bvlgari",
+        "joia perfume"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Bvlgari"
+    },
+    {
+      "slug": "burberry",
+      "name": "Burberry Parfums",
+      "country": "Reino Unido",
+      "founded": 1981,
+      "category": "designer",
+      "story": "Burberry lançou sua linha de perfumes em 1981. Burberry Brit e Her são referências de elegância britânica.",
+      "price_range": "R$ 400 - R$ 1.000",
+      "keywords": [
+        "Burberry",
+        "Brit",
+        "Her",
+        "perfume inglês Burberry"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Burberry"
+    },
+    {
+      "slug": "dolce-gabbana",
+      "name": "Dolce & Gabbana Parfums",
+      "country": "Itália",
+      "founded": 1992,
+      "category": "designer",
+      "story": "D&G lançou sua linha de perfumes em 1992. Light Blue é um dos perfumes mais vendidos do mundo. O italiano sensual mediterrâneo.",
+      "price_range": "R$ 400 - R$ 1.000",
+      "keywords": [
+        "Dolce Gabbana",
+        "Light Blue",
+        "The One",
+        "perfume D&G"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Dolce+Gabbana"
+    },
+    {
+      "slug": "jean-paul-gaultier",
+      "name": "Jean Paul Gaultier Parfums",
+      "country": "França",
+      "founded": 1993,
+      "category": "designer",
+      "story": "JPG lançou Le Male em 1993 com seu frasco em forma de torso masculino. Scandal e La Belle são best-sellers. ousadia parisiense.",
+      "price_range": "R$ 400 - R$ 1.000",
+      "keywords": [
+        "Jean Paul Gaultier",
+        "Le Male",
+        "Scandal",
+        "La Belle",
+        "perfume JPG"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=JPG"
+    },
+    {
+      "slug": "mugler",
+      "name": "Mugler Parfums",
+      "country": "França",
+      "founded": 1992,
+      "category": "designer",
+      "story": "Mugler lançou Angel em 1992, criando a categoria gourmand. Alien e Womanity são ousados. O pioneiro do gourmand.",
+      "price_range": "R$ 500 - R$ 1.200",
+      "keywords": [
+        "Mugler",
+        "Angel",
+        "Alien",
+        "Womanity",
+        "perfume gourmand",
+        "perfume Mugler"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Mugler"
+    },
+    {
+      "slug": "victor-rolf",
+      "name": "Viktor & Rolf Parfums",
+      "country": "Países Baixos",
+      "founded": 2003,
+      "category": "designer",
+      "story": "Viktor & Rolf lançou Flowerbomb em 2003 com seu frasco em forma de granada. Spicebomb é o equivalente masculino. O teatral holandês.",
+      "price_range": "R$ 500 - R$ 1.200",
+      "keywords": [
+        "Viktor Rolf",
+        "Flowerbomb",
+        "Spicebomb",
+        "perfume holandês"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Viktor+Rolf"
+    },
+    {
+      "slug": "prada",
+      "name": "Prada Parfums",
+      "country": "Itália",
+      "founded": 2003,
+      "category": "designer",
+      "story": "Prada lançou sua linha de perfumes em 2003. Candy e Luna Rossa são referências. Elegância minimalista italiana.",
+      "price_range": "R$ 500 - R$ 1.200",
+      "keywords": [
+        "Prada",
+        "Candy",
+        "Luna Rossa",
+        "perfume italiano Prada"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Prada"
+    },
+    {
+      "slug": "boucheron",
+      "name": "Boucheron Parfums",
+      "country": "França",
+      "founded": 1988,
+      "category": "nicho",
+      "story": "Boucheron é uma joalheria francesa fundada em 1858 que lançou sua linha de perfumes em 1988. Combina luxo joalheiro com perfumaria refinada. Quatre e Jaïpur são ícones.",
+      "price_range": "R$ 800 - R$ 2.000",
+      "keywords": [
+        "Boucheron",
+        "Quatre",
+        "Jaïpur",
+        "perfume joia francês",
+        "perfume luxo Boucheron"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Boucheron"
+    },
+    {
+      "slug": "cartier",
+      "name": "Cartier Parfums",
+      "country": "França",
+      "founded": 1981,
+      "category": "nicho",
+      "story": "Cartier é uma joalheria francesa fundada em 1847 que lançou sua linha de perfumes em 1981. L'Envol e Declaration são referências. Luxo joalheiro com perfumaria refinada.",
+      "price_range": "R$ 800 - R$ 2.000",
+      "keywords": [
+        "Cartier",
+        "L'Envol",
+        "Declaration",
+        "perfume joia Cartier"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Cartier"
+    },
+    {
+      "slug": "montblanc",
+      "name": "Montblanc Parfums",
+      "country": "Alemanha",
+      "founded": 2001,
+      "category": "designer",
+      "story": "Montblanc lançou sua linha de perfumes em 2001. Legend e Explorer são referências masculinas. Elegância alemã atemporal.",
+      "price_range": "R$ 400 - R$ 900",
+      "keywords": [
+        "Montblanc",
+        "Legend",
+        "Explorer",
+        "perfume alemão Montblanc"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Montblanc"
+    },
+    {
+      "slug": "boss",
+      "name": "Hugo Boss Parfums",
+      "country": "Alemanha",
+      "founded": 1985,
+      "category": "designer",
+      "story": "Hugo Boss lançou sua linha de perfumes em 1985. Boss Bottled é um dos perfumes masculinos mais vendidos do mundo. Elegância corporativa alemã.",
+      "price_range": "R$ 400 - R$ 900",
+      "keywords": [
+        "Hugo Boss",
+        "Boss Bottled",
+        "Boss The Scent",
+        "perfume alemão Boss"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Hugo+Boss"
+    },
+    {
+      "slug": "davidoff",
+      "name": "Davidoff Parfums",
+      "country": "Suíça",
+      "founded": 1984,
+      "category": "designer",
+      "story": "Davidoff lançou Cool Water em 1988, um dos perfumes masculinos mais vendidos do mundo. Referência aquática masculina.",
+      "price_range": "R$ 200 - R$ 600",
+      "keywords": [
+        "Davidoff",
+        "Cool Water",
+        "Zino",
+        "perfume suíço Davidoff"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Davidoff"
+    },
+    {
+      "slug": "creed-aventus",
+      "name": "Creed Aventus",
+      "country": "França",
+      "founded": 1760,
+      "category": "nicho",
+      "story": "Creed Aventus é a fragrância masculina mais lendária do mundo. Lançada em 2010 para celebrar o 250º aniversário da Creed. Notas de abacaxi, bétula e âmbar cinza. 673 mil buscas/mês no Google Brasil.",
+      "price_range": "R$ 2.500 - R$ 5.000",
+      "keywords": [
+        "Creed Aventus",
+        "Aventus",
+        "perfume masculino luxo",
+        "Creed original"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Creed+Aventus"
+    },
+    {
+      "slug": "maison-margiela",
+      "name": "Maison Margiela Replica",
+      "country": "França",
+      "founded": 2010,
+      "category": "nicho",
+      "story": "Maison Margiela Replica foi fundada em 2010. Cada perfume replica uma memória específica (Beach Walk, Lazy Sunday Morning, Jazz Club). Conceito único de fragrância-memória.",
+      "price_range": "R$ 700 - R$ 1.500",
+      "keywords": [
+        "Maison Margiela",
+        "Replica",
+        "Beach Walk",
+        "Lazy Sunday Morning",
+        "Jazz Club",
+        "perfume memória"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Margiela"
+    },
+    {
+      "slug": "atelier-cologne",
+      "name": "Atelier Cologne",
+      "country": "França",
+      "founded": 2009,
+      "category": "nicho",
+      "story": "Atelier Cologne foi fundada em 2009. Criou a categoria 'cologne absolue' — eau de cologne com concentração de parfum. Clémentine California e Orange Sanguine são aclamados.",
+      "price_range": "R$ 600 - R$ 1.500",
+      "keywords": [
+        "Atelier Cologne",
+        "Clémentine California",
+        "Orange Sanguine",
+        "cologne absolue",
+        "perfume nicho francês"
+      ],
+      "image": "https://placehold.co/400x400/0e0d0c/d4af37?text=Atelier+Cologne"
+    }
+  ]
+}
