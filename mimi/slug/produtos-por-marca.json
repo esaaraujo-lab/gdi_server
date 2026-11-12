@@ -1,0 +1,1066 @@
+{
+  "version": "1.0.0",
+  "updated": "2026-11-12",
+  "total_marcas": 98,
+  "total_produtos": 123,
+  "description": "Mapa brand_slug → produtos da MAISON de MiMi para renderização SEO das páginas de marca (cross-link com marcas.json).",
+  "marcas": {
+    "lattafa": [
+      {
+        "slug": "ameerat-al-arab-asdaaf-lattafa",
+        "name": "Ameerat Al Arab Asdaaf  Lattafa",
+        "price": 257,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/Ameerat.Al.Arab.Asdaaf.webp",
+        "stock_status": "in_stock"
+      },
+      {
+        "slug": "lattafa-badee-al-oud-for-glory-404",
+        "name": "Lattafa Badee  Al Oud for Glory",
+        "price": 270,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/dec-latafa-badee-oud-for-glory.jpg",
+        "stock_status": "in_stock"
+      },
+      {
+        "slug": "lattafa-qaed-al-fursan-260",
+        "name": "Lattafa Qaed Al Fursan",
+        "price": 260,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/qaed-al-fursan.jpg",
+        "stock_status": "in_stock"
+      },
+      {
+        "slug": "lattafa-asad-bourbon-375",
+        "name": "Lattafa Asad Bourbon",
+        "price": 375,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/asad.bpurbon.webp",
+        "stock_status": "in_stock"
+      },
+      {
+        "slug": "al-noble-ameer-lattafa-preto-375",
+        "name": "Al Noble Ameer - Lattafa-  Preto",
+        "price": 375,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/al-noble-ameer-lattafa-edp-100ml-original.webp",
+        "stock_status": "in_stock"
+      },
+      {
+        "slug": "lattafa-khamrah-dukhan-eau-de-parfum-375",
+        "name": "Lattafa Khamrah Dukhan Eau De Parfum",
+        "price": 375,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/khdkhan.webp",
+        "stock_status": "in_stock"
+      },
+      {
+        "slug": "decante-qaed-al-fursan-5ml-dec-03",
+        "name": "Decante Qaed Al Fursan (5ml)",
+        "price": 27,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/dec-Qaed-Al-Fursan.webp",
+        "stock_status": "in_stock"
+      },
+      {
+        "slug": "decante-dukhan-5ml-dec-08",
+        "name": "Decante Dukhan (5ml)",
+        "price": 39,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/dec-khamrah-dukhan.webp",
+        "stock_status": "in_stock"
+      }
+    ],
+    "allure": [
+      {
+        "slug": "allure-001",
+        "name": "Allure",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-001.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "burberry-london-floral": [
+      {
+        "slug": "burberry-london-floral-002",
+        "name": "Burberry London Floral",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-002.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "inspiracao-ch-men": [
+      {
+        "slug": "25ml-inspiracao-ch-men-004",
+        "name": "25ml - Inspiração CH Men",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-004.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "paco-rabanne": [
+      {
+        "slug": "gold-1-million-005",
+        "name": "Gold 1 Million",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-005.webp",
+        "stock_status": "pre_order"
+      },
+      {
+        "slug": "lady-diamond-million-105",
+        "name": "Lady Diamond Million",
+        "price": 69.99,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-105.webp",
+        "stock_status": "pre_order"
+      },
+      {
+        "slug": "invictus-victory-victorioso-116",
+        "name": "Invictus Victory Victorioso",
+        "price": 69.99,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-116.webp",
+        "stock_status": "pre_order"
+      },
+      {
+        "slug": "fame-couture-329",
+        "name": "Fame Couture",
+        "price": 69.99,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-329.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "dior": [
+      {
+        "slug": "i-love-j-adore-007",
+        "name": "I Love J'adore",
+        "price": 75,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-007.png",
+        "stock_status": "in_stock"
+      },
+      {
+        "slug": "hypnotic-poison-apple-027",
+        "name": "Hypnotic Poison Apple",
+        "price": 75,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-027.webp",
+        "stock_status": "in_stock"
+      }
+    ],
+    "212-vip-men": [
+      {
+        "slug": "212-vip-men-008",
+        "name": "212 Vip Men",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-008.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "perfume-brand-collection-n009-212-vip": [
+      {
+        "slug": "perfume-brand-collection-n009-212-vip-009",
+        "name": "Perfume Brand Collection N009 212 VIP",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-009.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "la-vie-est-belle": [
+      {
+        "slug": "la-vie-est-belle-012",
+        "name": "La Vie Est Belle",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-012.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "brand-collection-017": [
+      {
+        "slug": "brand-collection-017-017",
+        "name": "Brand Collection 017",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-017.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "chanel": [
+      {
+        "slug": "coco-mademoiselle-021",
+        "name": "Coco Mademoiselle",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-021.webp",
+        "stock_status": "pre_order"
+      },
+      {
+        "slug": "chanel-chance-269",
+        "name": "Chanel Chance",
+        "price": 90,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-269.webp",
+        "stock_status": "pre_order"
+      },
+      {
+        "slug": "coco-noir-couture-342",
+        "name": "Coco Noir Couture",
+        "price": 75,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-342.jpeg",
+        "stock_status": "in_stock"
+      },
+      {
+        "slug": "chants-tenderina-250",
+        "name": "Chants Tenderina",
+        "price": 250,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/chants.tenderina.webp",
+        "stock_status": "in_stock"
+      }
+    ],
+    "nyc-scents-bolsinha-de-luxo": [
+      {
+        "slug": "nyc-scents-bolsinha-de-luxo-022",
+        "name": "Nyc Scents Bolsinha de Luxo",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-022.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "brand-collection-023": [
+      {
+        "slug": "brand-collection-023-023",
+        "name": "Brand Collection 023",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-023.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "212-heroes-men-de-carolina-herrera": [
+      {
+        "slug": "skateboard-heroes-025",
+        "name": "Skateboard Heroes",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-347.jpg",
+        "stock_status": "pre_order"
+      }
+    ],
+    "irresistible-de-givenchy": [
+      {
+        "slug": "irresistible-026",
+        "name": "Irresistíble",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-026.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "chanel-chance-trende": [
+      {
+        "slug": "chanel-chance-031",
+        "name": "Chanel Chance",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-031.jpg",
+        "stock_status": "pre_order"
+      }
+    ],
+    "carolina-herrera": [
+      {
+        "slug": "212-vip-rose-034",
+        "name": "212 VIP Rosé",
+        "price": 75,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-034.webp",
+        "stock_status": "in_stock"
+      },
+      {
+        "slug": "good-girl-stiletto-126",
+        "name": "Good Girl Stiletto",
+        "price": 84.99,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-126.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "pink": [
+      {
+        "slug": "narciso-pink-060",
+        "name": "Narciso Pink",
+        "price": 75,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-060.webp",
+        "stock_status": "in_stock"
+      }
+    ],
+    "inspiracao-si-tradicional": [
+      {
+        "slug": "25ml-inspiracao-si-063",
+        "name": "25ml - Inspiração Sí",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-063.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "lancome": [
+      {
+        "slug": "la-nuit-tresor-069",
+        "name": "La Nuit Trésor",
+        "price": 75,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-069.jpg",
+        "stock_status": "in_stock"
+      },
+      {
+        "slug": "idole-238",
+        "name": "Idôle",
+        "price": 99.9,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-238.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "bleu-de-chanel": [
+      {
+        "slug": "bleu-de-chanel-070",
+        "name": "Bleu de Chanel",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-070.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "la-vie-est-belle-intense": [
+      {
+        "slug": "la-vie-est-belle-intense-076",
+        "name": "La Vie Est Belle Intense",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-076.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "inspiracao-dolce-gabbana-pour-femme": [
+      {
+        "slug": "pour-femme-085",
+        "name": "Pour Femme",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-085.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "paco-rabbane-olympea": [
+      {
+        "slug": "brand-olympea-087",
+        "name": "Brand Olympea",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-087.webp",
+        "stock_status": "in_stock"
+      }
+    ],
+    "dolce-gabbana": [
+      {
+        "slug": "light-blue-dolce-gabbana-093",
+        "name": "Light Blue - Dolce & Gabbana",
+        "price": 75,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-093.webp",
+        "stock_status": "in_stock"
+      }
+    ],
+    "calvin-klein": [
+      {
+        "slug": "euphoria-097",
+        "name": "Euphoria",
+        "price": 89.9,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-097.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "calvin-klein-deep-euphoria": [
+      {
+        "slug": "euphoria-deep-099",
+        "name": "Euphoria Deep",
+        "price": 69.99,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-099.jpeg",
+        "stock_status": "pre_order"
+      }
+    ],
+    "212-men": [
+      {
+        "slug": "212-men-brand-collection-n-102-102",
+        "name": "212 Men Brand Collection N.102",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-102.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "good-girl-tradiciona-sapatinho-glitter": [
+      {
+        "slug": "sapatinho-good-girl-glitter-124",
+        "name": "Sapatinho Good Girl Glitter",
+        "price": 100,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-124.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "britney-spears": [
+      {
+        "slug": "fantasy-bloom-132",
+        "name": "Fantasy Bloom",
+        "price": 75,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-132.jpeg",
+        "stock_status": "in_stock"
+      }
+    ],
+    "jean-paul-gaultier": [
+      {
+        "slug": "scandal-honey-136",
+        "name": "Scandal Honey",
+        "price": 69.99,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-136.webp",
+        "stock_status": "pre_order"
+      },
+      {
+        "slug": "le-male-couture-153",
+        "name": "Le Male Couture",
+        "price": 87,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-153.webp",
+        "stock_status": "pre_order"
+      },
+      {
+        "slug": "classique-femmale-171",
+        "name": "Classique Femmale",
+        "price": 75,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-171.webp",
+        "stock_status": "in_stock"
+      }
+    ],
+    "delina-de-quentin-bish": [
+      {
+        "slug": "marly-delina-151",
+        "name": "Marly Delina",
+        "price": 75,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-151.webp",
+        "stock_status": "in_stock"
+      }
+    ],
+    "parfums-de-marly": [
+      {
+        "slug": "delina-151",
+        "name": "Delina ",
+        "price": 99.9,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/bc-348.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "212-vip-black": [
+      {
+        "slug": "brand-collection-212-vip-black-154",
+        "name": "Brand Collection 212 VIP Black",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-154.jpg",
+        "stock_status": "pre_order"
+      }
+    ],
+    "angel-mugler": [
+      {
+        "slug": "angel-star-estrela-168",
+        "name": "Angel Star - Estrela",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-168.jpg",
+        "stock_status": "in_stock"
+      }
+    ],
+    "good-girl-legere": [
+      {
+        "slug": "25ml-inspiracao-legere-173",
+        "name": "25ml - Inspiração Legere",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-173.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "polo-blue": [
+      {
+        "slug": "polo-blue-174",
+        "name": "Polo Blue",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-174.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "issey-miyake": [
+      {
+        "slug": "l-eau-d-issey-176",
+        "name": "L'Eau d'Issey",
+        "price": 75,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-176.webp",
+        "stock_status": "in_stock"
+      }
+    ],
+    "chloe-eau-de-parfum": [
+      {
+        "slug": "chloe-177",
+        "name": "Chloé",
+        "price": 109,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-177.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "bad-boy": [
+      {
+        "slug": "brand-collection-bad-boy-181",
+        "name": "Brand Collection Bad Boy",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-181.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "animale-for-men": [
+      {
+        "slug": "animale-for-men-190",
+        "name": "Animale for Men",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-190.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "212-sexy": [
+      {
+        "slug": "brand-collection-212-sexy-194",
+        "name": "Brand Collection 212 Sexy",
+        "price": 80,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-194.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "yves-saint-laurent": [
+      {
+        "slug": "libre-intense-203",
+        "name": "Libre Intense",
+        "price": 96,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-203.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "kenzo": [
+      {
+        "slug": "flower-by-kenzo-216",
+        "name": "Flower by  Kenzo ",
+        "price": 75,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-216.webp",
+        "stock_status": "in_stock"
+      }
+    ],
+    "versace-eros-men": [
+      {
+        "slug": "versace-eros-men-242",
+        "name": "Versace Eros Men",
+        "price": 99.9,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-242.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "baccarat": [
+      {
+        "slug": "baccarat-247",
+        "name": "Baccarat",
+        "price": 99.9,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-247.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "dylan-blue": [
+      {
+        "slug": "dylan-blue-265",
+        "name": "Dylan Blue",
+        "price": 99.9,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-265.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "angel-nova": [
+      {
+        "slug": "angel-nova-283",
+        "name": "Angel Nova",
+        "price": 99.9,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-283.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "inspiracao-l-interdit-rouge": [
+      {
+        "slug": "inspiracao-l-interdit-rouge-294",
+        "name": "Inspiração L'interdit Rouge",
+        "price": 99.9,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-294.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "inspiracao-phanton": [
+      {
+        "slug": "brand-collection-phanton-296",
+        "name": "Brand Collection Phanton",
+        "price": 99.9,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-296.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "very": [
+      {
+        "slug": "sapatinho-brand-collection-very-red-297",
+        "name": "Sapatinho Brand Collection  Very Red",
+        "price": 99.9,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-297.jpg",
+        "stock_status": "pre_order"
+      }
+    ],
+    "guerlain": [
+      {
+        "slug": "mon-guerlain-bloom-312",
+        "name": "Mon Guerlain Bloom",
+        "price": 75,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-312.jpeg",
+        "stock_status": "in_stock"
+      }
+    ],
+    "sauvage-elixir": [
+      {
+        "slug": "sauvage-elixir-315",
+        "name": "Sauvage Elixir",
+        "price": 99.9,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-315.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "gossip-man": [
+      {
+        "slug": "gossip-man-321",
+        "name": "Gossip Man",
+        "price": 99.9,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-321.jpg",
+        "stock_status": "pre_order"
+      }
+    ],
+    "le-male-parfum": [
+      {
+        "slug": "le-male-parfum-325",
+        "name": "Lê Male Parfum",
+        "price": 99.9,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-325.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "bombshell": [
+      {
+        "slug": "bombshell-331",
+        "name": "Bombshell",
+        "price": 99.9,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-331.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "inspiracao-212-heroes-forever-feminino": [
+      {
+        "slug": "212-heroes-forever-340",
+        "name": "212 Heroes Forever",
+        "price": 99.9,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/bc-340.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "invictus-platinum": [
+      {
+        "slug": "invictus-platinum-350",
+        "name": "Invictus Platinum",
+        "price": 99.9,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/bc-350.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "good-girl-midnight": [
+      {
+        "slug": "collection-good-girl-midnight-357",
+        "name": "Collection  Good Girl Midnight",
+        "price": 99.9,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/bc-357.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "fame": [
+      {
+        "slug": "fame-365",
+        "name": "Fame",
+        "price": 99.9,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/bc-365.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "mfk": [
+      {
+        "slug": "baccarat-rouge-540-extrait-367",
+        "name": "Baccarat Rouge 540 Extrait",
+        "price": 90,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-367.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "inspiracao-versace-dylan-purple": [
+      {
+        "slug": "25ml-inspiracao-versace-dylan-purple-370",
+        "name": "25ml - Inspiração Versace Dylan Purple",
+        "price": 99.9,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/bc-370.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "inspiracao-le-beau": [
+      {
+        "slug": "inspiracao-le-beau-376",
+        "name": "Inspiração Le Beau",
+        "price": 99.9,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/bc-376.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "maison-francis-kurkdjian": [
+      {
+        "slug": "baccarat-rouge-540-380",
+        "name": "Baccarat Rouge 540",
+        "price": 99.9,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/bc-380.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "wanted-by-night-de-azzaro": [
+      {
+        "slug": "wanted-by-night-386",
+        "name": "Wanted by Night",
+        "price": 99.9,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/bc-386.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "tous": [
+      {
+        "slug": "baby-tous-bear-394",
+        "name": "Baby Tous Bear",
+        "price": 69.99,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-394.webp",
+        "stock_status": "pre_order"
+      },
+      {
+        "slug": "decante-yara-tous-5ml-dec-18",
+        "name": "Decante Yara Tous (5ml)",
+        "price": 39,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/dec-latafa_yara_tours_fem-01.jpg",
+        "stock_status": "in_stock"
+      }
+    ],
+    "inspiracao-moschino-toy-2-rosa": [
+      {
+        "slug": "moschino-toy-2-rosa-395",
+        "name": "Moschino Toy 2 Rosa",
+        "price": 99.9,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/bc-395.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "xerjoff-casamorati-erba-pura": [
+      {
+        "slug": "xerjoff-lira-casamorati-402",
+        "name": "Xerjoff Lira Casamorati",
+        "price": 85,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/bc-402_bc-407.webp",
+        "stock_status": "in_stock"
+      }
+    ],
+    "phantom-intense": [
+      {
+        "slug": "phantom-intense-427",
+        "name": "Phantom Intense",
+        "price": 99.9,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/bc-427.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "phantom-elixir": [
+      {
+        "slug": "phantom-elixir-440",
+        "name": "Phantom Elixir",
+        "price": 99.9,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/bc-440.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "prada": [
+      {
+        "slug": "paradoxe-445",
+        "name": "Paradoxe",
+        "price": 89.9,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/bc-445.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "delina-limited-editions-parfums-de-marly": [
+      {
+        "slug": "delina-limited-editions-468",
+        "name": "Delina Limited Editions",
+        "price": 99.9,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/bc-468.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "si-passione-red-musk-intense-giorgio-armani": [
+      {
+        "slug": "si-passione-red-musk-borboleta-477",
+        "name": "Sì Passione Red Musk Borboleta ",
+        "price": 85,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/bc-477.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "dream-collection": [
+      {
+        "slug": "arabic-collection-yara-rosa-002",
+        "name": "Arabic Collection - Yara Rosa",
+        "price": 85,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/arabic.yara.rosa.webp",
+        "stock_status": "in_stock"
+      }
+    ],
+    "olimpea-de-paco-rabane": [
+      {
+        "slug": "olimpea-de-paco-rabane-087",
+        "name": "Olimpéa de Paco Rabane",
+        "price": 77,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/bc-087.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "sauvage-dior-sauvage": [
+      {
+        "slug": "dior-sauvage-100",
+        "name": "Dior Sauvage",
+        "price": 75,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/bc-100.webp",
+        "stock_status": "in_stock"
+      }
+    ],
+    "libre-intense-yves-saint-laurent": [
+      {
+        "slug": "libre-intense-159",
+        "name": "Libre Intense",
+        "price": 75,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/bc-159.webp",
+        "stock_status": "in_stock"
+      }
+    ],
+    "angel-de-mugler": [
+      {
+        "slug": "angel-de-mugler-168",
+        "name": "Angel de Mugler",
+        "price": 85,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/bc-168.webp",
+        "stock_status": "in_stock"
+      }
+    ],
+    "burberry-her": [
+      {
+        "slug": "burberry-her-246",
+        "name": "Burberry Her",
+        "price": 75,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/bc-246.webp",
+        "stock_status": "in_stock"
+      }
+    ],
+    "bareeq-al-dhahab": [
+      {
+        "slug": "bareeq-al-dhahab-257",
+        "name": "Bareeq Al Dhahab",
+        "price": 257,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/bareeq.webp",
+        "stock_status": "in_stock"
+      }
+    ],
+    "5-lattafa-ameer-al-oudh-intense-oud-lattafa": [
+      {
+        "slug": "oud-mistery-intense-267",
+        "name": "Oud Mistery Intense",
+        "price": 267,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/omi.webp",
+        "stock_status": "in_stock"
+      },
+      {
+        "slug": "decante-oud-mystery-intense-5ml-dec-11",
+        "name": "Decante Oud Mystery Intense (5ml)",
+        "price": 39,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/wataniah_oud_mistery_intense.png",
+        "stock_status": "in_stock"
+      },
+      {
+        "slug": "decante-al-noble-ameer-5ml-dec-12",
+        "name": "Decante Al Noble Ameer (5ml)",
+        "price": 39,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/dec-uni.jpg",
+        "stock_status": "in_stock"
+      },
+      {
+        "slug": "decante-rose-mystery-intense-5ml-dec-15",
+        "name": "Decante Rose Mystery Intense (5ml)",
+        "price": 39,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/dec-fem-01.jpg",
+        "stock_status": "in_stock"
+      }
+    ],
+    "miss-dior-blooming-bouquet": [
+      {
+        "slug": "blooming-bouquet-384",
+        "name": "Blooming Bouquet",
+        "price": 75,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/bc-384.jpg",
+        "stock_status": "in_stock"
+      }
+    ],
+    "carolina-herreira-bad-man-elixir": [
+      {
+        "slug": "carolina-herrera-bad-man-elixir-443",
+        "name": "Carolina Herrera - Bad Man Elixir",
+        "price": 80,
+        "image": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQm8vrY1N_e1J7gI33L4_7PoLWzBu6WE1GUGEuLC3Ocn0DxWYbEzx3ee2E&s=10",
+        "stock_status": "in_stock"
+      }
+    ],
+    "prada-paradigm": [
+      {
+        "slug": "brand-collection-prada-paradigm-445",
+        "name": "Brand Collection Prada Paradigm",
+        "price": 75,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/bc-445.webp",
+        "stock_status": "in_stock"
+      }
+    ],
+    "caroline-herreira": [
+      {
+        "slug": "la-bomba-477",
+        "name": "Lá Bomba ",
+        "price": 84,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/bc-477.webp",
+        "stock_status": "in_stock"
+      }
+    ],
+    "afeer-atheeri-mel-baunilha-quente": [
+      {
+        "slug": "afeer-atheeri-abelhinha-af-01",
+        "name": "Afeer Atheeri Abelhinha",
+        "price": 79,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/af-atheeri-abelhinha.webp",
+        "stock_status": "pre_order"
+      }
+    ],
+    "4-lattafa-asad-lattafa": [
+      {
+        "slug": "afeer-asad-sultan-af-02",
+        "name": "Afeer Asad Sultan",
+        "price": 79,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/af-assad-elixir.webp",
+        "stock_status": "pre_order"
+      },
+      {
+        "slug": "decante-asad-zanzibar-5ml-dec-02",
+        "name": "Decante Asad Zanzibar (5ml)",
+        "price": 25,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/dec-assad-zanzibar.webp",
+        "stock_status": "in_stock"
+      },
+      {
+        "slug": "decante-asad-marrom-bourbon-5ml-dec-06",
+        "name": "Decante Asad Marrom Bourbon (5ml)",
+        "price": 39,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/dec-masc-01.jpg",
+        "stock_status": "in_stock"
+      }
+    ],
+    "afnan": [
+      {
+        "slug": "arabic-miniatura-9pm-af-04",
+        "name": "Arabic Miniatura  9PM ",
+        "price": 80,
+        "image": "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/mimi/upload_images/9.da.noite.webp",
+        "stock_status": "in_stock"
+      }
+    ],
+    "7-lattafa-fakhar-black-lattafa": [
+      {
+        "slug": "afeer-fakhar-rose-af-07",
+        "name": "Afeer Fakhar Rose",
+        "price": 79,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/af-07.png",
+        "stock_status": "pre_order"
+      },
+      {
+        "slug": "decante-fakhar-rose-gold-5ml-dec-16",
+        "name": "Decante Fakhar Rose Gold (5ml)",
+        "price": 39,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/dec-fem-01.jpg",
+        "stock_status": "in_stock"
+      }
+    ],
+    "al-wataniah": [
+      {
+        "slug": "decante-bareeq-al-dahab-5ml-dec-01",
+        "name": "Decante Bareeq Al Dahab (5ml)",
+        "price": 39,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images//dec-bareeq-al-dhahab.webp",
+        "stock_status": "in_stock"
+      }
+    ],
+    "creed-royal": [
+      {
+        "slug": "decante-royal-blend-nero-5ml-dec-04",
+        "name": "Decante Royal Blend Nero (5ml)",
+        "price": 29,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/dec-roayl-blend-nero.jpg",
+        "stock_status": "in_stock"
+      }
+    ],
+    "1-lattafa-khamrah-lattafa": [
+      {
+        "slug": "decante-khamrah-5ml-dec-05",
+        "name": "Decante Khamrah (5ml)",
+        "price": 35,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/dec-uni.jpg",
+        "stock_status": "in_stock"
+      }
+    ],
+    "armaf": [
+      {
+        "slug": "decante-odyssey-dubai-chocolat-5ml-dec-07",
+        "name": "Decante Odyssey Dubai Chocolat (5ml)",
+        "price": 39,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/dec-fem-01.jpg",
+        "stock_status": "in_stock"
+      }
+    ],
+    "28-al-wataniah-watani-noir-al-wataniah": [
+      {
+        "slug": "decante-watani-noir-5ml-dec-09",
+        "name": "Decante Watani Noir (5ml)",
+        "price": 39,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/dec-noir-masc-01.jpg",
+        "stock_status": "in_stock"
+      }
+    ],
+    "2-lattafa-bade-e-al-oud-oud-for-glory-lattafa": [
+      {
+        "slug": "decante-badee-al-oud-for-glory-5ml-dec-10",
+        "name": "Decante Badee Al Oud For Glory (5ml)",
+        "price": 39,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/dec-latafa-badee-oud-for-glory.jpg",
+        "stock_status": "in_stock"
+      }
+    ],
+    "maison-alhambra": [
+      {
+        "slug": "decante-chants-tenderina-5ml-dec-13",
+        "name": "Decante Chants Tenderina (5ml)",
+        "price": 39,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/maison_alhambra_chants_tenderina.jpg",
+        "stock_status": "in_stock"
+      }
+    ],
+    "prive-zarah": [
+      {
+        "slug": "decante-amirat-al-arab-prive-red-5ml-dec-14",
+        "name": "Decante Amirat Al Arab Prive Red (5ml)",
+        "price": 39,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/dec-fem-01.jpg",
+        "stock_status": "in_stock"
+      }
+    ],
+    "28-al-haramain-amber-oud-gold-edition-al-haramain": [
+      {
+        "slug": "decante-tharwah-gold-5ml-dec-17",
+        "name": "Decante Tharwah Gold (5ml)",
+        "price": 39,
+        "image": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/mimi/upload_images/dec-fem-latafa_tharwha_gold_feminino.jpg",
+        "stock_status": "in_stock"
+      }
+    ]
+  }
+}
