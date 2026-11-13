@@ -7,6 +7,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AnimationUtils
+import android.widget.Toast
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -175,6 +176,36 @@ class FileAdapter(
             // Watched ✓ on videos watched to the end.
             val showWatched = isVideo && item.name in watchedNames
             watchedBadge.visibility = if (showWatched) View.VISIBLE else View.GONE
+
+            // ★ v2.1.3: ⭐ Minha lista — pasta = favorita o CURSO (a pasta
+            // inteira); vídeo/áudio/PDF = favorita o arquivo.
+            val sm = SessionManager.get(ctx)
+            if (item.isFolder) {
+                val coursePath = if (currentFolderPath.endsWith("/")) "$currentFolderPath${item.name}/"
+                    else "$currentFolderPath/${item.name}/"
+                favStar.visibility = View.VISIBLE
+                favStar.text = if (sm.isFavoriteCourse(coursePath)) "⭐" else "☆"
+                favStar.setOnClickListener {
+                    val nowFav = sm.toggleFavoriteCourse(coursePath, item.name)
+                    favStar.text = if (nowFav) "⭐" else "☆"
+                    Toast.makeText(ctx,
+                        if (nowFav) "⭐ Curso adicionado à Minha lista"
+                        else "Curso removido da Minha lista",
+                        Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                val favItem = item.copy(folderPath = currentFolderPath)
+                favStar.visibility = View.VISIBLE
+                favStar.text = if (sm.isFavorite(currentFolderPath, item.name)) "⭐" else "☆"
+                favStar.setOnClickListener {
+                    val nowFav = sm.toggleFavorite(favItem)
+                    favStar.text = if (nowFav) "⭐" else "☆"
+                    Toast.makeText(ctx,
+                        if (nowFav) "⭐ Adicionado à Minha lista"
+                        else "Removido da Minha lista",
+                        Toast.LENGTH_SHORT).show()
+                }
+            }
         }
 
         playAppear(holder, position)
