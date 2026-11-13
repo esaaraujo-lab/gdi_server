@@ -1731,6 +1731,162 @@
         return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       },
 
+      // ★ v2.15.1: seção "Compartilhados" — itens de TODOS os alunos, com
+      // filtros por assunto e por aluno, autor visível em cada card.
+      async _renderSharedSection(el, kind) {
+        if (!el) return;
+        const titles = { flashcards: 'Flashcards', questoes: 'Questões', resumos: 'Resumos' };
+        const icons = { flashcards: '🃏', questoes: '❓', resumos: '📚' };
+        const wrap = document.createElement('div');
+        wrap.className = 'meggy-shared-section';
+        wrap.style.cssText = 'margin-top:28px;';
+        wrap.innerHTML =
+          '<h2 style="font-size:17px;color:#f0f6fc;margin:0 0 4px;">🤝 Compartilhados — de todos os alunos</h2>' +
+          '<div style="color:#9aa4b8;font-size:13px;margin-bottom:12px;">' + (titles[kind] || 'Conteúdos') + ' gerados por qualquer aluno · filtre por assunto e por aluno</div>' +
+          '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' +
+            '<select id="meggy-shared-subject" style="flex:1;min-width:160px;background:rgba(255,255,255,.06);border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:8px 10px;font-size:13px;">' +
+              '<option value="">Todos os assuntos</option>' +
+            '</select>' +
+            '<select id="meggy-shared-author" style="flex:1;min-width:160px;background:rgba(255,255,255,.06);border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:8px 10px;font-size:13px;">' +
+              '<option value="">Todos os alunos</option>' +
+            '</select>' +
+          '</div>' +
+          '<div id="meggy-shared-list"><div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando compartilhados...</div></div></div>';
+        el.appendChild(wrap);
+        const listEl = wrap.querySelector('#meggy-shared-list');
+        const subjectSel = wrap.querySelector('#meggy-shared-subject');
+        const authorSel = wrap.querySelector('#meggy-shared-author');
+        const esc = Shell.views._esc;
+        const fmtDate = (d) => { try { return d ? new Date(d).toLocaleDateString('pt-BR') : ''; } catch (_) { return ''; } };
+        const toast = (m) => { try { if (typeof window.showToast === 'function') window.showToast(m); } catch (_) {} };
+        try {
+          if (!Shell.__sharedAuthors) {
+            const r = await fetch('/api/ai/shared-authors', { cache: 'no-store' });
+            const d = await r.json();
+            Shell.__sharedAuthors = (d && d.ok && Array.isArray(d.authors)) ? d.authors : [];
+          }
+          if (!Shell.__sharedSubjects) {
+            const r = await fetch('/api/ai/shared-subjects', { cache: 'no-store' });
+            const d = await r.json();
+            Shell.__sharedSubjects = (d && d.ok) ? d : { summaryLessons: [], flashcardSubjects: [] };
+          }
+        } catch (_) {}
+        const subjects = kind === 'resumos'
+          ? (Shell.__sharedSubjects.summaryLessons || [])
+          : (Shell.__sharedSubjects.flashcardSubjects || []);
+        if (kind === 'resumos') subjectSel.querySelector('option').textContent = 'Todas as aulas';
+        subjects.forEach((s) => {
+          const o = document.createElement('option');
+          o.value = s; o.textContent = s;
+          subjectSel.appendChild(o);
+        });
+        (Shell.__sharedAuthors || []).forEach((a) => {
+          const o = document.createElement('option');
+          o.value = a.author;
+          o.textContent = a.author + ' (' + ((a.summaries || 0) + (a.flashcards || 0)) + ')';
+          authorSel.appendChild(o);
+        });
+        const loadList = async () => {
+          const subject = subjectSel.value || '';
+          const author = authorSel.value || '';
+          listEl.innerHTML = '<div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando...</div></div>';
+          try {
+            let items = [];
+            if (kind === 'resumos') {
+              const q = [];
+              if (subject) q.push('lesson=' + encodeURIComponent(subject));
+              if (author) q.push('author=' + encodeURIComponent(author));
+              const r = await fetch('/api/ai/shared-summaries' + (q.length ? '?' + q.join('&') : ''), { cache: 'no-store' });
+              const d = await r.json();
+              items = (d && d.ok && Array.isArray(d.summaries)) ? d.summaries : [];
+            } else {
+              const q = [];
+              if (kind === 'questoes') q.push('kind=question');
+              if (subject) q.push('subject=' + encodeURIComponent(subject));
+              if (author) q.push('author=' + encodeURIComponent(author));
+              const r = await fetch('/api/ai/shared-flashcards?' + q.join('&'), { cache: 'no-store' });
+              const d = await r.json();
+              items = (d && d.ok && Array.isArray(d.items)) ? d.items : [];
+            }
+            if (!items.length) {
+              listEl.innerHTML = '<div style="color:#9aa4b8;font-size:13px;padding:12px 0;">Nenhum item compartilhado com esses filtros.</div>';
+              return;
+            }
+            const icon = icons[kind] || '📝';
+            let html = '<div class="meggy-study-list">';
+            items.forEach((it, idx) => {
+              const author = esc(it.author || '—');
+              const date = fmtDate(it.date);
+              const byline = 'por ' + author + (date ? ' · ' + date : '');
+              if (kind === 'resumos') {
+                const title = esc(it.lessonName || it.lesson || 'Aula');
+                const prev = esc(String(it.summary || '').replace(/[#*`>]/g, '').replace(/\n/g, ' ').substring(0, 120));
+                html += '<div class="meggy-study-item meggy-shared-item" data-idx="' + idx + '" style="cursor:pointer;">' +
+                  '<div class="meggy-study-item-icon">📚</div>' +
+                  '<div class="meggy-study-item-body"><div class="meggy-study-item-title">' + title + '</div>' +
+                  '<div class="meggy-study-item-meta">' + prev + (prev ? '...' : '') + '</div>' +
+                  '<div class="meggy-study-item-meta" style="color:#ff8b9f;">' + byline + '</div></div>' +
+                  '<i class="bi bi-chevron-right meggy-study-item-chevron"></i></div>';
+              } else {
+                const title = esc(it.statement || it.front || (kind === 'questoes' ? 'Questão' : 'Flashcard'));
+                const sub = esc(it.subject || '');
+                html += '<div class="meggy-study-item meggy-shared-item" data-idx="' + idx + '" style="cursor:pointer;">' +
+                  '<div class="meggy-study-item-icon">' + icon + '</div>' +
+                  '<div class="meggy-study-item-body"><div class="meggy-study-item-title">' + title + '</div>' +
+                  '<div class="meggy-study-item-meta">' + sub + '</div>' +
+                  '<div class="meggy-study-item-meta" style="color:#ff8b9f;">' + byline + '</div></div>' +
+                  '<i class="bi bi-chevron-right meggy-study-item-chevron"></i></div>';
+              }
+            });
+            html += '</div>';
+            listEl.innerHTML = html;
+            wrap._sharedItems = items;
+            listEl.querySelectorAll('.meggy-shared-item').forEach((node) => {
+              node.onclick = () => {
+                const it = wrap._sharedItems[parseInt(node.dataset.idx, 10)];
+                if (!it) return;
+                if (kind === 'resumos') {
+                  Shell.views._showSummary(el, { lessonName: it.lessonName || it.lesson || 'Aula', summary: it.summary || '', author: it.author || '', date: it.date || 0 });
+                } else if (kind === 'questoes') {
+                  Shell.views._showQuiz(el, { lessonName: it.subject || 'Questão', author: it.author || '', questions: [Shell.views._sharedCardToQuestion(it)] });
+                } else {
+                  Shell.views._showFlashcardDeck(el, { lessonName: it.subject || 'Flashcard', author: it.author || '', questions: [Shell.views._sharedCardToQuestion(it)] });
+                }
+              };
+            });
+          } catch (e) {
+            listEl.innerHTML = '<div style="color:#ff8b8b;font-size:13px;padding:12px 0;">Não foi possível carregar os compartilhados.</div>';
+            toast('Não foi possível carregar os compartilhados');
+          }
+        };
+        subjectSel.onchange = loadList;
+        authorSel.onchange = loadList;
+        loadList();
+      },
+
+      // ★ v2.15.1: converte um card compartilhado (shared_flashcards) no formato
+      // de questão que _showQuiz/_showFlashcardDeck já entendem.
+      _sharedCardToQuestion(it) {
+        const q = {
+          statement: it.statement || it.front || '',
+          options: Array.isArray(it.options) ? it.options : null,
+          correct: (typeof it.correct === 'number') ? it.correct : (parseInt(it.correct, 10) || 0),
+          explanation: it.explanation || '',
+          legalText: it.legalText || '',
+          fundamentacao: it.fundamentacao || '',
+          type: it.type || 'mc',
+          author: it.author || ''
+        };
+        if (!q.statement && it.back) {
+          // card frente/verso sem enunciado: frente vira pergunta, verso vira resposta única
+          q.statement = it.front || '';
+          q.options = [it.back];
+          q.correct = 0;
+          q.type = 'mc';
+        }
+        return q;
+      },
+
       _renderGenerateHint(el, feature) {
         const titles = { flashcards: 'Flashcards', questoes: 'Questões', resumos: 'Resumos' };
         const icons = { flashcards: '🃏', questoes: '❓', resumos: '📚' };
@@ -1946,10 +2102,11 @@
           const withCards = entries.filter(e => e.questions && Array.isArray(e.questions) && e.questions.length > 0);
           const container = document.getElementById('meggy-flashcards-container');
           if (!container) return;
-          if (withCards.length === 0) { Shell.views._renderGenerateHint(el, 'flashcards'); return; }
+          if (withCards.length === 0) { Shell.views._renderGenerateHint(el, 'flashcards'); Shell.views._renderSharedSection(el, 'flashcards'); return; }
           // ★ Agrupar por curso → disciplina → assunto
           const tree = Shell.views._groupEntriesByHierarchy(withCards);
           Shell.views._renderStudyTree(container, tree, 'flashcards', el, withCards);
+          Shell.views._renderSharedSection(el, 'flashcards');
         })();
       },
 
@@ -1978,7 +2135,7 @@
               '<h1 class="meggy-view-title" style="font-size:16px;">🃏 ' + lessonName + '</h1>' +
             '</div>' +
             '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:13px;color:#9aa4b8;">' +
-              '<span>Cartão ' + (current + 1) + ' de ' + questions.length + '</span>' +
+              '<span>Cartão ' + (current + 1) + ' de ' + questions.length + (entry.author ? ' · por ' + Shell.views._esc(entry.author) : '') + '</span>' +
               '<span style="color:#ff8b9f;">Clique no cartão para virar</span>' +
             '</div>' +
             '<div class="meggy-flashcard-deck">' +
@@ -2014,10 +2171,11 @@
           const withQ = entries.filter(e => e.questions && Array.isArray(e.questions) && e.questions.length > 0);
           const container = document.getElementById('meggy-questoes-container');
           if (!container) return;
-          if (withQ.length === 0) { Shell.views._renderGenerateHint(el, 'questoes'); return; }
+          if (withQ.length === 0) { Shell.views._renderGenerateHint(el, 'questoes'); Shell.views._renderSharedSection(el, 'questoes'); return; }
           // ★ Agrupar por curso → disciplina → assunto
           const tree = Shell.views._groupEntriesByHierarchy(withQ);
           Shell.views._renderStudyTree(container, tree, 'questoes', el, withQ);
+          Shell.views._renderSharedSection(el, 'questoes');
         })();
       },
 
@@ -2052,7 +2210,7 @@
               '<h1 class="meggy-view-title" style="font-size:16px;">❓ ' + lessonName + '</h1>' +
             '</div>' +
             '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:13px;color:#9aa4b8;">' +
-              '<span>Questão ' + (current + 1) + ' de ' + questions.length + '</span>' +
+              '<span>Questão ' + (current + 1) + ' de ' + questions.length + (entry.author ? ' · por ' + Shell.views._esc(entry.author) : '') + '</span>' +
               '<span>Acertos: <strong id="meggy-quiz-score" style="color:#5ddeda;">' + score + '</strong>/<span id="meggy-quiz-answered">' + answered + '</span></span>' +
             '</div>' +
             '<div class="meggy-quiz-card">' +
@@ -2136,10 +2294,11 @@
           const withSummary = entries.filter(e => e.summary && typeof e.summary === 'string' && e.summary.length > 50);
           const container = document.getElementById('meggy-resumos-container');
           if (!container) return;
-          if (withSummary.length === 0) { Shell.views._renderGenerateHint(el, 'resumos'); return; }
+          if (withSummary.length === 0) { Shell.views._renderGenerateHint(el, 'resumos'); Shell.views._renderSharedSection(el, 'resumos'); return; }
           // ★ Agrupar por curso → disciplina → assunto
           const tree = Shell.views._groupEntriesByHierarchy(withSummary);
           Shell.views._renderStudyTree(container, tree, 'resumos', el, withSummary);
+          Shell.views._renderSharedSection(el, 'resumos');
         })();
       },
 
@@ -2155,6 +2314,7 @@
             '<button class="meggy-header-btn" onclick="Shell.views.resumos(document.getElementById(\'meggy-main\'))" style="font-size:13px;"><i class="bi bi-arrow-left"></i> Voltar</button>' +
             '<h1 class="meggy-view-title" style="font-size:16px;">📚 ' + lessonName + '</h1>' +
           '</div>' +
+          (entry.author ? '<div style="font-size:13px;color:#ff8b9f;margin:-4px 0 12px;">por ' + Shell.views._esc(entry.author) + (entry.date ? ' · ' + new Date(entry.date).toLocaleDateString('pt-BR') : '') + '</div>' : '') +
           '<div class="meggy-summary-card">' +
             '<div class="meggy-summary-toolbar">' +
               '<span class="meggy-summary-badge">⭐ Resumo Meggy 🐩</span>' +
