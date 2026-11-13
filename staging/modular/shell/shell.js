@@ -459,7 +459,7 @@
                     const __cardHtml = it => {
                         const name = it.name || 'Curso';
                         const badge = it.kind === 'concurso' ? '📌 Concurso' : it.kind === 'featured' ? '⭐ Em destaque' : '📚 Curso';
-                        const meta = badge + (it.total ? ' · ' + it.total + ' aulas' : '') + (it.percent != null && it.total ? ' · ' + it.percent + '% concluído' : '') + (it.examDate ? ' · 📅 ' + it.examDate : '');
+                        const meta = badge + (it.kind === 'concurso' ? '' : ' · ' + (it.total || 0) + ' aulas') + (it.percent != null && it.total ? ' · ' + it.percent + '% concluído' : '') + (it.examDate ? ' · 📅 ' + it.examDate : '');
                         const idAttr = it.kind === 'concurso' ? ' data-concurso-id="' + Shell._esc(it.concursoId) + '"' : ' data-course="' + Shell._esc(it.coursePath || '') + '"';
                         const rmBtn = it.kind === 'featured' ? '' :
                           '<button class="' + (it.kind === 'concurso' ? 'concurso-remove-btn' : 'course-remove-btn') + '" data-' + (it.kind === 'concurso' ? 'concurso-id="' + Shell._esc(it.concursoId) + '" data-concurso-name="' + Shell._esc(name) + '"' : 'course-path="' + Shell._esc(it.coursePath || '') + '" data-course-name="' + Shell._esc(name) + '"') + ' title="Remover" style="position:absolute;top:8px;right:8px;background:transparent;border:0;color:#8b949e;cursor:pointer;font-size:14px;padding:2px 6px;border-radius:6px;">✕</button>';
@@ -513,8 +513,22 @@
                           const r = await fetch('/api/courses/remove', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ coursePath: cp }) });
                           const d = await r.json().catch(() => ({}));
                           if (!r.ok || !d.ok) throw new Error((d && (d.error || d.message)) || ('HTTP ' + r.status));
+                          // ★ v2.14.8: o módulo lê os cursos do localStorage (LS_MANUAL) — se
+                          //   o fallback só apaga no servidor, o curso volta no reload/render
+                          //   do módulo. Limpa o manual + ocultos e invalida o cache unificado.
+                          try {
+                            const _normCp = (s) => String(s || '').toLowerCase().replace(/\/+$/, '');
+                            const _dec = (s) => { try { return decodeURIComponent(s); } catch (_) { return s; } };
+                            const _want = _normCp(_dec(cp));
+                            const _man = JSON.parse(localStorage.getItem('gdi-manual-courses-v1') || '[]');
+                            if (Array.isArray(_man)) localStorage.setItem('gdi-manual-courses-v1', JSON.stringify(_man.filter(m => !m || _normCp(_dec(m.path)) !== _want)));
+                            const _hid = JSON.parse(localStorage.getItem('gdi-hidden-courses-v1') || '[]');
+                            if (Array.isArray(_hid)) localStorage.setItem('gdi-hidden-courses-v1', JSON.stringify(_hid.filter(h => _normCp(_dec(h)) !== _want)));
+                          } catch (_) {}
+                          try { if (window.__gdiStudy && window.__gdiStudy.courses && window.__gdiStudy.courses.invalidateUnifiedCache) window.__gdiStudy.courses.invalidateUnifiedCache(); } catch (_) {}
+                          try { if (typeof Bus !== 'undefined' && Bus.emit) Bus.emit('courses:changed', {}); } catch (_) {}
                           Shell.views.cursos(el);
-                        } catch (err) { alert('Nao foi possivel remover: ' + err.message); }
+                        } catch (err) { if (window.gdiModal) { window.gdiModal({ title: 'Não foi possível remover', message: err.message, confirmText: 'OK' }); } else { alert('Nao foi possivel remover: ' + err.message); } }
                       };
                     });
                   }
