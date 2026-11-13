@@ -16,7 +16,6 @@ import com.bibigyn.app.BiBiGynApp
 import com.bibigyn.app.data.ApiService
 import com.bibigyn.app.data.FileItem
 import com.bibigyn.app.databinding.ActivityBrowseBinding
-import com.bibigyn.app.ui.login.LoginActivity
 import com.bibigyn.app.ui.player.PlayerActivity
 import com.bibigyn.app.util.AuthHelper
 import com.bibigyn.app.util.CrossFolderPlaylist
@@ -47,6 +46,9 @@ class BrowseActivity : AppCompatActivity() {
         binding.toolbar.title = folderName
         binding.toolbar.setNavigationOnClickListener { finish() }
         binding.breadcrumb.text = buildBreadcrumb(currentPath, folderName)
+        // ★ v2.1.3: necessário para os ClickableSpans do breadcrumb.
+        binding.breadcrumb.movementMethod = android.text.method.LinkMovementMethod.getInstance()
+        binding.breadcrumb.highlightColor = android.graphics.Color.TRANSPARENT
 
         val spanCount = calculateSpanCount()
         val layoutManager = GridLayoutManager(this, spanCount)
@@ -58,18 +60,43 @@ class BrowseActivity : AppCompatActivity() {
         loadFolder()
     }
 
+    // ★ v2.1.3: breadcrumb clicável — cada segmento volta para aquela pasta.
     private fun buildBreadcrumb(path: String, displayName: String): CharSequence {
         val pinkColor = ForegroundColorSpan(0xFFFF8B9F.toInt())
         val grayColor = ForegroundColorSpan(0xFF8B949E.toInt())
         val sb = SpannableStringBuilder()
+        val rootStart = sb.length
         sb.append("Meggy", grayColor, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        sb.setSpan(breadcrumbSpan("/"), rootStart, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         val segments = path.trim('/').split('/').filter { it.isNotBlank() }
-        for (seg in segments) {
+        var acc = "/"
+        for ((idx, seg) in segments.withIndex()) {
             sb.append("  ›  ", pinkColor, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             val label = if (seg.matches(Regex("^\\d+:$"))) displayName else seg
+            acc = if (acc.endsWith("/")) "$acc$seg/" else "$acc/$seg/"
+            val start = sb.length
             sb.append(label, grayColor, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            // O último segmento é a pasta atual — não é clicável.
+            if (idx < segments.size - 1) {
+                sb.setSpan(breadcrumbSpan(acc), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
         }
         return sb
+    }
+
+    /** ClickableSpan que navega para o caminho acumulado (sem empilhar telas). */
+    private fun breadcrumbSpan(targetPath: String) = object : android.text.style.ClickableSpan() {
+        override fun onClick(widget: View) {
+            currentPath = targetPath
+            folderName = if (targetPath == "/") "Browse" else targetPath.trim('/').split('/').last()
+            binding.toolbar.title = folderName
+            binding.breadcrumb.text = buildBreadcrumb(currentPath, folderName)
+            loadFolder()
+        }
+        override fun updateDrawState(ds: android.text.TextPaint) {
+            super.updateDrawState(ds)
+            ds.isUnderlineText = false
+        }
     }
 
     private fun calculateSpanCount(): Int {
@@ -103,7 +130,9 @@ class BrowseActivity : AppCompatActivity() {
             binding.recycler.adapter = adapter
 
             if (files.isEmpty()) {
-                binding.errorState?.visibility = View.VISIBLE
+                // ★ v2.1.3: pasta vazia é SUCESSO com 0 arquivos — mostra só
+                // o empty state (antes mostrava erro + vazio ao mesmo tempo).
+                binding.errorState?.visibility = View.GONE
                 binding.emptyState.visibility = View.VISIBLE
                 adapter.submitList(emptyList())
             } else {
@@ -116,17 +145,6 @@ class BrowseActivity : AppCompatActivity() {
                 adapter.setResumeAndWatched(resumed, watched)
             }
         }
-    }
-
-    /**
-     * v2.0.2 — Routes to LoginActivity with CLEAR_TASK so the entire back
-     * stack is wiped. Used when an expired session is detected.
-     */
-    private fun bounceToLogin() {
-        val intent = Intent(this, LoginActivity::class.java)
-        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        startActivity(intent)
-        finish()
     }
 
     private fun openFolder(file: FileItem) {
