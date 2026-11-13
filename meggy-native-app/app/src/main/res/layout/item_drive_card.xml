@@ -65,6 +65,24 @@
                 android:layout_gravity="top"
                 android:background="@drawable/tile_overlay_top" />
 
+            <!-- ★ v2.7.4: Favorito do drive — adiciona/remove da "Minha lista". -->
+            <TextView
+                android:id="@+id/drive_fav_star"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_gravity="top|end"
+                android:layout_marginTop="10dp"
+                android:layout_marginEnd="10dp"
+                android:background="@drawable/badge_resume"
+                android:gravity="center"
+                android:text="☆"
+                android:textColor="#FFFFFFFF"
+                android:textSize="16sp"
+                android:clickable="true"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:contentDescription="Adicionar à Minha lista" />
+
             <!-- Bottom scrim -->
             <View
                 android:layout_width="match_parent"
