@@ -1351,7 +1351,7 @@
 .gdi-central-body::-webkit-scrollbar{width:8px;}
 .gdi-central-body::-webkit-scrollbar-thumb{background:var(--ferreto-border,#21262d);border-radius:4px;}
 .gdi-central-body::-webkit-scrollbar-thumb:hover{background:var(--ferreto-border-strong,#30363d);}
-.gdi-courses{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;}
+.gdi-courses{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;}
 .gdi-course{background:linear-gradient(135deg,var(--ferreto-surface-2,rgba(255,255,255,.04)),rgba(255,255,255,.02));border:1px solid var(--ferreto-border,#21262d);border-radius:16px;padding:18px;transition:all .2s cubic-bezier(.4,0,.2,1);position:relative;overflow:hidden;display:flex;flex-direction:column;}
 .gdi-course::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--ferreto-grad);opacity:0;transition:opacity .2s;}
 .gdi-course:hover{border-color:rgba(255,139,159,.3);transform:translateY(-3px);box-shadow:0 12px 32px -8px rgba(0,0,0,.4);}
@@ -1413,7 +1413,7 @@
   .gdi-central-stats{display:none;}
   .gdi-central-head{padding:12px 14px;gap:10px;}
   .gdi-central-body{padding:16px;}
-  .gdi-courses{grid-template-columns:1fr;}
+  .gdi-courses{grid-template-columns:repeat(2,1fr);gap:10px;}
   .gdi-course-stats{grid-template-columns:repeat(2,1fr);}
 }
 /* ★ Task 15: scan progress bar (lightweight background course scanner) */
@@ -1428,6 +1428,7 @@
    Agora stats viram 2x2, botões ficam menores e padding reduz. */
 @media(max-width:480px){
   .gdi-course{padding:8px!important;}
+  .gdi-courses{gap:8px!important;}
   .gdi-course b{font-size:12px!important;}
   .gdi-course small{font-size:10px!important;margin:4px 0 8px!important;}
   .gdi-course-stats{grid-template-columns:repeat(2,1fr)!important;gap:4px!important;margin:auto 0 8px!important;}
