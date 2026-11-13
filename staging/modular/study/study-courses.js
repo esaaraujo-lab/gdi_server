@@ -184,6 +184,9 @@
         console.warn('[AddCourse] falha ao salvar no Drive (continuando):',e.message);
       }
 
+      // ★ v2.6: escanear a pasta agora — conta o progresso e alimenta a Meggy
+      try{ if(window.gdiCourseScanner && typeof window.gdiCourseScanner.startScan==='function'){ window.gdiCourseScanner.startScan(coursePath, null); } }catch(_){}
+
       // ★ 3) feedback visual: toast
       if(window.showToast)showToast(alreadyExists
         ? 'Curso já estava adicionado — Meggy continua trabalhando em background 🐩'
@@ -685,10 +688,30 @@
 
   // ★ REMOVIDO: tab cursos (user request) — função MANTIDA para preservar API pública
   // (window.renderCursos e window.gdiRefreshCentralPanel podem ser chamados por outros módulos)
+  // ★ v2.6: busca concursos + em destaque do endpoint unificado (cache 60s)
+  let __unifiedCache=null, __unifiedAt=0;
+  async function loadUnifiedExtras(){
+    const now=Date.now();
+    if(__unifiedCache && now-__unifiedAt<60000) return __unifiedCache;
+    const r=await fetch('/api/courses/unified',{credentials:'include'});
+    const d=await r.json();
+    if(!d||!d.ok||!Array.isArray(d.items)) throw new Error('unified failed');
+    const out=[];
+    for(const it of d.items){
+      if(it.kind==='concurso') out.push({kind:'concurso', key:'concurso:'+it.concursoId, concursoId:it.concursoId, name:it.name, examDate:it.examDate||'', total:it.total||0, lessons:new Set(), watched:0});
+      else if(it.kind==='featured') out.push({kind:'featured', key:'featured:'+it.coursePath, coursePath:it.coursePath, name:it.name, icon:it.icon||'⭐', color:it.color||'', total:it.total||0, lessons:new Set(), watched:0});
+    }
+    __unifiedCache=out; __unifiedAt=now;
+    return out;
+  }
+
   async function renderCursos(box){
     const cs=collectCourses();
+    // ★ v2.6: lista única — concursos + em destaque entram na mesma grade
+    const __extras=await loadUnifiedExtras().catch(()=>[]);
+    const all=cs.concat(__extras);
     const hidden=listHiddenCourses();
-    if(!cs.length){
+    if(!all.length){
       box.innerHTML=`<div class="gdi-empty-state">
         <span class="gdi-empty-state-icon">🎓</span>
         <h3>Nenhum estudo registrado ainda</h3>
@@ -725,7 +748,7 @@
       return;
     }
     box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
-      <b style="color:var(--ferreto-text,#f0f6fc);font-size:14px;">${cs.length} curso${cs.length>1?'s':''} em andamento</b>
+      <b style="color:var(--ferreto-text,#f0f6fc);font-size:14px;">${all.length} ${all.length===1?'curso':'cursos'} em andamento</b>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
         <button id="gdi-add-manual-course" class="gdi-mode-btn" style="font-size:11px;"><i class="bi bi-plus-lg"></i> Adicionar curso</button>
         ${hidden.length?`<button id="gdi-show-hidden" class="gdi-mode-btn" style="font-size:11px;"><i class="bi bi-eye-slash"></i> ${hidden.length} oculto${hidden.length>1?'s':''}</button>`:''}
@@ -753,7 +776,7 @@
     let currentPage=box.__page||0;
     function applyFilter(){
       const q=(box.__search||'').toLowerCase().trim();
-      const filtered=q?cs.filter(c=>cleanCourseName(c.key).toLowerCase().includes(q)||driveNameOf(c.key).toLowerCase().includes(q)):cs;
+      const filtered=q?all.filter(c=>{const n=(c.name||cleanCourseName(c.key)||'').toLowerCase();const d=(c.kind?'':(driveNameOf(c.key)||'')).toLowerCase();return n.includes(q)||d.includes(q);}):all;
       const totalPages=Math.max(1,Math.ceil(filtered.length/PAGE_SIZE));
       if(currentPage>=totalPages)currentPage=totalPages-1;
       if(currentPage<0)currentPage=0;
@@ -767,7 +790,7 @@
       }
       // ★ PATCH C: pré-busca bestIn em paralelo (Promise.all) — depois renderiza cards com target resolvido
       (async()=>{
-        const targets=await Promise.all(slice.map(c=>bestIn(c.key).catch(()=>null)));
+        const targets=await Promise.all(slice.map(c=>c.kind?Promise.resolve(null):bestIn(c.key).catch(()=>null)));
         if(box.__filterGen!==__gen)return;  // ★ v1.0.98 FIX: stale — abort
         slice.forEach((c,i)=>renderCourseCard(grid,c,box,targets[i]));
       })().catch(e=>{console.warn('[renderCursos] card render failed:',e&&e.message);});  // ★ CYCLE2-2 FIX: catch fire-and-forget IIFE — renderCourseCard is sync and could throw on DOM bugs.
@@ -788,6 +811,48 @@
       }
     }
     function renderCourseCard(grid,c,box,target){
+      // ★ v2.6: itens unificados (concurso / em destaque) — card simples na mesma grade
+      if(c.kind==='concurso'||c.kind==='featured'){
+        const isConcurso=c.kind==='concurso';
+        const el=document.createElement('div');el.className='gdi-course';el.style.cursor='pointer';
+        el.innerHTML=`
+        <div class="gdi-course-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+          <b style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;">
+            <span style="font-size:18px;flex:none;">${isConcurso?'📌':(c.icon||'⭐')}</span>
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.name||'')}</span>
+          </b>
+          ${isConcurso?'<button class="gdi-course-remove" title="Remover concurso" style="background:transparent;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:14px;padding:2px 6px;flex:none;border-radius:6px;"><i class="bi bi-x-lg"></i></button>':''}
+        </div>
+        <small style="color:var(--ferreto-secondary,#5ddeda);font-size:10px;display:block;margin-top:2px;">${isConcurso?'Concurso':'Curso em destaque'}${c.examDate?' · 📅 '+esc(c.examDate):''}</small>
+        <div class="gdi-course-stats">
+          <div class="gdi-course-stat"><span class="gdi-course-stat-num">${c.total||0}</span><span class="gdi-course-stat-label">Aulas</span></div>
+        </div>`;
+        grid.appendChild(el);
+        const removeBtn=el.querySelector('.gdi-course-remove');
+        if(removeBtn&&isConcurso){
+          removeBtn.onclick=async (e)=>{
+            e.stopPropagation();
+            const ok=await window.gdiModal({title:'Remover concurso',message:'Remover "'+(c.name||'')+'"? As disciplinas e aulas vinculadas serao apagadas. Esta acao nao pode ser desfeita.',confirmText:'Remover',cancelText:'Cancelar',danger:true});
+            if(!ok)return;
+            try{
+              const r=await fetch('/api/concursos/'+encodeURIComponent(c.concursoId),{method:'DELETE',credentials:'include'});
+              const d=await r.json().catch(()=>({}));
+              if(!r.ok||!d.ok)throw new Error((d&&(d.error||d.message))||('HTTP '+r.status));
+              __unifiedCache=null;
+              renderCursos(box).catch(()=>{});
+            }catch(err){if(window.showToast)showToast('Nao foi possivel remover: '+(err&&err.message||err));}
+          };
+        }
+        el.onclick=(e)=>{
+          if(e.target.closest('button'))return;
+          if(isConcurso){
+            if(window.Shell&&window.Shell.views&&window.Shell.views.concursoDetail)window.Shell.views.concursoDetail(document.getElementById('meggy-main'),c.concursoId);
+          }else if(c.coursePath){
+            if(window.Shell&&window.Shell.router){window.Shell.router.navigate('/drives');setTimeout(()=>{if(window.Shell.views&&window.Shell.views._renderDrives)window.Shell.views._renderDrives(c.coursePath);},50);}
+          }
+        };
+        return;
+      }
       // ★ FIX: cursos manuais usam dados do manualCourse (nome, ícone, cor)
       const mc=c.manualCourse||{};
       // ★ FIX 1 (Task 23): decode URL-encoded mc.name defensively.
@@ -815,7 +880,7 @@
             ${isManual?`<span style="font-size:18px;flex:none;">${icon}</span>`:''}
             <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(name)}</span>
           </b>
-          <button class="gdi-course-remove" title="${isManual?'Remover curso manual':'Ocultar curso'}" style="background:transparent;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:14px;padding:2px 6px;flex:none;border-radius:6px;transition:all .15s;"><i class="bi bi-x-lg"></i></button>
+          <button class="gdi-course-remove" title="${isManual?'Remover curso manual':'Remover curso'}" style="background:transparent;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:14px;padding:2px 6px;flex:none;border-radius:6px;transition:all .15s;"><i class="bi bi-x-lg"></i></button>
         </div>
         ${isManual
           ? `<small style="color:var(--ferreto-secondary,#5ddeda);font-size:10px;display:block;margin-top:4px;"><i class="bi bi-hdd"></i> ${escHtml(drive||'Drive')} · <span style="color:#ffd43b;"><i class="bi bi-hourglass-split"></i> Meggy processando…</span></small>`
@@ -873,20 +938,22 @@
         removeBtn.onclick=async (e)=>{
           e.stopPropagation();
           const ok=await window.gdiModal({
-            title:'Ocultar curso',
-            message:'Ocultar "'+name+'" da sua lista de cursos?\n\nO curso não será excluído — você pode restaurá-lo depois.',
-            confirmText:'Ocultar',
+            title:'Remover curso',
+            message:'Remover "'+name+'" da sua lista de cursos?\n\nA pasta no Drive não será apagada — você pode adicioná-lo novamente em Explorar Drives.',
+            confirmText:'Remover',
             cancelText:'Cancelar',
             danger:true
           });
           if(ok){
-            // ★ v1.0.103 FIX (Task 20-5 #10): await hideCourse so the write
-            //   chain completes BEFORE renderCursos reads LS_HIDDEN. Without
-            //   this, renderCursos could race and show the course as still
-            //   visible (write was queued but not yet flushed).
-            await hideCourse(c.key);
-            showToast('Curso ocultado');
-            renderCursos(box).catch(()=>{});
+            try{
+              const r=await fetch('/api/courses/remove',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({coursePath:c.key})});
+              const d=await r.json().catch(()=>({}));
+              if(!r.ok||!d.ok) throw new Error((d&&(d.error||d.message))||('HTTP '+r.status));
+              // ★ v2.5: remoção real no servidor; o hide local só mantém o cache consistente
+              await hideCourse(c.key);
+              showToast('Curso removido');
+              renderCursos(box).catch(()=>{});
+            }catch(err){ showToast('Não foi possível remover: '+(err&&err.message||err)); }
           }
         };
       }
