@@ -189,6 +189,9 @@ class PlayerActivity : AppCompatActivity() {
         binding.sleepButton.setOnClickListener { toggleSleepMode() }
         // ★ v2.0.0: Sleep timer button
         binding.sleepTimerButton.setOnClickListener { showSleepTimerDialog() }
+        // ★ v2.1.3: ⭐ Minha lista — favorita o vídeo atual.
+        binding.favButton.setOnClickListener { toggleFavoriteCurrent() }
+        updateFavButton()
 
         // ★ v2.3.0: REMOVED prev/next button wiring + bottom nav bar per user request.
         // Navigation between lessons is done via the playlist sidebar (☰).
@@ -414,6 +417,7 @@ class PlayerActivity : AppCompatActivity() {
         binding.playlistButton.animate().alpha(1f).setDuration(200).start()
         binding.sleepButton.animate().alpha(1f).setDuration(200).start()
         binding.sleepTimerButton.animate().alpha(1f).setDuration(200).start()
+        binding.favButton.animate().alpha(1f).setDuration(200).start()
         binding.playerView.useController = true
         binding.playerView.showController()
         scheduleAutoHide()
@@ -429,6 +433,7 @@ class PlayerActivity : AppCompatActivity() {
             binding.playlistButton.animate().alpha(0f).setDuration(200).start()
             binding.sleepButton.animate().alpha(0f).setDuration(200).start()
             binding.sleepTimerButton.animate().alpha(0f).setDuration(200).start()
+            binding.favButton.animate().alpha(0f).setDuration(200).start()
             binding.playerView.hideController()
         }
     }
@@ -603,6 +608,11 @@ class PlayerActivity : AppCompatActivity() {
         // ★ v2.0.0: Apply default speed from settings on init
         exo.playbackParameters = PlaybackParameters(speeds[speedIndex])
 
+        // ★ v2.1.3: o switch "Reproduzir próximo automaticamente" (Ajustes)
+        // agora é respeitado de verdade: com autoplay desligado o player
+        // pausa no fim de cada vídeo em vez de avançar sozinho.
+        exo.pauseAtEndOfMediaItems = !SessionManager.get(this).autoplayNext
+
         exo.playWhenReady = true
 
         exo.addListener(object : Player.Listener {
@@ -610,8 +620,13 @@ class PlayerActivity : AppCompatActivity() {
                 if (state == Player.STATE_ENDED) {
                     // ★ v2.4.0: ExoPlayer auto-advances to the next media item in the
                     // playlist. STATE_ENDED only fires when the ENTIRE playlist is done.
+                    // ★ v2.1.3: com autoplay desligado (pauseAtEndOfMediaItems) o
+                    // STATE_ENDED dispara no fim de CADA vídeo — só avisa
+                    // "Fim da playlist" quando não há próximo item.
                     markEnded(item)
-                    Snackbar.make(binding.root, "Fim da playlist", Snackbar.LENGTH_LONG).show()
+                    if (!exo.hasNextMediaItem()) {
+                        Snackbar.make(binding.root, "Fim da playlist", Snackbar.LENGTH_LONG).show()
+                    }
                 }
             }
 
@@ -631,6 +646,7 @@ class PlayerActivity : AppCompatActivity() {
                         currentUrl = BiBiGynApp.BASE_URL + (newItem.link ?: "")
                         binding.titleLabel.text = displayTitle(newItem)
                         playlistAdapter?.updateCurrent(newIndex)
+                        updateFavButton()
                         // Reset speed to 1x on transition (matching old playItem behavior)
                         speedIndex = 1
                         exo.playbackParameters = PlaybackParameters(1.0f)
@@ -695,17 +711,30 @@ class PlayerActivity : AppCompatActivity() {
         binding.speedButton.text = "1.0x"
     }
 
-    private fun playNext() {
-        val p = player
-        if (p != null && p.hasNextMediaItem()) {
-            p.seekToNextMediaItem()
-            p.play()
-        } else {
-            Snackbar.make(binding.root, "Fim da playlist", Snackbar.LENGTH_LONG).show()
-        }
-    }
+    // ★ v2.1.3: playNext() removido — era código morto (nenhum chamador;
+    // os botões prev/next foram removidos em v2.3.0 e o avanço é do ExoPlayer).
 
     // ★ v2.3.0: REMOVED playPrev(), updateNavButtons(), togglePlayPause().
+
+    /** ★ v2.1.3: ⭐ Minha lista — favorita/desfavorita o vídeo atual. */
+    private fun toggleFavoriteCurrent() {
+        val item = currentItem ?: return
+        val sm = SessionManager.get(this)
+        val favItem = item.copy(folderPath = item.folderPath ?: intent.getStringExtra(EXTRA_FOLDER_PATH))
+        val nowFav = sm.toggleFavorite(favItem)
+        updateFavButton()
+        Snackbar.make(binding.root,
+            if (nowFav) "⭐ Adicionado à Minha lista" else "Removido da Minha lista",
+            Snackbar.LENGTH_SHORT).show()
+    }
+
+    /** ★ v2.1.3: reflete o estado da ⭐ para o vídeo atual. */
+    private fun updateFavButton() {
+        val item = currentItem ?: run { binding.favButton.text = "☆"; return }
+        val sm = SessionManager.get(this)
+        val fp = item.folderPath ?: intent.getStringExtra(EXTRA_FOLDER_PATH) ?: ""
+        binding.favButton.text = if (sm.isFavorite(fp, item.name)) "⭐" else "☆"
+    }
     // The user can navigate between lessons via the playlist sidebar (☰).
 
     private fun releasePlayer() {
