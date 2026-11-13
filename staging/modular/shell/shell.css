@@ -245,7 +245,7 @@
 /* ─── Cards grid ─── */
 .meggy-cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 16px;
 }
 
@@ -2985,7 +2985,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   .meggy-header { padding: 0 12px !important; }
   .meggy-search { max-width: 200px !important; }
   #meggy-main { padding: 16px 10px !important; }
-  .meggy-cards-grid { grid-template-columns: 1fr !important; gap: 10px !important; }
+  .meggy-cards-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
   .meggy-card { padding: 14px !important; }
   .meggy-card-icon { font-size: 28px !important; }
   .meggy-card-title { font-size: 14px !important; }
