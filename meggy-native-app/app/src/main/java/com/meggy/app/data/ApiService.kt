@@ -93,37 +93,6 @@ class ApiService(private val context: Context) {
         }
     }
     
-    suspend fun listCourses(): List<CourseItem>? {
-        val request = Request.Builder()
-            .url("${MeggyApp.BASE_URL}/api/courses/list")
-            .header("Cookie", "session=${sessionManager.sessionCookie ?: ""}")
-            .build()
-
-        return try {
-            val response = MeggyApp.okHttpClient.newCall(request).execute()
-            if (!response.isSuccessful) return null
-
-            val body = response.body?.string() ?: return null
-            if (body.trimStart().startsWith("<")) return null
-
-            val json = JSONObject(body)
-            if (!json.optBoolean("ok")) return null
-
-            val courses = json.optJSONArray("courses") ?: return emptyList()
-            val result = mutableListOf<CourseItem>()
-            for (i in 0 until courses.length()) {
-                val c = courses.getJSONObject(i)
-                result.add(CourseItem(
-                    coursePath = c.optString("coursePath"),
-                    courseName = c.optString("courseName")
-                ))
-            }
-            result
-        } catch (e: Exception) {
-            null
-        }
-    }
-
     /**
      * ★ v2.7.3 LOGIN PERSISTENCE FIX:
      * Validates the current session by making a lightweight API call.
