@@ -323,6 +323,13 @@ class DetailActivity : AppCompatActivity() {
             try { startActivity(intent) } catch (e: Exception) {
                 startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(fullUrl)))
             }
+        } else {
+            // ★ v1.0.3: outros arquivos (.zip, .txt, etc.) — abre com app
+            // externo, como o BrowseActivity já fazia. Antes o clique era
+            // silenciosamente ignorado (sem else).
+            val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(fullUrl))
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            try { startActivity(intent) } catch (_: Exception) {}
         }
     }
 
