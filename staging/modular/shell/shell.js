@@ -2938,7 +2938,7 @@
           return;
         }
         if (feature === 'apps') {
-          el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">📱 Apps</h1></div><div class="meggy-cards-grid"><a class="meggy-card" href="https://github.com/esaaraujo-lab/gdi_server/releases/latest" target="_blank"><div class="meggy-card-icon">🖥️</div><div class="meggy-card-title">Windows/Linux</div><div class="meggy-card-meta">Desktop</div></a><a class="meggy-card" href="https://github.com/esaaraujo-lab/gdi_server/releases/latest" target="_blank"><div class="meggy-card-icon">📱</div><div class="meggy-card-title">Android</div><div class="meggy-card-meta">APK</div></a><a class="meggy-card" href="https://github.com/esaaraujo-lab/gdi_server/releases/latest" target="_blank"><div class="meggy-card-icon">📺</div><div class="meggy-card-title">Roku</div><div class="meggy-card-meta">BrightScript</div></a></div>';
+          Shell.views._renderApps(el);
           return;
         }
         if (feature === 'conquistas') {
@@ -2956,6 +2956,36 @@
         // Outras abas (provas, redacao, etc) — placeholder
         el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">' + title + '</h1></div><div class="meggy-placeholder"><div class="meggy-placeholder-icon">' + title.split(' ')[0] + '</div><div class="meggy-placeholder-title">' + title.replace(/^\S+\s/, '') + '</div><div class="meggy-placeholder-desc">Em breve.</div></div>';
       },
+
+    // ═══ _renderApps — área do aluno: baixar os APKs/apps com versão ao vivo ═══
+    // Busca /api/apps/latest (público) por plataforma e renderiza cards com
+    // versão + botão de download (/download/<platform>). Se a API falhar,
+    // cai para os cards com o link dos releases (nada quebra).
+    _renderApps(el) {
+      const PLATS = [
+        { p: 'windows', icon: '🖥️', name: 'Windows', meta: 'Desktop (.msi)' },
+        { p: 'linux', icon: '🐧', name: 'Linux', meta: 'Desktop (.AppImage)' },
+        { p: 'android', icon: '📱', name: 'Android', meta: 'Meggy (APK)' },
+        { p: 'android_tv', icon: '📺', name: 'Android TV', meta: 'BiBi (APK)' },
+        { p: 'vovofit_tv', icon: '💪', name: 'Vovó Fit TV', meta: 'Android TV (APK)' },
+        { p: 'roku', icon: '📺', name: 'Roku', meta: 'BrightScript (.zip)' }
+      ];
+      const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      const head = '<div class="meggy-view-header"><h1 class="meggy-view-title">📱 Apps</h1></div>';
+      const card = (pl, ver) => '<a class="meggy-card" href="/download/' + pl.p + '"><div class="meggy-card-icon">' + pl.icon + '</div><div class="meggy-card-title">' + pl.name + '</div><div class="meggy-card-meta">' + esc(ver || pl.meta) + '</div><div class="meggy-card-meta" style="color:#ff8b9f;">⬇️ Baixar</div></a>';
+      el.innerHTML = head + '<div class="meggy-cards-grid">' + PLATS.map(pl => card(pl, 'Carregando…')).join('') + '</div>';
+      Promise.all(PLATS.map(pl => fetch('/api/apps/latest?platform=' + pl.p).then(r => r.ok ? r.json() : null).catch(() => null))).then(results => {
+        let anyOk = false;
+        const grid = PLATS.map((pl, i) => {
+          const d = results[i];
+          if (d && d.ok && d.version) { anyOk = true; return card(pl, 'v' + d.version + ' · ' + pl.meta); }
+          return card(pl, pl.meta);
+        }).join('');
+        el.innerHTML = head + '<div class="meggy-cards-grid">' + grid + '</div>' + (anyOk ? '' : '<div style="text-align:center;margin-top:16px;"><a href="https://github.com/esaaraujo-lab/gdi_server/releases" target="_blank" class="meggy-header-btn">Ver todos os releases no GitHub</a></div>');
+      }).catch(() => {
+        el.innerHTML = head + '<div class="meggy-cards-grid">' + PLATS.map(pl => card(pl, pl.meta)).join('') + '</div><div style="text-align:center;margin-top:16px;"><a href="https://github.com/esaaraujo-lab/gdi_server/releases" target="_blank" class="meggy-header-btn">Ver todos os releases no GitHub</a></div>';
+      });
+    },
 
     // ═══ ISA Render Helpers (replica de produção — gdi-meggy.js) ═══
 
