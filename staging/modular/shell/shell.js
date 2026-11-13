@@ -1810,6 +1810,7 @@
               html += '<div style="margin-bottom:12px;padding:10px 12px;background:rgba(255,139,159,0.08);border:1px solid rgba(255,139,159,0.3);border-radius:8px;display:flex;justify-content:space-between;align-items:center;">' +
                 '<span style="font-size:12px;color:#ff8b9f;"><i class="bi bi-folder2-open"></i> ' + (function(){try{return decodeURIComponent(path)}catch(_){return path}})() + '</span>' +
                 '<button class="meggy-header-btn select-folder-btn" data-path="' + path + '" style="font-size:12px;background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-check-lg"></i> Selecionar esta pasta</button>' +
+                '<button class="meggy-header-btn v215-add-course-btn" data-path="' + path + '" style="font-size:12px;background:linear-gradient(135deg,#5ddeda,#0ea5a5);color:#06281f;border:none;margin-left:8px;"><i class="bi bi-folder-plus"></i> ＋ Adicionar esta pasta ao curso</button>' +
               '</div>';
             }
 
@@ -1843,10 +1844,12 @@
             if (folders.length === 0) {
               html += '<div style="padding:20px;text-align:center;color:#6b7488;">Nenhuma subpasta encontrada. Você pode selecionar esta pasta como curso.</div>';
             } else {
+              html += '<div style="display:flex;justify-content:flex-end;margin-bottom:8px;"><button class="meggy-header-btn" id="v215-add-selected" disabled style="font-size:12px;opacity:0.5;">＋ Adicionar selecionadas (0)</button></div>';
               html += '<div class="meggy-study-list">';
               folders.forEach(f => {
                 const fp = path + encodeURIComponent(f.name) + '/';
                 html += '<div class="meggy-study-item folder-item" data-path="' + fp + '" style="cursor:pointer;">' +
+                  '<input type="checkbox" class="v215-folder-check" data-path="' + fp + '" title="Selecionar para adicionar ao curso" style="margin:0 2px;accent-color:#ff8b9f;cursor:pointer;flex:none;" />' +
                   '<div class="meggy-study-item-icon"><i class="bi bi-folder" style="color:#ff8b9f;"></i></div>' +
                   '<div class="meggy-study-item-body"><div class="meggy-study-item-title">' + Shell.views._esc(f.name) + '</div></div>' +
                   '<i class="bi bi-chevron-right meggy-study-item-chevron"></i>' +
@@ -1862,6 +1865,22 @@
             browser.querySelectorAll('.meggy-breadcrumb a').forEach(a => {
               a.onclick = (e) => { e.preventDefault(); browseFolder(a.dataset.path); };
             });
+            // ★ v2.15.0: anexar esta pasta (ou as selecionadas) a um curso/concurso
+            const addCourseBtn = browser.querySelector('.v215-add-course-btn');
+            if (addCourseBtn) addCourseBtn.onclick = () => { Shell.views._v215AttachFlow([addCourseBtn.dataset.path], parentEl); };
+            const selBtn = browser.querySelector('#v215-add-selected');
+            const updateSel = () => {
+              const n = browser.querySelectorAll('.v215-folder-check:checked').length;
+              if (selBtn) { selBtn.disabled = n === 0; selBtn.style.opacity = n === 0 ? '0.5' : '1'; selBtn.textContent = '＋ Adicionar selecionadas (' + n + ')'; }
+            };
+            browser.querySelectorAll('.v215-folder-check').forEach(cb => {
+              cb.addEventListener('click', e => e.stopPropagation());
+              cb.addEventListener('change', updateSel);
+            });
+            if (selBtn) selBtn.onclick = () => {
+              const paths = Array.from(browser.querySelectorAll('.v215-folder-check:checked')).map(cb => cb.dataset.path);
+              if (paths.length) Shell.views._v215AttachFlow(paths, parentEl);
+            };
             const selectBtn = browser.querySelector('.select-folder-btn');
             if (selectBtn) {
               selectBtn.onclick = () => {
@@ -2067,6 +2086,15 @@
               fb.innerHTML = '<div class="meggy-quiz-feedback-' + (isCorrect ? 'correct' : 'wrong') + '">' + (isCorrect ? '✓ Correto!' : '✗ Incorreto') + '</div>' +
                 (q.explanation ? '<div class="meggy-quiz-feedback-expl">' + Shell.views._esc(q.explanation) + '</div>' : '') +
                 (q.fundamentacao ? '<div class="meggy-quiz-feedback-fund"><strong>Fundamentação:</strong> ' + Shell.views._esc(q.fundamentacao) + '</div>' : '');
+              // ★ v2.15.0: erro registrado no caderno do concurso (só quando a
+              // aula foi aberta a partir do plano desse concurso)
+              if (!isCorrect && Shell.__v215ConcursoId) {
+                try {
+                  const correctText = isMC ? (q.options[correctIdx] || '') : (correctIdx === 1 ? 'Certo' : 'Errado');
+                  const chosenText = isMC ? (q.options[chosen] || '') : (chosen === 1 ? 'Certo' : 'Errado');
+                  fetch('/api/concursos/' + encodeURIComponent(Shell.__v215ConcursoId) + '/errors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pergunta: q.statement || '', respostaCerta: correctText, respostaAluno: chosenText, modulo: Shell.__lastQuizLessonName || '' }) }).catch(() => {});
+                } catch (_) {}
+              }
               const scoreEl = document.getElementById('meggy-quiz-score');
               if (scoreEl) scoreEl.textContent = String(score);
               const answeredEl = document.getElementById('meggy-quiz-answered');
@@ -2573,6 +2601,9 @@
           if (!data.disciplinas || data.disciplinas.length === 0) {
             html += '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">📭</div><div class="meggy-placeholder-title">Nenhuma disciplina</div><div class="meggy-placeholder-desc">Analise o edital e escaneie os drives para montar o curso.</div></div>';
           } else {
+            // ★ v2.15.0: completude por disciplina (X/Y aulas + buracos)
+            const compMap = {};
+            (data.completeness || []).forEach(cp => { compMap[cp.nome] = cp; });
             data.disciplinas.forEach(d => {
               const incidenciaColor = d.incidencia === 'altissima' ? '#ff6b6b' : d.incidencia === 'alta' ? '#ffd43b' : '#5ddeda';
               const lessonCount = (d.lessons && d.lessons.length) || 0;
@@ -2584,6 +2615,8 @@
               if (d.peso != null) html += '<span style="background:rgba(93,222,218,0.12);color:#5ddeda;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;">' + Shell._esc(d.peso) + ' questões</span>';
               if (d.incidencia) html += '<span style="background:' + incidenciaColor + '22;color:' + incidenciaColor + ';padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;">' + Shell._esc(d.incidencia) + '</span>';
               html += '<span style="color:#8b949e;font-size:12px;">' + lessonCount + ' aulas</span>';
+              const compD = compMap[d.nome];
+              if (compD && compD.expected != null) html += '<span style="background:rgba(93,222,218,0.12);color:#5ddeda;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;" title="Aulas vinculadas / topicos do edital">' + compD.lessons + '/' + compD.expected + ' aulas</span>';
               html += '</div>';
               // Lessons (hidden by default)
               html += '<div class="meggy-tree-children" style="display:none;padding:8px 0 8px 28px;">';
@@ -2601,10 +2634,18 @@
                   html += '</div>';
                 });
               }
+              if (compD && compD.gaps && compD.gaps.length) {
+                html += '<div style="padding:8px 12px;margin:8px 0;background:rgba(255,212,59,0.06);border:1px solid rgba(255,212,59,0.2);border-radius:8px;font-size:12px;color:#ffd43b;">⚠️ Faltam: ' + compD.gaps.map(g => Shell._esc(g)).join(', ') + '</div>';
+              }
               html += '</div></div>';
             });
           }
           html += '</div>';
+
+          // ★ v2.15.0: seções de módulos, sugestões da Meggy e erros
+          html += '<div id="v215-sources" style="margin-top:20px;"></div>';
+          html += '<div id="v215-suggest" style="margin-top:20px;"></div>';
+          html += '<div id="v215-errors" style="margin-top:20px;"></div>';
 
           el.innerHTML = html;
 
@@ -2637,25 +2678,30 @@
               const d = await r.json();
               const p = d && d.ok && d.plans && d.plans[0];
               if (!p){
-                planBox.innerHTML = '<div style="padding:12px;background:rgba(255,212,59,0.06);border:1px solid rgba(255,212,59,0.2);border-radius:10px;font-size:13px;color:#e6edf3;">🎯 <b>Plano de estudo direcionado</b><div style="color:#9aa4b8;font-size:12px;margin:4px 0 10px;">A Meggy monta um plano dia a dia só com o mais cobrado pela banca do seu concurso.</div><button class="meggy-header-btn" id="btn-plan-new" style="background:linear-gradient(135deg,#ffd43b,#f59e0b);color:#1a1a1a;border:none;">🎯 Montar plano</button></div>';
+                planBox.innerHTML = '<div style="padding:12px;background:rgba(255,212,59,0.06);border:1px solid rgba(255,212,59,0.2);border-radius:10px;font-size:13px;color:#e6edf3;">🎯 <b>Plano de estudo direcionado</b><div style="color:#9aa4b8;font-size:12px;margin:4px 0 10px;">A Meggy monta um plano dia a dia só com o mais cobrado pela banca do seu concurso.</div><button class="meggy-header-btn" id="btn-plan-new" style="background:linear-gradient(135deg,#ffd43b,#f59e0b);color:#1a1a1a;border:none;">🎯 Montar plano</button> <button class="meggy-header-btn" id="btn-plan-meggy" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">🐩 Montar plano com a Meggy</button></div>';
               } else {
                 const dayIdx = Math.max(1, Math.min(p.totalDays, Math.floor((Date.now() - p.createdAt) / 86400000) + 1));
-                planBox.innerHTML = '<div style="padding:12px;background:rgba(93,222,218,0.06);border:1px solid rgba(93,222,218,0.2);border-radius:10px;font-size:13px;color:#e6edf3;">🎯 <b>Plano de estudo</b> · ' + Shell._esc(p.banca) + ' · dia ' + dayIdx + ' de ' + p.totalDays + ' · ' + p.dailyHours + 'h/dia<div style="margin-top:8px;"><button class="meggy-header-btn" id="btn-plan-view">📅 Ver plano completo</button> <button class="meggy-header-btn" id="btn-plan-new">🔄 Refazer plano</button></div><div id="plan-today" style="margin-top:10px;"></div></div>';
+                planBox.innerHTML = '<div style="padding:12px;background:rgba(93,222,218,0.06);border:1px solid rgba(93,222,218,0.2);border-radius:10px;font-size:13px;color:#e6edf3;">🎯 <b>Plano de estudo</b> · ' + Shell._esc(p.banca) + ' · dia ' + dayIdx + ' de ' + p.totalDays + ' · ' + p.dailyHours + 'h/dia<div style="margin-top:8px;"><button class="meggy-header-btn" id="btn-plan-view">📅 Ver plano completo</button> <button class="meggy-header-btn" id="btn-plan-new">🔄 Refazer plano</button> <button class="meggy-header-btn" id="btn-plan-meggy">🐩 Montar plano com a Meggy</button></div><div id="plan-today" style="margin-top:10px;"></div></div>';
                 try {
                   const rr = await fetch('/api/plans/' + encodeURIComponent(p.id), { credentials: 'include' });
                   const dd = await rr.json();
                   const today = dd && dd.ok && dd.plan && dd.plan.days && dd.plan.days[dayIdx - 1];
                   const tEl = document.getElementById('plan-today');
-                  if (today && tEl){ tEl.innerHTML = '<div style="font-size:12px;color:#9aa4b8;margin-bottom:6px;">Hoje (' + Shell._esc(today.date) + '):</div>' + today.sessions.map(s => '<div style="padding:6px 10px;background:rgba(255,255,255,0.03);border-radius:6px;font-size:12px;margin-bottom:4px;">' + (s.tipo === 'revisao' ? '🔁 ' : '📚 ') + Shell._esc(s.disciplina) + ' — ' + Shell._esc(s.topico) + ' <span style="color:#5ddeda;">(' + s.minutos + ' min)</span></div>').join(''); }
+                  if (today && tEl){ tEl.innerHTML = '<div style="font-size:12px;color:#9aa4b8;margin-bottom:6px;">Hoje (' + Shell._esc(today.date) + '):</div>' + today.sessions.map(s => '<div style="padding:6px 10px;background:rgba(255,255,255,0.03);border-radius:6px;font-size:12px;margin-bottom:4px;">' + (s.tipo === 'revisao' ? '🔁 ' : '📚 ') + Shell._esc(s.disciplina) + ' — ' + Shell._esc(s.topico) + ' <span style="color:#5ddeda;">(' + s.minutos + ' min)</span>' + Shell.views._v215PlayBtnHtml(s, concursoId) + '</div>').join(''); Shell.views._v215WirePlayButtons(tEl, concursoId); }
                 } catch (_) {}
                 const pv = document.getElementById('btn-plan-view');
-                if (pv) pv.onclick = () => Shell.views.showPlanModal(p.id);
+                if (pv) pv.onclick = () => Shell.views.showPlanModal(p.id, concursoId);
               }
               const pn = document.getElementById('btn-plan-new');
               if (pn) pn.onclick = () => Shell.views.showPlanModal(null, concursoId);
+              const pmg = document.getElementById('btn-plan-meggy');
+              if (pmg) pmg.onclick = () => Shell.views.showPlanModal(null, concursoId, { meggy: true });
             } catch (_) { if (planBox) planBox.innerHTML = ''; }
           }
           renderPlan();
+          Shell.views._v215RenderSources(el, concursoId, data);
+          Shell.views._v215RenderSuggest(el, concursoId, data);
+          Shell.views._v215RenderErrors(el, concursoId);
           const btnPlan = document.getElementById('btn-plan');
           if (btnPlan) btnPlan.onclick = () => { if (planBox) planBox.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
 
@@ -2707,9 +2753,508 @@
         });
       },
 
+      // ═══ v2.15.0 — Montar curso multi-pastas + plano da Meggy ═══
+      // Helpers + seções do detalhe do concurso + fluxo de anexo com prévia
+      // + resolução lesson_path → stream + geração de materiais por módulo.
+      // Nenhum alert()/confirm() nativo aqui: erros vão por gdiModal e
+      // avisos curtos por showToast (shell-bridge).
+      _v215Toast(msg) {
+        try { if (typeof window.showToast === 'function') { window.showToast(msg); return; } } catch (_) {}
+        try { console.log('[Meggy v2.15]', msg); } catch (_) {}
+      },
+
+      _v215Err(title, message) {
+        try {
+          if (typeof window.gdiModal === 'function') { window.gdiModal({ title: title, message: message, confirmText: 'OK' }); return; }
+        } catch (_) {}
+        Shell.views._v215Toast(title + ': ' + message);
+      },
+
+      _v215Confirm(title, message, confirmText) {
+        try {
+          if (typeof window.gdiModal === 'function') return window.gdiModal({ title: title, message: message, confirmText: confirmText || 'Confirmar', cancelText: 'Cancelar', danger: true });
+        } catch (_) {}
+        return Promise.resolve(false);
+      },
+
+      _v215Api(path, opts) {
+        opts = opts || {};
+        const init = { credentials: 'include' };
+        Object.keys(opts).forEach(k => { init[k] = opts[k]; });
+        return fetch(path, init).then(async r => {
+          let d = null;
+          try { d = await r.json(); } catch (_) {}
+          if (!r.ok || !d || d.ok === false) throw new Error((d && (d.error || d.message)) || ('HTTP ' + r.status));
+          return d;
+        });
+      },
+
+      _v215IsRoot(path) { return /^\/\d+:\/?$/.test(String(path || '')); },
+
+      _v215FolderName(path) {
+        try {
+          const parts = String(path || '').split('/').filter(Boolean);
+          const last = parts[parts.length - 1] || 'Curso';
+          return decodeURIComponent(last);
+        } catch (_) { return String(path || 'Curso'); }
+      },
+
+      // ── Item 6: botão "▶ Continuar" para sessões do plano com lessonPath ──
+      _v215PlayBtnHtml(s, concursoId) {
+        if (!s || !s.lessonPath) return '';
+        const watched = s.lessonWatched ? ' <span style="color:#3fb950;font-size:11px;">✓ Assistida</span>' : '';
+        return ' <button class="meggy-header-btn v215-play-btn" data-v215-lesson="' + encodeURIComponent(s.lessonPath) + '" data-v215-name="' + encodeURIComponent(s.lessonName || s.topico || '') + '" data-v215-concurso="' + Shell.views._esc(concursoId || '') + '" style="font-size:11px;padding:3px 8px;background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">▶ Continuar</button>' + watched;
+      },
+
+      _v215WirePlayButtons(root, concursoId) {
+        if (!root) return;
+        root.querySelectorAll('.v215-play-btn').forEach(btn => {
+          btn.onclick = (e) => {
+            if (e) e.stopPropagation();
+            const lp = btn.dataset.v215Lesson || '';
+            const nm = btn.dataset.v215Name || '';
+            const cid = btn.dataset.v215Concurso || concursoId || '';
+            Shell.views._v215PlayLesson(decodeURIComponent(lp), decodeURIComponent(nm), cid);
+          };
+        });
+      },
+
+      // Resolve lesson_path (ex.: /1:/TJSP/Dir/Aula 03.mp4) para o link de
+      // stream, listando a pasta-pai via gdiListAllFiles e achando o arquivo
+      // pelo nome. _playVideoInline recebe URL de stream, não lesson_path.
+      async _v215ResolveLesson(lessonPath, lessonName) {
+        if (!window.gdiListAllFiles) return null;
+        let decoded = lessonPath || '';
+        try { decoded = decodeURIComponent(decoded); } catch (_) {}
+        const parts = decoded.split('/').filter(Boolean);
+        if (parts.length < 2) return null;
+        const targetName = parts[parts.length - 1];
+        const parentPath = '/' + parts.slice(0, -1).join('/') + '/';
+        const files = await window.gdiListAllFiles(parentPath, '');
+        if (!files || !files.length) return null;
+        const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        let match = files.find(f => f.name === targetName);
+        if (!match && norm(targetName)) match = files.find(f => norm(f.name) === norm(targetName));
+        if (!match) return null;
+        const isVideo = f => (f.mimeType || '').startsWith('video/') || /\.mp4$/i.test(f.name || '') || /\.(mp3|m4a|wav|ogg|aac)$/i.test(f.name || '');
+        if (!isVideo(match)) return { file: match, parentPath: parentPath, notPlayable: true };
+        const videos = files.filter(isVideo);
+        const playlist = videos.map(v => ({ link: v.link || '', name: v.name, size: v.size ? (v.size / 1024 / 1024).toFixed(1) + ' MB' : '', folder: '' }));
+        const idx = playlist.findIndex(v => v.name === match.name);
+        return { file: match, parentPath: parentPath, link: match.link || '', name: match.name, playlist: playlist, index: idx < 0 ? 0 : idx };
+      },
+
+      async _v215PlayLesson(lessonPath, lessonName, concursoId) {
+        if (concursoId) Shell.__v215ConcursoId = concursoId;
+        if (!lessonPath) { Shell.views._v215Err('Aula sem caminho', 'Esta sessão do plano não tem uma aula vinculada.'); return; }
+        try {
+          const r = await Shell.views._v215ResolveLesson(lessonPath, lessonName);
+          if (!r) { Shell.views._v215Err('Não foi possível abrir a aula', 'A aula "' + (lessonName || lessonPath) + '" não foi encontrada na pasta do Drive. Ela pode ter sido movida ou renomeada.'); return; }
+          if (r.notPlayable) {
+            let go = false;
+            try { go = await window.gdiModal({ title: 'Aula em PDF/arquivo', message: 'Esta aula é um arquivo (' + (r.file.name || '') + '), não um vídeo. Deseja abrir a pasta dela?', confirmText: 'Abrir pasta', cancelText: 'Fechar' }); } catch (_) {}
+            if (go) Shell.views._renderDrives(r.parentPath);
+            return;
+          }
+          if (!r.link) { Shell.views._v215Err('Não foi possível abrir a aula', 'A aula foi encontrada, mas não tem link de stream.'); return; }
+          Shell.views._playVideoInline(r.link, r.name, r.playlist, r.index);
+        } catch (e) {
+          Shell.views._v215Err('Não foi possível abrir a aula', e.message || 'Erro ao buscar a aula no Drive.');
+        }
+      },
+
+      // ── Item 2: seção "📁 Módulos (pastas)" no detalhe do concurso ──
+      async _v215RenderSources(el, concursoId, data) {
+        const box = el.querySelector ? el.querySelector('#v215-sources') : document.getElementById('v215-sources');
+        if (!box) return;
+        box.innerHTML = '<div style="font-size:13px;color:#9aa4b8;padding:8px 0;">📁 <b style="color:#e6edf3;">Módulos (pastas)</b> · carregando…</div>';
+        let sources = (data && data.sources) || null;
+        try {
+          if (!sources) { const d = await Shell.views._v215Api('/api/concursos/' + encodeURIComponent(concursoId) + '/sources'); sources = d.sources || []; }
+        } catch (e) {
+          box.innerHTML = '<div style="font-size:13px;color:#ff8b9f;">📁 <b>Módulos (pastas)</b> — não foi possível carregar: ' + Shell.views._esc(e.message) + '</div>';
+          return;
+        }
+        let h = '<div style="font-size:14px;font-weight:600;color:#e6edf3;margin-bottom:8px;">📁 Módulos (pastas)' + (sources.length ? ' <span style="color:#9aa4b8;font-weight:400;font-size:12px;">(' + sources.length + ')</span>' : '') + '</div>';
+        if (!sources.length) {
+          h += '<div style="padding:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;font-size:13px;color:#9aa4b8;">Nenhuma pasta anexada ainda. Em “Adicionar Pasta de Curso”, use “＋ Adicionar esta pasta ao curso” para montar este concurso com várias pastas.</div>';
+        } else {
+          sources.forEach((s, i) => {
+            const m = s.materials || {};
+            const discs = (s.disciplinas || []).map(dn => '<span style="background:rgba(93,222,218,0.12);color:#5ddeda;padding:2px 8px;border-radius:999px;font-size:11px;">' + Shell.views._esc(dn) + '</span>').join(' ');
+            h += '<div class="v215-source" data-sid="' + s.id + '" style="padding:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;margin-bottom:8px;">' +
+              '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
+                '<span style="font-size:16px;">📁</span>' +
+                '<span style="font-weight:600;color:#e6edf3;flex:1;min-width:120px;">' + Shell.views._esc(s.name || Shell.views._v215FolderName(s.coursePath)) + (s.intensivo ? ' <span style="color:#ffd43b;font-size:11px;">⚡ intensivo</span>' : '') + '</span>' +
+                '<span style="color:#8b949e;font-size:12px;">' + (s.lessonCount || 0) + ' aulas</span>' +
+              '</div>' +
+              '<div style="font-size:11px;color:#8b949e;margin-top:4px;word-break:break-all;">' + Shell.views._esc(s.coursePath || '') + '</div>' +
+              '<div style="font-size:12px;color:#9aa4b8;margin-top:4px;">📝 ' + (m.resumos || 0) + ' resumos · 🃏 ' + (m.flashcards || 0) + ' flashcards · ❓ ' + (m.questoes || 0) + ' questões</div>' +
+              (discs ? '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">' + discs + '</div>' : '') +
+              '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">' +
+                '<button class="meggy-header-btn v215-src-up" data-i="' + i + '" style="font-size:12px;" ' + (i === 0 ? 'disabled' : '') + '>↑</button>' +
+                '<button class="meggy-header-btn v215-src-down" data-i="' + i + '" style="font-size:12px;" ' + (i === sources.length - 1 ? 'disabled' : '') + '>↓</button>' +
+                '<button class="meggy-header-btn v215-src-rename" data-i="' + i + '" style="font-size:12px;">✏️ Renomear</button>' +
+                '<button class="meggy-header-btn v215-src-intensivo" data-i="' + i + '" style="font-size:12px;' + (s.intensivo ? 'background:rgba(255,212,59,0.15);color:#ffd43b;border:1px solid rgba(255,212,59,0.35);' : '') + '">⚡ Intensivo</button>' +
+                '<button class="meggy-header-btn v215-src-gen" data-i="' + i + '" style="font-size:12px;">🐩 Gerar resumo + flashcards deste módulo</button>' +
+                '<button class="meggy-header-btn v215-src-quiz" data-i="' + i + '" style="font-size:12px;">🧠 Quiz deste módulo</button>' +
+                '<button class="meggy-header-btn v215-src-del" data-i="' + i + '" style="font-size:12px;background:rgba(255,107,107,.12);color:#ff8b8b;border:1px solid rgba(255,107,107,.35);">🗑️ Remover</button>' +
+              '</div></div>';
+          });
+        }
+        box.innerHTML = h;
+        const base = '/api/concursos/' + encodeURIComponent(concursoId) + '/sources';
+        const refreshSources = () => Shell.views._v215RenderSources(el, concursoId, null);
+        const reloadDetail = () => { const main = document.getElementById('meggy-main'); if (main) Shell.views.concursoDetail(main, concursoId); };
+        box.querySelectorAll('.v215-src-up, .v215-src-down').forEach(btn => {
+          btn.onclick = async () => {
+            const i = parseInt(btn.dataset.i, 10);
+            const j = btn.classList.contains('v215-src-up') ? i - 1 : i + 1;
+            if (j < 0 || j >= sources.length) return;
+            const order = sources.map(s => s.id);
+            const tmp = order[i]; order[i] = order[j]; order[j] = tmp;
+            try { await Shell.views._v215Api(base + '/reorder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ order: order }) }); refreshSources(); }
+            catch (e) { Shell.views._v215Err('Não foi possível reordenar', e.message); }
+          };
+        });
+        box.querySelectorAll('.v215-src-rename').forEach(btn => {
+          btn.onclick = async () => {
+            const s = sources[parseInt(btn.dataset.i, 10)];
+            if (!s) return;
+            let name = null;
+            try { name = await window.gdiModal({ title: 'Renomear módulo', message: 'Novo nome do módulo:', input: { value: s.name || '', placeholder: 'Nome do módulo' }, confirmText: 'Salvar', cancelText: 'Cancelar' }); } catch (_) { return; }
+            if (!name) return;
+            try { await Shell.views._v215Api(base + '/' + encodeURIComponent(s.id), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name }) }); refreshSources(); }
+            catch (e) { Shell.views._v215Err('Não foi possível renomear', e.message); }
+          };
+        });
+        box.querySelectorAll('.v215-src-intensivo').forEach(btn => {
+          btn.onclick = async () => {
+            const s = sources[parseInt(btn.dataset.i, 10)];
+            if (!s) return;
+            try { await Shell.views._v215Api(base + '/' + encodeURIComponent(s.id), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ intensivo: !s.intensivo }) }); reloadDetail(); }
+            catch (e) { Shell.views._v215Err('Não foi possível alterar o intensivo', e.message); }
+          };
+        });
+        box.querySelectorAll('.v215-src-del').forEach(btn => {
+          btn.onclick = async () => {
+            const s = sources[parseInt(btn.dataset.i, 10)];
+            if (!s) return;
+            const ok = await Shell.views._v215Confirm('Remover módulo', 'Remover "' + (s.name || s.coursePath) + '" deste concurso? As aulas vinculadas a ele serão desvinculadas.', 'Remover');
+            if (!ok) return;
+            try {
+              const d = await Shell.views._v215Api(base + '/' + encodeURIComponent(s.id), { method: 'DELETE' });
+              Shell.views._v215Toast('🗑️ Módulo removido (' + (d.deletedLessons || 0) + ' aulas desvinculadas).');
+              reloadDetail();
+            } catch (e) { Shell.views._v215Err('Não foi possível remover o módulo', e.message); }
+          };
+        });
+        box.querySelectorAll('.v215-src-gen').forEach(btn => {
+          btn.onclick = () => {
+            const s = sources[parseInt(btn.dataset.i, 10)];
+            if (s) Shell.views._v215GenerateModuleMaterials(el, concursoId, s, btn);
+          };
+        });
+        box.querySelectorAll('.v215-src-quiz').forEach(btn => {
+          btn.onclick = () => {
+            const s = sources[parseInt(btn.dataset.i, 10)];
+            if (!s) return;
+            const fn = window.__gdiStudy && window.__gdiStudy.courses && window.__gdiStudy.courses.startModuleQuiz;
+            if (typeof fn === 'function') fn(s.name || Shell.views._v215FolderName(s.coursePath), s.coursePath, null, concursoId);
+            else Shell.views._v215Err('Quiz indisponível', 'O módulo de cursos ainda não carregou. Abra a aba Meus Cursos uma vez e tente de novo.');
+          };
+        });
+      },
+
+      // ── Item 4: sugestões da Meggy (pastas que completam o concurso) ──
+      async _v215RenderSuggest(el, concursoId, data) {
+        const box = el.querySelector ? el.querySelector('#v215-suggest') : document.getElementById('v215-suggest');
+        if (!box) return;
+        let banca = '';
+        try {
+          const pl = await Shell.views._v215Api('/api/plans/list?concursoId=' + encodeURIComponent(concursoId));
+          const p0 = pl && pl.plans && pl.plans[0];
+          if (p0 && p0.banca) banca = p0.banca;
+        } catch (_) {}
+        if (!banca) banca = 'Cebraspe';
+        const opts = ['Cebraspe', 'FGV', 'FCC', 'Vunesp', 'IBFC'].map(b => '<option value="' + b + '"' + (b === banca ? ' selected' : '') + '>' + b + '</option>').join('');
+        box.innerHTML = '<div style="font-size:14px;font-weight:600;color:#e6edf3;margin-bottom:4px;">🐩 Sugestões da Meggy</div>' +
+          '<div style="font-size:12px;color:#9aa4b8;margin-bottom:8px;">Com base no edital e na banca, a Meggy sugere pastas que completam as disciplinas do concurso.</div>' +
+          '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;"><select id="v215-suggest-banca" style="padding:8px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#e6edf3;font-size:13px;">' + opts + '</select>' +
+          '<button class="meggy-header-btn" id="v215-suggest-btn" style="font-size:13px;">🐩 Buscar sugestões</button></div>' +
+          '<div id="v215-suggest-list" style="font-size:13px;color:#9aa4b8;">Clique em “Buscar sugestões” para ver as pastas recomendadas.</div>';
+        const btn = box.querySelector('#v215-suggest-btn');
+        if (!btn) return;
+        btn.onclick = async () => {
+          const b = (box.querySelector('#v215-suggest-banca') || {}).value || 'Cebraspe';
+          const list = box.querySelector('#v215-suggest-list');
+          if (list) list.innerHTML = 'Buscando sugestões…';
+          btn.disabled = true;
+          try {
+            const d = await Shell.views._v215Api('/api/concursos/' + encodeURIComponent(concursoId) + '/suggest-folders?banca=' + encodeURIComponent(b));
+            const sug = d.suggestions || [];
+            if (!sug.length) { if (list) list.innerHTML = 'Nenhuma sugestão para esta banca — as pastas prováveis já estão anexadas ou não foram encontradas.'; return; }
+            if (list) {
+              list.innerHTML = sug.map(sg => '<div style="padding:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;margin-bottom:6px;">' +
+                '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><span style="font-size:15px;">📁</span><b style="color:#e6edf3;flex:1;">' + Shell.views._esc(sg.name || Shell.views._v215FolderName(sg.path)) + '</b>' +
+                (sg.confidence != null ? '<span style="font-size:11px;color:#5ddeda;">' + Math.round(sg.confidence * 100) + '%</span>' : '') +
+                '<button class="meggy-header-btn v215-sug-add" data-path="' + Shell.views._esc(sg.path) + '" style="font-size:12px;background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">＋ Anexar</button></div>' +
+                '<div style="font-size:12px;color:#9aa4b8;margin-top:4px;">' + Shell.views._esc(sg.reason || '') + '</div>' +
+                (sg.disciplina ? '<div style="font-size:11px;color:#8b949e;margin-top:2px;">Disciplina: ' + Shell.views._esc(sg.disciplina) + '</div>' : '') +
+                '<div style="font-size:11px;color:#8b949e;word-break:break-all;">' + Shell.views._esc(sg.path) + '</div></div>').join('');
+              list.querySelectorAll('.v215-sug-add').forEach(ab => { ab.onclick = () => Shell.views._v215AttachFlow([ab.dataset.path], el, { concursoId: concursoId }); });
+            }
+          } catch (e) {
+            if (list) list.innerHTML = 'Não foi possível buscar sugestões: ' + Shell.views._esc(e.message);
+          } finally { btn.disabled = false; }
+        };
+      },
+
+      // ── Item 8 (lista): "📝 Revisar erros" ──
+      async _v215RenderErrors(el, concursoId) {
+        const box = el.querySelector ? el.querySelector('#v215-errors') : document.getElementById('v215-errors');
+        if (!box) return;
+        box.innerHTML = '<div style="font-size:14px;font-weight:600;color:#e6edf3;margin-bottom:8px;">📝 Revisar erros</div><div style="font-size:13px;color:#9aa4b8;">Carregando…</div>';
+        let errors = [];
+        try {
+          const d = await Shell.views._v215Api('/api/concursos/' + encodeURIComponent(concursoId) + '/errors');
+          errors = d.errors || [];
+        } catch (e) {
+          box.innerHTML = '<div style="font-size:14px;font-weight:600;color:#e6edf3;margin-bottom:8px;">📝 Revisar erros</div><div style="font-size:13px;color:#ff8b9f;">Não foi possível carregar os erros: ' + Shell.views._esc(e.message) + '</div>';
+          return;
+        }
+        let h = '<div style="font-size:14px;font-weight:600;color:#e6edf3;margin-bottom:4px;">📝 Revisar erros' + (errors.length ? ' <span style="color:#9aa4b8;font-weight:400;font-size:12px;">(' + errors.length + ')</span>' : '') + '</div>';
+        h += '<div style="font-size:12px;color:#9aa4b8;margin-bottom:8px;">Erros das questões respondidas neste concurso. Revise e remova os que já dominou.</div>';
+        if (!errors.length) {
+          h += '<div style="padding:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;font-size:13px;color:#9aa4b8;">Nenhum erro registrado ainda. Ao errar uma questão de uma aula aberta pelo plano deste concurso, ela aparece aqui.</div>';
+        } else {
+          errors.forEach(er => {
+            h += '<div style="padding:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;margin-bottom:8px;">' +
+              '<div style="font-size:13px;color:#e6edf3;font-weight:600;">' + Shell.views._esc(er.pergunta || '') + '</div>' +
+              '<div style="font-size:12px;color:#5ddeda;margin-top:4px;">✓ Resposta certa: ' + Shell.views._esc(er.respostaCerta || er.resposta_certa || '') + '</div>' +
+              '<div style="font-size:12px;color:#ff8b9f;">✗ Sua resposta: ' + Shell.views._esc(er.respostaAluno || er.resposta_aluno || '') + '</div>' +
+              (er.modulo ? '<div style="font-size:11px;color:#8b949e;margin-top:2px;">Módulo: ' + Shell.views._esc(er.modulo) + '</div>' : '') +
+              '<div style="margin-top:8px;"><button class="meggy-header-btn v215-err-del" data-id="' + er.id + '" style="font-size:12px;">🗑️ Remover após revisar</button></div></div>';
+          });
+        }
+        box.innerHTML = h;
+        box.querySelectorAll('.v215-err-del').forEach(btn => {
+          btn.onclick = async () => {
+            const ok = await Shell.views._v215Confirm('Remover erro', 'Remover este erro da lista de revisão?', 'Remover');
+            if (!ok) return;
+            try {
+              await Shell.views._v215Api('/api/concursos/' + encodeURIComponent(concursoId) + '/errors/' + encodeURIComponent(btn.dataset.id), { method: 'DELETE' });
+              Shell.views._v215Toast('Erro removido da revisão.');
+              Shell.views._v215RenderErrors(el, concursoId);
+            } catch (e) { Shell.views._v215Err('Não foi possível remover o erro', e.message); }
+          };
+        });
+      },
+
+      // ── Itens 1 + 3: fluxo de anexo com escolha de destino + prévia ──
+      _v215AttachFlow(folderPaths, parentEl, opts) {
+        opts = opts || {};
+        const paths = (folderPaths || []).filter(p => p);
+        if (!paths.length) return;
+        const roots = paths.filter(p => Shell.views._v215IsRoot(p));
+        if (roots.length) { Shell.views._v215Err('Pasta inválida', 'Não é possível anexar a raiz de um drive (' + roots.join(', ') + '). Escolha uma pasta dentro do drive.'); return; }
+        Shell.views._v215ShowAttachModal(paths, parentEl, opts);
+      },
+
+      _v215ShowAttachModal(folderPaths, parentEl, opts) {
+        opts = opts || {};
+        let modal = document.getElementById('v215-attach-modal');
+        if (modal) modal.remove();
+        modal = document.createElement('div');
+        modal.id = 'v215-attach-modal';
+        modal.className = 'meggy-modal-overlay';
+        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:10002;padding:20px;';
+        const close = () => { if (modal && modal.parentNode) modal.parentNode.removeChild(modal); };
+        const hideAddCourseModal = () => { const m = document.getElementById('meggy-add-course-modal'); if (m) m.style.display = 'none'; };
+        const finishToDetail = (concursoId) => {
+          close(); hideAddCourseModal();
+          const main = document.getElementById('meggy-main');
+          if (main && concursoId) Shell.views.concursoDetail(main, concursoId);
+          else if (parentEl) Shell.views.cursos(parentEl);
+        };
+        let concursosCache = [];
+
+        async function doAvulso() {
+          const nb = document.getElementById('v215a-next');
+          if (nb) { nb.disabled = true; nb.textContent = 'Criando…'; }
+          let created = 0;
+          const fails = [];
+          for (const p of folderPaths) {
+            try {
+              await Shell.views._v215Api('/api/courses/add', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ coursePath: p, courseName: Shell.views._v215FolderName(p), icon: '📚', color: '#ff8b9f' }) });
+              created++;
+              try { if (window.gdiCourseScanner && typeof window.gdiCourseScanner.startScan === 'function') window.gdiCourseScanner.startScan(p, null); } catch (_) {}
+            } catch (e) { fails.push(p); }
+          }
+          close(); hideAddCourseModal();
+          if (created) Shell.views._v215Toast('✅ ' + created + ' curso(s) adicionado(s).' + (fails.length ? ' ' + fails.length + ' falharam.' : ''));
+          if (fails.length) Shell.views._v215Err('Não foi possível adicionar como curso', fails.length + ' pasta(s) não puderam ser adicionadas como curso avulso.');
+          if (parentEl) Shell.views.cursos(parentEl);
+        }
+
+        async function renderPreview(concursoId) {
+          const bodyEl = document.getElementById('v215a-body');
+          const nextBtn = document.getElementById('v215a-next');
+          if (bodyEl) bodyEl.innerHTML = '<div style="padding:20px;text-align:center;color:#6b7488;font-size:12px;">Gerando prévia…</div>';
+          if (nextBtn) { nextBtn.disabled = true; nextBtn.textContent = 'Gerando prévia…'; }
+          let prev;
+          try {
+            prev = await Shell.views._v215Api('/api/concursos/' + encodeURIComponent(concursoId) + '/sources/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folderPaths: folderPaths }) });
+          } catch (e) {
+            Shell.views._v215Err('Não foi possível gerar a prévia', e.message);
+            if (nextBtn) { nextBtn.disabled = false; nextBtn.textContent = 'Ver prévia →'; }
+            return;
+          }
+          const conc = concursosCache.find(c => String(c.id) === String(concursoId)) || { id: concursoId, name: 'Concurso' };
+          let bh = '<div style="font-size:13px;color:#e6edf3;margin-bottom:4px;">Prévia — anexar a <b>📌 ' + Shell.views._esc(conc.name) + '</b></div>';
+          bh += '<div style="font-size:12px;color:#9aa4b8;margin-bottom:12px;">Confira antes de confirmar. Nada é anexado até você confirmar.</div>';
+          (prev.folders || []).forEach(f => {
+            const hrs = f.estHours != null ? f.estHours : Math.round(((f.estMinutes || 0) / 60) * 10) / 10;
+            bh += '<div style="padding:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;margin-bottom:6px;">' +
+              '<div style="font-size:13px;color:#e6edf3;font-weight:600;">📁 ' + Shell.views._esc(f.name || Shell.views._v215FolderName(f.path)) + '</div>' +
+              '<div style="font-size:12px;color:#9aa4b8;margin-top:4px;">📄 ' + (f.pdfs || 0) + ' PDFs · 🎬 ' + (f.videos || 0) + ' vídeos' + (f.audios ? ' · 🎵 ' + f.audios + ' áudios' : '') + ' · ' + (f.lessons || 0) + ' aulas · ' + (f.matched || 0) + ' vinculadas · ~' + hrs + 'h estimadas</div></div>';
+          });
+          const perFolderDups = (prev.folders || []).flatMap(f => (f.duplicates || []).map(dd => ({ name: dd.name, folders: dd.inFolders || dd.folders || [], alreadyInConcurso: dd.alreadyInConcurso })));
+          const allDups = (prev.duplicates || []).concat(perFolderDups);
+          if (allDups.length) {
+            bh += '<div style="padding:10px;background:rgba(255,212,59,0.06);border:1px solid rgba(255,212,59,0.25);border-radius:8px;font-size:12px;color:#ffd43b;margin-bottom:8px;">⚠️ Aulas duplicadas:<br>' + allDups.map(dd => '• ' + Shell.views._esc(dd.name) + (dd.alreadyInConcurso ? ' — já vinculada a este concurso' : ' — aparece em ' + (dd.folders || []).length + ' pastas')).join('<br>') + '</div>';
+          }
+          bh += '<div style="font-size:13px;color:#e6edf3;">Total: <b>' + (prev.totalLessons || 0) + ' aulas</b> · ~' + (prev.totalHours != null ? prev.totalHours : '') + 'h</div>';
+          if (bodyEl) bodyEl.innerHTML = bh;
+          const footerEl = document.getElementById('v215a-footer');
+          if (footerEl) {
+            footerEl.innerHTML = '<button class="meggy-header-btn" id="v215a-back">← Voltar</button>' +
+              '<button class="meggy-header-btn" id="v215a-confirm" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">Confirmar anexo</button>';
+            document.getElementById('v215a-back').onclick = () => renderChoice();
+            document.getElementById('v215a-confirm').onclick = async () => {
+              const cbtn = document.getElementById('v215a-confirm');
+              if (cbtn) { cbtn.disabled = true; cbtn.textContent = 'Anexando…'; }
+              try {
+                const d = await Shell.views._v215Api('/api/concursos/' + encodeURIComponent(concursoId) + '/sources', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folderPaths: folderPaths }) });
+                const sc = d.scanned || {};
+                let msg = '✅ ' + (sc.totalMatched != null ? sc.totalMatched : (d.attached || []).length) + ' aulas vinculadas ao concurso “' + conc.name + '”.';
+                if (d.skipped && d.skipped.length) msg += ' (' + d.skipped.length + ' pasta(s) já estavam anexadas.)';
+                Shell.views._v215Toast(msg);
+                finishToDetail(concursoId);
+              } catch (e) {
+                Shell.views._v215Err('Não foi possível anexar', e.message);
+                if (cbtn) { cbtn.disabled = false; cbtn.textContent = 'Confirmar anexo'; }
+              }
+            };
+          }
+        }
+
+        async function renderChoice() {
+          modal.innerHTML =
+            '<div class="meggy-modal-content" style="max-width:560px;width:100%;max-height:90vh;overflow-y:auto;background:#161b22;border:1px solid rgba(255,255,255,0.08);border-radius:14px;">' +
+              '<div class="meggy-modal-header" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.06);">' +
+                '<div class="meggy-modal-title" style="font-size:15px;font-weight:600;color:#e6edf3;">＋ Adicionar pasta ao curso</div>' +
+                '<button id="v215a-x" style="background:none;border:none;color:#9aa4b8;font-size:22px;cursor:pointer;line-height:1;padding:0 4px;">×</button>' +
+              '</div>' +
+              '<div id="v215a-body" style="padding:16px;"><div style="padding:20px;text-align:center;color:#6b7488;font-size:12px;">Carregando concursos…</div></div>' +
+              '<div id="v215a-footer" style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-between;gap:8px;">' +
+                '<button class="meggy-header-btn" id="v215a-cancel">Cancelar</button>' +
+                '<button class="meggy-header-btn" id="v215a-next" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;" disabled>Ver prévia →</button>' +
+              '</div>' +
+            '</div>';
+          document.getElementById('v215a-x').onclick = close;
+          document.getElementById('v215a-cancel').onclick = close;
+          try {
+            const d = await Shell.views._v215Api('/api/concursos/list');
+            concursosCache = d.concursos || [];
+          } catch (e) {
+            const bodyEl = document.getElementById('v215a-body');
+            if (bodyEl) bodyEl.innerHTML = '<div style="color:#ff6b6b;font-size:13px;">Não foi possível carregar seus concursos: ' + Shell.views._esc(e.message) + '</div>';
+            return;
+          }
+          if (opts.concursoId) { renderPreview(opts.concursoId); return; }
+          const bodyEl = document.getElementById('v215a-body');
+          const nextBtn = document.getElementById('v215a-next');
+          let mode = concursosCache.length ? 'concurso' : 'avulso';
+          let selId = concursosCache.length ? concursosCache[0].id : null;
+          let bh = '<div style="font-size:13px;color:#9aa4b8;margin-bottom:12px;">Pastas (' + folderPaths.length + '):</div>';
+          folderPaths.forEach(p => { bh += '<div style="padding:6px 10px;background:rgba(255,255,255,0.03);border-radius:6px;font-size:12px;color:#e6edf3;margin-bottom:4px;word-break:break-all;">📁 ' + Shell.views._esc(Shell.views._v215FolderName(p)) + ' <span style="color:#8b949e;">(' + Shell.views._esc(p) + ')</span></div>'; });
+          bh += '<div style="margin-top:12px;font-size:13px;color:#e6edf3;font-weight:600;margin-bottom:6px;">Onde adicionar?</div>';
+          bh += '<label style="display:flex;gap:8px;align-items:flex-start;padding:10px;border:1px solid rgba(255,255,255,0.1);border-radius:8px;margin-bottom:8px;cursor:pointer;"><input type="radio" name="v215a-mode" value="avulso" style="margin-top:3px;" /> <span><b style="color:#e6edf3;">📚 Criar como curso avulso</b><br><span style="font-size:12px;color:#9aa4b8;">Comportamento atual — cada pasta vira um curso separado na área do aluno.</span></span></label>';
+          if (concursosCache.length) {
+            bh += '<div style="font-size:12px;color:#9aa4b8;margin-bottom:6px;">Ou anexar a um concurso existente (as pastas viram módulos):</div>';
+            concursosCache.forEach(c => { bh += '<label style="display:flex;gap:8px;align-items:center;padding:10px;border:1px solid rgba(255,255,255,0.1);border-radius:8px;margin-bottom:6px;cursor:pointer;"><input type="radio" name="v215a-mode" value="concurso:' + c.id + '" style="margin-top:0;" /> <span style="flex:1;"><b style="color:#e6edf3;">📌 ' + Shell.views._esc(c.name) + '</b> <span style="font-size:12px;color:#8b949e;">' + (c.lessonCount || 0) + ' aulas</span></span></label>'; });
+          } else {
+            bh += '<div style="font-size:12px;color:#9aa4b8;">Você ainda não tem concursos — crie um em “Meus Cursos” para anexar pastas como módulos.</div>';
+          }
+          if (bodyEl) bodyEl.innerHTML = bh;
+          const syncNext = () => {
+            if (!nextBtn) return;
+            nextBtn.disabled = false;
+            nextBtn.textContent = mode === 'avulso' ? 'Criar curso avulso' : 'Ver prévia →';
+          };
+          modal.querySelectorAll('input[name="v215a-mode"]').forEach(radio => {
+            if (mode === 'concurso' && radio.value === 'concurso:' + selId) radio.checked = true;
+            if (mode === 'avulso' && radio.value === 'avulso') radio.checked = true;
+            radio.onchange = () => {
+              if (radio.value === 'avulso') { mode = 'avulso'; selId = null; }
+              else { mode = 'concurso'; selId = radio.value.slice('concurso:'.length); }
+              syncNext();
+            };
+          });
+          syncNext();
+          if (nextBtn) nextBtn.onclick = async () => {
+            if (mode === 'avulso') { await doAvulso(); return; }
+            if (selId) renderPreview(selId);
+          };
+        }
+
+        document.body.appendChild(modal);
+        renderChoice();
+      },
+
+      // ── Item 7: resumo + flashcards por módulo ──
+      // generateAll (meggy-cache.js) é chaveado por U.lessonKey(), derivado
+      // de window.location.pathname (página da aula) — não dá para rodar por
+      // pasta fora da aula sem refatoração grande. Caminho usado: o batalhão
+      // em segundo plano (startBattalion, como study-courses já faz ao
+      // adicionar curso), que gera resumo + questões no servidor; os
+      // flashcards são criados a partir das questões quando o material é
+      // carregado (autoCreateFlashcards). As contagens do módulo (materials
+      // do GET sources) refletem o que o batalhão gravou.
+      async _v215GenerateModuleMaterials(el, concursoId, source, btn) {
+        if (btn) { btn.disabled = true; btn.textContent = '🐩 Gerando…'; }
+        try {
+          if (!window.gdiListAllFiles) { Shell.views._v215Err('Não foi possível gerar', 'A listagem de arquivos do Drive (gdiListAllFiles) não está disponível.'); return; }
+          const files = await window.gdiListAllFiles(source.coursePath, '');
+          const pdfs = (files || []).filter(f => (f.mimeType || '').includes('pdf') || /\.pdf$/i.test(f.name || '')).slice(0, 10);
+          if (!pdfs.length) { Shell.views._v215Err('Sem PDFs neste módulo', 'Este módulo não tem PDFs para a Meggy ler. Adicione PDFs à pasta e tente de novo.'); return; }
+          const pdfList = pdfs.map(p => ({ name: p.name, url: p.link ? (String(p.link).startsWith('http') ? p.link : window.location.origin + p.link) : '' }));
+          let ok = false;
+          const isa = window.gdiIsaPdf || (window.__gdiMeggy && window.__gdiMeggy.summaries);
+          if (isa && typeof isa.startBattalion === 'function') {
+            try { ok = await isa.startBattalion(source.coursePath, source.coursePath, source.name || Shell.views._v215FolderName(source.coursePath), pdfList); } catch (_) { ok = false; }
+          }
+          if (!ok) {
+            try {
+              const r = await fetch('/api/ai/battalion', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ courseKey: source.coursePath, coursePath: source.coursePath, lessonName: source.name || 'Módulo', pdfs: pdfList }) });
+              const d = await r.json().catch(() => ({}));
+              ok = !!(d && d.ok);
+            } catch (_) { ok = false; }
+          }
+          if (!ok) { Shell.views._v215Err('Não foi possível iniciar a geração', 'O batalhão da Meggy não aceitou este módulo. Tente de novo em alguns minutos.'); return; }
+          Shell.views._v215Toast('🐩 A Meggy está gerando resumo + flashcards deste módulo em segundo plano (' + pdfs.length + ' PDFs). As contagens aparecem aqui quando prontos.');
+          setTimeout(() => { try { const box = el.querySelector ? el.querySelector('#v215-sources') : null; if (box && document.body.contains(box)) Shell.views._v215RenderSources(el, concursoId, null); } catch (_) {} }, 30000);
+        } catch (e) {
+          Shell.views._v215Err('Não foi possível gerar os materiais', e.message || 'Erro ao listar a pasta do módulo.');
+        } finally {
+          if (btn) { btn.disabled = false; btn.textContent = '🐩 Gerar resumo + flashcards deste módulo'; }
+        }
+      },
+
       // ★ v2.2: modal para colar o conteúdo programático depois da criação
       // ★ v2.8 Fase B: modal do plano — ver o plano dia a dia ou montar um novo
-      showPlanModal(planId, concursoId) {
+      showPlanModal(planId, concursoId, opts) {
         let modal = document.getElementById('plan-modal');
         if (modal) modal.remove();
         modal = document.createElement('div');
@@ -2737,18 +3282,19 @@
             h += '<div style="display:flex;flex-direction:column;gap:8px;">';
             p.days.forEach(dy => {
               h += '<div style="padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><div style="font-size:12px;color:#5ddeda;font-weight:600;margin-bottom:4px;">Dia ' + dy.day + ' · ' + Shell._esc(dy.date) + ' · ' + dy.minutos + ' min</div>';
-              dy.sessions.forEach(ss => { h += '<div style="font-size:12px;color:#e6edf3;padding:2px 0;">' + (ss.tipo === 'revisao' ? '🔁 ' : '📚 ') + Shell._esc(ss.disciplina) + ' — ' + Shell._esc(ss.topico) + ' <span style="color:#8b949e;">(' + ss.minutos + ' min)</span></div>'; });
+              dy.sessions.forEach(ss => { h += '<div style="font-size:12px;color:#e6edf3;padding:2px 0;">' + (ss.tipo === 'revisao' ? '🔁 ' : '📚 ') + Shell._esc(ss.disciplina) + ' — ' + Shell._esc(ss.topico) + ' <span style="color:#8b949e;">(' + ss.minutos + ' min)</span>' + Shell.views._v215PlayBtnHtml(ss, concursoId) + '</div>'; });
               h += '</div>';
             });
             h += '</div>';
             bodyEl.innerHTML = h;
+            Shell.views._v215WirePlayButtons(bodyEl, concursoId);
           }).catch(() => { const b = document.getElementById('pm-body'); if (b) b.innerHTML = '<div style="color:#ff6b6b;font-size:13px;">Erro ao carregar o plano.</div>'; });
           return;
         }
         modal.innerHTML =
           '<div class="meggy-modal-content" style="max-width:520px;width:100%;max-height:90vh;overflow-y:auto;background:#161b22;border:1px solid rgba(255,255,255,0.08);border-radius:14px;">' +
             '<div class="meggy-modal-header" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.06);">' +
-              '<div class="meggy-modal-title" style="font-size:15px;font-weight:600;color:#e6edf3;">🎯 Montar plano direcionado</div>' +
+              '<div class="meggy-modal-title" style="font-size:15px;font-weight:600;color:#e6edf3;">' + ((opts && opts.meggy) ? '🐩 Montar plano com a Meggy' : '🎯 Montar plano direcionado') + '</div>' +
               '<button id="pm-x" style="background:none;border:none;color:#9aa4b8;font-size:22px;cursor:pointer;line-height:1;padding:0 4px;">×</button>' +
             '</div>' +
             '<div style="padding:16px;">' +
@@ -2759,7 +3305,7 @@
             '</div>' +
             '<div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-between;gap:8px;">' +
               '<button class="meggy-header-btn" id="pm-cancel">Cancelar</button>' +
-              '<button class="meggy-header-btn" id="pm-build" style="background:linear-gradient(135deg,#ffd43b,#f59e0b);color:#1a1a1a;border:none;">🎯 Montar plano</button>' +
+              '<button class="meggy-header-btn" id="pm-build" style="background:linear-gradient(135deg,#ffd43b,#f59e0b);color:#1a1a1a;border:none;">' + ((opts && opts.meggy) ? '🐩 Montar plano com a Meggy' : '🎯 Montar plano') + '</button>' +
             '</div>' +
           '</div>';
         document.body.appendChild(modal);
@@ -2775,9 +3321,10 @@
             const r = await fetch('/api/plans/build', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ concursoId, banca, totalDays, dailyHours }) });
             const d = await r.json();
             if (!d.ok) throw new Error(d.error || ('HTTP ' + r.status));
+            if (d.summary && d.summary.withRealLessons) Shell.views._v215Toast('🐩 Plano montado com a Meggy: ' + (d.summary.lessonsLinked || 0) + ' aulas reais vinculadas' + (d.summary.lessonsWatched ? ' (' + d.summary.lessonsWatched + ' já assistidas)' : ''));
             close();
             if (concursoId) Shell.views.concursoDetail(document.getElementById('meggy-main'), concursoId);
-          } catch (e) { alert('Não foi possível montar o plano: ' + e.message); btn.disabled = false; btn.textContent = '🎯 Montar plano'; }
+          } catch (e) { Shell.views._v215Err('Não foi possível montar o plano', e.message); btn.disabled = false; btn.textContent = ((opts && opts.meggy) ? '🐩 Montar plano com a Meggy' : '🎯 Montar plano'); }
         };
       },
 
