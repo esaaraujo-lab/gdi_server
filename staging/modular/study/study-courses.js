@@ -690,6 +690,8 @@
   // (window.renderCursos e window.gdiRefreshCentralPanel podem ser chamados por outros módulos)
   // ★ v2.6: busca concursos + em destaque do endpoint unificado (cache 60s)
   let __unifiedCache=null, __unifiedAt=0;
+  // ★ v2.10.2: invalida o cache unificado (criar/excluir concurso)
+  function invalidateUnifiedCache(){ __unifiedCache=null; __unifiedAt=0; }
   async function loadUnifiedExtras(){
     const now=Date.now();
     if(__unifiedCache && now-__unifiedAt<60000) return __unifiedCache;
@@ -2244,6 +2246,7 @@
     syncCoursesFromDrive: function(){ return (window.__gdiStudy.scanner && window.__gdiStudy.scanner.syncCoursesFromDrive) ? window.__gdiStudy.scanner.syncCoursesFromDrive.apply(this, arguments) : Promise.resolve(); },
     // UI
     renderCursos: renderCursos,
+    invalidateUnifiedCache: invalidateUnifiedCache,
     showAddCourseModal: showAddCourseModal,
     showHiddenCoursesModal: showHiddenCoursesModal,
     openCourseDetail: openCourseDetail,
