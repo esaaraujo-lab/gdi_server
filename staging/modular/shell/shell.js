@@ -152,6 +152,9 @@
         { id: 'questoes', label: 'Questões', icon: 'bi-patch-question', path: '/questoes' },
         { id: 'flashcards', label: 'Flashcards', icon: 'bi-card-text', path: '/flashcards' },
         { id: 'meggy-ai', label: 'Meggy AI', icon: 'bi-robot', path: '/meggy-ai' },
+        { id: 'resumos', label: 'Resumos', icon: 'bi-journal-text', path: '/resumos' },
+        { id: 'conquistas', label: 'Conquistas', icon: 'bi-trophy', path: '/conquistas' },
+        { id: 'apps', label: 'Apps', icon: 'bi-phone', path: '/apps' },
         { id: 'config', label: 'Configurações', icon: 'bi-gear', path: '/config' }
       ],
 
@@ -2938,7 +2941,7 @@
           return;
         }
         if (feature === 'apps') {
-          Shell.views._renderApps(el);
+          Shell._renderApps(el);
           return;
         }
         if (feature === 'conquistas') {
