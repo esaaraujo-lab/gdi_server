@@ -270,7 +270,6 @@
       var aside = document.getElementById('meggy-sidebar');
       if (!aside || aside.querySelector('[data-bridge-item]')) return;
       var items = [
-        { id: 'concursos', label: 'Meus Concursos', icon: 'bi-pin-angle', path: '/concursos' },
         { id: 'simulado', label: 'Simulado', icon: 'bi-stopwatch', path: '/simulado' },
         { id: 'provas', label: 'Provas', icon: 'bi-file-earmark-text', path: '/provas' },
         { id: 'redacao', label: 'Redação', icon: 'bi-pen', path: '/redacao' },
@@ -291,7 +290,7 @@
           try { window.Shell.toggleSidebar(false); } catch (_) {}
         };
       });
-      console.log('[Shell Bridge] sidebar: +9 itens (concursos, simulado, provas, redação, cronograma, estatísticas, mapa de fracos, plano, notificações)');
+      console.log('[Shell Bridge] sidebar: +8 itens (simulado, provas, redação, cronograma, estatísticas, mapa de fracos, plano, notificações)');
     } catch (e) { console.warn('[Shell Bridge] sidebar falhou:', e); }
   }
 
