@@ -2132,6 +2132,9 @@
         let selectedFolders = [];
         let disciplinas = [];
         let scanResult = null;
+        let banca = '';
+        let dailyHoursVal = 4;
+        let examDateVal = '';
 
         function closeModal() { if (modal && modal.parentNode) modal.parentNode.removeChild(modal); }
 
@@ -2154,6 +2157,18 @@
               '<div style="margin-bottom:12px;">' +
                 '<label style="display:block;font-size:12px;color:#9aa4b8;margin-bottom:6px;">Horas de estudo por dia</label>' +
                 '<input id="cw-dailyhours" type="number" min="1" max="16" value="4" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#e6edf3;font-size:14px;box-sizing:border-box;" />' +
+              '</div>' +
+              '<div style="margin-bottom:12px;">' +
+                '<label style="display:block;font-size:12px;color:#9aa4b8;margin-bottom:6px;">Banca organizadora (p/ o plano direcionado)</label>' +
+                '<select id="cw-banca" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#e6edf3;font-size:14px;box-sizing:border-box;">' +
+                  '<option value="">Sem banca definida</option>' +
+                  '<option value="Cebraspe">Cebraspe</option>' +
+                  '<option value="FGV">FGV</option>' +
+                  '<option value="FCC">FCC</option>' +
+                  '<option value="Vunesp">Vunesp</option>' +
+                  '<option value="IBFC">IBFC</option>' +
+                '</select>' +
+                '<div style="margin-top:6px;font-size:11px;color:#6b7488;">Com a banca, a Meggy monta o plano só com o mais cobrado por ela.</div>' +
               '</div>';
             footerHTML =
               '<button class="meggy-header-btn" id="cw-cancel">Cancelar</button>' +
@@ -2229,6 +2244,7 @@
               byDiscHTML;
             footerHTML =
               '<button class="meggy-header-btn" id="cw-close-early">Fechar</button>' +
+              (banca ? '<button class="meggy-header-btn" id="cw-build-plan" style="background:linear-gradient(135deg,#ffd43b,#f59e0b);color:#1a1a1a;border:none;">🎯 Montar plano direcionado</button>' : '') +
               '<button class="meggy-header-btn" id="cw-view-course" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">📚 Ver Curso</button>';
           }
 
@@ -2255,6 +2271,9 @@
               const name = (document.getElementById('cw-name').value || '').trim();
               const examDate = document.getElementById('cw-examdate').value || '';
               const dailyHours = parseInt(document.getElementById('cw-dailyhours').value, 10) || 4;
+              banca = (document.getElementById('cw-banca') || {}).value || '';
+              dailyHoursVal = dailyHours;
+              examDateVal = examDate;
               if (!name) { alert('Informe o nome do concurso'); return; }
               nextBtn.disabled = true;
               nextBtn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Criando...';
@@ -2455,6 +2474,29 @@
             if (closeEarly) closeEarly.onclick = () => { closeModal(); Shell.views.concursos(el); };
             const viewBtn = document.getElementById('cw-view-course');
             if (viewBtn) viewBtn.onclick = () => { closeModal(); Shell.views.concursoDetail(el, concursoId); };
+            // ★ v2.8 Fase B: montar o plano direcionado da banca
+            const buildPlanBtn = document.getElementById('cw-build-plan');
+            if (buildPlanBtn) buildPlanBtn.onclick = async () => {
+              buildPlanBtn.disabled = true;
+              buildPlanBtn.textContent = 'Montando plano...';
+              try {
+                let totalDays = 60;
+                if (examDateVal) { const diff = Math.ceil((new Date(examDateVal + 'T12:00:00') - Date.now()) / 86400000); if (diff > 7) totalDays = Math.min(180, diff); }
+                const r = await fetch('/api/plans/build', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ concursoId, banca, dailyHours: dailyHoursVal, totalDays }) });
+                const d = await r.json();
+                if (!d.ok) throw new Error(d.error || ('HTTP ' + r.status));
+                const s = d.summary;
+                const bodyEl = document.getElementById('cw-body');
+                if (bodyEl) {
+                  let h = '<div style="text-align:center;padding:12px 0;"><div style="font-size:40px;margin-bottom:8px;">🎯</div><div style="font-size:17px;color:#e6edf3;font-weight:600;margin-bottom:4px;">Plano direcionado pronto!</div><div style="font-size:13px;color:#9aa4b8;">' + Shell._esc(banca) + ' · ' + s.totalDays + ' dias · ' + s.dailyHours + 'h/dia · ' + s.totalHours + 'h no total</div><div style="font-size:13px;color:#ffd43b;margin-top:6px;">' + s.altaSharePct + '% do tempo nas disciplinas de alta incidência</div></div>';
+                  h += '<div style="display:flex;flex-direction:column;gap:4px;">';
+                  s.disciplines.slice(0, 12).forEach(dd => { h += '<div style="display:flex;justify-content:space-between;padding:6px 10px;background:rgba(255,255,255,0.03);border-radius:6px;font-size:12px;"><span style="color:#e6edf3;">' + Shell._esc(dd.nome) + (dd.fromEdital ? ' 📋' : '') + '</span><span style="color:#5ddeda;font-weight:600;">' + dd.horas + 'h (' + dd.pct + '%)</span></div>'; });
+                  h += '</div>';
+                  bodyEl.innerHTML = h;
+                }
+                buildPlanBtn.style.display = 'none';
+              } catch (e) { alert('Não foi possível montar o plano: ' + e.message); buildPlanBtn.disabled = false; buildPlanBtn.textContent = '🎯 Montar plano direcionado'; }
+            };
           }
         }
 
@@ -2482,6 +2524,7 @@
           html += '<div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;align-items:center;">';
           html += '<button class="meggy-header-btn" id="tab-completo" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">📚 Curso Completo</button>';
           html += '<button class="meggy-header-btn" id="btn-edital">📋 Colar conteúdo programático</button>';
+          html += '<button class="meggy-header-btn" id="btn-plan">🎯 Plano de estudo</button>';
           html += '<button class="meggy-header-btn" id="btn-delete-concurso" style="background:rgba(255,107,107,.12);color:#ff8b8b;border:1px solid rgba(255,107,107,.35);">🗑️ Excluir concurso</button>';
           if (data.intensivoCount > 0) {
             html += '<button class="meggy-header-btn" id="tab-intensivo">⚡ Curso Intensivo (' + data.intensivoCount + ')</button>';
@@ -2492,6 +2535,7 @@
           html += '</div>';
 
           // Disciplinas accordion
+          html += '<div id="concurso-plan" style="margin-bottom:16px;"></div>';
           html += '<div id="concurso-content">';
           if (!data.disciplinas || data.disciplinas.length === 0) {
             html += '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">📭</div><div class="meggy-placeholder-title">Nenhuma disciplina</div><div class="meggy-placeholder-desc">Analise o edital e escaneie os drives para montar o curso.</div></div>';
@@ -2551,6 +2595,37 @@
           const btnEdital = document.getElementById('btn-edital');
           if (btnEdital) btnEdital.onclick = () => Shell.views.showEditalModal(el, concursoId);
 
+          // ★ v2.8 Fase B: painel do plano direcionado (dia atual + sessões de hoje)
+          const planBox = document.getElementById('concurso-plan');
+          async function renderPlan(){
+            if (!planBox) return;
+            try {
+              const r = await fetch('/api/plans/list?concursoId=' + encodeURIComponent(concursoId), { credentials: 'include' });
+              const d = await r.json();
+              const p = d && d.ok && d.plans && d.plans[0];
+              if (!p){
+                planBox.innerHTML = '<div style="padding:12px;background:rgba(255,212,59,0.06);border:1px solid rgba(255,212,59,0.2);border-radius:10px;font-size:13px;color:#e6edf3;">🎯 <b>Plano de estudo direcionado</b><div style="color:#9aa4b8;font-size:12px;margin:4px 0 10px;">A Meggy monta um plano dia a dia só com o mais cobrado pela banca do seu concurso.</div><button class="meggy-header-btn" id="btn-plan-new" style="background:linear-gradient(135deg,#ffd43b,#f59e0b);color:#1a1a1a;border:none;">🎯 Montar plano</button></div>';
+              } else {
+                const dayIdx = Math.max(1, Math.min(p.totalDays, Math.floor((Date.now() - p.createdAt) / 86400000) + 1));
+                planBox.innerHTML = '<div style="padding:12px;background:rgba(93,222,218,0.06);border:1px solid rgba(93,222,218,0.2);border-radius:10px;font-size:13px;color:#e6edf3;">🎯 <b>Plano de estudo</b> · ' + Shell._esc(p.banca) + ' · dia ' + dayIdx + ' de ' + p.totalDays + ' · ' + p.dailyHours + 'h/dia<div style="margin-top:8px;"><button class="meggy-header-btn" id="btn-plan-view">📅 Ver plano completo</button> <button class="meggy-header-btn" id="btn-plan-new">🔄 Refazer plano</button></div><div id="plan-today" style="margin-top:10px;"></div></div>';
+                try {
+                  const rr = await fetch('/api/plans/' + encodeURIComponent(p.id), { credentials: 'include' });
+                  const dd = await rr.json();
+                  const today = dd && dd.ok && dd.plan && dd.plan.days && dd.plan.days[dayIdx - 1];
+                  const tEl = document.getElementById('plan-today');
+                  if (today && tEl){ tEl.innerHTML = '<div style="font-size:12px;color:#9aa4b8;margin-bottom:6px;">Hoje (' + Shell._esc(today.date) + '):</div>' + today.sessions.map(s => '<div style="padding:6px 10px;background:rgba(255,255,255,0.03);border-radius:6px;font-size:12px;margin-bottom:4px;">' + (s.tipo === 'revisao' ? '🔁 ' : '📚 ') + Shell._esc(s.disciplina) + ' — ' + Shell._esc(s.topico) + ' <span style="color:#5ddeda;">(' + s.minutos + ' min)</span></div>').join(''); }
+                } catch (_) {}
+                const pv = document.getElementById('btn-plan-view');
+                if (pv) pv.onclick = () => Shell.views.showPlanModal(p.id);
+              }
+              const pn = document.getElementById('btn-plan-new');
+              if (pn) pn.onclick = () => Shell.views.showPlanModal(null, concursoId);
+            } catch (_) { if (planBox) planBox.innerHTML = ''; }
+          }
+          renderPlan();
+          const btnPlan = document.getElementById('btn-plan');
+          if (btnPlan) btnPlan.onclick = () => { if (planBox) planBox.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+
           // ★ v2.5: excluir concurso no detalhe
           const btnDelConcurso = document.getElementById('btn-delete-concurso');
           if (btnDelConcurso) btnDelConcurso.onclick = async () => {
@@ -2600,6 +2675,79 @@
       },
 
       // ★ v2.2: modal para colar o conteúdo programático depois da criação
+      // ★ v2.8 Fase B: modal do plano — ver o plano dia a dia ou montar um novo
+      showPlanModal(planId, concursoId) {
+        let modal = document.getElementById('plan-modal');
+        if (modal) modal.remove();
+        modal = document.createElement('div');
+        modal.id = 'plan-modal';
+        modal.className = 'meggy-modal-overlay';
+        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:10002;padding:20px;';
+        const close = () => { if (modal && modal.parentNode) modal.parentNode.removeChild(modal); };
+        if (planId) {
+          modal.innerHTML =
+            '<div class="meggy-modal-content" style="max-width:640px;width:100%;max-height:90vh;overflow-y:auto;background:#161b22;border:1px solid rgba(255,255,255,0.08);border-radius:14px;">' +
+              '<div class="meggy-modal-header" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.06);">' +
+                '<div class="meggy-modal-title" style="font-size:15px;font-weight:600;color:#e6edf3;">🎯 Plano de estudo</div>' +
+                '<button id="pm-x" style="background:none;border:none;color:#9aa4b8;font-size:22px;cursor:pointer;line-height:1;padding:0 4px;">×</button>' +
+              '</div>' +
+              '<div id="pm-body" style="padding:16px;"><div style="padding:20px;text-align:center;color:#6b7488;font-size:12px;">Carregando plano...</div></div>' +
+            '</div>';
+          document.body.appendChild(modal);
+          document.getElementById('pm-x').onclick = close;
+          fetch('/api/plans/' + encodeURIComponent(planId), { credentials: 'include' }).then(r => r.json()).then(d => {
+            const bodyEl = document.getElementById('pm-body');
+            if (!bodyEl) return;
+            if (!d || !d.ok || !d.plan) { bodyEl.innerHTML = '<div style="color:#ff6b6b;font-size:13px;">Não foi possível carregar o plano.</div>'; return; }
+            const p = d.plan, s = p.summary;
+            let h = '<div style="font-size:13px;color:#9aa4b8;margin-bottom:12px;">' + Shell._esc(p.banca || '') + ' · ' + s.totalDays + ' dias · ' + s.dailyHours + 'h/dia · ' + s.totalHours + 'h · ' + s.altaSharePct + '% nas altas</div>';
+            h += '<div style="display:flex;flex-direction:column;gap:8px;">';
+            p.days.forEach(dy => {
+              h += '<div style="padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><div style="font-size:12px;color:#5ddeda;font-weight:600;margin-bottom:4px;">Dia ' + dy.day + ' · ' + Shell._esc(dy.date) + ' · ' + dy.minutos + ' min</div>';
+              dy.sessions.forEach(ss => { h += '<div style="font-size:12px;color:#e6edf3;padding:2px 0;">' + (ss.tipo === 'revisao' ? '🔁 ' : '📚 ') + Shell._esc(ss.disciplina) + ' — ' + Shell._esc(ss.topico) + ' <span style="color:#8b949e;">(' + ss.minutos + ' min)</span></div>'; });
+              h += '</div>';
+            });
+            h += '</div>';
+            bodyEl.innerHTML = h;
+          }).catch(() => { const b = document.getElementById('pm-body'); if (b) b.innerHTML = '<div style="color:#ff6b6b;font-size:13px;">Erro ao carregar o plano.</div>'; });
+          return;
+        }
+        modal.innerHTML =
+          '<div class="meggy-modal-content" style="max-width:520px;width:100%;max-height:90vh;overflow-y:auto;background:#161b22;border:1px solid rgba(255,255,255,0.08);border-radius:14px;">' +
+            '<div class="meggy-modal-header" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.06);">' +
+              '<div class="meggy-modal-title" style="font-size:15px;font-weight:600;color:#e6edf3;">🎯 Montar plano direcionado</div>' +
+              '<button id="pm-x" style="background:none;border:none;color:#9aa4b8;font-size:22px;cursor:pointer;line-height:1;padding:0 4px;">×</button>' +
+            '</div>' +
+            '<div style="padding:16px;">' +
+              '<div style="font-size:13px;color:#9aa4b8;margin-bottom:12px;">A Meggy monta o plano só com o mais cobrado pela banca, cruzado com as disciplinas do edital deste concurso.</div>' +
+              '<div style="margin-bottom:12px;"><label style="display:block;font-size:12px;color:#9aa4b8;margin-bottom:6px;">Banca organizadora *</label><select id="pm-banca" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#e6edf3;font-size:14px;box-sizing:border-box;"><option value="Cebraspe">Cebraspe</option><option value="FGV">FGV</option><option value="FCC">FCC</option><option value="Vunesp">Vunesp</option><option value="IBFC">IBFC</option></select></div>' +
+              '<div style="display:flex;gap:12px;"><div style="flex:1;"><label style="display:block;font-size:12px;color:#9aa4b8;margin-bottom:6px;">Dias de plano</label><input id="pm-days" type="number" min="7" max="180" value="60" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#e6edf3;font-size:14px;box-sizing:border-box;" /></div>' +
+              '<div style="flex:1;"><label style="display:block;font-size:12px;color:#9aa4b8;margin-bottom:6px;">Horas por dia</label><input id="pm-hours" type="number" min="1" max="12" value="2" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#e6edf3;font-size:14px;box-sizing:border-box;" /></div></div>' +
+            '</div>' +
+            '<div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-between;gap:8px;">' +
+              '<button class="meggy-header-btn" id="pm-cancel">Cancelar</button>' +
+              '<button class="meggy-header-btn" id="pm-build" style="background:linear-gradient(135deg,#ffd43b,#f59e0b);color:#1a1a1a;border:none;">🎯 Montar plano</button>' +
+            '</div>' +
+          '</div>';
+        document.body.appendChild(modal);
+        document.getElementById('pm-x').onclick = close;
+        document.getElementById('pm-cancel').onclick = close;
+        document.getElementById('pm-build').onclick = async () => {
+          const banca = document.getElementById('pm-banca').value;
+          const totalDays = parseInt(document.getElementById('pm-days').value, 10) || 60;
+          const dailyHours = parseInt(document.getElementById('pm-hours').value, 10) || 2;
+          const btn = document.getElementById('pm-build');
+          btn.disabled = true; btn.textContent = 'Montando...';
+          try {
+            const r = await fetch('/api/plans/build', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ concursoId, banca, totalDays, dailyHours }) });
+            const d = await r.json();
+            if (!d.ok) throw new Error(d.error || ('HTTP ' + r.status));
+            close();
+            if (concursoId) Shell.views.concursoDetail(document.getElementById('meggy-main'), concursoId);
+          } catch (e) { alert('Não foi possível montar o plano: ' + e.message); btn.disabled = false; btn.textContent = '🎯 Montar plano'; }
+        };
+      },
+
       showEditalModal(el, concursoId) {
         let modal = document.getElementById('edital-modal');
         if (modal) modal.remove();
