@@ -2934,7 +2934,7 @@
           return;
         }
         if (feature === 'config') {
-          el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">⚙️ Configurações</h1></div><div style="max-width:500px;margin:0 auto;"><div class="meggy-card" style="cursor:default;"><div class="meggy-card-title">🎨 Tema</div><div class="meggy-card-meta"><button class="meggy-header-btn" onclick="Shell.toggleTheme()">Alternar tema</button></div></div><div class="meggy-card" style="cursor:default;margin-top:12px;"><div class="meggy-card-title">📦 Versão</div><div class="meggy-card-meta">Meggy STAGING</div></div><div class="meggy-card" style="cursor:default;margin-top:12px;"><div class="meggy-card-title">🚪 Conta</div><div class="meggy-card-meta"><button class="meggy-header-btn" onclick="Shell.logout()">Sair</button></div></div></div>';
+          el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">⚙️ Configurações</h1></div><div style="max-width:500px;margin:0 auto;"><div class="meggy-card" style="cursor:default;"><div class="meggy-card-title">🎨 Tema</div><div class="meggy-card-meta"><button class="meggy-header-btn" onclick="Shell.toggleTheme()">Alternar tema</button></div></div><div class="meggy-card" style="cursor:default;margin-top:12px;"><div class="meggy-card-title">📦 Versão</div><div class="meggy-card-meta">Meggy AI</div></div><div class="meggy-card" style="cursor:default;margin-top:12px;"><div class="meggy-card-title">🚪 Conta</div><div class="meggy-card-meta"><button class="meggy-header-btn" onclick="Shell.logout()">Sair</button></div></div></div>';
           return;
         }
         if (feature === 'apps') {
