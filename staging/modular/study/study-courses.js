@@ -960,8 +960,13 @@
               const r=await fetch('/api/courses/remove',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({coursePath:c.key})});
               const d=await r.json().catch(()=>({}));
               if(!r.ok||!d.ok) throw new Error((d&&(d.error||d.message))||('HTTP '+r.status));
-              // ★ v2.5: remoção real no servidor; o hide local só mantém o cache consistente
-              await hideCourse(c.key);
+              // ★ v2.14.8: remoção REAL também no localStorage — antes só hideCourse():
+              //   o curso ficava no LS_MANUAL e voltava no reload (o módulo lê de lá).
+              //   Tira do manual, limpa o oculto e invalida o cache unificado.
+              try{ const _m=lsGet('gdi-manual-courses-v1',[]); if(Array.isArray(_m)) lsSet('gdi-manual-courses-v1',_m.filter(m=>!m||low(m.path)!==low(c.key))); }catch(_){}
+              try{ await unhideCourse(c.key); }catch(_){}
+              try{ if(typeof invalidateUnifiedCache==='function') invalidateUnifiedCache(); }catch(_){}
+              try{ if(typeof Bus!=='undefined' && Bus.emit) Bus.emit('courses:changed', {}); }catch(_){}
               showToast('Curso removido');
               renderCursos(box).catch(()=>{});
             }catch(err){ showToast('Não foi possível remover: '+(err&&err.message||err)); }
