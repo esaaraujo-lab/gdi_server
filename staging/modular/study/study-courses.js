@@ -759,9 +759,12 @@
     <div style="margin-bottom:14px;">
       <input id="gdi-courses-search" type="search" placeholder="Buscar curso..." style="width:100%;box-sizing:border-box;background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);padding:9px 12px;font-size:13px;font-family:inherit;" value="${escHtml(box.__search||'')}">
     </div>
-    <div class="gdi-courses"></div>
+    <div id="gdi-featured-wrap" style="display:none;margin-bottom:18px;"><b style="color:var(--ferreto-text,#f0f6fc);font-size:14px;">⭐ Cursos em destaque</b><div class="gdi-courses" id="gdi-featured-grid" style="margin-top:10px;"></div></div>
+    <div id="gdi-own-wrap"><b style="color:var(--ferreto-text,#f0f6fc);font-size:14px;">📚 Meus Cursos</b><div class="gdi-courses" id="gdi-own-grid" style="margin-top:10px;"></div></div>
     <div id="gdi-courses-pager" style="margin-top:14px;text-align:center;"></div>`;
-    const grid=box.querySelector('.gdi-courses');
+    const grid=box.querySelector('#gdi-own-grid');
+    const featGrid=box.querySelector('#gdi-featured-grid');
+    const featWrap=box.querySelector('#gdi-featured-wrap');
     const pagerEl=box.querySelector('#gdi-courses-pager');
     const searchInput=box.querySelector('#gdi-courses-search');
 
@@ -779,16 +782,22 @@
     function applyFilter(){
       const q=(box.__search||'').toLowerCase().trim();
       const filtered=q?all.filter(c=>{const n=(c.name||cleanCourseName(c.key)||'').toLowerCase();const d=(c.kind?'':(driveNameOf(c.key)||'')).toLowerCase();return n.includes(q)||d.includes(q);}):all;
-      const totalPages=Math.max(1,Math.ceil(filtered.length/PAGE_SIZE));
+      // ★ v2.14.7: destaque em seção própria no topo (sem paginação — são poucos); os demais seguem na grade abaixo
+      const featFiltered=filtered.filter(c=>c.kind==='featured');
+      const ownFiltered=filtered.filter(c=>c.kind!=='featured');
+      featWrap.style.display=featFiltered.length?'':'none';
+      featGrid.innerHTML='';
+      featFiltered.forEach(c=>renderCourseCard(featGrid,c,box,null));
+      const totalPages=Math.max(1,Math.ceil(ownFiltered.length/PAGE_SIZE));
       if(currentPage>=totalPages)currentPage=totalPages-1;
       if(currentPage<0)currentPage=0;
-      const slice=filtered.slice(currentPage*PAGE_SIZE,(currentPage+1)*PAGE_SIZE);
+      const slice=ownFiltered.slice(currentPage*PAGE_SIZE,(currentPage+1)*PAGE_SIZE);
       // ★ v1.0.98 FIX: generation token to prevent stale cards from async race (Agent 15 Bug 3)
       const __gen=(box.__filterGen=(box.__filterGen||0)+1);
       // limpar grid
       grid.innerHTML='';
       if(!slice.length){
-        grid.innerHTML='<div class="gdi-notes-empty" style="padding:40px;text-align:center;">'+(q?'Nenhum curso encontrado para "'+escHtml(q)+'"':'Nenhum curso ainda.')+'</div>';
+        grid.innerHTML='<div class="gdi-notes-empty" style="padding:40px;text-align:center;">'+(q?'Nenhum curso encontrado para "'+escHtml(q)+'"':(featFiltered.length?'Nenhum curso próprio ainda.':'Nenhum curso ainda.'))+'</div>';
       }
       // ★ PATCH C: pré-busca bestIn em paralelo (Promise.all) — depois renderiza cards com target resolvido
       (async()=>{
@@ -803,13 +812,13 @@
           <span style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">Página ${currentPage+1} de ${totalPages}</span>
           <button class="gdi-mode-btn" id="gdi-courses-next" style="font-size:11px;padding:5px 10px;" ${currentPage===totalPages-1?'disabled':''}>Próxima <i class="bi bi-chevron-right"></i></button>
         </div>
-        <div style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;margin-top:6px;">Mostrando ${slice.length} de ${filtered.length} curso${filtered.length>1?'s':''}${q?' (filtrado por "'+escHtml(q)+'")':''}</div>`;
+        <div style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;margin-top:6px;">Mostrando ${slice.length} de ${ownFiltered.length} curso${ownFiltered.length>1?'s':''}${q?' (filtrado por "'+escHtml(q)+'")':''}</div>`;
         const prev=pagerEl.querySelector('#gdi-courses-prev');
         const next=pagerEl.querySelector('#gdi-courses-next');
         if(prev)prev.onclick=()=>{currentPage--;applyFilter();};
         if(next)next.onclick=()=>{currentPage++;applyFilter();};
       }else{
-        pagerEl.innerHTML=filtered.length>PAGE_SIZE?`<div style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">Mostrando ${slice.length} de ${filtered.length} cursos</div>`:'';
+        pagerEl.innerHTML=ownFiltered.length>PAGE_SIZE?`<div style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">Mostrando ${slice.length} de ${ownFiltered.length} cursos</div>`:'';
       }
     }
     function renderCourseCard(grid,c,box,target){
