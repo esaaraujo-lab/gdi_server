@@ -454,7 +454,11 @@
   }
 
   // ── Inicia quiz com questões do banco (não respondidas) ──
-  function startQuizFromBank(bodyEl,lesson){
+  // ★ v2.15.0: onDone opcional — {hits,misses,total,errors:[{statement,
+  //   options,correct,picked,correctText,pickedText}]} ao fim de cada batch.
+  //   O quiz por módulo usa p/ gravar os erros no caderno do servidor.
+  //   Chamadas antigas (sem onDone) comportam-se exatamente como antes.
+  function startQuizFromBank(bodyEl,lesson,onDone){
     // ★ CYCLE-10 (Agent 10): bail if the M9 panel was closed before this
     //   synchronous render started (covers both the questions() tail call
     //   and the recursive self-call after generateQuestions). Without this,
@@ -496,7 +500,7 @@
       </div>`;
       bodyEl.querySelector('#gdi-q-gen-more').onclick=async()=>{
         const ok=await generateQuestions(bodyEl.__items||[],bodyEl,lesson);
-        if(ok)startQuizFromBank(bodyEl,lesson);
+        if(ok)startQuizFromBank(bodyEl,lesson,onDone);
       };
       return;
     }
@@ -516,12 +520,15 @@
       shuffled[j] = tmp;
     }
     const batch=shuffled.slice(0,5);
-    runQuizSession(bodyEl,lesson,batch);
+    runQuizSession(bodyEl,lesson,batch,onDone);
   }
 
   // ── Roda uma sessão de quiz interativo ──
-  function runQuizSession(bodyEl,lesson,queue){
+  function runQuizSession(bodyEl,lesson,queue,onDone){
     let idx=0,hits=0,misses=0;
+    // ★ v2.15.0: erros desta sessão (resposta errada OU pulo sem responder),
+    //   entregues ao onDone no fim do batch. Não muda o fluxo do quiz.
+    const sessionErrors=[];
     function draw(){
       if(idx>=queue.length){
         // fim do batch
@@ -540,11 +547,16 @@
         // Gerar mais 5 questões
         bodyEl.querySelector('#gdi-q-more').onclick=async()=>{
           const ok=await generateQuestions(bodyEl.__items||[],bodyEl,lesson);
-          if(ok)startQuizFromBank(bodyEl,lesson);
-          else startQuizFromBank(bodyEl,lesson); // tenta de novo com o que tem
+          if(ok)startQuizFromBank(bodyEl,lesson,onDone);
+          else startQuizFromBank(bodyEl,lesson,onDone); // tenta de novo com o que tem
         };
         // Próximo batch (questões que ainda não foram respondidas)
-        bodyEl.querySelector('#gdi-q-next-batch').onclick=()=>startQuizFromBank(bodyEl,lesson);
+        bodyEl.querySelector('#gdi-q-next-batch').onclick=()=>startQuizFromBank(bodyEl,lesson,onDone);
+        // ★ v2.15.0: hook de conclusão do batch (opcional, retro-compatível).
+        if(typeof onDone==='function'){
+          try{ onDone({hits:hits,misses:misses,total:total,errors:sessionErrors.slice()}); }
+          catch(e){ console.warn('[Meggy] quiz onDone falhou:', e&&e.message); }
+        }
         return;
       }
       const q=queue[idx];
@@ -577,6 +589,8 @@
             misses++;
             markAnswered(q.id);
             if(window.__gdiGradeQ)window.__gdiGradeQ(q.id,false);
+            // ★ v2.15.0: pulo sem responder conta como erro da sessão
+            sessionErrors.push({statement:q.statement,options:Array.isArray(q.options)?q.options.slice():[],correct:q.correct,picked:-1,correctText:(q.options&&q.options[q.correct])||'',pickedText:''});
           }
           if(idx+1<queue.length){idx++;draw();}
           else{idx++;draw();}  // ★ Sprint 6: simplificado — ambos os ramos fazem o mesmo
@@ -592,6 +606,8 @@
         b.onclick=()=>{
           const acertou=i===q.correct;
           if(acertou)hits++;else misses++;
+          // ★ v2.15.0: resposta errada entra nos erros da sessão
+          if(!acertou)sessionErrors.push({statement:q.statement,options:Array.isArray(q.options)?q.options.slice():[],correct:q.correct,picked:i,correctText:(q.options&&q.options[q.correct])||'',pickedText:(q.options&&q.options[i])||''});
           markAnswered(q.id);
           // grade no SRS
           if(window.__gdiGradeQ)window.__gdiGradeQ(q.id,acertou);
