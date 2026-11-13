@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  v1.8.0 — Subtle pulse-in used when a tile gains focus (TV / D-pad).
+  Bound to card_scale_in via adapter.animateFocus().
+-->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:duration="220"
+    android:interpolator="@android:interpolator/decelerate_quint"
+    android:fillEnabled="true"
+    android:fillAfter="true">
+
+    <scale
+        android:fromXScale="1.0"
+        android:fromYScale="1.0"
+        android:toXScale="1.06"
+        android:toYScale="1.06"
+        android:pivotX="50%"
+        android:pivotY="50%" />
+</set>

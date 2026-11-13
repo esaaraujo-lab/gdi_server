@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    VOVÔ FIT — splash gradient
+    teal → lime (cores da marca: #0F3D3E + #A3E635)
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:type="linear"
+        android:angle="45"
+        android:startColor="@color/vovofit_teal"
+        android:centerColor="@color/vovofit_teal_dark"
+        android:endColor="@color/vovofit_lime" />
+</shape>

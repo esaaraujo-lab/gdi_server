@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  v1.8.0 — Subtle top scrim used to give badges (✓ / ▶) a little contrast
+  even when the underlying gradient is bright. Used as a 56dp tall band
+  at the top of the tile thumbnail.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:startColor="#66000000"
+        android:endColor="#00000000"
+        android:angle="270"
+        android:type="linear" />
+    <corners android:radius="0dp" />
+</shape>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    VOVÔ FIT — launcher icon foreground
+    Bitmap referenciando ic_launcher_foreground_img.png (1024x1024)
+    Sobre gradient teal→lime definido em ic_launcher_background.xml
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/ic_launcher_background" />
+    <item>
+        <bitmap
+            android:gravity="center"
+            android:src="@drawable/ic_launcher_foreground_img" />
+    </item>
+</layer-list>
