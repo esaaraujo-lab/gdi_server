@@ -11,6 +11,7 @@ import com.bibigyn.app.R
 import com.bibigyn.app.BiBiGynApp
 import com.bibigyn.app.databinding.ActivityMylistBinding
 import com.bibigyn.app.ui.browse.BrowseActivity
+import com.bibigyn.app.ui.detail.DetailActivity
 import com.bibigyn.app.ui.home.HomeActivity
 import com.bibigyn.app.ui.player.PlayerActivity
 import com.bibigyn.app.ui.search.SearchActivity
@@ -29,6 +30,7 @@ class MyListActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMylistBinding
     private lateinit var adapter: MyListAdapter
+    private lateinit var courseAdapter: MyListCourseAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,8 +67,26 @@ class MyListActivity : AppCompatActivity() {
         binding.recycler.layoutManager = GridLayoutManager(this, spanCount)
         binding.recycler.addItemDecoration(GridGutterDecoration(10))
 
-        adapter = MyListAdapter { file -> openFile(file) }
+        adapter = MyListAdapter(
+            onClick = { file -> openFile(file) },
+            onFavoriteToggle = { file ->
+                // ★ v2.1.3: ⭐ remove o item e recarrega a lista.
+                SessionManager.get(this).toggleFavorite(file)
+                android.widget.Toast.makeText(this, "Removido da Minha lista", android.widget.Toast.LENGTH_SHORT).show()
+                loadFavorites()
+            }
+        )
         binding.recycler.adapter = adapter
+
+        courseAdapter = MyListCourseAdapter(
+            onClick = { course -> openCourse(course) },
+            onFavoriteToggle = { course ->
+                SessionManager.get(this).toggleFavoriteCourse(course.drivePath, course.name)
+                android.widget.Toast.makeText(this, "Curso removido da Minha lista", android.widget.Toast.LENGTH_SHORT).show()
+                loadFavorites()
+            }
+        )
+        binding.recyclerCourses.adapter = courseAdapter
 
         loadFavorites()
     }
@@ -83,17 +103,47 @@ class MyListActivity : AppCompatActivity() {
     }
 
     private fun loadFavorites() {
-        val favs = SessionManager.get(this).getFavorites()
-        if (favs.isEmpty()) {
+        // ★ v2.1.3: duas seções — Cursos (pastas) + Vídeos/arquivos.
+        val sm = SessionManager.get(this)
+        val courses = sm.getFavoriteCourses()
+        val favs = sm.getFavorites()
+        val total = courses.size + favs.size
+
+        if (total == 0) {
             binding.emptyState.visibility = View.VISIBLE
-            binding.recycler.visibility = View.GONE
+            binding.scrollContent.visibility = View.GONE
             binding.labelCount.text = ""
+            return
+        }
+        binding.emptyState.visibility = View.GONE
+        binding.scrollContent.visibility = View.VISIBLE
+        binding.labelCount.text = "$total item(ns) salvos"
+
+        if (courses.isEmpty()) {
+            binding.labelCourses.visibility = View.GONE
+            binding.recyclerCourses.visibility = View.GONE
         } else {
-            binding.emptyState.visibility = View.GONE
+            binding.labelCourses.visibility = View.VISIBLE
+            binding.recyclerCourses.visibility = View.VISIBLE
+            courseAdapter.submit(courses)
+        }
+
+        if (favs.isEmpty()) {
+            binding.labelFiles.visibility = View.GONE
+            binding.recycler.visibility = View.GONE
+        } else {
+            binding.labelFiles.visibility = View.VISIBLE
             binding.recycler.visibility = View.VISIBLE
-            binding.labelCount.text = "${favs.size} item(ns) salvos"
             adapter.submit(favs)
         }
+    }
+
+    /** ★ v2.1.3: abre um curso favorito (detalhe do curso/pasta). */
+    private fun openCourse(course: SessionManager.FavCourse) {
+        val intent = Intent(this, DetailActivity::class.java)
+        intent.putExtra("drivePath", course.drivePath)
+        intent.putExtra("folderName", course.name)
+        startActivity(intent)
     }
 
     private fun openFile(file: com.bibigyn.app.data.FileItem) {
