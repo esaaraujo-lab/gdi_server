@@ -172,6 +172,7 @@
           explanation:it.explanation||'',
           legalText:it.legalText||'',
           fundamentacao:it.fundamentacao||'',
+          author:it.author||'',
           source:'shared'
         }));
       }
