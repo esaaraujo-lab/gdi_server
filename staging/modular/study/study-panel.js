@@ -547,8 +547,8 @@
             </div>
             <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0 0 14px;line-height:1.5;">App nativo Kotlin com ExoPlayer, navegação Netflix-style, download offline e auto-update.</p>
             <div style="display:flex;flex-direction:column;gap:8px;">
-              <a href="https://github.com/esaaraujo-lab/student_gdi/releases/download/v2.5.1/meggy-native-v2.6.0.apk" target="_blank" style="display:block;text-align:center;padding:10px 16px;background:linear-gradient(135deg,#5ddeda,#3aa8a4);color:#0d1119;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600;">⬇ Baixar APK (v2.7.2)</a>
-              <a href="https://github.com/esaaraujo-lab/student_gdi/releases" target="_blank" style="display:block;text-align:center;padding:8px 16px;background:transparent;color:var(--ferreto-text-muted,#8b949e);text-decoration:none;border:1px solid var(--ferreto-border,#30363d);border-radius:8px;font-size:12px;">Ver todas as versões</a>
+              <a href="/download/android" data-app="android" data-version-label="1" target="_blank" style="display:block;text-align:center;padding:10px 16px;background:linear-gradient(135deg,#5ddeda,#3aa8a4);color:#0d1119;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600;">⬇ Baixar APK</a>
+              <a href="https://github.com/esaaraujo-lab/gdi_server/releases" target="_blank" style="display:block;text-align:center;padding:8px 16px;background:transparent;color:var(--ferreto-text-muted,#8b949e);text-decoration:none;border:1px solid var(--ferreto-border,#30363d);border-radius:8px;font-size:12px;">Ver todas as versões</a>
             </div>
             <div style="margin-top:12px;font-size:11px;color:var(--ferreto-text-muted,#8b949e);">
               <div>✓ Android 7.0+ (API 24+)</div>
@@ -568,8 +568,8 @@
             </div>
             <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0 0 14px;line-height:1.5;">App desktop com Tauri 2.0 (Rust), multi-janela, atalhos globais, auto-update e TTS.</p>
             <div style="display:flex;flex-direction:column;gap:8px;">
-              <a href="https://github.com/esaaraujo-lab/student_gdi/releases/download/v1.3.1/meggy-windows-v1.3.1.msi" target="_blank" style="display:block;text-align:center;padding:10px 16px;background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600;">⬇ Baixar Windows (.msi)</a>
-              <a href="https://github.com/esaaraujo-lab/student_gdi/releases/download/v1.3.1/meggy-linux-v1.3.1.AppImage" target="_blank" style="display:block;text-align:center;padding:8px 16px;background:transparent;color:var(--ferreto-text-muted,#8b949e);text-decoration:none;border:1px solid var(--ferreto-border,#30363d);border-radius:8px;font-size:12px;">⬇ Linux (.AppImage)</a>
+              <a href="/download/windows" data-app="windows" data-version-label="1" target="_blank" style="display:block;text-align:center;padding:10px 16px;background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600;">⬇ Baixar Windows (.msi)</a>
+              <a href="/download/linux" data-app="linux" data-version-label="1" target="_blank" style="display:block;text-align:center;padding:8px 16px;background:transparent;color:var(--ferreto-text-muted,#8b949e);text-decoration:none;border:1px solid var(--ferreto-border,#30363d);border-radius:8px;font-size:12px;">⬇ Linux (.AppImage)</a>
             </div>
             <div style="margin-top:12px;font-size:11px;color:var(--ferreto-text-muted,#8b949e);">
               <div>✓ Windows 10/11 64-bit</div>
@@ -589,8 +589,8 @@
             </div>
             <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0 0 14px;line-height:1.5;">App nativo Roku (BrightScript + SceneGraph) para TV. Instalação manual via Developer Mode.</p>
             <div style="display:flex;flex-direction:column;gap:8px;">
-              <a href="https://github.com/esaaraujo-lab/student_gdi/raw/main/roku-app/meggy-roku-v1.0.2.zip" target="_blank" style="display:block;text-align:center;padding:10px 16px;background:linear-gradient(135deg,#8b949e,#586069);color:#fff;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600;">⬇ Baixar ZIP (v1.0.2)</a>
-              <a href="https://github.com/esaaraujo-lab/student_gdi/blob/main/roku-app/INSTALACAO.md" target="_blank" style="display:block;text-align:center;padding:8px 16px;background:transparent;color:var(--ferreto-text-muted,#8b949e);text-decoration:none;border:1px solid var(--ferreto-border,#30363d);border-radius:8px;font-size:12px;">📖 Guia de instalação</a>
+              <a href="/download/roku" data-app="roku" data-version-label="1" target="_blank" style="display:block;text-align:center;padding:10px 16px;background:linear-gradient(135deg,#8b949e,#586069);color:#fff;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600;">⬇ Baixar ZIP</a>
+              <a href="https://github.com/esaaraujo-lab/gdi_server/blob/main/roku-app/INSTALACAO.md" target="_blank" style="display:block;text-align:center;padding:8px 16px;background:transparent;color:var(--ferreto-text-muted,#8b949e);text-decoration:none;border:1px solid var(--ferreto-border,#30363d);border-radius:8px;font-size:12px;">📖 Guia de instalação</a>
             </div>
             <div style="margin-top:12px;font-size:11px;color:var(--ferreto-text-muted,#8b949e);">
               <div>✓ Roku TV, Stick, Ultra</div>
@@ -610,7 +610,7 @@
             </div>
             <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0 0 14px;line-height:1.5;">App separado para Android TV com apenas 2 drives: Clube Fit e Hipopressivos. Mesmas funções do Meggy, mas focado em fitness.</p>
             <div style="display:flex;flex-direction:column;gap:8px;">
-              <a href="https://github.com/esaaraujo-lab/gdi_server/releases/download/bibigyn-v2.1.1/app-release.apk" target="_blank" style="display:block;text-align:center;padding:10px 16px;background:linear-gradient(135deg,#5ddeda,#ff8b9f);color:#0d1119;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600;">⬇ Baixar APK (v2.1.1)</a>
+              <a href="/download/android_tv" data-app="android_tv" data-version-label="1" target="_blank" style="display:block;text-align:center;padding:10px 16px;background:linear-gradient(135deg,#5ddeda,#ff8b9f);color:#0d1119;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600;">⬇ Baixar APK</a>
               <a href="https://github.com/esaaraujo-lab/gdi_server/tree/main/bibigyn-android-tv" target="_blank" style="display:block;text-align:center;padding:8px 16px;background:transparent;color:var(--ferreto-text-muted,#8b949e);text-decoration:none;border:1px solid var(--ferreto-border,#30363d);border-radius:8px;font-size:12px;">Ver código-fonte</a>
             </div>
             <div style="margin-top:12px;font-size:11px;color:var(--ferreto-text-muted,#8b949e);">
@@ -640,6 +640,32 @@
         </div>
       </div>
     `;
+    // ★ v1.0.214 APP-LINKS-1: busca versão dinâmica de cada plataforma via /api/apps/latest
+    // e atualiza o label dos botões (data-app + data-version-label). Falha silenciosa — o
+    // botão continua funcionando via redirect /download/:platform mesmo sem o fetch.
+    try {
+      var _btns = (body && body.querySelectorAll) ? body.querySelectorAll('a[data-app][data-version-label]') : [];
+      _btns.forEach(function(btn){
+        var plat = btn.getAttribute('data-app');
+        if(!plat) return;
+        // Prefixo visual por plataforma (APK, ZIP, .msi, .AppImage)
+        var prefix = btn.textContent.replace(/\s*\(v[0-9.]+\)\s*$/, '').trim();
+        fetch('/api/apps/latest?platform=' + encodeURIComponent(plat), { credentials: 'omit' })
+          .then(function(r){ return r.ok ? r.json() : null; })
+          .then(function(d){
+            if(d && d.ok && d.version) {
+              // Preserva emoji "⬇" e rótulo base; anexa " (vX.Y.Z)"
+              btn.textContent = prefix + ' (v' + d.version + ')';
+              // ★ Se há asset_name informativo, mostra no title
+              if(d.asset_name) btn.setAttribute('title', d.asset_name + (d.size ? ' · ' + Math.round(d.size/1048576) + ' MB' : ''));
+              // ★ data-version guard p/ inspeção
+              btn.setAttribute('data-version', d.version);
+              btn.setAttribute('data-tag', d.tag || '');
+            }
+          })
+          .catch(function(){ /* silent: redirect endpoint continua funcionando */ });
+      });
+    } catch(_) {}
   }
 
   function renderPanel(){
