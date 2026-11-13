@@ -62,7 +62,7 @@ class HomeActivity : AppCompatActivity() {
         UpdateChecker.checkForUpdate(this, BuildConfig.VERSION_NAME)
 
         // ★ v1.8.0: dynamic version footer
-        binding.footerVersion.text = "🏃 VOVÔ FIT · v${BuildConfig.VERSION_NAME}"
+        binding.footerVersion.text = "🏃 VOVÓ FIT · v${BuildConfig.VERSION_NAME}"
 
         binding.topSair.setOnClickListener { logout() }
 
@@ -179,11 +179,20 @@ class HomeActivity : AppCompatActivity() {
         private fun buildDots() {
             binding.heroDots.removeAllViews()
             for (i in items.indices) {
+                // ★ v1.0.2: bolinha clicável — salta para o slide.
                 val dot = TextView(binding.root.context).apply {
                     text = "•"
                     textSize = 18f
                     setTextColor(0x66FFFFFF)
                     setPadding(6, 0, 6, 0)
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener {
+                        index = i
+                        render(animate = true)
+                        handler.removeCallbacks(rotateRunnable)
+                        handler.postDelayed(rotateRunnable, 8000L)
+                    }
                 }
                 binding.heroDots.addView(dot)
             }
@@ -228,7 +237,13 @@ class HomeActivity : AppCompatActivity() {
                 hasProgress = sm.hasResume(r.folderPath, r.videoName),
                 progress = sm.getResumeProgress(r.folderPath, r.videoName),
                 isWatched = sm.isWatched(r.folderPath, r.videoName),
-                hasResume = sm.hasResume(r.folderPath, r.videoName)
+                hasResume = sm.hasResume(r.folderPath, r.videoName),
+                // ★ v1.0.2: FileItem para a ⭐ da Minha lista.
+                file = com.vovofit.app.data.FileItem(
+                    name = r.videoName, mimeType = "video/mp4", id = "",
+                    driveId = null, link = null, size = 0L, modifiedTime = null,
+                    folderPath = r.folderPath
+                )
             )
         }
         binding.railContinue.adapter = RailAdapter(railItems) { item ->
@@ -332,7 +347,7 @@ class HomeActivity : AppCompatActivity() {
      */
     private fun immediateParentPath(folderPath: String): Pair<String, String> {
         val segments = folderPath.trim('/').split('/').filter { it.isNotBlank() }
-        if (segments.isEmpty()) return "/" to "VOVÔ FIT"
+        if (segments.isEmpty()) return "/" to "VOVÓ FIT"
         // Rebuild the path with trailing slash
         val path = "/" + segments.joinToString("/") + "/"
         val name = segments.last()
