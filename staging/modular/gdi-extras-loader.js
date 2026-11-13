@@ -33,7 +33,7 @@
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
   // ★ v1.0.91: bump 92 → 93 (Shaka skin + Pomodoro sidebar + video-in-panel + PDF split + rest mode fix + OCR AI routing + parallel dispatch).
-  const CACHE_VERSION = '181';  // ★ v1.0.190: coach fix (data.markdown) + scan-and-save
+  const CACHE_VERSION = '182';  // ★ v2 SHELL Fase 2A (sobre base remota 181): filtra study-panel.js sob o shell + carrega shell-bridge.js
   window.CACHE_VERSION = CACHE_VERSION;
 
   const MODULES = [
@@ -291,6 +291,15 @@
         return { ok, fail };
       }
 
+      // ★ v2 SHELL (Fase 2A): sob o shell nativo, NÃO carregar study-panel.js.
+      // Ele monta a Área do Aluno clássica (sidebar/home/drives próprios) por
+      // cima do shell nativo. As funções de estudo chegam às views do shell
+      // pelo shell-bridge.js (carregado abaixo, após as chains).
+      // (Na base remota o panel já vem comentado nas listas; o filtro é rede de segurança.)
+      const STUDY_CHAIN_LOAD = (typeof window !== 'undefined' && window.MEGGY_SHELL_NATIVO)
+        ? STUDY_CHAIN.filter(function(m){ return m !== 'study/study-panel.js'; })
+        : STUDY_CHAIN;
+
       // 1) Core-chain primeiro (sequencial) — gdi-ui e demais dependem de
       //    worker-bridge + storage + gdi-pdf já estarem em vigor.
       let ok = 0, fail = 0;
@@ -301,14 +310,27 @@
       //    mas as duas chains rodam simultaneamente via Promise.allSettled).
       const [meggyRes, studyRes] = await Promise.allSettled([
         loadChain('meggy', MEGGY_CHAIN),
-        loadChain('study', STUDY_CHAIN)
+        loadChain('study', STUDY_CHAIN_LOAD)
       ]);
       if (meggyRes.status === 'fulfilled') { ok += meggyRes.value.ok; fail += meggyRes.value.fail; }
       else { fail += MEGGY_CHAIN.length; console.warn('[GDI Loader] meggy chain rejected:', meggyRes.reason); }
       if (studyRes.status === 'fulfilled') { ok += studyRes.value.ok; fail += studyRes.value.fail; }
-      else { fail += STUDY_CHAIN.length; console.warn('[GDI Loader] study chain rejected:', studyRes.reason); }
+      else { fail += STUDY_CHAIN_LOAD.length; console.warn('[GDI Loader] study chain rejected:', studyRes.reason); }
 
       prefetchWorkers();
+
+      // ★ v2 SHELL (Fase 2A): ponte shell — liga os módulos carregados às
+      // views do shell nativo (quiz/simulado/provas/redação/cronograma/
+      // estatísticas/mapa de fracos/plano/notificações/flashcards-SRS).
+      // Só existe sob o shell; no main (clássico) este bloco não roda.
+      if (typeof window !== 'undefined' && window.MEGGY_SHELL_NATIVO) {
+        try {
+          await loadWithRetry(moduleUrl('shell/shell-bridge.js'), true);
+          console.log('[GDI Loader] ✓ shell/shell-bridge.js');
+        } catch (e) {
+          console.warn('[GDI Loader] ✗ shell-bridge.js —', e.message, '(views do shell ficam nos placeholders nativos)');
+        }
+      }
 
       const t1 = performance.now();
       console.log(`[GDI Loader] carga completa em ${Math.round(t1-t0)}ms — ${ok} OK, ${fail} falhas`);
