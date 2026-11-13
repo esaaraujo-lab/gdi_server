@@ -7,9 +7,12 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AnimationUtils
+import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
 import com.bibigyn.app.R
+import com.bibigyn.app.data.FileItem
 import com.bibigyn.app.data.colorFromString
+import com.bibigyn.app.util.SessionManager
 import com.bibigyn.app.databinding.ItemRailCardBinding
 
 /**
@@ -33,7 +36,10 @@ data class RailItem(
     val progress: Int,          // 0..100
     val isWatched: Boolean,
     val hasResume: Boolean,
-    val colorHint: String? = null
+    val colorHint: String? = null,
+    // ★ v2.1.3: arquivo correspondente (quando houver) — permite a ⭐
+    // da "Minha lista" no rail "Continue assistindo".
+    val file: FileItem? = null
 )
 
 class RailAdapter(
@@ -96,6 +102,25 @@ class RailAdapter(
 
             // Continue badge
             continueBadge.visibility = if (item.hasResume) View.VISIBLE else View.GONE
+
+            // ★ v2.1.3: ⭐ Minha lista (só quando o RailItem carrega o FileItem).
+            val favItem = item.file
+            if (favItem != null) {
+                val sm = SessionManager.get(holder.itemView.context)
+                val fp = favItem.folderPath ?: ""
+                favStar.visibility = View.VISIBLE
+                favStar.text = if (sm.isFavorite(fp, favItem.name)) "⭐" else "☆"
+                favStar.setOnClickListener {
+                    val nowFav = sm.toggleFavorite(favItem)
+                    favStar.text = if (nowFav) "⭐" else "☆"
+                    Toast.makeText(holder.itemView.context,
+                        if (nowFav) "⭐ Adicionado à Minha lista"
+                        else "Removido da Minha lista",
+                        Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                favStar.visibility = View.GONE
+            }
         }
 
         // Staggered appear animation
