@@ -32,12 +32,41 @@ class SessionManager private constructor(context: Context) {
         get() = prefs.getString(KEY_USERNAME, null)
         set(value) = prefs.edit().putString(KEY_USERNAME, value).apply()
 
+    /**
+     * ★ v2.7.3: Persisted password — used by ApiService.validateOrReLogin() to
+     * auto re-login when the server cookie expires after a few days.
+     * NOTE: This is intentionally preserved by clearSession() so the user does
+     * not have to re-enter credentials just because the cookie expired.
+     * A full logout (via SettingsActivity) should call a separate fullLogout().
+     */
+    var password: String?
+        get() = prefs.getString(KEY_PASSWORD, null)
+        set(value) = prefs.edit().putString(KEY_PASSWORD, value).apply()
+
     val isLoggedIn: Boolean get() = !sessionCookie.isNullOrEmpty()
 
+    /**
+     * Clears only the session cookie + username, but PRESERVES the password
+     * so ApiService.validateOrReLogin() can auto re-login when the cookie
+     * expires. This is the version called by AuthHelper.bounceToLogin().
+     */
     fun clearSession() {
         prefs.edit()
             .remove(KEY_SESSION)
             .remove(KEY_USERNAME)
+            .apply()
+    }
+
+    /**
+     * ★ v2.7.3: Full logout — also wipes username + password so the next
+     * launch forces manual re-authentication. Called from SettingsActivity
+     * when the user explicitly logs out.
+     */
+    fun fullLogout() {
+        prefs.edit()
+            .remove(KEY_SESSION)
+            .remove(KEY_USERNAME)
+            .remove(KEY_PASSWORD)
             .apply()
     }
 
@@ -271,6 +300,7 @@ class SessionManager private constructor(context: Context) {
         private const val PREFS_NAME = "meggy_session"
         private const val KEY_SESSION = "session_cookie"
         private const val KEY_USERNAME = "username"
+        private const val KEY_PASSWORD = "password"
         private const val KEY_RECENTS = "recents_v1"
         private const val KEY_FAVORITES = "favorites_v1"
         private const val KEY_DEFAULT_SPEED = "default_speed"
