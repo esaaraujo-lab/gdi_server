@@ -129,7 +129,11 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun logout() {
-        SessionManager.get(this).clearSession()
+        // ★ v2.1.4: "Sair da conta" agora é logout COMPLETO — fullLogout()
+        // apaga usuário + senha (o clearSession preservava a senha, e o
+        // fullLogout existia sem nenhum chamador, apesar do comentário em
+        // SessionManager dizer que era para ser chamado daqui).
+        SessionManager.get(this).fullLogout()
         PlaylistManager.clear()
         val intent = Intent(this, LoginActivity::class.java)
         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
