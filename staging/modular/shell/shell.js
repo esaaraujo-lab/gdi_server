@@ -453,8 +453,10 @@
                   if (!items.length) {
                     container.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">📚</div><div class="meggy-placeholder-title">Nenhum curso adicionado</div><div class="meggy-placeholder-desc">Vá em Explorar Drives para adicionar cursos, ou crie um concurso.</div><button class="meggy-header-btn" onclick="Shell.router.navigate(\'/drives\')" style="margin-top:16px;"><i class="bi bi-cloud"></i> Explorar Drives</button></div>';
                   } else {
-                    container.innerHTML = '<div class="meggy-cards-grid">' +
-                      items.map(it => {
+                    // ★ v2.14.7: destaque em seção própria no topo; os demais na grade abaixo
+                    const __feat = items.filter(it => it.kind === 'featured');
+                    const __own = items.filter(it => it.kind !== 'featured');
+                    const __cardHtml = it => {
                         const name = it.name || 'Curso';
                         const badge = it.kind === 'concurso' ? '📌 Concurso' : it.kind === 'featured' ? '⭐ Em destaque' : '📚 Curso';
                         const meta = badge + (it.total ? ' · ' + it.total + ' aulas' : '') + (it.percent != null && it.total ? ' · ' + it.percent + '% concluído' : '') + (it.examDate ? ' · 📅 ' + it.examDate : '');
@@ -466,7 +468,10 @@
                           '<div class="meggy-card-title">' + Shell._esc(name) + '</div>' +
                           '<div class="meggy-card-meta">' + Shell._esc(meta) + '</div>' +
                         '</div>';
-                      }).join('') + '</div>';
+                      };
+                    container.innerHTML =
+                      (__feat.length ? '<div class="meggy-continue-section"><h2>⭐ Cursos em destaque</h2><div class="meggy-cards-grid">' + __feat.map(__cardHtml).join('') + '</div></div>' : '') +
+                      (__own.length ? '<div class="meggy-continue-section"><h2>📚 Meus Cursos</h2><div class="meggy-cards-grid">' + __own.map(__cardHtml).join('') + '</div></div>' : '');
                     container.querySelectorAll('.meggy-card[data-concurso-id]').forEach(card => {
                       card.onclick = () => Shell.views.concursoDetail(el, card.dataset.concursoId);
                     });
