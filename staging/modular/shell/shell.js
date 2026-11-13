@@ -146,7 +146,7 @@
     sidebar: {
       items: [
         { id: 'home', label: 'Home', icon: 'bi-house-door', path: '/' },
-        { id: 'cursos', label: 'Meus Cursos e Concursos', icon: 'bi-collection-play', path: '/cursos' },
+        { id: 'cursos', label: 'Meus Cursos', icon: 'bi-collection-play', path: '/cursos' },
         { id: 'drives', label: 'Explorar Drives', icon: 'bi-cloud', path: '/drives' },
         { id: 'progresso', label: 'Progresso', icon: 'bi-graph-up', path: '/progresso' },
         { id: 'questoes', label: 'Questões', icon: 'bi-patch-question', path: '/questoes' },
@@ -337,7 +337,7 @@
           <div class="meggy-cards-grid">
             <div class="meggy-card" data-nav="/cursos">
               <div class="meggy-card-icon">📚</div>
-              <div class="meggy-card-title">Meus Cursos e Concursos</div>
+              <div class="meggy-card-title">Meus Cursos</div>
               <div class="meggy-card-meta">Cursos e concursos em um só lugar</div>
             </div>
             <div class="meggy-card" data-nav="/drives">
@@ -401,15 +401,13 @@
       cursos(el) {
         el.innerHTML = `
           <div class="meggy-view-header">
-            <h1 class="meggy-view-title">📚 Meus Cursos e Concursos</h1>
-            <button class="meggy-header-btn" id="meggy-add-course-btn" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;font-size:13px;"><i class="bi bi-folder-plus"></i> Adicionar Pasta de Curso</button>
+            <h1 class="meggy-view-title">📚 Meus Cursos</h1>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="meggy-header-btn" id="novo-concurso-btn" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;font-size:13px;">+ Novo Concurso</button>
+              <button class="meggy-header-btn" id="meggy-add-course-btn" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;font-size:13px;"><i class="bi bi-folder-plus"></i> Adicionar Pasta de Curso</button>
+            </div>
           </div>
-          <div style="font-size:15px;font-weight:600;color:#e6edf3;margin:18px 0 10px;">📌 Meus Concursos</div>
-          <div style="display:flex;justify-content:flex-end;margin-bottom:10px;"><button class="meggy-header-btn" id="novo-concurso-btn" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;font-size:13px;">+ Novo Concurso</button></div>
-          <div id="concursos-container">
-            <div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando...</div></div>
-          </div>
-          <div style="font-size:15px;font-weight:600;color:#e6edf3;margin:18px 0 10px;">📚 Meus Cursos</div>
+          <div id="meggy-cursos-tips" style="margin:14px 0 4px;"></div>
           <div id="meggy-cursos-container">
             <div class="meggy-loading">
               <div class="spinner-border" role="status"></div>
@@ -423,31 +421,6 @@
         if (addBtn) {
           addBtn.onclick = () => Shell.views._showAddCourseDialog(el);
         }
-
-        // Load concursos
-        fetch('/api/concursos/list').then(r => r.json()).then(data => {
-          const container = document.getElementById('concursos-container');
-          if (!container) return;
-          if (!data.ok || !data.concursos || data.concursos.length === 0) {
-            container.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">📌</div><div class="meggy-placeholder-title">Nenhum concurso criado</div><div class="meggy-placeholder-desc">Crie um novo concurso para montar um curso baseado no edital.</div></div>';
-          } else {
-            container.innerHTML = '<div class="meggy-cards-grid">' + data.concursos.map(c => {
-              const progress = c.lessonCount > 0 ? c.lessonCount + ' aulas' : 'Sem aulas';
-              return '<div class="meggy-card" data-concurso-id="' + Shell._esc(c.id) + '">' +
-                '<div class="meggy-card-icon">📌</div>' +
-                '<div class="meggy-card-title">' + Shell._esc(c.name) + '</div>' +
-                '<div class="meggy-card-meta">' + progress + (c.examDate ? ' · 📅 ' + Shell._esc(c.examDate) : '') + '</div>' +
-              '</div>';
-            }).join('') + '</div>';
-
-            container.querySelectorAll('.meggy-card[data-concurso-id]').forEach(card => {
-              card.onclick = () => Shell.views.concursoDetail(el, card.dataset.concursoId);
-            });
-          }
-        }).catch(e => {
-          const c = document.getElementById('concursos-container');
-          if (c) c.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">⚠️</div><div class="meggy-placeholder-title">Erro</div><div class="meggy-placeholder-desc">' + Shell._esc(e.message) + '</div></div>';
-        });
 
         const novoBtn = document.getElementById('novo-concurso-btn');
         if (novoBtn) novoBtn.onclick = () => Shell.views.showConcursoWizard(el);
@@ -463,39 +436,71 @@
               wrapper.style.cssText = 'max-width:none;padding:0;background:transparent;border:none;';
               container.appendChild(wrapper);
               window.__gdiStudy.courses.renderCursos(wrapper);
+              // ★ v2.6: dicas da Meggy a partir do progresso (lista unificada)
+              fetch('/api/courses/unified', { credentials: 'include' }).then(r => r.json()).then(d => { if (d && d.ok) Shell.views._renderCursosTips(d.items || []); }).catch(() => {});
             } else {
-              // ★ Listar cursos via API /api/courses/list
+              // ★ v2.6: lista única via API /api/courses/unified (cursos + concursos + destaque)
               const container = document.getElementById('meggy-cursos-container');
               try {
-                const r = await fetch('/api/courses/list', { headers: { 'Accept': 'application/json' }, credentials: 'include' });
+                const r = await fetch('/api/courses/unified', { headers: { 'Accept': 'application/json' }, credentials: 'include' });
                 if (r.ok) {
                   const data = await r.json();
-                  const courses = data.courses || data || [];
-                  if (Array.isArray(courses) && courses.length > 0) {
+                  const items = (data && data.items) || [];
+                  Shell.views._renderCursosTips(items);
+                  if (!items.length) {
+                    container.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">📚</div><div class="meggy-placeholder-title">Nenhum curso adicionado</div><div class="meggy-placeholder-desc">Vá em Explorar Drives para adicionar cursos, ou crie um concurso.</div><button class="meggy-header-btn" onclick="Shell.router.navigate(\'/drives\')" style="margin-top:16px;"><i class="bi bi-cloud"></i> Explorar Drives</button></div>';
+                  } else {
                     container.innerHTML = '<div class="meggy-cards-grid">' +
-                      courses.map(c => {
-                        // ★ API retorna: {coursePath, courseName, pdfCount, icon, color, addedAt}
-                        const name = c.courseName || c.name || c.key || c.coursePath || 'Curso';
-                        const key = c.coursePath || c.key || '';
-                        const pdfCount = c.pdfCount || c.totalLessons || c.total || 0;
-                        const addedAt = c.addedAt ? new Date(c.addedAt).toLocaleDateString('pt-BR') : '';
-                        return `<div class="meggy-card" data-course="${key}" style="cursor:pointer;">
-                          <div class="meggy-card-icon">${c.icon || '📚'}</div>
-                          <div class="meggy-card-title">${name}</div>
-                          <div class="meggy-card-meta">${pdfCount} PDFs${addedAt ? ' · add ' + addedAt : ''}</div>
-                        </div>`;
+                      items.map(it => {
+                        const name = it.name || 'Curso';
+                        const badge = it.kind === 'concurso' ? '📌 Concurso' : it.kind === 'featured' ? '⭐ Em destaque' : '📚 Curso';
+                        const meta = badge + (it.total ? ' · ' + it.total + ' aulas' : '') + (it.percent != null && it.total ? ' · ' + it.percent + '% concluído' : '') + (it.examDate ? ' · 📅 ' + it.examDate : '');
+                        const idAttr = it.kind === 'concurso' ? ' data-concurso-id="' + Shell._esc(it.concursoId) + '"' : ' data-course="' + Shell._esc(it.coursePath || '') + '"';
+                        const rmBtn = it.kind === 'featured' ? '' :
+                          '<button class="' + (it.kind === 'concurso' ? 'concurso-remove-btn' : 'course-remove-btn') + '" data-' + (it.kind === 'concurso' ? 'concurso-id="' + Shell._esc(it.concursoId) + '" data-concurso-name="' + Shell._esc(name) + '"' : 'course-path="' + Shell._esc(it.coursePath || '') + '" data-course-name="' + Shell._esc(name) + '"') + ' title="Remover" style="position:absolute;top:8px;right:8px;background:transparent;border:0;color:#8b949e;cursor:pointer;font-size:14px;padding:2px 6px;border-radius:6px;">✕</button>';
+                        return '<div class="meggy-card"' + idAttr + ' style="cursor:pointer;position:relative;">' + rmBtn +
+                          '<div class="meggy-card-icon">' + Shell._esc(it.icon || '📚') + '</div>' +
+                          '<div class="meggy-card-title">' + Shell._esc(name) + '</div>' +
+                          '<div class="meggy-card-meta">' + Shell._esc(meta) + '</div>' +
+                        '</div>';
                       }).join('') + '</div>';
+                    container.querySelectorAll('.meggy-card[data-concurso-id]').forEach(card => {
+                      card.onclick = () => Shell.views.concursoDetail(el, card.dataset.concursoId);
+                    });
                     container.querySelectorAll('.meggy-card[data-course]').forEach(card => {
                       card.onclick = () => {
                         const cp = card.dataset.course;
-                        if (cp) {
-                          Shell.router.navigate('/drives');
-                          setTimeout(() => Shell.views._renderDrives(cp), 50);
-                        }
+                        if (cp) { Shell.router.navigate('/drives'); setTimeout(() => Shell.views._renderDrives(cp), 50); }
                       };
                     });
-                  } else {
-                    container.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">📚</div><div class="meggy-placeholder-title">Nenhum curso adicionado</div><div class="meggy-placeholder-desc">Vá em Explorar Drives para adicionar cursos.</div><button class="meggy-header-btn" onclick="Shell.router.navigate(\'/drives\')" style="margin-top:16px;"><i class="bi bi-cloud"></i> Explorar Drives</button></div>';
+                    container.querySelectorAll('.concurso-remove-btn').forEach(btn => {
+                      btn.onclick = async (e) => {
+                        e.stopPropagation();
+                        const id = btn.dataset.concursoId;
+                        const name = btn.dataset.concursoName || 'este concurso';
+                        if (!confirm('Remover "' + name + '"? As disciplinas e aulas vinculadas serao apagadas. Esta acao nao pode ser desfeita.')) return;
+                        try {
+                          const r = await fetch('/api/concursos/' + encodeURIComponent(id), { method: 'DELETE', credentials: 'include' });
+                          const d = await r.json().catch(() => ({}));
+                          if (!r.ok || !d.ok) throw new Error((d && (d.error || d.message)) || ('HTTP ' + r.status));
+                          Shell.views.cursos(el);
+                        } catch (err) { alert('Nao foi possivel remover: ' + err.message); }
+                      };
+                    });
+                    container.querySelectorAll('.course-remove-btn').forEach(btn => {
+                      btn.onclick = async (e) => {
+                        e.stopPropagation();
+                        const cp = btn.dataset.coursePath;
+                        const name = btn.dataset.courseName || 'este curso';
+                        if (!confirm('Remover "' + name + '" da sua lista? A pasta no Drive nao sera apagada.')) return;
+                        try {
+                          const r = await fetch('/api/courses/remove', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ coursePath: cp }) });
+                          const d = await r.json().catch(() => ({}));
+                          if (!r.ok || !d.ok) throw new Error((d && (d.error || d.message)) || ('HTTP ' + r.status));
+                          Shell.views.cursos(el);
+                        } catch (err) { alert('Nao foi possivel remover: ' + err.message); }
+                      };
+                    });
                   }
                 } else {
                   container.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">📚</div><div class="meggy-placeholder-title">Nenhum curso adicionado</div><div class="meggy-placeholder-desc">Vá em Explorar Drives para adicionar cursos.</div><button class="meggy-header-btn" onclick="Shell.router.navigate(\'/drives\')" style="margin-top:16px;"><i class="bi bi-cloud"></i> Explorar Drives</button></div>';
@@ -514,6 +519,19 @@
               </div>`;
           }
         })();
+      },
+
+      // ★ v2.6: faixa de dicas da Meggy na área Meus Cursos (a partir do progresso)
+      _renderCursosTips(items) {
+        const strip = document.getElementById('meggy-cursos-tips');
+        if (!strip) return;
+        const courses = (items || []).filter(i => i.kind === 'course' && i.total > 0);
+        if (!courses.length) { strip.innerHTML = ''; return; }
+        const done = courses.reduce((a, c) => a + (c.watched || 0), 0);
+        const tot = courses.reduce((a, c) => a + (c.total || 0), 0);
+        const pct = tot > 0 ? Math.round(done / tot * 100) : 0;
+        const next = courses.filter(c => (c.percent || 0) < 100).sort((a, b) => (a.percent || 0) - (b.percent || 0))[0];
+        strip.innerHTML = '<div style="background:rgba(93,222,218,0.08);border:1px solid rgba(93,222,218,0.25);border-radius:10px;padding:10px 14px;font-size:13px;color:#c9d1d9;">💡 <b style="color:#5ddeda;">Dica da Meggy:</b> você já concluiu ' + done + ' de ' + tot + ' aulas (' + pct + '%).' + (next ? ' Que tal continuar <b>' + Shell._esc(next.name) + '</b> (' + (next.percent || 0) + '% concluído)?' : ' Parabéns, tudo em dia! 🐩') + '</div>';
       },
 
       drives(el, initialPath) {
@@ -1854,6 +1872,8 @@
             const d = await r.json();
             if (d.ok) {
               modal.style.display = 'none';
+              // ★ v2.6: escanear a pasta agora — conta o progresso e alimenta a Meggy
+              try { if (window.gdiCourseScanner && typeof window.gdiCourseScanner.startScan === 'function') { window.gdiCourseScanner.startScan(selectedPath, null); } } catch (_) {}
               // Recarregar view de cursos
               Shell.views.cursos(parentEl);
             } else {
@@ -2462,6 +2482,7 @@
           html += '<div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;align-items:center;">';
           html += '<button class="meggy-header-btn" id="tab-completo" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">📚 Curso Completo</button>';
           html += '<button class="meggy-header-btn" id="btn-edital">📋 Colar conteúdo programático</button>';
+          html += '<button class="meggy-header-btn" id="btn-delete-concurso" style="background:rgba(255,107,107,.12);color:#ff8b8b;border:1px solid rgba(255,107,107,.35);">🗑️ Excluir concurso</button>';
           if (data.intensivoCount > 0) {
             html += '<button class="meggy-header-btn" id="tab-intensivo">⚡ Curso Intensivo (' + data.intensivoCount + ')</button>';
           }
@@ -2529,6 +2550,18 @@
           // ★ v2.2: colar conteúdo programático depois (opcional na criação)
           const btnEdital = document.getElementById('btn-edital');
           if (btnEdital) btnEdital.onclick = () => Shell.views.showEditalModal(el, concursoId);
+
+          // ★ v2.5: excluir concurso no detalhe
+          const btnDelConcurso = document.getElementById('btn-delete-concurso');
+          if (btnDelConcurso) btnDelConcurso.onclick = async () => {
+            if (!confirm('Excluir este concurso? As disciplinas e aulas vinculadas serao apagadas. Esta acao nao pode ser desfeita.')) return;
+            try {
+              const r = await fetch('/api/concursos/' + encodeURIComponent(concursoId), { method: 'DELETE', credentials: 'include' });
+              const d = await r.json().catch(() => ({}));
+              if (!r.ok || !d.ok) throw new Error((d && (d.error || d.message)) || ('HTTP ' + r.status));
+              Shell.router.navigate('/concursos');
+            } catch (err) { alert('Nao foi possivel excluir: ' + err.message); }
+          };
 
           // Tab intensivo
           const tabIntensivo = document.getElementById('tab-intensivo');
