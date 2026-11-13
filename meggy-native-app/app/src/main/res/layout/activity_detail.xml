@@ -116,6 +116,23 @@
                             android:clickable="true" />
 
                         <Button
+                            android:id="@+id/hero_fav"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="☆  Salvar"
+                            android:background="#33FFFFFF"
+                            android:textColor="#FFFFFFFF"
+                            android:paddingHorizontal="22dp"
+                            android:paddingVertical="10dp"
+                            android:textAllCaps="false"
+                            android:textSize="14sp"
+                            android:layout_marginStart="10dp"
+                            android:stateListAnimator="@null"
+                            android:focusable="true"
+                            android:focusableInTouchMode="true"
+                            android:clickable="true" />
+
+                        <Button
                             android:id="@+id/hero_browse"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
