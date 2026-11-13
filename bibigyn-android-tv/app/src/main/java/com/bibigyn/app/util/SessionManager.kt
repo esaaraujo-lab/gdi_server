@@ -264,8 +264,6 @@ class SessionManager private constructor(context: Context) {
         val idx = list.indexOfFirst { (it.folderPath ?: "") == fp && it.name == item.name }
         return if (idx >= 0) {
             list.removeAt(idx)
-            prefs.edit().putString(KEY_FAVORITES, JSONArray().also { list.forEach { it -> it } }.toString()).apply()
-            // Re-serialize properly
             val out = JSONArray()
             list.forEach { out.put(FileItem.toJson(it)) }
             prefs.edit().putString(KEY_FAVORITES, out.toString()).apply()
@@ -277,6 +275,61 @@ class SessionManager private constructor(context: Context) {
             prefs.edit().putString(KEY_FAVORITES, out.toString()).apply()
             true
         }
+    }
+
+    // ───────── v2.1.3: Favorite COURSES ("Minha lista" — cursos/pastas) ─────────
+    //
+    // Um curso é uma pasta do Drive (drive raiz "/6:/" ou subpasta
+    // "/6:/Clube Fit/..."). Guardado como JSON [{drivePath, name}].
+    // Separado dos favoritos de arquivo (favorites_v1) porque um curso
+    // não é um FileItem.
+
+    data class FavCourse(val drivePath: String, val name: String)
+
+    /** Returns the list of favorited courses, most-recently-added first. */
+    fun getFavoriteCourses(): List<FavCourse> {
+        val raw = prefs.getString(KEY_FAV_COURSES, null) ?: return emptyList()
+        return try {
+            val arr = JSONArray(raw)
+            val out = ArrayList<FavCourse>(arr.length())
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                val path = o.optString("drivePath", "")
+                val name = o.optString("name", "")
+                if (path.isNotBlank()) out.add(FavCourse(path, name.ifBlank { path }))
+            }
+            out
+        } catch (_: Exception) { emptyList() }
+    }
+
+    /** True if drivePath is in the favorite-courses list. */
+    fun isFavoriteCourse(drivePath: String): Boolean =
+        getFavoriteCourses().any { it.drivePath == drivePath }
+
+    /** Toggles a course favorite. Returns true if it is now favorited. */
+    fun toggleFavoriteCourse(drivePath: String, name: String): Boolean {
+        val list = getFavoriteCourses().toMutableList()
+        val idx = list.indexOfFirst { it.drivePath == drivePath }
+        return if (idx >= 0) {
+            list.removeAt(idx)
+            saveFavoriteCourses(list)
+            false
+        } else {
+            list.add(0, FavCourse(drivePath, name))
+            saveFavoriteCourses(list)
+            true
+        }
+    }
+
+    private fun saveFavoriteCourses(list: List<FavCourse>) {
+        val out = JSONArray()
+        list.forEach {
+            val o = JSONObject()
+            o.put("drivePath", it.drivePath)
+            o.put("name", it.name)
+            out.put(o)
+        }
+        prefs.edit().putString(KEY_FAV_COURSES, out.toString()).apply()
     }
 
     // ───────── v2.0.0: Settings ─────────
@@ -303,6 +356,7 @@ class SessionManager private constructor(context: Context) {
         private const val KEY_PASSWORD = "password"
         private const val KEY_RECENTS = "recents_v1"
         private const val KEY_FAVORITES = "favorites_v1"
+        private const val KEY_FAV_COURSES = "fav_courses_v1"
         private const val KEY_DEFAULT_SPEED = "default_speed"
         private const val KEY_AUTOPLAY_NEXT = "autoplay_next"
         private const val KEY_SLEEP_TIMER_MIN = "sleep_timer_min"
