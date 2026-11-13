@@ -95,6 +95,27 @@
                 android:textSize="12sp"
                 android:visibility="gone" />
 
+            <!-- ★ v2.1.3: Favorito — adiciona/remove da "Minha lista".
+                 Fica abaixo do badge ✓ (top|end). Visibilidade e estado
+                 são definidos pelo adapter (GONE por padrão). -->
+            <TextView
+                android:id="@+id/fav_star"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_gravity="top|end"
+                android:layout_marginTop="42dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/badge_resume"
+                android:gravity="center"
+                android:text="☆"
+                android:textColor="#FFFFFFFF"
+                android:textSize="16sp"
+                android:visibility="gone"
+                android:clickable="true"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:contentDescription="Adicionar à Minha lista" />
+
             <!-- Continue ▶ badge (top-right, below watched) -->
             <TextView
                 android:id="@+id/continue_badge"
