@@ -5,12 +5,15 @@ import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.meggy.app.data.ApiService
 import com.meggy.app.databinding.ActivitySplashBinding
 import com.meggy.app.ui.home.HomeActivity
 import com.meggy.app.ui.login.LoginActivity
 import com.meggy.app.util.SessionManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * SplashActivity — Meggy-branded launch screen.
@@ -24,9 +27,12 @@ import kotlinx.coroutines.launch
  * The activity itself is also declared with android:noHistory="true" in the
  * manifest as a belt-and-suspenders guarantee.
  *
- * Note: we do NOT validate the cookie here — if it has expired the first API
- * call from HomeActivity/BrowseActivity will detect the HTML login redirect
- * and bounce the user back to LoginActivity (see ApiService.listFolder).
+ * v2.7.3 LOGIN PERSISTENCE FIX: instead of trusting `isLoggedIn` (which only
+ * checks the local cookie existence), we now do a server-side probe via
+ * ApiService.validateOrReLogin(). If the cookie has expired BUT we have a
+ * saved (username, password), we auto re-login silently and route to Home.
+ * Only when no credentials are saved (or re-login fails) do we route to
+ * LoginActivity so the user can re-enter them manually.
  */
 class SplashActivity : AppCompatActivity() {
 
@@ -46,11 +52,21 @@ class SplashActivity : AppCompatActivity() {
         lifecycleScope.launch {
             delay(1500)
             val session = SessionManager.get(this@SplashActivity)
-            val target = if (session.isLoggedIn) {
+            val api = ApiService(this@SplashActivity)
+
+            // ★ v2.7.3: validate session server-side; auto re-login if expired
+            // AND password is saved. Falls back to LoginActivity only when
+            // re-login fails or there are no saved credentials.
+            val valid = if (session.isLoggedIn) {
+                withContext(Dispatchers.IO) { api.validateOrReLogin() }
+            } else false
+
+            val target = if (valid) {
                 Intent(this@SplashActivity, HomeActivity::class.java)
             } else {
                 Intent(this@SplashActivity, LoginActivity::class.java)
             }
+
             // ★ v2.0.2: Clear the entire back stack so the user can never
             // navigate back to Splash (or any stale activity from a previous
             // launch) after routing.
