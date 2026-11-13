@@ -2290,6 +2290,9 @@
                 if (d.ok) {
                   concursoId = d.concursoId;
                   concursoName = name;
+                  // ★ v2.10.2: a lista de concursos é cacheada 60s — invalida
+                  // para o concurso novo aparecer sem recarregar a página
+                  try { if (window.__gdiStudy && window.__gdiStudy.courses && typeof window.__gdiStudy.courses.invalidateUnifiedCache === 'function') window.__gdiStudy.courses.invalidateUnifiedCache(); } catch (_) {}
                   step = 2;
                   render();
                 } else {
