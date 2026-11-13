@@ -539,6 +539,28 @@
     saveMemory(mem);
     return mem;
   }
+  // ★ v2.6: progresso do aluno p/ a Meggy dar dicas direcionadas (cache 5 min)
+  let _progressCtx='';
+  let _progressAt=0;
+  async function loadProgressCtx(){
+    try{
+      const now=Date.now();
+      if(_progressCtx&&now-_progressAt<300000)return;
+      const r=await fetch('/api/courses/unified',{credentials:'include'});
+      const d=await r.json();
+      if(!d||!d.ok||!Array.isArray(d.items))return;
+      const lines=[];let tot=0,done=0;
+      for(const it of d.items){
+        if(it.kind!=='course')continue;
+        const t=it.total||0,w=it.watched||0;tot+=t;done+=w;
+        if(t>0)lines.push(it.name+': '+w+'/'+t+' aulas ('+(it.percent||0)+'%)');
+      }
+      _progressCtx=lines.length?('Progresso do aluno: '+done+' de '+tot+' aulas concluidas. '+lines.slice(0,8).join('; ')+'. '):'';
+      _progressAt=now;
+    }catch(_){}
+  }
+  loadProgressCtx().catch(()=>{});
+
   function buildMemoryContext(){
     const mem=loadMemory();
     let ctx='';
@@ -546,6 +568,7 @@
     if(mem.lastLessons&&mem.lastLessons.length)ctx+=`Últimas aulas estudadas: ${mem.lastLessons.slice(0,5).join(', ')}. `;
     if(mem.weaknesses&&mem.weaknesses.length)ctx+=`Pontos fracos: ${mem.weaknesses.map(w=>w.subject+' ('+w.acc+'%)').join(', ')}. `;
     if(mem.topics&&mem.topics.length>3)ctx+=`Já estudou ${mem.topics.length} tópicos diferentes. `;
+    if(_progressCtx)ctx+=_progressCtx;
     return ctx;
   }
 
@@ -563,6 +586,7 @@
     if(!txt||busy)return;
     busy=true;
     sendBtn.disabled=true;
+    loadProgressCtx().catch(()=>{});
     // ★ Fix 7 (Task 20-8): save the text so we can restore it on error.
     //   Previously, input.value='' ran BEFORE the async AI call — if the
     //   fetch failed, the user lost their text and had to retype it.
