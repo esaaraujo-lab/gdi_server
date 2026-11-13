@@ -7,10 +7,12 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AnimationUtils
+import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
 import com.meggy.app.R
 import com.meggy.app.data.DriveItem
 import com.meggy.app.data.colorFromString
+import com.meggy.app.util.SessionManager
 import com.meggy.app.databinding.ItemDriveCardBinding
 
 /**
@@ -67,6 +69,19 @@ class DriveRailAdapter(
             // Per-drive gradient background derived from the drive name hash.
             val baseColor = colorFromString(drive.name)
             driveBg.background = driveGradientDrawable(holder.itemView.resources, baseColor)
+
+            // ★ v2.7.4: ⭐ Minha lista — favorita o drive (curso) inteiro.
+            val coursePath = "/${drive.index}:/"
+            val sm = SessionManager.get(holder.itemView.context)
+            driveFavStar.text = if (sm.isFavoriteCourse(coursePath)) "⭐" else "☆"
+            driveFavStar.setOnClickListener {
+                val nowFav = sm.toggleFavoriteCourse(coursePath, drive.name)
+                driveFavStar.text = if (nowFav) "⭐" else "☆"
+                Toast.makeText(holder.itemView.context,
+                    if (nowFav) "⭐ Curso adicionado à Minha lista"
+                    else "Curso removido da Minha lista",
+                    Toast.LENGTH_SHORT).show()
+            }
         }
         // Staggered appear animation
         val anim = AnimationUtils.loadAnimation(holder.itemView.context, R.anim.tile_appear)
