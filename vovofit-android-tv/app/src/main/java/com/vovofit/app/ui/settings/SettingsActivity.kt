@@ -105,12 +105,12 @@ class SettingsActivity : AppCompatActivity() {
         binding.btnLogout.setOnClickListener { logout() }
 
         binding.aboutText.text = buildString {
-            append("🏃 VOVÔ FIT · v${BuildConfig.VERSION_NAME}\n")
+            append("🏃 VOVÓ FIT · v${BuildConfig.VERSION_NAME}\n")
             append("Build ${BuildConfig.VERSION_CODE}\n\n")
             append("Plataforma de fitness para smart TVs.\n")
             append("Atualizações automáticas via GitHub.\n\n")
             append("Tecnologias: Kotlin, Media3, Material 3.\n")
-            append("© 2026 VOVÔ FIT · educa.eu.org")
+            append("© 2026 VOVÓ FIT · educa.eu.org")
         }
     }
 
