@@ -560,6 +560,23 @@
     }catch(_){}
   }
   loadProgressCtx().catch(()=>{});
+  // ★ v2.8 Fase B: plano de estudo ativo p/ a Meggy acompanhar o dia a dia (cache 5 min)
+  let _planCtx='';
+  let _planAt=0;
+  async function loadPlanCtx(){
+    try{
+      const now=Date.now();
+      if(_planCtx&&now-_planAt<300000)return;
+      const r=await fetch('/api/plans/list',{credentials:'include'});
+      const d=await r.json();
+      if(!d||!d.ok||!Array.isArray(d.plans)||!d.plans.length)return;
+      const p=d.plans[0];
+      const dayIdx=Math.max(1,Math.min(p.totalDays,Math.floor((Date.now()-p.createdAt)/86400000)+1));
+      _planCtx='Plano de estudo ativo: '+p.name+' ('+p.banca+'), dia '+dayIdx+' de '+p.totalDays+', '+p.dailyHours+'h por dia. ';
+      _planAt=now;
+    }catch(_){}
+  }
+  loadPlanCtx().catch(()=>{});
 
   function buildMemoryContext(){
     const mem=loadMemory();
@@ -569,6 +586,7 @@
     if(mem.weaknesses&&mem.weaknesses.length)ctx+=`Pontos fracos: ${mem.weaknesses.map(w=>w.subject+' ('+w.acc+'%)').join(', ')}. `;
     if(mem.topics&&mem.topics.length>3)ctx+=`Já estudou ${mem.topics.length} tópicos diferentes. `;
     if(_progressCtx)ctx+=_progressCtx;
+    if(_planCtx)ctx+=_planCtx;
     return ctx;
   }
 
@@ -587,6 +605,7 @@
     busy=true;
     sendBtn.disabled=true;
     loadProgressCtx().catch(()=>{});
+    loadPlanCtx().catch(()=>{});
     // ★ Fix 7 (Task 20-8): save the text so we can restore it on error.
     //   Previously, input.value='' ran BEFORE the async AI call — if the
     //   fetch failed, the user lost their text and had to retype it.
