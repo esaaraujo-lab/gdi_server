@@ -1352,13 +1352,13 @@
 .gdi-central-body::-webkit-scrollbar-thumb{background:var(--ferreto-border,#21262d);border-radius:4px;}
 .gdi-central-body::-webkit-scrollbar-thumb:hover{background:var(--ferreto-border-strong,#30363d);}
 .gdi-courses{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;}
-.gdi-course{background:linear-gradient(135deg,var(--ferreto-surface-2,rgba(255,255,255,.04)),rgba(255,255,255,.02));border:1px solid var(--ferreto-border,#21262d);border-radius:16px;padding:18px;transition:all .2s cubic-bezier(.4,0,.2,1);position:relative;overflow:hidden;}
+.gdi-course{background:linear-gradient(135deg,var(--ferreto-surface-2,rgba(255,255,255,.04)),rgba(255,255,255,.02));border:1px solid var(--ferreto-border,#21262d);border-radius:16px;padding:18px;transition:all .2s cubic-bezier(.4,0,.2,1);position:relative;overflow:hidden;display:flex;flex-direction:column;}
 .gdi-course::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--ferreto-grad);opacity:0;transition:opacity .2s;}
 .gdi-course:hover{border-color:rgba(255,139,159,.3);transform:translateY(-3px);box-shadow:0 12px 32px -8px rgba(0,0,0,.4);}
 .gdi-course:hover::before{opacity:1;}
 .gdi-course b{color:var(--ferreto-text,#f0f6fc);font-size:14px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-weight:600;}
 .gdi-course small{color:var(--ferreto-text-muted,#8b949e);font-size:11px;display:block;margin:6px 0 12px;}
-.gdi-course-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:12px 0;}
+.gdi-course-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:auto 0 12px;}
 .gdi-course-stat{background:var(--ferreto-surface-3,rgba(255,255,255,.04));border-radius:8px;padding:8px 6px;text-align:center;}
 .gdi-course-stat-num{font-size:18px;font-weight:700;color:var(--ferreto-text,#f0f6fc);display:block;font-family:var(--ferreto-font-display,'Poppins',sans-serif);}
 .gdi-course-stat-label{font-size:9px;color:var(--ferreto-text-muted,#8b949e);text-transform:uppercase;letter-spacing:.05em;margin-top:2px;display:block;}
@@ -1430,7 +1430,7 @@
   .gdi-course{padding:8px!important;}
   .gdi-course b{font-size:12px!important;}
   .gdi-course small{font-size:10px!important;margin:4px 0 8px!important;}
-  .gdi-course-stats{grid-template-columns:repeat(2,1fr)!important;gap:4px!important;margin:8px 0!important;}
+  .gdi-course-stats{grid-template-columns:repeat(2,1fr)!important;gap:4px!important;margin:auto 0 8px!important;}
   .gdi-course-stat{padding:6px 4px!important;}
   .gdi-course-stat-num{font-size:16px!important;}
   .gdi-course-stat-label{font-size:8px!important;}
