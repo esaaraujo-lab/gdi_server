@@ -433,12 +433,14 @@ class HomeActivity : AppCompatActivity() {
 
     /**
      * v2.0.2 — Clears the session and routes to LoginActivity with CLEAR_TASK
-     * so the entire back stack is wiped. Used by:
-     *   • the "Sair" button
-     *   • BrowseActivity/HomeActivity when an expired session is detected
+     * so the entire back stack is wiped. Used ONLY by the "Sair" button
+     * (logout()), so it is a FULL logout (wipes username + password).
+     * Session expiry uses AuthHelper.bounceToLogin() instead, which keeps
+     * the saved password so the user does not have to retype it.
      */
     private fun bounceToLogin() {
-        SessionManager.get(this).clearSession()
+        // ★ v2.7.5: logout completo — ver SettingsActivity.logout().
+        SessionManager.get(this).fullLogout()
         PlaylistManager.clear()
         val intent = Intent(this, LoginActivity::class.java)
         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
