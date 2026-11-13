@@ -185,30 +185,6 @@ sealed class LoginResult {
     data class Failure(val reason: String) : LoginResult()
 }
 
-// ──────────────────────────── User courses ────────────────────────────
-
-data class CourseItem(
-    val coursePath: String,
-    val courseName: String
-) {
-    companion object {
-        fun parse(json: String): List<CourseItem> {
-            val root = JSONObject(json)
-            if (!root.optBoolean("ok", false)) return emptyList()
-            val arr = root.optJSONArray("courses") ?: return emptyList()
-            val out = ArrayList<CourseItem>(arr.length())
-            for (i in 0 until arr.length()) {
-                val o = arr.getJSONObject(i)
-                out.add(CourseItem(
-                    coursePath = o.optString("coursePath", ""),
-                    courseName = o.optString("courseName", "(sem nome)")
-                ))
-            }
-            return out
-        }
-    }
-}
-
 // ──────────────────────────── v2.0.0: Hero rotation ────────────────────────────
 
 /**
