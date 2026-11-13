@@ -2816,7 +2816,11 @@
     },
 
     logout() {
-      if (confirm('Deseja sair?')) {
+      // ★ v2.10.3: confirm() nativo é auto-dispensado por navegadores
+      // automatizados — o Sair nunca deslogava. Usa o modal próprio.
+      if (typeof window.gdiModal === 'function') {
+        window.gdiModal({ title: 'Sair', message: 'Deseja sair da sua conta?', confirmText: 'Sair', cancelText: 'Cancelar' }).then(ok => { if (ok) window.location.href = '/logout'; }).catch(() => { window.location.href = '/logout'; });
+      } else {
         window.location.href = '/logout';
       }
     },
