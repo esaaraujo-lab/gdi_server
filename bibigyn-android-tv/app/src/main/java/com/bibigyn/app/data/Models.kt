@@ -95,6 +95,11 @@ data class FileItem(
                 link = if (o.has("link") && !o.isNull("link")) o.getString("link") else null,
                 size = sizeLong,
                 modifiedTime = if (o.has("modifiedTime") && !o.isNull("modifiedTime")) o.getString("modifiedTime") else null,
+                // ★ v2.1.3: toJson() grava folderPath/folderLabel (usado pelos
+                // favoritos) — o fromJson antigo os descartava, então um item
+                // favoritado perdia a pasta de origem ao reiniciar o app.
+                folderLabel = if (o.has("folderLabel") && !o.isNull("folderLabel")) o.getString("folderLabel") else null,
+                folderPath = if (o.has("folderPath") && !o.isNull("folderPath")) o.getString("folderPath") else null,
                 thumbnailLink = thumb
             )
         }
