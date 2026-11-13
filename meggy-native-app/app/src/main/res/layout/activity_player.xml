@@ -136,6 +136,16 @@
                 app:cornerRadius="16dp"  android:focusable="true" android:focusableInTouchMode="true"/>
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/fav_button"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="48dp"
+                android:text="☆"
+                android:textColor="@android:color/white"
+                app:cornerRadius="16dp"  android:focusable="true" android:focusableInTouchMode="true"/>
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/playlist_button"
                 style="@style/Widget.Material3.Button.TextButton"
                 android:layout_width="wrap_content"
