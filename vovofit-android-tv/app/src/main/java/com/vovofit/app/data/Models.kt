@@ -5,7 +5,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Data models for the VOVÔ FIT app.
+ * Data models for the VOVÓ FIT app.
  *
  * The backend JSON shapes are decoded into these simple Kotlin data classes so that
  * the UI layer never touches raw JSON. All parsers are null-safe and tolerate
@@ -97,6 +97,11 @@ data class FileItem(
                 link = if (o.has("link") && !o.isNull("link")) o.getString("link") else null,
                 size = sizeLong,
                 modifiedTime = if (o.has("modifiedTime") && !o.isNull("modifiedTime")) o.getString("modifiedTime") else null,
+                // ★ v1.0.2: toJson() grava folderPath/folderLabel (usado pelos
+                // favoritos) — o fromJson antigo os descartava, então um item
+                // favoritado perdia a pasta de origem ao reiniciar o app.
+                folderLabel = if (o.has("folderLabel") && !o.isNull("folderLabel")) o.getString("folderLabel") else null,
+                folderPath = if (o.has("folderPath") && !o.isNull("folderPath")) o.getString("folderPath") else null,
                 thumbnailLink = thumb
             )
         }
@@ -213,7 +218,7 @@ data class HeroItem(
 ) {
     companion object {
         /**
-         * VOVÔ FIT — 4 destaques, um por drive (Queima Diária, Todo Dia,
+         * VOVÓ FIT — 4 destaques, um por drive (Queima Diária, Todo Dia,
          * Clube de Casa, Saúde e Fitness). Cada hero rota a cada 8s com
          * crossfade e leva o usuário direto ao drive correspondente.
          */
