@@ -75,6 +75,17 @@ class DetailActivity : AppCompatActivity() {
 
         // ▶ Assistir → find first video and play
         binding.heroPlay.setOnClickListener { playFirstVideo() }
+        // ★ v2.7.4: ⭐ Salvar — favorita ESTE curso (pasta) na Minha lista.
+        updateHeroFav()
+        binding.heroFav.setOnClickListener {
+            val sm = SessionManager.get(this)
+            val nowFav = sm.toggleFavoriteCourse(currentPath, folderName)
+            updateHeroFav()
+            android.widget.Toast.makeText(this,
+                if (nowFav) "⭐ Curso adicionado à Minha lista"
+                else "Curso removido da Minha lista",
+                android.widget.Toast.LENGTH_SHORT).show()
+        }
         // Explorar → scroll to grid
         binding.heroBrowse.setOnClickListener {
             binding.sectionLabel.requestFocus()
@@ -85,6 +96,12 @@ class DetailActivity : AppCompatActivity() {
         setupContinueRail()
 
         loadFolder()
+    }
+
+    /** ★ v2.7.4: reflete o estado da ⭐ do hero. */
+    private fun updateHeroFav() {
+        val fav = SessionManager.get(this).isFavoriteCourse(currentPath)
+        binding.heroFav.text = if (fav) "⭐  Salvo" else "☆  Salvar"
     }
 
     /**
@@ -125,7 +142,13 @@ class DetailActivity : AppCompatActivity() {
                 hasProgress = progress > 0,
                 progress = progress,
                 isWatched = sm.isWatched(r.folderPath, r.videoName),
-                hasResume = sm.hasResume(r.folderPath, r.videoName)
+                hasResume = sm.hasResume(r.folderPath, r.videoName),
+                // ★ v2.7.4: FileItem para a ⭐ da Minha lista.
+                file = FileItem(
+                    name = r.videoName, mimeType = "video/mp4", id = "",
+                    driveId = null, link = null, size = 0L, modifiedTime = null,
+                    folderPath = r.folderPath
+                )
             )
         }
         binding.railContinue.adapter = RailAdapter(railItems) { item ->
