@@ -145,7 +145,7 @@ object UpdateChecker {
     ) {
         try {
             val request = DownloadManager.Request(Uri.parse(url)).apply {
-                setTitle("VOVÔ FIT — Atualização v$remoteVersion")
+                setTitle("VOVÓ FIT — Atualização v$remoteVersion")
                 setDescription("Baixando nova versão...")
                 setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
                 setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, fileName)
