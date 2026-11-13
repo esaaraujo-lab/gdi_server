@@ -179,11 +179,20 @@ class HomeActivity : AppCompatActivity() {
         private fun buildDots() {
             binding.heroDots.removeAllViews()
             for (i in items.indices) {
+                // ★ v2.7.4: bolinha clicável — salta para o slide.
                 val dot = TextView(binding.root.context).apply {
                     text = "•"
                     textSize = 18f
                     setTextColor(0x66FFFFFF)
                     setPadding(6, 0, 6, 0)
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener {
+                        index = i
+                        render(animate = true)
+                        handler.removeCallbacks(rotateRunnable)
+                        handler.postDelayed(rotateRunnable, 8000L)
+                    }
                 }
                 binding.heroDots.addView(dot)
             }
@@ -228,7 +237,13 @@ class HomeActivity : AppCompatActivity() {
                 hasProgress = sm.hasResume(r.folderPath, r.videoName),
                 progress = sm.getResumeProgress(r.folderPath, r.videoName),
                 isWatched = sm.isWatched(r.folderPath, r.videoName),
-                hasResume = sm.hasResume(r.folderPath, r.videoName)
+                hasResume = sm.hasResume(r.folderPath, r.videoName),
+                // ★ v2.7.4: FileItem para a ⭐ da Minha lista.
+                file = com.meggy.app.data.FileItem(
+                    name = r.videoName, mimeType = "video/mp4", id = "",
+                    driveId = null, link = null, size = 0L, modifiedTime = null,
+                    folderPath = r.folderPath
+                )
             )
         }
         binding.railContinue.adapter = RailAdapter(railItems) { item ->
