@@ -98,17 +98,17 @@ class ApiService(private val context: Context) {
             .url("${MeggyApp.BASE_URL}/api/courses/list")
             .header("Cookie", "session=${sessionManager.sessionCookie ?: ""}")
             .build()
-        
+
         return try {
             val response = MeggyApp.okHttpClient.newCall(request).execute()
             if (!response.isSuccessful) return null
-            
+
             val body = response.body?.string() ?: return null
             if (body.trimStart().startsWith("<")) return null
-            
+
             val json = JSONObject(body)
             if (!json.optBoolean("ok")) return null
-            
+
             val courses = json.optJSONArray("courses") ?: return emptyList()
             val result = mutableListOf<CourseItem>()
             for (i in 0 until courses.length()) {
@@ -122,5 +122,49 @@ class ApiService(private val context: Context) {
         } catch (e: Exception) {
             null
         }
+    }
+
+    /**
+     * ★ v2.7.3 LOGIN PERSISTENCE FIX:
+     * Validates the current session by making a lightweight API call.
+     * If the session cookie has expired (server returns HTML login page or
+     * a non-2xx code), AND we have a saved (username, password), automatically
+     * re-issues a login request — the OkHttp layer in login() captures the
+     * fresh `session=` cookie from Set-Cookie and persists it via
+     * SessionManager.
+     *
+     * Returns true if (a) session was already valid OR (b) auto re-login
+     * succeeded; false if no saved credentials OR re-login failed.
+     *
+     * Called from SplashActivity so the user never has to re-enter
+     * credentials just because the server cookie expired.
+     */
+    suspend fun validateOrReLogin(): Boolean {
+        // 1) Probe with a lightweight listFolder call — listing the first
+        //    drive root is cheap (one round-trip, JSON-encoded folder list).
+        //    listFolder returns null on (a) non-2xx, (b) HTML body (login
+        //    redirect), or (c) any exception — all 3 mean session is gone.
+        val probe = try {
+            listFolder("0:")
+        } catch (_: Exception) {
+            null
+        }
+        if (probe != null) return true  // session is valid
+
+        // 2) Session is invalid — see if we have saved credentials.
+        val user = sessionManager.username
+        val pass = sessionManager.password
+        if (user.isNullOrEmpty() || pass.isNullOrEmpty()) return false
+
+        // 3) Try a re-login. login() persists the new cookie + username via
+        //    SessionManager; we do NOT need to re-save the password (already
+        //    persisted) but we keep it current in case the user typed a new
+        //    one — though here we are using the saved one.
+        val ok = try {
+            login(user, pass)
+        } catch (_: Exception) {
+            false
+        }
+        return ok
     }
 }
