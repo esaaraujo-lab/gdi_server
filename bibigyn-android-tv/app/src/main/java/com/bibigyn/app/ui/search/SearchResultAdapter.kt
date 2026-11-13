@@ -6,11 +6,13 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AnimationUtils
+import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
 import com.bibigyn.app.R
 import com.bibigyn.app.data.DriveItem
 import com.bibigyn.app.data.FileItem
 import com.bibigyn.app.data.colorFromString
+import com.bibigyn.app.util.SessionManager
 import com.bibigyn.app.databinding.ItemRailCardBinding
 
 /**
@@ -87,6 +89,20 @@ class SearchResultAdapter(
                     progressBar.visibility = View.GONE
                     watchedBadge.visibility = View.GONE
                     continueBadge.visibility = View.GONE
+
+                    // ★ v2.1.3: ⭐ Minha lista — favorita o drive (curso).
+                    val coursePath = "/${d.index}:/"
+                    val sm = SessionManager.get(holder.itemView.context)
+                    favStar.visibility = View.VISIBLE
+                    favStar.text = if (sm.isFavoriteCourse(coursePath)) "⭐" else "☆"
+                    favStar.setOnClickListener {
+                        val nowFav = sm.toggleFavoriteCourse(coursePath, d.name)
+                        favStar.text = if (nowFav) "⭐" else "☆"
+                        Toast.makeText(holder.itemView.context,
+                            if (nowFav) "⭐ Curso adicionado à Minha lista"
+                            else "Curso removido da Minha lista",
+                            Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
             is SearchResult.File -> {
@@ -110,6 +126,35 @@ class SearchResultAdapter(
                     progressBar.visibility = View.GONE
                     watchedBadge.visibility = View.GONE
                     continueBadge.visibility = View.GONE
+
+                    // ★ v2.1.3: ⭐ Minha lista — favorita o arquivo.
+                    // Pasta = favorita o curso (a pasta inteira).
+                    val sm = SessionManager.get(holder.itemView.context)
+                    favStar.visibility = View.VISIBLE
+                    if (f.isFolder) {
+                        val fp = f.folderPath ?: ""
+                        val coursePath = if (fp.endsWith("/")) "$fp${f.name}/" else "$fp/${f.name}/"
+                        favStar.text = if (sm.isFavoriteCourse(coursePath)) "⭐" else "☆"
+                        favStar.setOnClickListener {
+                            val nowFav = sm.toggleFavoriteCourse(coursePath, f.name)
+                            favStar.text = if (nowFav) "⭐" else "☆"
+                            Toast.makeText(holder.itemView.context,
+                                if (nowFav) "⭐ Curso adicionado à Minha lista"
+                                else "Curso removido da Minha lista",
+                                Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        val fp = f.folderPath ?: ""
+                        favStar.text = if (sm.isFavorite(fp, f.name)) "⭐" else "☆"
+                        favStar.setOnClickListener {
+                            val nowFav = sm.toggleFavorite(f)
+                            favStar.text = if (nowFav) "⭐" else "☆"
+                            Toast.makeText(holder.itemView.context,
+                                if (nowFav) "⭐ Adicionado à Minha lista"
+                                else "Removido da Minha lista",
+                                Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
             }
         }
