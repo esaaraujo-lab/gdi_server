@@ -146,7 +146,7 @@
     sidebar: {
       items: [
         { id: 'home', label: 'Home', icon: 'bi-house-door', path: '/' },
-        { id: 'cursos', label: 'Meus Cursos', icon: 'bi-collection-play', path: '/cursos' },
+        { id: 'cursos', label: 'Meus Cursos e Concursos', icon: 'bi-collection-play', path: '/cursos' },
         { id: 'drives', label: 'Explorar Drives', icon: 'bi-cloud', path: '/drives' },
         { id: 'progresso', label: 'Progresso', icon: 'bi-graph-up', path: '/progresso' },
         { id: 'questoes', label: 'Questões', icon: 'bi-patch-question', path: '/questoes' },
@@ -336,8 +336,8 @@
           <div class="meggy-cards-grid">
             <div class="meggy-card" data-nav="/cursos">
               <div class="meggy-card-icon">📚</div>
-              <div class="meggy-card-title">Meus Cursos</div>
-              <div class="meggy-card-meta">Acesse seus cursos matriculados</div>
+              <div class="meggy-card-title">Meus Cursos e Concursos</div>
+              <div class="meggy-card-meta">Cursos e concursos em um só lugar</div>
             </div>
             <div class="meggy-card" data-nav="/drives">
               <div class="meggy-card-icon">☁️</div>
@@ -348,11 +348,6 @@
               <div class="meggy-card-icon">🤖</div>
               <div class="meggy-card-title">Meggy AI</div>
               <div class="meggy-card-meta">Chat, resumos, questões e flashcards</div>
-            </div>
-            <div class="meggy-card" data-nav="/concursos">
-              <div class="meggy-card-icon">📌</div>
-              <div class="meggy-card-title">Meus Concursos</div>
-              <div class="meggy-card-meta">Crie um curso baseado no edital</div>
             </div>
             <div class="meggy-card" data-nav="/progresso">
               <div class="meggy-card-icon">📊</div>
@@ -381,9 +376,15 @@
       cursos(el) {
         el.innerHTML = `
           <div class="meggy-view-header">
-            <h1 class="meggy-view-title">📚 Meus Cursos</h1>
+            <h1 class="meggy-view-title">📚 Meus Cursos e Concursos</h1>
             <button class="meggy-header-btn" id="meggy-add-course-btn" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;font-size:13px;"><i class="bi bi-folder-plus"></i> Adicionar Pasta de Curso</button>
           </div>
+          <div style="font-size:15px;font-weight:600;color:#e6edf3;margin:18px 0 10px;">📌 Meus Concursos</div>
+          <div style="display:flex;justify-content:flex-end;margin-bottom:10px;"><button class="meggy-header-btn" id="novo-concurso-btn" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;font-size:13px;">+ Novo Concurso</button></div>
+          <div id="concursos-container">
+            <div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando...</div></div>
+          </div>
+          <div style="font-size:15px;font-weight:600;color:#e6edf3;margin:18px 0 10px;">📚 Meus Cursos</div>
           <div id="meggy-cursos-container">
             <div class="meggy-loading">
               <div class="spinner-border" role="status"></div>
@@ -397,6 +398,34 @@
         if (addBtn) {
           addBtn.onclick = () => Shell.views._showAddCourseDialog(el);
         }
+
+        // Load concursos
+        fetch('/api/concursos/list').then(r => r.json()).then(data => {
+          const container = document.getElementById('concursos-container');
+          if (!container) return;
+          if (!data.ok || !data.concursos || data.concursos.length === 0) {
+            container.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">📌</div><div class="meggy-placeholder-title">Nenhum concurso criado</div><div class="meggy-placeholder-desc">Crie um novo concurso para montar um curso baseado no edital.</div></div>';
+          } else {
+            container.innerHTML = '<div class="meggy-cards-grid">' + data.concursos.map(c => {
+              const progress = c.lessonCount > 0 ? c.lessonCount + ' aulas' : 'Sem aulas';
+              return '<div class="meggy-card" data-concurso-id="' + Shell._esc(c.id) + '">' +
+                '<div class="meggy-card-icon">📌</div>' +
+                '<div class="meggy-card-title">' + Shell._esc(c.name) + '</div>' +
+                '<div class="meggy-card-meta">' + progress + (c.examDate ? ' · 📅 ' + Shell._esc(c.examDate) : '') + '</div>' +
+              '</div>';
+            }).join('') + '</div>';
+
+            container.querySelectorAll('.meggy-card[data-concurso-id]').forEach(card => {
+              card.onclick = () => Shell.views.concursoDetail(el, card.dataset.concursoId);
+            });
+          }
+        }).catch(e => {
+          const c = document.getElementById('concursos-container');
+          if (c) c.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">⚠️</div><div class="meggy-placeholder-title">Erro</div><div class="meggy-placeholder-desc">' + Shell._esc(e.message) + '</div></div>';
+        });
+
+        const novoBtn = document.getElementById('novo-concurso-btn');
+        if (novoBtn) novoBtn.onclick = () => Shell.views.showConcursoWizard(el);
 
         (async () => {
           // ★ Render direto via API — shell nativo não precisa do GDIndex
@@ -2038,43 +2067,9 @@
 
       // ═══ Meus Concursos — feature baseada em edital ═══
 
+      // ★ v2.2: mesclado com Meus Cursos — /concursos mostra a mesma visão unificada.
       concursos(el) {
-        el.innerHTML =
-          '<div class="meggy-view-header">' +
-            '<h1 class="meggy-view-title">📌 Meus Concursos</h1>' +
-            '<button class="meggy-header-btn" id="novo-concurso-btn" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;font-size:13px;">+ Novo Concurso</button>' +
-          '</div>' +
-          '<div id="concursos-container">' +
-            '<div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando...</div></div>' +
-          '</div>';
-
-        // Load concursos
-        fetch('/api/concursos/list').then(r => r.json()).then(data => {
-          const container = document.getElementById('concursos-container');
-          if (!container) return;
-          if (!data.ok || !data.concursos || data.concursos.length === 0) {
-            container.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">📌</div><div class="meggy-placeholder-title">Nenhum concurso criado</div><div class="meggy-placeholder-desc">Crie um novo concurso para montar um curso baseado no edital.</div></div>';
-          } else {
-            container.innerHTML = '<div class="meggy-cards-grid">' + data.concursos.map(c => {
-              const progress = c.lessonCount > 0 ? c.lessonCount + ' aulas' : 'Sem aulas';
-              return '<div class="meggy-card" data-concurso-id="' + Shell._esc(c.id) + '">' +
-                '<div class="meggy-card-icon">📌</div>' +
-                '<div class="meggy-card-title">' + Shell._esc(c.name) + '</div>' +
-                '<div class="meggy-card-meta">' + progress + (c.examDate ? ' · 📅 ' + Shell._esc(c.examDate) : '') + '</div>' +
-              '</div>';
-            }).join('') + '</div>';
-
-            container.querySelectorAll('.meggy-card[data-concurso-id]').forEach(card => {
-              card.onclick = () => Shell.views.concursoDetail(el, card.dataset.concursoId);
-            });
-          }
-        }).catch(e => {
-          const c = document.getElementById('concursos-container');
-          if (c) c.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">⚠️</div><div class="meggy-placeholder-title">Erro</div><div class="meggy-placeholder-desc">' + Shell._esc(e.message) + '</div></div>';
-        });
-
-        const novoBtn = document.getElementById('novo-concurso-btn');
-        if (novoBtn) novoBtn.onclick = () => Shell.views.showConcursoWizard(el);
+        Shell.views.cursos(el);
       },
 
       // ═══ Wizard: criar concurso em 4 passos ═══
@@ -2120,13 +2115,13 @@
               '<button class="meggy-header-btn" id="cw-next" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">Criar e Continuar →</button>';
           } else if (step === 2) {
             bodyHTML =
-              '<div style="font-size:13px;color:#9aa4b8;margin-bottom:12px;">Cole abaixo o texto do edital (ou trecho relevante). A Meggy 🐩 vai identificar disciplinas, pesos e incidência.</div>' +
+              '<div style="font-size:13px;color:#9aa4b8;margin-bottom:12px;">Cole abaixo o texto do edital ou do conteúdo programático (opcional). A Meggy 🐩 vai identificar disciplinas, pesos e incidência. Se preferir, continue sem colar — dá para colar depois, na página do concurso.</div>' +
               '<textarea id="cw-edital" placeholder="Cole aqui o texto do edital..." style="width:100%;min-height:240px;padding:12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#e6edf3;font-size:13px;font-family:monospace;box-sizing:border-box;resize:vertical;"></textarea>' +
               '<div style="margin-top:8px;font-size:11px;color:#6b7488;">💡 Dica: você pode pular esta etapa. O scan vai identificar as disciplinas pelos nomes das pastas.</div>';
             footerHTML =
               '<button class="meggy-header-btn" id="cw-back">← Voltar</button>' +
               '<div style="display:flex;gap:8px;">' +
-                '<button class="meggy-header-btn" id="cw-skip">Pular</button>' +
+                '<button class="meggy-header-btn" id="cw-skip">Continuar sem edital →</button>' +
                 '<button class="meggy-header-btn" id="cw-analyze" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">🔍 Analisar Edital</button>' +
               '</div>';
           } else if (step === 3) {
@@ -2249,7 +2244,7 @@
             const analyzeBtn = document.getElementById('cw-analyze');
             if (analyzeBtn) analyzeBtn.onclick = async () => {
               const editalText = (document.getElementById('cw-edital').value || '').trim();
-              if (!editalText) { alert('Cole o texto do edital'); return; }
+              if (!editalText) { step = 3; render(); return; } // ★ v2.2: sem texto = segue sem edital
               if (editalText.length < 50) { alert('Texto muito curto. Cole ao menos um trecho relevante do edital.'); return; }
               analyzeBtn.disabled = true;
               analyzeBtn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Analisando...';
@@ -2441,6 +2436,7 @@
           // Tabs
           html += '<div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;align-items:center;">';
           html += '<button class="meggy-header-btn" id="tab-completo" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">📚 Curso Completo</button>';
+          html += '<button class="meggy-header-btn" id="btn-edital">📋 Colar conteúdo programático</button>';
           if (data.intensivoCount > 0) {
             html += '<button class="meggy-header-btn" id="tab-intensivo">⚡ Curso Intensivo (' + data.intensivoCount + ')</button>';
           }
@@ -2505,6 +2501,10 @@
             };
           });
 
+          // ★ v2.2: colar conteúdo programático depois (opcional na criação)
+          const btnEdital = document.getElementById('btn-edital');
+          if (btnEdital) btnEdital.onclick = () => Shell.views.showEditalModal(el, concursoId);
+
           // Tab intensivo
           const tabIntensivo = document.getElementById('tab-intensivo');
           if (tabIntensivo) {
@@ -2539,6 +2539,48 @@
         }).catch(e => {
           el.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">⚠️</div><div class="meggy-placeholder-title">Erro</div><div class="meggy-placeholder-desc">' + Shell._esc(e.message) + '</div></div>';
         });
+      },
+
+      // ★ v2.2: modal para colar o conteúdo programático depois da criação
+      showEditalModal(el, concursoId) {
+        let modal = document.getElementById('edital-modal');
+        if (modal) modal.remove();
+        modal = document.createElement('div');
+        modal.id = 'edital-modal';
+        modal.className = 'meggy-modal-overlay';
+        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:10002;padding:20px;';
+        modal.innerHTML =
+          '<div class="meggy-modal-content" style="max-width:600px;width:100%;max-height:90vh;overflow-y:auto;background:#161b22;border:1px solid rgba(255,255,255,0.08);border-radius:14px;">' +
+            '<div class="meggy-modal-header" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.06);">' +
+              '<div class="meggy-modal-title" style="font-size:15px;font-weight:600;color:#e6edf3;">📋 Conteúdo programático</div>' +
+              '<button id="em-x" style="background:none;border:none;color:#9aa4b8;font-size:22px;cursor:pointer;line-height:1;padding:0 4px;">×</button>' +
+            '</div>' +
+            '<div style="padding:16px;">' +
+              '<div style="font-size:13px;color:#9aa4b8;margin-bottom:12px;">Cole o texto do edital ou do conteúdo programático. A Meggy 🐩 vai identificar disciplinas, pesos e incidência. Opcional — dá para criar o concurso sem isso.</div>' +
+              '<textarea id="em-edital" placeholder="Cole aqui o texto do edital..." style="width:100%;min-height:240px;padding:12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#e6edf3;font-size:13px;font-family:monospace;box-sizing:border-box;resize:vertical;"></textarea>' +
+            '</div>' +
+            '<div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-between;gap:8px;">' +
+              '<button class="meggy-header-btn" id="em-cancel">Cancelar</button>' +
+              '<button class="meggy-header-btn" id="em-analyze" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">🔍 Analisar Edital</button>' +
+            '</div>' +
+          '</div>';
+        document.body.appendChild(modal);
+        const close = () => { if (modal && modal.parentNode) modal.parentNode.removeChild(modal); };
+        document.getElementById('em-x').onclick = close;
+        document.getElementById('em-cancel').onclick = close;
+        document.getElementById('em-analyze').onclick = async () => {
+          const editalText = (document.getElementById('em-edital').value || '').trim();
+          if (!editalText || editalText.length < 50) { alert('Cole ao menos um trecho relevante do edital.'); return; }
+          const btn = document.getElementById('em-analyze');
+          btn.disabled = true;
+          btn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Analisando...';
+          try {
+            const r = await fetch('/api/concursos/' + encodeURIComponent(concursoId) + '/analyze-edital', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ editalText }) });
+            const d = await r.json();
+            if (d.ok) { close(); Shell.views.concursoDetail(el, concursoId); }
+            else { alert('Erro: ' + (d.error || 'tente novamente')); btn.disabled = false; btn.innerHTML = '🔍 Analisar Edital'; }
+          } catch (e) { alert('Erro: ' + e.message); btn.disabled = false; btn.innerHTML = '🔍 Analisar Edital'; }
+        };
       },
 
     },
