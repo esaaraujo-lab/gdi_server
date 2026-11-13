@@ -20,8 +20,8 @@ android {
         targetSdk 34
         // ★ v2.0.0: Bottom Nav (4 tabs) + Hero rotativo + Search/MyList/Settings + Player gestures
         // ★ v2.1.2: Login persistence (auto re-login when cookie expires) + TV keyboard fix (showSoftInput)
-        versionCode 10
-        versionName "2.1.3"
+        versionCode 11
+        versionName "2.1.4"
     }
 
     // ★ v1.4.0: Signing config com keystore FIXA (mesma em todos os builds)
