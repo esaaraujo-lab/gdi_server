@@ -476,12 +476,20 @@
                         if (cp) { Shell.router.navigate('/drives'); setTimeout(() => Shell.views._renderDrives(cp), 50); }
                       };
                     });
+                    // ★ v2.10.4: confirmação via gdiModal — o confirm() nativo é
+                    // auto-dispensado por navegadores automatizados e o ✕ não fazia nada
+                    const askRemove = async (title, msg) => {
+                      if (typeof window.gdiModal === 'function') {
+                        try { return await window.gdiModal({ title, message: msg, confirmText: 'Remover', cancelText: 'Cancelar', danger: true }); } catch (_) {}
+                      }
+                      return confirm(msg);
+                    };
                     container.querySelectorAll('.concurso-remove-btn').forEach(btn => {
                       btn.onclick = async (e) => {
                         e.stopPropagation();
                         const id = btn.dataset.concursoId;
                         const name = btn.dataset.concursoName || 'este concurso';
-                        if (!confirm('Remover "' + name + '"? As disciplinas e aulas vinculadas serao apagadas. Esta acao nao pode ser desfeita.')) return;
+                        if (!(await askRemove('Remover concurso', 'Remover "' + name + '"? As disciplinas e aulas vinculadas serao apagadas. Esta acao nao pode ser desfeita.'))) return;
                         try {
                           const r = await fetch('/api/concursos/' + encodeURIComponent(id), { method: 'DELETE', credentials: 'include' });
                           const d = await r.json().catch(() => ({}));
@@ -495,7 +503,7 @@
                         e.stopPropagation();
                         const cp = btn.dataset.coursePath;
                         const name = btn.dataset.courseName || 'este curso';
-                        if (!confirm('Remover "' + name + '" da sua lista? A pasta no Drive nao sera apagada.')) return;
+                        if (!(await askRemove('Remover curso', 'Remover "' + name + '" da sua lista? A pasta no Drive nao sera apagada.'))) return;
                         try {
                           const r = await fetch('/api/courses/remove', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ coursePath: cp }) });
                           const d = await r.json().catch(() => ({}));
