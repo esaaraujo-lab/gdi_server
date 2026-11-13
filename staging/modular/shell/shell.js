@@ -333,6 +333,7 @@
             <h1 class="meggy-view-title">🏠 Home</h1>
           </div>
           ${continueHTML}
+          <div id="meggy-featured-section"></div>
           <div class="meggy-cards-grid">
             <div class="meggy-card" data-nav="/cursos">
               <div class="meggy-card-icon">📚</div>
@@ -371,6 +372,30 @@
             }
           };
         });
+        // ★ v2.3: Cursos em destaque — cadastrados pelo admin, visíveis na Home de todos
+        fetch('/api/featured-courses').then(r => r.json()).then(data => {
+          const sec = document.getElementById('meggy-featured-section');
+          if (!sec) return;
+          const list = (data && data.ok && data.courses) || [];
+          if (!list.length) { sec.innerHTML = ''; return; }
+          sec.innerHTML = '<div class="meggy-continue-section"><h2>⭐ Cursos em destaque</h2><div class="meggy-cards-grid">' + list.map(c => {
+            const name = Shell._esc(c.courseName || c.coursePath || 'Curso');
+            return '<div class="meggy-card" data-course="' + Shell._esc(c.coursePath || '') + '">' +
+              '<div class="meggy-card-icon">' + Shell._esc(c.icon || '📚') + '</div>' +
+              '<div class="meggy-card-title">' + name + '</div>' +
+              '<div class="meggy-card-meta">Curso em destaque</div>' +
+            '</div>';
+          }).join('') + '</div></div>';
+          sec.querySelectorAll('.meggy-card[data-course]').forEach(card => {
+            card.onclick = () => {
+              const cp = card.dataset.course;
+              if (cp) {
+                Shell.router.navigate('/drives');
+                setTimeout(() => Shell.views._renderDrives(cp), 50);
+              }
+            };
+          });
+        }).catch(() => {});
       },
 
       cursos(el) {
