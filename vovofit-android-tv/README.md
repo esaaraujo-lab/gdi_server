@@ -1,9 +1,9 @@
-# VOVÔ FIT — Android TV App
+# VOVÓ FIT — Android TV App
 
-Fitness app for Android TV smart TVs. Built for the VOVÔ FIT brand (grandfather fitness).
+Fitness app for Android TV smart TVs. Built for the VOVÓ FIT brand (grandmother fitness).
 
 ## Brand
-- **Name**: VOVÔ FIT
+- **Name**: VOVÓ FIT
 - **Package**: `com.vovofit.app`
 - **Colors**: Deep Teal `#0F3D3E` + Lime Green `#A3E635`
 - **Backend**: https://educa.eu.org (same as Meggy/BiBi)
