@@ -1053,6 +1053,12 @@
           <div id="gdi-amc-loading" style="display:none;padding:30px;text-align:center;color:var(--ferreto-text-muted,#8b949e);font-size:13px;"><div class="gdi-spinner" style="margin:0 auto 10px;"></div>Carregando pastas...</div>
           <!-- Lista de pastas -->
           <div id="gdi-amc-folders" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;padding:4px;"></div>
+          <!-- ★ v2.15.0: multi-seleção de pastas (anexar várias a um concurso de uma vez) -->
+          <div id="gdi-amc-multi" style="display:none;margin-top:10px;padding:10px 12px;background:linear-gradient(135deg,rgba(255,139,159,.08),rgba(93,222,218,.04));border:1px solid var(--ferreto-border-strong,#30363d);border-radius:10px;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span id="gdi-amc-multi-count" style="color:var(--ferreto-text,#e6edf3);font-size:12px;flex:1;min-width:120px;"></span>
+            <button id="gdi-amc-add-selected" type="button" style="padding:8px 14px;border-radius:8px;border:0;cursor:pointer;font-weight:600;background:var(--ferreto-grad);color:#fff;font-size:12px;flex:none;">Adicionar selecionadas</button>
+            <button id="gdi-amc-clear-selected" type="button" class="gdi-mode-btn" style="font-size:12px;flex:none;">Limpar</button>
+          </div>
           <!-- Pasta atual info -->
           <div id="gdi-amc-current-info" style="display:none;margin-top:14px;padding:12px;background:linear-gradient(135deg,rgba(255,139,159,.08),rgba(93,222,218,.04));border:1px solid var(--ferreto-border-strong,#30363d);border-radius:10px;"></div>
         </div>
@@ -1103,6 +1109,9 @@
     //   always passed 0 — so the manual course entry was saved with pdfCount=0,
     //   and the home tile showed "0 aulas" until the scanner found lessons.
     let selectedPdfCount=0;
+    // ★ v2.15.0: multi-seleção de pastas (Map path -> nome). Persiste entre
+    //   navegações dentro do modal; limpa ao fechar (overlay é removido).
+    let selectedFolders=new Map();
 
     // ── Tabs ──
     const tabDrive=overlay.querySelector('#tab-drive');
@@ -1165,6 +1174,39 @@
     const foldersEl=overlay.querySelector('#gdi-amc-folders');
     const loadingEl=overlay.querySelector('#gdi-amc-loading');
     const currentInfoEl=overlay.querySelector('#gdi-amc-current-info');
+
+    // ★ v2.15.0: barra "Adicionar selecionadas" — mostra nº de pastas
+    //   marcadas com o checkbox de cada card (mesmo texto do Explorar Drives).
+    function refreshMultiBar(){
+      const bar=overlay.querySelector('#gdi-amc-multi');
+      const cnt=overlay.querySelector('#gdi-amc-multi-count');
+      if(!bar||!cnt)return;
+      const n=selectedFolders.size;
+      if(n>0){
+        bar.style.display='flex';
+        cnt.textContent=n+(n===1?' pasta selecionada':' pastas selecionadas');
+      }else{
+        bar.style.display='none';
+        cnt.textContent='';
+      }
+    }
+    const _amcAddSel=overlay.querySelector('#gdi-amc-add-selected');
+    if(_amcAddSel)_amcAddSel.onclick=()=>{
+      if(!selectedFolders.size){ showToast('Selecione ao menos uma pasta com o checkbox'); return; }
+      const paths=Array.from(selectedFolders.entries()).map(([path,name])=>({path:path,name:name}));
+      showFolderDestinationDialog(paths,{
+        onAvulso:async(list)=>{
+          for(const f of list){ await doAddCourseFromDrive(f.path, f.name, 0); }
+        },
+        onAttached:()=>{ selectedFolders.clear(); refreshMultiBar(); }
+      });
+    };
+    const _amcClearSel=overlay.querySelector('#gdi-amc-clear-selected');
+    if(_amcClearSel)_amcClearSel.onclick=()=>{
+      selectedFolders.clear();
+      overlay.querySelectorAll('.gdi-amc-folder-check').forEach(c=>{ c.checked=false; });
+      refreshMultiBar();
+    };
 
     function normPath(p){
       // ★ FIX (Agent 10 F-1): always strip trailing slash for consistency.
@@ -1342,6 +1384,7 @@
             if(!target.endsWith('/'))target=target+'/';
             return `<div class="gdi-amc-folder-card" data-p="${esc(target)}" data-n="${esc(fn)}" style="padding:12px 14px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);border-radius:10px;cursor:pointer;transition:all .15s;">
               <div style="display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" class="gdi-amc-folder-check" data-p="${esc(target)}" data-n="${esc(fn)}" ${selectedFolders.has(target)?'checked':''} title="Selecionar para adicionar em lote" style="flex:none;width:16px;height:16px;cursor:pointer;accent-color:#ff8b9f;">
                 <i class="bi bi-folder-fill" style="color:var(--ferreto-secondary,#5ddeda);font-size:18px;flex:none;"></i>
                 <b style="color:var(--ferreto-text,#f0f6fc);font-size:13px;line-height:1.3;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(fn)}</b>
                 <i class="bi bi-chevron-right" style="color:var(--ferreto-text-faint,#6b7488);font-size:12px;flex:none;"></i>
@@ -1351,6 +1394,16 @@
           foldersEl.querySelectorAll('.gdi-amc-folder-card').forEach(card=>{
             card.onmouseenter=()=>{card.style.borderColor='var(--ferreto-primary,#ff8b9f)';card.style.background='var(--ferreto-surface-3,rgba(255,255,255,.08))';};
             card.onmouseleave=()=>{card.style.borderColor='var(--ferreto-border,#30363d)';card.style.background='var(--ferreto-surface-2,rgba(255,255,255,.04))';};
+            // ★ v2.15.0: checkbox de multi-seleção — o clique não navega
+            const chk=card.querySelector('.gdi-amc-folder-check');
+            if(chk){
+              chk.addEventListener('click',ev=>ev.stopPropagation());
+              chk.addEventListener('change',()=>{
+                const p=chk.dataset.p, nm=chk.dataset.n||'Pasta';
+                if(chk.checked)selectedFolders.set(p,nm); else selectedFolders.delete(p);
+                refreshMultiBar();
+              });
+            }
             card.onclick=()=>navigate(card.dataset.p);
           });
         }
@@ -1561,7 +1614,16 @@
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
-      if(window.gdiAddCourseFromButton)window.gdiAddCourseFromButton(btn);
+      // ★ v2.15.0: abre o seletor de destino (curso avulso ou anexar a
+      //   concurso, com prévia) em vez de adicionar direto como avulso.
+      //   O comportamento avulso continua igual — é a opção (i) do seletor.
+      const p=btn.dataset.path||selectedPath;
+      const n=btn.dataset.name||selectedName||'Pasta';
+      const pdfs=parseInt(btn.dataset.pdfs||'0',10)||selectedPdfCount||0;
+      if(!p){ if(window.showToast)showToast('Erro: pasta não selecionada'); return; }
+      showFolderDestinationDialog([{path:p,name:n}],{
+        onAvulso:async()=>{ await doAddCourseFromDrive(p,n,pdfs); }
+      });
     };
     overlay.addEventListener('click',selectCurrentHandler,true);
 
@@ -1654,7 +1716,11 @@
             showToast('Navegue até uma pasta e clique em "Selecionar esta pasta"');
             return;
           }
-          await doAddCourseFromDrive(selectedPath, selectedName, selectedPdfCount||0);  // ★ CYCLE-3 FIX: pass actual PDF count
+          // ★ v2.15.0: abre o seletor de destino (avulso ou anexar a
+          //   concurso, com prévia). A opção avulsa chama doAddCourseFromDrive.
+          showFolderDestinationDialog([{path:selectedPath,name:selectedName}],{
+            onAvulso:async()=>{ await doAddCourseFromDrive(selectedPath, selectedName, selectedPdfCount||0); }
+          });
         }else{
           // modo manual
           const name=overlay.querySelector('#gdi-amc-name').value.trim();
@@ -1943,6 +2009,7 @@
       <div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;">
         <button id="gdi-detail-continue" class="gdi-btn gdi-btn-primary" style="font-size:12px;flex:1;justify-content:center;" disabled><i class="bi bi-hourglass-split"></i> Verificando próxima aula…</button>
         <a href="${escHtml(coursePath)}" class="gdi-mode-btn" style="font-size:12px;flex:1;justify-content:center;text-decoration:none;display:inline-flex;align-items:center;gap:6px;" title="Abrir pasta no Drive"><i class="bi bi-folder2-open"></i> Ir para o Drive</a>
+        <button id="gdi-detail-quiz" class="gdi-mode-btn" style="font-size:12px;flex:1;justify-content:center;" title="Gerar questões dos PDFs deste curso e abrir o quiz">🧠 Quiz deste módulo</button>
       </div>
 
       ${/* ★ Task 16 / FIX 2: botão "Escanear agora" na visão de detalhe */ ''}
@@ -2013,9 +2080,9 @@
               + '<div style="width:60px;height:4px;background:var(--ferreto-surface-3,rgba(255,255,255,.08));border-radius:2px;margin-top:3px;overflow:hidden;">'
               + '<div style="height:4px;width:'+pct+'%;background:'+color+';border-radius:2px;"></div>'
               + '</div>'
+              + '<button class="gdi-disc-quiz" data-disc="'+escHtml(disc)+'" data-disc-path="'+escHtml(g.path)+'" title="Gerar questões dos PDFs deste módulo" style="margin-top:6px;font-size:11px;color:var(--ferreto-secondary,#5ddeda);border:1px solid rgba(93,222,218,.3);border-radius:8px;cursor:pointer;padding:4px 8px;background:transparent;white-space:nowrap;">🧠 Quiz deste módulo</button>'
               + '</div>'
-              + '</div>';
-          }).join('') + '</div>';
+              + '</div>';        }).join('') + '</div>';
         })()}
       </div>
     </div>`;
@@ -2159,6 +2226,21 @@
       };
     });
 
+    // ★ v2.15.0: botão "Quiz deste módulo" do curso inteiro.
+    const _detailQuiz = box.querySelector('#gdi-detail-quiz');
+    if(_detailQuiz) _detailQuiz.onclick=()=>{ openModuleQuizModal(name, coursePath, c.key, null); };
+    // ★ v2.15.0: botão "Quiz deste módulo" por disciplina — gera questões
+    //   dos PDFs do módulo e abre o quiz (erros vão p/ o caderno do servidor).
+    box.querySelectorAll('.gdi-disc-quiz').forEach(btn=>{
+      btn.onclick=(e)=>{
+        e.stopPropagation();
+        const disc=btn.dataset.disc||'Módulo';
+        const discPath=btn.dataset.discPath||'';
+        if(!discPath){ showToast('Caminho do módulo indisponível'); return; }
+        openModuleQuizModal(disc, discPath, c.key, null);
+      };
+    });
+
     // ★ Task 16 / FIX 2: botão "Escanear agora" — dispara scanner manualmente no detalhe
     const detailScanBtn = box.querySelector('#gdi-detail-scan');
     if(detailScanBtn && !detailScanBtn.disabled){
@@ -2251,6 +2333,386 @@
     }
   });
 
+  // ═══════════════════════════════════════════════════════════════
+  // ★ v2.15.0 — "Montar curso multi-pastas + plano da Meggy"
+  //   (1) Seletor de destino p/ pastas: curso avulso OU anexar a concurso
+  //       existente (com prévia antes de confirmar).
+  //   (2) Quiz por módulo: gera questões dos PDFs do módulo (subject =
+  //       nome do módulo) e grava os erros no caderno do servidor.
+  //   Sem alert()/confirm() nativo em nada novo (gdiModal/toast/inline).
+  // ═══════════════════════════════════════════════════════════════
+  function toast215(msg){ if(window.showToast)window.showToast(msg); }
+  function isDriveRootPath(p){
+    const s=String(p||'').replace(/\/+$/,'');
+    return /^\/\d+:$/.test(s);
+  }
+  // GET /api/concursos/list → [{id,name,examDate,dailyHours,status,createdAt,lessonCount}]
+  async function fetchMyConcursos(){
+    const r=await fetch('/api/concursos/list',{credentials:'include'});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||!d.ok)throw new Error((d&&(d.error||d.message))||('HTTP '+r.status));
+    return Array.isArray(d.concursos)?d.concursos:[];
+  }
+  // POST /api/concursos/:id/sources/preview {folderPaths} → {folders,totalLessons,totalHours}
+  async function previewAttach(concursoId, folderPaths){
+    const r=await fetch('/api/concursos/'+encodeURIComponent(concursoId)+'/sources/preview',{
+      method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',
+      body:JSON.stringify({folderPaths:folderPaths})
+    });
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||!d.ok)throw new Error((d&&(d.error||d.message))||('HTTP '+r.status));
+    return d;
+  }
+  // POST /api/concursos/:id/sources {folderPaths} → {attached,skipped,scanned}
+  async function attachFoldersToConcurso(concursoId, folderPaths){
+    const r=await fetch('/api/concursos/'+encodeURIComponent(concursoId)+'/sources',{
+      method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',
+      body:JSON.stringify({folderPaths:folderPaths})
+    });
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||!d.ok)throw new Error((d&&(d.error||d.message))||('HTTP '+r.status));
+    return d;
+  }
+
+  // ── Seletor de destino de pasta(s) ──────────────────────────────────
+  // folderPaths: [{path,name}] ou ['/9:/Curso/...'].
+  // opts.onAvulso(list) — chamado p/ criar como curso(s) avulso(s) (fluxo atual).
+  // opts.onAttached(result, concurso) — chamado após anexo bem-sucedido.
+  // Textos idênticos ao Explorar Drives: "Adicionar selecionadas",
+  // "Adicionar esta pasta ao curso", "Anexar ao concurso".
+  // O overlay usa classe própria (gdi-v215-overlay) — NÃO .gdi-modal-overlay:
+  // window.gdiModal remove todos os .gdi-modal-overlay ao abrir, e o seletor
+  // precisa sobreviver a erros exibidos via gdiModal.
+  function showFolderDestinationDialog(folderPaths, opts){
+    opts=opts||{};
+    const list=(Array.isArray(folderPaths)?folderPaths:[]).map(f=>{
+      if(typeof f==='string'){
+        let nm='Pasta';
+        try{ const s=String(f).split('/').filter(Boolean); nm=decodeURIComponent(s[s.length-1]||'Pasta'); }catch(_){}
+        return {path:f,name:nm};
+      }
+      return {path:String((f&&f.path)||''),name:String((f&&f.name)||'Pasta')};
+    }).filter(f=>f.path);
+    if(!list.length){ toast215('Nenhuma pasta selecionada'); return; }
+    const multi=list.length>1;
+    const hasRoot=list.some(f=>isDriveRootPath(f.path));
+    const overlay=document.createElement('div');
+    overlay.className='gdi-v215-overlay';
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:100003;display:flex;align-items:center;justify-content:center;padding:20px;';
+    overlay.innerHTML=`<div style="background:var(--ferreto-bg-2,#0d1119);border:1px solid var(--ferreto-border,#21262d);border-radius:14px;max-width:560px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.6);">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--ferreto-border,#21262d);">
+        <b style="color:var(--ferreto-text,#f0f6fc);font-size:15px;font-family:var(--ferreto-font-display,'Poppins',sans-serif);">📂 Adicionar pasta${multi?'s':''}</b>
+        <button class="gdi-v215-x" style="background:transparent;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:18px;padding:4px 8px;border-radius:6px;">✕</button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:16px 20px;">
+        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;">
+          ${list.map(f=>`<div style="display:flex;gap:8px;align-items:center;background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;padding:8px 10px;"><i class="bi bi-folder-fill" style="color:var(--ferreto-secondary,#5ddeda);flex:none;"></i><div style="min-width:0;"><b style="color:var(--ferreto-text,#f0f6fc);font-size:13px;">${esc(f.name)}</b><div style="color:var(--ferreto-text-faint,#6b7488);font-size:11px;font-family:'JetBrains Mono',monospace;word-break:break-all;">${esc(f.path)}</div></div></div>`).join('')}
+        </div>
+        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0 0 12px;line-height:1.5;">Escolha o destino desta${multi?'s':''} pasta${multi?'s':''}:</p>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <button class="gdi-v215-avulso" style="text-align:left;padding:12px;border-radius:10px;border:1px solid var(--ferreto-border,#30363d);background:var(--ferreto-surface-2,rgba(255,255,255,.04));color:var(--ferreto-text,#e6edf3);cursor:pointer;font-size:13px;"><b>${multi?'Adicionar selecionadas como cursos avulsos':'Adicionar esta pasta ao curso'}</b><span style="display:block;color:var(--ferreto-text-muted,#8b949e);font-size:11px;margin-top:2px;">Cria um curso avulso na sua lista, como antes.</span></button>
+          <button class="gdi-v215-attach" style="text-align:left;padding:12px;border-radius:10px;border:1px solid var(--ferreto-border,#30363d);background:var(--ferreto-surface-2,rgba(255,255,255,.04));color:var(--ferreto-text,#e6edf3);cursor:pointer;font-size:13px;"><b>Anexar ao concurso</b><span style="display:block;color:var(--ferreto-text-muted,#8b949e);font-size:11px;margin-top:2px;">Anexa como módulo de um concurso existente — você vê a prévia antes de confirmar.</span></button>
+        </div>
+        <div class="gdi-v215-concursos" style="display:none;margin-top:14px;"></div>
+        <div class="gdi-v215-preview" style="display:none;margin-top:14px;"></div>
+        <div class="gdi-v215-status" style="display:none;margin-top:12px;font-size:12px;color:var(--ferreto-text-muted,#8b949e);"></div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;padding:0 20px 16px;border-top:1px solid var(--ferreto-border,#21262d);padding-top:14px;">
+        <button class="gdi-v215-cancel gdi-mode-btn" style="font-size:13px;">Cancelar</button>
+        <button class="gdi-v215-confirm" style="display:none;font-size:13px;padding:8px 16px;border-radius:8px;border:0;cursor:pointer;font-weight:600;background:var(--ferreto-grad);color:#fff;">Confirmar anexo</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    const q=s=>overlay.querySelector(s);
+    const statusEl=q('.gdi-v215-status');
+    function setStatus(msg,isErr){
+      if(!statusEl)return;
+      statusEl.style.display=msg?'block':'none';
+      statusEl.style.color=isErr?'#ff8b8b':'var(--ferreto-text-muted,#8b949e)';
+      statusEl.textContent=msg||'';
+    }
+    const close=()=>{ if(overlay.parentNode)overlay.remove(); };
+    q('.gdi-v215-x').onclick=close;
+    q('.gdi-v215-cancel').onclick=close;
+    overlay.addEventListener('click',e=>{ if(e.target===overlay)close(); });
+    // Raiz de drive não pode ser anexada (o servidor recusa com 400) —
+    // bloqueia já aqui, mas o avulso continua disponível.
+    if(hasRoot){
+      q('.gdi-v215-attach').style.display='none';
+      setStatus('Não é possível anexar a raiz de um drive a um concurso. Escolha uma pasta de curso.',true);
+    }
+    // (i) curso avulso — comportamento atual, sem mudanças
+    q('.gdi-v215-avulso').onclick=async()=>{
+      close();
+      try{ if(typeof opts.onAvulso==='function')await opts.onAvulso(list); }
+      catch(err){ toast215('Erro: '+(err&&err.message||err)); }
+    };
+    // (ii) anexar a concurso existente (com prévia antes de confirmar)
+    let chosenConcurso=null, previewData=null;
+    const concEl=q('.gdi-v215-concursos'), prevEl=q('.gdi-v215-preview'), confirmBtn=q('.gdi-v215-confirm');
+    q('.gdi-v215-attach').onclick=async()=>{
+      concEl.style.display='block'; prevEl.style.display='none'; confirmBtn.style.display='none'; previewData=null;
+      concEl.innerHTML='<div style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;padding:8px 0;">Carregando seus concursos…</div>';
+      let concursos=[];
+      try{ concursos=await fetchMyConcursos(); }
+      catch(err){ concEl.innerHTML='<div style="color:#ff8b8b;font-size:12px;">Não foi possível carregar os concursos: '+esc(String(err&&err.message||err))+'</div>'; return; }
+      if(!concursos.length){
+        concEl.innerHTML='<div style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;line-height:1.5;">Você ainda não tem concursos.<br>Crie um concurso primeiro em <b style="color:var(--ferreto-text,#e6edf3);">Meus Cursos</b> e volte aqui para anexar pastas a ele.</div>';
+        return;
+      }
+      concEl.innerHTML='<b style="color:var(--ferreto-text,#f0f6fc);font-size:13px;display:block;margin-bottom:8px;">Escolha o concurso:</b>'+concursos.map(cc=>`<label style="display:flex;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--ferreto-border,#30363d);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:13px;color:var(--ferreto-text,#e6edf3);"><input type="radio" name="gdi-v215-concurso" value="${esc(String(cc.id))}" style="accent-color:#ff8b9f;"><span style="flex:1;min-width:0;"><b>${esc(cc.name||'Concurso')}</b>${cc.examDate?` <span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">· 📅 ${esc(cc.examDate)}</span>`:''}</span><span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;white-space:nowrap;">${cc.lessonCount||0} aulas</span></label>`).join('');
+      concEl.querySelectorAll('input[name="gdi-v215-concurso"]').forEach(r=>{
+        r.addEventListener('change',async()=>{
+          chosenConcurso=concursos.find(cc=>String(cc.id)===r.value)||null;
+          if(!chosenConcurso)return;
+          confirmBtn.style.display='none'; previewData=null;
+          prevEl.style.display='block';
+          prevEl.innerHTML='<div style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;padding:8px 0;">Gerando prévia do anexo…</div>';
+          try{
+            previewData=await previewAttach(chosenConcurso.id, list.map(f=>f.path));
+            renderPreview(previewData);
+          }catch(err){
+            prevEl.innerHTML='<div style="color:#ff8b8b;font-size:12px;">Não foi possível gerar a prévia: '+esc(String(err&&err.message||err))+'</div>';
+          }
+        });
+      });
+    };
+    function renderPreview(pv){
+      const folders=Array.isArray(pv.folders)?pv.folders:[];
+      const rows=folders.map(f=>{
+        const dups=Array.isArray(f.duplicates)?f.duplicates:[];
+        const hrs=(f.estHours!==undefined&&f.estHours!==null)?f.estHours:((f.estMinutes||0)/60);
+        return `<div style="padding:8px 10px;border:1px solid var(--ferreto-border,#30363d);border-radius:8px;margin-bottom:6px;">
+          <b style="color:var(--ferreto-text,#f0f6fc);font-size:13px;">${esc(f.name||f.path||'')}</b>
+          <div style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin-top:2px;">${f.pdfs||0} PDFs · ${f.videos||0} vídeos · ${f.lessons||0} aulas · ~${Number(hrs||0).toFixed(1)}h</div>
+          ${dups.length?`<div style="color:#ffd43b;font-size:11px;margin-top:4px;">⚠ ${dups.length} arquivo(s) duplicado(s) em outro módulo — serão vinculados uma só vez.</div>`:''}
+        </div>`;
+      }).join('');
+      const totalH=(pv.totalHours!==undefined&&pv.totalHours!==null)?pv.totalHours:0;
+      prevEl.innerHTML=`<b style="color:var(--ferreto-text,#f0f6fc);font-size:13px;display:block;margin-bottom:8px;">Prévia do anexo — ${esc(chosenConcurso?chosenConcurso.name||'':'')}</b>${rows||'<div style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">Nenhuma aula encontrada nestas pastas.</div>'}<div style="color:var(--ferreto-text,#e6edf3);font-size:13px;margin-top:8px;"><b>Total: ${pv.totalLessons||0} aulas · ~${Number(totalH||0).toFixed(1)}h</b></div>`;
+      confirmBtn.style.display='inline-block';
+    }
+    confirmBtn.onclick=async()=>{
+      if(!chosenConcurso||!previewData)return;
+      confirmBtn.disabled=true; confirmBtn.style.opacity='.6'; confirmBtn.textContent='Anexando…';
+      setStatus('');
+      try{
+        const res=await attachFoldersToConcurso(chosenConcurso.id, list.map(f=>f.path));
+        const n=(res&&res.scanned&&typeof res.scanned.totalMatched==='number')?res.scanned.totalMatched:((res&&res.attached&&res.attached.length)||0);
+        const skipped=(res&&Array.isArray(res.skipped))?res.skipped.length:0;
+        close();
+        toast215('✅ '+n+' aulas vinculadas ao concurso "'+(chosenConcurso.name||'')+'"'+(skipped?' ('+skipped+' já estavam anexadas)':''));
+        try{ if(typeof opts.onAttached==='function')await opts.onAttached(res, chosenConcurso); }catch(_){}
+      }catch(err){
+        // ★ fecha o seletor ANTES do gdiModal: o gdiModal remove todos os
+        //   overlays .gdi-modal-overlay (incl. o modal de adicionar curso
+        //   atrás) — sem fechar antes, o erro apareceria atrás do seletor.
+        close();
+        const msg=(err&&err.message)||'Erro desconhecido';
+        if(typeof window.gdiModal==='function'){ await window.gdiModal({title:'Não foi possível anexar',message:msg,confirmText:'OK',cancelText:'Fechar'}); }
+        else toast215('Não foi possível anexar: '+msg);
+      }finally{
+        confirmBtn.disabled=false; confirmBtn.style.opacity='1'; confirmBtn.textContent='Confirmar anexo';
+      }
+    };
+  }
+
+  // ── Quiz por módulo ───────────────────────────────────────────────
+  // subject do banco local (gdi-questions-v1) = nome do módulo.
+  function countBankQuestions(subject){
+    try{
+      const arr=JSON.parse(localStorage.getItem('gdi-questions-v1')||'[]');
+      if(!Array.isArray(arr))return 0;
+      let n=0; for(const q of arr){ if(q&&q.subject===subject)n++; }
+      return n;
+    }catch(_){ return 0; }
+  }
+  // PDFs do módulo: 1º as aulas já escaneadas (sem I/O de Drive); se não
+  // houver nenhuma, lista o Drive (pasta + 1 nível de subpastas, máx. 20).
+  async function listModulePdfs(courseKey, modulePath){
+    const out=[]; const seen=new Set();
+    const push=(name,url)=>{
+      const u=String(url||'');
+      if(!u)return;
+      const k=low(u);
+      if(seen.has(k))return;
+      let decU=u; try{ decU=decodeURIComponent(u); }catch(_){}
+      if(!/\.pdf$/i.test(decU))return;
+      seen.add(k);
+      out.push({name:name||realName(u),url:u});
+    };
+    try{
+      const sc=window.gdiCourseScanner&&window.gdiCourseScanner.getCourseLessons?window.gdiCourseScanner.getCourseLessons(courseKey):null;
+      const les=sc&&Array.isArray(sc.lessons)?sc.lessons:[];
+      const target=low(modulePath);
+      for(const l of les){
+        if(l&&l.path&&low(l.path).indexOf(target)===0)push(l.name||realName(l.path), l.path);
+      }
+    }catch(_){}
+    if(out.length)return out.slice(0,20);
+    try{
+      const pw=window.gdiGetPw?window.gdiGetPw(modulePath):'';
+      const base=modulePath.endsWith('/')?modulePath:modulePath+'/';
+      const files=window.gdiListAllFiles?await window.gdiListAllFiles(modulePath, pw):[];
+      const subs=[];
+      for(const f of (files||[])){
+        if(!f)continue;
+        const isF=f.mimeType==='application/vnd.google-apps.folder'||f.type==='folder'||f.dir===true||(f.mimeType&&f.mimeType.includes('folder'));
+        if(isF){
+          const p=f.path||(base+encodeURIComponent(f.name||''));
+          if(p)subs.push(p.endsWith('/')?p:p+'/');
+          continue;
+        }
+        const nm=f.name||f.title||'';
+        if(/\.pdf$/i.test(nm))push(nm, f.path||f.url||(base+encodeURIComponent(nm)));
+      }
+      for(const sp of subs.slice(0,5)){
+        if(out.length>=20)break;
+        try{
+          const sub=window.gdiListAllFiles?await window.gdiListAllFiles(sp, pw):[];
+          const sbase=sp.endsWith('/')?sp:sp+'/';
+          for(const f of (sub||[])){
+            if(!f)continue;
+            const nm=f.name||f.title||'';
+            if((f.mimeType&&f.mimeType.includes('pdf'))||/\.pdf$/i.test(nm))push(nm, f.path||f.url||(sbase+encodeURIComponent(nm)));
+          }
+        }catch(_){}
+      }
+    }catch(_){}
+    return out.slice(0,20);
+  }
+  // Descobre a qual concurso um módulo pertence (fonte anexada cujo
+  // coursePath é prefixo do caminho do módulo). null = nenhum (quiz local).
+  async function resolveConcursoForPath(modulePath){
+    try{
+      const concursos=await fetchMyConcursos();
+      const target=low(modulePath);
+      for(const cc of concursos.slice(0,20)){
+        try{
+          const r=await fetch('/api/concursos/'+encodeURIComponent(cc.id)+'/sources',{credentials:'include'});
+          const d=await r.json().catch(()=>({}));
+          const srcs=(d&&Array.isArray(d.sources))?d.sources:[];
+          for(const s of srcs){
+            const cp=low(s.coursePath||'');
+            if(cp&&target.indexOf(cp)===0)return String(cc.id);
+          }
+        }catch(_){}
+      }
+    }catch(_){}
+    return null;
+  }
+  // POST /api/concursos/:id/errors por erro do quiz. Retorna nº gravados.
+  async function postModuleErrorsToServer(concursoId, moduleName, errors){
+    let saved=0;
+    for(const e of errors){
+      try{
+        const r=await fetch('/api/concursos/'+encodeURIComponent(concursoId)+'/errors',{
+          method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',
+          body:JSON.stringify({pergunta:e.statement||'',respostaCerta:e.correctText||'',respostaAluno:e.pickedText||'',modulo:moduleName})
+        });
+        const d=await r.json().catch(()=>({}));
+        if(r.ok&&d&&d.ok)saved++;
+      }catch(_){}
+    }
+    return saved;
+  }
+  // Abre o quiz do módulo num overlay próprio (o detalhe do curso fica atrás).
+  // concursoIdOpt: quando o chamador já sabe o concurso (ex.: detalhe do
+  // concurso no shell); null = resolve por prefixo de fonte (ou só local).
+  function openModuleQuizModal(moduleName, modulePath, courseKey, concursoIdOpt){
+    const MQ=(window.__gdiMeggy&&window.__gdiMeggy.questions)||null;
+    const overlay=document.createElement('div');
+    overlay.className='gdi-v215-overlay';
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:100003;display:flex;align-items:center;justify-content:center;padding:20px;';
+    overlay.innerHTML=`<div style="background:var(--ferreto-bg-2,#0d1119);border:1px solid var(--ferreto-border,#21262d);border-radius:14px;max-width:760px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.6);">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--ferreto-border,#21262d);">
+        <b style="color:var(--ferreto-text,#f0f6fc);font-size:15px;font-family:var(--ferreto-font-display,'Poppins',sans-serif);">🧠 Quiz deste módulo — ${esc(moduleName)}</b>
+        <button class="gdi-v215-x" style="background:transparent;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:18px;padding:4px 8px;border-radius:6px;">✕</button>
+      </div>
+      <div class="gdi-v215-quiz-body" style="flex:1;overflow-y:auto;padding:16px 20px;">
+        <div style="padding:30px;text-align:center;color:var(--ferreto-text-muted,#8b949e);font-size:13px;"><div class="gdi-spinner" style="margin:0 auto 10px;"></div>Preparando quiz do módulo…</div>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    const bodyEl=overlay.querySelector('.gdi-v215-quiz-body');
+    const close=()=>{ if(overlay.parentNode)overlay.remove(); };
+    overlay.querySelector('.gdi-v215-x').onclick=close;
+    overlay.addEventListener('click',e=>{ if(e.target===overlay)close(); });
+    (async()=>{
+      try{
+        if(!MQ||typeof MQ.generateQuestions!=='function'||typeof MQ.startQuizFromBank!=='function'){
+          bodyEl.innerHTML='<div style="padding:20px;text-align:center;color:#ff8b8b;font-size:13px;">Quiz indisponível: o módulo de questões não carregou. Recarregue a página e tente novamente.</div>';
+          return;
+        }
+        let concursoId=concursoIdOpt||null;
+        if(!concursoId){
+          bodyEl.innerHTML='<div style="padding:30px;text-align:center;color:var(--ferreto-text-muted,#8b949e);font-size:13px;">Verificando se este módulo pertence a um concurso…</div>';
+          concursoId=await resolveConcursoForPath(modulePath);
+        }
+        if(!overlay.isConnected)return;
+        bodyEl.innerHTML='<div style="padding:30px;text-align:center;color:var(--ferreto-text-muted,#8b949e);font-size:13px;"><div class="gdi-spinner" style="margin:0 auto 10px;"></div>Procurando PDFs do módulo…</div>';
+        const pdfs=await listModulePdfs(courseKey, modulePath);
+        if(!overlay.isConnected)return;
+        if(!pdfs.length){
+          bodyEl.innerHTML='<div style="padding:20px;text-align:center;color:var(--ferreto-text-muted,#8b949e);font-size:13px;">Nenhum PDF encontrado neste módulo.<br>O quiz precisa de PDFs com texto para gerar questões.</div>';
+          return;
+        }
+        // Gera questões até ter ao menos 10 no banco (máx. 3 rodadas de +5,
+        // cada uma de um PDF diferente — o cursor round-robin do Meggy).
+        // Se o banco já tem questões do módulo, pula a geração direto p/ o quiz.
+        let rounds=0;
+        while(countBankQuestions(moduleName)<10&&rounds<3){
+          if(!overlay.isConnected)return;
+          bodyEl.innerHTML='<div style="padding:30px;text-align:center;color:var(--ferreto-text-muted,#8b949e);font-size:13px;"><div class="gdi-spinner" style="margin:0 auto 10px;"></div>Meggy criando questões do módulo… (PDF '+(rounds+1)+' de até 3)</div>';
+          let ok=false;
+          try{ ok=await MQ.generateQuestions(pdfs, bodyEl, moduleName); }catch(e){ console.warn('[Quiz módulo] generateQuestions falhou:', e&&e.message); ok=false; }
+          rounds++;
+          if(!ok)break;
+        }
+        if(!overlay.isConnected)return;
+        if(countBankQuestions(moduleName)===0){
+          bodyEl.innerHTML='<div style="padding:20px;text-align:center;color:#ff8b8b;font-size:13px;">Não foi possível gerar questões dos PDFs deste módulo.<br><span style="color:var(--ferreto-text-muted,#8b949e);">Os PDFs podem ser escaneados (sem texto) ou a Meggy está indisponível.</span></div>';
+          return;
+        }
+        bodyEl.__items=pdfs;
+        MQ.startQuizFromBank(bodyEl, moduleName, async function(result){
+          // ★ fim do batch — grava os erros no caderno do servidor
+          //   (além do caderno local, que o gradeQ já atualizou) e mostra
+          //   quantos foram salvos. onDone é por batch (v. meggy-questions).
+          const errors=(result&&Array.isArray(result.errors))?result.errors:[];
+          let savedServer=0;
+          if(errors.length&&concursoId){
+            try{ savedServer=await postModuleErrorsToServer(concursoId, moduleName, errors); }catch(_){}
+          }
+          if(!bodyEl.isConnected)return;
+          // só anexa se a tela de resultado do batch ainda estiver visível
+          if(!bodyEl.querySelector('#gdi-q-next-batch'))return;
+          const line=document.createElement('div');
+          line.style.cssText='margin-top:16px;padding:12px;border:1px solid var(--ferreto-border,#30363d);border-radius:10px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));text-align:center;';
+          if(!errors.length){
+            line.innerHTML='<b style="color:#3fb950;font-size:13px;">🎉 Nenhum erro neste batch!</b>';
+          }else{
+            const n=concursoId?savedServer:errors.length;
+            line.innerHTML='<b style="color:var(--ferreto-text,#f0f6fc);font-size:13px;">'+n+' erros salvos em Revisar erros</b>'
+              +'<div style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;margin-top:4px;">'+(concursoId?('Caderno local + servidor'+(savedServer<errors.length?' ('+savedServer+' de '+errors.length+' gravados)':'')):'Caderno local (este módulo não pertence a um concurso)')+'</div>'
+              +'<button class="gdi-v215-review-errors gdi-mode-btn" style="font-size:12px;margin-top:10px;">📕 Revisar erros</button>';
+            const rb=line.querySelector('.gdi-v215-review-errors');
+            if(rb)rb.onclick=()=>{
+              try{
+                const Q=window.__gdiStudy&&window.__gdiStudy.questions;
+                if(Q&&typeof Q.renderQuestoes==='function')Q.renderQuestoes(bodyEl);
+              }catch(e){ toast215('Não foi possível abrir o caderno de erros'); }
+            };
+          }
+          bodyEl.appendChild(line);
+        });
+      }catch(err){
+        console.error('[Quiz módulo] erro:',err);
+        if(overlay.isConnected)bodyEl.innerHTML='<div style="padding:20px;text-align:center;color:#ff8b8b;font-size:13px;">Erro ao preparar o quiz: '+esc(String(err&&err.message||err))+'</div>';
+      }
+    })();
+  }
+
   // ── Namespace exposure ──
   window.__gdiStudy.courses = {
     // Course CRUD / collection
@@ -2290,7 +2752,14 @@
     dayKey: dayKey,
     dateBr: dateBr,
     // Constants
-    LS_HIDDEN: LS_HIDDEN
+    LS_HIDDEN: LS_HIDDEN,
+    // ★ v2.15.0: multi-pastas + quiz por módulo (reutilizável pelo Explorar Drives)
+    listConcursos: fetchMyConcursos,
+    previewAttach: previewAttach,
+    attachFoldersToConcurso: attachFoldersToConcurso,
+    showFolderDestinationDialog: showFolderDestinationDialog,
+    startModuleQuiz: openModuleQuizModal,
+    listModulePdfs: listModulePdfs
   };
 
   // ── Backward-compat aliases (preserved from monolith) ──
