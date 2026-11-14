@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  v1.0.4 — Filho da aula expandida (conceito "escolher aulas"): vídeo
+  (play rosa + "Vídeo — MM:SS"), PDF (ícone + nome + tamanho),
+  pasta de PDFs (pasta + "N arquivos"), .md/transcrição (ícone +
+  nome). Toque: vídeo → player; PDF → leitor de PDF; .md → leitor
+  de MD; pasta → DetailActivity da pasta.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/md_surface_container"
+    android:clickable="true"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingHorizontal="@dimen/spacing_lg"
+    android:paddingVertical="@dimen/spacing_md">
+
+    <FrameLayout
+        android:layout_width="40dp"
+        android:layout_height="40dp">
+
+        <TextView
+            android:id="@+id/childPlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/btn_play_circle"
+            android:gravity="center"
+            android:text="▶"
+            android:textColor="@color/md_on_primary"
+            android:textSize="16sp"
+            android:visibility="gone" />
+
+        <ImageView
+            android:id="@+id/childIcon"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:layout_gravity="center"
+            android:src="@drawable/ic_doc"
+            android:tint="@color/md_primary"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/spacing_md"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/childTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:textColor="@color/md_on_surface"
+            android:textSize="@dimen/text_card_title" />
+
+        <TextView
+            android:id="@+id/childMeta"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/md_on_surface_variant"
+            android:textSize="@dimen/text_card_subtitle" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/childChevron"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="›"
+        android:textColor="@color/md_on_surface_variant"
+        android:textSize="20sp" />
+</LinearLayout>
