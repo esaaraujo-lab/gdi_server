@@ -77,13 +77,24 @@ class DescriptionPregenerator(private val context: Context) {
         playlist: List<FileItem>,
         currentIndex: Int,
         isPlaying: () -> Boolean,
-        isActive: () -> Boolean
+        isActive: () -> Boolean,
+        // v1.0.8 onda 2 — playlists da MESMA pasta nao trazem folderPath nos
+        // itens (o listFolder nao o devolve): sem o fallback, a fila ficava
+        // vazia e nada era pre-gerado. `fallbackFolderPath` = pasta da aula
+        // atual; `currentFolderPath` = a mesma pasta, excluida da fila (a
+        // aula atual ja e gerada pelo trigger do player/detalhe).
+        currentFolderPath: String? = null,
+        fallbackFolderPath: String? = null
     ) {
         stop()
         val upcoming = playlist
             .drop(currentIndex + 1)
             .take(MAX_AHEAD)
-            .mapNotNull { it.folderPath?.takeIf { p -> p.isNotBlank() } }
+            .mapNotNull {
+                it.folderPath?.takeIf { p -> p.isNotBlank() }
+                    ?: fallbackFolderPath?.takeIf { p -> p.isNotBlank() }
+            }
+            .filter { it != currentFolderPath }
             .distinct()
         if (upcoming.isEmpty()) return
         job = scope.launch {
