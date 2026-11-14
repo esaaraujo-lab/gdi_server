@@ -50,6 +50,7 @@
           <button id="gdi-isa-regen" title="Regerar (PDF pode estar incompleto)" style="background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);color:var(--ferreto-text,#e6edf3);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;transition:.15s;"><i class="bi bi-arrow-clockwise"></i> Regerar</button>
           <button id="gdi-isa-dl" title="Baixar em PDF" style="background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);color:var(--ferreto-text,#e6edf3);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;transition:.15s;"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
           <button id="gdi-isa-copy" title="Copiar resumo" style="background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);color:var(--ferreto-text,#e6edf3);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;transition:.15s;"><i class="bi bi-clipboard"></i> Copiar</button>
+          <button id="gdi-isa-tts" title="Ouvir resumo em voz natural" style="background:#ff8b9f;border:none;color:#000;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;font-weight:600;"><i class="bi bi-volume-up"></i> Ouvir resumo</button>
         </div>
       </div>
       <div class="gdi-isa-summary-body" style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;padding:20px 24px;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.8;">
@@ -58,6 +59,17 @@
     </div>`;
     bodyEl.querySelector('#gdi-isa-dl').onclick=()=>window.__gdiMeggy.cache.downloadAsPdf(lesson,markdownText);
     bodyEl.querySelector('#gdi-isa-copy').onclick=()=>window.__gdiMeggy.cache.copySummary(markdownText);
+    // ★ v2.15.4 ITEM D: Ouvir resumo — voz natural (window.gdiTTS / meggy-tts.js).
+    // Guarda se o módulo não carregou: toast, nunca erro silencioso.
+    const ttsBtn=bodyEl.querySelector('#gdi-isa-tts');
+    if(ttsBtn)ttsBtn.onclick=()=>{
+      if(window.gdiTTS&&typeof window.gdiTTS.play==='function'){
+        const st=window.gdiTTS.getState();
+        if(st.status==='playing'||st.status==='paused'){window.gdiTTS.stop();ttsBtn.innerHTML='<i class="bi bi-volume-up"></i> Ouvir resumo';return;}
+        ttsBtn.innerHTML='⏹ Parar';
+        window.gdiTTS.play(markdownText,{onEnd:function(){ttsBtn.innerHTML='<i class="bi bi-volume-up"></i> Ouvir resumo';}});
+      }else showToast('Módulo de voz ainda não carregou. Recarregue a página.');
+    };
     // ★ botão Regerar: limpa cache e regenera resumo + questões
     const regenBtn=bodyEl.querySelector('#gdi-isa-regen');
     if(regenBtn)regenBtn.onclick=()=>{
@@ -723,12 +735,10 @@
     });
     bodyEl.querySelectorAll('.gdi-resumo-del').forEach(b=>b.onclick=async ()=>{
       // Só localStorage resumos têm botão deletar (Drive items não têm .gdi-resumo-del)
-      if(!window.gdiModal){
-        if(!confirm('Deletar este resumo?'))return;
-      } else {
-        const ok=await window.gdiModal({title:'Deletar resumo',message:'Tem certeza que deseja deletar este resumo? Esta ação não pode ser desfeita.',confirmText:'Deletar',cancelText:'Cancelar',danger:true});
-        if(!ok)return;
-      }
+      // ★ v2.15.4 Q4: sem gdiModal, toast + NÃO deleta (nunca confirm() nativo).
+      if(!window.gdiModal){ if(typeof window.showToast==='function')showToast('Confirmação indisponível — recarregue a página e tente de novo'); else console.warn('[Meggy] gdiModal indisponível — resumo não deletado'); return; }
+      const ok=await window.gdiModal({title:'Deletar resumo',message:'Tem certeza que deseja deletar este resumo? Esta ação não pode ser desfeita.',confirmText:'Deletar',cancelText:'Cancelar',danger:true});
+      if(!ok)return;
       if(window.gdiIsaPdf && window.gdiIsaPdf.delIsaSummary){
         // ★ FIX 20-14 #C (Agent 14): delIsaSummary schedules the delete on the
         //   _sumWriteChain promise but the OLD code didn't await it before
