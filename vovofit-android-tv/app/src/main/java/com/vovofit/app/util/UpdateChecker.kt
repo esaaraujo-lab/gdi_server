@@ -18,6 +18,7 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import com.vovofit.app.ui.player.PlayerActivity
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
@@ -28,6 +29,17 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * v1.0.6 — UpdateChecker com filtro por tag prefix vovofit-v*
+ *
+ * v1.0.8 — auto-update na abertura: a Splash (LAUNCHER) checa em modo
+ * silencioso (baixa em 2o plano, sem dialogo, instalador adiado para
+ * a Home); o download automatico mostra so um toast curto; o instalador
+ * NUNCA abre com o player em primeiro plano (fica pendente); a
+ * permissao "instalar apps desconhecidos" so e pedida de novo apos 24h
+ * de um "Depois"; a mesma versao nunca e baixada/lancada de novo.
+ * Limite real do Android (nao ha instalacao silenciosa sem
+ * privilegios): o instalador do sistema SEMPRE exige o toque do
+ * usuario em "Instalar", e a permissao precisa ser concedida 1x.
+ *
  *
  * ★ Mudanças v2.7.4 (instalação dentro do app):
  *  - Download IN-APP com progresso visível (diálogo com barra de progresso
@@ -68,10 +80,16 @@ object UpdateChecker {
      * já baixado tem que instalar na hora, mesmo que a checagem esteja
      * dentro da janela de 24h.
      */
-    fun checkForUpdateThrottled(context: Context, currentVersion: String) {
+    /**
+     * v1.0.8 — `silent = true` (Splash, app a abrir): checa e baixa em
+     * 2o plano, mas NAO retoma APK pendente nem abre o instalador —
+     * a Splash some em 1,5s e o instalador so pode abrir com a Home
+     * em primeiro plano (e ela que retoma o pendente).
+     */
+    fun checkForUpdateThrottled(context: Context, currentVersion: String, silent: Boolean = false) {
         // 1) APK pendente primeiro — nunca atrasado pelo throttle. Se
         // instalou, retorna (o checkForUpdate faria a mesma instalação).
-        if (resumePendingApk(context)) return
+        if (!silent && resumePendingApk(context)) return
         // 2) Throttle: 1×/24h.
         val prefs = context.getSharedPreferences(PREFS_UPDATE, Context.MODE_PRIVATE)
         val last = prefs.getLong(KEY_LAST_CHECK, 0L)
@@ -81,7 +99,7 @@ object UpdateChecker {
         // resposta bem-sucedida (HTTP 200 + corpo JSON válido) dentro de
         // checkForUpdate. Uma checagem que falha (sem rede / rate limit)
         // não queima a janela de 24h.
-        checkForUpdate(context, currentVersion, showFeedback = false)
+        checkForUpdate(context, currentVersion, showFeedback = false, silentDownload = silent)
     }
 
     /**
@@ -112,13 +130,20 @@ object UpdateChecker {
     private const val PREFS_NAME = "meggy_update"
     private const val KEY_DOWNLOADED_VERSION = "downloaded_version"
     private const val KEY_PENDING_APK = "pending_apk_path"
+    private const val KEY_PERMISSION_DECLINED_AT = "perm_declined_at"
+    private const val PERMISSION_REPROMPT_MS = 24L * 60 * 60 * 1000 // 24h
 
-    fun checkForUpdate(context: Context, currentVersion: String, showFeedback: Boolean = false) {
+    fun checkForUpdate(
+        context: Context, currentVersion: String, showFeedback: Boolean = false,
+        silentDownload: Boolean = false
+    ) {
         // ★ v2.7.4: APK pendente (usuário acabou de conceder a permissão de
         // instalar) — dispara a instalação agora, sem baixar de novo.
+        // v1.0.8: no modo silencioso (Splash) NAO retoma aqui — o
+        // instalador fica para a Home (ver checkForUpdateThrottled).
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val pendingPath = prefs.getString(KEY_PENDING_APK, null)
-        if (!pendingPath.isNullOrBlank()) {
+        if (!silentDownload && !pendingPath.isNullOrBlank()) {
             val pendingFile = File(pendingPath)
             if (pendingFile.exists() && canInstallPackages(context)) {
                 prefs.edit().remove(KEY_PENDING_APK).apply()
@@ -207,11 +232,22 @@ object UpdateChecker {
                     val downloadedFile = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
 
                     if (downloadedFile.exists() && lastDownloaded == remoteVersion) {
-                        showToast(context, "Instalando v$remoteVersion...")
-                        installApk(context, downloadedFile)
+                        // v1.0.8 — a mesma versao nunca e baixada nem
+                        // lancada de novo: o APK ja baixado so (re)instala;
+                        // no modo silencioso fica pendente para a Home.
+                        if (silentDownload) {
+                            prefs.edit().putString(KEY_PENDING_APK, downloadedFile.absolutePath).apply()
+                        } else {
+                            showToast(context, "Instalando v$remoteVersion...")
+                            installApk(context, downloadedFile)
+                        }
                     } else {
-                        showToast(context, "Baixando v$remoteVersion...$sizeStr")
-                        downloadInApp(context, apkUrl, fileName, remoteVersion, apkSize, prefs)
+                        // v1.0.8 — download automatico em 2o plano: o unico
+                        // indicador e este toast curto (sem dialogo). O
+                        // dialogo com progresso + Cancelar fica so para a
+                        // checagem MANUAL (Ajustes -> Verificar atualizacoes).
+                        showToast(context, "Baixando v$remoteVersion...$sizeStr", long = showFeedback)
+                        downloadInApp(context, apkUrl, fileName, remoteVersion, apkSize, prefs, showFeedback, silentDownload)
                     }
                 } else {
                     if (showFeedback) showToast(context, "Voce esta na versao mais recente (v$localVersion)")
@@ -222,9 +258,9 @@ object UpdateChecker {
         }.start()
     }
 
-    private fun showToast(context: Context, message: String) {
+    private fun showToast(context: Context, message: String, long: Boolean = true) {
         Handler(Looper.getMainLooper()).post {
-            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            Toast.makeText(context, message, if (long) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -257,7 +293,9 @@ object UpdateChecker {
     private fun downloadInApp(
         context: Context, url: String, fileName: String,
         remoteVersion: String, expectedSize: Long,
-        prefs: android.content.SharedPreferences
+        prefs: android.content.SharedPreferences,
+        showProgressDialog: Boolean = false,
+        deferInstall: Boolean = false
     ) {
         val mainHandler = Handler(Looper.getMainLooper())
         val cancelled = AtomicBoolean(false)
@@ -265,8 +303,9 @@ object UpdateChecker {
         var progressBar: ProgressBar? = null
         var progressText: TextView? = null
 
-        // Diálogo de progresso (só quando o contexto é uma Activity).
-        if (context is Activity) {
+        // v1.0.8 — diálogo de progresso SÓ na checagem manual (Ajustes):
+        // o download automático é silencioso (só o toast curto).
+        if (showProgressDialog && context is Activity) {
             mainHandler.post {
                 val bar = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
                     max = 100
@@ -335,7 +374,14 @@ object UpdateChecker {
                 }
                 mainHandler.post { dialog?.dismiss() }
                 prefs.edit().putString(KEY_DOWNLOADED_VERSION, remoteVersion).apply()
-                installApk(context, target)
+                if (deferInstall) {
+                    // v1.0.8 (Splash): nao abre o instalador com a tela de
+                    // login por baixo — deixa pendente para a Home.
+                    prefs.edit().putString(KEY_PENDING_APK, target.absolutePath).apply()
+                    showToast(context, "Atualização baixada — instala ao abrir a tela inicial", long = false)
+                } else {
+                    installApk(context, target)
+                }
             } catch (e: InterruptedException) {
                 mainHandler.post { dialog?.dismiss() }
                 target.delete()
@@ -397,6 +443,23 @@ object UpdateChecker {
      *  3. Se o instalador abrir, confirma com toast.
      */
     private fun installApk(context: Context, file: File) {
+        // v1.0.8 — nunca interromper reprodução: com o player em
+        // primeiro plano, guarda como pendente e sai em silêncio. A
+        // Home retoma a instalação (resumePendingApk) quando o usuário
+        // voltar da aula — sem toast, sem diálogo, sem tocar no vídeo.
+        if (PlayerActivity.isForeground) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().putString(KEY_PENDING_APK, file.absolutePath).apply()
+            return
+        }
+        // v1.0.8 — não entrar em loop na permissão: se o usuário tocou
+        // "Depois" há menos de 24h, mantém pendente em silêncio e só
+        // volta a perguntar depois desse prazo.
+        if (!canInstallPackages(context)) {
+            val declinePrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val declinedAt = declinePrefs.getLong(KEY_PERMISSION_DECLINED_AT, 0L)
+            if (System.currentTimeMillis() - declinedAt < PERMISSION_REPROMPT_MS) return
+        }
         // Passo 1: permissão de instalar de fontes desconhecidas.
         if (!canInstallPackages(context)) {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -415,7 +478,12 @@ object UpdateChecker {
                                 showToast(context, "Abra Configurações > Apps > Vovó Fit > Instalar apps desconhecidos")
                             }
                         }
-                        .setNegativeButton("Depois", null)
+                        .setNegativeButton("Depois") { _, _ ->
+                            prefs.edit().putLong(KEY_PERMISSION_DECLINED_AT, System.currentTimeMillis()).apply()
+                        }
+                        .setOnCancelListener {
+                            prefs.edit().putLong(KEY_PERMISSION_DECLINED_AT, System.currentTimeMillis()).apply()
+                        }
                         .show()
                 } else {
                     showToast(context, "Ative \"Instalar apps desconhecidos\" para o Vovó Fit e tente de novo")
