@@ -462,9 +462,12 @@
       //    (was 50000). 200K chars ≈ 50K tokens — fits modern 128K-context LLMs.
       const result=txt.slice(0,50000); // ★ v1.0.152: 200K→50K
       if(!result||result.length<50){
-        // ★ Erro descritivo: PDF provavelmente é escaneado (só imagens)
-        // e o OCR também falhou ou não retornou texto útil
-        throw new Error('PDF sem texto selecionável e OCR não conseguiu extrair. Possíveis causas:\n• PDF é composto só de imagens (escaneado) e o OCR falhou\n• PDF está criptografado ou corrompido\n• Falha ao baixar modelos de OCR do CDN (Tesseract.js)\n\nTente abrir o PDF num leitor comum para confirmar o conteúdo.');
+        // ★ v2.15.3 (item 4): mensagem honesta — o OCR está DESATIVADO
+        //   (v1.0.152: Tesseract bloqueia a thread por 5+ min) e nunca é
+        //   tentado aqui; dizer que "o OCR falhou" era falso. PDF sem texto
+        //   selecionável = PDF escaneado (só imagens) — OCR desativado.
+        //   Reativar o OCR (por IA via /api/ai/ocr) é decisão pendente do Elton.
+        throw new Error('PDF sem texto selecionável — PDF escaneado (só imagens) e OCR desativado. Possíveis causas:\n• PDF é composto só de imagens (escaneado) e o OCR está desativado\n• PDF está criptografado ou corrompido\n\nTente abrir o PDF num leitor comum para confirmar o conteúdo.');
       }
       return result;
     } finally {
