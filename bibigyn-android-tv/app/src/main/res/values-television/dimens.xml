@@ -4,6 +4,12 @@
   Qualificador values-television: aplicado em aparelhos TV (Leanback).
   Pisos: metadados ≥24sp, título de seção 28sp, hero ≥48sp, piso 36sp.
   Margens de overscan: 56dp laterais (mínimo 48dp), 40dp topo/fundo.
+  Patch TV 2.7.7/2.1.6/1.0.5 (bug layout gigante na TV): cards do rail
+  360dp -> 200dp (baseline 2.7.5), drive 280dp -> 156dp, thumb do
+  destaque 520x260 -> 320x180 (16:9), hero 360dp -> 340dp (o bloco de
+  texto tem ~320dp de altura com os tipos TV; 320dp não deixa folga).
+  Gap total entre cartões na TV: 16dp (marginEnd 8dp + decoração 8dp
+  do RailGutterDecoration) — ver TV_LAYOUT_FIX_2.7.7.md.
 -->
 <resources>
     <!-- ── Tipo (TV) ── -->
@@ -26,21 +32,24 @@
     <dimen name="tv_rail_spacing">24dp</dimen>
 
     <!-- ── Cards / hero (TV) ── -->
-    <dimen name="tv_hero_height">360dp</dimen>
-    <dimen name="tv_card_width">360dp</dimen>
-    <dimen name="tv_card_image_height">202dp</dimen>
-    <dimen name="tv_drive_card_width">280dp</dimen>
-    <dimen name="tv_drive_card_height">380dp</dimen>
+    <dimen name="tv_hero_height">340dp</dimen>
+    <dimen name="tv_card_width">200dp</dimen>
+    <dimen name="tv_card_image_height">112dp</dimen>
+    <dimen name="tv_drive_card_width">156dp</dimen>
+    <dimen name="tv_drive_card_height">224dp</dimen>
     <dimen name="tv_detail_hero_width">800dp</dimen>
     <dimen name="tv_play_fab_size">120dp</dimen>
     <dimen name="play_fab_size">120dp</dimen>
+    <dimen name="tv_rail_gap">8dp</dimen>
+    <dimen name="tv_drive_tile_height">112dp</dimen>
+    <dimen name="tv_hero_text_padding_side">80dp</dimen>
     <dimen name="tv_focus_ring_width">4dp</dimen>
     <dimen name="tv_focus_elevation">8dp</dimen>
     <dimen name="tv_control_button_size">96dp</dimen>
     <dimen name="tv_control_icon_size">56dp</dimen>
     <dimen name="tv_seek_button_size">72dp</dimen>
-    <dimen name="tv_featured_card_height">260dp</dimen>
-    <dimen name="tv_featured_thumb_width">520dp</dimen>
+    <dimen name="tv_featured_card_height">180dp</dimen>
+    <dimen name="tv_featured_thumb_width">320dp</dimen>
 
     <!-- ── Foco (TV) ── -->
     <dimen name="focus_ring_width_tv">4dp</dimen>
