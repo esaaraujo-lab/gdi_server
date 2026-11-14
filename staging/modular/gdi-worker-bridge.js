@@ -346,7 +346,7 @@
         }
         return new Promise((resolve, reject) => {
           _pdfPending.set(id, { resolve, reject, onProgress });
-          w.postMessage({ type: 'extract', id, url, maxPages: 60, maxChars: 25000, tryOcr: true });
+          w.postMessage({ type: 'extract', id, url, tryOcr: true }); // ★ v2.15.4: SEM maxPages/maxChars — o worker processa o PDF inteiro (ordem do Elton)
         }).catch(err => {
           console.warn('[gdi-worker-bridge] pdf extract fallback', err);
           _pdfPending.delete(id);
