@@ -33,20 +33,20 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
-import coil.load
 import com.google.android.material.snackbar.Snackbar
 import com.vovofit.app.VovoFitApp
 import com.vovofit.app.R
+import com.vovofit.app.util.CoverLibrary
+import com.vovofit.app.util.loadCoverChain
 import com.vovofit.app.data.ApiService
 import com.vovofit.app.data.FileItem
-import com.vovofit.app.data.colorFromString
-import com.vovofit.app.data.monogramFor
+import com.vovofit.app.data.coverResForPath
+import com.vovofit.app.util.LessonDescription
 import com.vovofit.app.databinding.ActivityPlayerBinding
 import com.vovofit.app.ui.home.HomeActivity
 import com.vovofit.app.ui.mylist.MyListActivity
 import com.vovofit.app.ui.search.SearchActivity
 import com.vovofit.app.ui.settings.SettingsActivity
-import com.vovofit.app.util.CardGradient
 import com.vovofit.app.util.Format
 import com.vovofit.app.util.PlaylistManager
 import com.vovofit.app.util.DescriptionPregenerator
@@ -133,7 +133,7 @@ import kotlinx.coroutines.withContext
  * legenda no áudio (não há faixa de vídeo).
  *
  * ÁUDIO (mp3/podcast): MESMO player — a área de vídeo vira a capa do
- * episódio (thumb/monograma + título + sub); mesmos controles
+ * episódio (thumb/capa do drive + título + sub); mesmos controles
  * (play/pause, velocidade, progresso, continuar de onde parou,
  * Descanso); sem CC. Card "Continuar de onde parou — Parado em 12:34"
  * quando havia posição salva ao abrir.
@@ -269,6 +269,8 @@ class PlayerActivity : AppCompatActivity() {
 
     // v2.7.6 — pré-geração das descrições das próximas aulas (Elton 00:21).
     private var descriptionPregenerator: DescriptionPregenerator? = null
+    /** v1.0.8 onda 2 — pastas cuja geracao ja foi disparada neste player. */
+    private val triggeredLessonFolders = mutableSetOf<String>()
     private var playerInForeground = false
 
     private enum class SubtitleState { UNKNOWN, READY, GENERATING, NONE }
@@ -401,12 +403,21 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        isForeground = true
         // Reaplica o immersive (o sistema pode ter restaurado as barras).
         if (isFullscreen || isTv) {
             WindowInsetsControllerCompat(window, window.decorView)
                 .hide(WindowInsetsCompat.Type.systemBars())
         }
     }
+
+    // v1.0.8 — o player saiu de primeiro plano: o UpdateChecker pode
+    // retomar a instalação pendente quando a Home voltar.
+    override fun onPause() {
+        isForeground = false
+        super.onPause()
+    }
+
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
@@ -521,17 +532,17 @@ class PlayerActivity : AppCompatActivity() {
         binding.audioCoverTitle.text = item.name
         binding.audioCoverSub.text = if ((item.folderLabel ?: "").contains("podcast", true) ||
             item.name.contains("podcast", true) || item.name.contains("cast", true)) "🎙 Podcast" else "Áudio"
-        val thumb = item.thumbnailLink
-        if (!thumb.isNullOrBlank()) {
-            binding.audioCoverImage.visibility = View.VISIBLE
-            binding.audioCoverMonogram.visibility = View.GONE
-            binding.audioCoverImage.load(thumb) { error(R.drawable.card_gradient_pink) }
-        } else {
-            binding.audioCoverImage.visibility = View.GONE
-            binding.audioCoverMonogram.visibility = View.VISIBLE
-            binding.audioCoverMonogram.text = monogramFor(item.name)
-            binding.audioCoverBg.background = CardGradient.drawable(resources, colorFromString(item.name))
-        }
+        // v1.0.8 camada 3 — (2) thumb > (3) imagem da biblioteca pelo
+        // nome/rotulo/pasta do audio > (4) capa do drive (nunca monograma).
+        val coverRes = coverResForPath(
+            item.folderPath ?: intent.getStringExtra(EXTRA_FOLDER_PATH)
+        )
+        binding.audioCoverImage.visibility = View.VISIBLE
+        binding.audioCoverMonogram.visibility = View.GONE
+        binding.audioCoverImage.loadCoverChain(
+            item.thumbnailLink, coverRes,
+            item.name, item.folderLabel, item.folderPath
+        )
         // Card "Continuar de onde parou — Parado em 12:34".
         if (isAudio && openedResumeMs > 0) {
             binding.audioResumeCard.visibility = View.VISIBLE
@@ -996,13 +1007,55 @@ class PlayerActivity : AppCompatActivity() {
         // PlaylistManager quando o player ainda não existe.
         val currentIdx = player?.currentMediaItemIndex?.takeIf { it >= 0 }
             ?: PlaylistManager.index()
+        // v1.0.8 onda 2 — a pasta da aula atual e o fallback de folderPath
+        // (playlists da mesma pasta nao trazem folderPath nos itens) e a
+        // pasta a excluir da pre-geracao (a atual e gerada por
+        // triggerCurrentLessonDescription, abaixo).
+        val currentFolder = PlaylistManager.getCurrent()?.folderPath
+            ?: intent.getStringExtra(EXTRA_FOLDER_PATH)
         descriptionPregenerator?.start(
             lifecycleScope,
             PlaylistManager.all(),
             currentIdx,
             isPlaying = { player?.isPlaying == true },
-            isActive = { playerInForeground && !isFinishing && !isDestroyed }
+            isActive = { playerInForeground && !isFinishing && !isDestroyed },
+            currentFolderPath = currentFolder,
+            fallbackFolderPath = currentFolder
         )
+        triggerCurrentLessonDescription()
+    }
+
+    /**
+     * v1.0.8 onda 2 — Disparo da geracao da aula ATUAL ao abrir o player.
+     * A aula pode ser aberta direto (Home "Continuar de onde parou" ->
+     * player) sem passar pelo DetailActivity, que ja dispara sozinho — sem
+     * isto, essa aula nunca gerava descricao. Leve: so [LessonDescription.
+     * triggerOnly] (sem o poll de 3 min do detalhe); 1x por pasta e por
+     * sessao do player; silencioso (sem toast, nada trava o video). Se o
+     * resumo ja existir, so o guarda no cache local. Sem material legivel
+     * ou com o backend sem IA (producao pre-v2), nao faz nada.
+     */
+    private fun triggerCurrentLessonDescription() {
+        val item = currentItem ?: PlaylistManager.getCurrent() ?: return
+        val folderPath = item.folderPath?.takeIf { it.isNotBlank() }
+            ?: intent.getStringExtra(EXTRA_FOLDER_PATH)?.takeIf { it.isNotBlank() }
+            ?: return
+        if (!triggeredLessonFolders.add(folderPath)) return
+        lifecycleScope.launch {
+            val api = ApiService(this@PlayerActivity)
+            val files = withContext(kotlinx.coroutines.Dispatchers.IO) { api.listFolder(folderPath) }
+            if (files.isNullOrEmpty()) return@launch
+            if (!LessonDescription.isLessonFolder(files)) return@launch
+            val folderName = folderPath.trimEnd('/').substringAfterLast('/')
+            when (val outcome = LessonDescription.triggerOnly(
+                this@PlayerActivity, folderPath, folderName, files
+            )) {
+                is LessonDescription.Outcome.Ready ->
+                    SessionManager.get(this@PlayerActivity)
+                        .saveLessonDescription(folderPath, outcome.text)
+                else -> Unit
+            }
+        }
     }
 
     private fun initialisePlayer() {
@@ -1298,5 +1351,13 @@ class PlayerActivity : AppCompatActivity() {
         const val EXTRA_URL = "playback_url"
         const val EXTRA_TITLE = "playback_title"
         const val EXTRA_FOLDER_PATH = "playback_folder_path"
+
+        /**
+         * v1.0.8 — true enquanto o player está em primeiro plano. O
+         * UpdateChecker adia o instalador (APK pendente) para não
+         * interromper a reprodução — a Home instala ao voltar.
+         */
+        @Volatile
+        var isForeground = false
     }
 }
