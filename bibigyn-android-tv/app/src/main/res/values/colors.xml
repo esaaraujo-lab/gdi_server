@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  v2.1.5 — Design tokens (3 tiers, design-tokens skill).
+  v2.1.9 onda 2 — Design tokens (3 tiers, design-tokens skill).
 
   Tier 1 — PRIMITIVOS: valores crus da marca (hex por valor).
   Tier 2 — SEMÂNTICOS: papéis M3 (primary / surface / onSurface ...) que
@@ -12,6 +12,18 @@
   IDÊNTICA nos 3 apps. Cor e tipo são POR MARCA.
   Evolução futura: gerar este arquivo a partir de um token JSON (DTCG)
   com Style Dictionary — ver REDESIGN_NOTES.md.
+
+  PALETA ONDA 2 (Elton 2026-11-14 19:43, "mais profissional e
+  elegante"): M3 dark, tons QUENTES e sóbrios — fundo e superfícies
+  em carvão quente (#121110…) em vez de azul-acinzentado; o LARANJA
+  da marca (#FF6B35) vira ACENTO (botões, progresso, anel de foco,
+  badge), nunca o fundo de tudo; o secundário magenta (#C026D3)
+  vira dourado suave (#D9A05B). Contraste WCAG AA: texto claro
+  #F2EDE6 sobre #121110 ≈ 15:1; secundário #C8C0B6 sobre #1B1917
+  ≈ 7:1; laranja #FF6B35 sobre texto escuro #241207 ≈ 7:1.
+  Nomes antigos mantidos por compatibilidade (drawables antigos
+  referenciam meggy_pink / meggy_purple / meggy_purple_deep /
+  meggy_teal) — o semântico é o que mudou.
 -->
 <resources>
 
@@ -24,26 +36,30 @@
     <color name="meggy_teal">#FF5DDEDA</color>
 
     <!-- ── Tier 2 · semânticos M3 (tema escuro) ── -->
-    <color name="md_background">#FF0D0E12</color>
-    <color name="md_surface">#FF16181F</color>
-    <color name="md_surface_variant">#FF232634</color>
-    <color name="md_surface_container">#FF1B1E27</color>
-    <color name="md_outline">#FF3A3F4F</color>
-    <color name="md_outline_variant">#FF2A2E3A</color>
+    <color name="md_background">#FF121110</color>
+    <color name="md_surface">#FF1B1917</color>
+    <color name="md_surface_variant">#FF2A2622</color>
+    <color name="md_surface_container">#FF211E1B</color>
+    <color name="md_surface_container_lowest">#FF0E0D0C</color>
+    <color name="md_surface_container_low">#FF171514</color>
+    <color name="md_surface_container_high">#FF2A2622</color>
+    <color name="md_surface_container_highest">#FF332F2A</color>
+    <color name="md_outline">#FF453E36</color>
+    <color name="md_outline_variant">#FF2E2A26</color>
 
-    <color name="md_on_background">#FFEAEAF0</color>
-    <color name="md_on_surface">#FFEAEAF0</color>
-    <color name="md_on_surface_variant">#FFC0C4D0</color>
+    <color name="md_on_background">#FFF2EDE6</color>
+    <color name="md_on_surface">#FFF2EDE6</color>
+    <color name="md_on_surface_variant">#FFC8C0B6</color>
 
     <color name="md_primary">#FFFF6B35</color>
-    <color name="md_on_primary">#FF1A0A0F</color>
+    <color name="md_on_primary">#FF241207</color>
     <color name="md_primary_container">#FF7B2D12</color>
     <color name="md_on_primary_container">#FFFFEAF1</color>
 
-    <color name="md_secondary">#FFC026D3</color>
-    <color name="md_on_secondary">#FF1A0A1F</color>
-    <color name="md_secondary_container">#FF5A1B6E</color>
-    <color name="md_on_secondary_container">#FFFBD7FF</color>
+    <color name="md_secondary">#FFD9A05B</color>
+    <color name="md_on_secondary">#FF241A08</color>
+    <color name="md_secondary_container">#FF4A3413</color>
+    <color name="md_on_secondary_container">#FFF7E8CF</color>
 
     <color name="md_error">#FFCF6679</color>
     <color name="md_on_error">#FF600014</color>
@@ -52,15 +68,15 @@
     <color name="black_overlay">#AA000000</color>
     <color name="white_overlay">#66FFFFFF</color>
     <!-- v1.7.0 additions -->
-    <color name="bg_primary">#0D1117</color>
-    <color name="bg_surface">#161B22</color>
-    <color name="bg_surface_light">#1E2230</color>
-    <color name="bg_card">#1A1F2E</color>
-    <color name="border_subtle">#21262D</color>
-    <color name="border_default">#30363D</color>
-    <color name="text_primary">#E6EDF3</color>
-    <color name="text_secondary">#8B949E</color>
-    <color name="text_muted">#484F58</color>
+    <color name="bg_primary">#121110</color>
+    <color name="bg_surface">#1B1917</color>
+    <color name="bg_surface_light">#2A2622</color>
+    <color name="bg_card">#211E1B</color>
+    <color name="border_subtle">#2E2A26</color>
+    <color name="border_default">#453E36</color>
+    <color name="text_primary">#F2EDE6</color>
+    <color name="text_secondary">#A89E92</color>
+    <color name="text_muted">#6E675E</color>
     <color name="accent_green">#3FB950</color>
     <color name="accent_yellow">#FAB005</color>
     <color name="accent_red">#FF6B6B</color>
@@ -68,16 +84,16 @@
 
     <!-- ── Tier 3 · componentes ── -->
     <!-- v1.8.0 — Tile accents (Netflix/Disney inspired) -->
-    <color name="tile_bg">#FF0F1218</color>
-    <color name="tile_bg_focused">#FF161B22</color>
+    <color name="tile_bg">#FF141210</color>
+    <color name="tile_bg_focused">#FF1B1917</color>
     <color name="tile_scrim_top">#66000000</color>
-    <color name="tile_scrim_bottom">#F00D0E12</color>
+    <color name="tile_scrim_bottom">#F0121110</color>
     <color name="tile_focus_ring">#FFFF6B35</color>
     <color name="tile_focus_halo">#33FF6B35</color>
     <color name="tile_title">#FFFFFFFF</color>
-    <color name="tile_subtitle">#FFC0C4D0</color>
+    <color name="tile_subtitle">#FFC8C0B6</color>
     <color name="hero_pink_accent">#FFFF6B35</color>
-    <color name="header_scrim">#F00D0E12</color>
+    <color name="header_scrim">#F0121110</color>
 
     <!-- v2.1.5 — componentes do redesign -->
     <!-- Fundo da pílula do badge do hero (rosa a 12% sobre o hero). -->
@@ -87,5 +103,5 @@
     <!-- Fundo do tile de ícone do drive (rosa sólido, conceito home). -->
     <color name="drive_icon_tile">#FFFF6B35</color>
     <!-- Texto sobre o tile de ícone do drive (rosa bem escuro). -->
-    <color name="drive_icon_tile_text">#FF1A0A0F</color>
+    <color name="drive_icon_tile_text">#FF241207</color>
 </resources>
