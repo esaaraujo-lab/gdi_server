@@ -1,184 +1,180 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  v2.1.0 — Netflix/Disney+ inspired animated tile WITH thumbnail support.
-
-  Changes vs v1.8.0:
-  • Added card_thumbnail ImageView between card_bg and card_icon.
-    When a thumbnail URL is available, the ImageView loads it via Coil
-    and the emoji icon is hidden. When no thumbnail is available, the
-    ImageView is gone and the emoji+gradient fallback shows.
-  • card_bg (gradient) stays visible underneath the thumbnail as a
-    loading placeholder + fallback.
+  v1.0.4 — Card de rail (conceitos home / Minha lista / busca / detalhe).
+  Estrutura: imagem 16:9 (foto real via Coil quando houver, monograma
+  tipográfico quando não houver — NUNCA emoji de câmera) + título
+  16sp (máx. 2 linhas) + subtítulo 14sp (1 linha) + barra de
+  progresso rosa + texto "% concluído · Xmin restantes".
+  Foco: anel 3dp na cor da marca via FocusAnimator.attachCard()
+  (stroke do card) + escala 1.06×/1.10× + elevação.
+  Raio 12dp, sem hex/dp solto (tokens em dimens.xml / colors.xml).
 -->
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="200dp"
+    android:id="@+id/card_root"
+    android:layout_width="@dimen/rail_card_width"
     android:layout_height="wrap_content"
-    android:layout_marginEnd="12dp"
+    android:layout_marginEnd="@dimen/rail_gap"
+    android:clickable="true"
     android:focusable="true"
     android:focusableInTouchMode="true"
-    android:clickable="true"
-    android:foreground="?attr/selectableItemBackground">
+    android:foreground="?attr/selectableItemBackground"
+    app:cardCornerRadius="@dimen/radius_md"
+    app:cardElevation="@dimen/elevation_0"
+    app:cardBackgroundColor="@color/tile_bg"
+    app:strokeWidth="0dp"
+    app:strokeColor="@color/tile_focus_ring">
 
-    <!-- Pink focus ring (hidden by default, shown on focus) -->
-    <View
-        android:id="@+id/focus_ring"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@drawable/tile_focus_border"
-        android:visibility="invisible" />
-
-    <com.google.android.material.card.MaterialCardView
-        android:id="@+id/card_root"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        app:cardCornerRadius="16dp"
-        app:cardElevation="0dp"
-        app:cardBackgroundColor="#0F1218"
-        app:strokeWidth="0dp"
-        app:strokeColor="@android:color/transparent">
+        android:orientation="vertical">
 
+        <!-- Área da imagem 16:9 -->
         <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="200dp">
+            android:layout_height="@dimen/rail_card_image_height">
 
-            <!-- Thumbnail gradient (set in code via colorFromString) — fallback + loading placeholder -->
+            <!-- Gradiente do curso (colorFromString) — fundo + placeholder -->
             <View
                 android:id="@+id/card_bg"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:background="@drawable/card_gradient_pink" />
 
-            <!-- v2.1.0: Real thumbnail ImageView (Coil-loaded, gone by default) -->
+            <!-- Foto real (Coil) — visível só quando há thumbnail -->
             <ImageView
                 android:id="@+id/card_thumbnail"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:scaleType="centerCrop"
                 android:visibility="gone"
-                android:contentDescription="Thumbnail" />
+                android:contentDescription="@string/thumb_desc" />
 
-            <!-- Big emoji icon (centered) — shown when no thumbnail -->
+            <!-- Monograma tipográfico (fallback) — iniciais do título -->
             <TextView
-                android:id="@+id/card_icon"
+                android:id="@+id/card_monogram"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:gravity="center"
-                android:textSize="44dp"
+                android:textColor="@color/tile_title"
+                android:textSize="@dimen/text_monogram"
+                android:textStyle="bold"
                 android:alpha="0.95" />
 
-            <!-- Top scrim for badge contrast -->
+            <!-- Sombra superior (contraste dos badges) -->
             <View
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
                 android:layout_gravity="top"
                 android:background="@drawable/tile_overlay_top" />
 
-            <!-- Bottom scrim for title contrast (~55% of thumbnail) -->
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="120dp"
-                android:layout_gravity="bottom"
-                android:background="@drawable/tile_overlay_bottom" />
-
-            <!-- Watched ✓ badge (top-right) -->
+            <!-- Badge ✓ assistido (topo, direita) -->
             <TextView
                 android:id="@+id/watched_badge"
                 android:layout_width="24dp"
                 android:layout_height="24dp"
                 android:layout_gravity="top|end"
-                android:layout_margin="10dp"
+                android:layout_margin="@dimen/spacing_sm"
                 android:background="@drawable/badge_watched"
                 android:gravity="center"
                 android:text="✓"
-                android:textColor="#FFFFFF"
+                android:textColor="@color/tile_title"
                 android:textSize="12sp"
                 android:visibility="gone" />
 
-            <!-- ★ v1.0.2: Favorito — adiciona/remove da "Minha lista". -->
+            <!-- ★ Favorito (topo, direita, abaixo do ✓) -->
             <TextView
                 android:id="@+id/fav_star"
                 android:layout_width="32dp"
                 android:layout_height="32dp"
                 android:layout_gravity="top|end"
                 android:layout_marginTop="42dp"
-                android:layout_marginEnd="8dp"
+                android:layout_marginEnd="@dimen/spacing_sm"
                 android:background="@drawable/badge_resume"
-                android:gravity="center"
-                android:text="☆"
-                android:textColor="#FFFFFFFF"
-                android:textSize="16sp"
-                android:visibility="gone"
                 android:clickable="true"
+                android:contentDescription="@string/fav_desc"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
-                android:contentDescription="Adicionar à Minha lista" />
+                android:gravity="center"
+                android:text="☆"
+                android:textColor="@color/tile_title"
+                android:textSize="16sp"
+                android:visibility="gone" />
 
-            <!-- Continue ▶ badge (top-right, below watched) -->
+            <!-- Badge ▶ continuar (topo, esquerda) -->
             <TextView
                 android:id="@+id/continue_badge"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="top|start"
-                android:layout_margin="10dp"
+                android:layout_margin="@dimen/spacing_sm"
                 android:background="@drawable/badge_resume"
                 android:paddingHorizontal="9dp"
                 android:paddingVertical="3dp"
                 android:text="▶ continuar"
-                android:textColor="#FFFF8B9F"
+                android:textColor="@color/md_primary"
                 android:textSize="10sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
+        </FrameLayout>
 
-            <!-- Bottom info: title + subtitle (overlay on scrim) -->
-            <LinearLayout
+        <!-- Conteúdo abaixo da imagem -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="@dimen/spacing_md"
+            android:paddingTop="@dimen/spacing_sm"
+            android:paddingBottom="@dimen/spacing_md">
+
+            <TextView
+                android:id="@+id/card_title"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_gravity="bottom"
-                android:orientation="vertical"
-                android:paddingHorizontal="12dp"
-                android:paddingBottom="10dp">
+                android:ellipsize="end"
+                android:lineSpacingExtra="1dp"
+                android:maxLines="2"
+                android:textColor="@color/tile_title"
+                android:textSize="@dimen/text_card_title"
+                android:textStyle="bold" />
 
-                <TextView
-                    android:id="@+id/card_title"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:textColor="#FFFFFFFF"
-                    android:textSize="13sp"
-                    android:textStyle="bold"
-                    android:shadowColor="#80000000"
-                    android:shadowDx="0"
-                    android:shadowDy="1"
-                    android:shadowRadius="3"
-                    android:maxLines="2"
-                    android:ellipsize="end"
-                    android:lineSpacingExtra="1dp" />
-
-                <TextView
-                    android:id="@+id/card_subtitle"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:textColor="#FFC0C4D0"
-                    android:textSize="10.5sp"
-                    android:layout_marginTop="2dp"
-                    android:maxLines="1"
-                    android:ellipsize="end"
-                    android:alpha="0.92" />
-            </LinearLayout>
-
-            <!-- Progress bar at the very bottom (pink→purple gradient) -->
-            <View
+            <TextView
+                android:id="@+id/card_subtitle"
                 android:layout_width="match_parent"
-                android:layout_height="3dp"
-                android:layout_gravity="bottom"
-                android:background="#1AFFFFFF" />
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:alpha="0.92"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/tile_subtitle"
+                android:textSize="@dimen/text_card_subtitle" />
 
-            <View
-                android:id="@+id/progress_bar"
-                android:layout_width="70dp"
-                android:layout_height="3dp"
-                android:layout_gravity="bottom|start"
-                android:background="@drawable/progress_gradient" />
-        </FrameLayout>
-    </com.google.android.material.card.MaterialCardView>
-</FrameLayout>
+            <!-- Progresso: barra + "% concluído · Xmin restantes" -->
+            <LinearLayout
+                android:id="@+id/progress_row"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <ProgressBar
+                    android:id="@+id/card_progress"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="4dp"
+                    android:max="100"
+                    android:progressDrawable="@drawable/progress_horizontal" />
+
+                <TextView
+                    android:id="@+id/card_progress_text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textColor="@color/md_primary"
+                    android:textSize="@dimen/text_card_progress" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>
