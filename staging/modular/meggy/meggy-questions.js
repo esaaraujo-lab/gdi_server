@@ -348,6 +348,19 @@
   }
 
   // ── generateQuestions: gera mais questões de um PDF específico (para "Gerar mais 5") ──
+  // ★ v2.15.3 (item 4): devolve motivo ESTRUTURADO em vez de boolean:
+  //   {ok, reason, detail, pdfName, pdfsWithText, pdfsTested, pdfsTotal, generated}
+  //   reason: 'no_text' | 'ai_down' | 'bad_format' | 'extract_timeout' | 'no_pdf'.
+  //   O modal do módulo renderiza o motivo (study-courses.js quizFailureHtml)
+  //   em vez de apagar o diagnóstico com a mensagem genérica. Chamadores
+  //   internos (questions()/runQuizSession) usam .ok. O texto do erro
+  //   continua sendo escrito no bodyEl via U.setError (compat com os fluxos
+  //   que leem o bodyEl), mas o motivo estruturado é a fonte da verdade.
+  //   Extração: sonda os PDFs em round-robin (até 5 por chamada) e conta
+  //   quantos têm texto — o erro diz "0 de N PDFs testados têm texto" em
+  //   vez de "os PDFs podem ser…". OCR continua DESATIVADO (v1.0.152):
+  //   PDF sem texto selecionável é PDF escaneado — o erro diz isso
+  //   explicitamente (reativar o OCR é decisão pendente do Elton).
   if(!window.__gdiPdfCursor)window.__gdiPdfCursor=0;
   // ★ Fix 13 (Task 20-8): track the lesson the cursor was advanced for.
   //   When the user switches to a different lesson (via the materials tab),
@@ -355,44 +368,73 @@
   //   PDF instead of resuming at a stale offset from the previous lesson.
   let _gdiPdfCursorLesson = null;
   async function generateQuestions(items,bodyEl,lesson){
-    if(!items||!items.length)return false;
+    const _fail=function(reason,detail,pdfName,pdfsWithText,pdfsTested,pdfsTotal){
+      return {ok:false,reason:reason,detail:detail||'',pdfName:pdfName||'',pdfsWithText:pdfsWithText||0,pdfsTested:pdfsTested||0,pdfsTotal:pdfsTotal||0,generated:0};
+    };
+    if(!items||!items.length){
+      if(bodyEl)U.setError(bodyEl,'Nenhum PDF neste módulo para gerar questões.');
+      return _fail('no_pdf','Nenhum PDF listado neste módulo.','',0,0,0);
+    }
     // ★ Fix 13: reset cursor on lesson change.
     if(_gdiPdfCursorLesson !== lesson){
       _gdiPdfCursorLesson = lesson;
       window.__gdiPdfCursor = 0;
     }
-    const pdfIdx=window.__gdiPdfCursor%items.length;
+    const startIdx=window.__gdiPdfCursor%items.length;
     window.__gdiPdfCursor++;
-    const pdfItem=items[pdfIdx];
-    // ★ FIX 20-14 #A (Agent 14): use spinner-aware loader here too — Fix 14
-    //   (Task 20-8) only covered questions() but NOT generateQuestions()
-    //   (the "Gerar mais 5 questões" flow). Both flows have 5-15s AI
-    //   generation windows where a static text message looks like a frozen
-    //   page. Now consistent with questions().
-    _setLoadingWithSpinner(bodyEl,'Extraindo texto do PDF: '+U.esc(pdfItem.name||'material')+'…');
-    let text;
+    // ★ v2.15.3: sonda até 5 PDFs (round-robin a partir do cursor) e conta
+    //   quantos têm texto extraível — o 1º com texto é usado p/ gerar.
+    //   (Todos os 20 seriam até 20×60s de teto interno; 5 é o limite por
+    //   chamada — o nº testado vai no resultado p/ a mensagem ser honesta.)
+    const PROBE_MAX=Math.min(items.length,5);
     const extractPdfText = window.__gdiMeggy.pdf.extractPdfText; // late-bind
-    try{
-      text=await extractPdfText(pdfItem.url);
-    }catch(e){
-      for(let i=1;i<items.length;i++){
-        const next=items[(pdfIdx+i)%items.length];
-        try{
-          text=await extractPdfText(next.url);
-          if(text&&text.trim().length>=50)break;
-        }catch(_){}
+    let text=null;
+    let pdfItem=items[startIdx];
+    let pdfsWithText=0;
+    let timedOut=0;
+    let probed=0;
+    let firstNoTextName='';
+    for(let k=0;k<PROBE_MAX;k++){
+      const cand=items[(startIdx+k)%items.length];
+      probed++;
+      _setLoadingWithSpinner(bodyEl,'Extraindo texto do PDF: '+U.esc(cand.name||'material')+'… ('+(k+1)+' de '+PROBE_MAX+')');
+      try{
+        const t=await extractPdfText(cand.url);
+        if(t&&t.trim().length>=50){ text=t; pdfItem=cand; pdfsWithText++; break; }
+        if(!firstNoTextName)firstNoTextName=cand.name||'';
+      }catch(e){
+        if(/tempo limite/i.test(e&&e.message||''))timedOut++;
+        if(!firstNoTextName)firstNoTextName=cand.name||'';
       }
-      if(!text||text.trim().length<50){U.setError(bodyEl,'Falha ao extrair texto.');return false;}
     }
-    if(!text||text.trim().length<50){U.setError(bodyEl,'PDF sem texto extraível.');return false;}
+    if(!text||text.trim().length<50){
+      if(timedOut>0&&pdfsWithText===0){
+        const detail='A extração de texto estourou o tempo limite em '+timedOut+' de '+probed+' PDF(s) testado(s) (ex.: '+(firstNoTextName||'material')+'). O arquivo pode ser muito grande ou o CDN do pdf.js está lento. Tente um PDF menor ou recarregue a página.';
+        U.setError(bodyEl,'Tempo limite na extração do PDF.');
+        return _fail('extract_timeout',detail,firstNoTextName,0,probed,items.length);
+      }
+      const detail='Nenhum dos '+probed+' PDF(s) testado(s) deste módulo tem texto selecionável (ex.: '+(firstNoTextName||'material')+'). São PDFs escaneados (só imagens) — OCR desativado, por isso a Meggy não consegue ler o conteúdo. Ative o OCR por IA ou use PDFs com texto selecionável.';
+      U.setError(bodyEl,'PDF sem texto extraível. São PDFs escaneados (só imagens) — OCR desativado.');
+      return _fail('no_text',detail,firstNoTextName,0,probed,items.length);
+    }
     // ★ FIX 20-14 #A (cont.): spinner during AI generation.
     _setLoadingWithSpinner(bodyEl,'Meggy está criando questões…');
     let resp;
     try{
-      resp=await U.callIsa('Baseado neste material, gere 5 questões de concurso público em JSON array. Misture:\n- 3 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"explanation":"..."}\n- 2 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"explanation":"..."}\nSem comentários, só JSON:\n\n'+text.slice(0,15000));
-    }catch(e){U.setError(bodyEl,'Meggy indisponível: '+e.message);return false;}
+      resp=await U.callIsa('Baseado neste material, gere 5 questões de concurso público em JSON array. Misture:\n- 3 múltipla escolha: {\"type\":\"mc\",\"statement\":\"...\",\"options\":[\"a\",\"b\",\"c\",\"d\"],\"correct\":0,\"explanation\":\"...\"}\n- 2 certo/errado (CEBRASPE): {\"type\":\"tf\",\"statement\":\"...\",\"correct\":1,\"explanation\":\"...\"}\nSem comentários, só JSON:\n\n'+text.slice(0,15000));
+    }catch(e){
+      // ★ v2.15.3: callIsa agora dá throw com o erro agregado (ai_down) —
+      //   antes retornava null e caía em "formato inválido".
+      const detail='A Meggy (IA) está indisponível no momento: '+(e&&e.message||e)+' Tente de novo em alguns minutos.';
+      U.setError(bodyEl,detail);
+      return _fail('ai_down',detail,pdfItem.name||'',pdfsWithText,probed,items.length);
+    }
     let arr;
-    try{arr=U.parseJsonArray(resp);}catch(e){U.setError(bodyEl,'Meggy retornou formato inválido: '+e.message);return false;}
+    try{arr=U.parseJsonArray(resp);}catch(e){
+      const detail='A IA respondeu, mas fora do formato esperado: '+(e&&e.message||e);
+      U.setError(bodyEl,'Meggy retornou formato inválido: '+e.message);
+      return _fail('bad_format',detail,pdfItem.name||'',pdfsWithText,probed,items.length);
+    }
     // ★ PATCH B: batch insert (1 read + 1 write)
     const _batchGen=[];
     const cleanArr=[];
@@ -450,9 +492,11 @@
     //   gdi-ui.js defines window.showToast on some pages, which would throw
     //   ReferenceError here.
     if(window.showToast) showToast(cleanArr.length+' questões geradas!');
-    return cleanArr.length>0;
+    if(!cleanArr.length){
+      return _fail('bad_format','A IA respondeu sem nenhuma questão válida.',pdfItem.name||'',pdfsWithText,probed,items.length);
+    }
+    return {ok:true,reason:'',detail:'',pdfName:pdfItem.name||'',pdfsWithText:pdfsWithText,pdfsTested:probed,pdfsTotal:items.length,generated:cleanArr.length};
   }
-
   // ── Inicia quiz com questões do banco (não respondidas) ──
   // ★ v2.15.0: onDone opcional — {hits,misses,total,errors:[{statement,
   //   options,correct,picked,correctText,pickedText}]} ao fim de cada batch.
@@ -499,8 +543,8 @@
         <button id="gdi-q-gen-more" class="gdi-btn gdi-btn-primary" style="margin-top:14px;"><i class="bi bi-stars"></i> Gerar 5 questões com Meggy</button>
       </div>`;
       bodyEl.querySelector('#gdi-q-gen-more').onclick=async()=>{
-        const ok=await generateQuestions(bodyEl.__items||[],bodyEl,lesson);
-        if(ok)startQuizFromBank(bodyEl,lesson,onDone);
+        const _gen=await generateQuestions(bodyEl.__items||[],bodyEl,lesson);
+        if(_gen&&_gen.ok)startQuizFromBank(bodyEl,lesson,onDone);
       };
       return;
     }
@@ -546,8 +590,8 @@
         </div>`;
         // Gerar mais 5 questões
         bodyEl.querySelector('#gdi-q-more').onclick=async()=>{
-          const ok=await generateQuestions(bodyEl.__items||[],bodyEl,lesson);
-          if(ok)startQuizFromBank(bodyEl,lesson,onDone);
+          const _gen=await generateQuestions(bodyEl.__items||[],bodyEl,lesson);
+          if(_gen&&_gen.ok)startQuizFromBank(bodyEl,lesson,onDone);
           else startQuizFromBank(bodyEl,lesson,onDone); // tenta de novo com o que tem
         };
         // Próximo batch (questões que ainda não foram respondidas)
