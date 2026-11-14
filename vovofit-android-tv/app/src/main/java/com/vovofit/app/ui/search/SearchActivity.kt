@@ -29,7 +29,7 @@ import com.vovofit.app.util.TvUtils
  * Barra de busca arredondada + chips Todos/Concursos/Cursos/Aulas/
  * Resumos + "Buscas recentes" (chips com relógio, máx. 5, persistidas
  * no SessionManager). Resultados como cards horizontais (thumb/
- * monograma, título, metadados, progresso + % e pill "Em andamento").
+ * capa do drive, título, metadados, progresso + % e pill "Em andamento").
  *
  * Filtros (dados reais, sem inventar):
  *  - Concursos: drives com `DriveItem.isConcurso` (Vovó Fit: nenhum drive é concurso)
