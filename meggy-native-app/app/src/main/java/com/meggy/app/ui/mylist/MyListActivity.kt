@@ -140,7 +140,7 @@ class MyListActivity : AppCompatActivity() {
         } else {
             binding.labelBookmarks.visibility = View.VISIBLE
             binding.recyclerBookmarks.visibility = View.VISIBLE
-            bookmarkAdapter.submit(bookmarks)
+            bookmarkAdapter.submitList(bookmarks)
         }
 
         when (currentTab) {
