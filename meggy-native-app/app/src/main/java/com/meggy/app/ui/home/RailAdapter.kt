@@ -85,8 +85,9 @@ class RailAdapter(
 
             // v2.7.11 onda 2 + camada (3) — thumb fotográfica quando
             // houver; sem ela, a imagem da biblioteca por tipo de aula
-            // (nome da aula → curso → pasta); sem match, a capa GERADA
-            // do drive (ThumbArt) — inclusive quando o Coil falhar.
+            // (nome da aula → curso → pasta); sem match, a imagem
+            // 'geral' (fallback da camada 3); sem manifesto, a capa
+            // GERADA do drive (ThumbArt) — inclusive quando o Coil falhar.
             // Monograma com letras NUNCA mais é thumb.
             val thumb = LibraryCovers.remoteCover(
                 item.thumbnailUrl ?: item.file?.thumbnailLink,
