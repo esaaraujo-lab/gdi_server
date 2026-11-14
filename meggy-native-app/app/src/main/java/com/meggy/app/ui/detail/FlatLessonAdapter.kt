@@ -82,7 +82,8 @@ class FlatLessonAdapter(
             flatThumbBg.background = CardGradient.drawable(res, colorFromString(item.name))
 
             // v2.7.11 onda 2 + camada (3) — sem thumb, a imagem da
-            // biblioteca pelo nome da aula/pasta; sem match, a capa
+            // biblioteca pelo nome da aula/pasta; sem match, a imagem
+            // 'geral' (fallback da camada 3); sem manifesto, a capa
             // gerada do drive (nunca monograma).
             val coverRes = ThumbArt.coverResForPath(folderPath)
             val thumb = LibraryCovers.remoteCover(item.thumbnailLink, item.name, folderPath)
