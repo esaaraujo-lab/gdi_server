@@ -5,11 +5,13 @@ import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.vovofit.app.BuildConfig
 import com.vovofit.app.data.ApiService
 import com.vovofit.app.databinding.ActivitySplashBinding
 import com.vovofit.app.ui.home.HomeActivity
 import com.vovofit.app.ui.login.LoginActivity
 import com.vovofit.app.util.SessionManager
+import com.vovofit.app.util.UpdateChecker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -42,6 +44,14 @@ class SplashActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivitySplashBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // v1.0.8 — auto-update: checa nova versão ao ABRIR o app
+        // (throttle 1×/24h, mesmo da Home). Modo silencioso: baixa em
+        // 2º plano sem diálogo e NÃO abre o instalador aqui (a Splash
+        // some em 1,5s) — o APK fica pendente e a Home instala ao
+        // chegar em primeiro plano.
+        UpdateChecker.checkForUpdateThrottled(applicationContext, BuildConfig.VERSION_NAME, silent = true)
+
 
         // Hide system bars for a clean splash.
         window.decorView.systemUiVisibility = (
