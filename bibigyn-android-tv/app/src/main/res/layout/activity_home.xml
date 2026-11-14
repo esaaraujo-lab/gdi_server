@@ -59,6 +59,7 @@
 
             <!-- Hero -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/heroCard"
                 android:layout_width="match_parent"
                 android:layout_height="@dimen/hero_height"
                 android:layout_marginTop="@dimen/spacing_lg"
@@ -70,24 +71,33 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent">
 
+                    <!-- v2.1.9: gradiente escuro limpo (base do hero sem
+                         foto). A foto vem no heroThumb (Coil) + scrim. -->
                     <View
                         android:id="@+id/heroBg"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:background="@drawable/card_gradient_pink" />
+                        android:background="@drawable/hero_gradient" />
 
-                    <!-- Marca do hero (monograma do título) -->
-                    <TextView
-                        android:id="@+id/heroIcon"
-                        android:layout_width="72dp"
-                        android:layout_height="72dp"
-                        android:layout_gravity="top|end"
-                        android:layout_margin="@dimen/spacing_lg"
-                        android:background="@drawable/btn_play_circle"
-                        android:gravity="center"
-                        android:textColor="@color/md_on_primary"
-                        android:textSize="32sp"
-                        android:textStyle="bold" />
+                    <!-- v2.1.9: arte real do hero (thumb do 1º vídeo do
+                         drive). Sem arte, fica só o gradiente escuro. -->
+                    <ImageView
+                        android:id="@+id/heroThumb"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="centerCrop"
+                        android:visibility="gone"
+                        android:contentDescription="@string/thumb_desc" />
+
+                    <!-- Scrim escuro p/ o texto legível sobre a foto -->
+                    <View
+                        android:id="@+id/heroScrim"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/hero_scrim" />
+
+                    <!-- (v2.1.9: heroIcon removido — monograma nunca
+                         mais como arte do hero) -->
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -141,41 +151,12 @@
                             android:textSize="@dimen/text_button"
                             android:textStyle="bold" />
 
-                        <LinearLayout
-                            android:id="@+id/heroDots"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="@dimen/spacing_sm"
-                            android:orientation="horizontal" />
+                        <!-- v2.1.9: dots removidos (fiel ao conceito — sem
+                             indicador; o carrossel troca por swipe + auto) -->
                     </LinearLayout>
 
-                    <TextView
-                        android:id="@+id/heroPrev"
-                        android:layout_width="36dp"
-                        android:layout_height="36dp"
-                        android:layout_gravity="center_vertical|start"
-                        android:layout_marginStart="@dimen/spacing_sm"
-                        android:background="@drawable/btn_play_circle"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:gravity="center"
-                        android:text="‹"
-                        android:textColor="@color/md_on_surface"
-                        android:textSize="24sp" />
-
-                    <TextView
-                        android:id="@+id/heroNext"
-                        android:layout_width="36dp"
-                        android:layout_height="36dp"
-                        android:layout_gravity="center_vertical|end"
-                        android:layout_marginEnd="@dimen/spacing_sm"
-                        android:background="@drawable/btn_play_circle"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:gravity="center"
-                        android:text="›"
-                        android:textColor="@color/md_on_surface"
-                        android:textSize="24sp" />
+                    <!-- v2.1.9: setas removidas (conceito: sem setas;
+                         troca por swipe + avanço automático) -->
                 </FrameLayout>
             </com.google.android.material.card.MaterialCardView>
 
@@ -230,7 +211,7 @@
                                 android:contentDescription="@string/thumb_desc" />
 
                             <TextView
-                                android:id="@+id/featuredMonogram"
+                                android:id="@+id/featuredDriveArt"
                                 android:layout_width="match_parent"
                                 android:layout_height="match_parent"
                                 android:gravity="center"
