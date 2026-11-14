@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  v2.5.0 — Hero gradient (richer, more elegant).
-  Deep purple → magenta → pink diagonal with subtle teal accent.
+  Onda 2 — Hero gradient: carvão quente → marrom profundo → laranja
+  queimado (acento). O roxo/magenta da v2.5.0 saiu da paleta; o
+  gradiente é só o fundo sob a foto da capa (nunca a capa em si).
 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
     <gradient
-        android:startColor="#FF1A0A2E"
-        android:centerColor="#FF7B1FA2"
-        android:endColor="#FFFF8B9F"
+        android:startColor="#FF121110"
+        android:centerColor="#FF3A1E0E"
+        android:endColor="#FF7B2D12"
         android:angle="135"
         android:type="linear" />
 </shape>
