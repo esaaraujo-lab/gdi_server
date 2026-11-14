@@ -8,7 +8,6 @@ import android.widget.Toast
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.meggy.app.util.SessionManager
 import com.meggy.app.data.colorFromString
 import com.meggy.app.data.monogramFor
 import com.meggy.app.databinding.ItemMylistCardBinding
