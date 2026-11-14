@@ -5,11 +5,13 @@ import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.bibigyn.app.BuildConfig
 import com.bibigyn.app.data.ApiService
 import com.bibigyn.app.databinding.ActivitySplashBinding
 import com.bibigyn.app.ui.home.HomeActivity
 import com.bibigyn.app.ui.login.LoginActivity
 import com.bibigyn.app.util.SessionManager
+import com.bibigyn.app.util.UpdateChecker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -42,6 +44,16 @@ class SplashActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivitySplashBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // v2.1.9 — AUTO-UPDATE na abertura do app: checagem com
+        // throttle (1x/24h) contra a API de releases do GitHub, em
+        // 2º plano e silenciosa (sem diálogo; o download e o
+        // instalador seguem as regras do UpdateChecker, inclusive o
+        // adiamento se o player estiver em primeiro plano). Usa o
+        // applicationContext porque a Splash some em 1,5 s — o
+        // instalador precisa de NEW_TASK, não da Activity. A Home
+        // re-checa no onCreate/onResume (o throttle evita duplicar).
+        UpdateChecker.checkForUpdateThrottled(applicationContext, BuildConfig.VERSION_NAME)
 
         // Hide system bars for a clean splash.
         window.decorView.systemUiVisibility = (
