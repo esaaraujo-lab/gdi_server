@@ -120,6 +120,15 @@
 
   function renderPlan(container, savedPlan){
     const plan=savedPlan.plan||savedPlan;
+    // ★ v2.15.6-banca: planos já salvos no Drive só têm `week` (o gerador
+    //   legado não devolvia weekSchedule) — normaliza p/ o formato que o
+    //   render entende, senão o plano gerado nunca aparece (o bug que o
+    //   Elton reportou: "Gerar meu plano" não fazia nada).
+    if(plan&&!plan.weekSchedule&&Array.isArray(plan.week)){
+      plan.weekSchedule=plan.week.map(function(d){
+        return { day: d.day, tasks: (d.blocks||[]).map(function(b){ return { course: b.subject, hours: Math.round(parseInt(b.duration,10)/60*2)/2, note: b.time }; }) };
+      });
+    }
     if(!plan||!plan.weekSchedule){
       renderSetup(container);
       return;
@@ -190,7 +199,7 @@
 
     // Days to exam badge
     let examBadge='';
-    if(plan.daysToExam!==null){
+    if(plan.daysToExam!=null){
       examBadge=`<div style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:600;display:inline-block;margin-bottom:10px;">⏰ ${plan.daysToExam} dias até a prova</div>`;
     }
 
@@ -243,16 +252,183 @@
     };
   }
 
+
+  // ═══════════════════════════════════════════════════════════════
+  // ★ v2.15.6: /plano com a Meggy — lista os planos do D1 (study_plans)
+  //   e o formulário "Concurso Prova" (tipo + nome + banca + data +
+  //   edital por URL, texto colado ou PDF com texto extraído no
+  //   navegador). A Meggy gera o plano (POST /api/plans/generate) e ele
+  //   é salvo nos dados do aluno. O plano semanal antigo (Drive) continua
+  //   no link no fim da página (renderSetup/renderPlan intactos).
+  // ═══════════════════════════════════════════════════════════════
+  async function fetchD1Plans(){
+    try{
+      const r=await fetch('/api/plans/list',{credentials:'same-origin'});
+      const d=await r.json();
+      if(d&&d.ok&&Array.isArray(d.plans)) return d.plans;
+    }catch(_){}
+    return [];
+  }
+
+  function planOriginBadge(p){
+    if(p.origin==='meggy-ai') return '<span style="display:inline-block;background:rgba(255,139,159,.15);border:1px solid rgba(255,139,159,.4);color:#ff8b9f;border-radius:999px;padding:2px 8px;font-size:10px;font-weight:600;">🐩 Gerado pela Meggy</span>';
+    return '<span style="display:inline-block;background:rgba(255,212,59,.1);border:1px solid rgba(255,212,59,.3);color:#ffd43b;border-radius:999px;padding:2px 8px;font-size:10px;font-weight:600;">🎯 Determinístico</span>';
+  }
+  function planEditalBadge(p){
+    const s=p.editalSource||'nenhum';
+    // ★ v2.15.6-banca: o perfil da banca é cruzado SEMPRE que a banca é
+    //   conhecida (com edital ou não) — o selo mostra as duas fontes.
+    const perfil=(p.bancaProfile?' 📊 + perfil da banca '+escHtml(p.bancaProfile):'');
+    // ★ merge v2.15.6-crossed: selo de cruzamento — mantém a fonte e o
+    //   perfil do desenho vencedor e acrescenta o selo quando cruzado.
+    const crossed=(p.crossed?' 🔀 Cruzado: edital + histórico da banca':'');
+    if(s==='url') return '<span style="color:#5ddeda;font-size:11px;">📋 Edital: lido da URL'+perfil+crossed+'</span>';
+    if(s==='texto') return '<span style="color:#5ddeda;font-size:11px;">📋 Edital: texto colado'+perfil+crossed+'</span>';
+    if(s==='pdf') return '<span style="color:#5ddeda;font-size:11px;">📋 Edital: PDF enviado'+perfil+crossed+'</span>';
+    if(s==='url-falha') return '<span style="color:#fab005;font-size:11px;">⚠️ Edital na URL não pôde ser lido — plano sem o edital'+perfil+crossed+'</span>';
+    return '<span style="color:#fab005;font-size:11px;">⚠️ Sem edital — baseado no que mais cai na banca</span>';
+  }
+
+  async function extractEditalPdfText(file, onStatus){
+    try{
+      if(!window.gdiIsaPdf||typeof window.gdiIsaPdf.extractPdfText!=='function') return '';
+      const url=URL.createObjectURL(file);
+      try{
+        const txt=await window.gdiIsaPdf.extractPdfText(url, function(ph){ if(onStatus) onStatus('Extraindo o texto do PDF do edital...'); });
+        return String(txt||'');
+      }finally{ try{ URL.revokeObjectURL(url); }catch(_){} }
+    }catch(_){ return ''; }
+  }
+
+  function renderMeggyPlans(container, plans){
+    const fmtDate=function(ts){ try{ return new Date(ts).toLocaleDateString('pt-BR'); }catch(_){ return ''; } };
+    let listHtml='';
+    if(plans.length){
+      listHtml=plans.map(function(p){
+        return '<div style="background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);border-radius:10px;padding:12px;margin-bottom:8px;">'
+          + '<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;"><div><div style="color:var(--ferreto-text,#f0f6fc);font-size:13px;font-weight:600;">'+escHtml(p.name||'Plano')+'</div>'
+          + '<div style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;margin-top:2px;">'+escHtml(p.banca||'')+(p.examDate?' · prova '+escHtml(p.examDate):'')+' · '+p.totalDays+' dias · '+p.dailyHours+'h/dia'+(p.createdAt?' · '+fmtDate(p.createdAt):'')+'</div>'
+          + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;align-items:center;">'+planOriginBadge(p)+' '+planEditalBadge(p)+'</div></div>'
+          + '<div style="display:flex;gap:6px;flex-shrink:0;"><button class="gdi-btn" data-plan-view="'+escHtml(p.id)+'" style="padding:6px 10px;font-size:12px;">📅 Ver plano</button>'
+          + '<button class="gdi-btn" data-plan-redo="'+escHtml(p.id)+'" style="padding:6px 10px;font-size:12px;">🔄 Refazer</button></div></div></div>';
+      }).join('');
+    } else {
+      listHtml='<div style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;padding:8px 0 14px;">Você ainda não tem plano. Monte o primeiro com a Meggy abaixo.</div>';
+    }
+    const inputStyle='width:100%;box-sizing:border-box;background:var(--ferreto-surface,rgba(0,0,0,.3));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);padding:10px 12px;font-size:14px;';
+    const labelStyle='display:block;color:var(--ferreto-text-muted,#8b949e);font-size:11px;margin-bottom:4px;';
+    container.innerHTML=
+      '<div style="margin-bottom:16px;">'
+      + '<h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 4px;font-size:16px;">🐩 Plano de Estudo</h3>'
+      + '<p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0;">A Meggy lê o seu concurso e o último edital e monta o plano dia a dia — salvo nos seus dados.</p></div>'
+      + '<div style="margin-bottom:18px;"><div style="font-size:12px;color:var(--ferreto-text,#e6edf3);font-weight:600;margin-bottom:8px;">📋 Meus planos</div>'+listHtml+'</div>'
+      + '<div style="background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);border-radius:12px;padding:16px;">'
+      + '<div style="font-size:13px;color:var(--ferreto-text,#e6edf3);font-weight:600;margin-bottom:4px;">🎯 Novo plano com a Meggy — Concurso Prova</div>'
+      + '<p style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;margin:0 0 12px;">Escolha o tipo de concurso e adicione o concurso que você vai prestar. A Meggy busca o último edital e gera o plano.</p>'
+      + '<div style="display:grid;gap:10px;max-width:520px;">'
+      + '<div><label style="'+labelStyle+'">Tipo de concurso</label><select id="gdi-plan2-type" style="'+inputStyle+'"><option value="concurso">Concurso Público</option><option value="enem">ENEM</option><option value="vestibular">Vestibular</option><option value="oab">OAB</option><option value="outro">Outro</option></select></div>'
+      + '<div><label style="'+labelStyle+'">Nome do concurso (ex.: PF 2026, TJSP Escrevente)</label><input id="gdi-plan2-name" type="text" placeholder="Ex.: Polícia Federal 2026" style="'+inputStyle+'"></div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;"><div><label style="'+labelStyle+'">Banca organizadora</label><select id="gdi-plan2-banca" style="'+inputStyle+'"><option value="">Outra / não sei</option><option value="Cebraspe">Cebraspe</option><option value="FGV">FGV</option><option value="FCC">FCC</option><option value="Vunesp">Vunesp</option><option value="IBFC">IBFC</option></select></div>'
+      + '<div><label style="'+labelStyle+'">Data da prova</label><input id="gdi-plan2-date" type="date" style="'+inputStyle+'"></div></div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;"><div><label style="'+labelStyle+'">Horas por dia: <span id="gdi-plan2-hours-label" style="color:var(--ferreto-primary,#ff8b9f);">2h</span></label><input id="gdi-plan2-hours" type="range" min="1" max="8" step="0.5" value="2" style="width:100%;accent-color:var(--ferreto-primary,#ff8b9f);"></div>'
+      + '<div><label style="'+labelStyle+'">Dias de plano (vazio = até a prova)</label><input id="gdi-plan2-days" type="number" min="7" max="180" placeholder="60" style="'+inputStyle+'"></div></div>'
+      + '<div><label style="'+labelStyle+'">URL do edital (a Meggy lê a página pública)</label><input id="gdi-plan2-edital-url" type="url" placeholder="https://.../edital" style="'+inputStyle+'"></div>'
+      + '<div><label style="'+labelStyle+'">Ou cole o texto do edital</label><textarea id="gdi-plan2-edital-text" rows="3" placeholder="Cole aqui o conteúdo programático do edital..." style="'+inputStyle+'"></textarea></div>'
+      + '<div><label style="'+labelStyle+'">Ou envie o PDF do edital (o texto é extraído no seu navegador)</label><input id="gdi-plan2-edital-pdf" type="file" accept="application/pdf,.pdf" style="width:100%;color:var(--ferreto-text-muted,#8b949e);font-size:12px;"><div id="gdi-plan2-pdf-status" style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);margin-top:4px;"></div></div>'
+      + '<div style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);">A Meggy cruza o edital com o que mais cai na banca (perfil semeado) — o histórico da banca entra sempre no plano. Sem edital, usa só o histórico da banca. Para PDF na URL, baixe o arquivo e envie-o aqui.</div>'
+      + '<div id="gdi-plan2-msg" style="font-size:12px;min-height:16px;"></div>'
+      + '<button id="gdi-plan2-generate" class="gdi-btn gdi-btn-primary" style="width:100%;font-size:14px;">🐩 Gerar plano com a Meggy</button>'
+      + '</div></div>'
+      + '<div style="text-align:center;margin-top:14px;"><button id="gdi-plan2-legacy" style="background:none;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:12px;text-decoration:underline;">Plano semanal antigo (Drive)</button></div>';
+    const q=function(s){ return container.querySelector(s); };
+    const hours=q('#gdi-plan2-hours'), hoursLabel=q('#gdi-plan2-hours-label');
+    if(hours&&hoursLabel) hours.oninput=function(){ hoursLabel.textContent=fmtHours(parseFloat(hours.value)); };
+    const pdfInput=q('#gdi-plan2-edital-pdf');
+    if(pdfInput) pdfInput.onchange=function(){
+      const st=q('#gdi-plan2-pdf-status');
+      if(st) st.textContent=pdfInput.files&&pdfInput.files[0]?('Arquivo: '+pdfInput.files[0].name+' — o texto será extraído ao gerar o plano.'):'';
+    };
+    const btn=q('#gdi-plan2-generate');
+    if(btn) btn.onclick=function(){ generateMeggyPlan(container); };
+    const legacy=q('#gdi-plan2-legacy');
+    if(legacy) legacy.onclick=function(){ renderSetup(container); };
+    container.querySelectorAll('[data-plan-view]').forEach(function(b){
+      b.onclick=function(){
+        if(window.Shell&&Shell.views&&typeof Shell.views.showPlanModal==='function') Shell.views.showPlanModal(b.getAttribute('data-plan-view'));
+      };
+    });
+    container.querySelectorAll('[data-plan-redo]').forEach(function(b){
+      b.onclick=function(){
+        const p=(plans||[]).find(function(x){ return x.id===b.getAttribute('data-plan-redo'); });
+        if(!p) return;
+        if(q('#gdi-plan2-name')) q('#gdi-plan2-name').value=p.name||'';
+        if(q('#gdi-plan2-banca')) q('#gdi-plan2-banca').value=p.banca||'';
+        if(q('#gdi-plan2-date')) q('#gdi-plan2-date').value=p.examDate||'';
+        if(q('#gdi-plan2-hours')){ q('#gdi-plan2-hours').value=p.dailyHours||2; if(hoursLabel) hoursLabel.textContent=fmtHours(p.dailyHours||2); }
+        if(q('#gdi-plan2-days')) q('#gdi-plan2-days').value=p.totalDays||'';
+        const form=q('#gdi-plan2-generate');
+        if(form) form.scrollIntoView({behavior:'smooth',block:'center'});
+      };
+    });
+  }
+
+  async function generateMeggyPlan(container){
+    const q=function(s){ return container.querySelector(s); };
+    const btn=q('#gdi-plan2-generate');
+    // ★ merge v2.15.6-crossed (bug achado pelos testes H): a mensagem era
+    //   guardada num nó capturado antes do re-render — renderMeggyPlans
+    //   recria o DOM e o sucesso sumia. Agora showMsg re-consulta
+    //   #gdi-plan2-msg a cada uso (o nó novo, depois do re-render).
+    const showMsg=function(t,err){ const m=q('#gdi-plan2-msg'); if(m){ m.style.color=err?'#ff6b6b':'#9aa4b8'; m.textContent=t; } };
+    // ★ v2.15.6-banca: ler os campos do form DENTRO do try — antes, um
+    //   campo ausente quebrava o clique em silêncio (o botão não fazia
+    //   nada e nenhum erro aparecia).
+    try{
+      if(!btn) throw new Error('formulário não carregado — recarregue a página');
+      const type=q('#gdi-plan2-type').value;
+    const name=q('#gdi-plan2-name').value.trim();
+    const banca=q('#gdi-plan2-banca').value;
+    const examDate=q('#gdi-plan2-date').value;
+    const dailyHours=parseFloat(q('#gdi-plan2-hours').value)||2;
+    let totalDays=parseInt(q('#gdi-plan2-days').value,10);
+    if(!totalDays&&examDate){ const d=new Date(examDate+'T12:00:00'); if(!isNaN(d.getTime())) totalDays=Math.ceil((d.getTime()-Date.now())/86400000); }
+    if(!totalDays||totalDays<7) totalDays=60;
+    if(totalDays>180) totalDays=180;
+    const editalUrl=q('#gdi-plan2-edital-url').value.trim();
+    let editalText=q('#gdi-plan2-edital-text').value.trim();
+    let editalSource=null;
+    const pdfFile=q('#gdi-plan2-edital-pdf').files&&q('#gdi-plan2-edital-pdf').files[0];
+      btn.disabled=true; btn.textContent='🐩 A Meggy está lendo o edital e montando o plano...';
+      if(pdfFile&&!editalText){
+        showMsg('Extraindo o texto do PDF do edital...');
+        const pdfText=await extractEditalPdfText(pdfFile, function(s){ showMsg(s); });
+        if(pdfText&&pdfText.length>=200){ editalText=pdfText; editalSource='pdf'; }
+        else showMsg('O PDF não trouxe texto suficiente — cole o texto do edital ou informe a URL.', true);
+      }
+      if(!editalUrl&&!editalText&&!banca){
+        showMsg('Informe a banca ou o edital (URL, texto ou PDF) para a Meggy montar o plano.', true);
+        btn.disabled=false; btn.textContent='🐩 Gerar plano com a Meggy'; return;
+      }
+      const r=await fetch('/api/plans/generate',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({concursoType:type,name:name,banca:banca,examDate:examDate,dailyHours:dailyHours,totalDays:totalDays,edital:{url:editalUrl||undefined,text:editalText||undefined,source:editalSource||undefined}})});
+      const d=await r.json();
+      if(!d||!d.ok) throw new Error((d&&d.error)||('HTTP '+r.status));
+      const plans=await fetchD1Plans();
+      renderMeggyPlans(container, plans);
+      showMsg((d.fallback?'⚠️ A IA estava indisponível — plano determinístico montado. ':'🐩 Plano gerado pela Meggy! ')+(d.editalNote||''));
+      if(window.Shell&&Shell.views&&typeof Shell.views.showPlanModal==='function'&&d.planId) Shell.views.showPlanModal(d.planId);
+    }catch(e){
+      showMsg('Não foi possível gerar o plano: '+(e.message||e), true);
+      if(btn){ btn.disabled=false; btn.textContent='🐩 Gerar plano com a Meggy'; }
+    }
+  }
+
   async function renderAll(container){
     if(!container)return;
     container.innerHTML='<div style="text-align:center;padding:20px;"><div class="gdi-mat-isa-spin" style="margin:0 auto;"></div></div>';
-    const savedPlan=await fetchPlan();
-    if(savedPlan&&savedPlan.plan){
-      renderPlan(container, savedPlan);
-    }else{
-      renderSetup(container);
-    }
+    const plans=await fetchD1Plans();
+    renderMeggyPlans(container, plans);
   }
+
 
   // ── Namespace exposure ──
   window.__gdiStudy = window.__gdiStudy || {};
@@ -262,7 +438,10 @@
     renderPlan: renderPlan,
     generatePlan: generatePlan,
     savePlan: savePlan,
-    fetchPlan: fetchPlan
+    fetchPlan: fetchPlan,
+    renderMeggyPlans: renderMeggyPlans,
+    generateMeggyPlan: generateMeggyPlan,
+    fetchD1Plans: fetchD1Plans
   };
 
   console.log('[GDI Study Plan] v1.0.139 — plano de estudo adaptativo ativo');
