@@ -1,23 +1,26 @@
 package com.meggy.app.ui.search
 
-import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AnimationUtils
 import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
+import coil.load
 import com.meggy.app.R
 import com.meggy.app.data.DriveItem
 import com.meggy.app.data.FileItem
 import com.meggy.app.data.colorFromString
+import com.meggy.app.data.monogramFor
+import com.meggy.app.databinding.ItemSearchResultBinding
+import com.meggy.app.util.CardGradient
+import com.meggy.app.util.FocusAnimator
+import com.meggy.app.util.Format
 import com.meggy.app.util.SessionManager
-import com.meggy.app.databinding.ItemRailCardBinding
+import com.meggy.app.util.TvUtils
 
 /**
- * v2.0.0 — Sealed result type used by [SearchActivity].
- * Either a Drive (folder) or a File (playable item).
+ * v2.0.0 — Tipo de resultado usado pela [SearchActivity].
  */
 sealed class SearchResult {
     data class Drive(val drive: DriveItem) : SearchResult()
@@ -25,9 +28,10 @@ sealed class SearchResult {
 }
 
 /**
- * Adapter that renders [SearchResult] items as Netflix-style tiles.
- * Uses the same item_rail_card.xml layout as the browse grid so the
- * search results look visually identical.
+ * v2.7.6 — Resultados como cards horizontais (conceito Buscar): thumb/
+ * monograma à esquerda, título (2 linhas), metadados, barra de
+ * progresso + % e pill "Em andamento" quando retomável. Foco via
+ * FocusAnimator (anel do tile_focus_border + escala).
  */
 class SearchResultAdapter(
     private val onDrive: (DriveItem) -> Unit,
@@ -42,10 +46,8 @@ class SearchResultAdapter(
         notifyDataSetChanged()
     }
 
-    inner class VH(val binding: ItemRailCardBinding) : RecyclerView.ViewHolder(binding.root) {
+    inner class VH(val binding: ItemSearchResultBinding) : RecyclerView.ViewHolder(binding.root) {
         init {
-            binding.root.isFocusable = true
-            binding.root.isFocusableInTouchMode = true
             binding.root.setOnClickListener {
                 val pos = bindingAdapterPosition
                 if (pos == RecyclerView.NO_POSITION) return@setOnClickListener
@@ -54,124 +56,77 @@ class SearchResultAdapter(
                     is SearchResult.File -> onFile(item.file)
                 }
             }
-            binding.root.setOnFocusChangeListener { _, hasFocus -> animateFocus(hasFocus) }
-        }
-
-        fun animateFocus(hasFocus: Boolean) {
-            val scale = if (hasFocus) 1.06f else 1f
-            binding.cardRoot.animate().scaleX(scale).scaleY(scale).setDuration(180).start()
-            binding.cardRoot.cardElevation = if (hasFocus) 16f else 0f
-            binding.focusRing.visibility = if (hasFocus) View.VISIBLE else View.INVISIBLE
+            FocusAnimator.attach(binding.root, TvUtils.isTv(binding.root.context))
         }
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
         val inflater = LayoutInflater.from(parent.context)
-        val vh = VH(ItemRailCardBinding.inflate(inflater, parent, false))
-        vh.binding.root.layoutParams = ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        )
-        return vh
+        return VH(ItemSearchResultBinding.inflate(inflater, parent, false))
     }
 
     override fun onBindViewHolder(holder: VH, position: Int) {
         val res = holder.itemView.resources
+        val ctx = holder.itemView.context
+        val sm = SessionManager.get(ctx)
         when (val item = items[position]) {
             is SearchResult.Drive -> {
                 val d = item.drive
                 with(holder.binding) {
-                    cardTitle.text = d.name
-                    cardSubtitle.text = "drive"
-                    cardIcon.text = d.icon
-                    val base = colorFromString(d.name)
-                    cardBg.background = gradient(res, base)
-                    progressBar.visibility = View.GONE
-                    watchedBadge.visibility = View.GONE
-                    continueBadge.visibility = View.GONE
-
-                    // ★ v2.7.4: ⭐ Minha lista — favorita o drive (curso).
-                    val coursePath = "/${d.index}:/"
-                    val sm = SessionManager.get(holder.itemView.context)
-                    favStar.visibility = View.VISIBLE
-                    favStar.text = if (sm.isFavoriteCourse(coursePath)) "⭐" else "☆"
-                    favStar.setOnClickListener {
-                        val nowFav = sm.toggleFavoriteCourse(coursePath, d.name)
-                        favStar.text = if (nowFav) "⭐" else "☆"
-                        Toast.makeText(holder.itemView.context,
-                            if (nowFav) "⭐ Curso adicionado à Minha lista"
-                            else "Curso removido da Minha lista",
-                            Toast.LENGTH_SHORT).show()
-                    }
+                    resultTitle.text = d.name
+                    resultMeta.text = if (d.isConcurso) "Concurso · ${d.tagline}" else "Curso · ${d.tagline}"
+                    resultBg.background = CardGradient.drawable(res, colorFromString(d.name))
+                    resultThumb.visibility = View.GONE
+                    resultMonogram.visibility = View.VISIBLE
+                    resultMonogram.text = monogramFor(d.name)
+                    resultProgressRow.visibility = View.GONE
+                    resultPill.visibility = View.GONE
                 }
             }
             is SearchResult.File -> {
                 val f = item.file
                 with(holder.binding) {
-                    cardTitle.text = f.name
-                    cardSubtitle.text = when {
-                        f.isVideo -> "vídeo"
-                        f.isAudio -> "áudio"
-                        f.isPdf -> "PDF"
+                    resultTitle.text = f.name
+                    resultMeta.text = when {
+                        f.isVideo -> "Aula em vídeo"
+                        f.isAudio -> "Áudio"
+                        f.isPdf -> "PDF · ${f.humanSize}"
+                        f.isMarkdown -> "Markdown · ${f.humanSize}"
+                        f.isFolder -> "Pasta"
                         else -> f.humanSize
                     }
-                    cardIcon.text = when {
-                        f.isVideo -> "\uD83C\uDFA5"
-                        f.isAudio -> "\uD83C\uDFB5"
-                        f.isPdf -> "\uD83D\uDCC4"
-                        else -> "\uD83D\uDCC4"
-                    }
-                    val base = colorFromString(f.name)
-                    cardBg.background = gradient(res, base)
-                    progressBar.visibility = View.GONE
-                    watchedBadge.visibility = View.GONE
-                    continueBadge.visibility = View.GONE
-
-                    // ★ v2.7.4: ⭐ Minha lista — favorita o arquivo.
-                    // Pasta = favorita o curso (a pasta inteira).
-                    val sm = SessionManager.get(holder.itemView.context)
-                    favStar.visibility = View.VISIBLE
-                    if (f.isFolder) {
-                        val fp = f.folderPath ?: ""
-                        val coursePath = if (fp.endsWith("/")) "$fp${f.name}/" else "$fp/${f.name}/"
-                        favStar.text = if (sm.isFavoriteCourse(coursePath)) "⭐" else "☆"
-                        favStar.setOnClickListener {
-                            val nowFav = sm.toggleFavoriteCourse(coursePath, f.name)
-                            favStar.text = if (nowFav) "⭐" else "☆"
-                            Toast.makeText(holder.itemView.context,
-                                if (nowFav) "⭐ Curso adicionado à Minha lista"
-                                else "Curso removido da Minha lista",
-                                Toast.LENGTH_SHORT).show()
-                        }
+                    resultBg.background = CardGradient.drawable(res, colorFromString(f.name))
+                    val thumb = f.thumbnailLink
+                    if (!thumb.isNullOrBlank() && (f.isVideo || f.isAudio || f.isPdf)) {
+                        resultThumb.visibility = View.VISIBLE
+                        resultMonogram.visibility = View.GONE
+                        resultThumb.load(thumb) { error(R.drawable.card_gradient_pink) }
                     } else {
-                        val fp = f.folderPath ?: ""
-                        favStar.text = if (sm.isFavorite(fp, f.name)) "⭐" else "☆"
-                        favStar.setOnClickListener {
-                            val nowFav = sm.toggleFavorite(f)
-                            favStar.text = if (nowFav) "⭐" else "☆"
-                            Toast.makeText(holder.itemView.context,
-                                if (nowFav) "⭐ Adicionado à Minha lista"
-                                else "Removido da Minha lista",
-                                Toast.LENGTH_SHORT).show()
-                        }
+                        resultThumb.visibility = View.GONE
+                        resultMonogram.visibility = View.VISIBLE
+                        resultMonogram.text = monogramFor(f.name)
+                    }
+                    // Progresso quando retomável.
+                    val fp = f.folderPath ?: ""
+                    val progress = if (f.isVideo || f.isAudio) sm.getResumeProgress(fp, f.name) else 0
+                    if (progress > 0) {
+                        val pos = sm.getResume(fp, f.name)
+                        val dur = sm.getResumeDuration(fp, f.name)
+                        resultProgressRow.visibility = View.VISIBLE
+                        resultProgress.progress = progress
+                        resultProgressText.text = "$progress% · ${Format.remainingText(dur, pos)}"
+                        resultPill.visibility = View.VISIBLE
+                    } else {
+                        resultProgressRow.visibility = View.GONE
+                        resultPill.visibility = View.GONE
                     }
                 }
             }
         }
-        // Staggered appear
-        val anim = AnimationUtils.loadAnimation(holder.itemView.context, R.anim.tile_appear)
+        val anim = AnimationUtils.loadAnimation(ctx, R.anim.tile_appear)
         anim.startOffset = (position % 12) * 40L
         holder.binding.root.startAnimation(anim)
     }
 
     override fun getItemCount(): Int = items.size
-
-    private fun gradient(res: android.content.res.Resources, baseColor: Int): GradientDrawable {
-        val r = Color.red(baseColor); val g = Color.green(baseColor); val b = Color.blue(baseColor)
-        val start = Color.argb(0x59, r, g, b)
-        val end = Color.parseColor("#FF0F1218")
-        return GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(start, end)).apply {
-            cornerRadius = 16 * res.displayMetrics.density
-        }
-    }
 }
