@@ -5,11 +5,11 @@ import android.graphics.Rect
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.MotionEvent
 import android.view.View
 import android.view.animation.AlphaAnimation
 import android.view.animation.AnimationSet
 import android.view.animation.DecelerateInterpolator
-import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -29,12 +29,12 @@ import com.meggy.app.ui.mylist.MyListActivity
 import com.meggy.app.ui.player.PlayerActivity
 import com.meggy.app.ui.search.SearchActivity
 import com.meggy.app.ui.settings.SettingsActivity
-import com.meggy.app.data.monogramFor
 import com.meggy.app.util.AuthHelper
 import com.meggy.app.util.CrossFolderPlaylist
 import com.meggy.app.util.PlaylistManager
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.Format
+import com.meggy.app.util.ThumbArt
 import com.meggy.app.util.TvUtils
 import com.meggy.app.util.FocusAnimator
 import com.meggy.app.util.setWordEllipsized
@@ -117,6 +117,12 @@ class HomeActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        // v2.7.11 — a nav inferior SEMPRE mostra "Início" aqui: o
+        // BottomNavigationView marcava o item tocado (ex. Ajustes) ao
+        // abrir a outra aba, e voltar com Back não passava por onCreate
+        // nem onNewIntent — por isso a home aparecia com "Ajustes"
+        // destacado enquanto a tela era a home.
+        binding.bottomNav.selectedItemId = R.id.nav_home
         // v2.7.6: re-checa atualização ao voltar (throttle 1×/24h) e
         // restaura o foco nos rails (TV).
         UpdateChecker.checkForUpdateThrottled(this, BuildConfig.VERSION_NAME)
@@ -154,7 +160,7 @@ class HomeActivity : AppCompatActivity() {
         heroRotator?.start()
     }
 
-    private class HeroRotator(
+    private inner class HeroRotator(
         private val binding: ActivityHomeBinding,
         private val items: List<HeroItem>,
         private val onClick: (HeroItem) -> Unit
@@ -163,11 +169,24 @@ class HomeActivity : AppCompatActivity() {
         private var index = 0
         private val rotateRunnable = Runnable { next() }
 
+        // v2.7.11 — sem setas e sem dots (conceito): navegação por
+        // swipe no card + avanço automático a cada 8s.
+        private var downX = 0f
+        private val heroThumbCache = mutableMapOf<String, String?>()
+
         init {
             binding.heroPlay.setOnClickListener { onClick(items[index]) }
-            binding.heroPrev.setOnClickListener { prev() }
-            binding.heroNext.setOnClickListener { next() }
-            buildDots()
+            binding.heroCard.setOnTouchListener { _, ev ->
+                when (ev.action) {
+                    MotionEvent.ACTION_DOWN -> { downX = ev.x; false }
+                    MotionEvent.ACTION_UP -> {
+                        val dx = ev.x - downX
+                        if (dx > 120) prev() else if (dx < -120) next()
+                        false
+                    }
+                    else -> false
+                }
+            }
             render(animate = false)
         }
 
@@ -193,9 +212,7 @@ class HomeActivity : AppCompatActivity() {
             binding.heroBadge.text = item.badge
             binding.heroTitle.setWordEllipsized(item.title)
             binding.heroSubtitle.setWordEllipsized(item.subtitle)
-            // v2.7.6: monograma (sem emoji) — não há foto de hero nos dados.
-            binding.heroIcon.text = monogramFor(item.title)
-            updateDots()
+            loadHeroArt(item)
             if (animate) {
                 val inn = AlphaAnimation(0f, 1f).apply { duration = 300 }
                 val set = AnimationSet(true).apply {
@@ -205,39 +222,49 @@ class HomeActivity : AppCompatActivity() {
                 binding.heroBadge.startAnimation(inn)
                 binding.heroTitle.startAnimation(inn)
                 binding.heroSubtitle.startAnimation(inn)
-                binding.heroIcon.startAnimation(inn)
             }
         }
 
-        private fun buildDots() {
-            binding.heroDots.removeAllViews()
-            for (i in items.indices) {
-                // ★ v2.7.4: bolinha clicável — salta para o slide.
-                val dot = TextView(binding.root.context).apply {
-                    text = "•"
-                    textSize = 18f
-                    setTextColor(0x66FFFFFF)
-                    setPadding(6, 0, 6, 0)
-                    isClickable = true
-                    isFocusable = true
-                    setOnClickListener {
-                        index = i
-                        render(animate = true)
-                        handler.removeCallbacks(rotateRunnable)
-                        handler.postDelayed(rotateRunnable, 8000L)
-                    }
+        /**
+         * v2.7.11 — arte do hero (conceito: foto real + scrim escuro).
+         * Os HeroItems são curados e não trazem thumb: busca a thumb do
+         * primeiro vídeo da pasta do drive (1 página, com cache por
+         * drivePath). Sem thumb no Drive, fica o gradiente escuro limpo
+         * — sem bola de monograma.
+         */
+        private fun loadHeroArt(item: HeroItem) {
+            val cached = heroThumbCache[item.drivePath]
+            if (cached != null) { showHeroArt(cached); return }
+            if (heroThumbCache.containsKey(item.drivePath)) { showHeroArt(null); return }
+            showHeroArt(null)
+            lifecycleScope.launch {
+                val thumb = withContext(Dispatchers.IO) {
+                    runCatching { api.listFolder(item.drivePath, 1) }.getOrNull()
+                        ?.firstOrNull { (it.isVideo || it.isAudio) && !it.thumbnailLink.isNullOrBlank() }
+                        ?.thumbnailLink
                 }
-                binding.heroDots.addView(dot)
+                heroThumbCache[item.drivePath] = thumb
+                if (items[index] == item) showHeroArt(thumb)
             }
         }
 
-        private fun updateDots() {
-            for (i in 0 until binding.heroDots.childCount) {
-                val dot = binding.heroDots.getChildAt(i) as? TextView ?: continue
-                dot.setTextColor(if (i == index) 0xFFFF8B9F.toInt() else 0x66FFFFFF)
-                dot.textSize = if (i == index) 22f else 18f
+        private fun showHeroArt(thumb: String?) {
+            if (thumb.isNullOrBlank()) {
+                binding.heroImage.visibility = View.GONE
+                binding.heroScrim.visibility = View.GONE
+                return
+            }
+            binding.heroImage.visibility = View.VISIBLE
+            binding.heroScrim.visibility = View.VISIBLE
+            binding.heroImage.load(thumb) {
+                error(R.drawable.hero_dark_gradient)
+                listener(onError = { _, _ ->
+                    binding.heroImage.visibility = View.GONE
+                    binding.heroScrim.visibility = View.GONE
+                })
             }
         }
+
     }
 
     // ──────────── v2.0.0: Continue rail multi-item ────────────
@@ -263,9 +290,13 @@ class HomeActivity : AppCompatActivity() {
         // "PF - Agente" or "DirAdmin" depending on the path depth.
         val railItems = recents.map { r ->
             val courseName = extractCourseName(r.folderPath)
+            val displayTitle = Format.lessonDisplayTitle(r.videoName, courseName)
             RailItem(
                 title = r.videoName,
-                subtitle = courseName,
+                displayTitle = displayTitle,
+                // O título já traz o curso ("Curso — Aula 01") → o
+                // subtítulo some (o adapter esconde subtítulo vazio).
+                subtitle = if (displayTitle.startsWith(courseName)) "" else courseName,
                 icon = "🎥",
                 hasProgress = sm.hasResume(r.folderPath, r.videoName),
                 progress = sm.getResumeProgress(r.folderPath, r.videoName),
@@ -280,13 +311,58 @@ class HomeActivity : AppCompatActivity() {
                     folderPath = r.folderPath
                 )
             )
-        }
-        binding.railContinue.adapter = RailAdapter(railItems) { item ->
+        }.toMutableList()
+        val continueAdapter = RailAdapter(railItems) { item ->
             lastFocusContinue = railItems.indexOf(item)
             val match = recents.find { it.videoName == item.title } ?: return@RailAdapter
             continueWatching(match.folderPath, match.videoName, item.subtitle)
         }
+        binding.railContinue.adapter = continueAdapter
+        backfillRecentThumbs(recents, railItems, continueAdapter)
         setupFeaturedContinue(recents)
+    }
+
+    /**
+     * v2.7.11 — Backfill das thumbs dos recents antigos.
+     *
+     * Causa raiz do monograma (verificada no código): ApiService.
+     * listFolder() montava o FileItem à mão e DESCARTAVA o
+     * thumbnailLink (o parser FileItem.fromJson tem o campo + o
+     * fallback drive.google.com/thumbnail?id=, mas nunca era chamado
+     * nesse caminho) — logo launchPlayer() sempre recebia thumb null
+     * e addRecent() nunca gravava thumb nenhuma. Com o listFolder
+     * corrigido, os vídeos abertos DEPOIS da 2.7.11 já salvam a thumb;
+     * os recents de antes continuariam sem — por isso este backfill
+     * lista a pasta de cada recent sem thumb, casa o vídeo pelo nome
+     * e grava a thumb no lugar (sem reordenar). Se o Drive não tiver
+     * thumb, o card mostra a arte-padrão do drive, nunca monograma.
+     * Roda em 2º plano, sem travar a home; falha de rede = ignora.
+     */
+    private fun backfillRecentThumbs(
+        recents: List<SessionManager.RecentItem>,
+        railItems: MutableList<RailItem>,
+        adapter: RailAdapter
+    ) {
+        val missing = recents.filter { it.thumbnailLink.isNullOrBlank() }
+        if (missing.isEmpty()) return
+        val sm = SessionManager.get(this)
+        lifecycleScope.launch {
+            for (r in missing) {
+                val thumb = withContext(Dispatchers.IO) {
+                    runCatching { api.listFolder(r.folderPath) }.getOrNull()
+                        ?.firstOrNull { it.name == r.videoName }?.thumbnailLink
+                }
+                if (thumb.isNullOrBlank()) continue
+                sm.updateRecentThumb(r.folderPath, r.videoName, thumb)
+                val idx = railItems.indexOfFirst {
+                    it.title == r.videoName && it.file?.folderPath == r.folderPath
+                }
+                if (idx >= 0) {
+                    railItems[idx] = railItems[idx].copy(thumbnailUrl = thumb)
+                    adapter.notifyItemChanged(idx)
+                }
+            }
+        }
     }
 
     /**
@@ -312,21 +388,28 @@ class HomeActivity : AppCompatActivity() {
         val pos = sm.getResume(best.folderPath, best.videoName)
         val dur = sm.getResumeDuration(best.folderPath, best.videoName)
         binding.featuredSection.visibility = View.VISIBLE
-        binding.featuredTitle.setWordEllipsized(best.videoName)
+        binding.featuredTitle.setWordEllipsized(
+            Format.lessonDisplayTitle(best.videoName, extractCourseName(best.folderPath)))
         binding.featuredSubtitle.setWordEllipsized(extractCourseName(best.folderPath))
         binding.featuredProgress.progress = progress
         binding.featuredProgressText.text = "$progress% concluído"
         binding.featuredTimeText.text = Format.positionText(pos, dur)
-        binding.featuredMonogram.text = monogramFor(best.videoName)
+        // v2.7.11 — sem monograma: arte-padrão do drive quando não há
+        // thumb (o ícone do drive vem do path da pasta do vídeo).
+        fun showFeaturedFallback() {
+            binding.featuredThumb.visibility = View.GONE
+            binding.featuredFallbackIcon.visibility = View.VISIBLE
+            binding.featuredFallbackIcon.text = ThumbArt.driveIconFor(best.folderPath)
+        }
         if (!best.thumbnailLink.isNullOrBlank()) {
             binding.featuredThumb.visibility = View.VISIBLE
-            binding.featuredMonogram.visibility = View.GONE
+            binding.featuredFallbackIcon.visibility = View.GONE
             binding.featuredThumb.load(best.thumbnailLink) {
                 error(com.meggy.app.R.drawable.card_gradient_pink)
+                listener(onError = { _, _ -> showFeaturedFallback() })
             }
         } else {
-            binding.featuredThumb.visibility = View.GONE
-            binding.featuredMonogram.visibility = View.VISIBLE
+            showFeaturedFallback()
         }
         binding.featuredContinue.setOnClickListener {
             continueWatching(best.folderPath, best.videoName, extractCourseName(best.folderPath))
