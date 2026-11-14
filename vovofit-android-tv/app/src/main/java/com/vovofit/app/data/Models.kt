@@ -267,8 +267,8 @@ private val STRING_COLOR_PALETTE: IntArray = intArrayOf(
     0xFFFF6B6B.toInt(),
     0xFF4ECDC4.toInt(),
     0xFFFFD93D.toInt(),
-    0xFFFF8B9F.toInt(),
-    0xFFC026D3.toInt(),
+    0xFFA3E635.toInt(),
+    0xFF8FAE9B.toInt(),
     0xFF6BCB77.toInt(),
     0xFFFF9F1C.toInt(),
     0xFF7B68EE.toInt(),
@@ -314,24 +314,65 @@ fun driveIndexFromPath(path: String?): Int? {
     return Regex("""^/?(\d+):""").find(path.trim())?.groupValues?.get(1)?.toIntOrNull()
 }
 
-/**
- * v1.0.8 — Arte de capa por drive (drawables locais cover_*, foto real):
- * usada como arte do hero e como fallback dos cards "Continue assistindo"
- * quando o Drive nao devolve thumb (ou o Coil falha). Monograma nunca
- * mais como thumb: a capa garante arte mesmo sem rede. Os 4 drives da
- * Vovo sao os indices 12-15 (QUEIMA DIARIA, TODO DIA, CLUBE DE CASA,
- * SAUDE E FITNESS).
- */
-fun driveCoverRes(driveIndex: Int): Int = when (driveIndex) {
-    12 -> R.drawable.cover_queima_diaria
-    13 -> R.drawable.cover_todo_dia
-    14 -> R.drawable.cover_clube_casa
-    15 -> R.drawable.cover_saude_fitness
-    else -> R.drawable.cover_saude_fitness
-}
+// ──────────────────────────── v1.0.8 onda 2 — capa por path ────────────────────────────
 
-/** v1.0.8 — Indice do drive no inicio do path ("/12:/Queima/..." -> 12). */
-fun driveIndexFromPath(path: String?): Int? {
-    if (path.isNullOrBlank()) return null
-    return Regex("""^/?(\d+):""").find(path.trim())?.groupValues?.get(1)?.toIntOrNull()
+/** Capa do drive de um path qualquer (15 = SAUDE E FITNESS quando desconhecido). */
+fun coverResForPath(path: String?): Int =
+    driveCoverRes(driveIndexFromPath(path) ?: 15)
+
+// ──────────────────────────── Cursos em destaque (admin) ────────────────────────────
+
+/**
+ * v1.0.8 onda 2 — Um curso em destaque do admin (GET /api/featured-courses).
+ *
+ * O backend v2.15.6 passa a devolver `coverUrl` (foto de capa definida pelo
+ * admin; URL http(s), ou null). O parse e defensivo e aceita `coverUrl`
+ * (contrato v2.15.6) e `cover_url` (snake_case) — null quando o campo ainda
+ * nao existe (producao pre-v2 ou backend antigo). Sem coverUrl, a UI usa a
+ * thumb do Drive (b), a imagem da biblioteca por tipo (c) ou a capa local
+ * do drive (d) — nunca monograma.
+ *
+ * Hierarquia da capa (Elton 19:43 + adendo 19:50 — camada 3):
+ *   (a) coverUrl do admin  >  (b) thumbnailLink do Drive  >
+ *   (c) imagem da biblioteca por tipo de aula (CoverLibrary — manifesto
+ *       no jsDelivr, resolvida pelo nome da aula/pasta/curso)  >
+ *   (d) capa local cover_* (foto 16:9 em drawable-nodpi).
+ * Monograma nunca mais como capa.
+ */
+data class FeaturedCourse(
+    val id: Long,
+    val coursePath: String,
+    val courseName: String,
+    val icon: String,
+    val color: String?,
+    val sortOrder: Int,
+    val coverUrl: String?
+) {
+    /** Indice do drive do curso ("/12:/..." -> 12), ou null. */
+    val driveIndex: Int? get() = driveIndexFromPath(coursePath)
+
+    companion object {
+        fun fromJson(o: JSONObject): FeaturedCourse {
+            val cover = o.optString("coverUrl").takeIf { it.isNotBlank() }
+                ?: o.optString("cover_url").takeIf { it.isNotBlank() }
+            return FeaturedCourse(
+                id = o.optLong("id", 0L),
+                coursePath = o.optString("coursePath").takeIf { it.isNotBlank() }
+                    ?: o.optString("course_path"),
+                courseName = o.optString("courseName").takeIf { it.isNotBlank() }
+                    ?: o.optString("course_name"),
+                icon = o.optString("icon"),
+                color = o.optString("color").takeIf { it.isNotBlank() },
+                sortOrder = o.optInt("sortOrder", o.optInt("sort_order", 0)),
+                coverUrl = cover
+            )
+        }
+
+        fun parseList(arr: JSONArray?): List<FeaturedCourse> {
+            if (arr == null) return emptyList()
+            val out = ArrayList<FeaturedCourse>(arr.length())
+            for (i in 0 until arr.length()) out.add(fromJson(arr.getJSONObject(i)))
+            return out
+        }
+    }
 }
