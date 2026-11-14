@@ -1,6 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   v2.7.6 — Design tokens (3 tiers, design-tokens skill).
+  v2.7.11 onda 2 — paleta revisada (M3 + design-tokens): mais
+  sóbria/elegante; o rosa (#FF8B9F) vira ACENTO (primary, foco,
+  progresso, botões) e some dos fundos/containers — o roxo
+  (#7B1FA2/#C026D3) sai dos papéis semânticos (os tokens primitivos
+  seguem existindo por compatibilidade: splash/ícone os usam).
+  Fundos e superfícies viram neutros grafite; o container primário
+  vira rosa-escuro profundo (#3A2029). Contraste WCAG AA verificado
+  (ver scripts/verify-wave2-meggy.py): texto normal >= 4.5:1 em
+  todos os pares; anel de foco rosa sobre o fundo 8.6:1.
 
   Tier 1 — PRIMITIVOS: valores crus da marca (hex por valor).
   Tier 2 — SEMÂNTICOS: papéis M3 (primary / surface / onSurface ...) que
@@ -23,26 +32,26 @@
     <color name="meggy_teal">#FF5DDEDA</color>
 
     <!-- ── Tier 2 · semânticos M3 (tema escuro) ── -->
-    <color name="md_background">#FF0D0E12</color>
-    <color name="md_surface">#FF16181F</color>
-    <color name="md_surface_variant">#FF232634</color>
-    <color name="md_surface_container">#FF1B1E27</color>
-    <color name="md_outline">#FF3A3F4F</color>
-    <color name="md_outline_variant">#FF2A2E3A</color>
+    <color name="md_background">#FF0E0F13</color>
+    <color name="md_surface">#FF14161C</color>
+    <color name="md_surface_variant">#FF1E212B</color>
+    <color name="md_surface_container">#FF1A1D26</color>
+    <color name="md_outline">#FF3D4356</color>
+    <color name="md_outline_variant">#FF262A36</color>
 
-    <color name="md_on_background">#FFEAEAF0</color>
-    <color name="md_on_surface">#FFEAEAF0</color>
-    <color name="md_on_surface_variant">#FFC0C4D0</color>
+    <color name="md_on_background">#FFEDEEF2</color>
+    <color name="md_on_surface">#FFEDEEF2</color>
+    <color name="md_on_surface_variant">#FFB9BEC9</color>
 
     <color name="md_primary">#FFFF8B9F</color>
-    <color name="md_on_primary">#FF1A0A0F</color>
-    <color name="md_primary_container">#FF7B1FA2</color>
-    <color name="md_on_primary_container">#FFFFEAF1</color>
+    <color name="md_on_primary">#FF2A0A13</color>
+    <color name="md_primary_container">#FF3A2029</color>
+    <color name="md_on_primary_container">#FFFFD9E0</color>
 
-    <color name="md_secondary">#FFC026D3</color>
-    <color name="md_on_secondary">#FF1A0A1F</color>
-    <color name="md_secondary_container">#FF5A1B6E</color>
-    <color name="md_on_secondary_container">#FFFBD7FF</color>
+    <color name="md_secondary">#FFB3A6B0</color>
+    <color name="md_on_secondary">#FF221A20</color>
+    <color name="md_secondary_container">#FF2B2530</color>
+    <color name="md_on_secondary_container">#FFE8DDE6</color>
 
     <color name="md_error">#FFCF6679</color>
     <color name="md_on_error">#FF600014</color>
@@ -51,15 +60,15 @@
     <color name="black_overlay">#AA000000</color>
     <color name="white_overlay">#66FFFFFF</color>
     <!-- v1.7.0 additions -->
-    <color name="bg_primary">#0D1117</color>
-    <color name="bg_surface">#161B22</color>
-    <color name="bg_surface_light">#1E2230</color>
-    <color name="bg_card">#1A1F2E</color>
-    <color name="border_subtle">#21262D</color>
-    <color name="border_default">#30363D</color>
-    <color name="text_primary">#E6EDF3</color>
-    <color name="text_secondary">#8B949E</color>
-    <color name="text_muted">#484F58</color>
+    <color name="bg_primary">#0E0F13</color>
+    <color name="bg_surface">#14161C</color>
+    <color name="bg_surface_light">#1E212B</color>
+    <color name="bg_card">#1A1D26</color>
+    <color name="border_subtle">#262A36</color>
+    <color name="border_default">#3D4356</color>
+    <color name="text_primary">#EDEEF2</color>
+    <color name="text_secondary">#B9BEC9</color>
+    <color name="text_muted">#8A90A0</color>
     <color name="accent_green">#3FB950</color>
     <color name="accent_yellow">#FAB005</color>
     <color name="accent_red">#FF6B6B</color>
@@ -67,14 +76,14 @@
 
     <!-- ── Tier 3 · componentes ── -->
     <!-- v1.8.0 — Tile accents (Netflix/Disney inspired) -->
-    <color name="tile_bg">#FF0F1218</color>
-    <color name="tile_bg_focused">#FF161B22</color>
+    <color name="tile_bg">#FF14161C</color>
+    <color name="tile_bg_focused">#FF1E212B</color>
     <color name="tile_scrim_top">#66000000</color>
     <color name="tile_scrim_bottom">#F00D0E12</color>
     <color name="tile_focus_ring">#FFFF8B9F</color>
     <color name="tile_focus_halo">#33FF8B9F</color>
     <color name="tile_title">#FFFFFFFF</color>
-    <color name="tile_subtitle">#FFC0C4D0</color>
+    <color name="tile_subtitle">#FFB9BEC9</color>
     <color name="hero_pink_accent">#FFFF8B9F</color>
     <color name="header_scrim">#F00D0E12</color>
 
@@ -86,5 +95,5 @@
     <!-- Fundo do tile de ícone do drive (rosa sólido, conceito home). -->
     <color name="drive_icon_tile">#FFFF8B9F</color>
     <!-- Texto sobre o tile de ícone do drive (rosa bem escuro). -->
-    <color name="drive_icon_tile_text">#FF1A0A0F</color>
+    <color name="drive_icon_tile_text">#FF2A0A13</color>
 </resources>
