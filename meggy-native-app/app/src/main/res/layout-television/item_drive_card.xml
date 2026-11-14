@@ -4,6 +4,7 @@
   Tile de ícone rosa com monograma (iniciais do drive) + nome 13sp
   + linha de metadados (DriveItem.tagline, texto curado — sem
   contagens inventadas). Foco via FocusAnimator.attachCard().
+  v2.7.10: a estrela interna NAO e focavel na TV (mesma armadilha do rail).
 -->
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -57,8 +58,7 @@
                 android:background="@drawable/badge_resume"
                 android:clickable="true"
                 android:contentDescription="@string/fav_desc"
-                android:focusable="true"
-                android:focusableInTouchMode="true"
+                android:focusable="false"
                 android:gravity="center"
                 android:text="☆"
                 android:textColor="@color/tile_title"
