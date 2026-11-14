@@ -2,7 +2,7 @@
  * meggy-pdf-worker.js  —  Web Worker para extração de texto de PDFs (Meggy)
  * ----------------------------------------------------------------------------
  * Substitui o trabalho pesado do gdi-meggy.js:
- *   - extractPdfText()        (loop de até 60 páginas, concatenação de texto)
+ *   - extractPdfText()        (PDF INTEIRO, sem teto de páginas — v2.15.4)
  *   - ocrPdfPage()            (render em canvas na thread principal)
  *
  * Usa OffscreenCanvas (disponível em Chrome/Edge/Firefox/Safari 16.4+) para
@@ -27,13 +27,11 @@
 let pdfjsReady = null;
 let tesseractReady = null;
 
-// ★ FIX Task 20-9 Item 14: hard cap no número de páginas extraídas, para evitar
-// OOM em PDFs gigantes (1000+ páginas — apostilas, livros, anais de congresso).
-// Antes, `maxPages` vinha do caller (60) e era usado direto; um caller futuro
-// podia pedir 500 e travar o worker. Agora, MAX_PAGES=50 é o teto absoluto —
-// `Math.min(doc.numPages, maxPages || MAX_PAGES, MAX_PAGES)` garante que mesmo
-// se o caller pedir 60 (como o bridge faz hoje), extraímos no máximo 50.
-const MAX_PAGES = 50;
+// ★ v2.15.4: SEM teto de páginas (ordem do Elton 2026-11-13) — o hard cap
+//   MAX_PAGES=50 (FIX Task 20-9 Item 14, anti-OOM) foi REMOVIDO. O worker
+//   processa o PDF inteiro; `pg.cleanup()` por página continua limitando a
+//   memória. Risco residual conhecido: PDF de 1000+ páginas acumula o texto
+//   inteiro em memória — verificar ao vivo com apostila grande.
 // ★ FIX Task 20-9 Item 15: Tesseract.js pode demorar >60s em páginas densas
 // (scans de livros, imagens de alta resolução). Sem timeout, o worker ficava
 // bloqueado no `Tesseract.recognize()` por minutos, segurando o `pdfPending`
@@ -115,17 +113,18 @@ async function extractFromBuffer({ id, buf, maxPages, maxChars, tryOcr }) {
   // no finally, espelhando meggy-pdf-engine.js:354-475.
   try {
     doc = await lib.getDocument({ data: buf, disableFontFace: true }).promise;
-    // ★ FIX Task 20-9 Item 14: hard cap MAX_PAGES=50. `maxPages` do caller
-    // (hoje 60) é respeitado se menor, mas nunca excede 50. Previne OOM em
-    // PDFs de 1000+ páginas (apostilas, livros) que podiam alocar centenas
-    // de MB de canvas/text-content no worker.
-    const n = Math.min(doc.numPages, maxPages || MAX_PAGES, MAX_PAGES);
+    // ★ v2.15.4: sem teto de páginas — n = PDF inteiro (ou maxPages
+    //   explícito do chamador, se ele pedir). Sem teto de chars: MAX só
+    //   existe se o chamador pedir maxChars explicitamente (era 25000).
+    const n = (typeof maxPages==='number'&&maxPages>0) ? Math.min(doc.numPages,maxPages) : doc.numPages;
     let text = '';
     let usedOcr = false;
-    const MAX = maxChars || 25000;
+    let ocrFailures = 0; // ★ v2.15.4: páginas cuja OCR falhou (não mais engolida)
+    let ocrLastReason = ''; // ★ v2.15.4: motivo real da última falha de OCR
+    const MAX = (typeof maxChars==='number'&&maxChars>0) ? maxChars : Infinity;
 
     for (let i = 1; i <= n; i++) {
-      self.postMessage({ type: 'progress', id, page: i, total: n });
+      self.postMessage({ type: 'progress', id, phase: 'extract', page: i, total: n });
       const pg = await doc.getPage(i);
       const tc = await pg.getTextContent({ normalizeWhitespace: true, includeMarkedContent: true });
       let pageText = '';
@@ -138,16 +137,24 @@ async function extractFromBuffer({ id, buf, maxPages, maxChars, tryOcr }) {
       }
       pageText = pageText.trim();
 
-      // Se a página não tem texto visível, tenta OCR (se habilitado)
+      // Se a página não tem texto visível, tenta OCR (se habilitado):
+      // ★ v2.15.4: IA por /api/ai/ocr PRIMEIRO (sem teto de páginas);
+      //   Tesseract (dentro do worker — não bloqueia a UI) só como fallback.
+      //   Falha de OCR NÃO é mais engolida em silêncio: conta em ocrFailures
+      //   e o motivo fica em ocrLastReason (vai no 'done'; se o documento
+      //   inteiro ficar sem texto por falha de OCR, vira 'error' honesto).
       if (tryOcr && pageText.length < 20) {
-        self.postMessage({ type: 'ocr', id, page: i, total: n });
+        self.postMessage({ type: 'ocr', id, phase: 'ocr-page', page: i, total: n });
         try {
-          const ocrText = await ocrPage(lib, pg);
+          const ocrText = await ocrPageWithAI(pg);
           if (ocrText && ocrText.length > pageText.length) {
             pageText = ocrText;
             usedOcr = true;
+          } else {
+            const tessText = await ocrPage(lib, pg);
+            if (tessText && tessText.length > pageText.length) { pageText = tessText; usedOcr = true; }
           }
-        } catch (_) { /* OCR falhou — mantém texto vazio */ }
+        } catch (e) { ocrFailures++; ocrLastReason = (e&&e.message)||String(e); }
       }
 
       text += pageText + '\n\n';
@@ -155,11 +162,52 @@ async function extractFromBuffer({ id, buf, maxPages, maxChars, tryOcr }) {
       if (text.length > MAX) { text = text.slice(0, MAX); break; }
     }
 
-    self.postMessage({ type: 'done', id, text, pages: n, usedOcr });
+    // ★ v2.15.4: documento inteiro sem texto POR FALHA DE OCR vira erro
+    //   honesto (com o motivo real) em vez de 'done' com texto vazio — o
+    //   bridge cai para o motor da thread principal, que tenta o OCR de
+    //   novo e devolve o motivo ao chamador. Nunca ok-vazio silencioso.
+    if (text.trim().length < 50 && ocrFailures > 0 && !usedOcr) {
+      self.postMessage({ type: 'error', id, message: 'OCR indisponível: ' + (ocrLastReason || 'a IA não conseguiu ler este PDF') + ' — tente novamente.' });
+      return;
+    }
+    self.postMessage({ type: 'done', id, text, pages: n, usedOcr, ocrFailures, ocrLastReason });
   } finally {
     // Garante que o PDFDocumentProxy seja destruído mesmo em falhas parciais.
     if (doc) { try { doc.destroy(); } catch (_) {} }
   }
+}
+
+// ★ v2.15.4: OCR por IA dentro do worker — POST /api/ai/ocr (sem modelo:
+//   o servidor resolve on-demand). O worker nasceu de Blob URL, então a
+//   URL é ABSOLUTA (self.location.origin) — fetch relativo falharia.
+//   credentials:'same-origin' leva o cookie de sessão (endpoint exige login).
+const OCR_API_URL = (self.location && self.location.origin ? self.location.origin : '') + '/api/ai/ocr';
+
+function _wUint8ToBase64(bytes){
+  let binary='';
+  const chunkSize=0x8000;
+  for(let i=0;i<bytes.length;i+=chunkSize){
+    binary+=String.fromCharCode.apply(null,bytes.subarray(i,Math.min(i+chunkSize,bytes.length)));
+  }
+  return btoa(binary);
+}
+
+async function ocrPageWithAI(page){
+  if (typeof OffscreenCanvas === 'undefined') throw new Error('OffscreenCanvas indisponível — OCR por IA não pode renderizar a página.');
+  const viewport = page.getViewport({ scale: 2 });
+  const canvas = new OffscreenCanvas(viewport.width, viewport.height);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, viewport.width, viewport.height);
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  const blob = await canvas.convertToBlob({ type: 'image/png' });
+  const imageB64 = _wUint8ToBase64(new Uint8Array(await blob.arrayBuffer()));
+  const r = await fetch(OCR_API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ image: imageB64, prompt: 'Transcreva TODO o texto visível desta imagem, preservando parágrafos e ordem de leitura. Responda apenas com o texto transcrito, sem comentários.' }) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((d && (d.detail || d.error)) || ('OCR HTTP ' + r.status));
+  const text = String((d && d.response) || '').trim();
+  if (!text) throw new Error('A IA não retornou texto para esta página.');
+  return text;
 }
 
 async function ocrPage(lib, page) {
