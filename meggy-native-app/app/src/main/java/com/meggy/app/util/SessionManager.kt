@@ -108,6 +108,11 @@ class SessionManager private constructor(context: Context) {
 
     fun saveResume(folderPath: String, videoName: String, positionMs: Long) {
         prefs.edit().putLong(resumeKey(folderPath, videoName), positionMs).apply()
+        // v2.7.11 ECOSSISTEMA — costura do resume entre aparelhos
+        // (PENDENTE, endpoint v2.15.6): ver ProgressSync. Enquanto
+        // SERVER_RESUME_ENABLED == false, não faz nada e o resume
+        // local acima continua sendo a única fonte.
+        ProgressSync.noteResumeSaved(folderPath, videoName, positionMs)
     }
 
     /**
@@ -118,12 +123,15 @@ class SessionManager private constructor(context: Context) {
      */
     fun getResume(folderPath: String, videoName: String): Long {
         val pos = prefs.getLong(resumeKey(folderPath, videoName), 0L)
-        if (pos <= 0L) return 0L
+        // v2.7.11 ECOSSISTEMA (PENDENTE, endpoint v2.15.6): sem resume
+        // local, o servidor seria consultado aqui (ver ProgressSync) —
+        // enquanto SERVER_RESUME_ENABLED == false, devolve 0 como antes.
+        if (pos <= 0L) return ProgressSync.resolveResume(folderPath, videoName, 0L)
         val dur = prefs.getLong(durKey(folderPath, videoName), 0L)
         // If we know the duration and the position is within 10s of the end,
         // treat as "finished" — return 0 so the player starts from the beginning.
         if (dur > 0L && dur - pos < 10_000L) return 0L
-        return pos
+        return ProgressSync.resolveResume(folderPath, videoName, pos)
     }
 
     /**
