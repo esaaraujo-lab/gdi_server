@@ -203,6 +203,7 @@
             //   .catch() was attached but no await — the modal closed before
             //   the re-render finished, causing a brief flash of stale content.
             await window.renderCursos(box).catch(()=>{});
+            refreshCursosTips();
           }
         }catch(e){console.warn('[AddCourse] erro ao re-renderizar:',e.message);}
       }
@@ -707,6 +708,16 @@
     return out;
   }
 
+  // ★ v2.15.3 (item 7): re-busca o unificado e re-renderiza a faixa
+  //   "💡 Dica da Meggy" (#meggy-cursos-tips, fora da grade). Os removes
+  //   do módulo re-renderizam só a grade (renderCursos) — sem isto a faixa
+  //   ficava com os totais do curso/concurso removido até o reload.
+  function refreshCursosTips(){
+    try{
+      if(typeof window!=='undefined'&&window.Shell&&window.Shell.views&&typeof window.Shell.views._refreshCursosTips==='function')window.Shell.views._refreshCursosTips();
+    }catch(_){}
+  }
+
   async function renderCursos(box){
     const cs=collectCourses();
     // ★ v2.6: lista única — concursos + em destaque entram na mesma grade
@@ -745,6 +756,7 @@
           });
           showToast('Cursos restaurados');
           renderCursos(box).catch(()=>{});
+          refreshCursosTips();
         }
       };
       return;
@@ -759,8 +771,8 @@
     <div style="margin-bottom:14px;">
       <input id="gdi-courses-search" type="search" placeholder="Buscar curso..." style="width:100%;box-sizing:border-box;background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);padding:9px 12px;font-size:13px;font-family:inherit;" value="${escHtml(box.__search||'')}">
     </div>
-    <div id="gdi-featured-wrap" style="display:none;margin-bottom:18px;"><b style="color:var(--ferreto-text,#f0f6fc);font-size:14px;">⭐ Cursos em destaque</b><div class="gdi-courses" id="gdi-featured-grid" style="margin-top:10px;"></div></div>
-    <div id="gdi-own-wrap"><b style="color:var(--ferreto-text,#f0f6fc);font-size:14px;">📚 Meus Cursos</b><div class="gdi-courses" id="gdi-own-grid" style="margin-top:10px;"></div></div>
+    <div id="gdi-featured-wrap" style="display:none;margin-bottom:18px;"><b style="color:var(--ferreto-text,#f0f6fc);font-size:14px;">⭐ Cursos em destaque</b><div class="gdi-courses" id="gdi-featured-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-top:10px;"></div></div>
+    <div id="gdi-own-wrap"><b style="color:var(--ferreto-text,#f0f6fc);font-size:14px;">📚 Meus Cursos</b><div class="gdi-courses" id="gdi-own-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-top:10px;"></div></div>
     <div id="gdi-courses-pager" style="margin-top:14px;text-align:center;"></div>`;
     const grid=box.querySelector('#gdi-own-grid');
     const featGrid=box.querySelector('#gdi-featured-grid');
@@ -851,6 +863,7 @@
               if(!r.ok||!d.ok)throw new Error((d&&(d.error||d.message))||('HTTP '+r.status));
               __unifiedCache=null;
               renderCursos(box).catch(()=>{});
+              refreshCursosTips();
             }catch(err){if(window.showToast)showToast('Nao foi possivel remover: '+(err&&err.message||err));}
           };
         }
@@ -969,6 +982,7 @@
               try{ if(typeof Bus!=='undefined' && Bus.emit) Bus.emit('courses:changed', {}); }catch(_){}
               showToast('Curso removido');
               renderCursos(box).catch(()=>{});
+              refreshCursosTips();
             }catch(err){ showToast('Não foi possível remover: '+(err&&err.message||err)); }
           }
         };
@@ -1493,6 +1507,7 @@
         if(window.showToast)showToast('Curso "'+courseName+'" adicionado! 🐩 Batalhão de IA iniciando em background...');
         try{
           renderCursos(box).catch(()=>{});
+          refreshCursosTips();
         }catch(e){
           console.warn('[AddCourse] erro ao re-renderizar:',e.message);
         }
@@ -1752,7 +1767,7 @@
             if(homeTab) homeTab.click();
           }catch(_){}
           showToast('Curso "'+name+'" adicionado! 🐩 Batalhão de IA iniciando em background...');
-          try{renderCursos(box).catch(()=>{});}catch(_){}
+          try{renderCursos(box).catch(()=>{});refreshCursosTips();}catch(_){}
           // ★ BATALHÃO para manual
           try{
             const pdfs=[];
@@ -1783,6 +1798,10 @@
                   }));
                 }
               }
+              // ★ v2.15.3 (item 3): marca no_text nos PDFs sem texto
+              //   (extração falhou ou <50 chars) — o servidor não deve
+              //   tratá-los como se tivessem texto.
+              for(const p of pdfs){ const t=(p.text||'').trim(); p.no_text=!(t&&t.length>=50); if(p.no_text)p.text=''; }
               await window.gdiIsaPdf.startBattalion(coursePath, coursePath, name, pdfs);
             }
           }catch(e){console.warn('[Batalhão] falha:',e.message);}
@@ -1857,6 +1876,7 @@
         //   chain completes BEFORE showHiddenCoursesModal reads LS_HIDDEN.
         await unhideCourse(b.dataset.ck);
         showToast('Curso restaurado');
+        refreshCursosTips();
         showHiddenCoursesModal(box);
       };
     });
@@ -1879,6 +1899,7 @@
         });
         showToast('Todos os cursos restaurados');
         renderCursos(box).catch(()=>{});
+        refreshCursosTips();
       }
     };
   }
@@ -2109,6 +2130,7 @@
         await hideCourse(c.key);
         showToast('Curso ocultado');
         renderCursos(box).catch(()=>{});
+        refreshCursosTips();
       }
     };
     // ★ Task FINAL / Fix 2c: botão "Remover" — remove o curso permanentemente
@@ -2165,6 +2187,7 @@
         try{ if(typeof Bus!=='undefined' && Bus.emit) Bus.emit('courses:changed', {}); }catch(_){}
         showToast('Curso removido');
         renderCursos(box).catch(()=>{});
+        refreshCursosTips();
       }catch(e){
         showToast('Erro ao remover: '+(e&&e.message||e));
       }
@@ -2533,7 +2556,11 @@
   // houver nenhuma, lista o Drive recursivamente (profundidade 3, máx. 40
   // listagens, máx. 20 PDFs — mesma enumeração da prévia do servidor e do
   // helper _v215ListModulePdfsRecursive do shell).
-  async function listModulePdfs(courseKey, modulePath){
+  // ★ v2.15.3 (item 3): maxPdfs virou parâmetro (padrão 20). Esta é a
+  //   ÚNICA implementação de descoberta de PDFs — o shell delega para
+  //   ela (_v215ListModulePdfsRecursive). Tenta primeiro o cache do
+  //   scanner (getCourseLessons) e só depois lista o Drive (BFS).
+  async function listModulePdfs(courseKey, modulePath, maxPdfs){
     const out=[]; const seen=new Set();
     const push=(name,url)=>{
       const u=String(url||'');
@@ -2553,7 +2580,7 @@
         if(l&&l.path&&low(l.path).indexOf(target)===0)push(l.name||realName(l.path), l.path);
       }
     }catch(_){}
-    if(out.length)return out.slice(0,20);
+    if(out.length)return out.slice(0, maxPdfs||20);
     try{
       const pw=window.gdiGetPw?window.gdiGetPw(modulePath):'';
       const base=modulePath.endsWith('/')?modulePath:modulePath+'/';
@@ -2576,7 +2603,7 @@
       const queue=[]; const seenDirs=new Set([base]);
       for(const sp of subs){ if(!seenDirs.has(sp)){ seenDirs.add(sp); queue.push({p:sp,d:1}); } }
       let listings=1;
-      while(queue.length&&out.length<20&&listings<40){
+      while(queue.length&&out.length<(maxPdfs||20)&&listings<40){
         const cur=queue.shift();
         let sub=[];
         try{ sub=window.gdiListAllFiles?await window.gdiListAllFiles(cur.p, pw):[]; }catch(_){ continue; }
@@ -2596,7 +2623,7 @@
         }
       }
     }catch(_){}
-    return out.slice(0,20);
+    return out.slice(0, maxPdfs||20);
   }
   // Descobre a qual concurso um módulo pertence (fonte anexada cujo
   // coursePath é prefixo do caminho do módulo). null = nenhum (quiz local).
@@ -2632,6 +2659,36 @@
       }catch(_){}
     }
     return saved;
+  }
+  // ★ v2.15.3 (item 4): motivo estruturado do quiz → HTML. O modal NÃO
+  //   sobrescreve mais o bodyEl com a mensagem genérica quando o banco
+  //   fica em 0 — renderiza o motivo real que generateQuestions devolveu
+  //   (no_text / ai_down / bad_format / extract_timeout / no_pdf).
+  function quizFailureHtml(res){
+    res=res||{};
+    const reason=res.reason||'unknown';
+    const detail=res.detail||'';
+    const n=res.pdfsWithText||0, tot=res.pdfsTotal||0, tested=res.pdfsTested||tot;
+    let title='Não foi possível gerar questões dos PDFs deste módulo.', sub='';
+    if(reason==='no_text'){
+      title='Os PDFs deste módulo não têm texto selecionável.';
+      sub='PDFs escaneados (só imagens) — OCR desativado. '+n+' de '+tested+' PDF(s) testado(s) '+(tot>tested?'(de '+tot+' no módulo) ':'')+'têm texto'+(res.pdfName?(' — ex.: '+res.pdfName):'')+'. Use PDFs com texto ou ative o OCR por IA.';
+    }else if(reason==='ai_down'){
+      title='A Meggy (IA) está indisponível no momento.';
+      sub=detail||'Tente de novo em alguns minutos.';
+    }else if(reason==='bad_format'){
+      title='A IA respondeu, mas fora do formato esperado.';
+      sub=detail||'Tente gerar de novo.';
+    }else if(reason==='extract_timeout'){
+      title='A extração de texto estourou o tempo limite.';
+      sub=detail||'Tente um PDF menor ou recarregue a página.';
+    }else if(reason==='no_pdf'){
+      title='Nenhum PDF encontrado neste módulo.';
+      sub='O quiz precisa de PDFs com texto para gerar questões.';
+    }else{
+      sub=detail||'Tente de novo em alguns minutos.';
+    }
+    return '<div style="padding:20px;text-align:center;color:#ff8b8b;font-size:13px;">'+esc(title)+'<br><span style="color:var(--ferreto-text-muted,#8b949e);">'+esc(sub)+'</span></div>';
   }
   // Abre o quiz do módulo num overlay próprio (o detalhe do curso fica atrás).
   // concursoIdOpt: quando o chamador já sabe o concurso (ex.: detalhe do
@@ -2677,18 +2734,29 @@
         // Gera questões até ter ao menos 10 no banco (máx. 3 rodadas de +5,
         // cada uma de um PDF diferente — o cursor round-robin do Meggy).
         // Se o banco já tem questões do módulo, pula a geração direto p/ o quiz.
+        // Gera questões até ter ao menos 10 no banco (máx. 3 rodadas de +5,
+        // cada uma de um PDF diferente — o cursor round-robin do Meggy).
+        // Se o banco já tem questões do módulo, pula a geração direto p/ o quiz.
+        // ★ v2.15.3 (item 4): guarda o resultado estruturado da última
+        //   geração — se o banco ficar em 0, o modal renderiza o motivo
+        //   real (quizFailureHtml) em vez da mensagem genérica que apagava
+        //   o diagnóstico escrito por generateQuestions.
         let rounds=0;
+        let lastGen=null;
         while(countBankQuestions(moduleName)<10&&rounds<3){
           if(!overlay.isConnected)return;
           bodyEl.innerHTML='<div style="padding:30px;text-align:center;color:var(--ferreto-text-muted,#8b949e);font-size:13px;"><div class="gdi-spinner" style="margin:0 auto 10px;"></div>Meggy criando questões do módulo… (PDF '+(rounds+1)+' de até 3)</div>';
-          let ok=false;
-          try{ ok=await MQ.generateQuestions(pdfs, bodyEl, moduleName); }catch(e){ console.warn('[Quiz módulo] generateQuestions falhou:', e&&e.message); ok=false; }
+          let res=null;
+          try{ res=await MQ.generateQuestions(pdfs, bodyEl, moduleName); }catch(e){ console.warn('[Quiz módulo] generateQuestions falhou:', e&&e.message); res={ok:false,reason:'ai_down',detail:String(e&&e.message||e),pdfsWithText:0,pdfsTested:0,pdfsTotal:pdfs.length}; }
+          // ★ retro-compat: generateQuestions antigo devolvia boolean.
+          if(typeof res==='boolean')res={ok:res,reason:res?'':'unknown',detail:'',pdfsWithText:0,pdfsTested:0,pdfsTotal:pdfs.length};
+          lastGen=res;
           rounds++;
-          if(!ok)break;
+          if(!res||!res.ok)break;
         }
         if(!overlay.isConnected)return;
         if(countBankQuestions(moduleName)===0){
-          bodyEl.innerHTML='<div style="padding:20px;text-align:center;color:#ff8b8b;font-size:13px;">Não foi possível gerar questões dos PDFs deste módulo.<br><span style="color:var(--ferreto-text-muted,#8b949e);">Os PDFs podem ser escaneados (sem texto) ou a Meggy está indisponível.</span></div>';
+          bodyEl.innerHTML=quizFailureHtml(lastGen);
           return;
         }
         bodyEl.__items=pdfs;
@@ -2739,6 +2807,7 @@
     syncCoursesFromDrive: function(){ return (window.__gdiStudy.scanner && window.__gdiStudy.scanner.syncCoursesFromDrive) ? window.__gdiStudy.scanner.syncCoursesFromDrive.apply(this, arguments) : Promise.resolve(); },
     // UI
     renderCursos: renderCursos,
+    refreshCursosTips: refreshCursosTips,
     invalidateUnifiedCache: invalidateUnifiedCache,
     showAddCourseModal: showAddCourseModal,
     showHiddenCoursesModal: showHiddenCoursesModal,
