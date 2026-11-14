@@ -3,6 +3,12 @@
    Dark theme Meggy: #0d1119 bg, #ff8b9f pink, #5ddeda cyan
    ═══════════════════════════════════════════════════════════════ */
 
+/* ★ v2.15.4 (player mobile P0–P2 + flash 1 coluna): este arquivo NÃO
+   existia no disco — baixado do jsDelivr em 2026-11-14
+   (cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/
+   shell/shell.css — 3.154 linhas, 70.143 B). Editar esta cópia; o commit
+   vai pelo gdi_server staging/modular/shell/shell.css (coordenador). */
+
 /* ─── Shell root ─── */
 #meggy-shell {
   position: fixed;
@@ -247,6 +253,18 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 16px;
+}
+
+/* ★ v2.15.4 (flash 1 coluna, v2.15.3 item 5): o grid de cursos vinha só
+   do inline de study-courses.js (#gdi-featured-grid / #gdi-own-grid) —
+   se o inline se perdesse num re-render, a grade colapsava para 1 coluna
+   até o reload. Regra no shell com os mesmos valores do inline (desktop
+   inalterado); no mobile força 2 colunas (o auto-fill minmax(200px,1fr)
+   só cabia 1 coluna em 360px). */
+.gdi-courses {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px;
 }
 
 .meggy-card {
@@ -535,6 +553,10 @@
 }
 
 /* ═══ Player de vídeo inline (todas as funcionalidades do GDI) ═══ */
+/* ★ v2.15.4 P2-07 — ÓRFÃO: nenhum JS usa .meggy-player-layout,
+   .meggy-player-main, .meggy-player-controls nem .meggy-player-playlist
+   (verificado 2026-11-13; o player real é .gdi-study em shell.js).
+   Mantido como referência — não reativar sem as regras mobile. */
 .meggy-player-layout {
   display: flex;
   gap: 20px;
@@ -638,9 +660,15 @@
 /* ─── Toast "Retomando de HH:MM:SS" ─── */
 .meggy-toast-resume {
   position: fixed;
-  bottom: 24px;
+  /* ★ v2.15.4 P1-08: bottom respeita a safe-area (home indicator) */
+  bottom: calc(24px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
+  /* ★ v2.15.4 P2-02: sem max-width vazava em telas de 320px */
+  max-width: calc(100vw - 32px);
+  flex-wrap: wrap;
+  justify-content: center;
+  text-align: center;
   background: rgba(22, 27, 38, 0.95);
   backdrop-filter: blur(18px);
   border: 1px solid rgba(255, 139, 159, 0.3);
@@ -700,6 +728,8 @@
 }
 
 /* ═══ Página de Aula Completa (replica GDI file_video) ═══ */
+/* ★ v2.15.4 P2-07 — ÓRFÃO: nenhum JS usa .meggy-lesson-page /
+   .meggy-lesson-sidebar (verificado 2026-11-13). Mantido como referência. */
 .meggy-lesson-page {
   max-width: 1600px;
   margin: 0 auto;
@@ -989,6 +1019,34 @@ body.meggy-focus-mode #meggy-main {
 .gdi-watched-btn.watched {
   background: rgba(63,185,80,0.15);
   color: #3fb950;
+}
+
+/* ★ v2.15.4 DESIGN (state layers M3 + foco visível — m3-foundations:
+   hover 8% / focus 12% / pressed 16%, transição 100–150ms, sem pulo de
+   layout; mobile-ui-ux: foco visível sempre; android-tv-design: foco é
+   o cursor na TV, nunca só cor). Regras fora de media query DE PROPÓSITO:
+   são estados de interação — o desktop em repouso continua idêntico. */
+.gdi-mode-btn:focus-visible,
+.gdi-watched-btn:focus-visible,
+.gdi-mat-tab:focus-visible,
+.gdi-playlist-item:focus-visible,
+.gdi-speed-select:focus-visible,
+#gdi-note-save:focus-visible,
+#gdi-pl-toggle:focus-visible,
+#gdi-note-time:focus-visible,
+.meggy-toast-btn:focus-visible {
+  outline: 2px solid #ff8b9f;
+  outline-offset: 2px;
+}
+.gdi-mode-btn, .gdi-watched-btn, .gdi-mat-tab, .gdi-playlist-item,
+#gdi-note-save, #gdi-pl-toggle, .meggy-toast-btn {
+  transition: background-color 150ms ease-out, transform 150ms ease-out, box-shadow 150ms ease-out;
+}
+.gdi-mode-btn:active, .gdi-watched-btn:active, .gdi-mat-tab:active,
+.gdi-playlist-item:active, #gdi-note-save:active, #gdi-pl-toggle:active,
+.meggy-toast-btn:active {
+  transform: scale(0.97);
+  background-color: rgba(255,255,255,0.16);
 }
 
 /* ─── Grid: player (left) + material (right) ─── */
@@ -1675,6 +1733,10 @@ body.meggy-player-active #meggy-sidebar:hover .meggy-sidebar-item {
   flex-shrink: 0;
 }
 
+/* ★ v2.15.4 P2-07 — ÓRFÃO: o layout .alfacon-* não é usado por nenhum
+   JS (verificado 2026-11-13; o player real é .gdi-study em shell.js).
+   .mode-cols foi contido em min-width:1025px para não quebrar o mobile
+   se um dia reativarem. */
 /* ═══ Materiais estilo Alfacon (cards visuais) ═══ */
 .alfacon-material-grid {
   display: grid;
@@ -1827,10 +1889,12 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   gap: 12px;
 }
 
-/* Mode: cols (2 colunas) */
-.alfacon-layout.mode-cols .alfacon-layout-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+/* Mode: cols (2 colunas) — ★ v2.15.4 P2-07: só ≥1025px */
+@media (min-width: 1025px) {
+  .alfacon-layout.mode-cols .alfacon-layout-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 /* Mode: focus-video (só vídeo) */
@@ -2635,6 +2699,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   line-height: 1.65;
   color: #e6edf3;
   max-height: calc(100vh - 220px);
+  max-height: calc(100dvh - 220px);
   overflow-y: auto;
 }
 .meggy-summary-body h1,
@@ -2755,6 +2820,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   max-width: 800px;
   margin: 0 auto;
   height: calc(100vh - 140px);
+  height: calc(100dvh - 140px);
   min-height: 400px;
 }
 .meggy-chat-messages {
@@ -2929,12 +2995,16 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 }
 
 /* ★ A6: Safe area insets for iPhone notch */
+/* ★ v2.15.4 P1-08: os seletores .meggy-header/.meggy-sidebar estavam
+   MORTOS — o header é <header id="meggy-header"> e o aside é
+   <aside id="meggy-sidebar"> (sem essas classes). Trocados para os ids;
+   sem isso o env() nunca se aplicava. O worker já tem viewport-fit=cover. */
 @supports (padding: env(safe-area-inset-top)) {
-  .meggy-header {
+  #meggy-header {
     padding-top: env(safe-area-inset-top);
     height: calc(56px + env(safe-area-inset-top));
   }
-  .meggy-sidebar {
+  #meggy-sidebar {
     padding-bottom: env(safe-area-inset-bottom);
   }
   #meggy-main {
@@ -2951,12 +3021,46 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   }
   .meggy-flashcard { transition: none !important; }
   .gdi-mat-isa-spin { animation: none !important; }
+  /* ★ v2.15.4 DESIGN: sem movimento, sem escala — o :active com 0.97
+     pularia instantâneo com a transição zerada (mobile-ui-ux §4). */
+  .gdi-mode-btn:active, .gdi-watched-btn:active, .gdi-mat-tab:active,
+  .gdi-playlist-item:active, #gdi-note-save:active, #gdi-pl-toggle:active,
+  .meggy-toast-btn:active { transform: none !important; }
 }
 
 /* ═══ Mobile breakpoint (≤768px) ═══ */
 @media (max-width: 768px) {
   /* A2: Sidebar width */
   #meggy-sidebar { width: min(260px, 85vw) !important; }
+  /* ★ v2.15.4 P1-08: topo acompanha o header com safe-area */
+  #meggy-sidebar { top: calc(56px + env(safe-area-inset-top)); }
+
+  /* ★ v2.15.4 P0-01: com o player aberto, body.meggy-player-active
+     #meggy-sidebar (width:60px !important; position:relative) vencia o
+     drawer mobile — a sidebar ficava transladada p/ fora ocupando 60px
+     do flex e só abria como tira de ícones (sem hover no touch p/
+     expandir). Decisão: override em CSS (não o "só aplicar a classe se
+     innerWidth>768" em JS) — o CSS sobrevive a rotação/resize sem
+     reavaliar JS e o desktop fica intacto. */
+  body.meggy-player-active #meggy-sidebar {
+    position: fixed !important;
+    left: 0;
+    top: calc(56px + env(safe-area-inset-top));
+    bottom: 0;
+    width: min(260px, 85vw) !important;
+    transform: translateX(-100%);
+    z-index: 10000;
+    padding: 16px 0;
+  }
+  body.meggy-player-active #meggy-sidebar.open { transform: translateX(0); }
+  body.meggy-player-active #meggy-sidebar .meggy-sidebar-item span {
+    opacity: 1 !important;
+    width: auto !important;
+  }
+  body.meggy-player-active #meggy-sidebar .meggy-sidebar-item {
+    justify-content: flex-start;
+    padding: 10px 20px;
+  }
 
   /* A3: Touch targets ≥44px */
   .meggy-mobile-menu-btn {
@@ -2982,10 +3086,16 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   }
 
   /* A5: Global mobile polish */
-  .meggy-header { padding: 0 12px !important; }
+  /* ★ v2.15.4 P1-08: .meggy-header era classe morta (o header é
+     #meggy-header) e o !important anulava o padding-top:env() do @supports */
+  #meggy-header { padding: env(safe-area-inset-top) 12px 0 !important; }
   .meggy-search { max-width: 200px !important; }
-  #meggy-main { padding: 16px 10px !important; }
+  #meggy-main { padding: 16px 10px calc(16px + env(safe-area-inset-bottom)) !important; }
   .meggy-cards-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+  /* ★ v2.15.4 (flash 1 coluna): grade de cursos sempre multi-coluna no
+     mobile — o !important vence o inline auto-fill minmax(200px,1fr),
+     que só cabia 1 coluna em 360px */
+  .gdi-courses { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
   .meggy-card { padding: 14px !important; }
   .meggy-card-icon { font-size: 28px !important; }
   .meggy-card-title { font-size: 14px !important; }
@@ -2996,7 +3106,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   .meggy-loading { padding: 24px 16px !important; }
 
   /* A1: Mobile video page — stack vertically */
-  .gdi-study { padding: 8px 10px 24px !important; }
+  .gdi-study { padding: 16px 8px 24px !important; } /* ★ v2.15.4 DESIGN: ritmo 8dp (era 8px 10px — 10px fora do grid) */
 
   /* Stack grid: video on top, materials below */
   .gdi-study-grid,
@@ -3004,16 +3114,15 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   .gdi-study-grid.mode-fm {
     grid-template-columns: 1fr !important;
   }
-  /* Never hide panels on mobile — show everything stacked */
-  .gdi-study-grid.mode-fv .gdi-study-right,
-  .gdi-study-grid.mode-fm .gdi-study-left {
-    visibility: visible !important;
-    position: static !important;
-    width: auto !important;
-    height: auto !important;
-    overflow: visible !important;
-    pointer-events: auto !important;
-  }
+  /* ★ v2.15.4 P1-03: o override "Never hide panels on mobile" foi
+     REMOVIDO. Ele prometia nunca esconder painéis no mobile, mas o
+     applyLayout inline do M10 (gdi-ui.js, display:none !important)
+     sempre venceu o visibility:visible — e o comportamento de foco
+     (esconder o outro painel) é o esperado nos botões Foco aula /
+     Foco material. Agora o foco funciona no mobile como no desktop
+     (classes mode-fv/mode-fm do shell); o M10 tem guarda e não aplica
+     mais layout inline quando o grid do shell existe. Em "Dividido"
+     os dois painéis continuam empilhados. */
 
   /* Modes bar: horizontal scroll */
   .gdi-study-bar {
@@ -3025,17 +3134,23 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     margin-bottom: 10px !important;
   }
   .gdi-study-bar::-webkit-scrollbar { display: none; }
+  /* ★ v2.15.4 P1-05: fade na borda direita indica que há mais p/ rolar
+     (scrollbar oculta tornava o Assistido e as abas finais indescobríveis) */
+  .gdi-study-bar, #gdi-mat-tabs {
+    mask-image: linear-gradient(90deg, #000 92%, transparent);
+    -webkit-mask-image: linear-gradient(90deg, #000 92%, transparent);
+  }
   .gdi-study-modes { flex-shrink: 0; }
   .gdi-mode-btn, .gdi-watched-btn {
     padding: 8px 12px !important;
     font-size: 12px !important;
     white-space: nowrap;
-    min-height: 40px;
+    min-height: 44px; /* ★ v2.15.4 P1-01: era 40px */
   }
   .gdi-mode-btn .bi, .gdi-watched-btn .bi { font-size: 14px !important; }
 
   /* Breadcrumb: smaller font */
-  .gdi-bc { font-size: 11px !important; }
+  .gdi-bc { font-size: 12px !important; } /* ★ v2.15.4 DESIGN: 11px → rótulo M3 12px */
 
   /* Video player: full-width */
   .gdi-player-wrap {
@@ -3046,18 +3161,40 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 
   /* Video controls bar: wrap to 2 rows */
   .gdi-study-left > div[style*="display:flex;gap:8px;flex-wrap:wrap;"] {
-    gap: 6px !important;
+    gap: 8px !important; /* ★ v2.15.4 DESIGN: 6px → 8px (ritmo 8dp) */
   }
   .gdi-study-left .gdi-mode-btn {
     flex: 1 1 calc(50% - 6px);
     justify-content: center;
-    min-height: 40px;
+    min-height: 44px; /* ★ v2.15.4 P1-01: era 40px */
     font-size: 12px !important;
+  }
+  /* ★ v2.15.4 P0-03/P1-01: o seletor de velocidade ocupa o mesmo slot
+     2-por-linha da fileira de controles */
+  .gdi-study-left .gdi-speed-select {
+    flex: 1 1 calc(50% - 6px);
+    min-height: 44px;
   }
 
   /* Notes: smaller */
   .gdi-notes { padding: 8px !important; }
   .gdi-notes textarea { font-size: 12px !important; min-height: 60px; }
+  /* ★ v2.15.4 P1-02: font 16px nos inputs no mobile — iOS dá zoom se <16px
+     (o seletor #gdi-note-input vence .gdi-notes textarea; o textarea do
+     chat Meggy e a busca do header seguem o mesmo padrão) */
+  #gdi-note-input, .meggy-ai-chat-input textarea, #meggy-search-input { font-size: 16px !important; }
+  /* ★ v2.15.4 P1-01: alvos de toque 44px — salvar nota (~24px antes),
+     tempo clicável (~16px), linhas da playlist (~28px), fechar drawer
+     (~28px). O !important vence os paddings inline do shell.js. */
+  #gdi-note-save { min-height: 44px !important; padding: 10px 14px !important; }
+  #gdi-note-time { display: inline-block; padding: 10px 6px !important; }
+  .gdi-playlist-item { min-height: 44px !important; padding: 12px 10px !important; }
+  .meggy-ai-drawer-close { min-width: 44px; min-height: 44px; padding: 10px !important; }
+  /* ★ v2.15.4 P2-05: textos de 10–11px do player → 12px no mobile */
+  .gdi-pl-size { font-size: 12px !important; }
+  #gdi-mat-status { font-size: 12px !important; }
+  .meggy-flashcard-label { font-size: 12px !important; }
+  #meggy-fc-card div[style*="font-size:10px"] { font-size: 12px !important; }
 
   /* Playlist: collapse height */
   #gdi-playlist-wrap { padding: 6px !important; }
@@ -3076,12 +3213,13 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     flex-shrink: 0;
     padding: 8px 12px !important;
     font-size: 12px !important;
-    min-height: 40px;
+    min-height: 44px; /* ★ v2.15.4 P1-01: era 40px */
   }
 
   /* Material body: shorter when stacked */
   #gdi-mat-body, .gdi-mat-body {
     height: 70vh !important;
+    height: 70dvh !important; /* ★ v2.15.4 P1-10: dvh com fallback vh */
     min-height: 320px !important;
   }
 
@@ -3110,7 +3248,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 
   /* Summary: full-width */
   .meggy-summary-card { max-width: 100% !important; }
-  .meggy-summary-body { padding: 14px !important; font-size: 13px !important; max-height: calc(100vh - 180px) !important; }
+  .meggy-summary-body { padding: 14px !important; font-size: 13px !important; max-height: calc(100vh - 180px) !important; max-height: calc(100dvh - 180px) !important; }
 
   /* Study list: full-width */
   .meggy-study-list { max-width: 100% !important; }
@@ -3121,6 +3259,84 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 
   /* Meggy AI drawer: full-width */
   .meggy-ai-drawer { width: 100% !important; max-width: 100% !important; }
+
+  /* ═══ ★ v2.15.4 DESIGN — polimento do player (mobile-ui-ux +
+     m3-foundations + video-player-ux). Tudo dentro de @media
+     (max-width:768px): o desktop não muda. ═══ */
+
+  /* — Tipografia M3: título 16–22 / corpo 14–16 / rótulo 11–14; nada de
+     10px no caminho principal (o inline 10px de .gdi-pl-size e 11px de
+     #gdi-mat-status já eram elevados p/ 12px na fase 2 — aqui sobe o
+     resto); line-height 1.4–1.5 (não corta ascendentes); clamp() p/
+     fluidez entre breakpoints. — */
+  #gdi-file-header-name { font-size: clamp(16px, 4.5vw, 20px) !important; line-height: 1.4 !important; font-weight: 700 !important; }
+  #gdi-file-header-meta { font-size: 12px !important; line-height: 1.5 !important; color: #9aa4b8 !important; }
+  .gdi-mode-btn, .gdi-watched-btn { font-size: 14px !important; }
+  .gdi-study-left .gdi-mode-btn { font-size: 14px !important; }
+  .gdi-study-left .gdi-speed-select { font-size: 14px !important; }
+  #gdi-pl-count { font-size: 12px !important; }
+  .gdi-playlist-item { font-size: 14px !important; }
+  .gdi-mat-tab { font-size: 14px !important; }
+  .gdi-mat-tab span { font-size: 14px !important; }
+  #gdi-note-save { font-size: 14px !important; }
+  #gdi-note-time { font-size: 12px !important; line-height: 1.5 !important; }
+  #gdi-mat-status { line-height: 1.5 !important; }
+  #gdi-note-input { line-height: 1.5 !important; }
+  .gdi-mat-loading { font-size: 14px !important; line-height: 1.5 !important; }
+  .gdi-mat-empty div { font-size: 14px !important; line-height: 1.5 !important; }
+  #meggy-player-error { font-size: 14px !important; line-height: 1.5 !important; }
+
+  /* — Ritmo 8dp: respiro entre grupos (vídeo → barra de modos →
+     controles → anotações → playlist → abas → material); 16px compacto. — */
+  .gdi-study-bar { margin-bottom: 16px !important; }
+  .gdi-study-head { margin-bottom: 16px !important; }
+  .gdi-study-left { gap: 16px !important; }
+  .gdi-study-right { gap: 16px !important; }
+  .gdi-study-modes { gap: 8px !important; }
+  .gdi-notes { padding: 16px !important; }
+  #gdi-playlist-wrap { padding: 8px !important; }
+  #gdi-mat-tabs { gap: 8px !important; }
+
+  /* — State layers M3 no mobile: focus 12% (o outline 2px vive na base);
+     hover 8% já existia; pressed 16% + :active 0.97 vivem na base. — */
+  .gdi-mode-btn:focus-visible, .gdi-watched-btn:focus-visible,
+  .gdi-mat-tab:focus-visible, .gdi-playlist-item:focus-visible,
+  #gdi-note-save:focus-visible, #gdi-pl-toggle:focus-visible,
+  .gdi-speed-select:focus-visible, #gdi-note-time:focus-visible,
+  .meggy-toast-btn:focus-visible {
+    background-color: rgba(255,255,255,0.12);
+  }
+
+  /* — Cinematográfico e quieto (video-player-ux §4): fundo quase-preto,
+     UMA cor de destaque (rosa #ff8b9f) p/ progresso/estado ativo;
+     superfícies em camadas de tom (não sombra pesada); raios M3 por
+     categoria (player 16 large, painéis 12 medium, campos 8 small). — */
+  .gdi-player-wrap { border-radius: 16px !important; box-shadow: 0 4px 16px -8px rgba(0,0,0,0.6) !important; }
+  .gdi-mode-btn.active { background: #ff8b9f !important; color: #1a0e12 !important; font-weight: 700 !important; }
+  .gdi-mat-tab.active { background: #ff8b9f !important; border-color: #ff8b9f !important; color: #1a0e12 !important; font-weight: 700 !important; }
+  .gdi-mat-tab.gdi-mat-isa.active { background: #ff8b9f !important; border-color: #ff8b9f !important; color: #1a0e12 !important; }
+  .gdi-watched-btn.done, .gdi-watched-btn.watched { background: rgba(63,185,80,0.20) !important; color: #56d364 !important; font-weight: 700 !important; }
+  .gdi-notes, #gdi-playlist-wrap { background: #14181f !important; border-radius: 12px !important; }
+  #gdi-mat-body { background: #161b22 !important; border-radius: 16px !important; }
+  .gdi-notes textarea, #gdi-note-input { border-radius: 8px !important; }
+  #gdi-note-save { border-radius: 8px !important; }
+  .gdi-playlist-item { border-radius: 8px !important; }
+  /* Scrim sob texto sobre o vídeo (video-player-ux §1/§4): o erro cobre o
+     vídeo quando ele falha — gradiente quase-preto atrás do texto. */
+  #meggy-player-error { background: linear-gradient(180deg, rgba(0,0,0,0.55), rgba(0,0,0,0.85)); }
+
+  /* — Contraste ≥4.5:1: #6b7488 FALHA (3.69:1 em #161b22, 4.03:1 em
+     #0d1119) → #9aa4b8 (6.90:1 / 7.54:1). O !important vence o inline. — */
+  .gdi-pl-size { color: #9aa4b8 !important; }
+  #gdi-mat-status { color: #9aa4b8 !important; }
+  #gdi-mat-tabs > span { color: #9aa4b8 !important; }
+  .gdi-study-right > div[style*="font-size:11px"] { color: #9aa4b8 !important; font-size: 12px !important; }
+  .gdi-mat-empty { color: #9aa4b8 !important; }
+  .gdi-mat-empty i { color: #9aa4b8 !important; }
+
+  /* — Toast "Retomando de…": botão era ~28px (P1-01 não o cobria) → 44px
+     + rótulo 14px, no ritmo dos demais controles. — */
+  .meggy-toast-btn { font-size: 14px !important; min-height: 44px !important; padding: 10px 16px !important; }
 }
 
 /* ═══ Small phone (≤480px) ═══ */
@@ -3128,10 +3344,15 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   .gdi-study { padding: 6px 8px 20px !important; }
   .gdi-mode-btn, .gdi-watched-btn {
     padding: 7px 10px !important;
-    font-size: 11px !important;
+    font-size: 12px !important; /* ★ v2.15.4 DESIGN: 11px → 12px (rótulo M3) */
   }
+  /* ★ v2.15.4 P1-05: em telas muito estreitas os 3 botões de modo viram
+     só ícone (o texto não cabe junto com Assistido); o title dá o nome.
+     O botão Assistido mantém o texto (é estado: Assistido/Assistida ✓). */
+  .gdi-mode-btn[data-mode] { font-size: 0 !important; }
+  .gdi-mode-btn[data-mode] .bi { font-size: 16px !important; }
   .gdi-player-wrap video { max-height: 52vw; }
-  #gdi-mat-body { height: 65vh !important; }
+  #gdi-mat-body { height: 65vh !important; height: 65dvh !important; }
   .meggy-card-icon { font-size: 24px !important; }
   .meggy-view-title { font-size: 16px !important; }
   .meggy-flashcard { min-height: 220px !important; }
@@ -3139,16 +3360,87 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 
 /* ═══ Tablet (769px–1024px) ═══ */
 @media (min-width: 769px) and (max-width: 1024px) {
-  .gdi-study-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
-  .gdi-study { padding: 12px 14px 32px; }
+  /* ★ v2.15.4 P0-02: era 1fr 1fr — anulava a regra de 1 coluna ≤1024px e
+     espremia vídeo+material lado a lado no tablet. Agora 1 coluna. */
+  .gdi-study-grid { grid-template-columns: 1fr; gap: 12px; }
+  .gdi-study { padding: 24px 24px 32px; } /* ★ v2.15.4 DESIGN: margem 24px no tablet (M3 médio; era 12px 14px) */
   .meggy-cards-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)) !important; }
+
+  /* ★ v2.15.4 DESIGN (tablet): respiro 24px entre grupos, título 20–22,
+     corpo 14–16, mesmo acento único (rosa + texto escuro) do mobile. */
+  .gdi-study-grid { gap: 24px !important; }
+  .gdi-study-bar { margin-bottom: 24px !important; }
+  .gdi-study-left { gap: 24px !important; }
+  .gdi-study-right { gap: 24px !important; }
+  #gdi-file-header-name { font-size: clamp(20px, 3vw, 22px) !important; line-height: 1.4 !important; font-weight: 700 !important; }
+  #gdi-file-header-meta, #gdi-mat-status, .gdi-pl-size { font-size: 14px !important; color: #9aa4b8 !important; }
+  .gdi-mode-btn, .gdi-watched-btn, .gdi-mat-tab { font-size: 14px !important; }
+  .gdi-mode-btn.active { background: #ff8b9f !important; color: #1a0e12 !important; font-weight: 700 !important; }
+  .gdi-mat-tab.active { background: #ff8b9f !important; border-color: #ff8b9f !important; color: #1a0e12 !important; font-weight: 700 !important; }
 }
 
 /* ═══ Landscape phone ═══ */
 @media (max-width: 900px) and (orientation: landscape) {
-  .gdi-player-wrap video { max-height: 70vh; }
-  #gdi-mat-body { height: 60vh !important; }
+  /* ★ v2.15.4 P1-06: min-height:0 !important vence o inline 420px de
+     #gdi-mat-body (height≠min-height: o 60vh antigo não vencia). */
+  /* ★ v2.15.4 P1-07: sem aspect-ratio:16/9 fixo nem cap 70vh — o vídeo
+     usa a altura do viewport (menos o header) sem letterbox. Os
+     seletores usam #gdi-study p/ vencer o <style> injetado do gdi-ui.js
+     (.gdi-study-grid .gdi-player-wrap{aspect-ratio:16/9!important} e
+     video{max-height:none!important;height:100%!important}). */
+  /* ★ v2.15.4 P1-10: dvh com fallback vh (a barra do navegador móvel
+     muda a altura; vh pula, dvh acompanha). */
+  #gdi-study .gdi-player-wrap { aspect-ratio: auto !important; }
+  #gdi-study .gdi-player-wrap video {
+    width: auto !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: calc(100vh - 56px) !important;
+    max-height: calc(100dvh - 56px) !important;
+    margin: 0 auto;
+  }
+  #gdi-mat-body {
+    min-height: 0 !important;
+    height: 60vh !important;
+    height: 60dvh !important;
+  }
 }
 
 
 
+
+/* ═══ ★ v2.15.4 DESIGN — TV na web (android-tv-design, 10 pés) ═══
+   Aplica ao player web visto na TV: paisagem, sem hover, sem ponteiro.
+   - Overscan: margem mínima 48dp; aqui 56dp (56–64dp é o confortável).
+   - Legibilidade à distância: título 28–36, metadados 18, controles 18
+     com 56px de altura (o piso 24sp da skill é p/ app nativo de TV; na
+     web do player, 18px é o máximo que cabe sem redesenhar o layout —
+     ver relatório: limite honesto).
+   - Foco inequívoco a 3 m: outline 3px + escala 1.05 (mínimo p/ trilhas
+     densas), 150ms ease-out, nunca só cor.
+   - D-pad: todos os controles são <button>/<select> reais ou ganharam
+     role="button" + tabindex no shell.js (playlist, tempo da anotação);
+     nada no player exige ponteiro (toque duplo ±10s tem equivalente em
+     Anterior/Próxima + seek). */
+@media (min-width: 1025px) and (orientation: landscape) and (hover: none) {
+  .gdi-study { padding: 48px 56px 56px !important; }
+  .gdi-study-grid { gap: 24px !important; }
+  .gdi-study-left { gap: 24px !important; }
+  .gdi-study-right { gap: 24px !important; }
+  #gdi-file-header-name { font-size: clamp(28px, 3vw, 36px) !important; line-height: 1.3 !important; font-weight: 700 !important; }
+  #gdi-file-header-meta, #gdi-mat-status, .gdi-pl-size, #gdi-pl-count { font-size: 18px !important; line-height: 1.5 !important; color: #9aa4b8 !important; }
+  .gdi-mode-btn, .gdi-watched-btn, .gdi-mat-tab, #gdi-note-save { font-size: 18px !important; min-height: 56px !important; }
+  .gdi-playlist-item { font-size: 18px !important; min-height: 56px !important; }
+  .gdi-mode-btn.active { background: #ff8b9f !important; color: #1a0e12 !important; font-weight: 700 !important; }
+  .gdi-mat-tab.active { background: #ff8b9f !important; border-color: #ff8b9f !important; color: #1a0e12 !important; font-weight: 700 !important; }
+  #meggy-player-error { font-size: 18px !important; line-height: 1.5 !important; background: linear-gradient(180deg, rgba(0,0,0,0.6), rgba(0,0,0,0.85)); }
+  .gdi-mode-btn:focus-visible, .gdi-watched-btn:focus-visible,
+  .gdi-mat-tab:focus-visible, .gdi-playlist-item:focus-visible,
+  #gdi-note-save:focus-visible, #gdi-pl-toggle:focus-visible,
+  .gdi-speed-select:focus-visible, #gdi-note-time:focus-visible {
+    outline: 3px solid #ff8b9f !important;
+    outline-offset: 3px;
+    transform: scale(1.05);
+    transition: transform 150ms ease-out, outline-color 150ms ease-out;
+  }
+}
