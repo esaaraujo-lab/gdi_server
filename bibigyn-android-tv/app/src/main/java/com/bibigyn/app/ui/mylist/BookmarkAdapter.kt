@@ -5,7 +5,10 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import coil.load
+import com.bibigyn.app.R
 import com.bibigyn.app.data.monogramFor
+import com.bibigyn.app.util.CoverLibrary
 import com.bibigyn.app.databinding.ItemMylistCardBinding
 import com.bibigyn.app.util.FocusAnimator
 import com.bibigyn.app.util.SessionManager
@@ -41,9 +44,28 @@ class BookmarkAdapter(
             mylistTypeChip.text = b.kind.uppercase()
             mylistTitle.text = b.name
             mylistMeta.text = b.path
-            mylistMonogram.text = monogramFor(b.name)
-            mylistThumb.visibility = android.view.View.GONE
-            mylistMonogram.visibility = android.view.View.VISIBLE
+            // Camada 3 — biblioteca por tipo (nome do marcador →
+            // caminho); sem match, o monogram (o bookmark não tem
+            // thumb do Drive para a camada 2).
+            val libraryUrl = CoverLibrary.resolve(
+                holder.itemView.context, b.name, b.path
+            )
+            if (!libraryUrl.isNullOrBlank()) {
+                mylistThumb.visibility = android.view.View.VISIBLE
+                mylistMonogram.visibility = android.view.View.GONE
+                mylistThumb.load(libraryUrl) {
+                    error(R.drawable.card_gradient_pink)
+                    listener(onError = { _, _ ->
+                        mylistThumb.visibility = android.view.View.GONE
+                        mylistMonogram.visibility = android.view.View.VISIBLE
+                        mylistMonogram.text = monogramFor(b.name)
+                    })
+                }
+            } else {
+                mylistMonogram.text = monogramFor(b.name)
+                mylistThumb.visibility = android.view.View.GONE
+                mylistMonogram.visibility = android.view.View.VISIBLE
+            }
             mylistProgressRow.visibility = android.view.View.GONE
             mylistContinue.visibility = android.view.View.GONE
             mylistFav.visibility = android.view.View.GONE
