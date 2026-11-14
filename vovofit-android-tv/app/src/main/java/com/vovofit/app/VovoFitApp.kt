@@ -16,7 +16,7 @@ class VovoFitApp : Application() {
          * Por padrão é o MESMO host do app (BASE_URL). VERIFICADO
          * 2026-11-14: a produção (educa.eu.org, worker pré-v2) NÃO tem
          * nenhuma dessas rotas (nenhum registro de
-         * /api/ai/battalion, /api/ai/summaries, /api/materials/* no
+         * /api/ai/battalion, /api/ai/summaries, /api/materials/... no
          * worker de produção auditado) — contra ela, as chamadas de IA
          * devolvem 404 e o app trata como "geração indisponível"
          * (nunca finge que gerou). As rotas existem no worker v2.15.4
