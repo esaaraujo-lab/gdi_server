@@ -7,6 +7,9 @@
   progresso rosa + texto "% concluído · Xmin restantes".
   Foco: anel 3dp na cor da marca via FocusAnimator.attachCard()
   (stroke do card) + escala 1.06×/1.10× + elevação.
+  v2.1.8: a estrela interna NAO e focavel na TV (era armadilha de foco:
+  o D-pad podia parar na estrela de 32dp, sem visual nenhum, e CENTER
+  favoritaria em vez de abrir o card). Por toque continua clicavel.
   Raio 12dp, sem hex/dp solto (tokens em dimens.xml / colors.xml).
 -->
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
@@ -94,8 +97,7 @@
                 android:background="@drawable/badge_resume"
                 android:clickable="true"
                 android:contentDescription="@string/fav_desc"
-                android:focusable="true"
-                android:focusableInTouchMode="true"
+                android:focusable="false"
                 android:gravity="center"
                 android:text="☆"
                 android:textColor="@color/tile_title"
