@@ -5,7 +5,7 @@
   seção 28sp, card 24sp). Sem bottom nav na TV (gone no layout e no
   código). Foco inicial: botão "Continuar" do destaque.
   Mesmos ids do layout de celular (ViewBinding único).
-  v2.1.7 — tamanhos 2.7.5 com o visual novo (Elton 11:13/11:15).
+  v2.1.8 — destaque focavel (anel 3dp + 1.10x) + estrela sem armadilha de foco (Elton 11:47).
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -196,12 +196,20 @@
                     android:textStyle="bold" />
 
                 <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/featured_card"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/tv_rail_spacing"
+                    android:clickable="true"
+                    android:descendantFocusability="blocksDescendants"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:foreground="?attr/selectableItemBackground"
                     app:cardCornerRadius="@dimen/radius_lg"
                     app:cardElevation="@dimen/elevation_0"
-                    app:cardBackgroundColor="@color/tile_bg">
+                    app:cardBackgroundColor="@color/tile_bg"
+                    app:strokeWidth="0dp"
+                    app:strokeColor="@color/tile_focus_ring">
 
                     <LinearLayout
                         android:layout_width="match_parent"
