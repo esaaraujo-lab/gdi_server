@@ -79,7 +79,8 @@ class SearchResultAdapter(
                     resultBg.background = CardGradient.drawable(res, colorFromString(d.name))
                     // v2.7.11 onda 2 + camada (3) — resultado de drive:
                     // imagem da biblioteca pelo nome do drive; sem match,
-                    // a capa gerada do drive (nunca monograma).
+                    // a imagem 'geral' (fallback da camada 3); sem
+                    // manifesto, a capa gerada do drive (nunca monograma).
                     resultThumb.visibility = View.VISIBLE
                     resultMonogram.visibility = View.GONE
                     val libraryUrl = LibraryCovers.resolve(d.name)
@@ -112,7 +113,8 @@ class SearchResultAdapter(
                     resultBg.background = CardGradient.drawable(res, colorFromString(f.name))
                     // v2.7.11 onda 2 + camada (3) — sem thumb, a imagem
                     // da biblioteca pelo nome do arquivo/pasta; sem match,
-                    // a capa gerada do drive (nunca monograma).
+                    // a imagem 'geral' (fallback da camada 3); sem
+                    // manifesto, a capa gerada do drive (nunca monograma).
                     val coverRes = ThumbArt.coverResForPath(f.folderPath ?: "")
                     val thumb = LibraryCovers.remoteCover(f.thumbnailLink, f.name, f.folderPath)
                     if (!thumb.isNullOrBlank() && (f.isVideo || f.isAudio || f.isPdf)) {
