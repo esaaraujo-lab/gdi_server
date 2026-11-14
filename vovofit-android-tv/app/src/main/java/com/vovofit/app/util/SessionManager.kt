@@ -234,6 +234,31 @@ class SessionManager private constructor(context: Context) {
         prefs.edit().putString(KEY_RECENTS, out.toString()).apply()
     }
 
+    /**
+     * v1.0.8 — Preenche a thumb de um recent existente SEM reordenar a
+     * lista (o addRecent move o item para o topo). Usado pelo backfill
+     * da home para recents antigos (pre-1.0.7) que nunca tiveram thumb
+     * salva. So preenche quando ainda nao ha thumb (nunca apaga a
+     * thumb ja salva).
+     */
+    fun updateRecentThumbnail(folderPath: String, videoName: String, thumbnailLink: String) {
+        if (thumbnailLink.isBlank()) return
+        val arr = recentArray()
+        var changed = false
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            if (o.optString("folder") == folderPath && o.optString("video") == videoName) {
+                if (o.optString("thumb").isBlank()) {
+                    o.put("thumb", thumbnailLink)
+                    changed = true
+                }
+                break
+            }
+        }
+        if (changed) prefs.edit().putString(KEY_RECENTS, arr.toString()).apply()
+    }
+
+
     /** Returns the list of recent items as List<RecentItem>, most-recent first. */
     fun getRecents(): List<RecentItem> {
         val arr = recentArray()
