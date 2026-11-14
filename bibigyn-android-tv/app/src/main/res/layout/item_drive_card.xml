@@ -38,6 +38,16 @@
                 android:layout_height="match_parent"
                 android:background="@color/tile_bg" />
 
+            <!-- Onda 2: foto de capa do drive (admin ou gerada) atrás
+                 do chip de ícone. Decorativa (o nome vai no texto). -->
+            <ImageView
+                android:id="@+id/drive_cover"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:importantForAccessibility="no"
+                android:scaleType="centerCrop"
+                android:visibility="gone" />
+
             <TextView
                 android:id="@+id/drive_icon"
                 android:layout_width="56dp"
