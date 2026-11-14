@@ -66,7 +66,7 @@ class BrowseActivity : AppCompatActivity() {
         val grayColor = ForegroundColorSpan(0xFF8B949E.toInt())
         val sb = SpannableStringBuilder()
         val rootStart = sb.length
-        sb.append("Meggy", grayColor, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        sb.append("Vovó Fit", grayColor, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         sb.setSpan(breadcrumbSpan("/"), rootStart, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         val segments = path.trim('/').split('/').filter { it.isNotBlank() }
         var acc = "/"
