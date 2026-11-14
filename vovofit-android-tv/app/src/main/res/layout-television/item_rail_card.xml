@@ -3,7 +3,7 @@
   v1.0.4 — Card de rail · TV (mesmos ids do celular).
   Estrutura: imagem 16:9 (foto real via Coil quando houver, monograma
   tipográfico quando não houver — NUNCA emoji de câmera) + título
-  24sp (máx. 2 linhas) + subtítulo 24sp (1 linha) + barra de
+  13sp (máx. 2 linhas) + subtítulo 10.5sp (1 linha) + barra de
   progresso rosa + texto "% concluído · Xmin restantes".
   Foco: anel 3dp na cor da marca via FocusAnimator.attachCard()
   (stroke do card) + escala 1.06×/1.10× + elevação.
@@ -58,7 +58,7 @@
                 android:layout_height="match_parent"
                 android:gravity="center"
                 android:textColor="@color/tile_title"
-                android:textSize="48sp"
+                android:textSize="44sp"
                 android:textStyle="bold"
                 android:alpha="0.95" />
 
@@ -173,7 +173,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
                     android:textColor="@color/md_primary"
-                    android:textSize="22sp" />
+                    android:textSize="12sp" />
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>
