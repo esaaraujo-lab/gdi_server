@@ -1,32 +1,31 @@
 package com.bibigyn.app.ui.home
 
-import android.content.res.Resources
-import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AnimationUtils
 import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
+import coil.load
 import com.bibigyn.app.R
 import com.bibigyn.app.data.FileItem
 import com.bibigyn.app.data.colorFromString
-import com.bibigyn.app.util.SessionManager
+import com.bibigyn.app.data.monogramFor
 import com.bibigyn.app.databinding.ItemRailCardBinding
+import com.bibigyn.app.util.CardGradient
+import com.bibigyn.app.util.FocusAnimator
+import com.bibigyn.app.util.Format
+import com.bibigyn.app.util.SessionManager
+import com.bibigyn.app.util.TvUtils
 
 /**
- * Horizontal-rail adapter for "Continue Assistindo" + future rails (v1.8.0).
+ * v2.1.5 — Rail "Continue assistindo" (conceito home).
  *
- * Each card mirrors the browse-grid tile style: 200dp wide × 200dp tall
- * thumbnail with top + bottom scrims, overlaid title/subtitle, optional
- * progress bar and ▶/✓ badges.
- *
- * Animations
- * ----------
- *  • [tile_appear] staggered fade-in + slide-up on first bind.
- *  • Focus change — scale 1.0 ↔ 1.06, elevation 0 ↔ 16dp, pink halo
- *    ring toggled.
+ * Card 16:9: foto real via Coil quando há thumbnail (RailItem.thumbnailUrl
+ * ou FileItem.thumbnailLink), monograma tipográfico quando não há —
+ * NUNCA emoji de câmera. Título 16sp (máx. 2 linhas), subtítulo 14sp,
+ * barra de progresso rosa + "% concluído · Xmin restantes".
+ * Foco: FocusAnimator.attachCard (anel 3dp da marca + escala + elevação).
  */
 data class RailItem(
     val title: String,
@@ -37,9 +36,9 @@ data class RailItem(
     val isWatched: Boolean,
     val hasResume: Boolean,
     val colorHint: String? = null,
-    // ★ v2.1.3: arquivo correspondente (quando houver) — permite a ⭐
-    // da "Minha lista" no rail "Continue assistindo".
-    val file: FileItem? = null
+    val file: FileItem? = null,
+    /** v2.1.5: thumb fotográfica do item (recents / FileItem). */
+    val thumbnailUrl: String? = null
 )
 
 class RailAdapter(
@@ -53,20 +52,7 @@ class RailAdapter(
                 val pos = bindingAdapterPosition
                 if (pos != RecyclerView.NO_POSITION) onClick(items[pos])
             }
-            binding.root.isFocusable = true
-            binding.root.isFocusableInTouchMode = true
-            binding.root.setOnFocusChangeListener { _, hasFocus ->
-                animateFocus(hasFocus)
-            }
-        }
-
-        fun animateFocus(hasFocus: Boolean) {
-            val scale = if (hasFocus) 1.06f else 1f
-            binding.cardRoot.animate().scaleX(scale).scaleY(scale)
-                .setDuration(180)
-                .start()
-            binding.cardRoot.cardElevation = if (hasFocus) 16f else 0f
-            binding.focusRing.visibility = if (hasFocus) View.VISIBLE else View.INVISIBLE
+            FocusAnimator.attachCard(binding.cardRoot, TvUtils.isTv(binding.root.context))
         }
     }
 
@@ -78,42 +64,61 @@ class RailAdapter(
     override fun onBindViewHolder(holder: VH, position: Int) {
         val item = items[position]
         val res = holder.itemView.resources
+        val ctx = holder.itemView.context
 
         with(holder.binding) {
-            cardIcon.text = item.icon
             cardTitle.text = item.title
             cardSubtitle.text = item.subtitle
 
-            // Per-card gradient background derived from the title hash (or explicit hint).
             val baseColor = colorFromString(item.colorHint ?: item.title)
-            cardBg.background = railGradientDrawable(res, baseColor)
+            cardBg.background = CardGradient.drawable(res, baseColor)
 
-            // Progress bar
-            progressBar.visibility = if (item.hasProgress) View.VISIBLE else View.GONE
-            if (item.hasProgress) {
-                val cardWidthPx = (200 * res.displayMetrics.density).toInt()
-                val lp = progressBar.layoutParams
-                lp.width = (cardWidthPx * item.progress / 100).coerceAtLeast(1)
-                progressBar.layoutParams = lp
+            // Thumb fotográfica quando houver; monograma quando não houver.
+            val thumb = item.thumbnailUrl ?: item.file?.thumbnailLink
+            if (!thumb.isNullOrBlank()) {
+                cardThumbnail.visibility = View.VISIBLE
+                cardMonogram.visibility = View.GONE
+                cardThumbnail.load(thumb) {
+                    error(R.drawable.card_gradient_pink)
+                }
+                cardThumbnail.setOnClickListener(null)
+            } else {
+                cardThumbnail.visibility = View.GONE
+                cardMonogram.visibility = View.VISIBLE
+                cardMonogram.text = monogramFor(item.title)
             }
 
-            // Watched badge
-            watchedBadge.visibility = if (item.isWatched) View.VISIBLE else View.GONE
+            // Progresso real: barra + "% concluído · Xmin restantes".
+            if (item.hasProgress && item.file != null) {
+                val sm = SessionManager.get(ctx)
+                val fp = item.file.folderPath ?: ""
+                val pos = sm.getResume(fp, item.file.name)
+                val dur = sm.getResumeDuration(fp, item.file.name)
+                progressRow.visibility = View.VISIBLE
+                cardProgress.progress = item.progress
+                cardProgressText.text = Format.progressText(item.progress, dur, pos)
+            } else if (item.hasProgress) {
+                progressRow.visibility = View.VISIBLE
+                cardProgress.progress = item.progress
+                cardProgressText.text = "${item.progress}% concluído"
+            } else {
+                progressRow.visibility = View.GONE
+            }
 
-            // Continue badge
+            watchedBadge.visibility = if (item.isWatched) View.VISIBLE else View.GONE
             continueBadge.visibility = if (item.hasResume) View.VISIBLE else View.GONE
 
-            // ★ v2.1.3: ⭐ Minha lista (só quando o RailItem carrega o FileItem).
+            // ★ Minha lista (só quando o RailItem carrega o FileItem).
             val favItem = item.file
             if (favItem != null) {
-                val sm = SessionManager.get(holder.itemView.context)
+                val sm = SessionManager.get(ctx)
                 val fp = favItem.folderPath ?: ""
                 favStar.visibility = View.VISIBLE
                 favStar.text = if (sm.isFavorite(fp, favItem.name)) "⭐" else "☆"
                 favStar.setOnClickListener {
                     val nowFav = sm.toggleFavorite(favItem)
                     favStar.text = if (nowFav) "⭐" else "☆"
-                    Toast.makeText(holder.itemView.context,
+                    Toast.makeText(ctx,
                         if (nowFav) "⭐ Adicionado à Minha lista"
                         else "Removido da Minha lista",
                         Toast.LENGTH_SHORT).show()
@@ -123,26 +128,10 @@ class RailAdapter(
             }
         }
 
-        // Staggered appear animation
         val anim = AnimationUtils.loadAnimation(holder.itemView.context, R.anim.tile_appear)
         anim.startOffset = (position % 12) * 40L
         holder.binding.root.startAnimation(anim)
     }
 
     override fun getItemCount(): Int = items.size
-
-    private fun railGradientDrawable(res: Resources, baseColor: Int): GradientDrawable {
-        val r = Color.red(baseColor)
-        val g = Color.green(baseColor)
-        val b = Color.blue(baseColor)
-        val start = Color.argb(0x59, r, g, b)
-        val end = Color.parseColor("#FF0F1218")
-        val cornerPx = (16 * res.displayMetrics.density)
-        return GradientDrawable(
-            GradientDrawable.Orientation.TL_BR,
-            intArrayOf(start, end)
-        ).apply {
-            cornerRadius = cornerPx
-        }
-    }
 }
