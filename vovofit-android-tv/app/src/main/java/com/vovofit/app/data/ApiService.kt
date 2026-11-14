@@ -42,55 +42,87 @@ class ApiService(private val context: Context) {
     }
     
     // ★ v1.0.8: POST para o PATH COMPLETO. OkHttp faz o encoding correto (%20).
-    suspend fun listFolder(fullPath: String): List<FileItem>? {
-        val jsonBody = JSONObject().apply {
-            put("id", "")
-            put("type", "folder")
-            put("password", "")
-            put("page_token", JSONObject.NULL)
-            put("page_index", 0)
-        }.toString()
-        
+    // ★ v1.0.5 (diagnóstico listagem): pagina TODAS as páginas.
+    // Antes: só page_index 0 / page_token null — qualquer pasta com mais
+    // de 100 itens (pageSize do worker, files_list_page_size: 100) perdia
+    // o resto em silêncio, pastas inclusive. O worker devolve
+    // nextPageToken no TOPO do JSON (não dentro de data); a próxima
+    // página usa esse token (page_index é só ecoado como curPageIndex).
+    // Travas: no máximo `maxPages` páginas e parada se o token repetir.
+    // Falha na página 0 mantém a semântica antiga (null = sessão
+    // expirada → bounceToLogin); falha numa página posterior devolve o
+    // que já foi acumulado em vez de derrubar a tela para o login.
+    suspend fun listFolder(fullPath: String, maxPages: Int = 20): List<FileItem>? {
         // Garantir trailing slash
         val path = if (fullPath.endsWith("/")) fullPath else "$fullPath/"
-        
-        val request = Request.Builder()
-            .url("${VovoFitApp.BASE_URL}$path")
-            .post(jsonBody.toRequestBody("application/json".toMediaTypeOrNull()))
-            .header("Cookie", "session=${sessionManager.sessionCookie ?: ""}")
-            .build()
-        
-        return try {
-            val response = VovoFitApp.okHttpClient.newCall(request).execute()
-            if (!response.isSuccessful) return null
-            
-            val body = response.body?.string() ?: return null
-            
-            // ★ v1.0.8: verificar se resposta é HTML (login redirect) em vez de JSON
-            if (body.trimStart().startsWith("<!DOCTYPE") || body.trimStart().startsWith("<html")) {
-                return null  // sessão expirou — precisa re-login
+
+        val result = mutableListOf<FileItem>()
+        var pageToken: String? = null
+        var pageIndex = 0
+        while (pageIndex < maxPages) {
+            val jsonBody = JSONObject().apply {
+                put("id", "")
+                put("type", "folder")
+                put("password", "")
+                put("page_token", if (pageToken == null) JSONObject.NULL else pageToken)
+                put("page_index", pageIndex)
+            }.toString()
+
+            val request = Request.Builder()
+                .url("${VovoFitApp.BASE_URL}$path")
+                .post(jsonBody.toRequestBody("application/json".toMediaTypeOrNull()))
+                .header("Cookie", "session=${sessionManager.sessionCookie ?: ""}")
+                .build()
+
+            val page: Pair<List<FileItem>, String?> = try {
+                val response = VovoFitApp.okHttpClient.newCall(request).execute()
+                if (!response.isSuccessful) {
+                    if (pageIndex == 0) return null
+                    break
+                }
+                val body = response.body?.string()
+                if (body == null) {
+                    if (pageIndex == 0) return null
+                    break
+                }
+
+                // ★ v1.0.8: verificar se resposta é HTML (login redirect) em vez de JSON
+                if (body.trimStart().startsWith("<!DOCTYPE") || body.trimStart().startsWith("<html")) {
+                    if (pageIndex == 0) return null  // sessão expirou — precisa re-login
+                    break
+                }
+
+                val json = JSONObject(body)
+                val files = json.optJSONObject("data")?.optJSONArray("files")
+                val items = mutableListOf<FileItem>()
+                if (files != null) {
+                    for (i in 0 until files.length()) {
+                        val f = files.getJSONObject(i)
+                        items.add(FileItem(
+                            name = f.optString("name"),
+                            mimeType = f.optString("mimeType"),
+                            id = f.optString("id"),
+                            driveId = f.optString("driveId"),
+                            link = f.optString("link", null),
+                            size = f.optLong("size", 0L),
+                            modifiedTime = f.optString("modifiedTime", null)
+                        ))
+                    }
+                }
+                val next = if (json.isNull("nextPageToken")) null
+                    else json.optString("nextPageToken").takeIf { it.isNotBlank() }
+                items to next
+            } catch (e: Exception) {
+                if (pageIndex == 0) return null
+                break
             }
-            
-            val json = JSONObject(body)
-            val files = json.optJSONObject("data")?.optJSONArray("files") ?: return emptyList()
-            
-            val result = mutableListOf<FileItem>()
-            for (i in 0 until files.length()) {
-                val f = files.getJSONObject(i)
-                result.add(FileItem(
-                    name = f.optString("name"),
-                    mimeType = f.optString("mimeType"),
-                    id = f.optString("id"),
-                    driveId = f.optString("driveId"),
-                    link = f.optString("link", null),
-                    size = f.optLong("size", 0L),
-                    modifiedTime = f.optString("modifiedTime", null)
-                ))
-            }
-            result
-        } catch (e: Exception) {
-            null
+            result.addAll(page.first)
+            val next = page.second
+            if (next == null || next == pageToken) break
+            pageToken = next
+            pageIndex++
         }
+        return result
     }
     
     /**
@@ -113,8 +145,10 @@ class ApiService(private val context: Context) {
         //    drive root is cheap (one round-trip, JSON-encoded folder list).
         //    listFolder returns null on (a) non-2xx, (b) HTML body (login
         //    redirect), or (c) any exception — all 3 mean session is gone.
+        //    v1.0.5: maxPages = 1 — o probe só precisa saber se a sessão
+        //    responde; não precisa listar a pasta inteira.
         val probe = try {
-            listFolder("0:")
+            listFolder("0:", maxPages = 1)
         } catch (_: Exception) {
             null
         }
