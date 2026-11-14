@@ -11,7 +11,7 @@
     <string name="login_loading">Entrando…</string>
 
     <!-- Home -->
-    <string name="home_logout">Sair</string>
+    <string name="home_logout">Sair →</string>
 
     <!-- Browse -->
     <string name="browse_loading">Carregando…</string>
