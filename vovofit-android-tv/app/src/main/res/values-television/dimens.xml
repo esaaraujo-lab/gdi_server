@@ -10,39 +10,44 @@
   texto tem ~320dp de altura com os tipos TV; 320dp não deixa folga).
   Gap total entre cartões na TV: 16dp (marginEnd 8dp + decoração 8dp
   do RailGutterDecoration) — ver TV_LAYOUT_FIX_2.7.7.md.
+  v1.0.6 — tamanhos 2.7.5 com o visual novo (Elton 11:13/11:15):
+  título/seção/card/meta/hero/drive de volta às medidas da 2.7.5;
+  margens de overscan (56/40dp) mantidas — sem elas o texto é
+  cortado na borda (foto do Elton). Texto: título 30sp, seção
+  18sp, card 13sp, meta 10.5sp, corpo 13sp, botão 15sp.
 -->
 <resources>
     <!-- ── Tipo (TV) ── -->
-    <dimen name="tv_title_lg">48sp</dimen>
-    <dimen name="tv_title_md">36sp</dimen>
-    <dimen name="tv_section_title">28sp</dimen>
-    <dimen name="tv_card_title">24sp</dimen>
-    <dimen name="tv_card_meta">24sp</dimen>
-    <dimen name="tv_body">24sp</dimen>
-    <dimen name="tv_body_lg">26sp</dimen>
-    <dimen name="tv_chip_text">22sp</dimen>
-    <dimen name="tv_button_text">24sp</dimen>
+    <dimen name="tv_title_lg">30sp</dimen>
+    <dimen name="tv_title_md">22sp</dimen>
+    <dimen name="tv_section_title">18sp</dimen>
+    <dimen name="tv_card_title">13sp</dimen>
+    <dimen name="tv_card_meta">10.5sp</dimen>
+    <dimen name="tv_body">13sp</dimen>
+    <dimen name="tv_body_lg">14sp</dimen>
+    <dimen name="tv_chip_text">12sp</dimen>
+    <dimen name="tv_button_text">15sp</dimen>
     <dimen name="tv_time_text">24sp</dimen>
 
     <!-- ── Overscan / margens (TV) ── -->
     <dimen name="tv_margin_side">56dp</dimen>
     <dimen name="tv_margin_top">40dp</dimen>
     <dimen name="tv_margin_bottom">40dp</dimen>
-    <dimen name="tv_section_spacing">32dp</dimen>
-    <dimen name="tv_rail_spacing">24dp</dimen>
+    <dimen name="tv_section_spacing">26dp</dimen>
+    <dimen name="tv_rail_spacing">12dp</dimen>
 
     <!-- ── Cards / hero (TV) ── -->
-    <dimen name="tv_hero_height">340dp</dimen>
+    <dimen name="tv_hero_height">320dp</dimen>
     <dimen name="tv_card_width">200dp</dimen>
     <dimen name="tv_card_image_height">112dp</dimen>
-    <dimen name="tv_drive_card_width">156dp</dimen>
-    <dimen name="tv_drive_card_height">224dp</dimen>
+    <dimen name="tv_drive_card_width">150dp</dimen>
+    <dimen name="tv_drive_card_height">210dp</dimen>
     <dimen name="tv_detail_hero_width">800dp</dimen>
     <dimen name="tv_play_fab_size">120dp</dimen>
     <dimen name="play_fab_size">120dp</dimen>
     <dimen name="tv_rail_gap">8dp</dimen>
     <dimen name="tv_drive_tile_height">112dp</dimen>
-    <dimen name="tv_hero_text_padding_side">80dp</dimen>
+    <dimen name="tv_hero_text_padding_side">32dp</dimen>
     <dimen name="tv_focus_ring_width">4dp</dimen>
     <dimen name="tv_focus_elevation">8dp</dimen>
     <dimen name="tv_control_button_size">96dp</dimen>
