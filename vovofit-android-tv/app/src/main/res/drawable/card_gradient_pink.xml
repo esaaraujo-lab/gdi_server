@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- v1.0.8 onda 2 — nome legado ("pink"): o gradiente agora e lima suave sobre o fundo neutro. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <gradient android:startColor="#FF8B9F33" android:endColor="#1a1a2e" android:angle="135" />
+    <gradient android:startColor="#A3E63533" android:endColor="#101614" android:angle="135" />
     <corners android:radius="10dp" />
 </shape>
