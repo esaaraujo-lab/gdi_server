@@ -15,7 +15,7 @@ object CardGradient {
         val g = Color.green(baseColor)
         val b = Color.blue(baseColor)
         val start = Color.argb(0x59, r, g, b)
-        val end = Color.parseColor("#FF0F1218")
+        val end = Color.parseColor("#FF101614")
         val cornerPx = (16 * res.displayMetrics.density)
         return GradientDrawable(
             GradientDrawable.Orientation.TL_BR,
