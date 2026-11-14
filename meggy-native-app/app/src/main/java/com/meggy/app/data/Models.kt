@@ -30,22 +30,25 @@ data class DriveItem(
     val rootFolderId: String?,
     val icon: String = "📁",
     val tagline: String = "",
-    val isConcurso: Boolean = false
+    val isConcurso: Boolean = false,
+    // v2.7.11 onda 2: slug da capa gerada do drive
+    // (res/drawable-nodpi/cover_<slug>.jpg) — fallback (c).
+    val coverSlug: String = ""
 ) {
     companion object {
         val ALL: List<DriveItem> = listOf(
-            DriveItem(0,  "RETA FINAL TRTs",                "18pNVx52TY5ImVTTEyxp30oEQJCnKgzL7", "⚖️", "Simulados + resumos", true),
-            DriveItem(1,  "CURSOS - PLATAFORMAS COMPLETAS", "1lZo5wBhqC44yEySqX6rjyzBuJEEvGPs7", "📚", "Cursos completos"),
-            DriveItem(2,  "VESTIBULARES PLATAFORMAS",       null, "🎯", "Aulas + materiais"),
-            DriveItem(3,  "VESTIBULARES ISOLADAS",          null, "🎨", "Aulas avulsas"),
-            DriveItem(4,  "MUSICA E CANTO",                 null, "🎼", "Aulas de música"),
-            DriveItem(5,  "CARREIRAS EDUCACIONAIS",         null, "🏆", "Carreiras da educação"),
-            DriveItem(6,  "CLUBE FIT",                      null, "💪", "Treinos + saúde"),
-            DriveItem(7,  "HIPOPRESSIVOS",                  null, "🧘", "Exercícios guiados"),
-            DriveItem(8,  "SAÚDE E MEDICINA",               null, "⚕️", "Residências + cursos"),
-            DriveItem(9,  "TUDO DE TRIBUNAIS",              null, "⚖️", "Tribunais completos", true),
-            DriveItem(10, "ALFACON 2026",                   null, "🎓", "Alfacon 2026", true),
-            DriveItem(11, "PREPARATÓRIO OAB",               null, "🛡️", "1ª e 2ª fase", true)
+            DriveItem(0,  "RETA FINAL TRTs",                "18pNVx52TY5ImVTTEyxp30oEQJCnKgzL7", "⚖️", "Simulados + resumos", true, coverSlug = "reta_final_trts"),
+            DriveItem(1,  "CURSOS - PLATAFORMAS COMPLETAS", "1lZo5wBhqC44yEySqX6rjyzBuJEEvGPs7", "📚", "Cursos completos", coverSlug = "plataformas_completas"),
+            DriveItem(2,  "VESTIBULARES PLATAFORMAS",       null, "🎯", "Aulas + materiais", coverSlug = "vestibulares_plataformas"),
+            DriveItem(3,  "VESTIBULARES ISOLADAS",          null, "🎨", "Aulas avulsas", coverSlug = "vestibulares_isoladas"),
+            DriveItem(4,  "MUSICA E CANTO",                 null, "🎼", "Aulas de música", coverSlug = "musica_e_canto"),
+            DriveItem(5,  "CARREIRAS EDUCACIONAIS",         null, "🏆", "Carreiras da educação", coverSlug = "carreiras_educacionais"),
+            DriveItem(6,  "CLUBE FIT",                      null, "💪", "Treinos + saúde", coverSlug = "clube_fit"),
+            DriveItem(7,  "HIPOPRESSIVOS",                  null, "🧘", "Exercícios guiados", coverSlug = "hipopressivos"),
+            DriveItem(8,  "SAÚDE E MEDICINA",               null, "⚕️", "Residências + cursos", coverSlug = "saude_e_medicina"),
+            DriveItem(9,  "TUDO DE TRIBUNAIS",              null, "⚖️", "Tribunais completos", true, coverSlug = "tribunais"),
+            DriveItem(10, "ALFACON 2026",                   null, "🎓", "Alfacon 2026", true, coverSlug = "alfacon_2026"),
+            DriveItem(11, "PREPARATÓRIO OAB",               null, "🛡️", "1ª e 2ª fase", true, coverSlug = "oab")
         )
     }
 }
@@ -220,7 +223,11 @@ data class HeroItem(
     val drivePath: String,        // BrowseActivity drivePath
     val driveName: String,        // displayed in browse
     val icon: String,             // emoji shown in hero corner
-    val colorHint: String? = null // optional colorFromString hint
+    val colorHint: String? = null, // optional colorFromString hint
+    // v2.7.11 onda 2 — (a) foto de capa definida pelo admin no
+    // curso em destaque (a API de featured passa a devolver
+    // `cover_url`). Null quando ausente (parse defensivo).
+    val coverUrl: String? = null
 ) {
     companion object {
         /**
@@ -228,6 +235,40 @@ data class HeroItem(
          * per major drive so the rotation surfaces content from across
          * the whole library, not just the first drive.
          */
+        /**
+         * v2.7.11 onda 2 — parse defensivo da API de cursos em
+         * destaque (o backend passa a devolver `cover_url` — foto
+         * de capa definida pelo admin). O app AINDA não tem endpoint
+         * de featured (os destaques hoje são a lista curada [ALL]);
+         * quando a API existir, este parse alimenta o hero com
+         * (a) cover_url, sem quebrar quando o campo falta (null).
+         * Aceita `cover_url` e `coverUrl`; string vazia vira null.
+         */
+        fun fromJson(o: JSONObject): HeroItem {
+            val cover = o.optString("cover_url", "").takeIf { it.isNotBlank() }
+                ?: o.optString("coverUrl", "").takeIf { it.isNotBlank() }
+            return HeroItem(
+                title = o.optString("title", ""),
+                subtitle = o.optString("subtitle", ""),
+                badge = o.optString("badge", ""),
+                drivePath = o.optString("drivePath", o.optString("drive_path", "")),
+                driveName = o.optString("driveName", o.optString("drive_name", "")),
+                icon = o.optString("icon", ""),
+                colorHint = o.optString("colorHint").takeIf { it.isNotBlank() },
+                coverUrl = cover
+            )
+        }
+
+        /** Lista de destaques de um JSONArray (tolerante a null). */
+        fun parseList(arr: JSONArray?): List<HeroItem> {
+            if (arr == null) return emptyList()
+            val out = ArrayList<HeroItem>(arr.length())
+            for (i in 0 until arr.length()) {
+                runCatching { out.add(fromJson(arr.getJSONObject(i))) }
+            }
+            return out
+        }
+
         val ALL: List<HeroItem> = listOf(
             HeroItem(
                 title = "PF — Agente da Polícia Federal",
@@ -278,6 +319,56 @@ data class HeroItem(
                 icon = "⚕️"
             )
         )
+    }
+}
+
+// ──────────────────────────── 2.7.11 onda 2: cursos em destaque ────────────────────────────
+
+/**
+ * Um curso em destaque do admin (D1 featured_courses), devolvido por
+ * GET /api/featured-courses → {ok, courses:[{id, coursePath,
+ * courseName, icon, color, sortOrder, addedAt, cover_url}]}.
+ * A rota existe no worker v2 (handleFeaturedList); a v2.15.6
+ * acrescenta `cover_url` (foto de capa definida pelo admin). O parse
+ * é defensivo: cover_url ausente/vazio → null (a UI cai para a thumb
+ * do Drive e depois para a capa gerada — nunca quebra a tela).
+ * Não inventa endpoint: a rota já existe; só o campo é novo.
+ */
+data class FeaturedCourse(
+    val id: Long,
+    val coursePath: String,
+    val courseName: String,
+    val icon: String?,
+    val color: String?,
+    val sortOrder: Int,
+    /** Onda 2 (a) — foto de capa do admin. Null quando o backend ainda não a devolve. */
+    val coverUrl: String?
+) {
+    companion object {
+        fun fromJson(o: JSONObject): FeaturedCourse {
+            // cover_url (snake_case do worker) ou coverUrl (camelCase);
+            // ausente/vazio → null.
+            val cover = o.optString("cover_url", "").takeIf { it.isNotBlank() }
+                ?: o.optString("coverUrl", "").takeIf { it.isNotBlank() }
+            return FeaturedCourse(
+                id = o.optLong("id", 0L),
+                coursePath = o.optString("coursePath", o.optString("course_path", "")),
+                courseName = o.optString("courseName", o.optString("course_name", "")),
+                icon = o.optString("icon", "").takeIf { it.isNotBlank() },
+                color = o.optString("color", "").takeIf { it.isNotBlank() },
+                sortOrder = o.optInt("sortOrder", o.optInt("sort_order", 0)),
+                coverUrl = cover
+            )
+        }
+
+        fun parseList(arr: JSONArray?): List<FeaturedCourse> {
+            if (arr == null) return emptyList()
+            val out = ArrayList<FeaturedCourse>(arr.length())
+            for (i in 0 until arr.length()) {
+                runCatching { out.add(fromJson(arr.getJSONObject(i))) }
+            }
+            return out
+        }
     }
 }
 
