@@ -76,8 +76,8 @@
 
                     <TextView
                         android:id="@+id/heroIcon"
-                        android:layout_width="120dp"
-                        android:layout_height="120dp"
+                        android:layout_width="96dp"
+                        android:layout_height="96dp"
                         android:layout_gravity="top|end"
                         android:layout_margin="@dimen/tv_rail_spacing"
                         android:background="@drawable/btn_play_circle"
@@ -91,7 +91,8 @@
                         android:layout_height="wrap_content"
                         android:layout_gravity="bottom|start"
                         android:orientation="vertical"
-                        android:padding="@dimen/tv_section_spacing">
+                        android:paddingHorizontal="@dimen/tv_hero_text_padding_side"
+                        android:paddingVertical="@dimen/tv_section_spacing">
 
                         <TextView
                             android:id="@+id/heroBadge"
@@ -148,10 +149,10 @@
 
                     <TextView
                         android:id="@+id/heroPrev"
-                        android:layout_width="64dp"
-                        android:layout_height="64dp"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
                         android:layout_gravity="center_vertical|start"
-                        android:layout_marginStart="@dimen/spacing_sm"
+                        android:layout_marginStart="@dimen/spacing_lg"
                         android:background="@drawable/btn_play_circle"
                         android:clickable="true"
                         android:focusable="true"
@@ -162,10 +163,10 @@
 
                     <TextView
                         android:id="@+id/heroNext"
-                        android:layout_width="64dp"
-                        android:layout_height="64dp"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
                         android:layout_gravity="center_vertical|end"
-                        android:layout_marginEnd="@dimen/spacing_sm"
+                        android:layout_marginEnd="@dimen/spacing_lg"
                         android:background="@drawable/btn_play_circle"
                         android:clickable="true"
                         android:focusable="true"
