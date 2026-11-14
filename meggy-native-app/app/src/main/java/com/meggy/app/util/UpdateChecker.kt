@@ -18,6 +18,7 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import com.meggy.app.MeggyApp
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
@@ -47,6 +48,34 @@ import java.util.concurrent.atomic.AtomicBoolean
  *  - A consulta de versão SEMPRE vai à API de releases do GitHub e pega a
  *    primeira release com prefixo native-v* (per_page=100 para a release
  *    nunca cair da primeira página). Nenhum cache de versão.
+ *
+ * ★ v2.7.11 — AUTO-UPDATE (ordem do Elton 2026-11-14):
+ *  - A Home já chama checkForUpdateThrottled no onCreate E no onResume
+ *    (a Splash leva à Home em ~1,5s) — ou seja, o app checa sozinho a
+ *    cada abertura, sem tocar em nada. O throttle 1×/24h continua.
+ *  - Achando versão nova, o APK BAIXA SOZINHO em 2º plano (sem o
+ *    diálogo modal de progresso; só um toast discreto) e, ao terminar,
+ *    ABRE o instalador do sistema SOZINHO.
+ *  - NUNCA interrompe reprodução: se o PlayerActivity está em 1º
+ *    plano, o instalador NÃO abre — o APK fica pendente e dispara ao
+ *    voltar à Home (resumePendingApk).
+ *  - NUNCA baixa/lança 2× a mesma versão: `offered_version` registra a
+ *    versão cujo instalador já foi aberto (ou cuja permissão já foi
+ *    pedida); o modo automático pula essa versão. A checagem MANUAL em
+ *    Ajustes ignora o guarda e sempre oferece de novo.
+ *  - Falha de rede/HTTP no automático = silenciosa, sem toast, e NÃO
+ *    queima a janela de 24h (regra da 2.7.9, mantida).
+ *  - "Baixar só no Wi-Fi" (Ajustes) controla SÓ o cache de vídeo do
+ *    ExoPlayer (VideoCache) — NÃO é um ajuste geral de download; por
+ *    isso o APK de atualização baixa em qualquer conexão (um APK de
+ *    ~17 MB parado por falta de Wi-Fi deixaria o auto-update morto na
+ *    prática). Decisão documentada, não um bug.
+ *  - LIMITE REAL DO ANDROID (honesto): não existe instalação
+ *    silenciosa sem privilégios de sistema. O instalador do sistema
+ *    SEMPRE exige o toque do usuário em "Instalar", e a permissão
+ *    "Instalar apps desconhecidos" precisa ser concedida uma vez (o
+ *    app leva aos ajustes e retoma sozinho depois). O automático cobre
+ *    checar + baixar + abrir o instalador — o toque final é do sistema.
  */
 object UpdateChecker {
 
@@ -81,7 +110,7 @@ object UpdateChecker {
         // resposta bem-sucedida (HTTP 200 + corpo JSON válido) dentro de
         // checkForUpdate. Uma checagem que falha (sem rede / rate limit)
         // não queima a janela de 24h.
-        checkForUpdate(context, currentVersion, showFeedback = false)
+        checkForUpdate(context, currentVersion, showFeedback = false, auto = true)
     }
 
     /**
@@ -112,8 +141,13 @@ object UpdateChecker {
     private const val PREFS_NAME = "meggy_update"
     private const val KEY_DOWNLOADED_VERSION = "downloaded_version"
     private const val KEY_PENDING_APK = "pending_apk_path"
+    // v2.7.11 — versão cujo instalador já foi aberto (ou cuja permissão
+    // de instalar já foi pedida) no modo automático. Evita baixar/lançar
+    // de novo uma versão que o usuário dispensou. A checagem manual
+    // (Ajustes) ignora este guarda.
+    private const val KEY_OFFERED_VERSION = "offered_version"
 
-    fun checkForUpdate(context: Context, currentVersion: String, showFeedback: Boolean = false) {
+    fun checkForUpdate(context: Context, currentVersion: String, showFeedback: Boolean = false, auto: Boolean = false) {
         // ★ v2.7.4: APK pendente (usuário acabou de conceder a permissão de
         // instalar) — dispara a instalação agora, sem baixar de novo.
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -192,6 +226,13 @@ object UpdateChecker {
                     return@Thread
                 }
 
+                // v2.7.11 — modo automático: esta versão já foi oferecida
+                // (instalador aberto ou permissão pedida) e não foi
+                // instalada — não baixar nem lançar de novo. A checagem
+                // manual em Ajustes ignora este guarda.
+                val offered = prefs.getString(KEY_OFFERED_VERSION, "") ?: ""
+                if (auto && remoteVersion == offered) return@Thread
+
                 // Mesma versao — NAO fazer nada (silencioso)
                 if (remoteVersion == localVersion) {
                     if (showFeedback) showToast(context, "Voce esta na versao mais recente (v$localVersion)")
@@ -208,10 +249,13 @@ object UpdateChecker {
 
                     if (downloadedFile.exists() && lastDownloaded == remoteVersion) {
                         showToast(context, "Instalando v$remoteVersion...")
-                        installApk(context, downloadedFile)
+                        installApk(context, downloadedFile, remoteVersion)
                     } else {
-                        showToast(context, "Baixando v$remoteVersion...$sizeStr")
-                        downloadInApp(context, apkUrl, fileName, remoteVersion, apkSize, prefs)
+                        // v2.7.11 — automático: só um toast discreto (o
+                        // download roda em 2º plano, sem diálogo modal).
+                        if (auto) showToast(context, "Baixando atualização v$remoteVersion em segundo plano…")
+                        else showToast(context, "Baixando v$remoteVersion...$sizeStr")
+                        downloadInApp(context, apkUrl, fileName, remoteVersion, apkSize, prefs, silent = auto)
                     }
                 } else {
                     if (showFeedback) showToast(context, "Voce esta na versao mais recente (v$localVersion)")
@@ -257,7 +301,8 @@ object UpdateChecker {
     private fun downloadInApp(
         context: Context, url: String, fileName: String,
         remoteVersion: String, expectedSize: Long,
-        prefs: android.content.SharedPreferences
+        prefs: android.content.SharedPreferences,
+        silent: Boolean = false
     ) {
         val mainHandler = Handler(Looper.getMainLooper())
         val cancelled = AtomicBoolean(false)
@@ -266,7 +311,9 @@ object UpdateChecker {
         var progressText: TextView? = null
 
         // Diálogo de progresso (só quando o contexto é uma Activity).
-        if (context is Activity) {
+        // v2.7.11 — no modo automático (silent) NÃO há diálogo modal: o
+        // download é invisível, só o toast discreto do chamador.
+        if (!silent && context is Activity) {
             mainHandler.post {
                 val bar = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
                     max = 100
@@ -335,7 +382,7 @@ object UpdateChecker {
                 }
                 mainHandler.post { dialog?.dismiss() }
                 prefs.edit().putString(KEY_DOWNLOADED_VERSION, remoteVersion).apply()
-                installApk(context, target)
+                installApk(context, target, remoteVersion)
             } catch (e: InterruptedException) {
                 mainHandler.post { dialog?.dismiss() }
                 target.delete()
@@ -343,15 +390,18 @@ object UpdateChecker {
             } catch (e: Exception) {
                 mainHandler.post { dialog?.dismiss() }
                 // Fallback: fluxo antigo via DownloadManager do sistema.
-                showToast(context, "Download direto falhou — tentando pelo sistema...")
-                downloadAndInstall(context, url, fileName, remoteVersion, prefs)
+                // v2.7.11 — no automático, o fallback também é silencioso
+                // (sem toast): falha de rede não acorda o usuário.
+                if (!silent) showToast(context, "Download direto falhou — tentando pelo sistema...")
+                downloadAndInstall(context, url, fileName, remoteVersion, prefs, silent)
             }
         }.start()
     }
 
     private fun downloadAndInstall(
         context: Context, url: String, fileName: String,
-        remoteVersion: String, prefs: android.content.SharedPreferences
+        remoteVersion: String, prefs: android.content.SharedPreferences,
+        silent: Boolean = false
     ) {
         try {
             val request = DownloadManager.Request(Uri.parse(url)).apply {
@@ -371,7 +421,7 @@ object UpdateChecker {
                         val file = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
                         if (file.exists()) {
                             prefs.edit().putString(KEY_DOWNLOADED_VERSION, remoteVersion).apply()
-                            installApk(context, file)
+                            installApk(context, file, remoteVersion)
                         }
                         try { context.unregisterReceiver(this) } catch (_: Exception) {}
                     }
@@ -384,7 +434,7 @@ object UpdateChecker {
                 context.registerReceiver(receiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
             }
         } catch (e: Exception) {
-            showToast(context, "Erro ao baixar: ${e.message}")
+            if (!silent) showToast(context, "Erro ao baixar: ${e.message}")
         }
     }
 
@@ -396,11 +446,23 @@ object UpdateChecker {
      *     diálogo com o caminho do APK em vez de falhar em silêncio.
      *  3. Se o instalador abrir, confirma com toast.
      */
-    private fun installApk(context: Context, file: File) {
+    private fun installApk(context: Context, file: File, version: String? = null) {
+        // v2.7.11 — NUNCA interromper reprodução: com o player em 1º
+        // plano, guarda o APK como pendente e NÃO abre o instalador.
+        // Ao voltar à Home, resumePendingApk dispara sozinho.
+        if (MeggyApp.isPlayerForeground()) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().putString(KEY_PENDING_APK, file.absolutePath).apply()
+            return
+        }
         // Passo 1: permissão de instalar de fontes desconhecidas.
         if (!canInstallPackages(context)) {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             prefs.edit().putString(KEY_PENDING_APK, file.absolutePath).apply()
+            // v2.7.11 — registra como "oferecida" para o automático não
+            // pedir a permissão de novo a cada abertura para a mesma
+            // versão (a checagem manual em Ajustes ignora o guarda).
+            if (version != null) prefs.edit().putString(KEY_OFFERED_VERSION, version).apply()
             Handler(Looper.getMainLooper()).post {
                 if (context is Activity) {
                     AlertDialog.Builder(context)
@@ -470,6 +532,13 @@ object UpdateChecker {
                 return
             }
 
+            // v2.7.11 — instalador aberto: registra como "oferecida"
+            // para o automático não relançar esta versão se o usuário
+            // dispensar a instalação (a checagem manual ignora o guarda).
+            if (version != null) {
+                context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    .edit().putString(KEY_OFFERED_VERSION, version).apply()
+            }
             context.startActivity(installIntent)
             // Passo 3: confirmação de que a instalação foi disparada.
             showToast(context, "📲 Instalador aberto — confirme a instalação na tela do sistema")
