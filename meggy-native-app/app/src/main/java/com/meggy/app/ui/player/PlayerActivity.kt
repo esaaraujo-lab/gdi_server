@@ -4,6 +4,7 @@ import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
@@ -15,9 +16,11 @@ import android.view.GestureDetector
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.SeekBar
 import androidx.appcompat.app.AppCompatActivity
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -31,7 +34,6 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
-import androidx.recyclerview.widget.LinearLayoutManager
 import coil.load
 import com.google.android.material.snackbar.Snackbar
 import com.meggy.app.MeggyApp
@@ -59,20 +61,56 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * v2.7.6 — Player (conceitos player celular + TV player v2, Elton 23:50).
+ * v2.7.7 — Player (conceitos player celular + TV player v2, Elton 23:50)
+ * + simplificação do player (Elton 10:31, patch 2.7.7).
  *
  * DOIS MODOS (mesma Activity, mesmos componentes):
  *  - Retrato (celular): vídeo 16:9 + controles do ExoPlayer + linha de
- *    info (título, curso em rosa, −10s/tempo/+10s/velocidade/CC) +
- *    Anterior/Próxima (só quando há anterior/próxima real na playlist)
- *    + "A seguir" (a playlist) + bottom nav.
+ *    info (tempo, velocidade, CC, Descanso, tela cheia) + título +
+ *    curso em rosa + Anterior/Próxima (só quando há anterior/próxima
+ *    real na playlist) + bottom nav. O controller nativo do ExoPlayer
+ *    tem botão de tela cheia (setFullscreenButtonClickListener).
  *  - Fullscreen / TV: vídeo em TELA CHEIA imediata na TV (item 6);
- *    barra de controles grande (pause rosa, −10s, +10s, tempo, barra
- *    com bolinha, velocidade, CC, Descanso, sair da tela cheia).
- *    Voltar sai do fullscreen e volta à navegação. Sem PiP na TV.
+ *    no CELULAR entra pelo botão ⛶ (na linha de controles e no
+ *    controller nativo) ou GIRANDO o aparelho — e sai com Voltar ou
+ *    girando de volta para retrato. Barra de controles grande (pause
+ *    rosa, tempo, barra com bolinha, Descanso, CC, velocidade, sair
+ *    da tela cheia). Voltar sai do fullscreen e volta à navegação.
+ *    Sem PiP na TV.
+ *
+ * FULLSCREEN NO CELULAR (v2.7.7 — o que faltava): o botão ⛶ existia
+ * no XML, mas a linha de retrato tinha −10s/+10s + 4 pills + tempo
+ * (~426dp em 328dp úteis num celular de 360dp) — o ⛶ caía para fora
+ * da tela e o tempo era esmagado para 0dp. Por isso o Elton não via
+ * tela cheia no celular. Agora a linha tem duas linhas (tempo em cima,
+ * pills embaixo) e o controller nativo também mostra o ⛶. A Activity
+ * NÃO é recriada ao girar (configChanges no manifest + onConfigura-
+ * tionChanged): o ExoPlayer segue do ponto exato, sem reiniciar.
+ * Em fullscreen o container do vídeo preenche a tela (sem o ratio
+ * 16:9, que em paisagem de celular deixava a barra fora da tela).
  *
  * SEM LOGO no vídeo (verificado: o player nunca desenhou logo; v2 do
  * conceito remove o círculo do poodle — nada a remover, nada a pôr).
+ *
+ * PLAYLIST EMBUTIDA REMOVIDA (v2.7.7): a gaveta lateral (☰) e a seção
+ * "A seguir" saíram do player — a playlist vive na PÁGINA
+ * (DetailActivity, que monta a playlist via PlaylistManager). O que
+ * CONTINUA: o avanço de aula (Anterior/Próxima + autoplay no fim +
+ * onMediaItemTransition com resume/velocidade) e o PlaylistManager.
+ * PlaylistAdapter.kt + item_playlist.xml foram apagados (só o player
+ * os usava).
+ *
+ * VELOCIDADE (v2.7.7): NÃO existe velocidade no topo do vídeo (só
+ * voltar/título lá). A velocidade vive SÓ nas barras de controles
+ * (pill pequena 1.0× na barra fullscreen/TV e na linha do retrato),
+ * e a "Velocidade padrão" dos Ajustes (sm.defaultSpeed) continua
+ * valendo na abertura e ao avançar de aula.
+ *
+ * ±10s (v2.7.7): botões REMOVIDOS do rodapé (barra fullscreen/TV e
+ * linha do retrato). O pulo CONTINUA: double-tap nas laterais do
+ * vídeo (celular) e setas ◀ ▶ do D-pad (TV, com os controles
+ * escondidos ou com o foco no vídeo; com os controles visíveis e o
+ * foco num botão, as setas movem o foco — navegação padrão).
  *
  * DESCANSO (🌙, v1.3.0 + pill 23:50): overlay preto SÓ sobre a
  * superfície de vídeo (a barra com a pill ativa continua visível e
@@ -90,9 +128,9 @@ import kotlinx.coroutines.withContext
  *
  * ÁUDIO (mp3/podcast): MESMO player — a área de vídeo vira a capa do
  * episódio (thumb/monograma + título + sub); mesmos controles
- * (play/pause, ±10s, velocidade, progresso, continuar de onde parou,
- * Descanso, playlist "A seguir"); sem CC. Card "Continuar de onde
- * parou — Parado em 12:34" quando havia posição salva ao abrir.
+ * (play/pause, velocidade, progresso, continuar de onde parou,
+ * Descanso); sem CC. Card "Continuar de onde parou — Parado em 12:34"
+ * quando havia posição salva ao abrir.
  *
  * CORREÇÕES v2.7.6 (bugs verificados no main):
  *  - onMediaItemTransition/playItem buscavam (idx, 0) — agora retomam
@@ -137,11 +175,25 @@ class PlayerActivity : AppCompatActivity() {
                         return true
                     }
                 }
-                KeyEvent.KEYCODE_BACK -> {
-                    if (playlistVisible) {
-                        hidePlaylist()
+                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    if (sleepMode) {
+                        exitSleepMode()
                         return true
                     }
+                    // v2.7.7 — setas do D-pad: ±10s (o pulo continua sem
+                    // os botões do rodapé). Só quando o foco está no
+                    // vídeo (ou os controles estão escondidos): com os
+                    // controles visíveis e o foco num botão, as setas
+                    // movem o foco — navegação padrão do D-pad. Em
+                    // retrato o controller nativo trata as teclas.
+                    if (isFullscreen && (!controlsVisible || binding.playerView.hasFocus())) {
+                        val back = event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT
+                        seekBy(if (back) -10_000L else 10_000L)
+                        showSeekHint(if (back) "⏪ -10s" else "⏩ +10s")
+                        return true
+                    }
+                }
+                KeyEvent.KEYCODE_BACK -> {
                     if (sleepMode) {
                         exitSleepMode()
                         return true
@@ -166,9 +218,6 @@ class PlayerActivity : AppCompatActivity() {
     private var currentItem: FileItem? = null
     private var currentUrl: String? = null
 
-    private var playlistAdapter: PlaylistAdapter? = null
-    private var upNextAdapter: PlaylistAdapter? = null
-    private var playlistVisible = false
     private var saveJob: Job? = null
     private var timeJob: Job? = null
 
@@ -254,12 +303,10 @@ class PlayerActivity : AppCompatActivity() {
         updatePrevNextButtons()
         updateCcButtons()
 
-        // Controles da barra (fullscreen/TV) e da linha de info (retrato)
+        // Controles da barra (fullscreen/TV) e da linha de info (retrato).
+        // v2.7.7: sem botões −10s/+10s (o pulo continua por double-tap e
+        // D-pad) e SEM playlist embutida (a playlist vive na página).
         binding.btnPlayPauseBar.setOnClickListener { exitRestIfActive(); togglePlayPause() }
-        binding.btnSeekBackBar.setOnClickListener { exitRestIfActive(); seekBy(-10_000L) }
-        binding.btnSeekFwdBar.setOnClickListener { exitRestIfActive(); seekBy(10_000L) }
-        binding.btnSeekBackInfo.setOnClickListener { exitRestIfActive(); seekBy(-10_000L) }
-        binding.btnSeekFwdInfo.setOnClickListener { exitRestIfActive(); seekBy(10_000L) }
         binding.btnSpeedBar.setOnClickListener { exitRestIfActive(); cycleSpeed() }
         binding.btnSpeedInfo.setOnClickListener { exitRestIfActive(); cycleSpeed() }
         binding.btnCcBar.setOnClickListener { exitRestIfActive(); showCcDialog() }
@@ -272,10 +319,19 @@ class PlayerActivity : AppCompatActivity() {
         binding.btnNext.setOnClickListener { exitRestIfActive(); playNext() }
         binding.centerPlayPause.setOnClickListener { exitRestIfActive(); togglePlayPause() }
         binding.restartButton.setOnClickListener { exitRestIfActive(); restartVideo() }
-        binding.playlistButton.setOnClickListener { exitRestIfActive(); togglePlaylist() }
         binding.sleepTimerButton.setOnClickListener { showSleepTimerDialog() }
         binding.favButton.setOnClickListener { exitRestIfActive(); toggleFavoriteCurrent() }
         updateFavButton()
+
+        // v2.7.7 — botão ⛶ do controller NATIVO do ExoPlayer (retrato):
+        // o Media3 só mostra o botão de tela cheia do controller quando
+        // há um listener. É o segundo acesso ao fullscreen no celular
+        // (o primeiro é o ⛶ da linha de controles). O parâmetro do
+        // callback é ignorado de propósito: o estado vem da nossa flag
+        // isFullscreen (não da polaridade que o Media3 passa).
+        binding.playerView.setFullscreenButtonClickListener { _ ->
+            if (this.isFullscreen) exitFullscreen() else enterFullscreen()
+        }
 
         binding.sleepOverlay.setOnClickListener { exitSleepMode() }
 
@@ -314,8 +370,6 @@ class PlayerActivity : AppCompatActivity() {
             }
         }
 
-        setupPlaylistSidebar()
-        setupUpNext()
         scheduleAutoHide()
 
         val defaultSleepMin = SessionManager.get(this).defaultSleepTimerMin
@@ -342,11 +396,33 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * v2.7.7 — fullscreen no celular ao GIRAR o aparelho (como no
+     * YouTube). A Activity NÃO é recriada ao girar (configChanges no
+     * manifest já declarava orientation|screenSize|...), então o
+     * ExoPlayer segue tocando do ponto exato — nada reinicia, nenhum
+     * seek, nenhum reload. Girar para paisagem entra em fullscreen;
+     * voltar para retrato sai. Na TV não há rotação — retorno imediato.
+     * Idempotente: enterFullscreen/applyPortraitMode já ajustam o
+     * requestedOrientation, e a mudança de configuração que eles
+     * disparam reentra aqui sem efeito (a flag já está certa).
+     */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (isTv) return
+        if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            if (!isFullscreen) enterFullscreen()
+        } else if (newConfig.orientation == Configuration.ORIENTATION_PORTRAIT) {
+            if (isFullscreen) applyPortraitMode()
+        }
+    }
+
     // ──────────── modos ────────────
 
     private fun applyPortraitMode() {
         isFullscreen = false
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        setPlayerContainerFullscreen(false)
         binding.playerView.useController = true
         binding.customBar.visibility = View.GONE
         binding.infoScroll.visibility = View.VISIBLE
@@ -358,6 +434,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun enterFullscreen() {
         isFullscreen = true
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        setPlayerContainerFullscreen(true)
         binding.playerView.useController = false
         binding.customBar.visibility = View.VISIBLE
         binding.infoScroll.visibility = View.GONE
@@ -366,6 +443,27 @@ class PlayerActivity : AppCompatActivity() {
         WindowInsetsControllerCompat(window, window.decorView)
             .hide(WindowInsetsCompat.Type.systemBars())
         showControls()
+    }
+
+    /**
+     * v2.7.7 — em fullscreen o container do vídeo preenche a tela.
+     * Com o ratio 16:9 fixo no XML, num celular em paisagem (tela mais
+     * larga que 16:9 — ex.: 915×412dp) o container ficava com 515dp de
+     * altura numa tela de 412dp, e a barra de controles (no rodapé do
+     * container) caía para FORA da área visível. Em fullscreen a altura
+     * é MATCH_PARENT (o vídeo usa fit e faz letterbox se preciso); em
+     * retrato volta o 16:9. Na TV (16:9 exato) dá no mesmo.
+     */
+    private fun setPlayerContainerFullscreen(fullscreen: Boolean) {
+        val lp = binding.playerContainer.layoutParams as ConstraintLayout.LayoutParams
+        if (fullscreen) {
+            lp.height = ViewGroup.LayoutParams.MATCH_PARENT
+            lp.dimensionRatio = null
+        } else {
+            lp.height = 0
+            lp.dimensionRatio = "16:9"
+        }
+        binding.playerContainer.layoutParams = lp
     }
 
     private fun exitFullscreen() {
@@ -378,6 +476,12 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     // ──────────── títulos / capa de áudio / botões ────────────
+
+    private fun displayTitle(item: FileItem?): String {
+        if (item == null) return "Reproduzindo"
+        val label = item.folderLabel
+        return if (!label.isNullOrBlank()) "${item.name}  ·  $label" else item.name
+    }
 
     private fun setTitles(item: FileItem?) {
         val title = displayTitle(item)
@@ -927,66 +1031,12 @@ class PlayerActivity : AppCompatActivity() {
         ts.setParameters(params)
     }
 
-    // ──────────── playlist sidebar + "A seguir" ────────────
-
-    private fun displayTitle(item: FileItem?): String {
-        if (item == null) return "Reproduzindo"
-        val label = item.folderLabel
-        return if (!label.isNullOrBlank()) "${item.name}  ·  $label" else item.name
-    }
-
-    private fun setupPlaylistSidebar() {
-        val items = PlaylistManager.all()
-        if (items.isEmpty()) {
-            binding.playlistButton.visibility = View.GONE
-            return
-        }
-        playlistAdapter = PlaylistAdapter(items, PlaylistManager.index()) { position ->
-            val item = items.getOrNull(position) ?: return@PlaylistAdapter
-            PlaylistManager.setIndex(position)
-            playItem(item)
-            hidePlaylist()
-        }
-        binding.playlistRecycler.layoutManager = LinearLayoutManager(this)
-        binding.playlistRecycler.adapter = playlistAdapter
-    }
-
-    private fun setupUpNext() {
-        val items = PlaylistManager.all()
-        if (items.size <= 1) {
-            binding.upNextLabel.visibility = View.GONE
-            binding.upNextRecycler.visibility = View.GONE
-            return
-        }
-        upNextAdapter = PlaylistAdapter(items, PlaylistManager.index()) { position ->
-            val item = items.getOrNull(position) ?: return@PlaylistAdapter
-            PlaylistManager.setIndex(position)
-            playItem(item)
-        }
-        binding.upNextRecycler.layoutManager = LinearLayoutManager(this)
-        binding.upNextRecycler.adapter = upNextAdapter
-    }
-
-    private fun togglePlaylist() {
-        playlistVisible = !playlistVisible
-        binding.playlistContainer.visibility = if (playlistVisible) View.VISIBLE else View.GONE
-        binding.playlistButton.text = if (playlistVisible) "\u2715" else "\u2630"
-        if (playlistVisible) {
-            binding.playlistRecycler.post {
-                val idx = PlaylistManager.index()
-                binding.playlistRecycler.smoothScrollToPosition(idx)
-                binding.playlistRecycler.requestFocus()
-                val vh = binding.playlistRecycler.findViewHolderForAdapterPosition(idx)
-                vh?.itemView?.requestFocus()
-            }
-        }
-    }
-
-    private fun hidePlaylist() {
-        playlistVisible = false
-        binding.playlistContainer.visibility = View.GONE
-        binding.playlistButton.text = "\u2630"
-    }
+    // ──────────── playlist — v2.7.7: a UI embutida (gaveta + "A seguir")
+    // foi REMOVIDA do player. A playlist vive na PÁGINA
+    // (DetailActivity, via PlaylistManager.setPlaylist); o avanço de
+    // aula (Anterior/Próxima, autoplay, onMediaItemTransition) continua
+    // igual. Não há mais setup de RecyclerView aqui — PlaylistAdapter
+    // e item_playlist.xml foram apagados.
 
     // ──────────── player lifecycle ────────────
 
@@ -1120,8 +1170,6 @@ class PlayerActivity : AppCompatActivity() {
                         updateAudioCover(newItem)
                         updatePrevNextButtons()
                         updateCcButtons()
-                        playlistAdapter?.updateCurrent(newIndex)
-                        upNextAdapter?.updateCurrent(newIndex)
                         updateFavButton()
                         // v2.7.6 (fix): retomar a posição salva + aplicar a
                         // velocidade padrão — antes zerava os dois.
@@ -1216,8 +1264,6 @@ class PlayerActivity : AppCompatActivity() {
         setTitles(item)
         initialisePlayer()
         startPregenerator()
-        playlistAdapter?.updateCurrent(PlaylistManager.index())
-        upNextAdapter?.updateCurrent(PlaylistManager.index())
     }
 
     private fun toggleFavoriteCurrent() {
