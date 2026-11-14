@@ -1,25 +1,53 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  v2.1.0 — Detail screen layout.
-  Netflix-style hero banner at top + grid of tiles below.
+  v2.1.5 — Detalhe da aula/curso (conceito escolhido pelo Elton 23:41,
+  adaptado aos dados reais — ver REDESIGN_NOTES.md).
+  Hero 16:9 com foto (thumb do primeiro vídeo quando houver, monograma
+  quando não) + play rosa central + barra de progresso + tempo;
+  título grande; curso em rosa; chips com borda (N aulas, N pastas,
+  X% concluído — sem chip "HD": não há dado de qualidade por pasta);
+  botão rosa "Continuar assistindo" em largura total; abas
+  Resumo | Aulas | Questões | Flashcards (Aulas é a 4ª aba, preserva
+  a grade de arquivos — o conceito só tinha 3); bottom nav presente.
+  A aba Aulas é a tela "escolher aulas" (23:53): pastas-aula
+  expansíveis com vídeo + PDF + pasta de PDFs, selos, busca e
+  progresso por aula.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="@color/bg_primary">
+    android:background="@color/md_background"
+    android:orientation="vertical">
+
+    <!-- Header TV (oculto no celular; visível no layout-television) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/headerSearch"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:src="@drawable/ic_search" />
+
+        <TextView
+            android:id="@+id/headerAvatar"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:text="M" />
+    </LinearLayout>
 
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="64dp"
-        android:background="@color/bg_primary"
+        android:background="@color/md_background"
         android:elevation="0dp"
-        app:titleTextColor="@color/text_primary"
+        app:navigationIconTint="@color/md_primary"
         app:titleTextAppearance="@style/TextAppearance.Material3.TitleLarge"
-        app:navigationIconTint="@color/meggy_pink" />
+        app:titleTextColor="@color/md_on_surface" />
 
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
@@ -30,211 +58,471 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:paddingHorizontal="@dimen/content_margin"
+            android:paddingBottom="@dimen/spacing_lg">
 
-            <!-- Hero Banner -->
-            <FrameLayout
-                android:id="@+id/detail_hero"
+            <!-- Hero 16:9 -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
-                android:layout_height="240dp">
+                android:layout_height="@dimen/detail_hero_height"
+                android:layout_marginTop="@dimen/spacing_sm"
+                app:cardCornerRadius="@dimen/radius_lg"
+                app:cardElevation="@dimen/elevation_0"
+                app:cardBackgroundColor="@color/tile_bg">
 
-                <!-- Gradient background -->
-                <View
-                    android:id="@+id/hero_bg"
+                <FrameLayout
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:background="@drawable/hero_gradient" />
+                    android:layout_height="match_parent">
 
-                <!-- Bottom scrim -->
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="120dp"
-                    android:layout_gravity="bottom"
-                    android:background="@drawable/tile_overlay_bottom" />
+                    <View
+                        android:id="@+id/heroBg"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/card_gradient_pink" />
+
+                    <ImageView
+                        android:id="@+id/heroImage"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="centerCrop"
+                        android:visibility="gone"
+                        android:contentDescription="@string/thumb_desc" />
+
+                    <TextView
+                        android:id="@+id/heroMonogram"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:gravity="center"
+                        android:textColor="@color/tile_title"
+                        android:textSize="48sp"
+                        android:textStyle="bold" />
+
+                    <!-- Play central -->
+                    <TextView
+                        android:id="@+id/heroPlayFab"
+                        android:layout_width="@dimen/play_fab_size"
+                        android:layout_height="@dimen/play_fab_size"
+                        android:layout_gravity="center"
+                        android:background="@drawable/btn_play_circle"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:text="▶"
+                        android:textColor="@color/md_on_primary"
+                        android:textSize="28sp" />
+
+                    <!-- ★ Salvar curso (topo, direita) -->
+                    <TextView
+                        android:id="@+id/heroFav"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="top|end"
+                        android:layout_margin="@dimen/spacing_sm"
+                        android:background="@drawable/badge_resume"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:paddingHorizontal="@dimen/spacing_md"
+                        android:paddingVertical="@dimen/spacing_xs"
+                        android:text="☆  Salvar"
+                        android:textColor="@color/tile_title"
+                        android:textSize="@dimen/text_chip" />
+
+                    <!-- Progresso do curso + tempo -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="bottom"
+                        android:orientation="vertical"
+                        android:paddingHorizontal="@dimen/spacing_md"
+                        android:paddingBottom="@dimen/spacing_sm">
+
+                        <TextView
+                            android:id="@+id/heroTime"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/tile_title"
+                            android:textSize="@dimen/text_card_progress"
+                            android:textStyle="bold" />
+
+                        <ProgressBar
+                            android:id="@+id/heroProgress"
+                            style="?android:attr/progressBarStyleHorizontal"
+                            android:layout_width="match_parent"
+                            android:layout_height="4dp"
+                            android:layout_marginTop="4dp"
+                            android:max="100"
+                            android:progressDrawable="@drawable/progress_horizontal" />
+                    </LinearLayout>
+                </FrameLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Título + curso -->
+            <TextView
+                android:id="@+id/heroTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_lg"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/text_detail_title"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/heroSubtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/md_primary"
+                android:textSize="@dimen/text_detail_course" />
+
+            <!-- Chips de metadados -->
+            <LinearLayout
+                android:id="@+id/chipsRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/chipCount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="@dimen/chip_height"
+                    android:layout_marginEnd="@dimen/spacing_sm"
+                    android:background="@drawable/chip_outline"
+                    android:gravity="center"
+                    android:paddingHorizontal="@dimen/spacing_md"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_chip" />
+
+                <TextView
+                    android:id="@+id/chipFolders"
+                    android:layout_width="wrap_content"
+                    android:layout_height="@dimen/chip_height"
+                    android:layout_marginEnd="@dimen/spacing_sm"
+                    android:background="@drawable/chip_outline"
+                    android:gravity="center"
+                    android:paddingHorizontal="@dimen/spacing_md"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_chip" />
+
+                <TextView
+                    android:id="@+id/chipProgress"
+                    android:layout_width="wrap_content"
+                    android:layout_height="@dimen/chip_height"
+                    android:background="@drawable/chip_outline"
+                    android:gravity="center"
+                    android:paddingHorizontal="@dimen/spacing_md"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_chip" />
+            </LinearLayout>
+
+            <!-- CTA -->
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/ctaContinue"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/cta_height"
+                android:layout_marginTop="@dimen/spacing_lg"
+                android:background="@drawable/btn_primary_pill"
+                android:focusable="true"
+                android:text="@string/cta_continue"
+                android:textColor="@color/md_on_primary"
+                android:textSize="@dimen/text_button"
+                android:textStyle="bold" />
+
+            <!-- Abas -->
+            <LinearLayout
+                android:id="@+id/tabsRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:orientation="horizontal">
 
                 <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
+                    android:id="@+id/tabResumo"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
                     android:orientation="vertical"
-                    android:padding="28dp"
-                    android:gravity="center_vertical">
+                    android:paddingVertical="@dimen/spacing_sm">
 
                     <TextView
-                        android:id="@+id/hero_badge"
+                        android:id="@+id/tabResumoLabel"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="📂 PASTA"
-                        android:textColor="@color/meggy_pink"
-                        android:textSize="11sp"
-                        android:textStyle="bold"
-                        android:letterSpacing="0.18"
-                        android:layout_marginBottom="8dp" />
+                        android:text="@string/tab_summary"
+                        android:textColor="@color/md_primary"
+                        android:textSize="@dimen/text_tab"
+                        android:textStyle="bold" />
 
-                    <TextView
-                        android:id="@+id/hero_title"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:textColor="#FFFFFFFF"
-                        android:textSize="26sp"
-                        android:textStyle="bold"
-                        android:shadowColor="#80000000"
-                        android:shadowDx="0"
-                        android:shadowDy="2"
-                        android:shadowRadius="6"
-                        android:layout_marginBottom="8dp"
-                        android:maxLines="2"
-                        android:ellipsize="end" />
-
-                    <TextView
-                        android:id="@+id/hero_subtitle"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:textColor="#B5C0CC"
-                        android:textSize="13sp"
-                        android:layout_marginBottom="18dp" />
-
-                    <LinearLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal">
-
-                        <Button
-                            android:id="@+id/hero_play"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="▶  Assistir"
-                            android:background="#FFFFFFFF"
-                            android:textColor="#FF000000"
-                            android:paddingHorizontal="28dp"
-                            android:paddingVertical="10dp"
-                            android:textAllCaps="false"
-                            android:textSize="14sp"
-                            android:textStyle="bold"
-                            android:stateListAnimator="@null"
-                            android:focusable="true"
-                            android:focusableInTouchMode="true"
-                            android:clickable="true" />
-
-                        <Button
-                            android:id="@+id/hero_fav"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="☆  Salvar"
-                            android:background="#33FFFFFF"
-                            android:textColor="#FFFFFFFF"
-                            android:paddingHorizontal="22dp"
-                            android:paddingVertical="10dp"
-                            android:textAllCaps="false"
-                            android:textSize="14sp"
-                            android:layout_marginStart="10dp"
-                            android:stateListAnimator="@null"
-                            android:focusable="true"
-                            android:focusableInTouchMode="true"
-                            android:clickable="true" />
-
-                        <Button
-                            android:id="@+id/hero_browse"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Explorar"
-                            android:background="#33FFFFFF"
-                            android:textColor="#FFFFFFFF"
-                            android:paddingHorizontal="22dp"
-                            android:paddingVertical="10dp"
-                            android:textAllCaps="false"
-                            android:textSize="14sp"
-                            android:layout_marginStart="10dp"
-                            android:stateListAnimator="@null"
-                            android:focusable="true"
-                            android:focusableInTouchMode="true"
-                            android:clickable="true" />
-                    </LinearLayout>
+                    <View
+                        android:id="@+id/tabIndicatorResumo"
+                        android:layout_width="match_parent"
+                        android:layout_height="3dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@color/md_primary" />
                 </LinearLayout>
-            </FrameLayout>
 
-            <!-- Section label -->
-            <TextView
-                android:id="@+id/section_label"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Conteúdos"
-                android:textColor="@color/text_primary"
-                android:textSize="17sp"
-                android:textStyle="bold"
-                android:paddingHorizontal="20dp"
-                android:paddingTop="22dp"
-                android:paddingBottom="10dp" />
+                <LinearLayout
+                    android:id="@+id/tabAulas"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:paddingVertical="@dimen/spacing_sm">
 
-            <!-- ★ v2.2.0: Continue de onde parou rail (per-drive recents) -->
-            <TextView
-                android:id="@+id/label_continue"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Continue de onde parou"
-                android:textColor="@color/meggy_pink"
-                android:textSize="15sp"
-                android:textStyle="bold"
-                android:paddingHorizontal="20dp"
-                android:paddingTop="20dp"
-                android:paddingBottom="8dp"
-                android:visibility="gone" />
+                    <TextView
+                        android:id="@+id/tabAulasLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/tab_lessons"
+                        android:textColor="@color/md_on_surface_variant"
+                        android:textSize="@dimen/text_tab" />
 
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rail_continue"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:clipToPadding="false"
-                android:paddingHorizontal="14dp"
-                android:paddingBottom="6dp"
-                android:nestedScrollingEnabled="false"
-                android:visibility="gone" />
+                    <View
+                        android:id="@+id/tabIndicatorAulas"
+                        android:layout_width="match_parent"
+                        android:layout_height="3dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@android:color/transparent" />
+                </LinearLayout>
 
-            <!-- Grid -->
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/recycler"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:nestedScrollingEnabled="false"
-                android:clipToPadding="false"
-                android:paddingHorizontal="10dp"
-                android:paddingBottom="24dp" />
+                <LinearLayout
+                    android:id="@+id/tabQuestoes"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:paddingVertical="@dimen/spacing_sm">
 
-            <!-- Loading skeleton -->
-            <ProgressBar
-                android:id="@+id/loading_view"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:layout_gravity="center"
-                android:layout_marginTop="40dp"
-                android:layout_marginBottom="40dp"
-                android:visibility="gone"
-                android:indeterminateTint="@color/meggy_pink" />
+                    <TextView
+                        android:id="@+id/tabQuestoesLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/tab_questions"
+                        android:textColor="@color/md_on_surface_variant"
+                        android:textSize="@dimen/text_tab" />
 
-            <!-- Empty state -->
+                    <View
+                        android:id="@+id/tabIndicatorQuestoes"
+                        android:layout_width="match_parent"
+                        android:layout_height="3dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@android:color/transparent" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/tabFlashcards"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:paddingVertical="@dimen/spacing_sm">
+
+                    <TextView
+                        android:id="@+id/tabFlashcardsLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/tab_flashcards"
+                        android:textColor="@color/md_on_surface_variant"
+                        android:textSize="@dimen/text_tab" />
+
+                    <View
+                        android:id="@+id/tabIndicatorFlashcards"
+                        android:layout_width="match_parent"
+                        android:layout_height="3dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@android:color/transparent" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Painel: Resumo -->
             <LinearLayout
-                android:id="@+id/empty_state"
-                android:layout_width="wrap_content"
+                android:id="@+id/panelResumo"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/resumoState"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/md_primary"
+                    android:textSize="@dimen/text_card_progress" />
+
+                <TextView
+                    android:id="@+id/resumoText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_md"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_detail_body" />
+
+                <TextView
+                    android:id="@+id/detailFooter"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_xl"
+                    android:gravity="end"
+                    android:textColor="@color/md_on_surface_variant"
+                    android:textSize="@dimen/text_card_progress" />
+            </LinearLayout>
+
+            <!-- Painel: Aulas (escolher aulas) -->
+            <LinearLayout
+                android:id="@+id/panelAulas"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:gravity="center"
-                android:layout_marginTop="40dp"
+                android:visibility="gone">
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_md"
+                    app:boxBackgroundColor="@color/md_surface_container"
+                    app:boxCornerRadiusTopStart="28dp"
+                    app:boxCornerRadiusTopEnd="28dp"
+                    app:boxCornerRadiusBottomStart="28dp"
+                    app:boxCornerRadiusBottomEnd="28dp"
+                    app:boxStrokeWidth="0dp">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/lessonSearch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="Buscar aula…"
+                        android:imeOptions="actionSearch"
+                        android:inputType="text"
+                        android:textColor="@color/md_on_surface"
+                        android:textColorHint="@color/md_on_surface_variant"
+                        android:textSize="@dimen/text_card_subtitle" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <TextView
+                    android:id="@+id/labelContinue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_xl"
+                    android:text="@string/continue_from_where"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_section_title"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/railContinue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_md"
+                    android:clipToPadding="false"
+                    android:overScrollMode="never"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/sectionLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_xl"
+                    android:text="@string/tab_lessons"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_section_title"
+                    android:textStyle="bold" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/recycler"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_md"
+                    android:clipToPadding="false"
+                    android:nestedScrollingEnabled="false"
+                    android:overScrollMode="never" />
+
+                <ProgressBar
+                    android:id="@+id/loadingView"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:layout_marginTop="@dimen/spacing_xl"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/emptyState"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_xl"
+                    android:gravity="center"
+                    android:text="@string/browse_empty"
+                    android:textColor="@color/md_on_surface_variant"
+                    android:textSize="@dimen/text_detail_body"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- Painel: Questões -->
+            <LinearLayout
+                android:id="@+id/panelQuestoes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
                 android:visibility="gone">
 
                 <TextView
-                    android:layout_width="wrap_content"
+                    android:id="@+id/questoesText"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textSize="56sp"
-                    android:text="📭" />
+                    android:layout_marginTop="@dimen/spacing_md"
+                    android:text="@string/no_questions"
+                    android:textColor="@color/md_on_surface_variant"
+                    android:textSize="@dimen/text_detail_body" />
+            </LinearLayout>
+
+            <!-- Painel: Flashcards -->
+            <LinearLayout
+                android:id="@+id/panelFlashcards"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
 
                 <TextView
-                    android:layout_width="wrap_content"
+                    android:id="@+id/flashcardsText"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="Pasta vazia."
-                    android:textColor="@color/text_secondary"
-                    android:textSize="14sp" />
+                    android:layout_marginTop="@dimen/spacing_md"
+                    android:text="@string/no_flashcards"
+                    android:textColor="@color/md_on_surface_variant"
+                    android:textSize="@dimen/text_detail_body" />
             </LinearLayout>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
+
+    <!-- Bottom nav (conceito do detalhe) — oculta na TV (código) -->
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottomNav"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="@dimen/content_margin"
+        android:layout_marginBottom="@dimen/spacing_md"
+        android:background="@drawable/nav_bar_background"
+        android:elevation="@dimen/elevation_3"
+        app:itemActiveIndicatorStyle="@style/NavIndicatorPill"
+        app:itemIconTint="@color/bottom_nav_item_color"
+        app:itemTextColor="@color/bottom_nav_item_color"
+        app:labelVisibilityMode="labeled"
+        app:menu="@menu/bottom_nav_menu" />
 </LinearLayout>
