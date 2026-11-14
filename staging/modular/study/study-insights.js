@@ -355,13 +355,19 @@
     // Sucesso — renderiza a resposta em Markdown simples
     // ★ v1.0.190 FIX: API retorna campo `markdown` (não `response`). Aceita ambos para compat.
     const md=String(data.response||data.markdown||'');
-    // Markdown muito simples: ## → h2, ** → bold, listas com -
-    let html=escHtml(md)
+    // ★ v2.15.5 item 10: renderer MD real (vendored, seguro por
+    //    construção). Sem ele, cai no renderer mínimo antigo
+    //    (escapado — seguro, mas só ##, ** e listas com -).
+    let html=null;
+    if(typeof window.gdiRenderMd==='function'){try{html=window.gdiRenderMd(md);}catch(_){html=null;}}
+    if(html===null){
+    html=escHtml(md)
       .replace(/^## (.+)$/gm,'<h3 style="color:var(--ferreto-text,#f0f6fc);font-size:13px;font-weight:700;margin:12px 0 6px;">$1</h3>')
       .replace(/^### (.+)$/gm,'<h4 style="color:var(--ferreto-text,#e6edf3);font-size:12px;font-weight:600;margin:10px 0 4px;">$1</h4>')
       .replace(/\*\*(.+?)\*\*/g,'<strong style="color:var(--ferreto-text,#f0f6fc);">$1</strong>')
       .replace(/^- (.+)$/gm,'<div style="padding-left:14px;position:relative;margin:3px 0;color:var(--ferreto-text,#e6edf3);font-size:12px;"><span style="position:absolute;left:0;color:var(--ferreto-primary,#ff8b9f);">•</span>$1</div>')
       .replace(/\n\n/g,'<div style="height:6px;"></div>');
+    }
 
     // Context badge
     const ctx=data.context||{};
