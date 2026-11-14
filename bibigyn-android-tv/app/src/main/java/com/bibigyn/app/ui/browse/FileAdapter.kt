@@ -15,6 +15,7 @@ import com.bibigyn.app.data.colorFromString
 import com.bibigyn.app.data.monogramFor
 import com.bibigyn.app.databinding.ItemRailCardBinding
 import com.bibigyn.app.util.CardGradient
+import com.bibigyn.app.util.CoverLibrary
 import com.bibigyn.app.util.FocusAnimator
 import com.bibigyn.app.util.Format
 import com.bibigyn.app.util.SessionManager
@@ -89,23 +90,38 @@ class FileAdapter(
             val baseColor = colorFromString(item.name)
             cardBg.background = CardGradient.drawable(res, baseColor)
 
-            // Thumb real quando houver; monograma quando não houver.
+            // Thumb real quando houver; sem ela (ou se ela
+            // falhar), camada 3 — biblioteca por tipo (nome do
+            // arquivo/pasta → caminho); sem match, o monograma.
+            val showLibraryOrMonogram = {
+                val libraryUrl = CoverLibrary.resolve(ctx, item.name, currentFolderPath)
+                if (!libraryUrl.isNullOrBlank()) {
+                    cardThumbnail.visibility = View.VISIBLE
+                    cardMonogram.visibility = View.GONE
+                    cardThumbnail.load(libraryUrl) {
+                        error(R.drawable.card_gradient_pink)
+                        listener(onError = { _, _ ->
+                            cardThumbnail.visibility = View.GONE
+                            cardMonogram.visibility = View.VISIBLE
+                            cardMonogram.text = monogramFor(item.name)
+                        })
+                    }
+                } else {
+                    cardThumbnail.visibility = View.GONE
+                    cardMonogram.visibility = View.VISIBLE
+                    cardMonogram.text = monogramFor(item.name)
+                }
+            }
             val thumbUrl = item.thumbnailLink
             if (thumbUrl != null && (item.isVideo || item.isPdf || item.isAudio)) {
                 cardThumbnail.visibility = View.VISIBLE
                 cardMonogram.visibility = View.GONE
                 cardThumbnail.load(thumbUrl) {
                     error(R.drawable.card_gradient_pink)
-                    // Patch: se a arte falhar a carregar, volta ao monograma.
-                    listener(onError = { _, _ ->
-                        cardThumbnail.visibility = View.GONE
-                        cardMonogram.visibility = View.VISIBLE
-                    })
+                    listener(onError = { _, _ -> showLibraryOrMonogram() })
                 }
             } else {
-                cardThumbnail.visibility = View.GONE
-                cardMonogram.visibility = View.VISIBLE
-                cardMonogram.text = monogramFor(item.name)
+                showLibraryOrMonogram()
             }
 
             // Progresso real para vídeos.
