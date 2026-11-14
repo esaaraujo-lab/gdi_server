@@ -234,6 +234,27 @@ class SessionManager private constructor(context: Context) {
         prefs.edit().putString(KEY_RECENTS, out.toString()).apply()
     }
 
+    /**
+     * v2.7.11 — Atualiza SÓ a thumb de um recent existente, no lugar
+     * (sem reordenar a lista e sem mexer no timestamp). Usado pelo
+     * backfill da Home: recents criados antes da 2.7.8 não tinham thumb
+     * salva (o listFolder da época descartava o campo). Não faz nada se
+     * o recent não existir.
+     */
+    fun updateRecentThumb(folderPath: String, videoName: String, thumbnailLink: String) {
+        if (thumbnailLink.isBlank()) return
+        val arr = recentArray()
+        val list = (0 until arr.length()).map { arr.getJSONObject(it) }.toMutableList()
+        val idx = list.indexOfFirst {
+            it.optString("folder") == folderPath && it.optString("video") == videoName
+        }
+        if (idx < 0) return
+        list[idx].put("thumb", thumbnailLink)
+        val out = JSONArray()
+        list.forEach { out.put(it) }
+        prefs.edit().putString(KEY_RECENTS, out.toString()).apply()
+    }
+
     /** Returns the list of recent items as List<RecentItem>, most-recent first. */
     fun getRecents(): List<RecentItem> {
         val arr = recentArray()
