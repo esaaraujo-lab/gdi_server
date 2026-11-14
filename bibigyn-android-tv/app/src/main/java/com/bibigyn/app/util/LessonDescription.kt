@@ -69,6 +69,37 @@ object LessonDescription {
     const val DETAIL_POLL_ATTEMPTS = 6
     const val POLL_DELAY_MS = 30_000L
 
+    /**
+     * Onda 2 — ganchos de abertura do texto descritivo (Elton
+     * 2026-11-14 19:43): o texto exibido começa com um gancho
+     * sorteado A CADA EXIBIÇÃO (não por aula — o sorteio acontece no
+     * momento de mostrar, sobre o resumo JÁ guardado, que é salvo
+     * SEM o gancho). Sem resumo, não há gancho: a descrição fica em
+     * branco (regra vigente), nunca texto inventado.
+     */
+    val DESCRIPTION_HOOKS = listOf(
+        "Nesta aula exploramos...",
+        "Vamos aprender...",
+        "Nesta aula, você vai descobrir...",
+        "Prepare-se para mergulhar em...",
+        "Hoje vamos ver..."
+    )
+
+    /** Sorteia um gancho da lista (um por exibição). */
+    fun randomHook(): String = DESCRIPTION_HOOKS.random()
+
+    /**
+     * Prefixa um gancho sorteado ao resumo gerado. Idempotente: se o
+     * texto já começa com um gancho, devolve como está (o resumo
+     * guardado nunca leva gancho — o sorteio é só na tela).
+     */
+    fun withHook(summary: String): String {
+        val text = summary.trim()
+        if (text.isBlank()) return text
+        if (DESCRIPTION_HOOKS.any { text.startsWith(it) }) return text
+        return "${randomHook()} $text"
+    }
+
     // ───────── (b)/(c) — heurística de "nome real de aula" ─────────
     //
     // Regra exata (nada de adivinhar na hora do teste):
