@@ -487,13 +487,12 @@
                         if (cp) { Shell.router.navigate('/drives'); setTimeout(() => Shell.views._renderDrives(cp), 50); }
                       };
                     });
-                    // ★ v2.10.4: confirmação via gdiModal — o confirm() nativo é
-                    // auto-dispensado por navegadores automatizados e o ✕ não fazia nada
+                    // ★ v2.10.4 + v2.15.4 Q2: confirmação via _v215Confirm
+                    //   (gdiModal → modal inline do próprio shell). O confirm()
+                    //   nativo era auto-dispensado por navegadores automatizados
+                    //   e o ✕ não fazia nada — nunca mais confirm() aqui.
                     const askRemove = async (title, msg) => {
-                      if (typeof window.gdiModal === 'function') {
-                        try { return await window.gdiModal({ title, message: msg, confirmText: 'Remover', cancelText: 'Cancelar', danger: true }); } catch (_) {}
-                      }
-                      return confirm(msg);
+                      return Shell.views._v215Confirm(title, msg, 'Remover');
                     };
                     container.querySelectorAll('.concurso-remove-btn').forEach(btn => {
                       btn.onclick = async (e) => {
@@ -511,7 +510,7 @@
                           try { if (window.__gdiStudy && window.__gdiStudy.courses && window.__gdiStudy.courses.invalidateUnifiedCache) window.__gdiStudy.courses.invalidateUnifiedCache(); } catch (_) {}
                           try { if (typeof Bus !== 'undefined' && Bus.emit) Bus.emit('courses:changed', {}); } catch (_) {}
                           Shell.views.cursos(el);
-                        } catch (err) { alert('Nao foi possivel remover: ' + err.message); }
+                        } catch (err) { Shell.views._v215Err('Não foi possível remover', err.message); }
                       };
                     });
                     container.querySelectorAll('.course-remove-btn').forEach(btn => {
@@ -539,7 +538,7 @@
                           try { if (window.__gdiStudy && window.__gdiStudy.courses && window.__gdiStudy.courses.invalidateUnifiedCache) window.__gdiStudy.courses.invalidateUnifiedCache(); } catch (_) {}
                           try { if (typeof Bus !== 'undefined' && Bus.emit) Bus.emit('courses:changed', {}); } catch (_) {}
                           Shell.views.cursos(el);
-                        } catch (err) { if (window.gdiModal) { window.gdiModal({ title: 'Não foi possível remover', message: err.message, confirmText: 'OK' }); } else { alert('Nao foi possivel remover: ' + err.message); } }
+                        } catch (err) { Shell.views._v215Err('Não foi possível remover', err.message); }
                       };
                     });
                   }
@@ -802,10 +801,10 @@
             <div class="gdi-study-bar" style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
               <div class="gdi-study-bc"><ol class="gdi-bc" style="list-style:none;padding:0;margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px;">${bcHTML}</ol></div>
               <div class="gdi-study-modes" style="display:flex;gap:6px;">
-                <button class="gdi-mode-btn active" data-mode="split"><i class="bi bi-layout-split"></i> Dividido</button>
-                <button class="gdi-mode-btn" data-mode="fv"><i class="bi bi-lightning-charge-fill"></i> Foco aula</button>
-                <button class="gdi-mode-btn" data-mode="fm"><i class="bi bi-file-earmark-pdf-fill"></i> Foco material</button>
-                <button class="gdi-watched-btn" id="gdi-watched-btn" data-b="1"><i class="bi bi-eye"></i> Assistido</button>
+                <button class="gdi-mode-btn active" data-mode="split" title="Dividido" aria-pressed="true"><i class="bi bi-layout-split"></i> Dividido</button>
+                <button class="gdi-mode-btn" data-mode="fv" title="Foco na aula" aria-pressed="false"><i class="bi bi-lightning-charge-fill"></i> Foco aula</button>
+                <button class="gdi-mode-btn" data-mode="fm" title="Foco no material" aria-pressed="false"><i class="bi bi-file-earmark-pdf-fill"></i> Foco material</button>
+                <button class="gdi-watched-btn" id="gdi-watched-btn" data-b="1" aria-pressed="false" aria-label="Marcar aula como assistida"><i class="bi bi-eye"></i> Assistido</button>
               </div>
             </div>
             <div class="gdi-study-grid" id="gdi-study-grid">
@@ -828,15 +827,20 @@
                       style="display:block;width:100%;max-height:none;"
                       onerror="this.style.display='none';document.getElementById('meggy-player-error').style.display='block'">
                     </video>
-                    <div id="meggy-player-error" style="display:none;padding:40px;text-align:center;color:#ff8b9f;">
-                      ⚠️ Não carregou. <a href="${videoUrl}" target="_blank" style="color:#5ddeda;">Abrir</a>
+                    <div id="meggy-player-error" role="alert" style="display:none;padding:40px 24px;text-align:center;color:#e6edf3;">
+                      <div style="font-size:28px;margin-bottom:12px;">⚠️</div>
+                      <div style="font-weight:700;margin-bottom:8px;">Não foi possível carregar este vídeo</div>
+                      <div style="font-size:14px;line-height:1.5;color:#9aa4b8;margin-bottom:16px;">Verifique sua conexão e tente abrir a aula novamente — ou abra o arquivo direto.</div>
+                      <a href="${videoUrl}" target="_blank" class="gdi-mode-btn" style="color:#5ddeda;">Abrir o vídeo</a>
                     </div>
                   `}
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;">
                   <button class="gdi-mode-btn" id="gdi-prev-btn" ${idx === 0 ? 'disabled' : ''}><i class="bi bi-chevron-left"></i> Anterior</button>
                   <button class="gdi-mode-btn" id="gdi-next-btn" ${idx >= pl.length - 1 ? 'disabled' : ''}>Próxima <i class="bi bi-chevron-right"></i></button>
-                  <a class="gdi-mode-btn" href="${videoUrl}" download="${name}" target="_blank"><i class="bi bi-download"></i></a>
+                  <a class="gdi-mode-btn" href="${videoUrl}" download="${name}" target="_blank" aria-label="Baixar vídeo" title="Baixar vídeo"><i class="bi bi-download"></i></a>
+                  <select class="gdi-speed-select" id="gdi-speed-select" title="Velocidade de reprodução" aria-label="Velocidade de reprodução" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#e6edf3;border-radius:999px;padding:6px 10px;font-size:13px;font-family:inherit;cursor:pointer;"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="1.75">1.75×</option><option value="2">2×</option></select>
+                  <button class="gdi-mode-btn" id="gdi-fullscreen-btn" title="Tela cheia (F)"><i class="bi bi-arrows-fullscreen"></i> Tela cheia</button>
                   <button class="gdi-mode-btn" id="gdi-interfolder-btn"><i class="bi bi-collection"></i> Interfolder</button>
                   <button class="gdi-mode-btn" id="gdi-meggy-ai-btn" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-robot"></i> Meggy</button>
                 </div>
@@ -844,20 +848,20 @@
                   <div style="font-size:14px;font-weight:600;color:#e6edf3;margin-bottom:8px;">📝 Anotações</div>
                   <textarea id="gdi-note-input" rows="2" placeholder="Digite sua anotação..." style="width:100%;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:6px;padding:8px;color:#e6edf3;font-family:inherit;font-size:13px;resize:vertical;outline:none;"></textarea>
                   <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
-                    <span id="gdi-note-time" style="cursor:pointer;font-size:12px;color:#5ddeda;">00:00</span>
+                    <span id="gdi-note-time" role="button" tabindex="0" aria-label="Ir para um momento do vídeo" style="cursor:pointer;font-size:12px;color:#5ddeda;">00:00</span>
                     <button id="gdi-note-save" style="background:rgba(255,139,159,0.12);border:1px solid rgba(255,139,159,0.3);color:#ff8b9f;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;"><i class="bi bi-save"></i> Salvar</button>
                   </div>
                   <div id="gdi-notes-list" style="margin-top:8px;"></div>
                 </div>
                 <div id="gdi-playlist-wrap" style="background:rgba(255,255,255,0.043);border:1px solid rgba(255,255,255,0.09);border-radius:10px;padding:8px;">
-                  <button id="gdi-pl-toggle" class="gdi-mode-btn" style="width:100%;justify-content:flex-start;padding:8px 10px;font-size:12px;">
+                  <button id="gdi-pl-toggle" class="gdi-mode-btn" aria-expanded="false" aria-controls="gdi-playlist-body" style="width:100%;justify-content:flex-start;padding:8px 10px;font-size:12px;">
                     <i class="bi bi-collection-play me-2"></i><strong>Playlist</strong>
                     <span id="gdi-pl-count" style="font-size:11px;color:#9aa4b8;margin-left:6px;">${idx + 1} / ${pl.length}</span>
                     <i id="gdi-pl-chev" class="bi bi-chevron-down" style="margin-left:auto;"></i>
                   </button>
                   <div id="gdi-playlist-body" style="overflow-y:auto;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:6px;background:rgba(0,0,0,0.2);max-height:240px;display:none;margin-top:6px;">
                     <div id="gdi-playlist-list">
-                      ${pl.map((v, i) => `<div class="gdi-playlist-item ${i === idx ? 'cur' : ''}" data-idx="${i}" title="${v.name}" style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:12px;color:${i === idx ? '#ff8b9f' : '#9aa4b8'};${i === idx ? 'background:rgba(255,139,159,0.12);' : ''}"><div style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><i class="bi ${i === idx ? 'bi-play-fill' : 'bi-film'} me-2"></i><span style="font-weight:${i === idx ? '600' : '400'};">${v.name}</span></div><span class="gdi-pl-size" style="font-size:10px;color:#6b7488;margin-left:8px;">${v.size || ''}</span></div>`).join('')}
+                      ${pl.map((v, i) => `<div class="gdi-playlist-item ${i === idx ? 'cur' : ''}" data-idx="${i}" title="${v.name}" role="button" tabindex="0" aria-label="Reproduzir ${v.name}" style="display:flex;justify-content:space-between;align-items:center;padding:12px 10px;border-radius:6px;cursor:pointer;font-size:12px;color:${i === idx ? '#ff8b9f' : '#9aa4b8'};${i === idx ? 'background:rgba(255,139,159,0.12);' : ''}"><div style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><i class="bi ${i === idx ? 'bi-play-fill' : 'bi-film'} me-2"></i><span style="font-weight:${i === idx ? '600' : '400'};">${v.name}</span></div><span class="gdi-pl-size" style="font-size:10px;color:#6b7488;margin-left:8px;">${v.size || ''}</span></div>`).join('')}
                     </div>
                   </div>
                 </div>
@@ -872,7 +876,7 @@
                   <strong><i class="bi bi-journal-bookmark-fill" style="color:#ff8b9f;"></i> Materiais da aula</strong>
                   <span id="gdi-mat-status" style="margin-left:8px;">buscando…</span>
                 </div>
-                <div id="gdi-mat-body" style="background:rgba(22,27,38,0.72);border:1px solid rgba(255,255,255,0.09);border-radius:16px;min-height:420px;height:calc(100vh - 250px);overflow:hidden;"></div>
+                <div id="gdi-mat-body" style="background:rgba(22,27,38,0.72);border:1px solid rgba(255,255,255,0.09);border-radius:16px;min-height:420px;height:calc(100vh - 250px);height:calc(100dvh - 250px);overflow:hidden;"></div>
               </aside>
             </div>
           </div>
@@ -881,6 +885,51 @@
         const video = document.getElementById('meggy-video');
         const timeEl = document.getElementById('gdi-note-time');
         const plCountEl = document.getElementById('gdi-pl-count');
+
+        // ★ v2.15.4 P1-09: fullscreen com fallback p/ iOS antigo
+        //   (video.webkitEnterFullscreen) — usado pelo botão de tela cheia
+        //   (P0-03) e pela tecla F. O requestFullscreen pode devolver
+        //   undefined em navegadores antigos — por isso o guard no .catch.
+        const goFullscreen = () => {
+          try {
+            if (document.fullscreenElement || document.webkitFullscreenElement) {
+              if (document.exitFullscreen) document.exitFullscreen();
+              else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+              return;
+            }
+            const wrap = video ? video.closest('.gdi-player-wrap') : null;
+            const tryEl = (el) => {
+              if (!el) return false;
+              try {
+                if (el.requestFullscreen) { const p = el.requestFullscreen(); if (p && typeof p.catch === 'function') p.catch(() => { try { if (video && video.webkitEnterFullscreen) video.webkitEnterFullscreen(); } catch (_) {} }); return true; }
+              } catch (_) {}
+              return false;
+            };
+            if (tryEl(wrap)) return;
+            if (tryEl(video)) return;
+            if (video && video.webkitEnterFullscreen) video.webkitEnterFullscreen();
+          } catch (_) {}
+        };
+
+        // ★ v2.15.4 P1-09: toque duplo no vídeo (±10s por lado; dois
+        //   touchend <300ms; esquerda volta, direita avança). Não há
+        //   dblclick no touch — por isso a detecção é por touchend.
+        if (video) {
+          let __lastTapAt = 0;
+          video.addEventListener('touchend', (e) => {
+            const now = Date.now();
+            const t = (e.changedTouches && e.changedTouches[0]) || null;
+            const x = t ? t.clientX : 0;
+            if (now - __lastTapAt < 300) {
+              __lastTapAt = 0;
+              try {
+                const r = video.getBoundingClientRect();
+                const mid = r.left + r.width / 2;
+                video.currentTime = x < mid ? Math.max(0, video.currentTime - 10) : Math.min(video.duration || 0, video.currentTime + 10);
+              } catch (_) {}
+            } else { __lastTapAt = now; }
+          });
+        }
 
         let lastSave = 0;
         const saveResume = () => {
@@ -938,8 +987,9 @@
         // Modos — usar CSS classes (visibility/position) em vez de display:none (C1: não destrói iframes)
         document.querySelectorAll('.gdi-mode-btn[data-mode]').forEach(btn => {
           btn.onclick = () => {
-            document.querySelectorAll('.gdi-mode-btn[data-mode]').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.gdi-mode-btn[data-mode]').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
             btn.classList.add('active');
+            btn.setAttribute('aria-pressed', 'true');
             const grid = document.getElementById('gdi-study-grid');
             const mode = btn.dataset.mode;
             if (mode === 'fv') {
@@ -966,6 +1016,7 @@
           const w = this.dataset.b === '1';
           this.dataset.b = w ? '0' : '1';
           this.classList.toggle('done', !w);
+          this.setAttribute('aria-pressed', String(!w));
           this.innerHTML = !w ? '<i class="bi bi-eye-fill"></i> Assistida ✓' : '<i class="bi bi-eye"></i> Assistido';
           try { if (window.GDIUser?.setWatched) window.GDIUser.setWatched(videoUrl, !w); } catch (e) {}
         };
@@ -980,9 +1031,12 @@
           const isOpen = plBody.style.display !== 'none';
           plBody.style.display = isOpen ? 'none' : 'block';
           plChev.className = isOpen ? 'bi bi-chevron-down' : 'bi bi-chevron-up';
+          document.getElementById('gdi-pl-toggle').setAttribute('aria-expanded', String(!isOpen));
         };
         document.querySelectorAll('.gdi-playlist-item').forEach(item => {
           item.onclick = () => { const i = parseInt(item.dataset.idx); if (i !== idx) switchTo(i); };
+          // ★ v2.15.4 DESIGN: item é botão (role+tabindex no markup) — Enter/Espaço ativam (teclado/D-pad).
+          item.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); item.click(); } };
         });
 
         // Breadcrumb
@@ -996,6 +1050,30 @@
 
         // Meggy AI
         document.getElementById('gdi-meggy-ai-btn').onclick = () => Shell.openMeggyAIDrawer();
+
+        // ★ v2.15.4 P0-03: seletor de velocidade + botão de tela cheia.
+        //   O enhancer (gdi-player-enhancer.js) já persiste via ratechange
+        //   e restaura por curso — aqui só mudamos video.playbackRate e
+        //   sincronizamos o select quando a taxa muda por outro caminho
+        //   (teclado, menu nativo, restauração do enhancer).
+        const speedSel = document.getElementById('gdi-speed-select');
+        if (speedSel && video) {
+          const syncSpeedSel = () => {
+            const r = String(video.playbackRate || 1);
+            for (let i = 0; i < speedSel.options.length; i++) {
+              if (speedSel.options[i].value === r) { speedSel.value = r; return; }
+            }
+          };
+          speedSel.addEventListener('change', () => {
+            const v = parseFloat(speedSel.value);
+            if (v > 0) video.playbackRate = v;
+          });
+          video.addEventListener('ratechange', syncSpeedSel);
+          video.addEventListener('loadedmetadata', syncSpeedSel);
+          syncSpeedSel();
+        }
+        const fsBtn = document.getElementById('gdi-fullscreen-btn');
+        if (fsBtn) fsBtn.onclick = () => goFullscreen();
 
         // ★ Interfolder — com finalizeNames
         document.getElementById('gdi-interfolder-btn').onclick = async () => {
@@ -1031,9 +1109,9 @@
             Shell.state.playerPlaylist = pl;
             idx = pl.findIndex(v => v.origName === name || v.link === videoUrl);
             if (idx === -1) idx = 0;
-            document.getElementById('gdi-playlist-list').innerHTML = pl.map((v, i) => `<div class="gdi-playlist-item ${i === idx ? 'cur' : ''}" data-idx="${i}" title="${v.name}" style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:12px;color:${i === idx ? '#ff8b9f' : '#9aa4b8'};${i === idx ? 'background:rgba(255,139,159,0.12);' : ''}"><div style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><i class="bi ${i === idx ? 'bi-play-fill' : 'bi-film'} me-2"></i><span style="font-weight:${i === idx ? '600' : '400'};">${v.name}</span></div><span class="gdi-pl-size" style="font-size:10px;color:#6b7488;margin-left:8px;">${v.size || ''}</span></div>`).join('');
+            document.getElementById('gdi-playlist-list').innerHTML = pl.map((v, i) => `<div class="gdi-playlist-item ${i === idx ? 'cur' : ''}" data-idx="${i}" title="${v.name}" role="button" tabindex="0" aria-label="Reproduzir ${v.name}" style="display:flex;justify-content:space-between;align-items:center;padding:12px 10px;border-radius:6px;cursor:pointer;font-size:12px;color:${i === idx ? '#ff8b9f' : '#9aa4b8'};${i === idx ? 'background:rgba(255,139,159,0.12);' : ''}"><div style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><i class="bi ${i === idx ? 'bi-play-fill' : 'bi-film'} me-2"></i><span style="font-weight:${i === idx ? '600' : '400'};">${v.name}</span></div><span class="gdi-pl-size" style="font-size:10px;color:#6b7488;margin-left:8px;">${v.size || ''}</span></div>`).join('');
             plCountEl.textContent = `${idx + 1} / ${pl.length}`;
-            document.querySelectorAll('.gdi-playlist-item').forEach(item => { item.onclick = () => { const i = parseInt(item.dataset.idx); if (i !== idx) switchTo(i); }; });
+            document.querySelectorAll('.gdi-playlist-item').forEach(item => { item.onclick = () => { const i = parseInt(item.dataset.idx); if (i !== idx) switchTo(i); }; item.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); item.click(); } }; });
             btn.innerHTML = `<i class="bi bi-check"></i> ${pl.length}`;
           } catch (e) { console.error(e); btn.innerHTML = '⚠️'; }
         };
@@ -1143,6 +1221,7 @@
               const icon = isTransc ? 'bi-card-text' : isAiResumo ? 'bi-stars' : isEbook ? 'bi-book' : ext === 'pdf' ? 'bi-file-earmark-pdf' : 'bi-file-earmark-text';
               const tab = document.createElement('button');
               tab.className = 'gdi-mat-tab' + (i === 0 ? ' active' : '');
+              if (i === 0) tab.setAttribute('aria-current', 'true');
               tab.style.cssText = 'display:inline-flex;flex-direction:row;align-items:center;gap:6px;padding:7px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:999px;cursor:pointer;font-size:13px;font-weight:500;color:#c9d1d9;font-family:inherit;transition:all 0.15s;white-space:nowrap;';
               tab.dataset.mat = i;
               tab.innerHTML = `<i class="bi ${icon}" style="font-size:16px;"></i><span style="font-size:13px;font-weight:600;">${label}</span>`;
@@ -1164,9 +1243,9 @@
             });
 
             function showMaterial(i) {
-              document.querySelectorAll('.gdi-mat-tab').forEach(t => { t.classList.remove('active'); t.style.background = 'rgba(255,255,255,0.06)'; t.style.borderColor = 'rgba(255,255,255,0.12)'; t.style.color = '#c9d1d9'; });
+              document.querySelectorAll('.gdi-mat-tab').forEach(t => { t.classList.remove('active'); t.removeAttribute('aria-current'); t.style.background = 'rgba(255,255,255,0.06)'; t.style.borderColor = 'rgba(255,255,255,0.12)'; t.style.color = '#c9d1d9'; });
               const activeTab = document.querySelector(`.gdi-mat-tab[data-mat="${i}"]`);
-              if (activeTab) { activeTab.classList.add('active'); activeTab.style.background = '#1f6feb'; activeTab.style.borderColor = '#1f6feb'; activeTab.style.color = '#fff'; }
+              if (activeTab) { activeTab.classList.add('active'); activeTab.setAttribute('aria-current', 'true'); activeTab.style.background = '#1f6feb'; activeTab.style.borderColor = '#1f6feb'; activeTab.style.color = '#fff'; }
               const m = materials[i];
               let link = '';
               if (m.link) { link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link); if (m.name.endsWith('.pdf') && !link.includes('inline=')) link += (link.includes('?') ? '&' : '?') + 'inline=true'; }
@@ -1195,15 +1274,15 @@
                     window._lastMdText = txt;
                     window._lastMdName = m.name;
                   }
-                }).catch(() => { const el = document.getElementById('gdi-mat-md'); if (el) el.textContent = 'Erro.'; });
+                }).catch(() => { const el = document.getElementById('gdi-mat-md'); if (el) el.textContent = 'Não foi possível carregar o texto. Toque na aba novamente.'; });
               } else if (link) bodyEl.innerHTML = `<div style="text-align:center;padding:40px;"><a href="${link}" target="_blank" class="gdi-mode-btn"><i class="bi bi-download"></i> Abrir</a></div>`;
               else bodyEl.innerHTML = '<div style="text-align:center;padding:40px;color:#6b7488;">Sem preview</div>';
             }
 
             function showISA(type) {
-              document.querySelectorAll('.gdi-mat-tab').forEach(t => { t.classList.remove('active'); t.style.background = 'rgba(124,77,255,0.08)'; t.style.borderColor = 'rgba(124,77,255,0.2)'; t.style.color = '#a78bfa'; });
+              document.querySelectorAll('.gdi-mat-tab').forEach(t => { t.classList.remove('active'); t.removeAttribute('aria-current'); t.style.background = 'rgba(124,77,255,0.08)'; t.style.borderColor = 'rgba(124,77,255,0.2)'; t.style.color = '#a78bfa'; });
               const activeTab = document.querySelector('.gdi-mat-tab[data-mat="' + type + '"]');
-              if (activeTab) { activeTab.classList.add('active'); activeTab.style.background = '#7c4dff'; activeTab.style.borderColor = '#7c4dff'; activeTab.style.color = '#fff'; }
+              if (activeTab) { activeTab.classList.add('active'); activeTab.setAttribute('aria-current', 'true'); activeTab.style.background = '#7c4dff'; activeTab.style.borderColor = '#7c4dff'; activeTab.style.color = '#fff'; }
               const lessonName = Shell.state.playerPlaylist?.[Shell.state.playerIndex]?.name || '';
               const lessonPath = Shell.state.currentFolderPath || '';
 
@@ -1514,8 +1593,8 @@
                   console.error('[Shell] showISA:', e);
                   bodyEl.innerHTML = '<div style="padding:20px;color:#ff8b9f;text-align:center;">' +
                     '<div style="font-size:36px;margin-bottom:12px;">⚠️</div>' +
-                    '<div style="font-weight:600;margin-bottom:8px;">Erro ao gerar conteúdo</div>' +
-                    '<div style="font-size:13px;color:#9aa4b8;margin-bottom:16px;">' + (e.message || 'Tente novamente.') + '</div>' +
+                    '<div style="font-weight:600;margin-bottom:8px;">Não foi possível gerar este conteúdo</div>' +
+                    '<div style="font-size:14px;line-height:1.5;color:#9aa4b8;margin-bottom:16px;">Verifique sua conexão e toque em "Tentar novamente".</div>' +
                     '<button class="meggy-header-btn" onclick="Shell.state.playerPlaylist && Shell.views._playVideoInline(Shell.state.playerPlaylist[Shell.state.playerIndex].link, Shell.state.playerPlaylist[Shell.state.playerIndex].name, Shell.state.playerPlaylist, Shell.state.playerIndex)" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-arrow-clockwise"></i> Tentar novamente</button>' +
                   '</div>';
                 }
@@ -1526,8 +1605,8 @@
           } catch (e) {
             console.error('[Shell] loadMaterials:', e);
             tabsEl.innerHTML = '';
-            if (statusEl) statusEl.textContent = 'erro';
-            bodyEl.innerHTML = `<div style="text-align:center;padding:40px;color:#ff8b9f;">Erro: ${e.message}</div>`;
+            if (statusEl) statusEl.textContent = 'não foi possível carregar';
+            bodyEl.innerHTML = `<div style="text-align:center;padding:40px 24px;color:#e6edf3;"><div style="font-weight:700;margin-bottom:8px;">Não foi possível carregar o material</div><div style="font-size:14px;line-height:1.5;color:#9aa4b8;">Verifique sua conexão e toque na aba novamente.</div></div>`;
           }
         }
         setTimeout(loadMaterials, 500);
@@ -1545,7 +1624,45 @@
           list.appendChild(note);
           notesInput.value = '';
         };
-        timeEl.onclick = () => { const t = parseFloat(prompt('Ir para (segundos):', '0')) || 0; video.currentTime = t; };
+        // ★ v2.15.4 Q6: seek por input inline — o prompt() nativo era
+        //   auto-dispensado em navegador automatizado → parseFloat(null)
+        //   = NaN → || 0 → o vídeo pulava para 0s. Agora: clique no tempo
+        //   abre um input (aceita segundos ou mm:ss); Enter aplica,
+        //   Esc ou blur cancela sem tocar no vídeo.
+        let __seekInput = null;
+        timeEl.onclick = () => {
+          if (!video) return;
+          if (!__seekInput) {
+            __seekInput = document.createElement('input');
+            __seekInput.type = 'text';
+            __seekInput.inputMode = 'decimal';
+            __seekInput.setAttribute('aria-label', 'Ir para (segundos ou mm:ss)');
+            __seekInput.style.cssText = 'width:90px;background:rgba(255,255,255,0.06);border:1px solid rgba(93,222,218,0.4);border-radius:6px;padding:6px 8px;color:#e6edf3;font-size:12px;font-family:inherit;outline:none;';
+            const applySeekInput = () => {
+              const raw = String(__seekInput.value || '').trim();
+              let t = NaN;
+              const mm = raw.match(/^(\d+):([0-5]?\d)$/);
+              if (mm) t = parseInt(mm[1], 10) * 60 + parseInt(mm[2], 10);
+              else t = parseFloat(raw);
+              if (isFinite(t) && t >= 0) video.currentTime = Math.min(t, video.duration || t);
+              __seekInput.style.display = 'none'; timeEl.style.display = '';
+            };
+            __seekInput.addEventListener('keydown', (ev) => {
+              ev.stopPropagation();
+              if (ev.key === 'Enter') applySeekInput();
+              else if (ev.key === 'Escape') { __seekInput.style.display = 'none'; timeEl.style.display = ''; }
+            });
+            __seekInput.addEventListener('blur', () => { __seekInput.style.display = 'none'; timeEl.style.display = ''; });
+            timeEl.parentNode.insertBefore(__seekInput, timeEl.nextSibling);
+          }
+          __seekInput.value = String(Math.floor(video.currentTime || 0));
+          __seekInput.style.display = '';
+          timeEl.style.display = 'none';
+          __seekInput.focus();
+          __seekInput.select();
+        };
+        // ★ v2.15.4 DESIGN: o tempo é botão (role+tabindex) — Enter/Espaço abrem o seek como o clique.
+        timeEl.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); timeEl.click(); } };
 
         // Atalhos
         const keyHandler = (e) => {
@@ -1556,7 +1673,7 @@
             case 'ArrowLeft': video.currentTime = Math.max(0, video.currentTime - 10); break;
             case 'ArrowUp': e.preventDefault(); video.volume = Math.min(1, video.volume + 0.1); break;
             case 'ArrowDown': e.preventDefault(); video.volume = Math.max(0, video.volume - 0.1); break;
-            case 'f': case 'F': if (document.fullscreenElement) document.exitFullscreen(); else video.requestFullscreen?.().catch(() => {}); break;
+            case 'f': case 'F': goFullscreen(); break;
             case 'm': case 'M': video.muted = !video.muted; break;
             case 'n': case 'N': if (idx < pl.length - 1) switchTo(idx + 1); break;
             case 'p': case 'P': if (idx > 0) switchTo(idx - 1); break;
@@ -2119,12 +2236,12 @@
               // Recarregar view de cursos
               Shell.views.cursos(parentEl);
             } else {
-              alert('Erro ao adicionar curso: ' + (d.error || 'tente novamente'));
+              Shell.views._v215Err('Erro ao adicionar curso', d.error || 'tente novamente');
               confirmBtn.disabled = false;
               confirmBtn.innerHTML = '<i class="bi bi-check-lg"></i> Adicionar como Curso';
             }
           } catch (e) {
-            alert('Erro: ' + e.message);
+            Shell.views._v215Err('Erro ao adicionar curso', e.message);
             confirmBtn.disabled = false;
             confirmBtn.innerHTML = '<i class="bi bi-check-lg"></i> Adicionar como Curso';
           }
@@ -2178,12 +2295,12 @@
             '<div class="meggy-flashcard-deck">' +
               '<div class="meggy-flashcard" id="meggy-flashcard-card" onclick="this.classList.toggle(\'flipped\')">' +
                 '<div class="meggy-flashcard-face meggy-flashcard-front">' +
-                  '<div class="meggy-flashcard-label">PERGUNTA</div>' +
+                  '<div class="meggy-flashcard-label">Pergunta</div>' +
                   '<div class="meggy-flashcard-text">' + front + '</div>' +
                   '<div class="meggy-flashcard-hint"><i class="bi bi-arrow-repeat"></i> Clique para ver a resposta</div>' +
                 '</div>' +
                 '<div class="meggy-flashcard-face meggy-flashcard-back">' +
-                  '<div class="meggy-flashcard-label">RESPOSTA</div>' +
+                  '<div class="meggy-flashcard-label">Resposta</div>' +
                   '<div class="meggy-flashcard-text">' + back + '</div>' +
                   '<div class="meggy-flashcard-hint"><i class="bi bi-arrow-repeat"></i> Clique para voltar</div>' +
                 '</div>' +
@@ -2358,11 +2475,23 @@
               '<div style="display:flex;gap:6px;">' +
                 '<button class="meggy-header-btn" onclick="navigator.clipboard.writeText(window._lastIsaText);this.textContent=\'✓ Copiado!\'" style="font-size:12px;"><i class="bi bi-clipboard"></i> Copiar</button>' +
                 '<button class="meggy-header-btn" onclick="window._downloadMdAsPdf(window._lastMdName)" style="font-size:12px;background:rgba(255,139,159,0.12);border:1px solid rgba(255,139,159,0.3);color:#ff8b9f;"><i class="bi bi-download"></i> PDF</button>' +
+                '<button class="meggy-header-btn" id="gdi-summary-tts-btn" title="Ouvir resumo em voz natural" style="font-size:12px;background:#ff8b9f;border:none;color:#000;font-weight:600;"><i class="bi bi-volume-up"></i> Ouvir resumo</button>' +
               '</div>' +
             '</div>' +
             '<div class="meggy-summary-body gdi-isa-summary-body">' + html + '</div>' +
           '</div>';
-        el.scrollTop = 0;
+                // ★ v2.15.4 ITEM D: Ouvir resumo — voz natural (window.gdiTTS).
+        // Guarda se o módulo não carregou: toast, nunca erro silencioso.
+        const _ttsBtn = el.querySelector('#gdi-summary-tts-btn');
+        if (_ttsBtn) _ttsBtn.onclick = () => {
+          if (window.gdiTTS && typeof window.gdiTTS.play === 'function') {
+            const _st = window.gdiTTS.getState();
+            if (_st.status === 'playing' || _st.status === 'paused') { window.gdiTTS.stop(); _ttsBtn.innerHTML = '<i class="bi bi-volume-up"></i> Ouvir resumo'; return; }
+            _ttsBtn.innerHTML = '⏹ Parar';
+            window.gdiTTS.play(window._lastIsaText || '', { onEnd: function () { _ttsBtn.innerHTML = '<i class="bi bi-volume-up"></i> Ouvir resumo'; } });
+          } else if (typeof window.showToast === 'function') window.showToast('Módulo de voz ainda não carregou. Recarregue a página.');
+        };
+el.scrollTop = 0;
       },
 
       // ═══ Meus Concursos — feature baseada em edital ═══
@@ -2578,12 +2707,12 @@
               // ★ v2.15.2 (H): texto dd/mm/aaaa → ISO; inválida não avança.
               const examDateRaw = (document.getElementById('cw-examdate').value || '').trim();
               const examDate = Shell.views._v215ParseDateBR(examDateRaw);
-              if (examDateRaw && !examDate) { alert('Data inválida — use dd/mm/aaaa (ex.: 15/06/2026).'); return; }
+              if (examDateRaw && !examDate) { Shell.views._v215Err('Data inválida', 'Use dd/mm/aaaa (ex.: 15/06/2026).'); return; }
               const dailyHours = parseInt(document.getElementById('cw-dailyhours').value, 10) || 4;
               banca = (document.getElementById('cw-banca') || {}).value || '';
               dailyHoursVal = dailyHours;
               examDateVal = examDate;
-              if (!name) { alert('Informe o nome do concurso'); return; }
+              if (!name) { Shell.views._v215Err('Nome do concurso', 'Informe o nome do concurso'); return; }
               nextBtn.disabled = true;
               nextBtn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Criando...';
               try {
@@ -2602,12 +2731,12 @@
                   step = 2;
                   render();
                 } else {
-                  alert('Erro: ' + (d.error || 'tente novamente'));
+                  Shell.views._v215Err('Erro ao criar concurso', d.error || 'tente novamente');
                   nextBtn.disabled = false;
                   nextBtn.innerHTML = 'Criar e Continuar →';
                 }
               } catch (e) {
-                alert('Erro: ' + e.message);
+                Shell.views._v215Err('Erro ao criar concurso', e.message);
                 nextBtn.disabled = false;
                 nextBtn.innerHTML = 'Criar e Continuar →';
               }
@@ -2621,7 +2750,7 @@
             if (analyzeBtn) analyzeBtn.onclick = async () => {
               const editalText = (document.getElementById('cw-edital').value || '').trim();
               if (!editalText) { step = 3; render(); return; } // ★ v2.2: sem texto = segue sem edital
-              if (editalText.length < 50) { alert('Texto muito curto. Cole ao menos um trecho relevante do edital.'); return; }
+              if (editalText.length < 50) { Shell.views._v215Err('Edital muito curto', 'Cole ao menos um trecho relevante do edital.'); return; }
               analyzeBtn.disabled = true;
               analyzeBtn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Analisando...';
               try {
@@ -2636,12 +2765,12 @@
                   step = 3;
                   render();
                 } else {
-                  alert('Erro: ' + (d.error || 'tente novamente'));
+                  Shell.views._v215Err('Erro ao analisar edital', d.error || 'tente novamente');
                   analyzeBtn.disabled = false;
                   analyzeBtn.innerHTML = '🔍 Analisar Edital';
                 }
               } catch (e) {
-                alert('Erro: ' + e.message);
+                Shell.views._v215Err('Erro ao analisar edital', e.message);
                 analyzeBtn.disabled = false;
                 analyzeBtn.innerHTML = '🔍 Analisar Edital';
               }
@@ -2763,12 +2892,12 @@
             // Add folder button
             const addBtn = document.getElementById('cw-add-folder');
             if (addBtn) addBtn.onclick = () => {
-              if (!currentBrowsePath) { alert('Navegue até uma pasta primeiro'); return; }
+              if (!currentBrowsePath) { Shell.views._v215Err('Nenhuma pasta', 'Navegue até uma pasta primeiro'); return; }
               if (selectedFolders.indexOf(currentBrowsePath) < 0) {
                 selectedFolders.push(currentBrowsePath);
                 render();
               } else {
-                alert('Pasta já selecionada');
+                Shell.views._v215Err('Pasta já selecionada', 'Esta pasta já está na lista.');
               }
             };
 
@@ -2784,7 +2913,7 @@
             // Scan button
             const scanBtn = document.getElementById('cw-scan');
             if (scanBtn) scanBtn.onclick = async () => {
-              if (selectedFolders.length === 0) { alert('Adicione ao menos uma pasta'); return; }
+              if (selectedFolders.length === 0) { Shell.views._v215Err('Nenhuma pasta', 'Adicione ao menos uma pasta'); return; }
               scanBtn.disabled = true;
               scanBtn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Escaneando...';
               try {
@@ -2814,12 +2943,12 @@
                   step = 4;
                   render();
                 } else {
-                  alert('Erro: ' + (d.error || 'tente novamente'));
+                  Shell.views._v215Err('Erro ao escanear', d.error || 'tente novamente');
                   scanBtn.disabled = false;
                   scanBtn.innerHTML = '📡 Escanear';
                 }
               } catch (e) {
-                alert('Erro: ' + e.message);
+                Shell.views._v215Err('Erro ao escanear', e.message);
                 scanBtn.disabled = false;
                 scanBtn.innerHTML = '📡 Escanear';
               }
@@ -2853,7 +2982,7 @@
                   bodyEl.innerHTML = h;
                 }
                 buildPlanBtn.style.display = 'none';
-              } catch (e) { alert('Não foi possível montar o plano: ' + e.message); buildPlanBtn.disabled = false; buildPlanBtn.textContent = '🎯 Montar plano direcionado'; }
+              } catch (e) { Shell.views._v215Err('Não foi possível montar o plano', e.message); buildPlanBtn.disabled = false; buildPlanBtn.textContent = '🎯 Montar plano direcionado'; }
             };
           }
         }
@@ -3079,11 +3208,56 @@
         Shell.views._v215Toast(title + ': ' + message);
       },
 
+      // ★ v2.15.4 Q1: nunca resolve false silencioso. Sem gdiModal
+      //   (gdi-core.js carrega async; se o usuário clicar antes ou o core
+      //   falhar, não há gdiModal), abre o confirm inline do próprio shell
+      //   (_v215ConfirmFallback); só resolve false após o usuário cancelar
+      //   ou, se nem o DOM permitir, após avisar por toast. "Excluir
+      //   concurso" e "Remover módulo" sempre abrem alguma confirmação.
       _v215Confirm(title, message, confirmText) {
         try {
           if (typeof window.gdiModal === 'function') return window.gdiModal({ title: title, message: message, confirmText: confirmText || 'Confirmar', cancelText: 'Cancelar', danger: true });
         } catch (_) {}
-        return Promise.resolve(false);
+        return Shell.views._v215ConfirmFallback(title, message, confirmText);
+      },
+
+      // ★ v2.15.4 Q1: modal de confirmação do próprio shell — zero
+      //   dependência de gdi-core.js (estilos 100% inline). Esc/cancelar/
+      //   clicar fora resolve false; confirmar resolve true.
+      _v215ConfirmFallback(title, message, confirmText) {
+        return new Promise((resolve) => {
+          try {
+            document.querySelectorAll('.meggy-v215-confirm').forEach((m) => { try { if (typeof m.__v215Cleanup === 'function') m.__v215Cleanup(); } catch (_) {} m.remove(); });
+            const overlay = document.createElement('div');
+            overlay.className = 'meggy-v215-confirm';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100002;display:flex;align-items:center;justify-content:center;padding:20px;';
+            overlay.innerHTML = '<div style="background:#0d1119;border:1px solid rgba(255,255,255,.12);border-radius:14px;max-width:480px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.6);">' +
+              '<div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.08);font-size:15px;font-weight:700;color:#e6edf3;">' + Shell._esc(title) + '</div>' +
+              '<div style="padding:20px;font-size:14px;line-height:1.6;color:#e6edf3;white-space:pre-wrap;">' + Shell._esc(message) + '</div>' +
+              '<div style="display:flex;gap:8px;justify-content:flex-end;padding:0 20px 16px;flex-wrap:wrap;">' +
+                '<button class="meggy-v215-confirm-cancel" style="min-height:44px;padding:10px 16px;border-radius:8px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:#c9d1d9;font-size:13px;cursor:pointer;font-family:inherit;">Cancelar</button>' +
+                '<button class="meggy-v215-confirm-ok" style="min-height:44px;padding:10px 16px;border-radius:8px;border:0;background:#ff6b6b;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">' + Shell._esc(confirmText || 'Confirmar') + '</button>' +
+              '</div></div>';
+            let done = false;
+            const finish = (v) => {
+              if (done) return;
+              done = true;
+              try { document.removeEventListener('keydown', onKey); } catch (_) {}
+              try { overlay.remove(); } catch (_) {}
+              resolve(v);
+            };
+            const onKey = (e) => { if (e.key === 'Escape') finish(false); };
+            overlay.__v215Cleanup = () => finish(false);
+            overlay.querySelector('.meggy-v215-confirm-ok').onclick = () => finish(true);
+            overlay.querySelector('.meggy-v215-confirm-cancel').onclick = () => finish(false);
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) finish(false); });
+            document.addEventListener('keydown', onKey);
+            document.body.appendChild(overlay);
+          } catch (_) {
+            Shell.views._v215Toast('Não foi possível abrir a confirmação — recarregue a página e tente de novo.');
+            resolve(false);
+          }
+        });
       },
 
       _v215Api(path, opts) {
@@ -3229,12 +3403,25 @@
                 '<button class="meggy-header-btn v215-src-rename" data-i="' + i + '" style="font-size:12px;">✏️ Renomear</button>' +
                 '<button class="meggy-header-btn v215-src-intensivo" data-i="' + i + '" style="font-size:12px;' + (s.intensivo ? 'background:rgba(255,212,59,0.15);color:#ffd43b;border:1px solid rgba(255,212,59,0.35);' : '') + '">⚡ Intensivo</button>' +
                 '<button class="meggy-header-btn v215-src-gen" data-i="' + i + '" style="font-size:12px;">🐩 Gerar resumo + flashcards deste módulo</button>' +
+                '<button class="meggy-header-btn v215-src-tts" data-i="' + i + '" style="font-size:12px;">▶ Ouvir resumo do módulo</button>' +
                 '<button class="meggy-header-btn v215-src-quiz" data-i="' + i + '" style="font-size:12px;">🧠 Quiz deste módulo</button>' +
                 '<button class="meggy-header-btn v215-src-del" data-i="' + i + '" style="font-size:12px;background:rgba(255,107,107,.12);color:#ff8b8b;border:1px solid rgba(255,107,107,.35);">🗑️ Remover</button>' +
               '</div></div>';
           });
         }
         box.innerHTML = h;
+        // ★ v2.15.4 ITEM D: Ouvir resumo do módulo — voz natural.
+        // Guarda se o módulo não carregou: toast, nunca erro silencioso.
+        box.querySelectorAll('.v215-src-tts').forEach(btn => {
+          btn.onclick = () => {
+            const s = sources[parseInt(btn.dataset.i, 10)];
+            if (!s) return;
+            if (window.gdiTTS && typeof window.gdiTTS.playModuleSummary === 'function') {
+              btn.disabled = true;
+              window.gdiTTS.playModuleSummary(s.name || '', s.coursePath || '').finally(function () { btn.disabled = false; });
+            } else if (typeof window.showToast === 'function') window.showToast('Módulo de voz ainda não carregou. Recarregue a página.');
+          };
+        });
         const base = '/api/concursos/' + encodeURIComponent(concursoId) + '/sources';
         const refreshSources = () => Shell.views._v215RenderSources(el, concursoId, null);
         const reloadDetail = () => { const main = document.getElementById('meggy-main'); if (main) Shell.views.concursoDetail(main, concursoId); };
@@ -3771,8 +3958,9 @@
             } catch (_) { ok = false; }
           }
           if (!ok) { Shell.views._v215Err('Não foi possível iniciar a geração', 'O batalhão da Meggy não aceitou este módulo. Tente de novo em alguns minutos.'); return; }
+          const _ocrWhy=(withText.filter(function(p){return p.no_text&&p.noTextReason;}).map(function(p){return p.noTextReason;})[0]||''); // ★ v2.15.4: motivo real da falha de OCR
           if (!withTextCount) {
-            Shell.views._v215Err('PDFs sem texto extraível', 'Os ' + pdfs.length + ' PDF(s) deste módulo são escaneados (só imagens) — OCR desativado. A geração foi iniciada, mas o servidor deve pular os PDFs sem texto; acompanhe o status abaixo.');
+            Shell.views._v215Err('PDFs sem texto extraível', 'Os ' + pdfs.length + ' PDF(s) deste módulo são escaneados (só imagens) e o OCR por IA não conseguiu ler o conteúdo' + (_ocrWhy ? (' (' + _ocrWhy + ')') : '') + '. A geração foi iniciada, mas o servidor deve pular os PDFs sem texto; acompanhe o status abaixo.');
           } else {
             Shell.views._v215Toast('🐩 A Meggy está gerando resumo + flashcards deste módulo em segundo plano (' + withTextCount + ' de ' + pdfs.length + ' PDFs com texto' + (pdfs.length - withTextCount ? ', ' + (pdfs.length - withTextCount) + ' sem texto' : '') + ').');
           }
@@ -3889,7 +4077,7 @@
         document.getElementById('em-cancel').onclick = close;
         document.getElementById('em-analyze').onclick = async () => {
           const editalText = (document.getElementById('em-edital').value || '').trim();
-          if (!editalText || editalText.length < 50) { alert('Cole ao menos um trecho relevante do edital.'); return; }
+          if (!editalText || editalText.length < 50) { Shell.views._v215Err('Edital muito curto', 'Cole ao menos um trecho relevante do edital.'); return; }
           const btn = document.getElementById('em-analyze');
           btn.disabled = true;
           btn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Analisando...';
@@ -3897,8 +4085,8 @@
             const r = await fetch('/api/concursos/' + encodeURIComponent(concursoId) + '/analyze-edital', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ editalText }) });
             const d = await r.json();
             if (d.ok) { close(); Shell.views.concursoDetail(el, concursoId); }
-            else { alert('Erro: ' + (d.error || 'tente novamente')); btn.disabled = false; btn.innerHTML = '🔍 Analisar Edital'; }
-          } catch (e) { alert('Erro: ' + e.message); btn.disabled = false; btn.innerHTML = '🔍 Analisar Edital'; }
+            else { Shell.views._v215Err('Erro ao analisar edital', d.error || 'tente novamente'); btn.disabled = false; btn.innerHTML = '🔍 Analisar Edital'; }
+          } catch (e) { Shell.views._v215Err('Erro ao analisar edital', e.message); btn.disabled = false; btn.innerHTML = '🔍 Analisar Edital'; }
         };
       },
 
@@ -4082,8 +4270,8 @@
       const PLATS = [
         { p: 'windows', icon: '🖥️', name: 'Windows', meta: 'Desktop (.msi)' },
         { p: 'linux', icon: '🐧', name: 'Linux', meta: 'Desktop (.AppImage)' },
-        { p: 'android', icon: '📱', name: 'Android', meta: 'Meggy (APK)' },
-        { p: 'android_tv', icon: '📺', name: 'Android TV', meta: 'BiBi (APK)' },
+        { p: 'android', icon: '📱', name: 'Android', meta: 'Meggy — APK completo · celular e TV' },
+        { p: 'android_tv', icon: '📺', name: 'Bibi Fit', meta: 'Android TV (APK)' },
         { p: 'vovofit_tv', icon: '💪', name: 'Vovó Fit TV', meta: 'Android TV (APK)' },
         { p: 'roku', icon: '📺', name: 'Roku', meta: 'BrightScript (.zip)' }
       ];
@@ -4163,8 +4351,22 @@
       return Shell._pdfLibsLoading;
     },
 
-    // ★ _extractPdfText: extrai texto de um PDF usando pdf.js (cap 30 páginas, 50K chars)
+    // ★ v2.15.4: _extractPdfText delega ao motor compartilhado
+    //   (meggy-pdf-engine.js) — PDF INTEIRO + OCR por IA, sem teto de
+    //   30 págs/50K chars. Mantém o contrato antigo: devolve '' em falha
+    //   (os chamadores testam length>50) e nunca dá throw.
     async _extractPdfText(url) {
+      try {
+        const eng=(window.__gdiMeggy&&window.__gdiMeggy.pdf&&window.__gdiMeggy.pdf.extractPdfText)||(window.gdiIsaPdf&&window.gdiIsaPdf.extractPdfText);
+        if(typeof eng==='function'){
+          const t=await eng(url);
+          return String(t||'');
+        }
+      } catch (e) {
+        console.warn('[Shell] PDF extract (motor) falhou:', e&&e.message||e);
+        return '';
+      }
+      // Fallback: implementação própria antiga (sem OCR) se o motor não carregou.
       try {
         await Shell._ensurePdfLibs();
         if (!window.pdfjsLib) return '';
@@ -4335,6 +4537,7 @@
         tts.onclick = () => {
           if (ttsPlaying) {
             // Parar
+            if (window.gdiTTS && typeof window.gdiTTS.stop === 'function') window.gdiTTS.stop();
             if (window.speechSynthesis) window.speechSynthesis.cancel();
             if (window._meggyTtsAudio) { window._meggyTtsAudio.pause(); window._meggyTtsAudio = null; }
             ttsPlaying = false;
@@ -4345,6 +4548,10 @@
           if (!text || !text.trim()) return;
           ttsPlaying = true;
           tts.innerHTML = '<i class="bi bi-stop-circle"></i> Parar';
+          if (window.gdiTTS && typeof window.gdiTTS.play === 'function') {
+            window.gdiTTS.play(text, { onEnd: function () { ttsPlaying = false; tts.innerHTML = '<i class="bi bi-volume-up"></i> Ouvir'; } });
+            return;
+          }
           Shell._speakNatural(text, function() {
             ttsPlaying = false;
             tts.innerHTML = '<i class="bi bi-volume-up"></i> Ouvir';
@@ -4502,22 +4709,22 @@
             '<span style="color:#8b949e;font-size:12px;">' + Shell._esc(lessonName) + ' · ' + (idx + 1) + '/' + cards.length + '</span>' +
             '<span style="color:#8b949e;font-size:12px;">✓ ' + hits + ' ✗ ' + misses + '</span>' +
           '</div>' +
-          '<div style="position:relative;perspective:1500px;height:340px;max-width:560px;margin:0 auto;cursor:pointer;" id="meggy-fc-card">' +
+          '<div style="position:relative;perspective:1500px;height:min(340px,52vh);height:min(340px,52dvh);max-width:560px;margin:0 auto;cursor:pointer;" id="meggy-fc-card">' +
             '<div style="position:absolute;inset:0;transform-style:preserve-3d;transition:transform .55s cubic-bezier(.4,0,.2,1);" id="meggy-fc-inner">' +
               '<div class="meggy-flashcard-face meggy-flashcard-front" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:18px 16px;border-radius:12px;background:linear-gradient(135deg,rgba(255,139,159,.14),rgba(192,38,211,.08));border:1.5px solid rgba(255,139,159,.4);backface-visibility:hidden;">' +
-                '<div style="font-size:10px;font-weight:700;letter-spacing:.08em;color:#ff8b9f;text-transform:uppercase;display:flex;align-items:center;gap:4px;"><i class="bi bi-question-circle"></i> PERGUNTA</div>' +
+                '<div style="font-size:12px;font-weight:700;color:#ff8b9f;display:flex;align-items:center;gap:4px;"><i class="bi bi-question-circle"></i> Pergunta</div>' +
                 '<div style="font-size:16px;line-height:1.55;color:#f0f6fc;text-align:center;">' + front + '</div>' +
-                '<div style="font-size:10px;color:#8b949e;font-style:italic;"><i class="bi bi-arrow-repeat"></i> clique para virar</div>' +
+                '<div style="font-size:12px;color:#8b949e;font-style:italic;"><i class="bi bi-arrow-repeat"></i> clique para virar</div>' +
               '</div>' +
               '<div class="meggy-flashcard-face meggy-flashcard-back" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:18px 16px;border-radius:12px;background:linear-gradient(135deg,rgba(93,222,218,.14),rgba(63,185,80,.08));border:1.5px solid rgba(93,222,218,.4);transform:rotateY(180deg);backface-visibility:hidden;">' +
-                '<div style="font-size:10px;font-weight:700;letter-spacing:.08em;color:#5ddeda;text-transform:uppercase;display:flex;align-items:center;gap:4px;"><i class="bi bi-check-circle"></i> RESPOSTA</div>' +
+                '<div style="font-size:12px;font-weight:700;color:#5ddeda;display:flex;align-items:center;gap:4px;"><i class="bi bi-check-circle"></i> Resposta</div>' +
                 '<div style="font-size:14px;line-height:1.55;color:#e6edf3;text-align:left;overflow-y:auto;max-height:240px;">' + backHtml + '</div>' +
-                '<div style="font-size:10px;color:#8b949e;font-style:italic;"><i class="bi bi-arrow-repeat"></i> clique para voltar</div>' +
+                '<div style="font-size:12px;color:#8b949e;font-style:italic;"><i class="bi bi-arrow-repeat"></i> clique para voltar</div>' +
               '</div>' +
             '</div>' +
           '</div>' +
           '<div id="meggy-fc-grade-panel"></div>' +
-          '<div style="display:flex;justify-content:space-between;align-items:center;padding-top:14px;margin-top:10px;border-top:1px solid rgba(255,255,255,.08);">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;padding-top:16px;margin-top:8px;border-top:1px solid rgba(255,255,255,.08);">' +
             '<button class="meggy-header-btn" id="meggy-fc-prev" ' + (idx === 0 ? 'disabled' : '') + ' style="font-size:13px;"><i class="bi bi-chevron-left"></i> Anterior</button>' +
             '<button class="meggy-header-btn" id="meggy-fc-next" style="font-size:13px;background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">' + (idx < cards.length - 1 ? 'Próximo' : 'Finalizar') + ' <i class="bi bi-chevron-right"></i></button>' +
           '</div>' +
@@ -4602,7 +4809,7 @@
     const lesson = name || 'Resumo';
     const html = (window.marked && window.DOMPurify) ? window.DOMPurify.sanitize(window.marked.parse(text)) : (function(t){ return t.replace(/^### (.+)$/gm, '<h3>$1</h3>').replace(/^## (.+)$/gm, '<h2>$1</h2>').replace(/^# (.+)$/gm, '<h1>$1</h1>').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/^- (.+)$/gm, '<li>$1</li>').replace(/\n/g, '<br>'); })(text);
     const w = window.open('', '_blank');
-    if (!w) { alert('Permita pop-ups para baixar o PDF'); return; }
+    if (!w) { Shell.views._v215Toast('Permita pop-ups para baixar o PDF'); return; }
     w.document.write('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>' + lesson + ' — Resumo Meggy</title><style>');
     w.document.write('@page{margin:2cm;size:A4;}');
     w.document.write('*{box-sizing:border-box;}');
@@ -4650,7 +4857,7 @@
       html = (window.marked && window.DOMPurify) ? window.DOMPurify.sanitize(window.marked.parse(text)) : (function(t){ return t.replace(/^### (.+)$/gm, '<h3>$1</h3>').replace(/^## (.+)$/gm, '<h2>$1</h2>').replace(/^# (.+)$/gm, '<h1>$1</h1>').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/^- (.+)$/gm, '<li>$1</li>').replace(/\n/g, '<br>'); })(text);
     }
     const w = window.open('', '_blank');
-    if (!w) { alert('Permita pop-ups para baixar o PDF'); return; }
+    if (!w) { Shell.views._v215Toast('Permita pop-ups para baixar o PDF'); return; }
     w.document.write('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>' + lesson + ' — ' + typeLabel + ' Meggy</title><style>');
     w.document.write('@page{margin:2cm;size:A4;}');
     w.document.write('*{box-sizing:border-box;}');
