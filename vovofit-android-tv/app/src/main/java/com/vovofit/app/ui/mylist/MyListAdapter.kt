@@ -8,13 +8,14 @@ import android.widget.Toast
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import coil.load
 import com.vovofit.app.R
 import com.vovofit.app.data.FileItem
 import com.vovofit.app.data.colorFromString
-import com.vovofit.app.data.monogramFor
+import com.vovofit.app.data.coverResForPath
 import com.vovofit.app.databinding.ItemMylistCardBinding
 import com.vovofit.app.util.CardGradient
+import com.vovofit.app.util.CoverLibrary
+import com.vovofit.app.util.loadCoverChain
 import com.vovofit.app.util.FocusAnimator
 import com.vovofit.app.util.Format
 import com.vovofit.app.util.SessionManager
@@ -23,7 +24,7 @@ import com.vovofit.app.util.TvUtils
 /**
  * v1.0.4 — Minha lista — abas Aulas (e Concursos).
  *
- * Cards com chip de tipo ("AULA"), thumb/monograma, título, progresso
+ * Cards com chip de tipo ("AULA"), thumb/capa do drive, título, progresso
  * real + % (vídeos/áudios com resume), ⭐ rosa para remover dos
  * favoritos. Foco via FocusAnimator.attachCard.
  * O "Continuar" (abrir) é o clique no card — a aba Cursos usa
@@ -73,16 +74,16 @@ class MyListAdapter(
             mylistTitle.text = item.name
             mylistBg.background = CardGradient.drawable(res, colorFromString(item.name))
 
-            val thumb = item.thumbnailLink
-            if (!thumb.isNullOrBlank() && (item.isVideo || item.isAudio || item.isPdf)) {
-                mylistThumb.visibility = View.VISIBLE
-                mylistMonogram.visibility = View.GONE
-                mylistThumb.load(thumb) { error(R.drawable.card_gradient_pink) }
-            } else {
-                mylistThumb.visibility = View.GONE
-                mylistMonogram.visibility = View.VISIBLE
-                mylistMonogram.text = monogramFor(item.name)
-            }
+            // v1.0.8 camada 3 — (2) thumb (só vídeo/áudio/PDF, como
+            // antes) > (3) imagem da biblioteca pelo nome/pasta >
+            // (4) capa do drive (nunca monograma).
+            val coverRes = coverResForPath(item.folderPath ?: currentFolderPath)
+            val thumb = if (!item.thumbnailLink.isNullOrBlank() &&
+                (item.isVideo || item.isAudio || item.isPdf)
+            ) item.thumbnailLink else null
+            mylistThumb.visibility = View.VISIBLE
+            mylistMonogram.visibility = View.GONE
+            mylistThumb.loadCoverChain(thumb, coverRes, item.name, item.folderPath)
 
             val sm = SessionManager.get(ctx)
             val fp = item.folderPath ?: currentFolderPath
