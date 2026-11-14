@@ -301,7 +301,8 @@ class HomeActivity : AppCompatActivity() {
             if (cached != null) { showHeroArtUrl(cached, item); return }
             if (heroThumbCache.containsKey(item.drivePath)) {
                 // Thumb (2) conhecida como ausente → biblioteca (3)
-                // por nome do destaque/curso; sem match, capa gerada (4).
+                // por nome do destaque/curso; sem match, a imagem 'geral'
+                // (fallback da camada 3); sem manifesto, capa gerada (4).
                 val libraryUrl = LibraryCovers.resolve(item.title, item.driveName, item.drivePath)
                 if (libraryUrl != null) showHeroArtUrl(libraryUrl, item) else showHeroCover(item)
                 return
@@ -477,7 +478,8 @@ class HomeActivity : AppCompatActivity() {
             binding.featuredThumb.setImageResource(ThumbArt.coverResForPath(best.folderPath))
         }
         // v2.7.11 camada (3): sem thumb do Drive, a imagem da
-        // biblioteca por tipo de aula; sem match, a capa gerada (4).
+        // biblioteca por tipo de aula; sem match, a imagem 'geral'
+        // (fallback da camada 3); sem manifesto, a capa gerada (4).
         val featuredRemote = LibraryCovers.remoteCover(
             best.thumbnailLink, best.videoName,
             extractCourseName(best.folderPath), best.folderPath
