@@ -572,7 +572,7 @@
       if(!d||!d.ok||!Array.isArray(d.plans)||!d.plans.length)return;
       const p=d.plans[0];
       const dayIdx=Math.max(1,Math.min(p.totalDays,Math.floor((Date.now()-p.createdAt)/86400000)+1));
-      _planCtx='Plano de estudo ativo: '+p.name+' ('+p.banca+'), dia '+dayIdx+' de '+p.totalDays+', '+p.dailyHours+'h por dia. ';
+      _planCtx='Plano de estudo ativo: '+p.name+' ('+p.banca+'), dia '+dayIdx+' de '+p.totalDays+', '+p.dailyHours+'h por dia'+(p.origin==='meggy-ai'?' — gerado pela Meggy':'')+'. ';
       _planAt=now;
     }catch(_){}
   }
