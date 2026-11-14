@@ -33,7 +33,7 @@
   // ★ Cache-buster fixo. Bump este número SÓ ao publicar nova versão.
   // Antes era Date.now() — isso causava re-download de ~5MB em toda navegação.
   // ★ v1.0.91: bump 92 → 93 (Shaka skin + Pomodoro sidebar + video-in-panel + PDF split + rest mode fix + OCR AI routing + parallel dispatch).
-  const CACHE_VERSION = '182';  // ★ v2 SHELL Fase 2A (sobre base remota 181): filtra study-panel.js sob o shell + carrega shell-bridge.js
+  const CACHE_VERSION = '183';  // ★ v2.15.5 item 10: + meggy-md.js (renderer MD vendored)  // ★ v2 SHELL Fase 2A (sobre base remota 181): filtra study-panel.js sob o shell + carrega shell-bridge.js
   window.CACHE_VERSION = CACHE_VERSION;
 
   const MODULES = [
@@ -44,6 +44,7 @@
     'gdi-pdf.js',
     'gdi-ui.js',
     // 2. Meggy modularizado (7 módulos em modular/meggy/) — substitui gdi-meggy.js
+    'meggy/meggy-md.js',             // ★ v2.15.5 item 10 — renderer MD vendored (sem CDN), antes de utils
     'meggy/meggy-utils.js',          // 1o — helpers + CSS + constants
     'meggy/meggy-pdf-engine.js',     // PDF.js + OCR
     'meggy/meggy-cache.js',          // generateAll + _chainCache/_inflight
@@ -247,6 +248,7 @@
       // `loadChain` que nunca rejeita (sempre resuelve com {ok, fail} counts).
       const CORE_CHAIN = ['gdi-worker-bridge.js', 'storage.js', 'gdi-pdf.js', 'gdi-ui.js', 'gdi-player-enhancer.js', 'gdi-ai-providers.js'];
       const MEGGY_CHAIN = [
+        'meggy/meggy-md.js',            // ★ v2.15.5 item 10 — renderer MD vendored (sem CDN), antes de utils
         'meggy/meggy-utils.js',
         'meggy/meggy-pdf-engine.js',
         'meggy/meggy-cache.js',
