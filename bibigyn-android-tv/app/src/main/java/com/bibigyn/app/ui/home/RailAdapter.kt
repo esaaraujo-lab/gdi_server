@@ -17,6 +17,7 @@ import com.bibigyn.app.util.FocusAnimator
 import com.bibigyn.app.util.Format
 import com.bibigyn.app.util.SessionManager
 import com.bibigyn.app.util.TvUtils
+import com.bibigyn.app.util.setWordEllipsized
 
 /**
  * v2.1.5 — Rail "Continue assistindo" (conceito home).
@@ -67,8 +68,8 @@ class RailAdapter(
         val ctx = holder.itemView.context
 
         with(holder.binding) {
-            cardTitle.text = item.title
-            cardSubtitle.text = item.subtitle
+            cardTitle.setWordEllipsized(item.title)
+            cardSubtitle.setWordEllipsized(item.subtitle)
 
             val baseColor = colorFromString(item.colorHint ?: item.title)
             cardBg.background = CardGradient.drawable(res, baseColor)
@@ -80,6 +81,12 @@ class RailAdapter(
                 cardMonogram.visibility = View.GONE
                 cardThumbnail.load(thumb) {
                     error(R.drawable.card_gradient_pink)
+                    // Patch: se a arte falhar a carregar, volta ao monograma
+                    // (antes ficava só o gradiente, sem arte nem monograma).
+                    listener(onError = { _, _ ->
+                        cardThumbnail.visibility = View.GONE
+                        cardMonogram.visibility = View.VISIBLE
+                    })
                 }
                 cardThumbnail.setOnClickListener(null)
             } else {
