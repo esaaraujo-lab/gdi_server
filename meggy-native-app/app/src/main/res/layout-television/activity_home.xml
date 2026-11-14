@@ -1,0 +1,363 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  v2.7.6 — Home TV (layout-television, conceito home TV + TV continuar).
+  Margens de overscan 56dp laterais / 40dp topo. Tipos TV (título 48sp,
+  seção 28sp, card 24sp). Sem bottom nav na TV (gone no layout e no
+  código). Foco inicial: botão "Continuar" do destaque.
+  Mesmos ids do layout de celular (ViewBinding único).
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/md_background"
+    android:orientation="vertical"
+    android:paddingHorizontal="@dimen/tv_margin_side"
+    android:paddingTop="@dimen/tv_margin_top"
+    android:paddingBottom="@dimen/tv_margin_bottom">
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Topo: logo + sair -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/app_name"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/tv_title_md"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/topSair"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="@dimen/spacing_sm"
+                    android:text="@string/home_logout"
+                    android:textColor="@color/md_on_surface_variant"
+                    android:textSize="@dimen/tv_body" />
+            </LinearLayout>
+
+            <!-- Hero -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/tv_hero_height"
+                android:layout_marginTop="@dimen/tv_section_spacing"
+                app:cardCornerRadius="@dimen/radius_lg"
+                app:cardElevation="@dimen/elevation_0"
+                app:cardBackgroundColor="@color/tile_bg">
+
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
+
+                    <View
+                        android:id="@+id/heroBg"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/card_gradient_pink" />
+
+                    <TextView
+                        android:id="@+id/heroIcon"
+                        android:layout_width="120dp"
+                        android:layout_height="120dp"
+                        android:layout_gravity="top|end"
+                        android:layout_margin="@dimen/tv_rail_spacing"
+                        android:background="@drawable/btn_play_circle"
+                        android:gravity="center"
+                        android:textColor="@color/md_on_primary"
+                        android:textSize="48sp"
+                        android:textStyle="bold" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="bottom|start"
+                        android:orientation="vertical"
+                        android:padding="@dimen/tv_section_spacing">
+
+                        <TextView
+                            android:id="@+id/heroBadge"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/chip_badge"
+                            android:paddingHorizontal="@dimen/spacing_lg"
+                            android:paddingVertical="@dimen/spacing_sm"
+                            android:textColor="@color/md_primary"
+                            android:textSize="@dimen/tv_chip_text"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/heroTitle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/spacing_sm"
+                            android:ellipsize="end"
+                            android:maxLines="2"
+                            android:textColor="@color/md_on_surface"
+                            android:textSize="@dimen/tv_title_lg"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/heroSubtitle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:ellipsize="end"
+                            android:maxLines="2"
+                            android:textColor="@color/md_on_surface_variant"
+                            android:textSize="@dimen/tv_body_lg" />
+
+                        <androidx.appcompat.widget.AppCompatButton
+                            android:id="@+id/heroPlay"
+                            android:layout_width="wrap_content"
+                            android:layout_height="64dp"
+                            android:layout_marginTop="@dimen/spacing_lg"
+                            android:background="@drawable/btn_primary_pill"
+                            android:focusable="true"
+                            android:paddingHorizontal="@dimen/spacing_2xl"
+                            android:text="@string/explore_cta"
+                            android:textColor="@color/md_on_primary"
+                            android:textSize="@dimen/tv_button_text"
+                            android:textStyle="bold" />
+
+                        <LinearLayout
+                            android:id="@+id/heroDots"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/spacing_sm"
+                            android:orientation="horizontal" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/heroPrev"
+                        android:layout_width="64dp"
+                        android:layout_height="64dp"
+                        android:layout_gravity="center_vertical|start"
+                        android:layout_marginStart="@dimen/spacing_sm"
+                        android:background="@drawable/btn_play_circle"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:text="‹"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="36sp" />
+
+                    <TextView
+                        android:id="@+id/heroNext"
+                        android:layout_width="64dp"
+                        android:layout_height="64dp"
+                        android:layout_gravity="center_vertical|end"
+                        android:layout_marginEnd="@dimen/spacing_sm"
+                        android:background="@drawable/btn_play_circle"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:text="›"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="36sp" />
+                </FrameLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- "Continuar de onde parou" — destaque (TV) -->
+            <LinearLayout
+                android:id="@+id/featuredSection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/tv_section_spacing"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/continue_from_where"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/tv_section_title"
+                    android:textStyle="bold" />
+
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/tv_rail_spacing"
+                    app:cardCornerRadius="@dimen/radius_lg"
+                    app:cardElevation="@dimen/elevation_0"
+                    app:cardBackgroundColor="@color/tile_bg">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:padding="@dimen/tv_rail_spacing">
+
+                        <FrameLayout
+                            android:layout_width="@dimen/tv_featured_thumb_width"
+                            android:layout_height="@dimen/tv_featured_card_height">
+
+                            <View
+                                android:id="@+id/featuredBg"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:background="@drawable/card_gradient_pink" />
+
+                            <ImageView
+                                android:id="@+id/featuredThumb"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:scaleType="centerCrop"
+                                android:visibility="gone"
+                                android:contentDescription="@string/thumb_desc" />
+
+                            <TextView
+                                android:id="@+id/featuredMonogram"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:gravity="center"
+                                android:textColor="@color/tile_title"
+                                android:textSize="56sp"
+                                android:textStyle="bold" />
+                        </FrameLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="@dimen/tv_rail_spacing"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/featuredTitle"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:ellipsize="end"
+                                android:maxLines="2"
+                                android:textColor="@color/md_on_surface"
+                                android:textSize="@dimen/tv_title_md"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/featuredSubtitle"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:ellipsize="end"
+                                android:maxLines="1"
+                                android:textColor="@color/md_on_surface_variant"
+                                android:textSize="@dimen/tv_body" />
+
+                            <ProgressBar
+                                android:id="@+id/featuredProgress"
+                                style="?android:attr/progressBarStyleHorizontal"
+                                android:layout_width="match_parent"
+                                android:layout_height="8dp"
+                                android:layout_marginTop="@dimen/spacing_lg"
+                                android:max="100"
+                                android:progressDrawable="@drawable/progress_horizontal" />
+
+                            <TextView
+                                android:id="@+id/featuredProgressText"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="@dimen/spacing_sm"
+                                android:textColor="@color/md_primary"
+                                android:textSize="@dimen/tv_body" />
+
+                            <TextView
+                                android:id="@+id/featuredTimeText"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:textColor="@color/md_on_surface_variant"
+                                android:textSize="@dimen/tv_body" />
+
+                            <androidx.appcompat.widget.AppCompatButton
+                                android:id="@+id/featuredContinue"
+                                android:layout_width="wrap_content"
+                                android:layout_height="64dp"
+                                android:layout_marginTop="@dimen/spacing_lg"
+                                android:background="@drawable/btn_primary_pill"
+                                android:focusable="true"
+                                android:paddingHorizontal="@dimen/spacing_2xl"
+                                android:text="@string/cta_continue"
+                                android:textColor="@color/md_on_primary"
+                                android:textSize="@dimen/tv_button_text"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+            </LinearLayout>
+
+            <!-- Continue assistindo -->
+            <TextView
+                android:id="@+id/labelContinue"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/tv_section_spacing"
+                android:text="@string/continue_watching"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/tv_section_title"
+                android:textStyle="bold" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/railContinue"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/tv_rail_spacing"
+                android:clipToPadding="false"
+                android:overScrollMode="never" />
+
+            <!-- Explorar drives -->
+            <TextView
+                android:id="@+id/labelDrives"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/tv_section_spacing"
+                android:text="@string/explore_drives"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/tv_section_title"
+                android:textStyle="bold" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/railDrives"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/tv_rail_spacing"
+                android:clipToPadding="false"
+                android:overScrollMode="never" />
+
+            <TextView
+                android:id="@+id/footerVersion"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/tv_section_spacing"
+                android:gravity="center"
+                android:textColor="@color/md_on_surface_variant"
+                android:textSize="@dimen/tv_body" />
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- Sem bottom nav na TV -->
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottomNav"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        app:menu="@menu/bottom_nav_menu" />
+</LinearLayout>
