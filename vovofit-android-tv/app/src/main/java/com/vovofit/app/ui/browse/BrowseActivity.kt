@@ -62,7 +62,8 @@ class BrowseActivity : AppCompatActivity() {
 
     // ★ v1.0.2: breadcrumb clicável — cada segmento volta para aquela pasta.
     private fun buildBreadcrumb(path: String, displayName: String): CharSequence {
-        val pinkColor = ForegroundColorSpan(0xFFFF8B9F.toInt())
+        // v1.0.8 onda 2 — separador do breadcrumb na cor de acento (lima; era o rosa da Meggy).
+        val pinkColor = ForegroundColorSpan(0xFFA3E635.toInt())
         val grayColor = ForegroundColorSpan(0xFF8B949E.toInt())
         val sb = SpannableStringBuilder()
         val rootStart = sb.length
