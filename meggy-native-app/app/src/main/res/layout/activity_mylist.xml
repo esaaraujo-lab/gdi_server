@@ -1,137 +1,220 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  v2.0.0 — Minha lista (favoritos) screen.
+  v2.7.6 — Minha lista (conceito): header com avatar + "Minha lista" +
+  "N itens salvos" em rosa; abas Cursos/Aulas/Concursos (pill rosa
+  na ativa); cards horizontais com chip de tipo, thumb, título,
+  progresso + %, botão "Continuar" (cursos) e ★ para remover.
+  Mantém os dois RecyclerViews atuais (cursos + arquivos) — as abas
+  só alternam a visibilidade.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="@color/bg_primary">
+    android:background="@color/md_background"
+    android:orientation="vertical">
 
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="64dp"
-        android:background="@color/bg_primary"
+        android:background="@color/md_background"
         android:elevation="0dp"
-        app:title="Minha lista"
-        app:titleTextColor="@color/text_primary"
+        app:navigationIconTint="@color/md_primary"
         app:titleTextAppearance="@style/TextAppearance.Material3.TitleLarge"
-        app:navigationIconTint="@color/meggy_pink" />
+        app:titleTextColor="@color/md_on_surface" />
 
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="#22FF8B9F" />
-
-    <TextView
-        android:id="@+id/label_count"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="@color/text_secondary"
-        android:textSize="13sp"
-        android:paddingHorizontal="20dp"
-        android:paddingTop="10dp"
-        android:paddingBottom="6dp" />
-
-    <FrameLayout
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/scrollContent"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_weight="1"
+        android:fillViewport="true">
 
-        <!-- ★ v2.7.4: Duas seções — Cursos (pastas favoritas) e Vídeos/arquivos. -->
-        <androidx.core.widget.NestedScrollView
-            android:id="@+id/scroll_content"
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clipToPadding="false">
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="@dimen/content_margin"
+            android:paddingBottom="@dimen/spacing_lg">
 
+            <!-- Header: avatar + título + contagem -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical">
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
                 <TextView
-                    android:id="@+id/label_courses"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="📚 Cursos"
-                    android:textColor="@color/text_primary"
-                    android:textSize="15sp"
-                    android:textStyle="bold"
-                    android:paddingHorizontal="20dp"
-                    android:paddingTop="6dp"
-                    android:paddingBottom="8dp"
-                    android:visibility="gone" />
+                    android:id="@+id/avatarMonogram"
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:background="@drawable/btn_play_circle"
+                    android:gravity="center"
+                    android:textColor="@color/md_on_primary"
+                    android:textSize="22sp"
+                    android:textStyle="bold" />
 
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/recycler_courses"
-                    android:layout_width="match_parent"
+                <LinearLayout
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:clipToPadding="false"
-                    android:nestedScrollingEnabled="false"
-                    android:paddingHorizontal="10dp"
-                    android:paddingBottom="8dp"
-                    android:visibility="gone" />
+                    android:layout_marginStart="@dimen/spacing_md"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
 
-                <TextView
-                    android:id="@+id/label_files"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="🎬 Vídeos e arquivos"
-                    android:textColor="@color/text_primary"
-                    android:textSize="15sp"
-                    android:textStyle="bold"
-                    android:paddingHorizontal="20dp"
-                    android:paddingTop="6dp"
-                    android:paddingBottom="8dp"
-                    android:visibility="gone" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/mylist_title"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="@dimen/text_topbar_title"
+                        android:textStyle="bold" />
 
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/recycler"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:clipToPadding="false"
-                    android:nestedScrollingEnabled="false"
-                    android:paddingHorizontal="10dp"
-                    android:paddingBottom="24dp" />
+                    <TextView
+                        android:id="@+id/labelCount"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:textColor="@color/md_primary"
+                        android:textSize="@dimen/text_card_subtitle" />
+                </LinearLayout>
             </LinearLayout>
-        </androidx.core.widget.NestedScrollView>
 
-        <LinearLayout
-            android:id="@+id/empty_state"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:visibility="gone">
+            <!-- Abas -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_lg"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/tabCourses"
+                    android:layout_width="wrap_content"
+                    android:layout_height="@dimen/chip_height"
+                    android:layout_marginEnd="@dimen/spacing_sm"
+                    android:background="@drawable/btn_primary_pill"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:paddingHorizontal="@dimen/spacing_lg"
+                    android:text="Cursos"
+                    android:textColor="@color/md_on_primary"
+                    android:textSize="@dimen/text_chip"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tabFiles"
+                    android:layout_width="wrap_content"
+                    android:layout_height="@dimen/chip_height"
+                    android:layout_marginEnd="@dimen/spacing_sm"
+                    android:background="@drawable/chip_outline"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:paddingHorizontal="@dimen/spacing_lg"
+                    android:text="Aulas"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_chip" />
+
+                <TextView
+                    android:id="@+id/tabConcursos"
+                    android:layout_width="wrap_content"
+                    android:layout_height="@dimen/chip_height"
+                    android:background="@drawable/chip_outline"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:paddingHorizontal="@dimen/spacing_lg"
+                    android:text="Concursos"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_chip" />
+            </LinearLayout>
 
             <TextView
-                android:layout_width="wrap_content"
+                android:id="@+id/labelCourses"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textSize="56sp"
-                android:text="⭐" />
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:text="Cursos salvos"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/text_section_title"
+                android:textStyle="bold" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/recyclerCourses"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:clipToPadding="false"
+                android:nestedScrollingEnabled="false"
+                android:overScrollMode="never" />
 
             <TextView
-                android:layout_width="wrap_content"
+                android:id="@+id/labelFiles"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="Sua lista está vazia.\nToque em ⭐ nos vídeos e cursos para salvá-los aqui."
-                android:textColor="@color/text_secondary"
-                android:textSize="14sp"
-                android:gravity="center" />
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:text="Aulas salvas"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/text_section_title"
+                android:textStyle="bold" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/recycler"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:clipToPadding="false"
+                android:nestedScrollingEnabled="false"
+                android:overScrollMode="never" />
+
+            <TextView
+                android:id="@+id/labelBookmarks"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:text="Documentos marcados"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/text_section_title"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/recyclerBookmarks"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:clipToPadding="false"
+                android:nestedScrollingEnabled="false"
+                android:overScrollMode="never"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/emptyState"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:gravity="center"
+                android:text="Nada salvo ainda — toque na ★ de um curso ou aula."
+                android:textColor="@color/md_on_surface_variant"
+                android:textSize="@dimen/text_detail_body"
+                android:visibility="gone" />
         </LinearLayout>
-    </FrameLayout>
+    </androidx.core.widget.NestedScrollView>
 
+    <!-- Bottom nav — oculta na TV (código) -->
     <com.google.android.material.bottomnavigation.BottomNavigationView
-        android:id="@+id/bottom_nav"
+        android:id="@+id/bottomNav"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/bg_surface"
+        android:layout_marginHorizontal="@dimen/content_margin"
+        android:layout_marginBottom="@dimen/spacing_md"
+        android:background="@drawable/nav_bar_background"
+        android:elevation="@dimen/elevation_3"
+        app:itemActiveIndicatorStyle="@style/NavIndicatorPill"
+        app:itemIconTint="@color/bottom_nav_item_color"
+        app:itemTextColor="@color/bottom_nav_item_color"
         app:labelVisibilityMode="labeled"
-        app:itemTextColor="@color/meggy_pink"
-        app:itemIconTint="@color/meggy_pink"
-        app:menu="@menu/bottom_nav" />
+        app:menu="@menu/bottom_nav_menu" />
 </LinearLayout>
