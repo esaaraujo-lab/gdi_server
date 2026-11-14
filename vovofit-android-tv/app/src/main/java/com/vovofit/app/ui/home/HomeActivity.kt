@@ -38,6 +38,8 @@ import com.vovofit.app.util.SessionManager
 import com.vovofit.app.util.Format
 import com.vovofit.app.util.TvUtils
 import com.vovofit.app.util.FocusAnimator
+import com.vovofit.app.util.CoverLibrary
+import com.vovofit.app.util.loadCoverChain
 import com.vovofit.app.util.setWordEllipsized
 import com.vovofit.app.util.UpdateChecker
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +51,8 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var binding: ActivityHomeBinding
     private lateinit var api: ApiService
     private var heroRotator: HeroRotator? = null
+    /** v1.0.8 onda 2 — coverUrl do admin por indice de drive (hero). */
+    private var featuredCovers: Map<Int, String> = emptyMap()
     private var lastFocusContinue = 0
     private var lastFocusDrives = 0
 
@@ -112,6 +116,9 @@ class HomeActivity : AppCompatActivity() {
         }
 
         setupHero()
+        loadFeaturedCovers()
+        // v1.0.8 — camada 3 das capas: busca o manifesto em 2o plano.
+        CoverLibrary.refreshAsync(this)
         setupContinueRail()
         setupDrivesRail()
     }
@@ -148,6 +155,28 @@ class HomeActivity : AppCompatActivity() {
         binding.bottomNav.selectedItemId = R.id.nav_home
     }
 
+    /**
+     * v1.0.8 onda 2 — Busca os cursos em destaque p/ a capa (a) do hero.
+     * Em 2o plano, silencioso: sem rede, sem sessao ou sem coverUrl, o hero
+     * segue com a capa local do drive. A primeira capa por drive vence (a
+     * ordem e a do admin). Quando chega, o hero atual re-renderiza.
+     */
+    private fun loadFeaturedCovers() {
+        lifecycleScope.launch {
+            val list = withContext(Dispatchers.IO) { api.getFeaturedCourses() }
+            if (list.isEmpty()) return@launch
+            val byDrive = linkedMapOf<Int, String>()
+            for (c in list) {
+                val idx = c.driveIndex ?: continue
+                val url = c.coverUrl ?: continue
+                if (!byDrive.containsKey(idx)) byDrive[idx] = url
+            }
+            if (byDrive.isEmpty()) return@launch
+            featuredCovers = byDrive
+            heroRotator?.updateCoverUrls(byDrive)
+        }
+    }
+
     // ──────────── v2.0.0: Hero rotativo ────────────
 
     private fun setupHero() {
@@ -167,7 +196,14 @@ class HomeActivity : AppCompatActivity() {
     ) {
         private val handler = Handler(Looper.getMainLooper())
         private var index = 0
+        /** v1.0.8 onda 2 — coverUrl do admin por indice de drive. */
+        private var coverUrls: Map<Int, String> = emptyMap()
         private val rotateRunnable = Runnable { next() }
+
+        fun updateCoverUrls(map: Map<Int, String>) {
+            coverUrls = map
+            render(animate = false)
+        }
 
         init {
             binding.heroPlay.setOnClickListener { onClick(items[index]) }
@@ -223,7 +259,18 @@ class HomeActivity : AppCompatActivity() {
             // v1.0.8 — arte real do drive (capa local cover_*) com scrim
             // escuro no layout; sem monograma. Sem arte, o gradiente
             // escuro limpo (heroBg) fica por baixo.
-            binding.heroArt.setImageResource(item.coverRes)
+            // v1.0.8 camada 3 — hierarquia da capa do hero: (a) coverUrl
+            // do admin (featured) via Coil; senao (3) a imagem da
+            // biblioteca pelo titulo/nome do drive; senao (4) a capa
+            // local do drive (foto 16:9). Nunca monograma nem gradiente
+            // liso como capa. (O hero nao tem thumb do Drive — a (2)
+            // nao se aplica aqui.)
+            binding.heroArt.loadCoverChain(
+                coverUrls[driveIndexFromPath(item.drivePath)],
+                item.coverRes,
+                item.title, item.driveName,
+                placeholderRes = item.coverRes
+            )
             if (animate) {
                 val inn = AlphaAnimation(0f, 1f).apply { duration = 300 }
                 val set = AnimationSet(true).apply {
@@ -351,24 +398,37 @@ class HomeActivity : AppCompatActivity() {
         binding.featuredProgress.progress = progress
         binding.featuredProgressText.text = "$progress% concluído"
         binding.featuredTimeText.text = Format.positionText(pos, dur)
-        // v1.0.8 — thumb real; sem thumb, a capa do drive (arte local).
-        // Monograma nunca mais como thumb.
-        binding.featuredArt.setImageResource(
-            driveCoverRes(driveIndexFromPath(best.folderPath) ?: 15)
-        )
+        // v1.0.8 — thumb real; sem thumb, a imagem da biblioteca
+        // pelo nome da aula/pasta (camada 3); sem match, a capa do drive
+        // (arte local). Monograma nunca mais como thumb.
+        val featuredCoverRes = driveCoverRes(driveIndexFromPath(best.folderPath) ?: 15)
+        val featuredLibUrl = CoverLibrary.resolve(this, best.videoName, best.folderPath)
+        fun showFeaturedArt() {
+            binding.featuredThumb.visibility = View.GONE
+            binding.featuredArt.visibility = View.VISIBLE
+            binding.featuredArt.setImageResource(featuredCoverRes)
+        }
+        fun showFeaturedLib() {
+            binding.featuredThumb.visibility = View.VISIBLE
+            binding.featuredArt.visibility = View.GONE
+            binding.featuredThumb.load(featuredLibUrl!!) {
+                error(com.vovofit.app.R.drawable.card_gradient_pink)
+                listener(onError = { _, _ -> showFeaturedArt() })
+            }
+        }
         if (!best.thumbnailLink.isNullOrBlank()) {
             binding.featuredThumb.visibility = View.VISIBLE
             binding.featuredArt.visibility = View.GONE
             binding.featuredThumb.load(best.thumbnailLink) {
                 error(com.vovofit.app.R.drawable.card_gradient_pink)
                 listener(onError = { _, _ ->
-                    binding.featuredThumb.visibility = View.GONE
-                    binding.featuredArt.visibility = View.VISIBLE
+                    if (featuredLibUrl != null) showFeaturedLib() else showFeaturedArt()
                 })
             }
+        } else if (featuredLibUrl != null) {
+            showFeaturedLib()
         } else {
-            binding.featuredThumb.visibility = View.GONE
-            binding.featuredArt.visibility = View.VISIBLE
+            showFeaturedArt()
         }
         binding.featuredContinue.setOnClickListener {
             continueWatching(best.folderPath, best.videoName, extractCourseName(best.folderPath))
