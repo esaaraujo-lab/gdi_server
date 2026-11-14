@@ -9,9 +9,11 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.vovofit.app.data.colorFromString
-import com.vovofit.app.data.monogramFor
+import com.vovofit.app.data.coverResForPath
 import com.vovofit.app.databinding.ItemMylistCardBinding
 import com.vovofit.app.util.CardGradient
+import com.vovofit.app.util.CoverLibrary
+import com.vovofit.app.util.loadCoverChain
 import com.vovofit.app.util.FocusAnimator
 import com.vovofit.app.util.SessionManager
 import com.vovofit.app.util.TvUtils
@@ -19,7 +21,7 @@ import com.vovofit.app.util.TvUtils
 /**
  * v1.0.4 — Minha lista — aba Cursos (e Concursos).
  *
- * Card com chip "CURSO", monograma, nome, botão rosa "Continuar"
+ * Card com chip "CURSO", capa do drive, nome, botão "Continuar"
  * (abre o DetailActivity do curso) e ⭐ para remover. Sem contagem
  * "X de Y aulas": o total de aulas exige listar a pasta (chamada de
  * rede por curso) — dado não disponível sem custo; documentado nas
@@ -56,9 +58,15 @@ class MyListCourseAdapter(
             mylistMeta.text = "Curso salvo"
             mylistTitle.text = course.name
             mylistBg.background = CardGradient.drawable(res, colorFromString(course.name))
-            mylistThumb.visibility = View.GONE
-            mylistMonogram.visibility = View.VISIBLE
-            mylistMonogram.text = monogramFor(course.name)
+            // v1.0.8 camada 3 — curso salvo mostra a imagem da biblioteca
+            // pelo nome/pasta quando houver match; senao a capa do drive
+            // (nunca monograma).
+            mylistThumb.visibility = View.VISIBLE
+            mylistMonogram.visibility = View.GONE
+            mylistThumb.loadCoverChain(
+                null, coverResForPath(course.drivePath),
+                course.name, course.drivePath
+            )
             // Sem progresso por curso (não há agregado local); o
             // progresso vive por aula dentro do detalhe.
             mylistProgressRow.visibility = View.GONE
