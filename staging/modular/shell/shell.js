@@ -440,7 +440,9 @@
               container.appendChild(wrapper);
               window.__gdiStudy.courses.renderCursos(wrapper);
               // ★ v2.6: dicas da Meggy a partir do progresso (lista unificada)
-              fetch('/api/courses/unified', { credentials: 'include' }).then(r => r.json()).then(d => { if (d && d.ok) Shell.views._renderCursosTips(d.items || []); }).catch(() => {});
+              // ★ v2.15.3 (item 7): extraído p/ _refreshCursosTips() — os
+              //   removes do módulo chamam-no após re-renderizar a grade.
+              Shell.views._refreshCursosTips();
             } else {
               // ★ v2.6: lista única via API /api/courses/unified (cursos + concursos + destaque)
               const container = document.getElementById('meggy-cursos-container');
@@ -558,6 +560,13 @@
               </div>`;
           }
         })();
+      },
+
+      // ★ v2.15.3 (item 7): re-busca o unificado e re-renderiza a faixa
+      //   "💡 Dica da Meggy" (#meggy-cursos-tips). Chamado na entrada da
+      //   view cursos e após cada remoção/ocultação/adição no módulo.
+      _refreshCursosTips() {
+        fetch('/api/courses/unified', { credentials: 'include' }).then(r => r.json()).then(d => { if (d && d.ok) Shell.views._renderCursosTips(d.items || []); }).catch(() => {});
       },
 
       // ★ v2.6: faixa de dicas da Meggy na área Meus Cursos (a partir do progresso)
@@ -2364,6 +2373,44 @@
       },
 
       // ═══ Wizard: criar concurso em 4 passos ═══
+      // ★ v2.15.3 (item 2): garante as horas no resultado do /scan. O /scan
+      //   novo devolve totalHours/totalMinutes (+ truncated); se vier sem
+      //   horas (servidor antigo), chama /sources/preview como fallback com
+      //   as mesmas pastas e preenche os totais a partir da prévia.
+      async _v215EnsureScanHours(concursoId, scanResult, folderPaths) {
+        if (!scanResult) return scanResult;
+        if (scanResult.totalHours != null || scanResult.totalMinutes != null) return scanResult;
+        try {
+          const prev = await Shell.views._v215Api('/api/concursos/' + encodeURIComponent(concursoId) + '/sources/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folderPaths: folderPaths || [] }) });
+          if (prev) {
+            if (prev.totalHours != null) scanResult.totalHours = prev.totalHours;
+            if (prev.totalMinutes != null) scanResult.totalMinutes = prev.totalMinutes;
+            if (prev.truncated != null) scanResult.truncated = prev.truncated;
+            if (Array.isArray(prev.folders)) scanResult._previewFolders = prev.folders;
+          }
+        } catch (_) {}
+        return scanResult;
+      },
+
+      // ★ v2.15.3 (item 2): fragmento HTML do passo 4 com as horas e o
+      //   aviso de contagem truncada. '' quando não há horas nem aviso.
+      _v215WizardStep4HoursHtml(r) {
+        r = r || {};
+        const hasHours = (r.totalHours != null || r.totalMinutes != null);
+        const hrs = (r.totalHours != null) ? r.totalHours : Math.round(((r.totalMinutes || 0) / 60) * 10) / 10;
+        let h = '';
+        if (hasHours) {
+          h += '<div style="display:flex;gap:12px;justify-content:center;margin-bottom:16px;">' +
+            '<div style="flex:1;padding:14px;background:rgba(255,212,59,0.08);border:1px solid rgba(255,212,59,0.2);border-radius:10px;text-align:center;">' +
+            '<div style="font-size:24px;font-weight:700;color:#ffd43b;">~' + hrs + 'h</div>' +
+            '<div style="font-size:11px;color:#9aa4b8;">Tempo estimado de estudo</div></div></div>';
+        }
+        if (r.truncated) {
+          h += '<div style="margin-top:0;margin-bottom:16px;padding:10px;background:rgba(255,212,59,0.06);border:1px solid rgba(255,212,59,0.25);border-radius:8px;font-size:12px;color:#ffd43b;">⚠️ Contagem parcial — a enumeração de pastas foi truncada pelo servidor; o total real de aulas/horas pode ser maior.</div>';
+        }
+        return h;
+      },
+
       showConcursoWizard(el) {
         let modal = document.getElementById('concurso-wizard');
         if (modal) modal.remove();
@@ -2490,6 +2537,7 @@
                   '<div style="font-size:11px;color:#9aa4b8;">Aulas vinculadas</div>' +
                 '</div>' +
               '</div>' +
+              Shell.views._v215WizardStep4HoursHtml(r) +
               byDiscHTML;
             footerHTML =
               '<button class="meggy-header-btn" id="cw-close-early">Fechar</button>' +
@@ -2759,6 +2807,10 @@
                   } catch (me) {
                     scanResult.modulesError = me.message || 'não foi possível criar os módulos';
                   }
+                  // ★ v2.15.3 (item 2): preenche as horas do passo 4 (do
+                  //   /scan, ou da prévia como fallback quando o servidor
+                  //   ainda não devolve horas).
+                  try { await Shell.views._v215EnsureScanHours(concursoId, scanResult, selectedFolders); } catch (_) {}
                   step = 4;
                   render();
                 } else {
@@ -3525,15 +3577,21 @@
         renderChoice();
       },
 
-      // ★ v2.15.2 (B): UMA única descoberta recursiva de PDFs, compartilhada
-      //   com o quiz do módulo (study-courses.js listModulePdfs) — mesma
-      //   profundidade/cap da prévia do servidor (listDriveTree: profundidade
-      //   3, 40 listagens). Antes, a geração de materiais listava só a pasta
-      //   do módulo (profundidade 0) e o quiz só 1 nível / 5 subpastas — os
-      //   PDFs dentro das "Aula NN" eram invisíveis e os dois fluxos diziam
-      //   "Sem PDFs" embora a prévia contasse 18/13/12. Devolve até maxPdfs
-      //   (padrão 20), sem duplicar (mesmo PDF por dois caminhos).
+      // ★ v2.15.3 (item 3): UMA única descoberta de PDFs — delega para
+      //   listModulePdfs (study-courses.js), que tenta primeiro o cache do
+      //   scanner (getCourseLessons) e só depois lista o Drive (BFS,
+      //   profundidade 3, ≤40 listagens, ≤20 PDFs). A BFS própria do shell
+      //   foi mantida SÓ como fallback p/ quando o módulo de cursos ainda
+      //   não carregou — no caminho normal os dois fluxos (resumo e quiz)
+      //   usam a mesma implementação e concordam.
       async _v215ListModulePdfsRecursive(coursePath, maxPdfs) {
+        try {
+          const mod = window.__gdiStudy && window.__gdiStudy.courses;
+          if (mod && typeof mod.listModulePdfs === 'function') {
+            const list = await mod.listModulePdfs(coursePath, coursePath, maxPdfs || 20);
+            return Array.isArray(list) ? list.slice(0, maxPdfs || 20) : [];
+          }
+        } catch (_) {}
         const MAX_PDFS = maxPdfs || 20;
         const MAX_LISTINGS = 40;
         const MAX_DEPTH = 3;
@@ -3575,7 +3633,6 @@
         }
         return out.slice(0, MAX_PDFS);
       },
-
       // ── Item 7: resumo + flashcards por módulo ──
       // generateAll (meggy-cache.js) é chaveado por U.lessonKey(), derivado
       // de window.location.pathname (página da aula) — não dá para rodar por
@@ -3583,8 +3640,109 @@
       // em segundo plano (startBattalion, como study-courses já faz ao
       // adicionar curso), que gera resumo + questões no servidor; os
       // flashcards são criados a partir das questões quando o material é
-      // carregado (autoCreateFlashcards). As contagens do módulo (materials
-      // do GET sources) refletem o que o batalhão gravou.
+      // carregado (autoCreateFlashcards).
+      // ★ v2.15.3 (item 3) — CORREÇÃO de comentário falso: as contagens do
+      //   módulo (materials do GET sources) NÃO refletem o que o batalhão
+      //   gravou. O batalhão grava no cache ISA no Drive + nos arquivos de
+      //   resumos compartilhados e nunca escreve materials_meta (0 linhas
+      //   no D1); materials_meta só é escrita por /api/materials/save-in-
+      //   folder. Por isso os contadores ficavam 0/0/0 mesmo com o batalhão
+      //   "concluído". A UI agora dá poll em getBattalionStatus e mostra o
+      //   progresso/erro real em vez de confiar nos contadores.
+      // ★ v2.15.3 (item 3): extrai o texto dos PDFs NO CLIENTE antes do
+      //   POST ao batalhão, com o motor de PDF existente (extractPdfText,
+      //   pdf.js, até 30 págs / 50K chars, teto interno de 60s). O servidor
+      //   pula todo PDF sem pdf.text — sem isto o batalhão marcava
+      //   battalionDone=true com 0 gerações e envenenava os retries.
+      //   Devolve [{name, url, text, no_text}] — text só quando >=50 chars;
+      //   sem texto, text:'' + no_text:true (nunca finge que tem texto).
+      //   Extrai em lotes de 5 em paralelo (mesmo padrão do anexo manual
+      //   em study-courses.js); cada falha é isolada (não aborta os outros).
+      async _v215ExtractPdfTexts(pdfs) {
+        const list = (pdfs || []).map(p => ({ name: p.name || '', url: p.url || p.link || '', link: p.link || '', text: '', no_text: true, noTextReason: '' }));
+        const extract = (window.gdiIsaPdf && window.gdiIsaPdf.extractPdfText) || (window.__gdiMeggy && window.__gdiMeggy.pdf && window.__gdiMeggy.pdf.extractPdfText);
+        if (!extract) { list.forEach(p => { p.noTextReason = 'extrator de PDF indisponível'; }); return list; }
+        const PARALLEL = 5;
+        for (let i = 0; i < list.length; i += PARALLEL) {
+          const chunk = list.slice(i, i + PARALLEL);
+          await Promise.allSettled(chunk.map(async p => {
+            const fetchUrl = p.url || p.link;
+            if (!fetchUrl) { p.noTextReason = 'sem URL para baixar'; return; }
+            try {
+              const txt = await extract(fetchUrl);
+              const t = String(txt || '').trim();
+              if (t.length >= 50) { p.text = t.slice(0, 15000); p.no_text = false; }
+              else { p.noTextReason = 'texto extraível curto (' + t.length + ' chars)'; }
+            } catch (e) { p.noTextReason = (e && e.message) ? String(e.message).split('\n')[0].slice(0, 160) : 'falha na extração'; }
+          }));
+        }
+        return list;
+      },
+
+      // ★ v2.15.3 (item 3): dá poll em getBattalionStatus e mostra o
+      //   progresso/erro REAL do job ({jobId, total, processed, skipped,
+      //   done}) numa linha de status dentro de #v215-sources — antes só
+      //   havia um setTimeout cego de 30s que re-renderizava as fontes e
+      //   os contadores 0/0/0 nunca saíam do zero. Ao concluir, re-renderiza
+      //   as fontes (contagens atualizadas). opts: {intervalMs, maxPolls}.
+      //   Devolve uma Promise que resolve no fim do poll (done ou teto).
+      _v215PollBattalionStatus(el, concursoId, courseKey, opts) {
+        opts = opts || {};
+        const intervalMs = opts.intervalMs || 10000;
+        const maxPolls = opts.maxPolls || 30;
+        const box = el && el.querySelector ? el.querySelector('#v215-sources') : null;
+        let statusEl = box ? box.querySelector('#v215-battalion-status') : null;
+        const ensureStatusEl = () => {
+          if (!box) return null;
+          if (!statusEl) {
+            statusEl = document.createElement('div');
+            statusEl.id = 'v215-battalion-status';
+            statusEl.style.cssText = 'font-size:12px;color:#9aa4b8;margin-bottom:8px;';
+            if (box.prepend) box.prepend(statusEl);
+            else if (box.insertBefore && box.firstChild) box.insertBefore(statusEl, box.firstChild);
+          }
+          return statusEl;
+        };
+        const renderStatus = (txt) => { const s = ensureStatusEl(); if (s) s.innerHTML = txt; };
+        const getStatus = async () => {
+          const isa = window.gdiIsaPdf || (window.__gdiMeggy && window.__gdiMeggy.summaries);
+          if (isa && typeof isa.getBattalionStatus === 'function') return isa.getBattalionStatus(courseKey);
+          const r = await fetch('/api/ai/battalion/status?courseKey=' + encodeURIComponent(courseKey), { cache: 'no-store', credentials: 'include' });
+          return r.json();
+        };
+        let polls = 0;
+        return new Promise((resolve) => {
+          const tick = async () => {
+            polls++;
+            try {
+              const st = await getStatus();
+              const done = !!(st && (st.done === true || st.battalionDone === true));
+              const total = (st && (st.total != null ? st.total : st.pdfsFound)) || 0;
+              const processed = (st && (st.processed != null ? st.processed : st.pdfsDone)) || 0;
+              const skipped = (st && Array.isArray(st.skipped)) ? st.skipped : [];
+              if (done) {
+                if (processed > 0) {
+                  renderStatus('🐩 Materiais prontos: ' + processed + ' de ' + (total || processed) + ' PDF(s) processado(s)' + (skipped.length ? ' · ' + skipped.length + ' sem texto' : '') + '.');
+                  Shell.views._v215Toast('🐩 Resumo + flashcards prontos (' + processed + ' PDF(s)).');
+                } else {
+                  const why = skipped.length ? ' — ' + skipped.slice(0, 3).map(s2 => Shell.views._esc(s2.name || '') + ': ' + Shell.views._esc(s2.reason || 'sem texto')).join('; ') : ' — nenhum PDF tinha texto extraível.';
+                  renderStatus('⚠️ A Meggy não gerou materiais deste módulo' + why);
+                  Shell.views._v215Err('A Meggy não gerou materiais', 'Nenhum PDF processado' + why);
+                }
+                try { Shell.views._v215RenderSources(el, concursoId, null); } catch (_) {}
+                resolve(st); return;
+              }
+              renderStatus('🐩 A Meggy está gerando resumo + flashcards… (' + processed + '/' + (total || '?') + ' PDFs)');
+            } catch (e) {
+              renderStatus('🐩 Gerando resumo + flashcards… (não foi possível verificar o progresso)');
+            }
+            if (polls >= maxPolls) { renderStatus('🐩 Geração em segundo plano — as contagens aparecem aqui quando prontas.'); resolve(null); return; }
+            setTimeout(tick, intervalMs);
+          };
+          tick();
+        });
+      },
+
       async _v215GenerateModuleMaterials(el, concursoId, source, btn) {
         if (btn) { btn.disabled = true; btn.textContent = '🐩 Gerando…'; }
         try {
@@ -3592,7 +3750,14 @@
           //   os PDFs das subpastas "Aula NN" contam (a prévia já os contava).
           const pdfs = await Shell.views._v215ListModulePdfsRecursive(source.coursePath, 20);
           if (!pdfs.length) { Shell.views._v215Err('Sem PDFs neste módulo', 'Este módulo não tem PDFs para a Meggy ler (nem nas subpastas). Adicione PDFs à pasta e tente de novo.'); return; }
-          const pdfList = pdfs.map(p => ({ name: p.name, url: p.link ? (String(p.link).startsWith('http') ? p.link : window.location.origin + p.link) : '' }));
+          // ★ v2.15.3 (item 3): extrai o texto NO CLIENTE antes do POST —
+          //   o servidor pula todo PDF sem pdf.text e marcava o job como
+          //   concluído com 0 gerações. Sem texto, o item vai com text:''
+          //   + no_text:true (nunca como se tivesse texto).
+          if (btn) btn.textContent = '🐩 Lendo PDFs (' + pdfs.length + ')…';
+          const withText = await Shell.views._v215ExtractPdfTexts(pdfs);
+          const withTextCount = withText.filter(p => !p.no_text).length;
+          const pdfList = withText.map(p => ({ name: p.name, url: p.url || (p.link ? (String(p.link).startsWith('http') ? p.link : window.location.origin + p.link) : ''), text: p.no_text ? '' : (p.text || ''), no_text: !!p.no_text }));
           let ok = false;
           const isa = window.gdiIsaPdf || (window.__gdiMeggy && window.__gdiMeggy.summaries);
           if (isa && typeof isa.startBattalion === 'function') {
@@ -3606,15 +3771,20 @@
             } catch (_) { ok = false; }
           }
           if (!ok) { Shell.views._v215Err('Não foi possível iniciar a geração', 'O batalhão da Meggy não aceitou este módulo. Tente de novo em alguns minutos.'); return; }
-          Shell.views._v215Toast('🐩 A Meggy está gerando resumo + flashcards deste módulo em segundo plano (' + pdfs.length + ' PDFs). As contagens aparecem aqui quando prontos.');
-          setTimeout(() => { try { const box = el.querySelector ? el.querySelector('#v215-sources') : null; if (box && document.body.contains(box)) Shell.views._v215RenderSources(el, concursoId, null); } catch (_) {} }, 30000);
+          if (!withTextCount) {
+            Shell.views._v215Err('PDFs sem texto extraível', 'Os ' + pdfs.length + ' PDF(s) deste módulo são escaneados (só imagens) — OCR desativado. A geração foi iniciada, mas o servidor deve pular os PDFs sem texto; acompanhe o status abaixo.');
+          } else {
+            Shell.views._v215Toast('🐩 A Meggy está gerando resumo + flashcards deste módulo em segundo plano (' + withTextCount + ' de ' + pdfs.length + ' PDFs com texto' + (pdfs.length - withTextCount ? ', ' + (pdfs.length - withTextCount) + ' sem texto' : '') + ').');
+          }
+          // ★ v2.15.3 (item 3): poll do status real em vez do setTimeout
+          //   cego de 30s — mostra progresso/erro e re-renderiza ao concluir.
+          try { Shell.views._v215PollBattalionStatus(el, concursoId, source.coursePath); } catch (_) { setTimeout(() => { try { const box = el.querySelector ? el.querySelector('#v215-sources') : null; if (box && document.body.contains(box)) Shell.views._v215RenderSources(el, concursoId, null); } catch (_) {} }, 30000); }
         } catch (e) {
           Shell.views._v215Err('Não foi possível gerar os materiais', e.message || 'Erro ao listar a pasta do módulo.');
         } finally {
           if (btn) { btn.disabled = false; btn.textContent = '🐩 Gerar resumo + flashcards deste módulo'; }
         }
       },
-
       // ★ v2.2: modal para colar o conteúdo programático depois da criação
       // ★ v2.8 Fase B: modal do plano — ver o plano dia a dia ou montar um novo
       showPlanModal(planId, concursoId, opts) {
