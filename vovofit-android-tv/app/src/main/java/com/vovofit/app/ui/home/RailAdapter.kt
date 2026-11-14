@@ -15,6 +15,8 @@ import com.vovofit.app.data.driveIndexFromPath
 import com.vovofit.app.databinding.ItemRailCardBinding
 import com.vovofit.app.util.CardGradient
 import com.vovofit.app.util.FocusAnimator
+import com.vovofit.app.util.CoverLibrary
+import com.vovofit.app.util.loadCoverChain
 import com.vovofit.app.util.Format
 import com.vovofit.app.util.SessionManager
 import com.vovofit.app.util.TvUtils
@@ -78,26 +80,32 @@ class RailAdapter(
             val baseColor = colorFromString(item.colorHint ?: item.title)
             cardBg.background = CardGradient.drawable(res, baseColor)
 
-            // v1.0.8 — Thumb fotográfica quando houver; senão a CAPA DO
+            // v1.0.8 — Thumb fotográfica quando houver; senão a IMAGEM
+            // DA BIBLIOTECA pelo título/pasta (camada 3); senão a CAPA DO
             // DRIVE (arte local cover_*, foto real). Monograma nunca mais:
             // quando o Drive não devolve thumb (ou o Coil falha — as
-            // thumbs do Drive nem sempre abrem sem sessão Google), a capa
-            // garante arte no card. Sem pasta conhecida e sem thumb, fica
-            // só o gradiente escuro limpo (sem letras).
+            // thumbs do Drive nem sempre abrem sem sessão Google), a
+            // biblioteca ou a capa garante arte no card. Sem pasta
+            // conhecida e sem thumb nem match, fica só o gradiente
+            // escuro limpo (sem letras).
             val thumb = item.thumbnailUrl ?: item.file?.thumbnailLink
             val coverRes = item.file?.folderPath
                 ?.let { driveIndexFromPath(it) }?.let { driveCoverRes(it) }
+            val libUrl = CoverLibrary.resolve(
+                ctx, item.title, item.file?.name, item.file?.folderPath
+            )
             if (!thumb.isNullOrBlank()) {
                 cardThumbnail.visibility = View.VISIBLE
-                cardThumbnail.load(thumb) {
-                    error(R.drawable.card_gradient_pink)
-                    listener(onError = { _, _ ->
-                        if (coverRes != null) {
-                            cardThumbnail.setImageResource(coverRes)
-                        } else {
-                            cardThumbnail.visibility = View.GONE
-                        }
-                    })
+                cardThumbnail.loadCoverChain(
+                    thumb,
+                    coverRes ?: R.drawable.card_gradient_pink,
+                    item.title, item.file?.name, item.file?.folderPath
+                )
+                cardThumbnail.setOnClickListener(null)
+            } else if (libUrl != null) {
+                cardThumbnail.visibility = View.VISIBLE
+                cardThumbnail.load(libUrl) {
+                    error(coverRes ?: R.drawable.card_gradient_pink)
                 }
                 cardThumbnail.setOnClickListener(null)
             } else if (coverRes != null) {
