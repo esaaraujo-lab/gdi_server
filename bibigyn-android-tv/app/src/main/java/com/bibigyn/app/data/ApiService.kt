@@ -95,18 +95,18 @@ class ApiService(private val context: Context) {
                 val json = JSONObject(body)
                 val files = json.optJSONObject("data")?.optJSONArray("files")
                 val items = mutableListOf<FileItem>()
+                // ★ v2.1.9 — CAUSA RAIZ DO MONOGRAMA: o código antigo
+                // montava FileItem à mão e NUNCA lia "thumbnailLink" nem
+                // aplicava o fallback drive.google.com/thumbnail?id=<id>
+                // (só FileItem.fromJson faz isso). O thumbnailLink vinha
+                // sempre null → launchPlayer/addRecent gravavam recents
+                // sem thumb → os cards caíam no monograma. fromJson é o
+                // único parser (usado também nos favoritos) — passar a
+                // usá-lo aqui corrige a thumb em TODAS as telas que
+                // listam pastas (home, detalhe, busca, browse, player).
                 if (files != null) {
                     for (i in 0 until files.length()) {
-                        val f = files.getJSONObject(i)
-                        items.add(FileItem(
-                            name = f.optString("name"),
-                            mimeType = f.optString("mimeType"),
-                            id = f.optString("id"),
-                            driveId = f.optString("driveId"),
-                            link = f.optString("link", null),
-                            size = f.optLong("size", 0L),
-                            modifiedTime = f.optString("modifiedTime", null)
-                        ))
+                        items.add(FileItem.fromJson(files.getJSONObject(i)))
                     }
                 }
                 val next = if (json.isNull("nextPageToken")) null
