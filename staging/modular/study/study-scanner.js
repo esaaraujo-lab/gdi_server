@@ -418,6 +418,9 @@
       console.error('[Scanner] erro:', e && e.message);
       state.status = 'error';
       state.error  = (e && e.message) || String(e);
+      // ★ v2.15.5 (item 9): timestamp do erro — sem ele o detalhe do curso
+      //   não distinguia um erro de agora de um erro de dias atrás.
+      state.errorAt = Date.now();
       setScanState(courseKey, state);
       // Persist partial lessons if any, so UI shows what we have so far.
       if(allLessons && allLessons.length){
@@ -452,6 +455,7 @@
       lessonsFound: (lessons.lessons||[]).length,
       percent: total > 0 ? Math.round((state.scannedFolders||0) / total * 100) : 0,
       error: state.error || null,
+      errorAt: state.errorAt || null,
       startedAt: state.startedAt || null,
       completedAt: state.completedAt || null
     };
