@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   v1.0.4 — Card de rail (conceitos home / Minha lista / busca / detalhe).
-  Estrutura: imagem 16:9 (foto real via Coil quando houver, monograma
-  tipográfico quando não houver — NUNCA emoji de câmera) + título
+  Estrutura: imagem 16:9 (foto real via Coil quando houver, capa do
+  drive quando não houver — v1.0.8, monograma nunca mais) + título
   16sp (máx. 2 linhas) + subtítulo 14sp (1 linha) + barra de
   progresso rosa + texto "% concluído · Xmin restantes".
   Foco: anel 3dp na cor da marca via FocusAnimator.attachCard()
@@ -51,16 +51,6 @@
                 android:visibility="gone"
                 android:contentDescription="@string/thumb_desc" />
 
-            <!-- Monograma tipográfico (fallback) — iniciais do título -->
-            <TextView
-                android:id="@+id/card_monogram"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:gravity="center"
-                android:textColor="@color/tile_title"
-                android:textSize="@dimen/text_monogram"
-                android:textStyle="bold"
-                android:alpha="0.95" />
 
             <!-- Sombra superior (contraste dos badges) -->
             <View
