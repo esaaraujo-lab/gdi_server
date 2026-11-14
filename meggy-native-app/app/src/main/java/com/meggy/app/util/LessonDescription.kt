@@ -130,6 +130,29 @@ object LessonDescription {
         return topic
     }
 
+    // ───────── ganchos do texto descritivo (onda 2) ─────────
+    //
+    // Elton 2026-11-14: o texto exibido da aula começa com um GANCHO
+    // sorteado A CADA EXIBIÇÃO (não por aula — o mesmo resumo pode
+    // abrir com um gancho diferente), combinado com o resumo da
+    // Meggy. O gancho é só de exibição (DetailActivity.showDescription):
+    // nunca é guardado no cache nem enviado ao servidor, e nunca é
+    // inventado conteúdo: sem resumo, não há gancho (o texto fica a
+    // provisória / em branco, como antes).
+    val DESCRIPTION_HOOKS = listOf(
+        "Nesta aula exploramos...",
+        "Vamos aprender...",
+        "Nesta aula, você vai descobrir...",
+        "Prepare-se para mergulhar em...",
+        "Hoje vamos ver..."
+    )
+
+    /** Resumo com gancho sorteado na hora (exibição). */
+    fun withHook(summary: String): String {
+        if (summary.isBlank()) return summary
+        return "${DESCRIPTION_HOOKS.random()} $summary"
+    }
+
     /**
      * Descrição provisória (b): tenta o nome da pasta, depois o nome
      * do primeiro arquivo de vídeo/áudio. Null → branco (c).
