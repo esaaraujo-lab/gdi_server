@@ -10,12 +10,13 @@ import coil.load
 import com.meggy.app.R
 import com.meggy.app.data.FileItem
 import com.meggy.app.data.colorFromString
-import com.meggy.app.data.monogramFor
 import com.meggy.app.databinding.ItemFlatLessonBinding
 import com.meggy.app.util.CardGradient
 import com.meggy.app.util.FocusAnimator
 import com.meggy.app.util.Format
 import com.meggy.app.util.SessionManager
+import com.meggy.app.util.ThumbArt
+import com.meggy.app.util.LibraryCovers
 import com.meggy.app.util.TvUtils
 
 /**
@@ -80,15 +81,22 @@ class FlatLessonAdapter(
             flatTitle.text = item.name
             flatThumbBg.background = CardGradient.drawable(res, colorFromString(item.name))
 
-            val thumb = item.thumbnailLink
+            // v2.7.11 onda 2 + camada (3) — sem thumb, a imagem da
+            // biblioteca pelo nome da aula/pasta; sem match, a capa
+            // gerada do drive (nunca monograma).
+            val coverRes = ThumbArt.coverResForPath(folderPath)
+            val thumb = LibraryCovers.remoteCover(item.thumbnailLink, item.name, folderPath)
             if (!thumb.isNullOrBlank() && (item.isVideo || item.isAudio || item.isPdf)) {
                 flatThumb.visibility = View.VISIBLE
                 flatMonogram.visibility = View.GONE
-                flatThumb.load(thumb) { error(R.drawable.card_gradient_pink) }
+                flatThumb.load(thumb) {
+                    error(coverRes)
+                    listener(onError = { _, _ -> flatThumb.setImageResource(coverRes) })
+                }
             } else {
-                flatThumb.visibility = View.GONE
-                flatMonogram.visibility = View.VISIBLE
-                flatMonogram.text = monogramFor(item.name)
+                flatThumb.visibility = View.VISIBLE
+                flatMonogram.visibility = View.GONE
+                flatThumb.setImageResource(coverRes)
             }
 
             val dur = if (item.isVideo || item.isAudio) sm.getResumeDuration(folderPath, item.name) else 0L
