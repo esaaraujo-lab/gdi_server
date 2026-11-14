@@ -21,7 +21,7 @@ import io.noties.markwon.Markwon
 import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
 import io.noties.markwon.ext.tables.TablePlugin
 import io.noties.markwon.AbstractMarkwonPlugin
-import io.noties.markwon.MarkwonTheme
+import io.noties.markwon.core.MarkwonTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -142,7 +142,7 @@ class MdReaderActivity : AppCompatActivity() {
                         .codeTextColor(ContextCompat.getColor(this@MdReaderActivity, R.color.md_on_surface))
                         .blockQuoteColor(pink)
                         .blockQuoteWidth((8 * resources.displayMetrics.density).toInt())
-                        .bulletListItemStrokeColor(pink)
+                        .listItemColor(pink)
                 }
             })
             .build()
