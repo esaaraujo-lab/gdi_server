@@ -5,15 +5,17 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.vovofit.app.data.monogramFor
+import com.vovofit.app.data.coverResForPath
 import com.vovofit.app.databinding.ItemMylistCardBinding
 import com.vovofit.app.util.FocusAnimator
+import com.vovofit.app.util.CoverLibrary
+import com.vovofit.app.util.loadCoverChain
 import com.vovofit.app.util.SessionManager
 import com.vovofit.app.util.TvUtils
 
 /**
  * v1.0.4 — "Documentos marcados" (bookmarks dos leitores PDF/MD).
- * Reutiliza o card da Minha lista: chip com o tipo, monograma, nome.
+ * Reutiliza o card da Minha lista: chip com o tipo, capa do drive, nome.
  */
 class BookmarkAdapter(
     private val onOpen: (SessionManager.Bookmark) -> Unit
@@ -41,9 +43,14 @@ class BookmarkAdapter(
             mylistTypeChip.text = b.kind.uppercase()
             mylistTitle.text = b.name
             mylistMeta.text = b.path
-            mylistMonogram.text = monogramFor(b.name)
-            mylistThumb.visibility = android.view.View.GONE
-            mylistMonogram.visibility = android.view.View.VISIBLE
+            // v1.0.8 camada 3 — documento marcado mostra a imagem da
+            // biblioteca pelo nome/pasta quando houver match; senao a capa
+            // do drive (nunca monograma).
+            mylistThumb.visibility = android.view.View.VISIBLE
+            mylistMonogram.visibility = android.view.View.GONE
+            mylistThumb.loadCoverChain(
+                null, coverResForPath(b.path), b.name, b.path
+            )
             mylistProgressRow.visibility = android.view.View.GONE
             mylistContinue.visibility = android.view.View.GONE
             mylistFav.visibility = android.view.View.GONE
