@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  v1.0.4 — Card de drive · TV (mesmos ids do celular).
+  Tile de ícone rosa com monograma (iniciais do drive) + nome 14sp
+  + linha de metadados (DriveItem.tagline, texto curado — sem
+  contagens inventadas). Foco via FocusAnimator.attachCard().
+-->
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/drive_card_root"
+    android:layout_width="@dimen/tv_drive_card_width"
+    android:layout_height="wrap_content"
+    android:layout_marginEnd="@dimen/rail_gap"
+    android:clickable="true"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    android:foreground="?attr/selectableItemBackground"
+    app:cardCornerRadius="@dimen/radius_md"
+    app:cardElevation="@dimen/elevation_0"
+    app:cardBackgroundColor="@color/tile_bg"
+    app:strokeWidth="0dp"
+    app:strokeColor="@color/tile_focus_ring">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- Tile de ícone (rosa da marca, monograma escuro) -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="200dp">
+
+            <View
+                android:id="@+id/drive_bg"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@color/drive_icon_tile" />
+
+            <TextView
+                android:id="@+id/drive_icon"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:textColor="@color/drive_icon_tile_text"
+                android:textSize="56sp"
+                android:textStyle="bold" />
+
+            <!-- ★ Favorito do drive -->
+            <TextView
+                android:id="@+id/drive_fav_star"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_gravity="top|end"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:layout_marginEnd="@dimen/spacing_sm"
+                android:background="@drawable/badge_resume"
+                android:clickable="true"
+                android:contentDescription="@string/fav_desc"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:gravity="center"
+                android:text="☆"
+                android:textColor="@color/tile_title"
+                android:textSize="16sp" />
+        </FrameLayout>
+
+        <!-- Nome + metadados -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="@dimen/spacing_md"
+            android:paddingTop="@dimen/spacing_sm"
+            android:paddingBottom="@dimen/spacing_md">
+
+            <TextView
+                android:id="@+id/drive_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="@color/tile_title"
+                android:textSize="@dimen/tv_card_title"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/drive_meta"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/tile_subtitle"
+                android:textSize="@dimen/tv_card_meta" />
+        </LinearLayout>
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>
