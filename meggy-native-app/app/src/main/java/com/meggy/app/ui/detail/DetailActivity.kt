@@ -23,7 +23,6 @@ import com.meggy.app.data.AiService
 import com.meggy.app.data.ApiService
 import com.meggy.app.data.FileItem
 import com.meggy.app.data.colorFromString
-import com.meggy.app.data.monogramFor
 import com.meggy.app.databinding.ActivityDetailBinding
 import com.meggy.app.ui.home.HomeActivity
 import com.meggy.app.ui.home.RailAdapter
@@ -40,6 +39,8 @@ import com.meggy.app.util.Format
 import com.meggy.app.util.LessonDescription
 import com.meggy.app.util.PlaylistManager
 import com.meggy.app.util.SessionManager
+import com.meggy.app.util.ThumbArt
+import com.meggy.app.util.LibraryCovers
 import com.meggy.app.util.TvUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -99,6 +100,15 @@ class DetailActivity : AppCompatActivity() {
     private var allFiles: List<FileItem> = emptyList()
     private var currentTab: Tab = Tab.LESSONS
     private var lastFocusedContinuePos = 0
+    // v2.7.11 camada (3) — quando o manifesto da biblioteca chega,
+    // re-aplica o hero e as listas (o app já está com a capa gerada).
+    private val libraryReadyListener: () -> Unit = {
+        if (!isFinishing && !isDestroyed) {
+            refreshHeroCover()
+            binding.recycler.adapter?.notifyDataSetChanged()
+            binding.railContinue.adapter?.notifyDataSetChanged()
+        }
+    }
 
     private enum class Tab { SUMMARY, LESSONS, QUESTIONS, FLASHCARDS }
 
@@ -110,6 +120,10 @@ class DetailActivity : AppCompatActivity() {
         api = ApiService(this)
         currentPath = intent.getStringExtra("drivePath") ?: "/"
         folderName = intent.getStringExtra("folderName") ?: "Detalhe"
+        // v2.7.11 camada (3) — manifesto em 2º plano (o warmUp é
+        // guardado: se a home já buscou, não busca de novo).
+        LibraryCovers.warmUp(this)
+        LibraryCovers.addOnReadyListener(libraryReadyListener)
 
         // Hero
         binding.heroTitle.text = folderName
@@ -117,7 +131,12 @@ class DetailActivity : AppCompatActivity() {
         binding.toolbar.setNavigationOnClickListener { finish() }
         val baseColor = colorFromString(folderName)
         binding.heroBg.background = heroGradient(baseColor)
-        binding.heroMonogram.text = monogramFor(folderName)
+        // v2.7.11 onda 2 — hero sempre com capa: a gerada do drive
+        // já no onCreate; loadFolder() troca pela thumb do Drive
+        // (1º vídeo) quando houver. Nunca monograma.
+        binding.heroImage.visibility = View.VISIBLE
+        binding.heroMonogram.visibility = View.GONE
+        binding.heroImage.setImageResource(ThumbArt.coverResForPath(currentPath))
 
         // TV: header com busca + avatar; sem bottom nav.
         val isTv = TvUtils.isTv(this)
@@ -185,6 +204,7 @@ class DetailActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        LibraryCovers.removeOnReadyListener(libraryReadyListener)
         descriptionJob?.cancel()
         super.onDestroy()
     }
@@ -319,17 +339,9 @@ class DetailActivity : AppCompatActivity() {
             }
             allFiles = files
 
-            // Hero: foto do 1º vídeo (thumb real) ou monograma.
-            val firstThumb = files.firstOrNull { (it.isVideo || it.isAudio) && !it.thumbnailLink.isNullOrBlank() }
-                ?.thumbnailLink
-            if (!firstThumb.isNullOrBlank()) {
-                binding.heroImage.visibility = View.VISIBLE
-                binding.heroMonogram.visibility = View.GONE
-                binding.heroImage.load(firstThumb) { error(R.drawable.card_gradient_pink) }
-            } else {
-                binding.heroImage.visibility = View.GONE
-                binding.heroMonogram.visibility = View.VISIBLE
-            }
+            // Hero: (2) thumb do 1º vídeo, (3) imagem da biblioteca
+            // por nome da pasta/curso, (4) capa gerada — nunca monograma.
+            refreshHeroCover()
 
             // Chips reais: N aulas, N pastas, X% concluído. Sem "HD".
             val videoCount = files.count { it.isVideo || it.isAudio }
@@ -440,7 +452,7 @@ class DetailActivity : AppCompatActivity() {
         // (a) Cache local — instantâneo ("abre na hora da próxima vez").
         val cached = sm.getLessonDescription(currentPath)
         if (!cached.isNullOrBlank()) {
-            showDescription(cached, getString(R.string.summary_state_generated))
+            showDescription(cached, getString(R.string.summary_state_generated), generated = true)
             return
         }
         // (b)/(c) provisória imediata (ou branco) enquanto resolve.
@@ -467,7 +479,7 @@ class DetailActivity : AppCompatActivity() {
                         )
                         AiService.saveToFolder(this@DetailActivity, filePath, fileName, outcome.text)
                     }
-                    showDescription(outcome.text, getString(R.string.summary_state_generated))
+                    showDescription(outcome.text, getString(R.string.summary_state_generated), generated = true)
                 }
                 is LessonDescription.Outcome.Generating -> {
                     // Ainda gerando após 3 min: mantém o texto e avisa.
@@ -497,14 +509,50 @@ class DetailActivity : AppCompatActivity() {
         }
     }
 
-    private fun showDescription(text: String, state: String) {
-        binding.resumoText.text = text
+    /**
+     * v2.7.11 onda 2 — o texto do resumo GERADO é exibido com um
+     * gancho sorteado a cada exibição (LessonDescription.withHook);
+     * o gancho é só de exibição — o texto guardado (cache local /
+     * servidor) nunca leva o gancho. A provisória (nome da aula) e
+     * os estados (gerando / sem material) não levam gancho.
+     */
+    private fun showDescription(text: String, state: String, generated: Boolean = false) {
+        binding.resumoText.text =
+            if (generated) LessonDescription.withHook(text) else text
         showDescriptionState(state)
     }
 
     private fun showDescriptionState(state: String) {
         binding.resumoState.text = state
         binding.resumoState.visibility = if (state.isBlank()) View.GONE else View.VISIBLE
+    }
+
+    /**
+     * v2.7.11 camada (3) — hero do detalhe: (1) não há cover_url
+     * aqui (o detalhe não recebe o destaque do admin); (2) thumb
+     * do 1º vídeo; (3) imagem da biblioteca por nome da pasta/
+     * curso; (4) capa gerada do drive. Nunca monograma. Lê
+     * [allFiles] (já carregado por [loadFolder]) — por isso o
+     * listener onReady pode chamá-lo de novo quando o manifesto
+     * chega depois da tela pronta.
+     */
+    private fun refreshHeroCover() {
+        val firstThumb = allFiles.firstOrNull { (it.isVideo || it.isAudio) && !it.thumbnailLink.isNullOrBlank() }
+            ?.thumbnailLink
+        val coverRes = ThumbArt.coverResForPath(currentPath)
+        val remote = LibraryCovers.remoteCover(firstThumb, folderName, currentPath)
+        binding.heroImage.visibility = View.VISIBLE
+        binding.heroMonogram.visibility = View.GONE
+        if (remote != null) {
+            binding.heroImage.load(remote) {
+                error(coverRes)
+                listener(onError = { _, _ ->
+                    binding.heroImage.setImageResource(coverRes)
+                })
+            }
+        } else {
+            binding.heroImage.setImageResource(coverRes)
+        }
     }
 
     private fun updateHeroProgress() {
