@@ -16,10 +16,11 @@ import com.meggy.app.util.TvUtils
 /**
  * v2.7.6 — Rail "Explorar drives" (conceito home).
  *
- * Tile de ícone rosa com o emoji do drive (2.7.5) + nome 14sp +
- * linha de metadados (DriveItem.tagline, texto curado). Foco via
- * FocusAnimator.attachCard (anel 3dp da marca + escala + elevação).
- * O tile rosa é o token `drive_icon_tile` (por marca: rosa/laranja/lima).
+ * v2.7.11 — card ESCURO com quadrado rosa de ícone + nome +
+ * linha de metadados (DriveItem.tagline, texto curado; sem subtítulo
+ * quando não houver — nunca contagens inventadas). Antes (2.7.6) o
+ * tile inteiro era ROSA. Foco via FocusAnimator.attachCard (anel 3dp
+ * da marca + escala + elevação).
  */
 class DriveRailAdapter(
     private val drives: List<DriveItem>,
@@ -47,6 +48,7 @@ class DriveRailAdapter(
             driveIcon.text = drive.icon  // patch: emoji do drive de volta (2.7.5)
             driveName.setWordEllipsized(drive.name)
             driveMeta.setWordEllipsized(drive.tagline)
+            driveMeta.visibility = if (drive.tagline.isBlank()) View.GONE else View.VISIBLE
 
             val coursePath = "/${drive.index}:/"
             val sm = SessionManager.get(holder.itemView.context)
