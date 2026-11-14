@@ -311,7 +311,7 @@ fun colorFromString(str: String): Int {
  * emoji de câmera. "Direito Constitucional — Aula 08" → "DC".
  */
 fun monogramFor(title: String): String {
-    val words = title.split(Regex("[^\p{L}0-9]+"))
+    val words = title.split(Regex("[^\\p{L}0-9]+"))
         .filter { it.isNotBlank() && it[0].isLetterOrDigit() }
     if (words.isEmpty()) return "M"
     if (words.size == 1) return words[0].take(2).uppercase()
