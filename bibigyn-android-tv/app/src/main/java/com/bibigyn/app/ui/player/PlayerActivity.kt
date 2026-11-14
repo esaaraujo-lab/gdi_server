@@ -54,6 +54,7 @@ import com.bibigyn.app.util.FocusAnimator
 import com.bibigyn.app.util.SessionManager
 import com.bibigyn.app.util.SubtitleFetcher
 import com.bibigyn.app.util.TvUtils
+import com.bibigyn.app.util.UpdateChecker
 import com.bibigyn.app.util.VideoCache
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -969,6 +970,10 @@ class PlayerActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         playerInForeground = true
+        // v2.1.9: o auto-update NUNCA lança o instalador por cima da
+        // reprodução — o download que terminar agora fica adiado e
+        // lança quando o player fechar (ver UpdateChecker).
+        UpdateChecker.setPlayerForeground(true)
         initialisePlayer()
         startPregenerator()
     }
@@ -976,6 +981,7 @@ class PlayerActivity : AppCompatActivity() {
     override fun onStop() {
         super.onStop()
         playerInForeground = false
+        UpdateChecker.setPlayerForeground(false)
         descriptionPregenerator?.stop()
         releasePlayer()
     }
