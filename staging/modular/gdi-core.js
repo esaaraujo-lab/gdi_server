@@ -1294,14 +1294,20 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
               const _resp=await fetch(_curItem.url,{credentials:'same-origin'});
               if(!_resp.ok)throw new Error('HTTP '+_resp.status);
               const _txt=await _resp.text();
-              // render markdown com sanitização
-              let _html;
+              // ★ v2.15.5 item 10: renderer único — marked+sanitizador
+              //    quando o CDN responde; sem ele, o vendored (seguro por
+              //    construção) em vez de texto cru. gdiSanitize só no HTML
+              //    vindo do marked: sem DOMPurify ele escaparia o HTML
+              //    do vendored e anularia a formatação.
+              let _html=null;
               if(window.marked){
-                try{_html=marked.parse(_txt);}catch(_){_html=escHtml(_txt).replace(/\n/g,'<br>');}
-              }else{
-                _html=escHtml(_txt).replace(/\n/g,'<br>');
+                try{_html=marked.parse(_txt);}catch(_){_html=null;}
+                if(_html!==null&&window.gdiSanitize){try{_html=window.gdiSanitize(_html);}catch(_){_html=null;}}
               }
-              if(window.gdiSanitize){try{_html=window.gdiSanitize(_html);}catch(_){}}
+              if(_html===null){
+                if(typeof window.gdiRenderMd==='function'){try{_html=window.gdiRenderMd(_txt);}catch(_){_html=null;}}
+                if(_html===null)_html=escHtml(_txt).replace(/\n/g,'<br>');
+              }
               const _isAi=_curItem.isAiGenerated;
               const _isTr=_curItem.isTranscription;
               const _badge=_isAi?'<span style="background:rgba(255,139,159,.15);color:#ff8b9f;border:1px solid rgba(255,139,159,.3);padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;">RESUMO DE IA</span>':
