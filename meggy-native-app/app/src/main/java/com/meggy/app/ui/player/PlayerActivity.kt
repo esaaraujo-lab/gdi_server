@@ -30,7 +30,6 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
-import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
@@ -51,6 +50,7 @@ import com.meggy.app.util.CardGradient
 import com.meggy.app.util.Format
 import com.meggy.app.util.PlaylistManager
 import com.meggy.app.util.DescriptionPregenerator
+import com.meggy.app.util.FocusAnimator
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.SubtitleFetcher
 import com.meggy.app.util.TvUtils
@@ -61,8 +61,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * v2.7.7 — Player (conceitos player celular + TV player v2, Elton 23:50)
+ * v2.7.9 — Player (conceitos player celular + TV player v2, Elton 23:50)
  * + simplificação do player (Elton 10:31, patch 2.7.7).
+ * v2.7.9 — controles da barra: feedback visual (seletores +
+ * FocusAnimator), foco D-pad entra na barra, barra invisível
+ * some com GONE (não intercepta mais toques).
  *
  * DOIS MODOS (mesma Activity, mesmos componentes):
  *  - Retrato (celular): vídeo 16:9 + controles do ExoPlayer + linha de
@@ -118,13 +121,14 @@ import kotlinx.coroutines.withContext
  * Tocar de novo, qualquer interação com os controles ou tocar no
  * overlay restaura o vídeo. Na TV a pill é focável pelo D-pad.
  *
- * LEGENDA (CC, estilo YouTube): botão CC na barra + escolha de idioma
- * quando há legenda. Fontes: sidecar .vtt/.srt na pasta da aula, ou o
- * endpoint do worker GET /api/ai/subtitles (200 VTT / 202 gerando /
- * 404 sem legenda — ver SubtitleFetcher; o endpoint AINDA NÃO existe,
- * o app degrada para "sem legendas"). O toggle Legendas dos Ajustes
- * é o padrão; o CC é o controle por sessão/aula. Sem legenda, o CC
- * mostra "sem legendas" — nunca menu vazio/falso. Sem CC no áudio.
+ * LEGENDA: sem botão CC na barra (removido v2.7.9, Elton 11:16)
+ * — as legendas valem SÓ pelo toggle Legendas dos Ajustes.
+ * Fontes: sidecar .vtt/.srt na pasta da aula, ou o endpoint do
+ * worker GET /api/ai/subtitles (200 VTT / 202 gerando / 404 sem
+ * legenda — ver SubtitleFetcher; o endpoint AINDA NÃO existe, o app
+ * degrada para "sem legendas"). Com o toggle ligado e havendo
+ * legenda, ela aparece sozinha; desligado, nenhuma legenda. Sem
+ * legenda no áudio (não há faixa de vídeo).
  *
  * ÁUDIO (mp3/podcast): MESMO player — a área de vídeo vira a capa do
  * episódio (thumb/monograma + título + sub); mesmos controles
@@ -159,8 +163,13 @@ class PlayerActivity : AppCompatActivity() {
                     }
                 }
                 KeyEvent.KEYCODE_DPAD_DOWN -> {
-                    if (isFullscreen && controlsVisible) {
-                        binding.playerView.requestFocus()
+                    // v2.7.9 — DOWN do vídeo ENTRA na barra (antes pedia
+                    // foco no próprio playerView e prendia o foco lá: os
+                    // botões da barra ficavam inalcançáveis pelo D-pad).
+                    // Com o foco já na barra, deixa o sistema navegar
+                    // (pills -> SeekBar) — não consome a tecla.
+                    if (isFullscreen && controlsVisible && binding.playerView.hasFocus()) {
+                        binding.btnPlayPauseBar.requestFocus()
                         return true
                     }
                 }
@@ -301,7 +310,6 @@ class PlayerActivity : AppCompatActivity() {
         updateSpeedLabels()
         updateAudioCover(item)
         updatePrevNextButtons()
-        updateCcButtons()
 
         // Controles da barra (fullscreen/TV) e da linha de info (retrato).
         // v2.7.7: sem botões −10s/+10s (o pulo continua por double-tap e
@@ -309,8 +317,6 @@ class PlayerActivity : AppCompatActivity() {
         binding.btnPlayPauseBar.setOnClickListener { exitRestIfActive(); togglePlayPause() }
         binding.btnSpeedBar.setOnClickListener { exitRestIfActive(); cycleSpeed() }
         binding.btnSpeedInfo.setOnClickListener { exitRestIfActive(); cycleSpeed() }
-        binding.btnCcBar.setOnClickListener { exitRestIfActive(); showCcDialog() }
-        binding.btnCcInfo.setOnClickListener { exitRestIfActive(); showCcDialog() }
         binding.btnRestBar.setOnClickListener { toggleSleepMode() }
         binding.btnRestInfo.setOnClickListener { toggleSleepMode() }
         binding.btnFullscreen.setOnClickListener { enterFullscreen() }
@@ -321,6 +327,18 @@ class PlayerActivity : AppCompatActivity() {
         binding.restartButton.setOnClickListener { exitRestIfActive(); restartVideo() }
         binding.sleepTimerButton.setOnClickListener { showSleepTimerDialog() }
         binding.favButton.setOnClickListener { exitRestIfActive(); toggleFavoriteCurrent() }
+
+        // v2.7.9 — feedback visual dos botões da barra (foco D-pad na TV
+        // + escala + anel do seletor): sem isso o botão focado/pressionado
+        // era indistinguível (chip_outline/btn_play_circle são estáticos).
+        // Barra pós-remoção do CC (Elton 11:16): play/pausa, Descanso,
+        // velocidade, sair da tela cheia (+ pills do retrato).
+        listOf(
+            binding.btnPlayPauseBar, binding.btnRestBar,
+            binding.btnSpeedBar, binding.btnExitFullscreen, binding.btnSpeedInfo,
+            binding.btnRestInfo, binding.btnFullscreen,
+            binding.centerPlayPause
+        ).forEach { FocusAnimator.attach(it, isTv) }
         updateFavButton()
 
         // v2.7.7 — botão ⛶ do controller NATIVO do ExoPlayer (retrato):
@@ -425,6 +443,12 @@ class PlayerActivity : AppCompatActivity() {
         setPlayerContainerFullscreen(false)
         binding.playerView.useController = true
         binding.customBar.visibility = View.GONE
+        // v2.7.9 — restaura a barra superior (o hide do fullscreen pode
+        // tê-la deixado GONE + alpha 0; em retrato ela fica visível).
+        handler.removeCallbacks(hideBarRunnable)
+        binding.topBar.visibility = View.VISIBLE
+        binding.topBar.alpha = 1f
+        binding.customBar.alpha = 1f
         binding.infoScroll.visibility = View.VISIBLE
         binding.bottomNav.visibility = if (isTv) View.GONE else View.VISIBLE
         binding.audioCover.visibility = if (isAudio) View.VISIBLE else View.GONE
@@ -518,31 +542,6 @@ class PlayerActivity : AppCompatActivity() {
     private fun updatePrevNextButtons() {
         binding.btnPrev.visibility = if (PlaylistManager.hasPrev()) View.VISIBLE else View.GONE
         binding.btnNext.visibility = if (PlaylistManager.hasNext()) View.VISIBLE else View.GONE
-    }
-
-    private fun updateCcButtons() {
-        // Sem CC no áudio (não há faixa de vídeo/legenda).
-        val visible = !isAudio
-        binding.btnCcBar.visibility = if (visible) View.VISIBLE else View.GONE
-        binding.btnCcInfo.visibility = if (visible) View.VISIBLE else View.GONE
-        updateCcActiveState()
-    }
-
-    private fun updateCcActiveState() {
-        val active = isSubtitleActive()
-        val pink = getColor(R.color.md_primary)
-        val muted = getColor(R.color.md_on_surface_variant)
-        binding.btnCcBar.setTextColor(if (active) pink else muted)
-        binding.btnCcInfo.setTextColor(if (active) pink else muted)
-    }
-
-    private fun isSubtitleActive(): Boolean {
-        val p = player ?: return false
-        return try {
-            p.currentTracks.groups.any { group ->
-                group.type == C.TRACK_TYPE_TEXT && group.isSelected
-            }
-        } catch (_: Exception) { false }
     }
 
     private fun updateSpeedLabels() {
@@ -766,10 +765,21 @@ class PlayerActivity : AppCompatActivity() {
         if (sleepMode) return
         controlsVisible = true
         if (isFullscreen) {
-            binding.customBar.animate().alpha(1f).setDuration(200).start()
-            binding.titleLabel.animate().alpha(1f).setDuration(200).start()
+            // v2.7.9 — cancela o GONE pendente do hide: a barra não pode
+            // sumir depois de mostrada de novo.
+            handler.removeCallbacks(hideBarRunnable)
             binding.customBar.visibility = View.VISIBLE
-            binding.titleLabel.visibility = View.VISIBLE
+            binding.topBar.visibility = View.VISIBLE
+            binding.customBar.animate().alpha(1f).setDuration(200).start()
+            binding.topBar.animate().alpha(1f).setDuration(200).start()
+            // v2.7.9 — TV: o foco tem que entrar na barra (antes nenhum
+            // botão recebia foco e o D-pad não alcançava os controles).
+            if (isTv) {
+                val f = currentFocus
+                if (f == null || f == binding.playerView) {
+                    binding.btnPlayPauseBar.requestFocus()
+                }
+            }
         } else {
             binding.playerView.showController()
         }
@@ -781,12 +791,25 @@ class PlayerActivity : AppCompatActivity() {
         if (sleepMode) return
         controlsVisible = false
         if (isFullscreen) {
+            // v2.7.9 — a barra invisível (alpha 0) continuava interceptando
+            // toques na região dela; some com GONE 250ms depois do fade.
             binding.customBar.animate().alpha(0f).setDuration(200).start()
-            binding.titleLabel.animate().alpha(0f).setDuration(200).start()
+            binding.topBar.animate().alpha(0f).setDuration(200).start()
+            handler.removeCallbacks(hideBarRunnable)
+            handler.postDelayed(hideBarRunnable, 250)
         } else {
             binding.playerView.hideController()
         }
         updateCenterPlayPause()
+    }
+
+    // v2.7.9 — esconde a barra do fullscreen depois do fade-out, só se
+    // os controles continuarem escondidos (showControls cancela).
+    private val hideBarRunnable = Runnable {
+        if (!controlsVisible) {
+            binding.customBar.visibility = View.GONE
+            binding.topBar.visibility = View.GONE
+        }
     }
 
     private fun scheduleAutoHide() {
@@ -828,13 +851,13 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    // ──────────── legenda (CC) ────────────
+    // ──────────── legenda (sem botão CC desde v2.7.9) ────────────
 
     /**
      * Busca a legenda da aula atual (sidecar na pasta, senão o endpoint
-     * do worker). Chamado em 2º plano após o player iniciar — o CC já
-     * está pronto quando o aluno toca nele. Sem legenda: CC mostra
-     * "sem legendas" (nunca menu vazio).
+     * do worker). Chamado em 2º plano após o player iniciar — a
+     * legenda já está pronta quando o vídeo começa. Sem legenda,
+     * nada é exibido (nunca menu vazio/falso).
      */
     private fun ensureSubtitles() {
         if (isAudio || subtitleState == SubtitleState.READY) return
@@ -871,7 +894,6 @@ class PlayerActivity : AppCompatActivity() {
                     subtitleState = SubtitleState.NONE
                 }
             }
-            updateCcActiveState()
         }
     }
 
@@ -899,106 +921,6 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /** Diálogo estilo YouTube: idiomas disponíveis + "Desativado". */
-    private fun showCcDialog() {
-        if (isAudio) return
-        if (!SessionManager.get(this).subtitlesEnabled) {
-            Snackbar.make(binding.root, "Legendas desligadas nos Ajustes", Snackbar.LENGTH_LONG).show()
-            return
-        }
-        when (subtitleState) {
-            SubtitleState.NONE -> {
-                Snackbar.make(binding.root, "Sem legendas para esta aula", Snackbar.LENGTH_LONG).show()
-                return
-            }
-            SubtitleState.GENERATING -> {
-                Snackbar.make(binding.root, "Gerando legenda… tente de novo em instantes", Snackbar.LENGTH_LONG).show()
-                return
-            }
-            SubtitleState.UNKNOWN -> {
-                ensureSubtitles()
-                Snackbar.make(binding.root, "Buscando legenda…", Snackbar.LENGTH_SHORT).show()
-                return
-            }
-            else -> {}
-        }
-        val languages = availableSubtitleLanguages()
-        val options = mutableListOf<String>()
-        options.add("Desativado")
-        options.addAll(languages)
-        val current = currentSubtitleLanguage()
-        AlertDialog.Builder(this)
-            .setTitle("Legendas")
-            .setSingleChoiceItems(options.toTypedArray(), if (current == null) 0 else options.indexOf(current)) { dialog, which ->
-                dialog.dismiss()
-                if (which == 0) {
-                    disableSubtitlesForSession()
-                } else {
-                    selectSubtitleLanguage(options[which])
-                }
-            }
-            .show()
-    }
-
-    private fun availableSubtitleLanguages(): List<String> {
-        val langs = mutableListOf<String>()
-        if (subtitleState == SubtitleState.READY) langs.add(subtitleLanguage)
-        try {
-            val info = trackSelector?.currentMappedTrackInfo ?: return langs
-            for (r in 0 until info.rendererCount) {
-                if (info.getRendererType(r) != C.TRACK_TYPE_TEXT) continue
-                val groups = info.getTrackGroups(r)
-                for (g in 0 until groups.length) {
-                    val group = groups[g]
-                    for (t in 0 until group.length) {
-                        val lang = group.getFormat(t).language ?: continue
-                        if (!langs.contains(lang)) langs.add(lang)
-                    }
-                }
-            }
-        } catch (_: Exception) {}
-        return langs
-    }
-
-    private fun currentSubtitleLanguage(): String? {
-        val p = player ?: return null
-        return try {
-            p.currentTracks.groups.firstOrNull { group ->
-                group.type == C.TRACK_TYPE_TEXT && group.isSelected
-            }?.let { group ->
-                group.mediaTrackGroup.getFormat(0).language
-            }
-        } catch (_: Exception) { null }
-    }
-
-    private fun selectSubtitleLanguage(language: String) {
-        val ts = trackSelector ?: return
-        val info = ts.currentMappedTrackInfo ?: return
-        for (r in 0 until info.rendererCount) {
-            if (info.getRendererType(r) != C.TRACK_TYPE_TEXT) continue
-            val groups = info.getTrackGroups(r)
-            for (g in 0 until groups.length) {
-                val group = groups[g]
-                for (t in 0 until group.length) {
-                    if (group.getFormat(t).language == language) {
-                        ts.setParameters(
-                            ts.buildUponParameters()
-                                .setRendererDisabled(C.TRACK_TYPE_TEXT, false)
-                                .setOverrideForType(TrackSelectionOverride(group, t))
-                        )
-                        updateCcActiveState()
-                        return
-                    }
-                }
-            }
-        }
-    }
-
-    private fun disableSubtitlesForSession() {
-        val ts = trackSelector ?: return
-        ts.setParameters(ts.buildUponParameters().setRendererDisabled(C.TRACK_TYPE_TEXT, true))
-        updateCcActiveState()
-    }
-
     /** Aplica o toggle Legendas dos Ajustes (padrão da sessão). */
     private fun applySubtitlesEnabled() {
         val ts = trackSelector ?: return
@@ -1169,8 +1091,7 @@ class PlayerActivity : AppCompatActivity() {
                         setTitles(newItem)
                         updateAudioCover(newItem)
                         updatePrevNextButtons()
-                        updateCcButtons()
-                        updateFavButton()
+                                        updateFavButton()
                         // v2.7.6 (fix): retomar a posição salva + aplicar a
                         // velocidade padrão — antes zerava os dois.
                         val watched = isWatched(newItem)
