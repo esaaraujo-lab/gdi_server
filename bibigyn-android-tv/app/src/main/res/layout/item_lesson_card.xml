@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  v2.1.5 — Card de aula · TV (conceito "escolher aulas" TV): thumb,
+  título, chips ("▶ Vídeo MM:SS", "PDF" / "N PDFS"), "% concluída"
+  + barra rosa. Foco via FocusAnimator.attachCard().
+-->
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/lesson_card_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:clickable="true"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    android:foreground="?attr/selectableItemBackground"
+    app:cardCornerRadius="@dimen/radius_md"
+    app:cardElevation="@dimen/elevation_0"
+    app:cardBackgroundColor="@color/tile_bg"
+    app:strokeWidth="0dp"
+    app:strokeColor="@color/tile_focus_ring">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="@dimen/spacing_lg">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/tv_card_image_height">
+
+            <View
+                android:id="@+id/lessonCardBg"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/card_gradient_pink" />
+
+            <ImageView
+                android:id="@+id/lessonCardThumb"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:visibility="gone"
+                android:contentDescription="@string/thumb_desc" />
+
+            <TextView
+                android:id="@+id/lessonCardMonogram"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:textColor="@color/tile_title"
+                android:textSize="48sp"
+                android:textStyle="bold" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/lessonCardTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_md"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:textColor="@color/md_on_surface"
+            android:textSize="@dimen/tv_card_title"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:id="@+id/lessonCardChips"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_sm"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/lessonCardChipVideo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/chip_outline"
+                android:paddingHorizontal="@dimen/spacing_md"
+                android:paddingVertical="@dimen/spacing_xs"
+                android:textColor="@color/md_primary"
+                android:textSize="@dimen/tv_chip_text" />
+
+            <TextView
+                android:id="@+id/lessonCardChipPdf"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/spacing_sm"
+                android:background="@drawable/chip_outline"
+                android:paddingHorizontal="@dimen/spacing_md"
+                android:paddingVertical="@dimen/spacing_xs"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/tv_chip_text"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_md"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/lessonCardProgressText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/md_primary"
+                android:textSize="@dimen/tv_chip_text" />
+
+            <ProgressBar
+                android:id="@+id/lessonCardProgress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="0dp"
+                android:layout_height="8dp"
+                android:layout_marginStart="@dimen/spacing_md"
+                android:layout_weight="1"
+                android:max="100"
+                android:progressDrawable="@drawable/progress_horizontal" />
+        </LinearLayout>
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>
