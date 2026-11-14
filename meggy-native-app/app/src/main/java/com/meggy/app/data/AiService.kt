@@ -146,7 +146,7 @@ object AiService {
         if (user.isNullOrEmpty() || pass.isNullOrEmpty()) return@withContext false
         try {
             val formBody = "username=${URLEncoder.encode(user, "UTF-8")}" +
-                "&password=<redacted> \"UTF-8\")}"
+                "&password=${URLEncoder.encode(pass, "UTF-8")}"
             val request = Request.Builder()
                 .url("${MeggyApp.AI_BASE_URL}/login")
                 .post(formBody.toRequestBody("application/x-www-form-urlencoded".toMediaTypeOrNull()))
