@@ -15,7 +15,6 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import coil.load
 import com.google.android.material.snackbar.Snackbar
 import com.vovofit.app.VovoFitApp
 import com.vovofit.app.R
@@ -23,7 +22,9 @@ import com.vovofit.app.data.AiService
 import com.vovofit.app.data.ApiService
 import com.vovofit.app.data.FileItem
 import com.vovofit.app.data.colorFromString
-import com.vovofit.app.data.monogramFor
+import com.vovofit.app.data.coverResForPath
+import com.vovofit.app.data.driveCoverRes
+import com.vovofit.app.data.driveIndexFromPath
 import com.vovofit.app.databinding.ActivityDetailBinding
 import com.vovofit.app.ui.home.HomeActivity
 import com.vovofit.app.ui.home.RailAdapter
@@ -37,6 +38,8 @@ import com.vovofit.app.ui.settings.SettingsActivity
 import com.vovofit.app.util.AuthHelper
 import com.vovofit.app.util.CrossFolderPlaylist
 import com.vovofit.app.util.Format
+import com.vovofit.app.util.CoverLibrary
+import com.vovofit.app.util.loadCoverChain
 import com.vovofit.app.util.LessonDescription
 import com.vovofit.app.util.PlaylistManager
 import com.vovofit.app.util.SessionManager
@@ -50,7 +53,7 @@ import kotlinx.coroutines.withContext
  * v1.0.4 — Detalhe da aula (conceito detalhe, escolhido pelo Elton 23:41).
  *
  * Hero 16:9 com foto da aula (thumb do primeiro vídeo via Coil; sem
- * thumb, gradiente + monograma — nunca placeholder cinza), play rosa
+ * thumb, capa do drive — nunca placeholder cinza), play rosa
  * central, progresso + tempo "12:34 / 48:20". Título grande, curso em
  * rosa, chips com borda (N aulas · N pastas · X% concluído — sem chip
  * "HD" inventado: as aulas são MP4 progressivos de uma só versão).
@@ -100,6 +103,16 @@ class DetailActivity : AppCompatActivity() {
     private var currentTab: Tab = Tab.LESSONS
     private var lastFocusedContinuePos = 0
 
+    /**
+     * PENDENTE (ecossistema, 2026-11-14): as abas Questões/Flashcards
+     * mostram só o placeholder (@string/no_questions, no_flashcards) —
+     * o batalhão GERA questões e flashcards no backend
+     * (AiService.BattalionStatus.hasQuestions), mas o app ainda NÃO
+     * lê o material gerado (falta o endpoint de leitura no backend +
+     * a ligação aqui). Nada inventado no local: sem material, o
+     * placeholder continua. Resumo (aba SUMMARY) já vem do backend
+     * (LessonDescription/AiService). Ver util/ResumeSync.kt (auditoria).
+     */
     private enum class Tab { SUMMARY, LESSONS, QUESTIONS, FLASHCARDS }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -117,7 +130,16 @@ class DetailActivity : AppCompatActivity() {
         binding.toolbar.setNavigationOnClickListener { finish() }
         val baseColor = colorFromString(folderName)
         binding.heroBg.background = heroGradient(baseColor)
-        binding.heroMonogram.text = monogramFor(folderName)
+        // v1.0.8 camada 3 — arte inicial = imagem da biblioteca pelo
+        // nome/pasta quando houver match; senao a capa do drive (foto
+        // local 16:9), nunca monograma; loadFolder() troca pela thumb
+        // real quando houver.
+        binding.heroImage.loadCoverChain(
+            null, driveCoverRes(driveIndexFromPath(currentPath) ?: 15),
+            folderName, currentPath
+        )
+        binding.heroImage.visibility = View.VISIBLE
+        binding.heroMonogram.visibility = View.GONE
 
         // TV: header com busca + avatar; sem bottom nav.
         val isTv = TvUtils.isTv(this)
@@ -318,17 +340,18 @@ class DetailActivity : AppCompatActivity() {
             }
             allFiles = files
 
-            // Hero: foto do 1º vídeo (thumb real) ou monograma.
+            // Hero: foto do 1º vídeo (thumb real), senao a imagem da
+            // biblioteca pelo nome/pasta (camada 3), senao a capa do drive
+            // (foto local 16:9). Se o Coil falhar, cai na camada seguinte
+            // — nunca gradiente liso nem monograma.
             val firstThumb = files.firstOrNull { (it.isVideo || it.isAudio) && !it.thumbnailLink.isNullOrBlank() }
                 ?.thumbnailLink
-            if (!firstThumb.isNullOrBlank()) {
-                binding.heroImage.visibility = View.VISIBLE
-                binding.heroMonogram.visibility = View.GONE
-                binding.heroImage.load(firstThumb) { error(R.drawable.card_gradient_pink) }
-            } else {
-                binding.heroImage.visibility = View.GONE
-                binding.heroMonogram.visibility = View.VISIBLE
-            }
+            binding.heroImage.visibility = View.VISIBLE
+            binding.heroMonogram.visibility = View.GONE
+            binding.heroImage.loadCoverChain(
+                firstThumb, driveCoverRes(driveIndexFromPath(currentPath) ?: 15),
+                folderName, currentPath
+            )
 
             // Chips reais: N aulas, N pastas, X% concluído. Sem "HD".
             val videoCount = files.count { it.isVideo || it.isAudio }
@@ -439,7 +462,9 @@ class DetailActivity : AppCompatActivity() {
         // (a) Cache local — instantâneo ("abre na hora da próxima vez").
         val cached = sm.getLessonDescription(currentPath)
         if (!cached.isNullOrBlank()) {
-            showDescription(cached, getString(R.string.summary_state_generated))
+            // v1.0.8 onda 2 — gancho sorteado a cada exibicao (o cache guarda
+            // o resumo cru; o gancho nunca e persistido).
+            showDescription(LessonDescription.withHook(cached), getString(R.string.summary_state_generated))
             return
         }
         // (b)/(c) provisória imediata (ou branco) enquanto resolve.
@@ -466,7 +491,7 @@ class DetailActivity : AppCompatActivity() {
                         )
                         AiService.saveToFolder(this@DetailActivity, filePath, fileName, outcome.text)
                     }
-                    showDescription(outcome.text, getString(R.string.summary_state_generated))
+                    showDescription(LessonDescription.withHook(outcome.text), getString(R.string.summary_state_generated))
                 }
                 is LessonDescription.Outcome.Generating -> {
                     // Ainda gerando após 3 min: mantém o texto e avisa.
@@ -798,7 +823,7 @@ class DetailActivity : AppCompatActivity() {
         val g = Color.green(baseColor)
         val b = Color.blue(baseColor)
         val start = Color.argb(0x80, r, g, b)
-        val end = Color.parseColor("#FF0D0E12")
+        val end = Color.parseColor("#FF101614")
         return GradientDrawable(
             GradientDrawable.Orientation.TL_BR,
             intArrayOf(start, end)
