@@ -8,13 +8,14 @@ import android.widget.Toast
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import coil.load
 import com.vovofit.app.R
 import com.vovofit.app.data.FileItem
 import com.vovofit.app.data.colorFromString
-import com.vovofit.app.data.monogramFor
+import com.vovofit.app.data.coverResForPath
 import com.vovofit.app.databinding.ItemRailCardBinding
 import com.vovofit.app.util.CardGradient
+import com.vovofit.app.util.CoverLibrary
+import com.vovofit.app.util.loadCoverChain
 import com.vovofit.app.util.FocusAnimator
 import com.vovofit.app.util.Format
 import com.vovofit.app.util.SessionManager
@@ -24,7 +25,7 @@ import com.vovofit.app.util.TvUtils
  * v1.0.4 — Grade de arquivos (detalhe/navegação).
  *
  * Mesma estrutura do RailAdapter: thumb real via Coil quando houver
- * (vídeos/PDFs/áudios), monograma tipográfico quando não houver —
+ * (vídeos/PDFs/áudios), capa do drive quando não houver —
  * NUNCA emoji de câmera. Progresso real (% + "Xmin restantes") para
  * vídeos com resume; badges ✓/▶ continuar; ⭐ (pasta = curso, resto =
  * arquivo). Foco via FocusAnimator.attachCard.
@@ -89,24 +90,15 @@ class FileAdapter(
             val baseColor = colorFromString(item.name)
             cardBg.background = CardGradient.drawable(res, baseColor)
 
-            // Thumb real quando houver; monograma quando não houver.
-            val thumbUrl = item.thumbnailLink
-            if (thumbUrl != null && (item.isVideo || item.isPdf || item.isAudio)) {
-                cardThumbnail.visibility = View.VISIBLE
-                cardMonogram.visibility = View.GONE
-                cardThumbnail.load(thumbUrl) {
-                    error(R.drawable.card_gradient_pink)
-                    // Patch: se a arte falhar a carregar, volta ao monograma.
-                    listener(onError = { _, _ ->
-                        cardThumbnail.visibility = View.GONE
-                        cardMonogram.visibility = View.VISIBLE
-                    })
-                }
-            } else {
-                cardThumbnail.visibility = View.GONE
-                cardMonogram.visibility = View.VISIBLE
-                cardMonogram.text = monogramFor(item.name)
-            }
+            // v1.0.8 camada 3 — (2) thumb (só vídeo/PDF/áudio, como
+            // antes) > (3) imagem da biblioteca pelo nome/pasta >
+            // (4) capa do drive (foto local 16:9). Monograma nunca mais.
+            val coverRes = coverResForPath(currentFolderPath)
+            val thumbUrl = if (item.thumbnailLink != null &&
+                (item.isVideo || item.isPdf || item.isAudio)
+            ) item.thumbnailLink else null
+            cardThumbnail.visibility = View.VISIBLE
+            cardThumbnail.loadCoverChain(thumbUrl, coverRes, item.name, currentFolderPath)
 
             // Progresso real para vídeos.
             val sm = SessionManager.get(ctx)
