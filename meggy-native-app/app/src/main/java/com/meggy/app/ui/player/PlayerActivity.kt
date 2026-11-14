@@ -37,22 +37,23 @@ import coil.load
 import com.google.android.material.snackbar.Snackbar
 import com.meggy.app.MeggyApp
 import com.meggy.app.R
+import com.meggy.app.data.AiService
 import com.meggy.app.data.ApiService
 import com.meggy.app.data.FileItem
-import com.meggy.app.data.colorFromString
-import com.meggy.app.data.monogramFor
 import com.meggy.app.databinding.ActivityPlayerBinding
 import com.meggy.app.ui.home.HomeActivity
 import com.meggy.app.ui.mylist.MyListActivity
 import com.meggy.app.ui.search.SearchActivity
 import com.meggy.app.ui.settings.SettingsActivity
-import com.meggy.app.util.CardGradient
 import com.meggy.app.util.Format
 import com.meggy.app.util.PlaylistManager
 import com.meggy.app.util.DescriptionPregenerator
 import com.meggy.app.util.FocusAnimator
 import com.meggy.app.util.SessionManager
+import com.meggy.app.util.LessonDescription
+import com.meggy.app.util.LibraryCovers
 import com.meggy.app.util.SubtitleFetcher
+import com.meggy.app.util.ThumbArt
 import com.meggy.app.util.TvUtils
 import com.meggy.app.util.VideoCache
 import kotlinx.coroutines.Job
@@ -227,6 +228,11 @@ class PlayerActivity : AppCompatActivity() {
     private var player: ExoPlayer? = null
     private var trackSelector: DefaultTrackSelector? = null
     private var currentItem: FileItem? = null
+    // v2.7.11 camada (3) — quando o manifesto chega, re-aplica a
+    // capa de áudio do item atual (sem toast, sem travar).
+    private val libraryReadyListener: () -> Unit = {
+        if (!isFinishing && !isDestroyed) updateAudioCover(currentItem)
+    }
     private var currentUrl: String? = null
 
     private var saveJob: Job? = null
@@ -311,6 +317,7 @@ class PlayerActivity : AppCompatActivity() {
         setTitles(item)
         updateSpeedLabels()
         updateAudioCover(item)
+        LibraryCovers.addOnReadyListener(libraryReadyListener)
         updatePrevNextButtons()
 
         // Controles da barra (fullscreen/TV) e da linha de info (retrato).
@@ -521,16 +528,26 @@ class PlayerActivity : AppCompatActivity() {
         binding.audioCoverTitle.text = item.name
         binding.audioCoverSub.text = if ((item.folderLabel ?: "").contains("podcast", true) ||
             item.name.contains("podcast", true) || item.name.contains("cast", true)) "🎙 Podcast" else "Áudio"
-        val thumb = item.thumbnailLink
+        // v2.7.11 onda 2 + camada (3) — capa de áudio: thumb do Drive,
+        // senão a imagem da biblioteca pelo nome do áudio/aula, senão
+        // a capa gerada do drive (nunca monograma).
+        val coverRes = ThumbArt.coverResForPath(item.folderPath ?: "")
+        val thumb = LibraryCovers.remoteCover(
+            item.thumbnailLink, item.name, item.folderLabel, item.folderPath
+        )
         if (!thumb.isNullOrBlank()) {
             binding.audioCoverImage.visibility = View.VISIBLE
             binding.audioCoverMonogram.visibility = View.GONE
-            binding.audioCoverImage.load(thumb) { error(R.drawable.card_gradient_pink) }
+            binding.audioCoverImage.load(thumb) {
+                error(coverRes)
+                listener(onError = { _, _ ->
+                    binding.audioCoverImage.setImageResource(coverRes)
+                })
+            }
         } else {
-            binding.audioCoverImage.visibility = View.GONE
-            binding.audioCoverMonogram.visibility = View.VISIBLE
-            binding.audioCoverMonogram.text = monogramFor(item.name)
-            binding.audioCoverBg.background = CardGradient.drawable(resources, colorFromString(item.name))
+            binding.audioCoverImage.visibility = View.VISIBLE
+            binding.audioCoverMonogram.visibility = View.GONE
+            binding.audioCoverImage.setImageResource(coverRes)
         }
         // Card "Continuar de onde parou — Parado em 12:34".
         if (isAudio && openedResumeMs > 0) {
@@ -1003,6 +1020,38 @@ class PlayerActivity : AppCompatActivity() {
             isPlaying = { player?.isPlaying == true },
             isActive = { playerInForeground && !isFinishing && !isDestroyed }
         )
+        // v2.7.11 onda 2 — disparo automático da aula ATUAL ao abrir
+        // o player (o pregenerator só cobre as PRÓXIMAS 3; o detalhe
+        // só dispara quando a aula é aberta por lá). Quem chega aqui
+        // sem passar pelo detalhe (ex. "Continuar assistindo" na
+        // home) também gera o resumo da aula que está tocando.
+        // Fire-and-forget, sem poll e sem UI: triggerOnly dispara o
+        // batalhão e a aba Resumo lê do cache na próxima abertura.
+        // Falha silenciosa (sem toast, sem travar o player); backend
+        // sem IA nem tenta (AiService.backendUnavailable). As guardas
+        // do batalhão (job concluído/rodando) evitam POST duplo com
+        // o disparo do DetailActivity.
+        val currentFolder = currentItem?.folderPath
+            ?: intent.getStringExtra(EXTRA_FOLDER_PATH)
+        if (!currentFolder.isNullOrBlank()) {
+            lifecycleScope.launch {
+                try {
+                    val sm = SessionManager.get(this@PlayerActivity)
+                    if (sm.getLessonDescription(currentFolder) != null) return@launch
+                    if (AiService.backendUnavailable) return@launch
+                    val files = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        runCatching { api.listFolder(currentFolder) }.getOrNull()
+                    } ?: return@launch
+                    if (!LessonDescription.isLessonFolder(files)) return@launch
+                    val folderName = currentFolder.trimEnd('/').substringAfterLast('/')
+                    LessonDescription.triggerOnly(
+                        this@PlayerActivity, currentFolder, folderName, files
+                    )
+                } catch (_: Exception) {
+                    // Silencioso por desenho (ver comentário acima).
+                }
+            }
+        }
     }
 
     private fun initialisePlayer() {
@@ -1290,6 +1339,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        LibraryCovers.removeOnReadyListener(libraryReadyListener)
         super.onDestroy()
         stopSleepTimer()
     }
