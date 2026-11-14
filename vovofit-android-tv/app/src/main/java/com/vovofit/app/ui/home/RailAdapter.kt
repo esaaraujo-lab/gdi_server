@@ -10,7 +10,8 @@ import coil.load
 import com.vovofit.app.R
 import com.vovofit.app.data.FileItem
 import com.vovofit.app.data.colorFromString
-import com.vovofit.app.data.monogramFor
+import com.vovofit.app.data.driveCoverRes
+import com.vovofit.app.data.driveIndexFromPath
 import com.vovofit.app.databinding.ItemRailCardBinding
 import com.vovofit.app.util.CardGradient
 import com.vovofit.app.util.FocusAnimator
@@ -23,8 +24,9 @@ import com.vovofit.app.util.setWordEllipsized
  * v1.0.4 — Rail "Continue assistindo" (conceito home).
  *
  * Card 16:9: foto real via Coil quando há thumbnail (RailItem.thumbnailUrl
- * ou FileItem.thumbnailLink), monograma tipográfico quando não há —
- * NUNCA emoji de câmera. Título 16sp (máx. 2 linhas), subtítulo 14sp,
+ * ou FileItem.thumbnailLink), capa do drive quando não há (v1.0.8 —
+ * monograma nunca mais como thumb). NUNCA emoji de câmera. Título 16sp
+ * (máx. 2 linhas), subtítulo 14sp,
  * barra de progresso rosa + "% concluído · Xmin restantes".
  * Foco: FocusAnimator.attachCard (anel 3dp da marca + escala + elevação).
  */
@@ -68,31 +70,42 @@ class RailAdapter(
         val ctx = holder.itemView.context
 
         with(holder.binding) {
-            cardTitle.setWordEllipsized(item.title)
+            // v1.0.8 — título limpo ("001 - aula.mp4" -> "Aula 1 — Tema"
+            // quando número+tema conhecidos; senão sem extensão/numeração).
+            cardTitle.setWordEllipsized(Format.lessonTitle(item.title))
             cardSubtitle.setWordEllipsized(item.subtitle)
 
             val baseColor = colorFromString(item.colorHint ?: item.title)
             cardBg.background = CardGradient.drawable(res, baseColor)
 
-            // Thumb fotográfica quando houver; monograma quando não houver.
+            // v1.0.8 — Thumb fotográfica quando houver; senão a CAPA DO
+            // DRIVE (arte local cover_*, foto real). Monograma nunca mais:
+            // quando o Drive não devolve thumb (ou o Coil falha — as
+            // thumbs do Drive nem sempre abrem sem sessão Google), a capa
+            // garante arte no card. Sem pasta conhecida e sem thumb, fica
+            // só o gradiente escuro limpo (sem letras).
             val thumb = item.thumbnailUrl ?: item.file?.thumbnailLink
+            val coverRes = item.file?.folderPath
+                ?.let { driveIndexFromPath(it) }?.let { driveCoverRes(it) }
             if (!thumb.isNullOrBlank()) {
                 cardThumbnail.visibility = View.VISIBLE
-                cardMonogram.visibility = View.GONE
                 cardThumbnail.load(thumb) {
                     error(R.drawable.card_gradient_pink)
-                    // Patch: se a arte falhar a carregar, volta ao monograma
-                    // (antes ficava só o gradiente, sem arte nem monograma).
                     listener(onError = { _, _ ->
-                        cardThumbnail.visibility = View.GONE
-                        cardMonogram.visibility = View.VISIBLE
+                        if (coverRes != null) {
+                            cardThumbnail.setImageResource(coverRes)
+                        } else {
+                            cardThumbnail.visibility = View.GONE
+                        }
                     })
                 }
                 cardThumbnail.setOnClickListener(null)
+            } else if (coverRes != null) {
+                cardThumbnail.visibility = View.VISIBLE
+                cardThumbnail.setImageResource(coverRes)
+                cardThumbnail.setOnClickListener(null)
             } else {
                 cardThumbnail.visibility = View.GONE
-                cardMonogram.visibility = View.VISIBLE
-                cardMonogram.text = monogramFor(item.title)
             }
 
             // Progresso real: barra + "% concluído · Xmin restantes".
