@@ -70,7 +70,10 @@ object PlaylistManager {
                         folderLabel = if (o.has("folderLabel") && !o.isNull("folderLabel"))
                             o.getString("folderLabel") else null,
                         folderPath = if (o.has("folderPath") && !o.isNull("folderPath"))
-                            o.getString("folderPath") else null
+                            o.getString("folderPath") else null,
+                        // v1.0.8 (achado BiBi): restaurar a thumb persistida.
+                        thumbnailLink = if (o.has("thumbnailLink") && !o.isNull("thumbnailLink"))
+                            o.getString("thumbnailLink") else null
                     )
                 )
             }
@@ -94,6 +97,10 @@ object PlaylistManager {
                 // v1.2.0: persist disambiguation + resume-key fields
                 put("folderLabel", item.folderLabel ?: JSONObject.NULL)
                 put("folderPath", item.folderPath ?: JSONObject.NULL)
+                // v1.0.8 (achado BiBi): persistir a thumb — sem ela, o
+                // restore abaixo devolvia a playlist sem thumbnailLink e
+                // o player salvava recents sem thumb apos o restart.
+                put("thumbnailLink", item.thumbnailLink ?: JSONObject.NULL)
             })
         }
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
