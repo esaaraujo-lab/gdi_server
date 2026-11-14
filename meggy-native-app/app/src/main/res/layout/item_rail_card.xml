@@ -51,9 +51,9 @@
                 android:visibility="gone"
                 android:contentDescription="@string/thumb_desc" />
 
-            <!-- Monograma tipográfico (fallback) — iniciais do título -->
+            <!-- Arte-padrão do drive (fallback) — ícone do drive, nunca monograma -->
             <TextView
-                android:id="@+id/card_monogram"
+                android:id="@+id/card_fallback_icon"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:gravity="center"
