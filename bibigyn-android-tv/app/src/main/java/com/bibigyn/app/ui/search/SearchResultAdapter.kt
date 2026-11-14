@@ -14,6 +14,7 @@ import com.bibigyn.app.data.colorFromString
 import com.bibigyn.app.data.monogramFor
 import com.bibigyn.app.databinding.ItemSearchResultBinding
 import com.bibigyn.app.util.CardGradient
+import com.bibigyn.app.util.CoverLibrary
 import com.bibigyn.app.util.FocusAnimator
 import com.bibigyn.app.util.Format
 import com.bibigyn.app.util.SessionManager
@@ -76,9 +77,25 @@ class SearchResultAdapter(
                     resultTitle.text = d.name
                     resultMeta.text = if (d.isConcurso) "Concurso · ${d.tagline}" else "Curso · ${d.tagline}"
                     resultBg.background = CardGradient.drawable(res, colorFromString(d.name))
-                    resultThumb.visibility = View.GONE
-                    resultMonogram.visibility = View.VISIBLE
-                    resultMonogram.text = monogramFor(d.name)
+                    // Camada 3 — biblioteca por tipo (nome do
+                    // drive → tagline); sem match, o monograma.
+                    val libraryUrl = CoverLibrary.resolve(ctx, d.name, d.tagline)
+                    if (!libraryUrl.isNullOrBlank()) {
+                        resultThumb.visibility = View.VISIBLE
+                        resultMonogram.visibility = View.GONE
+                        resultThumb.load(libraryUrl) {
+                            error(R.drawable.card_gradient_pink)
+                            listener(onError = { _, _ ->
+                                resultThumb.visibility = View.GONE
+                                resultMonogram.visibility = View.VISIBLE
+                                resultMonogram.text = monogramFor(d.name)
+                            })
+                        }
+                    } else {
+                        resultThumb.visibility = View.GONE
+                        resultMonogram.visibility = View.VISIBLE
+                        resultMonogram.text = monogramFor(d.name)
+                    }
                     resultProgressRow.visibility = View.GONE
                     resultPill.visibility = View.GONE
                 }
@@ -96,15 +113,38 @@ class SearchResultAdapter(
                         else -> f.humanSize
                     }
                     resultBg.background = CardGradient.drawable(res, colorFromString(f.name))
+                    // Camada 3 — biblioteca por tipo (nome do
+                    // arquivo → pasta); sem thumb (ou se ela falhar),
+                    // a imagem da biblioteca; sem match, o monograma.
+                    val showLibraryOrMonogram = {
+                        val libraryUrl = CoverLibrary.resolve(ctx, f.name, f.folderPath)
+                        if (!libraryUrl.isNullOrBlank()) {
+                            resultThumb.visibility = View.VISIBLE
+                            resultMonogram.visibility = View.GONE
+                            resultThumb.load(libraryUrl) {
+                                error(R.drawable.card_gradient_pink)
+                                listener(onError = { _, _ ->
+                                    resultThumb.visibility = View.GONE
+                                    resultMonogram.visibility = View.VISIBLE
+                                    resultMonogram.text = monogramFor(f.name)
+                                })
+                            }
+                        } else {
+                            resultThumb.visibility = View.GONE
+                            resultMonogram.visibility = View.VISIBLE
+                            resultMonogram.text = monogramFor(f.name)
+                        }
+                    }
                     val thumb = f.thumbnailLink
                     if (!thumb.isNullOrBlank() && (f.isVideo || f.isAudio || f.isPdf)) {
                         resultThumb.visibility = View.VISIBLE
                         resultMonogram.visibility = View.GONE
-                        resultThumb.load(thumb) { error(R.drawable.card_gradient_pink) }
+                        resultThumb.load(thumb) {
+                            error(R.drawable.card_gradient_pink)
+                            listener(onError = { _, _ -> showLibraryOrMonogram() })
+                        }
                     } else {
-                        resultThumb.visibility = View.GONE
-                        resultMonogram.visibility = View.VISIBLE
-                        resultMonogram.text = monogramFor(f.name)
+                        showLibraryOrMonogram()
                     }
                     // Progresso quando retomável.
                     val fp = f.folderPath ?: ""
