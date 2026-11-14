@@ -66,5 +66,15 @@
     <color name="tile_title">#FFFFFFFF</color>
     <color name="tile_subtitle">#FFC0C4D0</color>
     <color name="hero_pink_accent">#FFA3E635</color>
+
+    <!-- v1.0.4 — componentes do redesign (nomes do Meggy, valores lima) -->
+    <!-- Fundo da pílula do badge do hero (lima a 12% sobre o hero). -->
+    <color name="hero_badge_bg">#1FA3E635</color>
+    <!-- Trilho da barra de progresso do card (branco a 20%). -->
+    <color name="progress_track">#33FFFFFF</color>
+    <!-- Fundo do tile de ícone do drive (lima sólido, conceito home). -->
+    <color name="drive_icon_tile">#FFA3E635</color>
+    <!-- Texto sobre o tile de ícone do drive (lima bem escuro). -->
+    <color name="drive_icon_tile_text">#FF1A0A0F</color>
     <color name="header_scrim">#F00D0E12</color>
 </resources>
