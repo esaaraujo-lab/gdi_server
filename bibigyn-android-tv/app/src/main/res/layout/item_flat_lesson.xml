@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v2.1.5 — Linha da lista PLANA (conceito escolher-aulas-pasta-unica).
+     Thumb + título + duração, barra de progresso rosa e estado:
+     "✓ Concluída" (assistida), botão "Continuar" (em andamento) ou
+     "X% concluída" (em andamento, sem ação). Sem thumb real, monograma. -->
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/flatCardRoot"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="@dimen/spacing_md"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    app:cardBackgroundColor="@color/tile_bg"
+    app:cardCornerRadius="@dimen/radius_md"
+    app:cardElevation="0dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="@dimen/spacing_md">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <FrameLayout
+                android:id="@+id/flatThumbBox"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:layout_marginEnd="@dimen/spacing_md">
+
+                <View
+                    android:id="@+id/flatThumbBg"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/card_gradient_pink" />
+
+                <ImageView
+                    android:id="@+id/flatThumb"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="@string/thumb_desc"
+                    android:scaleType="centerCrop"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/flatMonogram"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:textColor="@color/md_on_primary"
+                    android:textSize="24sp"
+                    android:textStyle="bold" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/flatTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="2"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_card_title" />
+
+                <TextView
+                    android:id="@+id/flatMeta"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:textColor="@color/md_on_surface_variant"
+                    android:textSize="@dimen/text_card_subtitle" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_sm"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ProgressBar
+                android:id="@+id/flatProgress"
+                style="@style/Widget.AppCompat.ProgressBar.Horizontal"
+                android:layout_width="0dp"
+                android:layout_height="6dp"
+                android:layout_weight="1"
+                android:max="100"
+                android:progressDrawable="@drawable/progress_horizontal" />
+
+            <TextView
+                android:id="@+id/flatProgressText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/spacing_md"
+                android:textColor="@color/md_on_surface_variant"
+                android:textSize="@dimen/text_card_progress"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/flatDoneBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/spacing_md"
+                android:background="@drawable/chip_badge"
+                android:paddingHorizontal="@dimen/spacing_md"
+                android:paddingVertical="4dp"
+                android:text="✓ Concluída"
+                android:textColor="@color/md_on_primary"
+                android:textSize="@dimen/text_card_progress"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/flatContinue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/spacing_md"
+                android:background="@drawable/btn_primary_pill"
+                android:clickable="true"
+                android:focusable="true"
+                android:paddingHorizontal="@dimen/spacing_md"
+                android:paddingVertical="6dp"
+                android:text="@string/cta_continue"
+                android:textColor="@color/md_on_primary"
+                android:textSize="@dimen/text_card_progress"
+                android:visibility="gone" />
+        </LinearLayout>
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>
