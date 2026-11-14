@@ -30,6 +30,45 @@ object Format {
     fun positionText(positionMs: Long, durationMs: Long): String =
         "${mmss(positionMs)} de ${mmss(durationMs)} · ${remainingText(durationMs, positionMs)}"
 
+    /**
+     * v2.1.9 — título cru de arquivo → título limpo (conceito home):
+     * remove a extensão e a numeração inicial ("001 - ", "01. ").
+     * Ex.: "001 - aula.mp4" → "aula"; "01. Treino de pernas.mp4" →
+     * "Treino de pernas". NÃO inventa descrição (a da Meggy depende
+     * dos endpoints de IA — produção bloqueada, outro trabalho).
+     */
+    fun displayTitle(raw: String?): String {
+        if (raw.isNullOrBlank()) return ""
+        var t = raw.trim()
+        t = Regex("\\.[A-Za-z0-9]{2,5}$").replace(t, "")
+        repeat(2) {
+            val before = t
+            t = Regex("^\\d{1,3}\\s*[-–—.)\\s]+").replace(t, "").trim()
+            if (t == before) return@repeat
+        }
+        t = t.trim(' ', '-', '–', '—', ':', '.').trim()
+        return t.ifBlank { raw.trim() }
+    }
+
+    /**
+     * v2.1.9 — título do card no estilo do conceito ("Disciplina —
+     * Aula NN"): tema real do nome (LessonDescription.extractTopic),
+     * senão "Aula NN" da numeração do arquivo, senão o título limpo.
+     * A disciplina vai no SUBTÍTULO do card (já é o courseName) —
+     * título + subtítulo compõem "Disciplina — Aula NN" sem duplicar
+     * o nome do curso nas duas linhas.
+     */
+    fun lessonTitle(videoName: String, courseName: String): String {
+        val topic = LessonDescription.extractTopic(videoName)
+        if (!topic.isNullOrBlank()) return topic
+        val num = Regex("(?:aula|ep\\.?|episódio|episodio|parte)\\s*(\\d{1,3})",
+            RegexOption.IGNORE_CASE).find(videoName)
+            ?.groupValues?.getOrNull(1)?.toIntOrNull()
+            ?: Regex("^\\d{1,3}").find(videoName)?.value?.toIntOrNull()
+        if (num != null) return "Aula ${"%02d".format(num)}"
+        return displayTitle(videoName)
+    }
+
     /** "Você está em 22% — 10min assistidos" (rodapé do detalhe TV). */
     fun watchedFooter(progressPct: Int, watchedMs: Long): String {
         val min = (watchedMs / 60_000L).toInt()
