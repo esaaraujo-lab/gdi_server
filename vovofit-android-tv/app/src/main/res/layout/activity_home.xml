@@ -79,8 +79,8 @@
                     <!-- Marca do hero (monograma do título) -->
                     <TextView
                         android:id="@+id/heroIcon"
-                        android:layout_width="88dp"
-                        android:layout_height="88dp"
+                        android:layout_width="72dp"
+                        android:layout_height="72dp"
                         android:layout_gravity="top|end"
                         android:layout_margin="@dimen/spacing_lg"
                         android:background="@drawable/btn_play_circle"
@@ -94,7 +94,8 @@
                         android:layout_height="wrap_content"
                         android:layout_gravity="bottom|start"
                         android:orientation="vertical"
-                        android:padding="@dimen/spacing_xl">
+                        android:paddingHorizontal="@dimen/hero_text_padding_side"
+                        android:paddingVertical="@dimen/spacing_xl">
 
                         <TextView
                             android:id="@+id/heroBadge"
@@ -150,8 +151,8 @@
 
                     <TextView
                         android:id="@+id/heroPrev"
-                        android:layout_width="44dp"
-                        android:layout_height="44dp"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
                         android:layout_gravity="center_vertical|start"
                         android:layout_marginStart="@dimen/spacing_sm"
                         android:background="@drawable/btn_play_circle"
@@ -164,8 +165,8 @@
 
                     <TextView
                         android:id="@+id/heroNext"
-                        android:layout_width="44dp"
-                        android:layout_height="44dp"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
                         android:layout_gravity="center_vertical|end"
                         android:layout_marginEnd="@dimen/spacing_sm"
                         android:background="@drawable/btn_play_circle"
