@@ -44,7 +44,9 @@
     <dimen name="tv_drive_card_height">210dp</dimen>
     <dimen name="tv_detail_hero_width">800dp</dimen>
     <dimen name="tv_play_fab_size">120dp</dimen>
-    <dimen name="play_fab_size">120dp</dimen>
+    <!-- v1.0.7 — disco de play da TV: 120dp era o circulo rosa gigante
+         da foto (11:48); 96dp e o disco modesto sobre o video. -->
+    <dimen name="play_fab_size">96dp</dimen>
     <dimen name="tv_rail_gap">8dp</dimen>
     <dimen name="tv_drive_tile_height">112dp</dimen>
     <dimen name="tv_hero_text_padding_side">32dp</dimen>
