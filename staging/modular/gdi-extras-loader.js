@@ -50,6 +50,7 @@
     'meggy/meggy-questions.js',      // question bank + quiz
     'meggy/meggy-flashcards.js',     // flashcards
     'meggy/meggy-summaries.js',      // summary/mindmap + battalion + ASSEMBLA gdiIsaPdf
+    'meggy/meggy-tts.js',            // ★ v2.15.4 ITEM D: TTSPlayer — voz natural pt-BR p/ resumos (window.gdiTTS)
     // 'meggy/meggy-widget.js',      // ★ STAGING FIX: removido — FAB flutuante (#gdi-ai-fab) é redundante (Meggy AI já está na sidebar + botão no player de vídeo)
     // 3. Study modularizado (8 módulos em modular/study/) — substitui gdi-study.js
     'study/study-theme.js',          // 1o — CSS BlackTie
@@ -251,7 +252,8 @@
         'meggy/meggy-cache.js',
         'meggy/meggy-questions.js',
         'meggy/meggy-flashcards.js',
-        'meggy/meggy-summaries.js'
+        'meggy/meggy-summaries.js',
+        'meggy/meggy-tts.js'           // ★ v2.15.4 ITEM D: TTSPlayer (window.gdiTTS)
         // 'meggy/meggy-widget.js'  // ★ STAGING FIX: removido — cria FAB flutuante (#gdi-ai-fab) redundante. Meggy AI já vive na sidebar do shell + no botão do player de vídeo.
       ];
       const STUDY_CHAIN = [
@@ -398,14 +400,14 @@
         // Load CSS
         const link = document.createElement('link');
         link.rel = 'stylesheet';
-        link.href = '/modular/shell/shell.css?v=3';
+        link.href = '/modular/shell/shell.css?v=33';
         link.onerror = () => console.error('[GDI Loader] shell.css falhou');
         document.head.appendChild(link);
         console.log('[GDI Loader] ✓ shell.css carregado');
         // ★ STAGING FIX: shell.js NÃO é carregado aqui — o worker-staging.js já injeta
-        // <script src="/modular/shell/shell.js?v=31" defer></script> via html() template
+        // <script src="/modular/shell/shell.js?v=51" defer></script> via html() template
         // (linha ~419 do worker-staging.js). A carga duplicada aqui (shell.js?v=3) causava
-        // duplo init do Shell e sobrescrita por versão stale (v3 < v31). Removido.
+        // duplo init do Shell e sobrescrita por versão stale (v3 < v51). Removido.
       } catch (e) {
         console.error('[GDI Loader] shell load failed:', e && e.message || e);
       }
