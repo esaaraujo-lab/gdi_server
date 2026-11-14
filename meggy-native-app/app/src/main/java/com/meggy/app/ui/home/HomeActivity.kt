@@ -14,6 +14,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import coil.load
 import com.meggy.app.BuildConfig
 import com.meggy.app.MeggyApp
 import com.meggy.app.R
@@ -28,10 +29,13 @@ import com.meggy.app.ui.mylist.MyListActivity
 import com.meggy.app.ui.player.PlayerActivity
 import com.meggy.app.ui.search.SearchActivity
 import com.meggy.app.ui.settings.SettingsActivity
+import com.meggy.app.data.monogramFor
 import com.meggy.app.util.AuthHelper
 import com.meggy.app.util.CrossFolderPlaylist
 import com.meggy.app.util.PlaylistManager
 import com.meggy.app.util.SessionManager
+import com.meggy.app.util.Format
+import com.meggy.app.util.TvUtils
 import com.meggy.app.util.UpdateChecker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -42,6 +46,8 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var binding: ActivityHomeBinding
     private lateinit var api: ApiService
     private var heroRotator: HeroRotator? = null
+    private var lastFocusContinue = 0
+    private var lastFocusDrives = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -59,10 +65,15 @@ class HomeActivity : AppCompatActivity() {
         }
 
         api = ApiService(this)
-        UpdateChecker.checkForUpdate(this, BuildConfig.VERSION_NAME)
+        // v2.7.6: checagem com throttle (máx. 1×/24h) + resume de APK
+        // pendente — ver UpdateChecker.checkForUpdateThrottled.
+        UpdateChecker.checkForUpdateThrottled(this, BuildConfig.VERSION_NAME)
 
-        // ★ v1.8.0: dynamic version footer
-        binding.footerVersion.text = "🐩 Meggy · v${BuildConfig.VERSION_NAME}"
+        // ★ v1.8.0: dynamic version footer (sem emoji, v2.7.6)
+        binding.footerVersion.text = "Meggy · v${BuildConfig.VERSION_NAME}"
+
+        // v2.7.6: TV não tem bottom nav.
+        if (TvUtils.isTv(this)) binding.bottomNav.visibility = View.GONE
 
         binding.topSair.setOnClickListener { logout() }
 
@@ -100,6 +111,19 @@ class HomeActivity : AppCompatActivity() {
         setupHero()
         setupContinueRail()
         setupDrivesRail()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // v2.7.6: re-checa atualização ao voltar (throttle 1×/24h) e
+        // restaura o foco nos rails (TV).
+        UpdateChecker.checkForUpdateThrottled(this, BuildConfig.VERSION_NAME)
+        if (TvUtils.isTv(this)) {
+            binding.railContinue.post {
+                binding.railContinue.findViewHolderForAdapterPosition(lastFocusContinue)
+                    ?.itemView?.requestFocus()
+            }
+        }
     }
 
     // ★ v2.0.2: If HomeActivity is brought back to front (singleTask), ensure
@@ -161,7 +185,8 @@ class HomeActivity : AppCompatActivity() {
             binding.heroBadge.text = item.badge
             binding.heroTitle.text = item.title
             binding.heroSubtitle.text = item.subtitle
-            binding.heroIcon.text = item.icon
+            // v2.7.6: monograma (sem emoji) — não há foto de hero nos dados.
+            binding.heroIcon.text = monogramFor(item.title)
             updateDots()
             if (animate) {
                 val inn = AlphaAnimation(0f, 1f).apply { duration = 300 }
@@ -238,6 +263,8 @@ class HomeActivity : AppCompatActivity() {
                 progress = sm.getResumeProgress(r.folderPath, r.videoName),
                 isWatched = sm.isWatched(r.folderPath, r.videoName),
                 hasResume = sm.hasResume(r.folderPath, r.videoName),
+                // v2.7.6: thumb fotográfica do recent (salva pelo player).
+                thumbnailUrl = r.thumbnailLink,
                 // ★ v2.7.4: FileItem para a ⭐ da Minha lista.
                 file = com.meggy.app.data.FileItem(
                     name = r.videoName, mimeType = "video/mp4", id = "",
@@ -247,8 +274,54 @@ class HomeActivity : AppCompatActivity() {
             )
         }
         binding.railContinue.adapter = RailAdapter(railItems) { item ->
+            lastFocusContinue = railItems.indexOf(item)
             val match = recents.find { it.videoName == item.title } ?: return@RailAdapter
             continueWatching(match.folderPath, match.videoName, item.subtitle)
+        }
+        setupFeaturedContinue(recents)
+    }
+
+    /**
+     * v2.7.6 — "Continuar de onde parou" em destaque (conceito TV
+     * continuar): o item em andamento mais recente, com thumb,
+     * progresso e "12:34 de 48:20 · 12 min restantes". Só na TV
+     * (no celular o rail "Continue assistindo" já cumpre o papel).
+     */
+    private fun setupFeaturedContinue(recents: List<SessionManager.RecentItem>) {
+        val sm = SessionManager.get(this)
+        if (!TvUtils.isTv(this)) {
+            binding.featuredSection.visibility = View.GONE
+            return
+        }
+        val best = recents
+            .filter { sm.hasResume(it.folderPath, it.videoName) }
+            .maxByOrNull { sm.getResumeProgress(it.folderPath, it.videoName) }
+        if (best == null) {
+            binding.featuredSection.visibility = View.GONE
+            return
+        }
+        val progress = sm.getResumeProgress(best.folderPath, best.videoName)
+        val pos = sm.getResume(best.folderPath, best.videoName)
+        val dur = sm.getResumeDuration(best.folderPath, best.videoName)
+        binding.featuredSection.visibility = View.VISIBLE
+        binding.featuredTitle.text = best.videoName
+        binding.featuredSubtitle.text = extractCourseName(best.folderPath)
+        binding.featuredProgress.progress = progress
+        binding.featuredProgressText.text = "$progress% concluído"
+        binding.featuredTimeText.text = Format.positionText(pos, dur)
+        binding.featuredMonogram.text = monogramFor(best.videoName)
+        if (!best.thumbnailLink.isNullOrBlank()) {
+            binding.featuredThumb.visibility = View.VISIBLE
+            binding.featuredMonogram.visibility = View.GONE
+            binding.featuredThumb.load(best.thumbnailLink) {
+                error(com.meggy.app.R.drawable.card_gradient_pink)
+            }
+        } else {
+            binding.featuredThumb.visibility = View.GONE
+            binding.featuredMonogram.visibility = View.VISIBLE
+        }
+        binding.featuredContinue.setOnClickListener {
+            continueWatching(best.folderPath, best.videoName, extractCourseName(best.folderPath))
         }
     }
 
@@ -409,6 +482,8 @@ class HomeActivity : AppCompatActivity() {
     private fun launchPlayer(url: String, title: String, folderPath: String) {
         SessionManager.get(this).saveLastWatched(folderPath, title)
         SessionManager.get(this).addRecent(folderPath, title)
+        // v2.7.6: a thumb do recent é salva pelo PlayerActivity
+        // (addRecent com thumbnailLink) — aqui não há thumb disponível.
         val intent = Intent(this, PlayerActivity::class.java)
         intent.putExtra(PlayerActivity.EXTRA_URL, url)
         intent.putExtra(PlayerActivity.EXTRA_TITLE, title)
@@ -420,7 +495,10 @@ class HomeActivity : AppCompatActivity() {
         binding.railDrives.layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         binding.railDrives.addItemDecoration(RailGutterDecoration(8))
-        binding.railDrives.adapter = DriveRailAdapter(DriveItem.ALL) { drive -> openDrive(drive) }
+        binding.railDrives.adapter = DriveRailAdapter(DriveItem.ALL) { drive ->
+            lastFocusDrives = DriveItem.ALL.indexOf(drive)
+            openDrive(drive)
+        }
     }
 
     private fun openDrive(drive: DriveItem) {
