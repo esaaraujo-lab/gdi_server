@@ -61,9 +61,15 @@
       try{
         const html=marked.parse(txt);
         if(window.gdiSanitize){try{return window.gdiSanitize(html);}catch(_){}}
+        // ★ v2.15.5 item 10: sem sanitizador, o renderer vendored
+        //    (seguro por construção) em vez de texto cru.
+        if(typeof window.gdiRenderMd==='function'){try{return window.gdiRenderMd(txt);}catch(_){}}
         return esc(txt).replace(/\n/g,'<br>');
       }catch(_){}
     }
+    // ★ v2.15.5 item 10: sem marked (CDN fora), o renderer vendored
+    //    formata de verdade — nunca mais MD cru com # e *.
+    if(typeof window.gdiRenderMd==='function'){try{return window.gdiRenderMd(txt);}catch(_){}}
     return esc(txt).replace(/\n/g,'<br>');
   }
 
