@@ -2741,11 +2741,11 @@
     const drive=driveNameOf(c.key);
     // ★ FIX 3b (Task 14): usa totalLessons real (do manual course) ao invés de c.lessons.size
     // (que era o nº de paths visitados — wrong).
-    const total=c.totalLessons||c.lessons.size||0;
-    const watched=c.watched||0;
-    const remaining=Math.max(0,total-watched);  // ★ nunca negativo
-    const progress=total>0?Math.min(100,Math.round(watched/total*100)):(watched>0?100:0);
-    const progressColor=progress>=80?'#3fb950':progress>=40?'#ffd43b':'var(--ferreto-primary,#ff8b9f)';
+    let total=c.totalLessons||c.lessons.size||0; // ★ v2.15.6 (P8): recalculado APÓS o merge (v. abaixo)
+    let watched=c.watched||0;
+    let remaining=Math.max(0,total-watched);  // ★ nunca negativo
+    let progress=total>0?Math.min(100,Math.round(watched/total*100)):(watched>0?100:0);
+    let progressColor=progress>=80?'#3fb950':progress>=40?'#ffd43b':'var(--ferreto-primary,#ff8b9f)';
     const coursePath=c.key;  // e.g. /4:/CANTE COM EXCELENCIA 2.0 + COMUNIDADE/
 
     // coleta aulas individuais do curso
@@ -2772,6 +2772,8 @@
     //    Cada aula escaneada recebe watched=true se seu path estiver em d.watched.
     let scannedCount = 0;
     let scanStatus = null;
+    let scanErrorAt = 0;
+    let scanPendingFolders = 0;
     let scanErrorMsg = '';
     if(window.gdiCourseScanner){
       try{
@@ -2779,6 +2781,8 @@
         if(sp){
           scanStatus = sp.status;
           scannedCount = sp.lessonsFound || 0;
+          scanErrorAt = sp.errorAt || sp.startedAt || 0; // ★ v2.15.6 (P8): fallback p/ estados legados
+          scanPendingFolders = sp.pendingFolders || 0;
           scanErrorMsg = sp.error || '';  // ★ FIX v54: show actual error message
         }
         const scanned = window.gdiCourseScanner.getCourseLessons(c.key);
@@ -2802,6 +2806,20 @@
       }catch(_){}
     }
     lessons.sort((a,b)=>a.name.localeCompare(b.name,'pt-BR',{numeric:true}));
+
+    // ★ v2.15.6 (P8): contagem REAL — o total provisório acima ignorava
+    //   as aulas escaneadas (o cartão já as contava). Port do fix v2.15.5
+    //   (item 9), que só existia em study-courses.js: o detalhe da Home
+    //   mostrava "0 AULAS" com o cartão em "4 aulas". O aviso de erro do
+    //   scanner também ganha o port do gate de frescor (v. scanErrorAt).
+    total=Math.max(c.totalLessons||0,c.lessons.size||0,lessons.length,scannedCount||0);
+    watched=Math.max(Math.min(c.watched||0,total),lessons.filter(l=>l.watched).length);
+    watched=Math.min(watched,total);
+    remaining=Math.max(0,total-watched);
+    progress=total>0?Math.min(100,Math.round(watched/total*100)):(watched>0?100:0);
+    progressColor=progress>=80?'#3fb950':progress>=40?'#ffd43b':'var(--ferreto-primary,#ff8b9f)';
+    const scanErrorFresh=scanErrorAt>0&&(Date.now()-scanErrorAt)<3600*1000;
+    const showScanError=scanStatus==='error'&&(lessons.length===0||scanErrorFresh);
 
     box.innerHTML=`<div style="max-width:760px;margin:0 auto;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--ferreto-border,#21262d);">
@@ -2853,10 +2871,12 @@
         <i class="bi bi-clock-history"></i> Última atividade: <b style="color:var(--ferreto-text,#e6edf3);">${dateBr(c.lastAt)}</b>
       </div>`:''}
 
-      ${(scanStatus==='scanning'||scanStatus==='error')?`
+      ${(scanStatus==='scanning'||showScanError||scanStatus==='partial')?`
       <div style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ferreto-text-muted,#8b949e);">
         ${scanStatus==='scanning'
           ? '<i class="bi bi-arrow-repeat" style="color:var(--ferreto-secondary,#5ddeda);"></i> Escaneando aulas em background... <b style="color:var(--ferreto-text,#e6edf3);">'+scannedCount+'</b> encontradas até agora (a lista abaixo cresce em tempo real).'
+          : scanStatus==='partial'
+          ? '<i class="bi bi-hourglass-split" style="color:#ffd43b;"></i> Scan parcial: <b style="color:var(--ferreto-text,#e6edf3);">'+scannedCount+'</b> aulas encontradas até agora. O scanner automático continua em background e completa o resto.'
           : '<i class="bi bi-exclamation-triangle" style="color:#ff8b8b;"></i> O scanner encontrou um erro. Algumas aulas podem estar ausentes da lista.'+(scanErrorMsg?'<br><span style="color:#ff8b8b;font-size:11px;">Detalhe: '+escHtml(scanErrorMsg)+'</span>':'')}
       </div>`:''}
 
@@ -2866,7 +2886,7 @@
       </div>
 
       ${/* ★ Task 16 / FIX 2: botão "Escanear agora" na visão de detalhe */ ''}
-      ${(!scanStatus || scanStatus === 'error') ? `
+      ${(!scanStatus || scanStatus === 'error' || scanStatus === 'partial') ? `
       <div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;">
         <button id="gdi-detail-scan" class="gdi-mode-btn" data-course-key="${escHtml(c.key)}" style="font-size:12px;flex:1;justify-content:center;color:var(--ferreto-secondary,#5ddeda);border-color:rgba(93,222,218,.3);" title="Escanear aulas do curso">
           <i class="bi bi-arrow-repeat"></i> Escanear agora
@@ -4750,6 +4770,7 @@
     if(/^\/\d+:\/?$/.test(courseKey||'')){
       state.status = 'error';
       state.startedAt = Date.now();
+      state.errorAt = Date.now(); // ★ v2.15.6 (P8): o gate de frescor precisa do timestamp do erro
       state.error = 'Caminho inválido (raiz do drive). Remova este curso e adicione novamente navegando até a pasta do curso.';
       setScanState(courseKey, state);
       console.warn('[Scanner] courseKey é raiz do drive — abortando:', courseKey);
@@ -4784,12 +4805,30 @@
         if(!d || !d.ok) throw new Error(d && d.error || 'scan falhou');
         
         const batchLessons = d.lessons || [];
-        allLessons = batchLessons; // servidor retorna TODAS as lessons acumuladas (do cursor)
+        // ★ v2.15.6 (P8): ACUMULA com dedupe por path — o comentário antigo
+        //   mentia ("servidor retorna TODAS as lessons acumuladas"): no
+        //   caminho distribuído cada batch trazia SÓ o seu. Sem acumular,
+        //   o cache terminava com o ÚLTIMO batch (0 aulas quando ele só
+        //   tinha pastas-contêiner) e o detalhe mostrava "0 AULAS". O
+        //   servidor v2.15.6 já devolve o acumulado; o dedupe protege o
+        //   cliente contra um servidor antigo ou um parcial não persistido.
+        const _seenPaths = new Set(allLessons.map(l => (l && (l.path || l.id)) || ''));
+        for (const bl of batchLessons) {
+          const bk = (bl && (bl.path || bl.id)) || '';
+          if (bk && !_seenPaths.has(bk)) { _seenPaths.add(bk); allLessons.push(bl); }
+          else if (!bk) allLessons.push(bl);
+        }
         isDone = d.status !== 'partial'; // done ou cached → termina
         
         // Atualiza estado parcial para o UI mostrar progresso
+        // ★ v2.15.6 (P8): progresso HONESTO — totalFolders vinha do
+        //   estado antigo (ou 1) e scannedFolders era setado = totalFolders,
+        //   então o % pulava p/ 100% no 1º batch (ou ficava no valor velho,
+        //   ex. 17%, enquanto os batches rodavam). Agora: total = pastas
+        //   já escaneadas (cumulativo, do servidor) + pendentes.
         state.status = 'scanning';
-        state.scannedFolders = state.totalFolders;
+        state.scannedFolders = (typeof d.scannedCount === 'number') ? d.scannedCount : (state.scannedFolders || 0);
+        state.totalFolders = state.scannedFolders + (d.pendingFolders || 0);
         state.lessonsFound = allLessons.length;
         state.pendingFolders = d.pendingFolders || 0;
         state.batchNum = batchNum;
@@ -4819,7 +4858,17 @@
       }
       
       if(!isDone && batchNum >= maxBatches){
-        console.warn('[Scanner] atingiu maxBatches (30) — scan parcial. Aulas encontradas:', allLessons.length);
+        // ★ v2.15.6 (P8): NÃO marca 'done' — o curso ainda tem pastas
+        //   pendentes. Antes, marcava done + scanned:true com aulas
+        //   parciais e o detalhe nunca mais re-escanava. 'partial' deixa
+        //   claro que o cron (backfill) continua o trabalho em background.
+        console.warn('[Scanner] atingiu maxBatches (30) — scan parcial. Aulas encontradas:', allLessons.length, 'pastas pendentes:', state.pendingFolders);
+        state.status = 'partial';
+        state.completedAt = null;
+        setScanState(courseKey, state);
+        setLessons(courseKey, { lessons: allLessons, scanned: false, totalFolders: state.totalFolders || 1, totalLessons: allLessons.length });
+        if(onProgress) try{ onProgress(state, { lessons: allLessons, scanned: false, totalFolders: state.totalFolders || 1, totalLessons: allLessons.length }); }catch(_){}
+        return state;
       }
       
       console.log('[Scanner] scan completo:', allLessons.length, 'aulas encontradas em', batchNum, 'batches');
@@ -4850,6 +4899,7 @@
     } catch(e) {
       console.error('[Scanner] erro:', e.message);
       state.status = 'error';
+      state.errorAt = Date.now(); // ★ v2.15.6 (P8): o gate de frescor precisa do timestamp do erro
       state.error = e.message;
       setScanState(courseKey, state);
       if(onProgress) try{ onProgress(state, getLessons(courseKey)); }catch(_){}
@@ -4870,7 +4920,9 @@
       lessonsFound: (lessons.lessons||[]).length,
       percent: total > 0 ? Math.round((state.scannedFolders||0) / total * 100) : 0,
       error: state.error || null,
+      errorAt: state.errorAt || null, // ★ v2.15.6 (P8): o port do detalhe precisa do timestamp do erro
       startedAt: state.startedAt || null,
+      pendingFolders: state.pendingFolders || 0,
       completedAt: state.completedAt || null
     };
   }
@@ -4928,6 +4980,7 @@
       const state = getScanState(courseKey);
       if(state){
         state.status = 'error';
+        state.errorAt = Date.now(); // ★ v2.15.6 (P8): o gate de frescor precisa do timestamp do erro
         state.error = e && e.message || String(e);
         setScanState(courseKey, state);
         try{ if(onProgress) onProgress(state, getLessons(courseKey)); }catch(_){}
