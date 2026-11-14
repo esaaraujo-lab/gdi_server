@@ -124,6 +124,12 @@ class HomeActivity : AppCompatActivity() {
                 binding.railContinue.findViewHolderForAdapterPosition(lastFocusContinue)
                     ?.itemView?.requestFocus()
             }
+            // v2.1.6: mesmo para o rail de drives — sem isso, voltar de um
+            // detalhe de drive perdia o foco do tile do drive na TV.
+            binding.railDrives.post {
+                binding.railDrives.findViewHolderForAdapterPosition(lastFocusDrives)
+                    ?.itemView?.requestFocus()
+            }
         }
     }
 
