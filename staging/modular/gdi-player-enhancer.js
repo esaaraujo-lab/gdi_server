@@ -110,8 +110,13 @@
               const wrap=v.closest('.gdi-player-wrap')||v.parentElement||v;
               if(wrap.requestFullscreen)wrap.requestFullscreen();
               else if(v.requestFullscreen)v.requestFullscreen();
+              // ★ v2.15.4 P1-09: iOS antigo não tem requestFullscreen no
+              //   wrap/vídeo — webkitEnterFullscreen é o caminho.
+              else if(v.webkitEnterFullscreen)v.webkitEnterFullscreen();
             }
-          }catch(_){}
+          }catch(_){
+            try{if(v.webkitEnterFullscreen)v.webkitEnterFullscreen();}catch(__){}
+          }
           e.preventDefault();break;
         case '0':case '1':case '2':case '3':case '4':
         case '5':case '6':case '7':case '8':case '9':
@@ -257,7 +262,7 @@
     if(old){old.remove();return;}
     const help=document.createElement('div');
     help.className='gdi-shortcuts-help';
-    help.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:10000;background:var(--ferreto-bg-2,#0d1119);border:1px solid var(--ferreto-border,#30363d);border-radius:14px;padding:24px;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.6);font-family:var(--ferreto-font-body,system-ui,sans-serif);';
+    help.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:10000;background:var(--ferreto-bg-2,#0d1119);border:1px solid var(--ferreto-border,#30363d);border-radius:14px;padding:24px;width:calc(100vw - 32px);max-width:400px;box-sizing:border-box;box-shadow:0 20px 60px rgba(0,0,0,.6);font-family:var(--ferreto-font-body,system-ui,sans-serif);';
     help.innerHTML=
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'+
       '<b style="color:var(--ferreto-text,#f0f6fc);font-size:16px;">⌨️ Atalhos do Player</b>'+
