@@ -8,7 +8,6 @@ import android.widget.Toast
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.vovofit.app.util.SessionManager
 import com.vovofit.app.data.colorFromString
 import com.vovofit.app.data.monogramFor
 import com.vovofit.app.databinding.ItemMylistCardBinding
