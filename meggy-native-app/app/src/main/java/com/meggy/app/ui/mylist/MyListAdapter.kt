@@ -17,6 +17,7 @@ import com.meggy.app.databinding.ItemMylistCardBinding
 import com.meggy.app.util.CardGradient
 import com.meggy.app.util.FocusAnimator
 import com.meggy.app.util.Format
+import com.meggy.app.util.LibraryCovers
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.TvUtils
 
@@ -73,11 +74,23 @@ class MyListAdapter(
             mylistTitle.text = item.name
             mylistBg.background = CardGradient.drawable(res, colorFromString(item.name))
 
-            val thumb = item.thumbnailLink
-            if (!thumb.isNullOrBlank() && (item.isVideo || item.isAudio || item.isPdf)) {
+            // v2.7.11 camada (3): sem thumb, a imagem da biblioteca
+            // pelo nome da aula/pasta; sem match, o monograma de
+            // antes (a Minha lista ainda não usa a capa gerada).
+            val thumb = LibraryCovers.remoteCover(
+                item.thumbnailLink, item.name, item.folderPath ?: currentFolderPath
+            )
+            if (!thumb.isNullOrBlank()) {
                 mylistThumb.visibility = View.VISIBLE
                 mylistMonogram.visibility = View.GONE
-                mylistThumb.load(thumb) { error(R.drawable.card_gradient_pink) }
+                mylistThumb.load(thumb) {
+                    error(R.drawable.card_gradient_pink)
+                    listener(onError = { _, _ ->
+                        mylistThumb.visibility = View.GONE
+                        mylistMonogram.visibility = View.VISIBLE
+                        mylistMonogram.text = monogramFor(item.name)
+                    })
+                }
             } else {
                 mylistThumb.visibility = View.GONE
                 mylistMonogram.visibility = View.VISIBLE
