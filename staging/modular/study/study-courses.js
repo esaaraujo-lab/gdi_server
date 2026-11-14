@@ -696,7 +696,7 @@
   async function loadUnifiedExtras(){
     const now=Date.now();
     if(__unifiedCache && now-__unifiedAt<60000) return __unifiedCache;
-    const r=await fetch('/api/courses/unified',{credentials:'include'});
+    const r=await fetch('/api/courses/unified',{credentials:'include',cache:'no-store'});
     const d=await r.json();
     if(!d||!d.ok||!Array.isArray(d.items)) throw new Error('unified failed');
     const out=[];
@@ -891,9 +891,14 @@
       const icon=mc.icon||'📁';
       const color=mc.color||'var(--ferreto-primary,#ff8b9f)';
       const isManual=c.manual===true;
-      const progress=c.lessons.size>0?Math.round(c.watched/c.lessons.size*100):0;
+      // ★ v2.15.5 (item 9): o cartão usa o MESMO total do detalhe
+      //   (totalLessons do cadastro/scanner) — c.lessons.size é sempre 0
+      //   em cursos manuais (o Set nunca é preenchido em collectCourses),
+      //   então o cartão mostrava 0 aulas e "restantes" negativo.
+      const _cardTotal=c.totalLessons||c.lessons.size||0;
+      const progress=_cardTotal>0?Math.round(c.watched/_cardTotal*100):0;
       const progressColor=progress>=80?'#3fb950':progress>=40?'#ffd43b':'var(--ferreto-primary,#ff8b9f)';
-      const remaining=c.lessons.size-c.watched;
+      const remaining=Math.max(0,_cardTotal-c.watched);
       const el=document.createElement('div');el.className='gdi-course';
       el.style.cursor='pointer';
       // ★ destaque visual para curso manual: border-left com a cor do manualCourse
@@ -914,7 +919,7 @@
           ${isManual
             ? `<div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:#ffd43b;">…</span><span class="gdi-course-stat-label">Batalhão</span></div>
                <div class="gdi-course-stat"><span class="gdi-course-stat-num">0</span><span class="gdi-course-stat-label">Assistidas</span></div>`
-            : `<div class="gdi-course-stat"><span class="gdi-course-stat-num">${c.lessons.size}</span><span class="gdi-course-stat-label">Aulas</span></div>
+            : `<div class="gdi-course-stat"><span class="gdi-course-stat-num">${_cardTotal}</span><span class="gdi-course-stat-label">Aulas</span></div>
                <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:#3fb950;">${c.watched}</span><span class="gdi-course-stat-label">Feitas</span></div>
                <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:#ffd43b;">${remaining}</span><span class="gdi-course-stat-label">Restam</span></div>
                <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:${progressColor};">${progress}%</span><span class="gdi-course-stat-label">Concl.</span></div>`
@@ -972,7 +977,11 @@
             try{
               const r=await fetch('/api/courses/remove',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({coursePath:c.key})});
               const d=await r.json().catch(()=>({}));
-              if(!r.ok||!d.ok) throw new Error((d&&(d.error||d.message))||('HTTP '+r.status));
+              // ★ v2.15.5 (item 6): 404 = "curso não encontrado" no servidor
+              //   (curso só-local, nunca registrado) — a remoção local
+              //   prossegue; só outra falha aborta e mantém o cartão.
+              const _gone404=r.status===404;
+              if((!r.ok&&!_gone404)||(!d.ok&&!_gone404)) throw new Error((d&&(d.error||d.message))||('HTTP '+r.status));
               // ★ v2.14.8: remoção REAL também no localStorage — antes só hideCourse():
               //   o curso ficava no LS_MANUAL e voltava no reload (o módulo lê de lá).
               //   Tira do manual, limpa o oculto e invalida o cache unificado.
@@ -1909,11 +1918,13 @@
     const drive=driveNameOf(c.key);
     // ★ FIX 3b (Task 14): usa totalLessons real (do manual course) ao invés de c.lessons.size
     // (que era o nº de paths visitados — wrong).
-    const total=c.totalLessons||c.lessons.size||0;
-    const watched=c.watched||0;
-    const remaining=Math.max(0,total-watched);  // ★ nunca negativo
-    const progress=total>0?Math.min(100,Math.round(watched/total*100)):(watched>0?100:0);
-    const progressColor=progress>=80?'#3fb950':progress>=40?'#ffd43b':'var(--ferreto-primary,#ff8b9f)';
+    // ★ v2.15.5 (item 9): total/watched/progress são RECALCULADOS após o
+    //   merge com as aulas escaneadas (abaixo) — o total aqui é provisório.
+    let total=c.totalLessons||c.lessons.size||0;
+    let watched=c.watched||0;
+    let remaining=Math.max(0,total-watched);  // ★ nunca negativo
+    let progress=total>0?Math.min(100,Math.round(watched/total*100)):(watched>0?100:0);
+    let progressColor=progress>=80?'#3fb950':progress>=40?'#ffd43b':'var(--ferreto-primary,#ff8b9f)';
     const coursePath=c.key;  // e.g. /4:/CANTE COM EXCELENCIA 2.0 + COMUNIDADE/
 
     // coleta aulas individuais do curso
@@ -1940,12 +1951,14 @@
     //    Cada aula escaneada recebe watched=true se seu path estiver em d.watched.
     let scannedCount = 0;
     let scanStatus = null;
+    let scanErrorAt = 0;
     if(window.gdiCourseScanner){
       try{
         const sp = window.gdiCourseScanner.getScanProgress(c.key);
         if(sp){
           scanStatus = sp.status;
           scannedCount = sp.lessonsFound || 0;
+          scanErrorAt = sp.errorAt || 0;
         }
         const scanned = window.gdiCourseScanner.getCourseLessons(c.key);
         if(scanned && Array.isArray(scanned.lessons) && scanned.lessons.length){
@@ -1968,6 +1981,21 @@
       }catch(_){}
     }
     lessons.sort((a,b)=>a.name.localeCompare(b.name,'pt-BR',{numeric:true}));
+
+    // ★ v2.15.5 (item 9): contagem REAL — o total provisório acima ignorava
+    //   as aulas escaneadas (o cartão, via unified/D1 ou via scanner, já as
+    //   contava). O detalhe agora usa a mesma lista mesclada que exibe.
+    total=Math.max(c.totalLessons||0,c.lessons.size||0,lessons.length,scannedCount||0);
+    watched=Math.min(c.watched||0,total);
+    remaining=Math.max(0,total-watched);
+    progress=total>0?Math.min(100,Math.round(watched/total*100)):(watched>0?100:0);
+    progressColor=progress>=80?'#3fb950':progress>=40?'#ffd43b':'var(--ferreto-primary,#ff8b9f)';
+    // ★ v2.15.5 (item 9): o aviso de erro do scanner só vale quando o erro é
+    //   ATUAL e relevante — um erro antigo persistido no localStorage (com as
+    //   aulas já presentes) não pode assustar para sempre. Mostra quando não
+    //   há nenhuma aula listada, ou quando o erro foi registrado há < 1h.
+    const scanErrorFresh=scanErrorAt>0&&(Date.now()-scanErrorAt)<3600*1000;
+    const showScanError=scanStatus==='error'&&(lessons.length===0||scanErrorFresh);
 
     box.innerHTML=`<div style="max-width:760px;margin:0 auto;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--ferreto-border,#21262d);">
@@ -2020,7 +2048,7 @@
         <i class="bi bi-clock-history"></i> Última atividade: <b style="color:var(--ferreto-text,#e6edf3);">${dateBr(c.lastAt)}</b>
       </div>`:''}
 
-      ${(scanStatus==='scanning'||scanStatus==='error')?`
+      ${(scanStatus==='scanning'||showScanError)?`
       <div style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ferreto-text-muted,#8b949e);">
         ${scanStatus==='scanning'
           ? '<i class="bi bi-arrow-repeat" style="color:var(--ferreto-secondary,#5ddeda);"></i> Escaneando aulas em background... <b style="color:var(--ferreto-text,#e6edf3);">'+scannedCount+'</b> encontradas até agora (a lista abaixo cresce em tempo real).'
@@ -2149,42 +2177,42 @@
       });
       if(!ok) return;
       try{
+        // ★ v2.15.5 (item 6): servidor PRIMEIRO — antes o POST era
+        //   fire-and-forget (resultado ignorado) e a UI já dizia "Curso
+        //   removido" enquanto o servidor podia ter falhado; o curso
+        //   voltava no próximo sync/render. 404 = o servidor já não tem o
+        //   curso (só local) — a remoção local prossegue. Qualquer outra
+        //   falha ABORTA sem tocar no estado local (o cartão fica, com erro).
+        const _rr=await fetch('/api/courses/remove', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          credentials:'include',
+          body: JSON.stringify({coursePath: c.key})
+        });
+        const _rd=await _rr.json().catch(()=>({}));
+        const _gone404=_rr.status===404;
+        if((!_rr.ok&&!_gone404)||(!_rd.ok&&!_gone404)) throw new Error((_rd&&(_rd.error||_rd.message))||('HTTP '+_rr.status));
+        // Servidor confirmou (ou já não tinha o curso) — só agora o estado local.
+        // ★ v2.15.5 (item 6): filtro NORMALIZADO (low: decode + minúsculas +
+        //   sem '/' final) — o filtro antigo usava igualdade estrita e a
+        //   entrada do LS_MANUAL sobrevivia quando o path estava codificado,
+        //   fazendo o cartão reaparecer. (O hide→unhide de antes some: sem
+        //   remoção confirmada não há nada a esconder; com ela, nada a restaurar.)
         const LS_MANUAL_RM='gdi-manual-courses-v1';
-        // ★ v1.0.97: dupla proteção local — marca como hidden antes de remover.
-        // ★ v1.0.103 FIX (Task 20-5 #10): route through _hiddenWriteChain via
-        //   hideCourse() to avoid racing with other pending hide/unhide writes.
-        //   hideCourse also emits courses:changed for cache invalidation.
-        if(c && c.key){
-          await hideCourse(c.key);
-        }
-        // 2. Remove do localStorage
         let manual=lsGet(LS_MANUAL_RM,[]);
         if(!Array.isArray(manual))manual=[];  // ★ CYCLE-3 FIX: guard against corrupted localStorage
-        const next=manual.filter(m=>!m || m.path!==c.key);
+        const next=manual.filter(m=>!m || low(m.path)!==low(c.key));
         lsSet(LS_MANUAL_RM,next);
-        // 3. Remove do servidor (segunda camada — impede syncCoursesFromDrive de re-adicionar)
-        try{
-          await fetch('/api/courses/remove', {
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({coursePath: c.key})
-          });
-        }catch(e){
-          console.warn('[Remover curso] falha ao remover do servidor (continua com hidden local):', e && e.message);
-        }
         // limpa estado do scanner e cache de aulas
         if(window.gdiCourseScanner){
           try{window.gdiCourseScanner.clearScanState(c.key);}catch(_){}
         }
         // limpa também da lista de ocultos (se estava oculto)
-        // ★ v1.0.103 FIX (Task 20-5 #10): await unhideCourse so the write chain
-        //   completes before renderCursos reads LS_HIDDEN (counter must be right).
         try{ await unhideCourse(c.key); }catch(_){}
         // ★ v1.0.103 FIX (Task 20-5 #9): emit courses:changed to invalidate caches
-        //   (bestInCache, _ccCache in study-panel.js). unhideCourse already emits,
-        //   but we emit here too in case the course was never hidden (unhide is a
-        //   no-op then) — belt-and-suspenders.
+        //   (bestInCache, _ccCache in study-panel.js).
         try{ if(typeof Bus!=='undefined' && Bus.emit) Bus.emit('courses:changed', {}); }catch(_){}
+        try{ if(typeof invalidateUnifiedCache==='function') invalidateUnifiedCache(); }catch(_){}
         showToast('Curso removido');
         renderCursos(box).catch(()=>{});
         refreshCursosTips();
