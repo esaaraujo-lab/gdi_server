@@ -13,6 +13,7 @@ import com.bibigyn.app.data.colorFromString
 import com.bibigyn.app.data.monogramFor
 import com.bibigyn.app.databinding.ItemFlatLessonBinding
 import com.bibigyn.app.util.CardGradient
+import com.bibigyn.app.util.CoverLibrary
 import com.bibigyn.app.util.FocusAnimator
 import com.bibigyn.app.util.Format
 import com.bibigyn.app.util.SessionManager
@@ -80,15 +81,38 @@ class FlatLessonAdapter(
             flatTitle.text = item.name
             flatThumbBg.background = CardGradient.drawable(res, colorFromString(item.name))
 
+            // Camada 3 — biblioteca por tipo (nome do arquivo →
+            // pasta); sem thumb (ou se ela falhar), a imagem da
+            // biblioteca; sem match, o monograma.
+            val showLibraryOrMonogram = {
+                val libraryUrl = CoverLibrary.resolve(ctx, item.name, folderPath)
+                if (!libraryUrl.isNullOrBlank()) {
+                    flatThumb.visibility = View.VISIBLE
+                    flatMonogram.visibility = View.GONE
+                    flatThumb.load(libraryUrl) {
+                        error(R.drawable.card_gradient_pink)
+                        listener(onError = { _, _ ->
+                            flatThumb.visibility = View.GONE
+                            flatMonogram.visibility = View.VISIBLE
+                            flatMonogram.text = monogramFor(item.name)
+                        })
+                    }
+                } else {
+                    flatThumb.visibility = View.GONE
+                    flatMonogram.visibility = View.VISIBLE
+                    flatMonogram.text = monogramFor(item.name)
+                }
+            }
             val thumb = item.thumbnailLink
             if (!thumb.isNullOrBlank() && (item.isVideo || item.isAudio || item.isPdf)) {
                 flatThumb.visibility = View.VISIBLE
                 flatMonogram.visibility = View.GONE
-                flatThumb.load(thumb) { error(R.drawable.card_gradient_pink) }
+                flatThumb.load(thumb) {
+                    error(R.drawable.card_gradient_pink)
+                    listener(onError = { _, _ -> showLibraryOrMonogram() })
+                }
             } else {
-                flatThumb.visibility = View.GONE
-                flatMonogram.visibility = View.VISIBLE
-                flatMonogram.text = monogramFor(item.name)
+                showLibraryOrMonogram()
             }
 
             val dur = if (item.isVideo || item.isAudio) sm.getResumeDuration(folderPath, item.name) else 0L
