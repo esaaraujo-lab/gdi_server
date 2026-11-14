@@ -13,6 +13,7 @@ import com.meggy.app.data.colorFromString
 import com.meggy.app.databinding.ItemRailCardBinding
 import com.meggy.app.util.CardGradient
 import com.meggy.app.util.ThumbArt
+import com.meggy.app.util.LibraryCovers
 import com.meggy.app.util.FocusAnimator
 import com.meggy.app.util.Format
 import com.meggy.app.util.SessionManager
@@ -82,20 +83,27 @@ class RailAdapter(
             val baseColor = colorFromString(item.colorHint ?: item.title)
             cardBg.background = CardGradient.drawable(res, baseColor)
 
-            // v2.7.11 — thumb fotográfica quando houver; arte-padrão do
-            // drive (ícone) quando não houver OU quando o Coil falhar.
+            // v2.7.11 onda 2 + camada (3) — thumb fotográfica quando
+            // houver; sem ela, a imagem da biblioteca por tipo de aula
+            // (nome da aula → curso → pasta); sem match, a capa GERADA
+            // do drive (ThumbArt) — inclusive quando o Coil falhar.
             // Monograma com letras NUNCA mais é thumb.
-            val thumb = item.thumbnailUrl ?: item.file?.thumbnailLink
+            val thumb = LibraryCovers.remoteCover(
+                item.thumbnailUrl ?: item.file?.thumbnailLink,
+                item.displayTitle ?: item.title, item.subtitle,
+                item.file?.folderPath
+            )
+            val coverRes = ThumbArt.coverResForPath(item.file?.folderPath ?: "")
             fun showFallbackArt() {
-                cardThumbnail.visibility = View.GONE
-                cardFallbackIcon.visibility = View.VISIBLE
-                cardFallbackIcon.text = ThumbArt.driveIconFor(item.file?.folderPath ?: "")
+                cardThumbnail.visibility = View.VISIBLE
+                cardFallbackIcon.visibility = View.GONE
+                cardThumbnail.setImageResource(coverRes)
             }
             if (!thumb.isNullOrBlank()) {
                 cardThumbnail.visibility = View.VISIBLE
                 cardFallbackIcon.visibility = View.GONE
                 cardThumbnail.load(thumb) {
-                    error(R.drawable.card_gradient_pink)
+                    error(coverRes)
                     listener(onError = { _, _ -> showFallbackArt() })
                 }
                 cardThumbnail.setOnClickListener(null)
