@@ -1,0 +1,286 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  v2.1.5 — Leitor de PDF (conceito leitor-pdf): header voltar + nome
+  + busca + compartilhar; página como card branco (PdfRenderer);
+  barra inferior "‹ Página X de N ›" + zoom "− 100% +" + bookmark.
+  TV: mesmos controles focáveis por D-pad; página rola com as setas.
+  Busca no texto via pdfbox-android (PDFTextStripper); PDFs
+  escaneados sem texto não retornam ocorrências (documentado).
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/md_background"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:background="@color/md_background"
+        android:elevation="0dp"
+        app:navigationIconTint="@color/md_primary"
+        app:titleTextAppearance="@style/TextAppearance.Material3.TitleLarge"
+        app:titleTextColor="@color/md_on_surface">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_gravity="end"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:id="@+id/btnSearch"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:clickable="true"
+                android:contentDescription="Buscar no texto"
+                android:focusable="true"
+                android:padding="12dp"
+                android:src="@drawable/ic_search"
+                android:tint="@color/md_on_surface" />
+
+            <ImageView
+                android:id="@+id/btnShare"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:clickable="true"
+                android:contentDescription="Compartilhar"
+                android:focusable="true"
+                android:padding="12dp"
+                android:src="@drawable/ic_share"
+                android:tint="@color/md_on_surface" />
+        </LinearLayout>
+    </com.google.android.material.appbar.MaterialToolbar>
+
+    <!-- Barra de busca no texto -->
+    <LinearLayout
+        android:id="@+id/searchBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="@dimen/content_margin"
+        android:paddingVertical="@dimen/spacing_sm"
+        android:visibility="gone">
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            app:boxBackgroundColor="@color/md_surface_container"
+            app:boxCornerRadiusTopStart="28dp"
+            app:boxCornerRadiusTopEnd="28dp"
+            app:boxCornerRadiusBottomStart="28dp"
+            app:boxCornerRadiusBottomEnd="28dp"
+            app:boxStrokeWidth="0dp">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/searchInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Buscar no texto…"
+                android:imeOptions="actionSearch"
+                android:inputType="text"
+                android:textColor="@color/md_on_surface"
+                android:textColorHint="@color/md_on_surface_variant"
+                android:textSize="@dimen/text_card_subtitle" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <TextView
+            android:id="@+id/searchCount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/spacing_sm"
+            android:textColor="@color/md_on_surface_variant"
+            android:textSize="@dimen/text_card_subtitle" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnSearchPrev"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/chip_outline"
+            android:focusable="true"
+            android:text="‹"
+            android:textColor="@color/md_on_surface"
+            android:textSize="20sp" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnSearchNext"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="@dimen/spacing_xs"
+            android:background="@drawable/chip_outline"
+            android:focusable="true"
+            android:text="›"
+            android:textColor="@color/md_on_surface"
+            android:textSize="20sp" />
+    </LinearLayout>
+
+    <!-- Página -->
+    <HorizontalScrollView
+        android:id="@+id/pageScrollH"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true"
+        android:focusable="true"
+        android:scrollbars="none">
+
+        <ScrollView
+            android:id="@+id/pageScrollV"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:focusable="true"
+            android:scrollbars="none">
+
+            <FrameLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="@dimen/spacing_lg">
+
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:cardCornerRadius="@dimen/radius_md"
+                    app:cardElevation="@dimen/elevation_3"
+                    app:cardBackgroundColor="@android:color/white">
+
+                    <ImageView
+                        android:id="@+id/pageImage"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:contentDescription="Página do PDF" />
+                </com.google.android.material.card.MaterialCardView>
+
+                <ProgressBar
+                    android:id="@+id/loadingView"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/errorView"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:gravity="center"
+                    android:textColor="@color/md_on_surface_variant"
+                    android:textSize="@dimen/text_detail_body"
+                    android:visibility="gone" />
+            </FrameLayout>
+        </ScrollView>
+    </HorizontalScrollView>
+
+    <!-- Barra inferior: página + zoom + bookmark -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/md_surface_container"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="@dimen/spacing_md">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnPrevPage"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="@drawable/chip_outline"
+                android:focusable="true"
+                android:text="‹"
+                android:textColor="@color/md_on_surface"
+                android:textSize="22sp" />
+
+            <TextView
+                android:id="@+id/pageLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="@dimen/spacing_sm"
+                android:clickable="true"
+                android:focusable="true"
+                android:text="Página 1 de 1"
+                android:textColor="@color/md_primary"
+                android:textSize="@dimen/text_card_title"
+                android:textStyle="bold" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnNextPage"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="@drawable/chip_outline"
+                android:focusable="true"
+                android:text="›"
+                android:textColor="@color/md_on_surface"
+                android:textSize="22sp" />
+        </LinearLayout>
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnZoomOut"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/chip_outline"
+            android:focusable="true"
+            android:text="−"
+            android:textColor="@color/md_on_surface"
+            android:textSize="22sp" />
+
+        <TextView
+            android:id="@+id/zoomLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="@dimen/spacing_sm"
+            android:text="100%"
+            android:textColor="@color/md_on_surface"
+            android:textSize="@dimen/text_card_title"
+            android:textStyle="bold" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnZoomIn"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/chip_outline"
+            android:focusable="true"
+            android:text="+"
+            android:textColor="@color/md_on_surface"
+            android:textSize="22sp" />
+
+        <TextView
+            android:id="@+id/btnBookmark"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="@dimen/spacing_md"
+            android:background="@drawable/chip_outline"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:text="☆"
+            android:textColor="@color/md_primary"
+            android:textSize="22sp" />
+    </LinearLayout>
+
+    <!-- Bottom nav (conceito) — oculta na TV (código) -->
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottomNav"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="@dimen/content_margin"
+        android:layout_marginBottom="@dimen/spacing_md"
+        android:background="@drawable/nav_bar_background"
+        android:elevation="@dimen/elevation_3"
+        app:itemActiveIndicatorStyle="@style/NavIndicatorPill"
+        app:itemIconTint="@color/bottom_nav_item_color"
+        app:itemTextColor="@color/bottom_nav_item_color"
+        app:labelVisibilityMode="labeled"
+        app:menu="@menu/bottom_nav_menu" />
+</LinearLayout>
