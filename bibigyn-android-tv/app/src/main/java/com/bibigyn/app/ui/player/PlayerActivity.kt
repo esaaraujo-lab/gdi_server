@@ -61,7 +61,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * v2.1.7 — Player (conceitos player celular + TV player v2, Elton 23:50)
+ * v2.1.8 — Player (conceitos player celular + TV player v2, Elton 23:50)
+ * v2.1.8 — barra cinematografica (Elton 11:48): disco escuro modesto,
+ * state layer nos chips, scrim 72% na base, emoji ⏸ -> ❚❚ (texto branco).
  * + simplificação do player (Elton 10:31, patch 2.1.6).
  * v2.1.7 — controles da barra: feedback visual (seletores +
  * FocusAnimator), foco D-pad entra na barra, barra invisível
@@ -561,7 +563,9 @@ class PlayerActivity : AppCompatActivity() {
         val p = player
         val paused = p != null && !p.isPlaying
         binding.centerPlayPause.visibility = if (paused && controlsVisible) View.VISIBLE else View.GONE
-        binding.btnPlayPauseBar.text = if (p?.isPlaying == true) "⏸" else "▶"
+        // v2.1.8 — "❚❚" e glifo de TEXTO (branco, sobre o disco escuro);
+        // o emoji "⏸" renderizava como quadrado LARANJA na TV (foto 11:48).
+        binding.btnPlayPauseBar.text = if (p?.isPlaying == true) "❚❚" else "▶"
     }
 
     private fun playPrev() {
