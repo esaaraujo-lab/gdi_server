@@ -5,11 +5,11 @@ import android.graphics.Rect
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.MotionEvent
 import android.view.View
 import android.view.animation.AlphaAnimation
 import android.view.animation.AnimationSet
 import android.view.animation.DecelerateInterpolator
-import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -29,7 +29,8 @@ import com.vovofit.app.ui.mylist.MyListActivity
 import com.vovofit.app.ui.player.PlayerActivity
 import com.vovofit.app.ui.search.SearchActivity
 import com.vovofit.app.ui.settings.SettingsActivity
-import com.vovofit.app.data.monogramFor
+import com.vovofit.app.data.driveCoverRes
+import com.vovofit.app.data.driveIndexFromPath
 import com.vovofit.app.util.AuthHelper
 import com.vovofit.app.util.CrossFolderPlaylist
 import com.vovofit.app.util.PlaylistManager
@@ -117,6 +118,11 @@ class HomeActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        // v1.0.8 — a nav INFERIOR sempre mostra "Início" selecionado na
+        // home. Bug: tocar numa aba marcava a aba na nav DA HOME (o
+        // listener retorna true) e, ao voltar com Back, o onResume não
+        // restaurava a seleção — a home abria com "Ajustes" destacado.
+        binding.bottomNav.selectedItemId = R.id.nav_home
         // v1.0.4: re-checa atualização ao voltar (throttle 1×/24h) e
         // restaura o foco nos rails (TV).
         UpdateChecker.checkForUpdateThrottled(this, BuildConfig.VERSION_NAME)
@@ -165,9 +171,30 @@ class HomeActivity : AppCompatActivity() {
 
         init {
             binding.heroPlay.setOnClickListener { onClick(items[index]) }
-            binding.heroPrev.setOnClickListener { prev() }
-            binding.heroNext.setOnClickListener { next() }
-            buildDots()
+            // v1.0.8 — sem setas e sem dots (conceito): o hero navega por
+            // swipe horizontal no card + avanço automático a cada 8s.
+            var downX = 0f
+            var downY = 0f
+            binding.heroCard.setOnTouchListener { _, ev ->
+                when (ev.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        downX = ev.x
+                        downY = ev.y
+                        false
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        val dx = ev.x - downX
+                        val dy = ev.y - downY
+                        if (kotlin.math.abs(dx) > 120f &&
+                            kotlin.math.abs(dx) > kotlin.math.abs(dy) * 2
+                        ) {
+                            if (dx < 0) next() else prev()
+                            true
+                        } else false
+                    }
+                    else -> false
+                }
+            }
             render(animate = false)
         }
 
@@ -193,9 +220,10 @@ class HomeActivity : AppCompatActivity() {
             binding.heroBadge.text = item.badge
             binding.heroTitle.setWordEllipsized(item.title)
             binding.heroSubtitle.setWordEllipsized(item.subtitle)
-            // v1.0.4: monograma (sem emoji) — não há foto de hero nos dados.
-            binding.heroIcon.text = monogramFor(item.title)
-            updateDots()
+            // v1.0.8 — arte real do drive (capa local cover_*) com scrim
+            // escuro no layout; sem monograma. Sem arte, o gradiente
+            // escuro limpo (heroBg) fica por baixo.
+            binding.heroArt.setImageResource(item.coverRes)
             if (animate) {
                 val inn = AlphaAnimation(0f, 1f).apply { duration = 300 }
                 val set = AnimationSet(true).apply {
@@ -205,39 +233,10 @@ class HomeActivity : AppCompatActivity() {
                 binding.heroBadge.startAnimation(inn)
                 binding.heroTitle.startAnimation(inn)
                 binding.heroSubtitle.startAnimation(inn)
-                binding.heroIcon.startAnimation(inn)
+                binding.heroArt.startAnimation(inn)
             }
         }
 
-        private fun buildDots() {
-            binding.heroDots.removeAllViews()
-            for (i in items.indices) {
-                // ★ v2.7.4: bolinha clicável — salta para o slide.
-                val dot = TextView(binding.root.context).apply {
-                    text = "•"
-                    textSize = 18f
-                    setTextColor(0x66FFFFFF)
-                    setPadding(6, 0, 6, 0)
-                    isClickable = true
-                    isFocusable = true
-                    setOnClickListener {
-                        index = i
-                        render(animate = true)
-                        handler.removeCallbacks(rotateRunnable)
-                        handler.postDelayed(rotateRunnable, 8000L)
-                    }
-                }
-                binding.heroDots.addView(dot)
-            }
-        }
-
-        private fun updateDots() {
-            for (i in 0 until binding.heroDots.childCount) {
-                val dot = binding.heroDots.getChildAt(i) as? TextView ?: continue
-                dot.setTextColor(if (i == index) 0xFFFF8B9F.toInt() else 0x66FFFFFF)
-                dot.textSize = if (i == index) 22f else 18f
-            }
-        }
     }
 
     // ──────────── v2.0.0: Continue rail multi-item ────────────
@@ -287,6 +286,41 @@ class HomeActivity : AppCompatActivity() {
             continueWatching(match.folderPath, match.videoName, item.subtitle)
         }
         setupFeaturedContinue(recents)
+        // v1.0.8 — backfill das thumbs dos recents antigos (ver método).
+        backfillRecentThumbnails(recents)
+    }
+
+    private var backfillDone = false
+
+    /**
+     * v1.0.8 — Backfill das thumbs dos recents antigos (pré-1.0.7, sem
+     * "thumb" salva) e dos que o listFolder antigo deixou sem thumb:
+     * lista a pasta do recent, acha o vídeo e grava a thumb NO LUGAR
+     * (updateRecentThumbnail — sem reordenar). Roda 1× por abertura da
+     * home, em 2º plano e em silêncio: sem rede ou com a sessão
+     * expirada, simplesmente não preenche (a capa do drive cobre o
+     * card) e nunca tira o usuário da home.
+     */
+    private fun backfillRecentThumbnails(recents: List<SessionManager.RecentItem>) {
+        if (backfillDone) return
+        backfillDone = true
+        val missing = recents.filter { it.thumbnailLink.isNullOrBlank() }
+        if (missing.isEmpty()) return
+        lifecycleScope.launch {
+            val sm = SessionManager.get(this@HomeActivity)
+            var updated = false
+            for (r in missing) {
+                val files = withContext(Dispatchers.IO) { api.listFolder(r.folderPath) } ?: break
+                val match = files.find { it.name == r.videoName && (it.isVideo || it.isAudio) }
+                val thumb = match?.thumbnailLink
+                if (!thumb.isNullOrBlank()) {
+                    sm.updateRecentThumbnail(r.folderPath, r.videoName, thumb)
+                    updated = true
+                }
+            }
+            // Recarrega o rail com as thumbs preenchidas.
+            if (updated) setupContinueRail()
+        }
     }
 
     /**
@@ -312,21 +346,29 @@ class HomeActivity : AppCompatActivity() {
         val pos = sm.getResume(best.folderPath, best.videoName)
         val dur = sm.getResumeDuration(best.folderPath, best.videoName)
         binding.featuredSection.visibility = View.VISIBLE
-        binding.featuredTitle.setWordEllipsized(best.videoName)
+        binding.featuredTitle.setWordEllipsized(Format.lessonTitle(best.videoName))
         binding.featuredSubtitle.setWordEllipsized(extractCourseName(best.folderPath))
         binding.featuredProgress.progress = progress
         binding.featuredProgressText.text = "$progress% concluído"
         binding.featuredTimeText.text = Format.positionText(pos, dur)
-        binding.featuredMonogram.text = monogramFor(best.videoName)
+        // v1.0.8 — thumb real; sem thumb, a capa do drive (arte local).
+        // Monograma nunca mais como thumb.
+        binding.featuredArt.setImageResource(
+            driveCoverRes(driveIndexFromPath(best.folderPath) ?: 15)
+        )
         if (!best.thumbnailLink.isNullOrBlank()) {
             binding.featuredThumb.visibility = View.VISIBLE
-            binding.featuredMonogram.visibility = View.GONE
+            binding.featuredArt.visibility = View.GONE
             binding.featuredThumb.load(best.thumbnailLink) {
                 error(com.vovofit.app.R.drawable.card_gradient_pink)
+                listener(onError = { _, _ ->
+                    binding.featuredThumb.visibility = View.GONE
+                    binding.featuredArt.visibility = View.VISIBLE
+                })
             }
         } else {
             binding.featuredThumb.visibility = View.GONE
-            binding.featuredMonogram.visibility = View.VISIBLE
+            binding.featuredArt.visibility = View.VISIBLE
         }
         binding.featuredContinue.setOnClickListener {
             continueWatching(best.folderPath, best.videoName, extractCourseName(best.folderPath))
