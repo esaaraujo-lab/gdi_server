@@ -6,14 +6,16 @@ import android.view.ViewGroup
 import android.view.animation.AnimationUtils
 import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
-import coil.load
 import com.vovofit.app.R
 import com.vovofit.app.data.DriveItem
 import com.vovofit.app.data.FileItem
 import com.vovofit.app.data.colorFromString
-import com.vovofit.app.data.monogramFor
+import com.vovofit.app.data.coverResForPath
+import com.vovofit.app.data.driveCoverRes
 import com.vovofit.app.databinding.ItemSearchResultBinding
 import com.vovofit.app.util.CardGradient
+import com.vovofit.app.util.CoverLibrary
+import com.vovofit.app.util.loadCoverChain
 import com.vovofit.app.util.FocusAnimator
 import com.vovofit.app.util.Format
 import com.vovofit.app.util.SessionManager
@@ -29,7 +31,7 @@ sealed class SearchResult {
 
 /**
  * v1.0.4 — Resultados como cards horizontais (conceito Buscar): thumb/
- * monograma à esquerda, título (2 linhas), metadados, barra de
+ * capa do drive à esquerda, título (2 linhas), metadados, barra de
  * progresso + % e pill "Em andamento" quando retomável. Foco via
  * FocusAnimator (anel do tile_focus_border + escala).
  */
@@ -76,9 +78,14 @@ class SearchResultAdapter(
                     resultTitle.text = d.name
                     resultMeta.text = if (d.isConcurso) "Concurso · ${d.tagline}" else "Curso · ${d.tagline}"
                     resultBg.background = CardGradient.drawable(res, colorFromString(d.name))
-                    resultThumb.visibility = View.GONE
-                    resultMonogram.visibility = View.VISIBLE
-                    resultMonogram.text = monogramFor(d.name)
+                    // v1.0.8 camada 3 — drive mostra a imagem da biblioteca
+                    // pelo nome do drive quando houver match; senao a capa
+                    // do drive (nunca monograma).
+                    resultThumb.visibility = View.VISIBLE
+                    resultMonogram.visibility = View.GONE
+                    resultThumb.loadCoverChain(
+                        null, driveCoverRes(d.index), d.name
+                    )
                     resultProgressRow.visibility = View.GONE
                     resultPill.visibility = View.GONE
                 }
@@ -96,16 +103,16 @@ class SearchResultAdapter(
                         else -> f.humanSize
                     }
                     resultBg.background = CardGradient.drawable(res, colorFromString(f.name))
-                    val thumb = f.thumbnailLink
-                    if (!thumb.isNullOrBlank() && (f.isVideo || f.isAudio || f.isPdf)) {
-                        resultThumb.visibility = View.VISIBLE
-                        resultMonogram.visibility = View.GONE
-                        resultThumb.load(thumb) { error(R.drawable.card_gradient_pink) }
-                    } else {
-                        resultThumb.visibility = View.GONE
-                        resultMonogram.visibility = View.VISIBLE
-                        resultMonogram.text = monogramFor(f.name)
-                    }
+                    // v1.0.8 camada 3 — (2) thumb (só vídeo/áudio/PDF,
+                    // como antes) > (3) imagem da biblioteca pelo
+                    // nome/pasta > (4) capa do drive (nunca monograma).
+                    val coverRes = coverResForPath(f.folderPath)
+                    val thumb = if (!f.thumbnailLink.isNullOrBlank() &&
+                        (f.isVideo || f.isAudio || f.isPdf)
+                    ) f.thumbnailLink else null
+                    resultThumb.visibility = View.VISIBLE
+                    resultMonogram.visibility = View.GONE
+                    resultThumb.loadCoverChain(thumb, coverRes, f.name, f.folderPath)
                     // Progresso quando retomável.
                     val fp = f.folderPath ?: ""
                     val progress = if (f.isVideo || f.isAudio) sm.getResumeProgress(fp, f.name) else 0
