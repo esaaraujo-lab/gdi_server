@@ -205,9 +205,17 @@
   }
 
   // ── ISA call (POST /api/ai) ──
+  // ★ v2.15.3 (item 4): propaga o erro agregado em vez de retornar null
+  //   silencioso. Antes, /api/ai fora + /api/ai/stream fora → return null,
+  //   e o quiz rotulava a falha como "formato inválido". Agora as duas
+  //   tentativas registram o motivo e a função dá throw com os dois —
+  //   generateQuestions distingue 'ai_down' de 'bad_format'. Chamadores
+  //   que já faziam .catch (meggy-cache.js generateAll) não mudam: o
+  //   throw cai no catch deles como antes caía o null no `if(!r)`.
   async function callIsa(prompt){
     // ★ v1.0.153: Tenta /api/ai PRIMEIRO (handleAi do v117 funciona).
     // Se falhar (502/null), tenta /api/ai/stream (NVIDIA direto).
+    const errs=[];
     try{
       const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({message:prompt,messages:[]})});
@@ -217,8 +225,15 @@
         if(data&&data.ok&&data.response){
           return data.response;
         }
+        let detail='';
+        try{ detail=String((data&&(data.error||data.message))||''); }catch(_){}
+        errs.push('/api/ai respondeu sem texto útil'+(detail?' ('+detail.slice(0,200)+')':''));
+      }else{
+        let detail='';
+        try{ const d=await r.json(); detail=String((d&&(d.error||d.message))||''); }catch(_){}
+        errs.push('/api/ai HTTP '+r.status+(detail?' ('+detail.slice(0,200)+')':''));
       }
-    }catch(e){/* fallback */}
+    }catch(e){ errs.push('/api/ai falhou ('+(e&&e.message||e)+')'); }
     // Fallback: /api/ai/stream
     try{
       const r2=await fetch('/api/ai/stream',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -242,11 +257,13 @@
           }
         }
         if(fullText&&fullText.trim().length>10)return fullText;
+        errs.push('/api/ai/stream respondeu sem texto útil');
+      }else{
+        errs.push('/api/ai/stream HTTP '+(r2?r2.status:'sem resposta'));
       }
-    }catch(e){console.warn('[Meggy] callIsa stream falhou:',e.message);}
-    return null;
+    }catch(e){ errs.push('/api/ai/stream falhou ('+(e&&e.message||e)+')'); console.warn('[Meggy] callIsa stream falhou:',e.message); }
+    throw new Error('Meggy indisponível: '+errs.join('; '));
   }
-
   async function callIsaKeyed(prompt,keyHint){
     return callIsa(prompt);
   }
