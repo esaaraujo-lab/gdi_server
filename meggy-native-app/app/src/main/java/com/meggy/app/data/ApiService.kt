@@ -93,20 +93,18 @@ class ApiService(private val context: Context) {
                 }
 
                 val json = JSONObject(body)
+                // v2.7.11 — CAUSA RAIZ DO MONOGRAMA: o código antigo
+                // montava o FileItem À MÃO e descartava o thumbnailLink
+                // (o worker devolve thumbnailLink — fields pede o campo).
+                // Sem thumb, launchPlayer() recebia null, addRecent()
+                // nunca gravava thumb nenhuma e o card caía no monograma.
+                // FileItem.fromJson() lê thumbnailLink + aplica o fallback
+                // drive.google.com/thumbnail?id=<id> quando o campo falta.
                 val files = json.optJSONObject("data")?.optJSONArray("files")
                 val items = mutableListOf<FileItem>()
                 if (files != null) {
                     for (i in 0 until files.length()) {
-                        val f = files.getJSONObject(i)
-                        items.add(FileItem(
-                            name = f.optString("name"),
-                            mimeType = f.optString("mimeType"),
-                            id = f.optString("id"),
-                            driveId = f.optString("driveId"),
-                            link = f.optString("link", null),
-                            size = f.optLong("size", 0L),
-                            modifiedTime = f.optString("modifiedTime", null)
-                        ))
+                        items.add(FileItem.fromJson(files.getJSONObject(i)))
                     }
                 }
                 val next = if (json.isNull("nextPageToken")) null
