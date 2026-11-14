@@ -21,8 +21,8 @@ android {
         // ★ VOVÓ FIT v1.0.1 — Initial release (fork of BiBi Fit).
         //   4 drives: Queima Diária (12), Todo Dia (13), Clube de Casa (14), Saúde e Fitness (15).
         //   Brand: deep teal #0F3D3E + lime green #A3E635. Tag prefix vovofit-v*.
-        versionCode 7
-        versionName "1.0.6"
+        versionCode 8
+        versionName "1.0.7"
     }
 
     // ★ v1.4.0: Signing config com keystore FIXA (mesma em todos os builds)
