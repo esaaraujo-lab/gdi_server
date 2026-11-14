@@ -15,6 +15,7 @@ import com.bibigyn.app.data.colorFromString
 import com.bibigyn.app.data.monogramFor
 import com.bibigyn.app.databinding.ItemMylistCardBinding
 import com.bibigyn.app.util.CardGradient
+import com.bibigyn.app.util.CoverLibrary
 import com.bibigyn.app.util.FocusAnimator
 import com.bibigyn.app.util.Format
 import com.bibigyn.app.util.SessionManager
@@ -73,15 +74,38 @@ class MyListAdapter(
             mylistTitle.text = item.name
             mylistBg.background = CardGradient.drawable(res, colorFromString(item.name))
 
+            // Camada 3 — biblioteca por tipo (nome do arquivo →
+            // pasta); sem thumb (ou se ela falhar), a imagem da
+            // biblioteca; sem match, o monograma.
+            val showLibraryOrMonogram = {
+                val libraryUrl = CoverLibrary.resolve(ctx, item.name, item.folderPath)
+                if (!libraryUrl.isNullOrBlank()) {
+                    mylistThumb.visibility = View.VISIBLE
+                    mylistMonogram.visibility = View.GONE
+                    mylistThumb.load(libraryUrl) {
+                        error(R.drawable.card_gradient_pink)
+                        listener(onError = { _, _ ->
+                            mylistThumb.visibility = View.GONE
+                            mylistMonogram.visibility = View.VISIBLE
+                            mylistMonogram.text = monogramFor(item.name)
+                        })
+                    }
+                } else {
+                    mylistThumb.visibility = View.GONE
+                    mylistMonogram.visibility = View.VISIBLE
+                    mylistMonogram.text = monogramFor(item.name)
+                }
+            }
             val thumb = item.thumbnailLink
             if (!thumb.isNullOrBlank() && (item.isVideo || item.isAudio || item.isPdf)) {
                 mylistThumb.visibility = View.VISIBLE
                 mylistMonogram.visibility = View.GONE
-                mylistThumb.load(thumb) { error(R.drawable.card_gradient_pink) }
+                mylistThumb.load(thumb) {
+                    error(R.drawable.card_gradient_pink)
+                    listener(onError = { _, _ -> showLibraryOrMonogram() })
+                }
             } else {
-                mylistThumb.visibility = View.GONE
-                mylistMonogram.visibility = View.VISIBLE
-                mylistMonogram.text = monogramFor(item.name)
+                showLibraryOrMonogram()
             }
 
             val sm = SessionManager.get(ctx)
