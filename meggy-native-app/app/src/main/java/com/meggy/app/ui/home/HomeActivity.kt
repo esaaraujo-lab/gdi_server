@@ -36,6 +36,7 @@ import com.meggy.app.util.PlaylistManager
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.Format
 import com.meggy.app.util.TvUtils
+import com.meggy.app.util.FocusAnimator
 import com.meggy.app.util.setWordEllipsized
 import com.meggy.app.util.UpdateChecker
 import kotlinx.coroutines.Dispatchers
@@ -330,6 +331,20 @@ class HomeActivity : AppCompatActivity() {
         binding.featuredContinue.setOnClickListener {
             continueWatching(best.folderPath, best.videoName, extractCourseName(best.folderPath))
         }
+        // v2.7.10 — o CARD GRANDE e o alvo do foco na TV: clicavel e
+        // focavel, com FocusAnimator.attachCard (anel 3dp da marca +
+        // escala 1.10x + elevacao). Antes so o botao interno era
+        // focavel e o fundo dele (btn_primary_pill, shape estatico)
+        // nao tinha estado de foco — por isso o Elton nao via
+        // feedback nenhum no card de "Continuar de onde parou".
+        // O botao continua clicavel por toque; o foco D-pad vai para
+        // o card (o layout TV usa descendantFocusability=
+        // blocksDescendants). O card nao e reciclado (view fixa da
+        // Home), entao o attach nao depende de rebind.
+        binding.featuredCard.setOnClickListener {
+            continueWatching(best.folderPath, best.videoName, extractCourseName(best.folderPath))
+        }
+        FocusAnimator.attachCard(binding.featuredCard, true)
     }
 
     /**
