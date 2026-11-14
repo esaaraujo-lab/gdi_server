@@ -1952,13 +1952,18 @@
     let scannedCount = 0;
     let scanStatus = null;
     let scanErrorAt = 0;
+    let scanPendingFolders = 0;
     if(window.gdiCourseScanner){
       try{
         const sp = window.gdiCourseScanner.getScanProgress(c.key);
         if(sp){
           scanStatus = sp.status;
           scannedCount = sp.lessonsFound || 0;
-          scanErrorAt = sp.errorAt || 0;
+          // ★ v2.15.6 (P8): errorAt vinha sempre 0 — o produtor (scanner)
+          //   nunca o gravava e o gate de frescor era letra morta (aviso
+          //   antigo p/ sempre). Fallback p/ startedAt (estado legado).
+          scanErrorAt = sp.errorAt || sp.startedAt || 0;
+          scanPendingFolders = sp.pendingFolders || 0;
         }
         const scanned = window.gdiCourseScanner.getCourseLessons(c.key);
         if(scanned && Array.isArray(scanned.lessons) && scanned.lessons.length){
@@ -1980,13 +1985,40 @@
         }
       }catch(_){}
     }
+    // ★ v2.15.6 (P8): fontes locais vazias → busca as aulas no D1
+    //   (/api/d1/lessons/by-course) e re-renderiza com elas. Sem isto, um
+    //   curso do unificado sem aulas locais mostrava "0 AULAS" e "Nenhuma
+    //   aula encontrada ainda" mesmo com o D1 cheio. Guarda _d1Merged p/
+    //   buscar uma só vez por curso; não mexe na enumeração do scanner.
+    if (!lessons.length && !c._d1Merged) {
+      c._d1Merged = true;
+      box.innerHTML = '<div style="max-width:760px;margin:0 auto;padding:20px;text-align:center;color:#8b949e;font-size:13px;">Carregando aulas…</div>';
+      try {
+        fetch('/api/d1/lessons/by-course?path=' + encodeURIComponent(c.key), { credentials: 'include', cache: 'no-store' })
+          .then(r => r.json()).then(d => {
+            const dl = (d && d.ok && d.lessons) || [];
+            if (dl.length) {
+              c._d1Lessons = [];
+              dl.forEach(l => { const p = l.lesson_path; if (!p) return; c._d1Lessons.push({ path: String(p).split('?')[0], name: l.lesson_name || realName(p), watched: !!(w && w[p]), resumed: false }); });
+            }
+            openCourseDetail(box, c);
+          }).catch(() => { openCourseDetail(box, c); });
+      } catch (_) { openCourseDetail(box, c); }
+      return;
+    }
+    if (Array.isArray(c._d1Lessons)) {
+      c._d1Lessons.forEach(sl => { if (!sl || !sl.path) return; const lp = low(sl.path); if (seen.has(lp)) return; seen.add(lp); lessons.push({ path: sl.path, name: sl.name || realName(sl.path), watched: !!sl.watched, resumed: false }); });
+    }
     lessons.sort((a,b)=>a.name.localeCompare(b.name,'pt-BR',{numeric:true}));
 
     // ★ v2.15.5 (item 9): contagem REAL — o total provisório acima ignorava
     //   as aulas escaneadas (o cartão, via unified/D1 ou via scanner, já as
     //   contava). O detalhe agora usa a mesma lista mesclada que exibe.
-    total=Math.max(c.totalLessons||0,c.lessons.size||0,lessons.length,scannedCount||0);
-    watched=Math.min(c.watched||0,total);
+    // ★ v2.15.6 (P8): inclui c.total (do /api/courses/unified) — o cartão
+    //   já o mostrava, mas o detalhe ignorava-o e exibia "0 AULAS".
+    total=Math.max(c.totalLessons||0,c.total||0,c.lessons.size||0,lessons.length,scannedCount||0);
+    watched=Math.max(Math.min(c.watched||0,total),lessons.filter(l=>l.watched).length);
+    watched=Math.min(watched,total);
     remaining=Math.max(0,total-watched);
     progress=total>0?Math.min(100,Math.round(watched/total*100)):(watched>0?100:0);
     progressColor=progress>=80?'#3fb950':progress>=40?'#ffd43b':'var(--ferreto-primary,#ff8b9f)';
@@ -2048,10 +2080,12 @@
         <i class="bi bi-clock-history"></i> Última atividade: <b style="color:var(--ferreto-text,#e6edf3);">${dateBr(c.lastAt)}</b>
       </div>`:''}
 
-      ${(scanStatus==='scanning'||showScanError)?`
+      ${(scanStatus==='scanning'||showScanError||scanStatus==='partial')?`
       <div style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ferreto-text-muted,#8b949e);">
         ${scanStatus==='scanning'
           ? '<i class="bi bi-arrow-repeat" style="color:var(--ferreto-secondary,#5ddeda);"></i> Escaneando aulas em background... <b style="color:var(--ferreto-text,#e6edf3);">'+scannedCount+'</b> encontradas até agora (a lista abaixo cresce em tempo real).'
+          : scanStatus==='partial'
+          ? '<i class="bi bi-hourglass-split" style="color:#ffd43b;"></i> Scan parcial: <b style="color:var(--ferreto-text,#e6edf3);">'+scannedCount+'</b> aulas encontradas até agora. O scanner automático continua em background e completa o resto.'
           : '<i class="bi bi-exclamation-triangle" style="color:#ff8b8b;"></i> O scanner encontrou um erro. Algumas aulas podem estar ausentes da lista.'}
       </div>`:''}
 
@@ -2062,7 +2096,7 @@
       </div>
 
       ${/* ★ Task 16 / FIX 2: botão "Escanear agora" na visão de detalhe */ ''}
-      ${(!scanStatus || scanStatus === 'error') ? `
+      ${(!scanStatus || scanStatus === 'error' || scanStatus === 'partial') ? `
       <div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;">
         <button id="gdi-detail-scan" class="gdi-mode-btn" data-course-key="${escHtml(c.key)}" style="font-size:12px;flex:1;justify-content:center;color:var(--ferreto-secondary,#5ddeda);border-color:rgba(93,222,218,.3);" title="Escanear aulas do curso">
           <i class="bi bi-arrow-repeat"></i> Escanear agora
@@ -2413,24 +2447,47 @@
     return Array.isArray(d.concursos)?d.concursos:[];
   }
   // POST /api/concursos/:id/sources/preview {folderPaths} → {folders,totalLessons,totalHours}
+  // ★ v2.15.6 (P2): prévia paginada — retoma do cursor (pending) com o
+  //   acumulado até truncated=false, senão o Módulo II (além das 40
+  //   listagens) não aparece nem na prévia nem no detalhe. Teto 20
+  //   tentativas p/ não loopar p/ sempre num cursor quebrado.
   async function previewAttach(concursoId, folderPaths){
-    const r=await fetch('/api/concursos/'+encodeURIComponent(concursoId)+'/sources/preview',{
-      method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',
-      body:JSON.stringify({folderPaths:folderPaths})
-    });
-    const d=await r.json().catch(()=>({}));
+    let body={folderPaths:folderPaths};
+    let d=null, r=null;
+    for(let a=0;a<20;a++){
+      r=await fetch('/api/concursos/'+encodeURIComponent(concursoId)+'/sources/preview',{
+        method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',
+        body:JSON.stringify(body)
+      });
+      d=await r.json().catch(()=>({}));
+      if(!r.ok||!d.ok||!d.truncated)break;
+      body={folderPaths:folderPaths,resume:d.pending||{},accum:{folders:d.folders||[],seenNewPaths:d.seenNewPaths||[],enumErrors:d.enumErrors||[]}};
+    }
     if(!r.ok||!d.ok)throw new Error((d&&(d.error||d.message))||('HTTP '+r.status));
     return d;
   }
   // POST /api/concursos/:id/sources {folderPaths} → {attached,skipped,scanned}
+  // ★ v2.15.6 (P2): anexo paginado — as retomadas devolvem attached=[]
+  //   (o D1 já tem as aulas da 1ª chamada), então o attached/skipped da
+  //   1ª chamada é preservado e o totalLessons final é o cumulativo do D1.
   async function attachFoldersToConcurso(concursoId, folderPaths){
-    const r=await fetch('/api/concursos/'+encodeURIComponent(concursoId)+'/sources',{
-      method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',
-      body:JSON.stringify({folderPaths:folderPaths})
-    });
-    const d=await r.json().catch(()=>({}));
-    if(!r.ok||!d.ok)throw new Error((d&&(d.error||d.message))||('HTTP '+r.status));
-    return d;
+    let body={folderPaths:folderPaths};
+    let d=null, r=null;
+    let firstAttached=null, firstSkipped=null, lastTotal=0;
+    for(let a=0;a<20;a++){
+      r=await fetch('/api/concursos/'+encodeURIComponent(concursoId)+'/sources',{
+        method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',
+        body:JSON.stringify(body)
+      });
+      d=await r.json().catch(()=>({}));
+      if(!r.ok||!d.ok)throw new Error((d&&(d.error||d.message))||('HTTP '+r.status));
+      if(firstAttached===null){ firstAttached=d.attached; firstSkipped=d.skipped; }
+      if(d.totalLessons!=null)lastTotal=d.totalLessons;
+      if(!d.scanned||!d.scanned.truncated)break;
+      body={folderPaths:folderPaths,resume:(d.scanned&&d.scanned.pending)||{}};
+    }
+    const out=Object.assign({},d,{attached:firstAttached||d.attached,skipped:firstSkipped||d.skipped,totalLessons:lastTotal});
+    return out;
   }
 
   // ── Seletor de destino de pasta(s) ──────────────────────────────────
