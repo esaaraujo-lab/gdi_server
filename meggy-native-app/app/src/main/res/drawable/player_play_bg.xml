@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- v2.7.9 — Botão redondo de play do player: rosa no estado normal
-     (igual a btn_play_circle), anel claro quando focado/pressionado.
-     btn_play_circle é um shape estático — sem feedback visual. -->
+<!-- v2.7.10 — Disco de play/pausa do player (Elton 11:48): disco
+     MODESTO de fundo preto semi-transparente (60%), icone BRANCO —
+     nada de rosa solido nem laranja. O rosa da marca fica SO para o
+     anel de FOCO (player_play_ring). Antes o estado normal era o
+     btn_play_circle rosa (foto: circulo rosa gigante + pause laranja).
+     Tamanho: 64dp no celular, 96dp na TV (play_fab_size). -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_pressed="true" android:drawable="@drawable/player_play_ring" />
     <item android:state_focused="true" android:drawable="@drawable/player_play_ring" />
-    <item android:drawable="@drawable/btn_play_circle" />
+    <item android:drawable="@drawable/player_play_disc" />
 </selector>
