@@ -71,7 +71,7 @@ object FocusAnimator {
             interpolator = DecelerateInterpolator()
             start()
         }
-        ObjectAnimator.ofFloat(view, View.ELEVATION, targetElev).apply {
+        ObjectAnimator.ofFloat(view, "elevation", targetElev).apply {
             duration = DURATION_MS
             interpolator = DecelerateInterpolator()
             start()
