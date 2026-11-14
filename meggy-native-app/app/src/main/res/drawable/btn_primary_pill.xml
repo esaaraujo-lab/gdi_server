@@ -1,7 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- v2.7.6 — Botão primário M3: fundo rosa, cantos em pílula. -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <corners android:radius="@dimen/radius_pill" />
-    <solid android:color="@color/md_primary" />
-</shape>
+<!-- v2.7.10 — Botão primário M3: fundo da marca, cantos em pílula.
+     Era um shape ESTATICO: o botao (heroPlay, featuredContinue, ...)
+     nao mostrava NADA com o foco do D-pad na TV. Agora e seletor:
+     focado/pressionado ganha anel branco 3dp/2dp; o estado normal e
+     identico ao anterior. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="@dimen/radius_pill" />
+            <solid android:color="@color/md_primary" />
+            <stroke android:width="3dp" android:color="@android:color/white" />
+        </shape>
+    </item>
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="@dimen/radius_pill" />
+            <solid android:color="@color/md_primary" />
+            <stroke android:width="2dp" android:color="@android:color/white" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="@dimen/radius_pill" />
+            <solid android:color="@color/md_primary" />
+        </shape>
+    </item>
+</selector>
