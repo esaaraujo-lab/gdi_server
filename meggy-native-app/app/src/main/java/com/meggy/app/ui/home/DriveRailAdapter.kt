@@ -72,7 +72,8 @@ class DriveRailAdapter(
             // visual); o else é obrigatório (view reciclada).
             val adminCover = featuredCovers[coursePath]?.takeIf { it.isNotBlank() }
             // v2.7.11 camada (3): sem capa do admin, a imagem da
-            // biblioteca pelo nome do drive/curso; sem match, o card
+            // biblioteca pelo nome do drive/curso; sem match, a imagem
+            // 'geral' (fallback da camada 3); sem manifesto, o card
             // segue como antes (sem foto de fundo).
             val driveCoverUrl = adminCover
                 ?: LibraryCovers.resolve(drive.name, drive.tagline)
