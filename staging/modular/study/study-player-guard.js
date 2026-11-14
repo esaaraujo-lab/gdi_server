@@ -32,18 +32,21 @@
   //    (line 135 below); that's the "media:ended" half of the spec.
   const _activeGuards = new Set();
 
+  // ★ v2.15.4 P2-03: .gdi-stall-card com width calc(100% - 32px) +
+  //   box-sizing:border-box (não estoura em 360px) e botões com 44px.
   if(!document.getElementById('gdi-stall-style')){
     const s=document.createElement('style');s.id='gdi-stall-style';s.textContent=`
 .gdi-stall-overlay{position:absolute;inset:0;background:rgba(7,9,16,.82);
   -webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);
   display:flex;align-items:center;justify-content:center;z-index:30;
   animation:ferreto-fade .2s ease;}
-.gdi-stall-card{display:flex;flex-direction:column;align-items:center;gap:9px;text-align:center;padding:22px;max-width:340px;}
+.gdi-stall-card{display:flex;flex-direction:column;align-items:center;gap:9px;text-align:center;padding:22px;width:calc(100% - 32px);max-width:340px;box-sizing:border-box;}
 .gdi-stall-card .gdi-stall-ico{font-size:36px;color:var(--ferreto-primary,#ff8b9f);
   filter:drop-shadow(0 4px 14px rgba(255,139,159,.5));}
 .gdi-stall-title{font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-size:15px;font-weight:600;color:#fff;}
 .gdi-stall-sub{font-size:12px;color:#9aa4b8;margin-bottom:8px;line-height:1.4;}
 .gdi-stall-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;}
+.gdi-stall-actions .gdi-btn{min-height:44px;}
 .gdi-play-hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:20;cursor:pointer;
   background:rgba(0,0,0,.28);opacity:0;transition:opacity .2s;pointer-events:none;}
 .gdi-play-hint.show{opacity:1;pointer-events:auto;}
