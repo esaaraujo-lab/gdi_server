@@ -126,6 +126,31 @@ class ApiService(private val context: Context) {
     }
     
     /**
+     * v1.0.8 onda 2 — Cursos em destaque do admin (GET /api/featured-courses).
+     * Devolve a lista (vazia em qualquer falha — silencioso: a home cai para
+     * as capas locais). O backend v2.15.6 inclui `coverUrl` por curso; sem
+     * ele (producao pre-v2: 404), a lista vem vazia e nada muda na UI.
+     * Nao lanca excecao; nunca mostra toast.
+     */
+    suspend fun getFeaturedCourses(): List<FeaturedCourse> {
+        return try {
+            val request = Request.Builder()
+                .url("${VovoFitApp.BASE_URL}/api/featured-courses")
+                .header("Cookie", "session=${sessionManager.sessionCookie ?: ""}")
+                .build()
+            VovoFitApp.okHttpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return emptyList()
+                val body = response.body?.string() ?: return emptyList()
+                val json = JSONObject(body)
+                if (!json.optBoolean("ok", false)) return emptyList()
+                FeaturedCourse.parseList(json.optJSONArray("courses"))
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
      * ★ v2.1.2 LOGIN PERSISTENCE FIX:
      * Validates the current session by making a lightweight API call.
      * If the session cookie has expired (server returns HTML login page or
