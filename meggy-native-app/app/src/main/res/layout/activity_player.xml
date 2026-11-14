@@ -1,15 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  v2.7.6 — Player (conceitos player celular + player TV v2).
+  v2.7.7 — Player (conceitos player celular + player TV v2) + simplificação
+  do player (Elton 10:31, patch 2.7.7).
   Dois modos, mesma activity:
-  • Retrato (celular): vídeo 16:9 no topo + controles abaixo (−10s,
-    tempo, +10s, velocidade, CC, tela cheia) + título + curso +
-    Anterior/Próxima + "A seguir" + bottom nav. Controller nativo
-    do ExoPlayer ativo.
-  • Fullscreen (celular, via botão; TV, sempre): vídeo ocupa a tela,
-    barra de controles grande embaixo (pause rosa, −10s, +10s, tempo,
-    progresso, Descanso, CC, velocidade, sair da tela cheia).
-    Controller nativo desligado; barra própria.
+  • Retrato (celular): vídeo 16:9 no topo + controles abaixo (tempo,
+    velocidade, CC, Descanso, tela cheia) + título + curso +
+    Anterior/Próxima + bottom nav. Controller nativo do ExoPlayer ativo
+    (com botão de tela cheia — setFullscreenButtonClickListener).
+    A linha de controles tem DUAS linhas (tempo em cima, pills embaixo)
+    porque os 5 elementos não cabem numa só linha em telas de 360dp —
+    antes o botão de tela cheia caía para fora da tela e o tempo era
+    esmagado para 0dp (a linha tinha −10s/+10s + 4 pills + tempo).
+  • Fullscreen (celular, via botão ou girando o aparelho; TV, sempre):
+    vídeo ocupa a tela, barra de controles grande embaixo (pause rosa,
+    Descanso, CC, velocidade, sair da tela cheia) + tempo + progresso.
+    Controller nativo desligado; barra própria. O container do vídeo
+    preenche a tela em fullscreen (sem o ratio 16:9, que em paisagem
+    de celular — tela mais larga que 16:9 — deixava a barra fora da
+    área visível); em retrato volta o 16:9.
   Áudio (mp3/podcast): MESMO player — a área de vídeo vira a CAPA
   do episódio (thumb/monograma); sem CC; mesmos controles, mesmo
   progresso/retomada e Descanso. SEM logo sobre o vídeo (verificado:
@@ -17,6 +25,17 @@
   Descanso (🌙, modo existente v1.3.0): overlay preto SÓ sobre a
   superfície de vídeo (a barra fica acessível); áudio e progresso
   continuam; qualquer interação com os controles restaura o vídeo.
+  SIMPLIFICAÇÃO 2.7.7 (o que SAIU daqui):
+  • Playlist embutida REMOVIDA (gaveta lateral + botão ☰ no topo +
+    seção "A seguir"): a playlist vive na PÁGINA (DetailActivity);
+    o avanço (Anterior/Próxima + autoplay) continua igual.
+  • Botões −10s/+10s REMOVIDOS do rodapé (barra fullscreen e linha
+    retrato): o avanço/retrocesso continua por double-tap nas laterais
+    (celular) e setas do D-pad (TV, com controles escondidos ou foco
+    no vídeo) — ver PlayerActivity.dispatchKeyEvent.
+  • Velocidade NÃO fica no topo do vídeo: só nas barras de controles
+    (pill pequena 1.0×), com a "Velocidade padrão" dos Ajustes valendo
+    na abertura e ao avançar de aula — ver PlayerActivity.
 -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -195,18 +214,6 @@
                     android:text="☆"
                     android:textColor="@android:color/white"
                     app:cornerRadius="16dp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/playlist_button"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:focusable="true"
-                    android:focusableInTouchMode="true"
-                    android:minWidth="48dp"
-                    android:text="☰"
-                    android:textColor="@android:color/white"
-                    app:cornerRadius="16dp" />
             </LinearLayout>
 
             <TextView
@@ -254,34 +261,6 @@
                     android:text="❚❚"
                     android:textColor="@color/md_on_primary"
                     android:textSize="24sp" />
-
-                <TextView
-                    android:id="@+id/btn_seek_back_bar"
-                    android:layout_width="56dp"
-                    android:layout_height="56dp"
-                    android:layout_marginStart="@dimen/spacing_lg"
-                    android:background="@drawable/chip_outline"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center"
-                    android:text="◀10"
-                    android:textColor="@color/md_on_surface"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/btn_seek_fwd_bar"
-                    android:layout_width="56dp"
-                    android:layout_height="56dp"
-                    android:layout_marginStart="@dimen/spacing_sm"
-                    android:background="@drawable/chip_outline"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center"
-                    android:text="10▶"
-                    android:textColor="@color/md_on_surface"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
 
                 <View
                     android:layout_width="0dp"
@@ -374,36 +353,6 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- Sidebar da playlist -->
-        <FrameLayout
-            android:id="@+id/playlist_container"
-            android:layout_width="320dp"
-            android:layout_height="match_parent"
-            android:layout_gravity="end"
-            android:background="#E6000000"
-            android:visibility="gone">
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="64dp"
-                android:paddingHorizontal="@dimen/spacing_lg"
-                android:paddingVertical="@dimen/spacing_md"
-                android:text="Playlist"
-                android:textColor="#E6EDF3"
-                android:textSize="15sp"
-                android:textStyle="bold" />
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/playlist_recycler"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:layout_marginBottom="@dimen/spacing_lg"
-                android:layout_marginTop="112dp"
-                android:clipToPadding="false"
-                android:paddingHorizontal="@dimen/spacing_sm" />
-        </FrameLayout>
-
         <!-- Hint de gesto (centro, transitório) -->
         <TextView
             android:id="@+id/seek_gesture_hint"
@@ -456,108 +405,92 @@
             android:paddingBottom="@dimen/spacing_lg"
             android:paddingTop="@dimen/spacing_lg">
 
-            <!-- Linha de controles (retrato) -->
+            <!-- Linha de controles (retrato) — v2.7.7: DUAS linhas.
+                 Numa só linha, tempo + 4 pills não cabem em 360dp
+                 (o botão de tela cheia caía para fora da tela e o tempo
+                 era esmagado para 0dp). Sem os botões −10s/+10s (removidos
+                 no patch 2.7.7 — o pulo continua por double-tap/D-pad).
+                 Linha 1: tempo. Linha 2: velocidade, CC, Descanso,
+                 tela cheia — todos os ids preservados. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:id="@+id/btn_seek_back_info"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:background="@drawable/chip_outline"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center"
-                    android:text="−10s"
-                    android:textColor="@color/md_on_surface"
-                    android:textSize="@dimen/text_chip"
-                    android:textStyle="bold" />
+                android:orientation="vertical">
 
                 <TextView
                     android:id="@+id/info_time_label"
-                    android:layout_width="0dp"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginHorizontal="@dimen/spacing_md"
-                    android:layout_weight="1"
                     android:gravity="center"
                     android:text="00:00 / 00:00"
                     android:textColor="@color/md_on_surface"
                     android:textSize="@dimen/text_card_title"
                     android:textStyle="bold" />
 
-                <TextView
-                    android:id="@+id/btn_seek_fwd_info"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:background="@drawable/chip_outline"
-                    android:clickable="true"
-                    android:focusable="true"
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_sm"
                     android:gravity="center"
-                    android:text="+10s"
-                    android:textColor="@color/md_on_surface"
-                    android:textSize="@dimen/text_chip"
-                    android:textStyle="bold" />
+                    android:orientation="horizontal">
 
-                <TextView
-                    android:id="@+id/btn_speed_info"
-                    android:layout_width="wrap_content"
-                    android:layout_height="48dp"
-                    android:layout_marginStart="@dimen/spacing_sm"
-                    android:background="@drawable/chip_outline"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center"
-                    android:paddingHorizontal="@dimen/spacing_lg"
-                    android:text="1.0×"
-                    android:textColor="@color/md_primary"
-                    android:textSize="@dimen/text_chip"
-                    android:textStyle="bold" />
+                    <TextView
+                        android:id="@+id/btn_speed_info"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:background="@drawable/chip_outline"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:paddingHorizontal="@dimen/spacing_lg"
+                        android:text="1.0×"
+                        android:textColor="@color/md_primary"
+                        android:textSize="@dimen/text_chip"
+                        android:textStyle="bold" />
 
-                <TextView
-                    android:id="@+id/btn_cc_info"
-                    android:layout_width="wrap_content"
-                    android:layout_height="48dp"
-                    android:layout_marginStart="@dimen/spacing_sm"
-                    android:background="@drawable/chip_outline"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center"
-                    android:paddingHorizontal="@dimen/spacing_lg"
-                    android:text="CC"
-                    android:textColor="@color/md_on_surface"
-                    android:textSize="@dimen/text_chip"
-                    android:textStyle="bold" />
+                    <TextView
+                        android:id="@+id/btn_cc_info"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="@dimen/spacing_sm"
+                        android:background="@drawable/chip_outline"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:paddingHorizontal="@dimen/spacing_lg"
+                        android:text="CC"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="@dimen/text_chip"
+                        android:textStyle="bold" />
 
+                    <TextView
+                        android:id="@+id/btn_rest_info"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="@dimen/spacing_sm"
+                        android:background="@drawable/chip_outline"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:paddingHorizontal="@dimen/spacing_lg"
+                        android:text="🌙 Descanso"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="@dimen/text_chip"
+                        android:textStyle="bold" />
 
-                <TextView
-                    android:id="@+id/btn_rest_info"
-                    android:layout_width="wrap_content"
-                    android:layout_height="48dp"
-                    android:layout_marginStart="@dimen/spacing_sm"
-                    android:background="@drawable/chip_outline"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center"
-                    android:paddingHorizontal="@dimen/spacing_lg"
-                    android:text="🌙 Descanso"
-                    android:textColor="@color/md_on_surface"
-                    android:textSize="@dimen/text_chip"
-                    android:textStyle="bold" />
-                <TextView
-                    android:id="@+id/btn_fullscreen"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:layout_marginStart="@dimen/spacing_sm"
-                    android:background="@drawable/chip_outline"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center"
-                    android:text="⛶"
-                    android:textColor="@color/md_on_surface"
-                    android:textSize="20sp" />
+                    <TextView
+                        android:id="@+id/btn_fullscreen"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="@dimen/spacing_sm"
+                        android:background="@drawable/chip_outline"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:text="⛶"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="20sp" />
+                </LinearLayout>
             </LinearLayout>
 
             <!-- Card "Continuar de onde parou" (áudio com posição salva) -->
@@ -640,25 +573,9 @@
                     android:textSize="@dimen/text_button" />
             </LinearLayout>
 
-            <!-- A seguir -->
-            <TextView
-                android:id="@+id/up_next_label"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_xl"
-                android:text="A seguir"
-                android:textColor="@color/md_on_surface"
-                android:textSize="@dimen/text_section_title"
-                android:textStyle="bold" />
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/up_next_recycler"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_md"
-                android:clipToPadding="false"
-                android:nestedScrollingEnabled="false"
-                android:overScrollMode="never" />
+            <!-- v2.7.7: seção "A seguir" (playlist embutida no player)
+                 REMOVIDA — a playlist vive na página (DetailActivity).
+                 Anterior/Próxima acima continuam (avanço de aula). -->
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 
