@@ -350,7 +350,9 @@
   // ── generateQuestions: gera mais questões de um PDF específico (para "Gerar mais 5") ──
   // ★ v2.15.3 (item 4): devolve motivo ESTRUTURADO em vez de boolean:
   //   {ok, reason, detail, pdfName, pdfsWithText, pdfsTested, pdfsTotal, generated}
-  //   reason: 'no_text' | 'ai_down' | 'bad_format' | 'extract_timeout' | 'no_pdf'.
+  //   reason: 'no_text' | 'ocr_failed' | 'ai_down' | 'bad_format' | 'extract_timeout' | 'no_pdf'.
+  //   ★ v2.15.4: 'ocr_failed' = a extração falhou NO OCR (a IA não conseguiu
+  //   ler as páginas escaneadas) — o detail traz o motivo real da IA.
   //   O modal do módulo renderiza o motivo (study-courses.js quizFailureHtml)
   //   em vez de apagar o diagnóstico com a mensagem genérica. Chamadores
   //   internos (questions()/runQuizSession) usam .ok. O texto do erro
@@ -358,9 +360,10 @@
   //   que leem o bodyEl), mas o motivo estruturado é a fonte da verdade.
   //   Extração: sonda os PDFs em round-robin (até 5 por chamada) e conta
   //   quantos têm texto — o erro diz "0 de N PDFs testados têm texto" em
-  //   vez de "os PDFs podem ser…". OCR continua DESATIVADO (v1.0.152):
-  //   PDF sem texto selecionável é PDF escaneado — o erro diz isso
-  //   explicitamente (reativar o OCR é decisão pendente do Elton).
+  //   vez de "os PDFs podem ser…".
+  //   ★ v2.15.4: OCR REATIVADO (ordem do Elton, SEM LIMITES) — o motor
+  //   (meggy-pdf-engine.js) tenta o OCR por IA em TODAS as páginas sem
+  //   texto; se a IA falhar, o motivo é 'ocr_failed' com o motivo real.
   if(!window.__gdiPdfCursor)window.__gdiPdfCursor=0;
   // ★ Fix 13 (Task 20-8): track the lesson the cursor was advanced for.
   //   When the user switches to a different lesson (via the materials tab),
@@ -384,8 +387,9 @@
     window.__gdiPdfCursor++;
     // ★ v2.15.3: sonda até 5 PDFs (round-robin a partir do cursor) e conta
     //   quantos têm texto extraível — o 1º com texto é usado p/ gerar.
-    //   (Todos os 20 seriam até 20×60s de teto interno; 5 é o limite por
-    //   chamada — o nº testado vai no resultado p/ a mensagem ser honesta.)
+    //   (5 é o limite de sondagem por chamada — o nº testado vai no
+    //   resultado p/ a mensagem ser honesta. Não há teto de páginas na
+    //   extração em si desde a v2.15.4.)
     const PROBE_MAX=Math.min(items.length,5);
     const extractPdfText = window.__gdiMeggy.pdf.extractPdfText; // late-bind
     let text=null;
@@ -394,6 +398,7 @@
     let timedOut=0;
     let probed=0;
     let firstNoTextName='';
+    let lastExtractErr=''; // ★ v2.15.4: último erro da extração (p/ motivo 'ocr_failed')
     for(let k=0;k<PROBE_MAX;k++){
       const cand=items[(startIdx+k)%items.length];
       probed++;
@@ -403,18 +408,26 @@
         if(t&&t.trim().length>=50){ text=t; pdfItem=cand; pdfsWithText++; break; }
         if(!firstNoTextName)firstNoTextName=cand.name||'';
       }catch(e){
-        if(/tempo limite/i.test(e&&e.message||''))timedOut++;
+        lastExtractErr=(e&&e.message||String(e)); // ★ v2.15.4: guarda o motivo real
+        if(/tempo limite/i.test(lastExtractErr))timedOut++;
         if(!firstNoTextName)firstNoTextName=cand.name||'';
       }
     }
     if(!text||text.trim().length<50){
       if(timedOut>0&&pdfsWithText===0){
-        const detail='A extração de texto estourou o tempo limite em '+timedOut+' de '+probed+' PDF(s) testado(s) (ex.: '+(firstNoTextName||'material')+'). O arquivo pode ser muito grande ou o CDN do pdf.js está lento. Tente um PDF menor ou recarregue a página.';
+        const detail='A extração de texto estourou o tempo limite em '+timedOut+' de '+probed+' PDF(s) testado(s) (ex.: '+(firstNoTextName||'material')+'). O arquivo pode ser muito grande, escaneado (OCR de muitas páginas) ou o CDN do pdf.js está lento. Aguarde e tente de novo — não há mais teto de páginas.';
         U.setError(bodyEl,'Tempo limite na extração do PDF.');
         return _fail('extract_timeout',detail,firstNoTextName,0,probed,items.length);
       }
-      const detail='Nenhum dos '+probed+' PDF(s) testado(s) deste módulo tem texto selecionável (ex.: '+(firstNoTextName||'material')+'). São PDFs escaneados (só imagens) — OCR desativado, por isso a Meggy não consegue ler o conteúdo. Ative o OCR por IA ou use PDFs com texto selecionável.';
-      U.setError(bodyEl,'PDF sem texto extraível. São PDFs escaneados (só imagens) — OCR desativado.');
+      // ★ v2.15.4: OCR REATIVADO — se a extração falhou NO OCR, o motivo
+      //   é 'ocr_failed' (com o motivo real da IA) e não 'no_text'.
+      if(/OCR (indisponível|falhou)|ai_down|ocr_/i.test(lastExtractErr)){
+        const detail='O OCR por IA falhou ao ler os PDFs escaneados deste módulo (ex.: '+(firstNoTextName||'material')+'): '+lastExtractErr.split('\n')[0].slice(0,300)+' Tente de novo em alguns minutos.';
+        U.setError(bodyEl,'OCR indisponível: '+lastExtractErr.split('\n')[0].slice(0,200));
+        return _fail('ocr_failed',detail,firstNoTextName,0,probed,items.length);
+      }
+      const detail='Nenhum dos '+probed+' PDF(s) testado(s) deste módulo tem texto selecionável (ex.: '+(firstNoTextName||'material')+'). São PDFs escaneados (só imagens) e o OCR por IA não encontrou texto legível. Use PDFs com texto selecionável.';
+      U.setError(bodyEl,'PDF sem texto extraível. São PDFs escaneados (só imagens) — o OCR por IA não encontrou texto legível.');
       return _fail('no_text',detail,firstNoTextName,0,probed,items.length);
     }
     // ★ FIX 20-14 #A (cont.): spinner during AI generation.
