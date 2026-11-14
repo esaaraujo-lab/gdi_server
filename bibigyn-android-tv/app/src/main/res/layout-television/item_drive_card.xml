@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   v2.1.5 — Card de drive · TV (mesmos ids do celular).
-  Tile de ícone rosa com monograma (iniciais do drive) + nome 14sp
+  Tile de ícone rosa com monograma (iniciais do drive) + nome 24sp
   + linha de metadados (DriveItem.tagline, texto curado — sem
   contagens inventadas). Foco via FocusAnimator.attachCard().
 -->
@@ -10,7 +10,7 @@
     android:id="@+id/drive_card_root"
     android:layout_width="@dimen/tv_drive_card_width"
     android:layout_height="wrap_content"
-    android:layout_marginEnd="@dimen/rail_gap"
+    android:layout_marginEnd="@dimen/tv_rail_gap"
     android:clickable="true"
     android:focusable="true"
     android:focusableInTouchMode="true"
@@ -29,7 +29,7 @@
         <!-- Tile de ícone (rosa da marca, monograma escuro) -->
         <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="200dp">
+            android:layout_height="@dimen/tv_drive_tile_height">
 
             <View
                 android:id="@+id/drive_bg"
