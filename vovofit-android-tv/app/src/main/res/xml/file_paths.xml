@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <external-files-path name="downloads" path="Download/" />
-    <external-files-path name="external_downloads" path="." />
-    <cache-path name="cache" path="." />
-    <files-path name="files" path="." />
+<!-- v1.0.4 — FileProvider para compartilhar PDFs baixados (leitor de PDF). -->
+<paths>
+    <cache-path name="pdfs" path="pdfs/" />
+    <cache-path name="downloads" path="downloads/" />
 </paths>
