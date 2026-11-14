@@ -7,7 +7,7 @@ import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
 import com.vovofit.app.R
 import com.vovofit.app.data.DriveItem
-import com.vovofit.app.data.monogramFor
+import com.vovofit.app.util.setWordEllipsized
 import com.vovofit.app.databinding.ItemDriveCardBinding
 import com.vovofit.app.util.FocusAnimator
 import com.vovofit.app.util.SessionManager
@@ -16,7 +16,7 @@ import com.vovofit.app.util.TvUtils
 /**
  * v1.0.4 — Rail "Explorar drives" (conceito home).
  *
- * Tile de ícone rosa com monograma (iniciais do drive) + nome 14sp +
+ * Tile de ícone rosa com o emoji do drive (2.7.5) + nome 14sp +
  * linha de metadados (DriveItem.tagline, texto curado). Foco via
  * FocusAnimator.attachCard (anel 3dp da marca + escala + elevação).
  * O tile rosa é o token `drive_icon_tile` (por marca: rosa/laranja/lima).
@@ -44,9 +44,9 @@ class DriveRailAdapter(
     override fun onBindViewHolder(holder: VH, position: Int) {
         val drive = drives[position]
         with(holder.binding) {
-            driveIcon.text = monogramFor(drive.name)
-            driveName.text = drive.name
-            driveMeta.text = drive.tagline
+            driveIcon.text = drive.icon  // patch: emoji do drive de volta (2.7.5)
+            driveName.setWordEllipsized(drive.name)
+            driveMeta.setWordEllipsized(drive.tagline)
 
             val coursePath = "/${drive.index}:/"
             val sm = SessionManager.get(holder.itemView.context)
