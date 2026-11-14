@@ -50,6 +50,58 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 object UpdateChecker {
 
+    private const val PREFS_UPDATE = "meggy_update"
+    private const val KEY_LAST_CHECK = "last_check_ms"
+    private const val CHECK_INTERVAL_MS = 24L * 60 * 60 * 1000 // 24h
+
+    /**
+     * v2.7.6 — Checagem com throttle (máx. 1×/24h, persistido em prefs).
+     *
+     * Motivo (UPDATECHECKER_DIAGNOSIS.md): a 2.7.2 só checava no onCreate
+     * da Home e falhava 100% silenciosa — por isso o Elton ficou na 2.7.2.
+     * Agora a Home re-checa também no onResume, mas o throttle impede
+     * chamadas repetidas à API do GitHub (limite 60 req/h sem auth).
+     *
+     * O resume de um APK pendente NUNCA é adiado pelo throttle: um APK
+     * já baixado tem que instalar na hora, mesmo que a checagem esteja
+     * dentro da janela de 24h.
+     */
+    fun checkForUpdateThrottled(context: Context, currentVersion: String) {
+        // 1) APK pendente primeiro — nunca atrasado pelo throttle. Se
+        // instalou, retorna (o checkForUpdate faria a mesma instalação).
+        if (resumePendingApk(context)) return
+        // 2) Throttle: 1×/24h.
+        val prefs = context.getSharedPreferences(PREFS_UPDATE, Context.MODE_PRIVATE)
+        val last = prefs.getLong(KEY_LAST_CHECK, 0L)
+        val now = System.currentTimeMillis()
+        if (now - last < CHECK_INTERVAL_MS) return
+        prefs.edit().putLong(KEY_LAST_CHECK, now).apply()
+        checkForUpdate(context, currentVersion, showFeedback = false)
+    }
+
+    /**
+     * v2.7.6 — Retoma a instalação de um APK já baixado (KEY_PENDING_APK),
+     * se existir. Mesma lógica do início de checkForUpdate (v2.7.4),
+     * extraída para ser chamada antes do throttle. Retorna true quando
+     * instalou (ou quando não havia APK pendente instalável — o
+     * chamador decide se segue para a checagem de rede).
+     */
+    fun resumePendingApk(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_UPDATE, Context.MODE_PRIVATE)
+        val pending = prefs.getString(KEY_PENDING_APK, null) ?: return false
+        val file = java.io.File(pending)
+        if (!file.exists()) {
+            prefs.edit().remove(KEY_PENDING_APK).apply()
+            return false
+        }
+        if (!canInstallPackages(context)) return false
+        prefs.edit().remove(KEY_PENDING_APK).apply()
+        showToast(context, "Instalando atualização...")
+        installApk(context, file)
+        return true
+    }
+
+
     private const val GITHUB_RELEASES_API = "https://api.github.com/repos/esaaraujo-lab/gdi_server/releases?per_page=100"
     private const val TAG_PREFIX = "native-v"
     private const val PREFS_NAME = "meggy_update"
