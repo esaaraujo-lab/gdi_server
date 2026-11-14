@@ -36,12 +36,19 @@
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
+                <ImageView
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginEnd="@dimen/spacing_sm"
+                    android:contentDescription="@string/app_name"
+                    android:src="@drawable/ic_launcher_foreground_img" />
+
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="@string/app_name"
-                    android:textColor="@color/md_on_surface"
+                    android:textColor="@color/md_primary"
                     android:textSize="@dimen/text_topbar_title"
                     android:textStyle="bold" />
 
@@ -53,12 +60,13 @@
                     android:focusable="true"
                     android:padding="@dimen/spacing_sm"
                     android:text="@string/home_logout"
-                    android:textColor="@color/md_on_surface_variant"
+                    android:textColor="@color/md_primary"
                     android:textSize="@dimen/text_topbar_action" />
             </LinearLayout>
 
             <!-- Hero -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/heroCard"
                 android:layout_width="match_parent"
                 android:layout_height="@dimen/hero_height"
                 android:layout_marginTop="@dimen/spacing_lg"
@@ -74,20 +82,23 @@
                         android:id="@+id/heroBg"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:background="@drawable/card_gradient_pink" />
+                        android:background="@drawable/hero_dark_gradient" />
 
-                    <!-- Marca do hero (monograma do título) -->
-                    <TextView
-                        android:id="@+id/heroIcon"
-                        android:layout_width="72dp"
-                        android:layout_height="72dp"
-                        android:layout_gravity="top|end"
-                        android:layout_margin="@dimen/spacing_lg"
-                        android:background="@drawable/btn_play_circle"
-                        android:gravity="center"
-                        android:textColor="@color/md_on_primary"
-                        android:textSize="32sp"
-                        android:textStyle="bold" />
+                    <!-- Foto real do destaque (Coil) + scrim escuro para o texto -->
+                    <ImageView
+                        android:id="@+id/heroImage"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="centerCrop"
+                        android:visibility="gone"
+                        android:contentDescription="@string/thumb_desc" />
+
+                    <View
+                        android:id="@+id/heroScrim"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/tile_overlay_bottom"
+                        android:visibility="gone" />
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -141,41 +152,8 @@
                             android:textSize="@dimen/text_button"
                             android:textStyle="bold" />
 
-                        <LinearLayout
-                            android:id="@+id/heroDots"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="@dimen/spacing_sm"
-                            android:orientation="horizontal" />
                     </LinearLayout>
 
-                    <TextView
-                        android:id="@+id/heroPrev"
-                        android:layout_width="36dp"
-                        android:layout_height="36dp"
-                        android:layout_gravity="center_vertical|start"
-                        android:layout_marginStart="@dimen/spacing_sm"
-                        android:background="@drawable/btn_play_circle"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:gravity="center"
-                        android:text="‹"
-                        android:textColor="@color/md_on_surface"
-                        android:textSize="24sp" />
-
-                    <TextView
-                        android:id="@+id/heroNext"
-                        android:layout_width="36dp"
-                        android:layout_height="36dp"
-                        android:layout_gravity="center_vertical|end"
-                        android:layout_marginEnd="@dimen/spacing_sm"
-                        android:background="@drawable/btn_play_circle"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:gravity="center"
-                        android:text="›"
-                        android:textColor="@color/md_on_surface"
-                        android:textSize="24sp" />
                 </FrameLayout>
             </com.google.android.material.card.MaterialCardView>
 
@@ -219,7 +197,7 @@
                                 android:id="@+id/featuredBg"
                                 android:layout_width="match_parent"
                                 android:layout_height="match_parent"
-                                android:background="@drawable/card_gradient_pink" />
+                                android:background="@drawable/hero_dark_gradient" />
 
                             <ImageView
                                 android:id="@+id/featuredThumb"
@@ -230,13 +208,14 @@
                                 android:contentDescription="@string/thumb_desc" />
 
                             <TextView
-                                android:id="@+id/featuredMonogram"
+                                android:id="@+id/featuredFallbackIcon"
                                 android:layout_width="match_parent"
                                 android:layout_height="match_parent"
                                 android:gravity="center"
                                 android:textColor="@color/tile_title"
                                 android:textSize="@dimen/text_monogram"
-                                android:textStyle="bold" />
+                                android:textStyle="bold"
+                                android:alpha="0.95" />
                         </FrameLayout>
 
                         <LinearLayout
