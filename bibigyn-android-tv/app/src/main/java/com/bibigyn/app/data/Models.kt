@@ -17,16 +17,25 @@ import org.json.JSONObject
 /**
  * One of the 12 hardcoded root drives shown on the home screen.
  */
+/**
+ * v2.1.5 — `tagline` é a linha de metadados do card do drive na home
+ * (texto curado, descritivo — NUNCA contagens inventadas: o app não
+ * lista o conteúdo do drive sem abrir). `isConcurso` marca os drives
+ * de concurso, usados pelo filtro "Concursos" da busca e pela aba
+ * "Concursos" da Minha lista.
+ */
 data class DriveItem(
     val index: Int,
     val name: String,
     val rootFolderId: String?,
-    val icon: String = "📁"
+    val icon: String = "📁",
+    val tagline: String = "",
+    val isConcurso: Boolean = false
 ) {
     companion object {
         val ALL: List<DriveItem> = listOf(
-            DriveItem(6,  "CLUBE FIT",                   null, "💪"),
-            DriveItem(7,  "HIPOPRESSIVOS",               null, "🧘")
+            DriveItem(6,  "CLUBE FIT",                   null, "💪", "Treinos + saúde"),
+            DriveItem(7,  "HIPOPRESSIVOS",               null, "🧘", "Exercícios guiados")
         )
     }
 }
@@ -60,6 +69,19 @@ data class FileItem(
                 name.endsWith(".mov", true) ||
                 name.endsWith(".avi", true)
     val isPdf: Boolean get() = mimeType == "application/pdf" || name.endsWith(".pdf", true)
+
+    /** v2.1.5: Markdown (.md/.markdown) — abre no leitor de MD embutido. */
+    val isMarkdown: Boolean
+        get() = name.endsWith(".md", true) || name.endsWith(".markdown", true) ||
+            name.endsWith(".txt", true)
+
+    /** v2.1.5: arquivo de legenda (.vtt/.srt) — sidecar da aula. */
+    val isSubtitle: Boolean
+        get() = name.endsWith(".vtt", true) || name.endsWith(".srt", true)
+
+    /** v2.1.5: transcrição da aula (pasta/arquivo "Transcrição"/"transcript"). */
+    val isTranscript: Boolean
+        get() = name.contains("transcri", true) || name.contains("transcript", true)
 
     /** Human-readable file size, e.g. "1.4 GB". */
     val humanSize: String
@@ -200,7 +222,7 @@ data class HeroItem(
             HeroItem(
                 title = "Clube Fit — Treinos Completos",
                 subtitle = "Aulas de fitness, musculação e cardio. Vídeos HD.",
-                badge = "💪 DESTAQUE DA SEMANA",
+                badge = "DESTAQUE DA SEMANA",
                 drivePath = "/6:/",
                 driveName = "CLUBE FIT",
                 icon = "💪"
@@ -208,7 +230,7 @@ data class HeroItem(
             HeroItem(
                 title = "Hipopressivos — Técnica Completa",
                 subtitle = "Exercícios hipopressivos para fortalecimento core.",
-                badge = "🧘 EM ALTA",
+                badge = "EM ALTA",
                 drivePath = "/7:/",
                 driveName = "HIPOPRESSIVOS",
                 icon = "🧘"
@@ -238,4 +260,12 @@ fun colorFromString(str: String): Int {
     var hash = 0
     for (c in str) hash = c.code + ((hash shl 5) - hash)
     return STRING_COLOR_PALETTE[Math.floorMod(hash, STRING_COLOR_PALETTE.size)]
+}
+
+fun monogramFor(title: String): String {
+    val words = title.split(Regex("[^\\p{L}0-9]+"))
+        .filter { it.isNotBlank() && it[0].isLetterOrDigit() }
+    if (words.isEmpty()) return "M"
+    if (words.size == 1) return words[0].take(2).uppercase()
+    return (words[0].take(1) + words[1].take(1)).uppercase()
 }
