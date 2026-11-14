@@ -56,7 +56,7 @@ import org.json.JSONObject
  *     (`.gdi-resumos/<fileName>`), a "pasta de materiais".
  *
  *   Auth: todas exigem `Cookie: session=<sessão>` (401 sem ela).
- *   ATENÇÃO: o worker tem um portão de auth para TODO /api/* — um 401
+ *   ATENÇÃO: o worker tem um portão de auth para TODO /api/... — um 401
  *   NÃO prova que a rota existe (até rota inexistente dá 401 sem
  *   sessão). Só um 404 COM sessão válida prova ausência da rota.
  *
