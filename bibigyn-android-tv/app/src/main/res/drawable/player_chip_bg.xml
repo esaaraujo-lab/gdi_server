@@ -1,29 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- v2.7.9 — Fundo dos botões da barra do player: mesmo visual do
-     chip_outline no estado normal, MAS com estados de pressionado
-     (fundo mais claro + borda rosa 2dp) e focado (borda rosa 3dp = o
-     anel de foco da TV). chip_outline é um shape estático — por isso
-     o botão parecia não responder (zero feedback visual). -->
+<!-- v2.1.8 — Botoes do player (Descanso, velocidade, ⛶): icones
+     discretos sobre o scrim, nao pilulas pesadas (Elton 11:48, skills
+     video-player-ux + android-tv-design). Estados por STATE LAYER
+     (branco 8% hover / 12% foco / 16% pressionado, sem forma saturada)
+     + anel rosa 3dp no foco (TV) + leve escala via FocusAnimator.
+     Normal = transparente; o rosa da marca fica SO para o progresso
+     e para o anel de foco. Raio 16dp (mesma categoria, mesmo raio). -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_pressed="true">
         <shape android:shape="rectangle">
             <corners android:radius="16dp" />
-            <solid android:color="@color/md_surface_variant" />
-            <stroke android:width="2dp" android:color="@color/md_primary" />
+            <solid android:color="#29FFFFFF" />
         </shape>
     </item>
     <item android:state_focused="true">
         <shape android:shape="rectangle">
             <corners android:radius="16dp" />
-            <solid android:color="@color/md_surface_variant" />
+            <solid android:color="#1FFFFFFF" />
             <stroke android:width="3dp" android:color="@color/md_primary" />
+        </shape>
+    </item>
+    <item android:state_hovered="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="16dp" />
+            <solid android:color="#14FFFFFF" />
         </shape>
     </item>
     <item>
         <shape android:shape="rectangle">
             <corners android:radius="16dp" />
-            <solid android:color="@color/md_surface_container" />
-            <stroke android:width="1dp" android:color="@color/md_outline" />
+            <solid android:color="@android:color/transparent" />
         </shape>
     </item>
 </selector>
