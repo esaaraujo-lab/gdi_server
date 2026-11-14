@@ -6,13 +6,14 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import coil.load
 import com.vovofit.app.R
 import com.vovofit.app.data.FileItem
 import com.vovofit.app.data.colorFromString
-import com.vovofit.app.data.monogramFor
+import com.vovofit.app.data.coverResForPath
 import com.vovofit.app.databinding.ItemFlatLessonBinding
 import com.vovofit.app.util.CardGradient
+import com.vovofit.app.util.CoverLibrary
+import com.vovofit.app.util.loadCoverChain
 import com.vovofit.app.util.FocusAnimator
 import com.vovofit.app.util.Format
 import com.vovofit.app.util.SessionManager
@@ -80,16 +81,16 @@ class FlatLessonAdapter(
             flatTitle.text = item.name
             flatThumbBg.background = CardGradient.drawable(res, colorFromString(item.name))
 
-            val thumb = item.thumbnailLink
-            if (!thumb.isNullOrBlank() && (item.isVideo || item.isAudio || item.isPdf)) {
-                flatThumb.visibility = View.VISIBLE
-                flatMonogram.visibility = View.GONE
-                flatThumb.load(thumb) { error(R.drawable.card_gradient_pink) }
-            } else {
-                flatThumb.visibility = View.GONE
-                flatMonogram.visibility = View.VISIBLE
-                flatMonogram.text = monogramFor(item.name)
-            }
+            // v1.0.8 camada 3 — (2) thumb (só vídeo/áudio/PDF, como
+            // antes) > (3) imagem da biblioteca pelo nome/pasta >
+            // (4) capa do drive (nunca monograma).
+            val coverRes = coverResForPath(folderPath)
+            val thumb = if (!item.thumbnailLink.isNullOrBlank() &&
+                (item.isVideo || item.isAudio || item.isPdf)
+            ) item.thumbnailLink else null
+            flatThumb.visibility = View.VISIBLE
+            flatMonogram.visibility = View.GONE
+            flatThumb.loadCoverChain(thumb, coverRes, item.name, folderPath)
 
             val dur = if (item.isVideo || item.isAudio) sm.getResumeDuration(folderPath, item.name) else 0L
             flatMeta.text = when {
