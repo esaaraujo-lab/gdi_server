@@ -3,6 +3,7 @@ package com.bibigyn.app.data
 import android.content.Context
 import com.bibigyn.app.BiBiGynApp
 import com.bibigyn.app.util.SessionManager
+
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -125,6 +126,32 @@ class ApiService(private val context: Context) {
         return result
     }
     
+    /**
+     * Onda 2 — GET /api/featured-courses (rota real do worker v2,
+     * handleFeaturedList): cursos em destaque do admin, com
+     * `cover_url` a partir da v2.15.6 (parse defensivo em
+     * FeaturedCourse.fromJson — null quando ausente). Best-effort e
+     * silencioso: null em qualquer falha (rede/auth/servidor sem a
+     * rota) — a UI cai para a thumb do Drive e depois para a capa
+     * gerada. Não inventa endpoint nem muda BASE_URL.
+     */
+    suspend fun getFeaturedCourses(): List<FeaturedCourse>? {
+        val request = Request.Builder()
+            .url("${BiBiGynApp.BASE_URL}/api/featured-courses")
+            .header("Cookie", "session=${sessionManager.sessionCookie ?: ""}")
+            .build()
+        return try {
+            val response = BiBiGynApp.okHttpClient.newCall(request).execute()
+            if (!response.isSuccessful) return null
+            val body = response.body?.string() ?: return null
+            val json = JSONObject(body)
+            if (!json.optBoolean("ok", false)) return null
+            FeaturedCourse.parseList(json.optJSONArray("courses"))
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     /**
      * ★ v2.1.2 LOGIN PERSISTENCE FIX:
      * Validates the current session by making a lightweight API call.
