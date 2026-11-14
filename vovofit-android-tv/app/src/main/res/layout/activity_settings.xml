@@ -1,29 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  v2.0.0 — Settings screen.
+  v1.0.4 — Ajustes (conceito Ajustes, FUNÇÕES REAIS — ver REDESIGN_NOTES.md).
+  Perfil (nome real do usuário; SEM e-mail — o app não tem esse dado;
+  SEM selo "Assinante" — não há endpoint de assinatura; pill mostra
+  "Conta ativa" enquanto a sessão é válida). PREFERÊNCIAS: Notificações
+  (lembrete diário 19h, real), Reprodução automática (corrigido 2.7.4),
+  Baixar só no Wi-Fi (cache do ExoPlayer), Legendas (trilha de texto).
+  CONFIGURAÇÕES: Qualidade do vídeo (Auto/HD/SD via track selector,
+  só com >1 trilha), Velocidade padrão, Timer de sono, Verificar
+  atualizações, Sobre (versão dinâmica). Sair = fullLogout.
+  Nenhuma opção existente foi removida — só reestilizada.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="@color/bg_primary">
+    android:background="@color/md_background"
+    android:orientation="vertical">
 
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="64dp"
-        android:background="@color/bg_primary"
+        android:background="@color/md_background"
         android:elevation="0dp"
-        app:title="Ajustes"
-        app:titleTextColor="@color/text_primary"
+        app:navigationIconTint="@color/md_primary"
+        app:title="@string/settings_title"
         app:titleTextAppearance="@style/TextAppearance.Material3.TitleLarge"
-        app:navigationIconTint="@color/meggy_pink" />
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="#22FF8B9F" />
+        app:titleTextColor="@color/md_on_surface" />
 
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
@@ -35,244 +39,555 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="20dp">
+            android:paddingHorizontal="@dimen/content_margin"
+            android:paddingBottom="@dimen/spacing_lg">
 
-            <!-- ─── Reprodução ─── -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="REPRODUÇÃO"
-                android:textColor="@color/meggy_pink"
-                android:textSize="11sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.18"
-                android:paddingBottom="6dp" />
-
-            <!-- Default speed -->
+            <!-- Perfil -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:background="@drawable/tile_focus_border"
                 android:gravity="center_vertical"
-                android:paddingVertical="14dp">
+                android:orientation="horizontal"
+                android:padding="@dimen/spacing_lg">
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Velocidade padrão"
-                        android:textColor="@color/text_primary"
-                        android:textSize="15sp" />
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Aplicada ao abrir qualquer vídeo"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="12sp"
-                        android:layout_marginTop="2dp" />
-                </LinearLayout>
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_speed_down"
-                    style="@style/Widget.Material3.Button.IconButton"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:text="−"
-                    android:textSize="20sp"
-                    android:textColor="@color/meggy_pink" />
                 <TextView
-                    android:id="@+id/speed_value"
-                    android:layout_width="60dp"
-                    android:layout_height="wrap_content"
+                    android:id="@+id/profileAvatar"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:background="@drawable/btn_play_circle"
                     android:gravity="center"
-                    android:textColor="@color/text_primary"
-                    android:textSize="15sp"
+                    android:textColor="@color/md_on_primary"
+                    android:textSize="24sp"
                     android:textStyle="bold" />
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_speed_up"
-                    style="@style/Widget.Material3.Button.IconButton"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:text="+"
-                    android:textSize="20sp"
-                    android:textColor="@color/meggy_pink" />
-            </LinearLayout>
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="#2230363D" />
-
-            <!-- Autoplay next -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingVertical="14dp">
 
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/spacing_lg"
                     android:layout_weight="1"
                     android:orientation="vertical">
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Reproduzir próximo automaticamente"
-                        android:textColor="@color/text_primary"
-                        android:textSize="15sp" />
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Avança para o próximo vídeo da playlist"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="12sp"
-                        android:layout_marginTop="2dp" />
-                </LinearLayout>
 
-                <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/switch_autoplay"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
+                    <TextView
+                        android:id="@+id/profileName"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="@dimen/text_detail_course"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/profileSub"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Conta Vovó Fit"
+                        android:textColor="@color/md_on_surface_variant"
+                        android:textSize="@dimen/text_card_subtitle" />
+
+                    <TextView
+                        android:id="@+id/profilePill"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_sm"
+                        android:background="@drawable/chip_badge"
+                        android:paddingHorizontal="@dimen/spacing_sm"
+                        android:paddingVertical="@dimen/spacing_xs"
+                        android:text="@string/active_account"
+                        android:textColor="@color/md_primary"
+                        android:textSize="@dimen/text_card_progress"
+                        android:textStyle="bold" />
+                </LinearLayout>
             </LinearLayout>
 
-            <View
+            <!-- PREFERÊNCIAS -->
+            <TextView
                 android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="#2230363D" />
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:text="PREFERÊNCIAS"
+                android:textColor="@color/md_primary"
+                android:textSize="@dimen/text_chip"
+                android:textStyle="bold" />
 
-            <!-- Default sleep timer -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingVertical="14dp">
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:background="@drawable/tile_focus_border"
+                android:orientation="vertical"
+                android:paddingHorizontal="@dimen/spacing_lg">
 
                 <LinearLayout
-                    android:layout_width="0dp"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-                    <TextView
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingVertical="@dimen/spacing_md">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Notificações"
+                            android:textColor="@color/md_on_surface"
+                            android:textSize="@dimen/text_card_title" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Lembrete diário de estudo às 19h"
+                            android:textColor="@color/md_on_surface_variant"
+                            android:textSize="@dimen/text_card_subtitle" />
+                    </LinearLayout>
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchNotifications"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Timer de sono padrão"
-                        android:textColor="@color/text_primary"
-                        android:textSize="15sp" />
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Inicia automaticamente ao abrir o player"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="12sp"
-                        android:layout_marginTop="2dp" />
+                        android:focusable="true" />
                 </LinearLayout>
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_sleep_down"
-                    style="@style/Widget.Material3.Button.IconButton"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:text="−"
-                    android:textSize="20sp"
-                    android:textColor="@color/meggy_pink" />
-                <TextView
-                    android:id="@+id/sleep_value"
-                    android:layout_width="60dp"
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/md_outline_variant" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:gravity="center"
-                    android:textColor="@color/text_primary"
-                    android:textSize="15sp"
-                    android:textStyle="bold" />
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_sleep_up"
-                    style="@style/Widget.Material3.Button.IconButton"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:text="+"
-                    android:textSize="20sp"
-                    android:textColor="@color/meggy_pink" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingVertical="@dimen/spacing_md">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Reprodução automática"
+                            android:textColor="@color/md_on_surface"
+                            android:textSize="@dimen/text_card_title" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Avançar para a próxima aula sozinho"
+                            android:textColor="@color/md_on_surface_variant"
+                            android:textSize="@dimen/text_card_subtitle" />
+                    </LinearLayout>
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchAutoplay"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:focusable="true" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/md_outline_variant" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingVertical="@dimen/spacing_md">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Baixar só no Wi-Fi"
+                            android:textColor="@color/md_on_surface"
+                            android:textSize="@dimen/text_card_title" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="O vídeo assistido só é guardado no aparelho no Wi-Fi"
+                            android:textColor="@color/md_on_surface_variant"
+                            android:textSize="@dimen/text_card_subtitle" />
+                    </LinearLayout>
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchWifiOnly"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:focusable="true" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/md_outline_variant" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingVertical="@dimen/spacing_md">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Legendas"
+                            android:textColor="@color/md_on_surface"
+                            android:textSize="@dimen/text_card_title" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Mostrar legendas quando a aula tiver"
+                            android:textColor="@color/md_on_surface_variant"
+                            android:textSize="@dimen/text_card_subtitle" />
+                    </LinearLayout>
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchSubtitles"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:focusable="true" />
+                </LinearLayout>
             </LinearLayout>
 
-            <!-- ─── Atualização ─── -->
+            <!-- CONFIGURAÇÕES -->
             <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="ATUALIZAÇÃO"
-                android:textColor="@color/meggy_pink"
-                android:textSize="11sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.18"
-                android:paddingTop="24dp"
-                android:paddingBottom="6dp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_check_update"
-                style="@style/Widget.Material3.Button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="🔍 Verificar atualização"
-                android:backgroundTint="@color/meggy_pink"
-                android:textColor="#FF000000"
-                app:cornerRadius="14dp" />
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:text="CONFIGURAÇÕES"
+                android:textColor="@color/md_primary"
+                android:textSize="@dimen/text_chip"
+                android:textStyle="bold" />
 
-            <!-- ─── Conta ─── -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="CONTA"
-                android:textColor="@color/meggy_pink"
-                android:textSize="11sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.18"
-                android:paddingTop="24dp"
-                android:paddingBottom="6dp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_logout"
-                style="@style/Widget.Material3.Button.OutlinedButton"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Sair da conta"
-                android:textColor="@color/accent_red"
-                app:strokeColor="@color/accent_red"
-                app:cornerRadius="14dp" />
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:background="@drawable/tile_focus_border"
+                android:orientation="vertical"
+                android:paddingHorizontal="@dimen/spacing_lg">
 
-            <!-- ─── Sobre ─── -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="SOBRE"
-                android:textColor="@color/meggy_pink"
-                android:textSize="11sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.18"
-                android:paddingTop="24dp"
-                android:paddingBottom="6dp" />
+                <!-- Qualidade do vídeo -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingVertical="@dimen/spacing_md">
 
-            <TextView
-                android:id="@+id/about_text"
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Qualidade do vídeo"
+                            android:textColor="@color/md_on_surface"
+                            android:textSize="@dimen/text_card_title" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Vale quando a aula tiver mais de uma qualidade"
+                            android:textColor="@color/md_on_surface_variant"
+                            android:textSize="@dimen/text_card_subtitle" />
+                    </LinearLayout>
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnQualityDown"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/chip_outline"
+                        android:focusable="true"
+                        android:text="−"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="18sp" />
+
+                    <TextView
+                        android:id="@+id/qualityValue"
+                        android:layout_width="64dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:text="Auto"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="@dimen/text_card_title"
+                        android:textStyle="bold" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnQualityUp"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/chip_outline"
+                        android:focusable="true"
+                        android:text="+"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="18sp" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/md_outline_variant" />
+
+                <!-- Velocidade padrão -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingVertical="@dimen/spacing_md">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Velocidade padrão"
+                            android:textColor="@color/md_on_surface"
+                            android:textSize="@dimen/text_card_title" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Aplicada ao abrir cada aula"
+                            android:textColor="@color/md_on_surface_variant"
+                            android:textSize="@dimen/text_card_subtitle" />
+                    </LinearLayout>
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnSpeedDown"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/chip_outline"
+                        android:focusable="true"
+                        android:text="−"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="18sp" />
+
+                    <TextView
+                        android:id="@+id/speedValue"
+                        android:layout_width="64dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:text="1.0×"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="@dimen/text_card_title"
+                        android:textStyle="bold" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnSpeedUp"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/chip_outline"
+                        android:focusable="true"
+                        android:text="+"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="18sp" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/md_outline_variant" />
+
+                <!-- Timer de sono -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingVertical="@dimen/spacing_md">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Timer de sono"
+                            android:textColor="@color/md_on_surface"
+                            android:textSize="@dimen/text_card_title" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Pausa o player após o tempo"
+                            android:textColor="@color/md_on_surface_variant"
+                            android:textSize="@dimen/text_card_subtitle" />
+                    </LinearLayout>
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnSleepDown"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/chip_outline"
+                        android:focusable="true"
+                        android:text="−"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="18sp" />
+
+                    <TextView
+                        android:id="@+id/sleepValue"
+                        android:layout_width="64dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:text="Off"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="@dimen/text_card_title"
+                        android:textStyle="bold" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnSleepUp"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/chip_outline"
+                        android:focusable="true"
+                        android:text="+"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="18sp" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/md_outline_variant" />
+
+                <!-- Verificar atualizações -->
+                <LinearLayout
+                    android:id="@+id/btnCheckUpdate"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingVertical="@dimen/spacing_lg">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Verificar atualizações"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="@dimen/text_card_title" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="›"
+                        android:textColor="@color/md_on_surface_variant"
+                        android:textSize="22sp" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/md_outline_variant" />
+
+                <!-- Sobre -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingVertical="@dimen/spacing_lg">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Sobre"
+                            android:textColor="@color/md_on_surface"
+                            android:textSize="@dimen/text_card_title" />
+
+                        <TextView
+                            android:id="@+id/aboutText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:textColor="@color/md_on_surface_variant"
+                            android:textSize="@dimen/text_card_subtitle" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Sair -->
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnLogout"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textColor="@color/text_secondary"
-                android:textSize="13sp"
-                android:lineSpacingExtra="3dp" />
+                android:layout_height="@dimen/cta_height"
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:background="@drawable/btn_primary_pill"
+                android:focusable="true"
+                android:text="@string/logout"
+                android:textColor="@color/md_on_primary"
+                android:textSize="@dimen/text_button"
+                android:textStyle="bold" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 
+    <!-- Bottom nav — oculta na TV (código) -->
     <com.google.android.material.bottomnavigation.BottomNavigationView
-        android:id="@+id/bottom_nav"
+        android:id="@+id/bottomNav"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/bg_surface"
+        android:layout_marginHorizontal="@dimen/content_margin"
+        android:layout_marginBottom="@dimen/spacing_md"
+        android:background="@drawable/nav_bar_background"
+        android:elevation="@dimen/elevation_3"
+        app:itemActiveIndicatorStyle="@style/NavIndicatorPill"
+        app:itemIconTint="@color/bottom_nav_item_color"
+        app:itemTextColor="@color/bottom_nav_item_color"
         app:labelVisibilityMode="labeled"
-        app:itemTextColor="@color/meggy_pink"
-        app:itemIconTint="@color/meggy_pink"
-        app:menu="@menu/bottom_nav" />
+        app:menu="@menu/bottom_nav_menu" />
 </LinearLayout>
