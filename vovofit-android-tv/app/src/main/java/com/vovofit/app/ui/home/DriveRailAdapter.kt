@@ -1,32 +1,25 @@
 package com.vovofit.app.ui.home
 
-import android.content.res.Resources
-import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
 import android.view.LayoutInflater
-import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AnimationUtils
 import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
 import com.vovofit.app.R
 import com.vovofit.app.data.DriveItem
-import com.vovofit.app.data.colorFromString
-import com.vovofit.app.util.SessionManager
+import com.vovofit.app.data.monogramFor
 import com.vovofit.app.databinding.ItemDriveCardBinding
+import com.vovofit.app.util.FocusAnimator
+import com.vovofit.app.util.SessionManager
+import com.vovofit.app.util.TvUtils
 
 /**
- * Horizontal-rail adapter for the 12 root drives (v1.8.0).
+ * v1.0.4 — Rail "Explorar drives" (conceito home).
  *
- * Each card is a 150dp × 210dp poster-style tile with a per-drive
- * gradient derived from the drive name hash, big emoji icon, and the
- * drive name overlaid on a bottom scrim.
- *
- * Animations
- * ----------
- *  • [tile_appear] staggered fade-in + slide-up on first bind.
- *  • Focus change — scale 1.0 ↔ 1.06, elevation 0 ↔ 16dp, pink halo
- *    ring toggled.
+ * Tile de ícone rosa com monograma (iniciais do drive) + nome 14sp +
+ * linha de metadados (DriveItem.tagline, texto curado). Foco via
+ * FocusAnimator.attachCard (anel 3dp da marca + escala + elevação).
+ * O tile rosa é o token `drive_icon_tile` (por marca: rosa/laranja/lima).
  */
 class DriveRailAdapter(
     private val drives: List<DriveItem>,
@@ -39,20 +32,7 @@ class DriveRailAdapter(
                 val pos = bindingAdapterPosition
                 if (pos != RecyclerView.NO_POSITION) onClick(drives[pos])
             }
-            binding.root.isFocusable = true
-            binding.root.isFocusableInTouchMode = true
-            binding.root.setOnFocusChangeListener { _, hasFocus ->
-                animateFocus(hasFocus)
-            }
-        }
-
-        fun animateFocus(hasFocus: Boolean) {
-            val scale = if (hasFocus) 1.06f else 1f
-            binding.driveCardRoot.animate().scaleX(scale).scaleY(scale)
-                .setDuration(180)
-                .start()
-            binding.driveCardRoot.cardElevation = if (hasFocus) 16f else 0f
-            binding.driveFocusRing.visibility = if (hasFocus) View.VISIBLE else View.INVISIBLE
+            FocusAnimator.attachCard(binding.driveCardRoot, TvUtils.isTv(binding.root.context))
         }
     }
 
@@ -64,13 +44,10 @@ class DriveRailAdapter(
     override fun onBindViewHolder(holder: VH, position: Int) {
         val drive = drives[position]
         with(holder.binding) {
-            driveIcon.text = drive.icon
+            driveIcon.text = monogramFor(drive.name)
             driveName.text = drive.name
-            // Per-drive gradient background derived from the drive name hash.
-            val baseColor = colorFromString(drive.name)
-            driveBg.background = driveGradientDrawable(holder.itemView.resources, baseColor)
+            driveMeta.text = drive.tagline
 
-            // ★ v1.0.2: ⭐ Minha lista — favorita o drive (curso) inteiro.
             val coursePath = "/${drive.index}:/"
             val sm = SessionManager.get(holder.itemView.context)
             driveFavStar.text = if (sm.isFavoriteCourse(coursePath)) "⭐" else "☆"
@@ -83,26 +60,10 @@ class DriveRailAdapter(
                     Toast.LENGTH_SHORT).show()
             }
         }
-        // Staggered appear animation
         val anim = AnimationUtils.loadAnimation(holder.itemView.context, R.anim.tile_appear)
         anim.startOffset = (position % 12) * 40L
         holder.binding.root.startAnimation(anim)
     }
 
     override fun getItemCount(): Int = drives.size
-
-    private fun driveGradientDrawable(res: Resources, baseColor: Int): GradientDrawable {
-        val r = Color.red(baseColor)
-        val g = Color.green(baseColor)
-        val b = Color.blue(baseColor)
-        val start = Color.argb(0x59, r, g, b)
-        val end = Color.parseColor("#FF0F1218")
-        val cornerPx = (16 * res.displayMetrics.density)
-        return GradientDrawable(
-            GradientDrawable.Orientation.TL_BR,
-            intArrayOf(start, end)
-        ).apply {
-            cornerRadius = cornerPx
-        }
-    }
 }
