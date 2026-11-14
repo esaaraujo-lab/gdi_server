@@ -22,6 +22,7 @@ import com.bibigyn.app.R
 import com.bibigyn.app.data.AiService
 import com.bibigyn.app.data.ApiService
 import com.bibigyn.app.data.FileItem
+import com.bibigyn.app.data.DriveItem
 import com.bibigyn.app.data.colorFromString
 import com.bibigyn.app.data.monogramFor
 import com.bibigyn.app.databinding.ActivityDetailBinding
@@ -36,6 +37,7 @@ import com.bibigyn.app.ui.search.SearchActivity
 import com.bibigyn.app.ui.settings.SettingsActivity
 import com.bibigyn.app.util.AuthHelper
 import com.bibigyn.app.util.CrossFolderPlaylist
+import com.bibigyn.app.util.CoverLibrary
 import com.bibigyn.app.util.Format
 import com.bibigyn.app.util.LessonDescription
 import com.bibigyn.app.util.PlaylistManager
@@ -108,6 +110,11 @@ class DetailActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         api = ApiService(this)
+        // Camada 3 — biblioteca de capas por tipo: busca o manifesto
+        // em 2º plano (nunca bloqueia); o hero resolve a imagem
+        // quando o manifesto já chegou (a listagem da pasta roda
+        // depois, em rede, então o fetch costuma ganhar a corrida).
+        CoverLibrary.warmUp(this)
         currentPath = intent.getStringExtra("drivePath") ?: "/"
         folderName = intent.getStringExtra("folderName") ?: "Detalhe"
 
@@ -117,7 +124,9 @@ class DetailActivity : AppCompatActivity() {
         binding.toolbar.setNavigationOnClickListener { finish() }
         val baseColor = colorFromString(folderName)
         binding.heroBg.background = heroGradient(baseColor)
-        binding.heroMonogram.text = monogramFor(folderName)
+        // Onda 2: o monograma só é atribuído dentro de
+        // showGeneratedHeroCover (último recurso, drive sem capa
+        // gerada) — nunca como capa.
 
         // TV: header com busca + avatar; sem bottom nav.
         val isTv = TvUtils.isTv(this)
@@ -318,16 +327,19 @@ class DetailActivity : AppCompatActivity() {
             }
             allFiles = files
 
-            // Hero: foto do 1º vídeo (thumb real) ou monograma.
+            // Hero: (b) foto do 1º vídeo (thumb real) ou (c) capa
+            // gerada do drive — nunca monograma como capa.
             val firstThumb = files.firstOrNull { (it.isVideo || it.isAudio) && !it.thumbnailLink.isNullOrBlank() }
                 ?.thumbnailLink
             if (!firstThumb.isNullOrBlank()) {
                 binding.heroImage.visibility = View.VISIBLE
                 binding.heroMonogram.visibility = View.GONE
-                binding.heroImage.load(firstThumb) { error(R.drawable.card_gradient_pink) }
+                binding.heroImage.load(firstThumb) {
+                    error(R.drawable.card_gradient_pink)
+                    listener(onError = { _, _ -> showGeneratedHeroCover() })
+                }
             } else {
-                binding.heroImage.visibility = View.GONE
-                binding.heroMonogram.visibility = View.VISIBLE
+                showGeneratedHeroCover()
             }
 
             // Chips reais: N aulas, N pastas, X% concluído. Sem "HD".
@@ -437,9 +449,14 @@ class DetailActivity : AppCompatActivity() {
         descriptionJob?.cancel()
         val sm = SessionManager.get(this)
         // (a) Cache local — instantâneo ("abre na hora da próxima vez").
+        // Onda 2: o gancho é sorteado AQUI, a cada exibição, sobre o
+        // resumo guardado (que é salvo sem gancho).
         val cached = sm.getLessonDescription(currentPath)
         if (!cached.isNullOrBlank()) {
-            showDescription(cached, getString(R.string.summary_state_generated))
+            showDescription(
+                LessonDescription.withHook(cached),
+                getString(R.string.summary_state_generated)
+            )
             return
         }
         // (b)/(c) provisória imediata (ou branco) enquanto resolve.
@@ -458,6 +475,8 @@ class DetailActivity : AppCompatActivity() {
             )) {
                 is LessonDescription.Outcome.Ready -> {
                     sm.saveLessonDescription(currentPath, outcome.text)
+                    // Onda 2: gancho sorteado na exibição (o texto
+                    // guardado continua sem gancho).
                     // Grava na pasta de materiais (best-effort).
                     val filePath = LessonDescription.lessonFilePath(currentPath, files)
                     if (filePath != null) {
@@ -466,7 +485,10 @@ class DetailActivity : AppCompatActivity() {
                         )
                         AiService.saveToFolder(this@DetailActivity, filePath, fileName, outcome.text)
                     }
-                    showDescription(outcome.text, getString(R.string.summary_state_generated))
+                    showDescription(
+                        LessonDescription.withHook(outcome.text),
+                        getString(R.string.summary_state_generated)
+                    )
                 }
                 is LessonDescription.Outcome.Generating -> {
                     // Ainda gerando após 3 min: mantém o texto e avisa.
@@ -504,6 +526,40 @@ class DetailActivity : AppCompatActivity() {
     private fun showDescriptionState(state: String) {
         binding.resumoState.text = state
         binding.resumoState.visibility = if (state.isBlank()) View.GONE else View.VISIBLE
+    }
+
+    /**
+     * Onda 2 (c) — capa gerada do drive no hero do detalhe (sem
+     * thumb no Drive). O monograma só aparece quando o drive não tem
+     * capa gerada.
+     */
+    private fun showGeneratedHeroCover() {
+        // Camada 3 — biblioteca por tipo (nome da pasta → caminho):
+        // sem ela, (4) capa gerada / monograma.
+        val libraryUrl = CoverLibrary.resolve(this, folderName, currentPath)
+        if (!libraryUrl.isNullOrBlank()) {
+            binding.heroImage.visibility = View.VISIBLE
+            binding.heroMonogram.visibility = View.GONE
+            binding.heroImage.load(libraryUrl) {
+                error(R.drawable.card_gradient_pink)
+                listener(onError = { _, _ -> showGeneratedDriveCover() })
+            }
+            return
+        }
+        showGeneratedDriveCover()
+    }
+
+    private fun showGeneratedDriveCover() {
+        val coverRes = DriveItem.coverResForPath(currentPath)
+        if (coverRes != null) {
+            binding.heroImage.visibility = View.VISIBLE
+            binding.heroMonogram.visibility = View.GONE
+            binding.heroImage.load(coverRes)
+        } else {
+            binding.heroImage.visibility = View.GONE
+            binding.heroMonogram.text = monogramFor(folderName)
+            binding.heroMonogram.visibility = View.VISIBLE
+        }
     }
 
     private fun updateHeroProgress() {
