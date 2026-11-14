@@ -27,7 +27,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * v2.7.4 — UpdateChecker com filtro por tag prefix native-v*
+ * v1.0.6 — UpdateChecker com filtro por tag prefix vovofit-v*
  *
  * ★ Mudanças v2.7.4 (instalação dentro do app):
  *  - Download IN-APP com progresso visível (diálogo com barra de progresso
@@ -45,7 +45,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  *  - Confirmação: toast "Instalador aberto — confirme a instalação" quando
  *    o instalador é disparado com sucesso.
  *  - A consulta de versão SEMPRE vai à API de releases do GitHub e pega a
- *    primeira release com prefixo native-v* (per_page=100 para a release
+ *    primeira release com prefixo vovofit-v* (per_page=100 para a release
  *    nunca cair da primeira página). Nenhum cache de versão.
  */
 object UpdateChecker {
@@ -56,6 +56,8 @@ object UpdateChecker {
 
     /**
      * v1.0.4 — Checagem com throttle (máx. 1×/24h, persistido em prefs).
+     * v1.0.6 — timestamp só após HTTP 200 + corpo válido
+     * (antes era gravado ANTES da rede e uma falha queimava a janela).
      *
      * Motivo (UPDATECHECKER_DIAGNOSIS.md): a 2.7.2 só checava no onCreate
      * da Home e falhava 100% silenciosa — por isso o Elton ficou na 2.7.2.
@@ -75,7 +77,10 @@ object UpdateChecker {
         val last = prefs.getLong(KEY_LAST_CHECK, 0L)
         val now = System.currentTimeMillis()
         if (now - last < CHECK_INTERVAL_MS) return
-        prefs.edit().putLong(KEY_LAST_CHECK, now).apply()
+        // v1.0.6 — o timestamp NÃO é gravado aqui: só após uma
+        // resposta bem-sucedida (HTTP 200 + corpo JSON válido) dentro de
+        // checkForUpdate. Uma checagem que falha (sem rede / rate limit)
+        // não queima a janela de 24h.
         checkForUpdate(context, currentVersion, showFeedback = false)
     }
 
@@ -103,7 +108,7 @@ object UpdateChecker {
 
 
     private const val GITHUB_RELEASES_API = "https://api.github.com/repos/esaaraujo-lab/gdi_server/releases?per_page=100"
-    private const val TAG_PREFIX = "native-v"
+    private const val TAG_PREFIX = "vovofit-v"
     private const val PREFS_NAME = "meggy_update"
     private const val KEY_DOWNLOADED_VERSION = "downloaded_version"
     private const val KEY_PENDING_APK = "pending_apk_path"
@@ -152,7 +157,12 @@ object UpdateChecker {
 
                 val releasesArray = JSONArray(body)
 
-                // Busca a primeira release com tag prefix "native-v"
+                // v1.0.6 — checagem OK (HTTP 200 + corpo válido): grava o
+                // timestamp do throttle agora. Falhas de rede/HTTP acima
+                // retornam antes daqui e não queimam a janela de 24h.
+                prefs.edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).apply()
+
+                // Busca a primeira release com tag prefix "vovofit-v"
                 var remoteVersion = ""
                 var apkUrl: String? = null
                 var apkSize = 0L
@@ -178,7 +188,7 @@ object UpdateChecker {
                 }
 
                 if (remoteVersion.isEmpty()) {
-                    if (showFeedback) showToast(context, "Nenhuma release native-v* encontrada")
+                    if (showFeedback) showToast(context, "Nenhuma release vovofit-v* encontrada")
                     return@Thread
                 }
 
@@ -191,7 +201,7 @@ object UpdateChecker {
                 // Versao remota e mais nova → download in-app + install
                 if (isNewer(remoteVersion, localVersion) && apkUrl != null) {
                     val sizeStr = if (apkSize > 0) " (${apkSize / 1024 / 1024} MB)" else ""
-                    val fileName = "meggy-$remoteVersion.apk"
+                    val fileName = "vovofit-$remoteVersion.apk"
 
                     val lastDownloaded = prefs.getString(KEY_DOWNLOADED_VERSION, "") ?: ""
                     val downloadedFile = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
