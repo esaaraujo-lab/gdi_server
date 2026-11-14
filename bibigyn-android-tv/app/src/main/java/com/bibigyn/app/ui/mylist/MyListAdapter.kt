@@ -1,188 +1,122 @@
 package com.bibigyn.app.ui.mylist
 
-import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AnimationUtils
+import android.widget.Toast
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import coil.load
 import com.bibigyn.app.R
 import com.bibigyn.app.data.FileItem
-import com.bibigyn.app.util.SessionManager
 import com.bibigyn.app.data.colorFromString
-import com.bibigyn.app.databinding.ItemRailCardBinding
+import com.bibigyn.app.data.monogramFor
+import com.bibigyn.app.databinding.ItemMylistCardBinding
+import com.bibigyn.app.util.CardGradient
+import com.bibigyn.app.util.FocusAnimator
+import com.bibigyn.app.util.Format
+import com.bibigyn.app.util.SessionManager
+import com.bibigyn.app.util.TvUtils
 
 /**
- * v2.0.0 — Adapter for the "Minha lista" grid.
- * Mirrors FileAdapter's tile styling (gradient + scrim + overlays)
- * without the watched/resume badge logic (favorites have no playback
- * state on this screen).
- */
-/**
- * v2.1.3 — a ⭐ no card REMOVE o item da lista (toggle + reload na Activity).
+ * v2.1.5 — Minha lista — abas Aulas (e Concursos).
+ *
+ * Cards com chip de tipo ("AULA"), thumb/monograma, título, progresso
+ * real + % (vídeos/áudios com resume), ⭐ rosa para remover dos
+ * favoritos. Foco via FocusAnimator.attachCard.
+ * O "Continuar" (abrir) é o clique no card — a aba Cursos usa
+ * [MyListCourseAdapter], que tem o botão Continuar rosa.
  */
 class MyListAdapter(
-    private val onClick: (FileItem) -> Unit,
-    private val onFavoriteToggle: (FileItem) -> Unit = {}
-) : RecyclerView.Adapter<MyListAdapter.VH>() {
+    private val onFile: (FileItem) -> Unit
+) : ListAdapter<FileItem, MyListAdapter.VH>(DIFF) {
 
-    private val items = mutableListOf<FileItem>()
+    private var currentFolderPath: String = ""
 
-    fun submit(newItems: List<FileItem>) {
-        items.clear(); items.addAll(newItems); notifyDataSetChanged()
+    fun setFolderPath(path: String) {
+        currentFolderPath = path
     }
 
-    inner class VH(val binding: ItemRailCardBinding) : RecyclerView.ViewHolder(binding.root) {
+    inner class VH(val binding: ItemMylistCardBinding) : RecyclerView.ViewHolder(binding.root) {
         init {
-            binding.root.isFocusable = true
-            binding.root.isFocusableInTouchMode = true
             binding.root.setOnClickListener {
                 val pos = bindingAdapterPosition
                 if (pos == RecyclerView.NO_POSITION) return@setOnClickListener
-                onClick(items[pos])
+                onFile(getItem(pos))
             }
-            binding.root.setOnFocusChangeListener { _, hasFocus -> animateFocus(hasFocus) }
-        }
-        fun animateFocus(hasFocus: Boolean) {
-            val scale = if (hasFocus) 1.06f else 1f
-            binding.cardRoot.animate().scaleX(scale).scaleY(scale).setDuration(180).start()
-            binding.cardRoot.cardElevation = if (hasFocus) 16f else 0f
-            binding.focusRing.visibility = if (hasFocus) View.VISIBLE else View.INVISIBLE
+            FocusAnimator.attach(binding.root, TvUtils.isTv(binding.root.context))
         }
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
         val inflater = LayoutInflater.from(parent.context)
-        val vh = VH(ItemRailCardBinding.inflate(inflater, parent, false))
-        vh.binding.root.layoutParams = ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        )
-        return vh
+        return VH(ItemMylistCardBinding.inflate(inflater, parent, false))
     }
 
     override fun onBindViewHolder(holder: VH, position: Int) {
-        val f = items[position]
+        val item = getItem(position)
         val res = holder.itemView.resources
-        with(holder.binding) {
-            cardTitle.text = f.name
-            cardSubtitle.text = when {
-                f.isVideo -> "vídeo"
-                f.isAudio -> "áudio"
-                f.isPdf -> "PDF"
-                else -> f.humanSize
-            }
-            cardIcon.text = when {
-                f.isVideo -> "\uD83C\uDFA5"
-                f.isAudio -> "\uD83C\uDFB5"
-                f.isPdf -> "\uD83D\uDCC4"
-                else -> "\uD83D\uDCC4"
-            }
-            val base = colorFromString(f.name)
-            cardBg.background = gradient(res, base)
-            progressBar.visibility = View.GONE
-            watchedBadge.visibility = View.GONE
-            continueBadge.visibility = View.GONE
+        val ctx = holder.itemView.context
 
-            // ★ v2.1.3: ⭐ aqui REMOVE da lista (o item já está favoritado).
-            favStar.visibility = View.VISIBLE
-            favStar.text = "⭐"
-            favStar.setOnClickListener { onFavoriteToggle(f) }
+        with(holder.binding) {
+            mylistMeta.text = item.folderPath ?: ""
+            mylistTypeChip.text = when {
+                item.isVideo -> "AULA"
+                item.isAudio -> "ÁUDIO"
+                item.isPdf -> "PDF"
+                item.isMarkdown -> "MD"
+                item.isFolder -> "CURSO"
+                else -> "ARQUIVO"
+            }
+            mylistTitle.text = item.name
+            mylistBg.background = CardGradient.drawable(res, colorFromString(item.name))
+
+            val thumb = item.thumbnailLink
+            if (!thumb.isNullOrBlank() && (item.isVideo || item.isAudio || item.isPdf)) {
+                mylistThumb.visibility = View.VISIBLE
+                mylistMonogram.visibility = View.GONE
+                mylistThumb.load(thumb) { error(R.drawable.card_gradient_pink) }
+            } else {
+                mylistThumb.visibility = View.GONE
+                mylistMonogram.visibility = View.VISIBLE
+                mylistMonogram.text = monogramFor(item.name)
+            }
+
+            val sm = SessionManager.get(ctx)
+            val fp = item.folderPath ?: currentFolderPath
+            val progress = if (item.isVideo || item.isAudio) sm.getResumeProgress(fp, item.name) else 0
+            if (progress > 0) {
+                val pos = sm.getResume(fp, item.name)
+                val dur = sm.getResumeDuration(fp, item.name)
+                mylistProgressRow.visibility = View.VISIBLE
+                mylistProgress.progress = progress
+                mylistProgressText.text = "$progress% · ${Format.remainingText(dur, pos)}"
+                mylistContinue.visibility = View.VISIBLE
+            } else {
+                mylistProgressRow.visibility = View.GONE
+                mylistContinue.visibility = if (item.isVideo || item.isAudio) View.VISIBLE else View.GONE
+            }
+
+            mylistFav.setOnClickListener {
+                sm.toggleFavorite(item.copy(folderPath = fp))
+                Toast.makeText(ctx, "Removido da Minha lista", Toast.LENGTH_SHORT).show()
+            }
+            mylistContinue.setOnClickListener { onFile(item) }
         }
+
         val anim = AnimationUtils.loadAnimation(holder.itemView.context, R.anim.tile_appear)
         anim.startOffset = (position % 12) * 40L
         holder.binding.root.startAnimation(anim)
     }
 
-    override fun getItemCount(): Int = items.size
-
-    private fun gradient(res: android.content.res.Resources, baseColor: Int): GradientDrawable {
-        val r = Color.red(baseColor); val g = Color.green(baseColor); val b = Color.blue(baseColor)
-        val start = Color.argb(0x59, r, g, b)
-        val end = Color.parseColor("#FF0F1218")
-        return GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(start, end)).apply {
-            cornerRadius = 16 * res.displayMetrics.density
-        }
-    }
-}
-
-/**
- * v2.1.3 — Adapter da seção "📚 Cursos" da Minha lista.
- * Um curso favorito é uma pasta do Drive (drive raiz ou subpasta).
- * Clique abre o curso; a ⭐ remove da lista.
- */
-class MyListCourseAdapter(
-    private val onClick: (SessionManager.FavCourse) -> Unit,
-    private val onFavoriteToggle: (SessionManager.FavCourse) -> Unit = {}
-) : RecyclerView.Adapter<MyListCourseAdapter.VH>() {
-
-    private val items = mutableListOf<SessionManager.FavCourse>()
-
-    fun submit(newItems: List<SessionManager.FavCourse>) {
-        items.clear(); items.addAll(newItems); notifyDataSetChanged()
-    }
-
-    inner class VH(val binding: ItemRailCardBinding) : RecyclerView.ViewHolder(binding.root) {
-        init {
-            binding.root.isFocusable = true
-            binding.root.isFocusableInTouchMode = true
-            binding.root.setOnClickListener {
-                val pos = bindingAdapterPosition
-                if (pos == RecyclerView.NO_POSITION) return@setOnClickListener
-                onClick(items[pos])
-            }
-            binding.root.setOnFocusChangeListener { _, hasFocus -> animateFocus(hasFocus) }
-        }
-        fun animateFocus(hasFocus: Boolean) {
-            val scale = if (hasFocus) 1.06f else 1f
-            binding.cardRoot.animate().scaleX(scale).scaleY(scale).setDuration(180).start()
-            binding.cardRoot.cardElevation = if (hasFocus) 16f else 0f
-            binding.focusRing.visibility = if (hasFocus) View.VISIBLE else View.INVISIBLE
-        }
-    }
-
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
-        val inflater = LayoutInflater.from(parent.context)
-        val vh = VH(ItemRailCardBinding.inflate(inflater, parent, false))
-        vh.binding.root.layoutParams = ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        )
-        return vh
-    }
-
-    override fun onBindViewHolder(holder: VH, position: Int) {
-        val c = items[position]
-        val res = holder.itemView.resources
-        with(holder.binding) {
-            cardTitle.text = c.name
-            cardSubtitle.text = "curso"
-            cardIcon.text = "\uD83D\uDCC1"
-            val base = colorFromString(c.name)
-            cardBg.background = gradient(res, base)
-            progressBar.visibility = View.GONE
-            watchedBadge.visibility = View.GONE
-            continueBadge.visibility = View.GONE
-
-            // ★ v2.1.3: ⭐ aqui REMOVE o curso da lista.
-            favStar.visibility = View.VISIBLE
-            favStar.text = "⭐"
-            favStar.setOnClickListener { onFavoriteToggle(c) }
-        }
-        val anim = AnimationUtils.loadAnimation(holder.itemView.context, R.anim.tile_appear)
-        anim.startOffset = (position % 12) * 40L
-        holder.binding.root.startAnimation(anim)
-    }
-
-    override fun getItemCount(): Int = items.size
-
-    private fun gradient(res: android.content.res.Resources, baseColor: Int): GradientDrawable {
-        val r = Color.red(baseColor); val g = Color.green(baseColor); val b = Color.blue(baseColor)
-        val start = Color.argb(0x59, r, g, b)
-        val end = Color.parseColor("#FF0F1218")
-        return GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(start, end)).apply {
-            cornerRadius = 16 * res.displayMetrics.density
+    companion object {
+        val DIFF = object : DiffUtil.ItemCallback<FileItem>() {
+            override fun areItemsTheSame(oldItem: FileItem, newItem: FileItem): Boolean =
+                oldItem.id == newItem.id && oldItem.name == newItem.name
+            override fun areContentsTheSame(oldItem: FileItem, newItem: FileItem): Boolean =
+                oldItem == newItem
         }
     }
 }
