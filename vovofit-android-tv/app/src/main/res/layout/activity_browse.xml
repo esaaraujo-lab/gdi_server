@@ -42,7 +42,7 @@
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:layout_gravity="bottom"
-            android:background="#22FF8B9F" />
+            android:background="#22A3E635" />
     </FrameLayout>
 
     <!-- Breadcrumb chip -->
