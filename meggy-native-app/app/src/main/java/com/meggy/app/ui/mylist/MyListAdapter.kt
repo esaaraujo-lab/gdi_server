@@ -75,7 +75,8 @@ class MyListAdapter(
             mylistBg.background = CardGradient.drawable(res, colorFromString(item.name))
 
             // v2.7.11 camada (3): sem thumb, a imagem da biblioteca
-            // pelo nome da aula/pasta; sem match, o monograma de
+            // pelo nome da aula/pasta; sem match, a imagem 'geral'
+            // (fallback da camada 3); sem manifesto, o monograma de
             // antes (a Minha lista ainda não usa a capa gerada).
             val thumb = LibraryCovers.remoteCover(
                 item.thumbnailLink, item.name, item.folderPath ?: currentFolderPath
