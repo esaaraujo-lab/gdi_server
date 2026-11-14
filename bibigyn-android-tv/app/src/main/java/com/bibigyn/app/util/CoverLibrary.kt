@@ -29,12 +29,14 @@ import org.json.JSONObject
  * aula/pasta/curso, casando as keywords do manifesto contra o nome.
  *
  * ┌─────────────────────────────────────────────────────────────────┐
- * │ PONTO ÚNICO DE LIGAÇÃO — URL DO MANIFESTO                      │
- * │ [LIBRARY_MANIFEST_URL] abaixo. Hoje está VAZIA (não            │
- * │ configurada): a URL ainda não existe — o Elton vai mandá-la   │
- * │ quando a biblioteca estiver publicada no jsDelivr. Para ligar,│
- * │ basta preencher essa UMA constante com a URL do manifesto;    │
- * │ nenhum outro arquivo precisa mudar.                           │
+ * │ PONTO ÚNICO DE LIGAÇÃO — URL DO MANIFESTO (LIGADA 2.1.9)      │
+ * │ [LIBRARY_MANIFEST_URL] abaixo: manifesto v1, 58 imagens,      │
+ * │ publicado e verificado no jsDelivr (md5                         │
+ * │ d3280cb57cc79073734ce8c446d6009f, 14.950 bytes). Fallback:       │
+ * │ [LIBRARY_MANIFEST_RAW_URL] (raw.githubusercontent.com, mesmo   │
+ * │ conteúdo) — o jsDelivr já devolveu 403 transitório ("Package   │
+ * │ size exceeded the configured limit of 50 MB") logo após o      │
+ * │ lote de commits; ver COVER_LIBRARY_NOTES.md §6.               │
  * └─────────────────────────────────────────────────────────────────┘
  *
  * CONTRATO DO MANIFESTO (formato sugerido — documentado aqui; o
@@ -46,12 +48,12 @@ import org.json.JSONObject
  *     {
  *       "id": "hipopressivos",
  *       "keywords": ["hipopressivos"],
- *       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/covers/hipopressivos.jpg"
+ *       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/hipopressivos.jpg"
  *     },
  *     {
  *       "id": "cardio",
- *       "keywords": ["cardio", "aerobico", "aerobico"],
- *       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/covers/cardio.jpg"
+ *       "keywords": ["cardio", "aerobico", "hiit"],
+ *       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/cardio.jpg"
  *     }
  *   ]
  * }
@@ -70,38 +72,57 @@ import org.json.JSONObject
  *   1. Normaliza cada nome candidato ([normalize]): minúsculas,
  *      sem acentos, sem pontuação, espaços colapsados
  *      ("Hipopressivos — Aula 03" → "hipopressivos aula 03").
- *   2. Tenta os candidatos NA ORDEM dada (o chamador passa do mais
+ *   2. Tenta TODOS os candidatos juntos (o chamador passa do mais
  *      específico ao mais genérico: nome da aula, depois pasta,
  *      depois curso/drive ou o caminho completo).
  *   3. Uma keyword casa quando o nome normalizado A CONTÉM como
  *      substring ("musculacao pernas" contém "pernas").
- *   4. Ganha o match com a keyword MAIS LONGA; empate → o primeiro
- *      candidato, depois a primeira entrada do manifesto.
- *   5. Sem match → null (o chamador cai para a camada 4).
+ *   4. Ganha o match com a keyword MAIS LONGA, considerando TODOS
+ *      os nomes candidatos juntos; empate → a PRIMEIRA entrada do
+ *      manifesto (entradas específicas primeiro — regra oficial
+ *      COVER_LIBRARY_NOTES.md §3). A ordem dos candidatos NÃO
+ *      desempata: só serve para juntar os nomes a casar.
+ *   5. Sem match e com o manifesto carregado → a imagem 'geral'
+ *      (última do manifesto, keyword 'meggy'): fallback EXPLÍCITO
+ *      da camada 3. Sem manifesto carregado → null (o chamador cai
+ *      para a camada 4, arte padrão).
  *   Keywords com menos de 3 caracteres normalizados são ignoradas
- *   (uma keyword de 1–2 letras casaria com quase tudo).
+ *   (uma keyword de 1–2 letras casaria com quase tudo): a keyword
+ *   'pf' (2 letras) NÃO casa sozinha — PF casa por 'policia
+ *   federal' / 'agente da policia federal' / 'agente pf'.
  *
  * CACHE / REDE:
  *   - O manifesto é buscado em 2º plano ([warmUp], na abertura da
  *     home / detalhe / player) e NUNCA bloqueia a UI.
  *   - Cache em memória + persistido (SharedPreferences, TTL 24h).
- *   - Sem URL configurada, sem rede, ou fetch falhando → a camada 3
- *     é pulada EM SILÊNCIO (resolve devolve null) e a UI cai para
- *     a camada 4. Nunca trava a tela, nunca toast de erro por isso.
+ *   - Sem URL configurada, sem rede, ou fetch falhando nas DUAS
+ *     URLs (jsDelivr e raw) → a camada 3 é pulada EM SILÊNCIO
+ *     (resolve devolve null) e a UI cai para a camada 4. Nunca
+ *     trava a tela, nunca toast de erro por isso.
  *   - [resolve] é síncrono e só lê o cache (memória, ou o disco
  *     quando a memória está vazia); nunca faz rede na thread da UI.
  */
 object CoverLibrary {
 
     /**
-     * URL DO MANIFESTO DA BIBLIOTECA DE CAPAS (jsDelivr).
-     *
-     * TODO: ligar quando o Elton mandar a URL do manifesto no
-     * jsDelivr — preencher esta constante e SÓ ela. Enquanto estiver
-     * vazia, a camada 3 fica desligada e a hierarquia da capa é
-     * (1) admin → (2) thumb → (4) arte gerada, como antes.
+     * URL DO MANIFESTO DA BIBLIOTECA DE CAPAS (jsDelivr) — LIGADA
+     * na onda final 2.1.9. Manifesto v1, 58 imagens, publicado em
+     * gdi_server@main/staging/modular/meggy/covers/ e verificado
+     * (md5 d3280cb57cc79073734ce8c446d6009f, 14.950 bytes).
      */
-    const val LIBRARY_MANIFEST_URL = ""
+    const val LIBRARY_MANIFEST_URL =
+        "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/cover-manifest.json"
+
+    /**
+     * Fallback do manifesto (raw.githubusercontent.com, mesmo
+     * conteúdo, sem CDN). O jsDelivr já devolveu 403 transitório
+     * ("Package size exceeded the configured limit of 50 MB") logo
+     * após o lote de commits da biblioteca — ver
+     * COVER_LIBRARY_NOTES.md §6. [fetchManifestBody] tenta a CDN
+     * primeiro e o raw em seguida; o raw é fallback imediato.
+     */
+    const val LIBRARY_MANIFEST_RAW_URL =
+        "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/staging/modular/meggy/covers/cover-manifest.json"
 
     /** TTL do cache do manifesto (memória + disco): 24h. */
     const val CACHE_TTL_MS = 24L * 60L * 60L * 1000L
@@ -212,9 +233,11 @@ object CoverLibrary {
     /**
      * Resolve a URL da imagem da biblioteca para os nomes dados, do
      * mais específico ao mais genérico (ex.: nome da aula, pasta,
-     * curso/drive). Ganha a keyword mais longa; empate → primeiro
-     * candidato, depois primeira entrada do manifesto. Null = sem
-     * manifesto carregado, sem URL configurada ou sem match — o
+     * curso/drive). Ganha a keyword mais longa, considerando TODOS
+     * os candidatos juntos; empate → primeira entrada do manifesto.
+     * Com o manifesto carregado e sem match, devolve a imagem
+     * 'geral' (fallback explícito da camada 3). Null = sem manifesto
+     * carregado, sem URL configurada, ou manifesto sem 'geral' — o
      * chamador cai para a camada 4 em silêncio.
      */
     fun resolve(context: Context, vararg names: String?): String? {
@@ -223,28 +246,29 @@ object CoverLibrary {
         if (images.isEmpty()) return null
         var bestUrl: String? = null
         var bestLen = -1
-        var bestCandidate = Int.MAX_VALUE
         var bestEntry = Int.MAX_VALUE
-        names.forEachIndexed { candidateIdx, rawName ->
-            val name = normalize(rawName ?: return@forEachIndexed)
-            if (name.isEmpty()) return@forEachIndexed
+        names.forEach { rawName ->
+            val name = normalize(rawName ?: return@forEach)
+            if (name.isEmpty()) return@forEach
             images.forEachIndexed { entryIdx, image ->
                 for (keyword in image.keywords) {
                     if (keyword.isEmpty() || !name.contains(keyword)) continue
                     val len = keyword.length
                     if (len > bestLen ||
-                        (len == bestLen && (candidateIdx < bestCandidate ||
-                            (candidateIdx == bestCandidate && entryIdx < bestEntry)))
+                        (len == bestLen && entryIdx < bestEntry)
                     ) {
                         bestLen = len
-                        bestCandidate = candidateIdx
                         bestEntry = entryIdx
                         bestUrl = image.url
                     }
                 }
             }
         }
-        return bestUrl
+        if (bestUrl != null) return bestUrl
+        // Fallback explícito da camada 3 (regra oficial §3): manifesto
+        // carregado e nenhum match → imagem 'geral' (última do
+        // manifesto, id "geral"). Sem entrada 'geral', null (camada 4).
+        return images.firstOrNull { it.id == "geral" }?.url
     }
 
     // ─────────────────────────── cache + fetch ───────────────────────────
@@ -269,8 +293,9 @@ object CoverLibrary {
     }
 
     /**
-     * Busca o manifesto em 2º plano (se a URL estiver configurada e
-     * o cache estiver vencido) e avisa [onLoaded] na thread principal
+     * Busca o manifesto em 2º plano (se uma URL estiver configurada e
+     * o cache estiver vencido — jsDelivr, com fallback para o raw) e
+     * avisa [onLoaded] na thread principal
      * quando terminar — com ou sem sucesso. Nunca lança, nunca mostra
      * erro: sem URL / sem rede / fetch falhando, o cache (se houver)
      * continua valendo e a camada 3 é pulada em silêncio.
@@ -290,22 +315,43 @@ object CoverLibrary {
         }
     }
 
+    /**
+     * Busca o corpo do manifesto (IO): tenta a CDN (jsDelivr) e, em
+     * falha (HTTP não-2xx, corpo vazio ou exceção — ex. o 403
+     * transitório de limite de pacote), tenta o raw. Devolve null se
+     * as duas falharem. Nunca lança.
+     */
+    private fun fetchManifestBody(): String? {
+        val urls = listOf(LIBRARY_MANIFEST_URL, LIBRARY_MANIFEST_RAW_URL)
+        for (url in urls) {
+            if (url.isBlank()) continue
+            try {
+                val request = Request.Builder()
+                    .url(url)
+                    .header("Accept", "application/json")
+                    .build()
+                val body = BiBiGynApp.okHttpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@use null
+                    response.body?.string()
+                } ?: continue
+                if (body.isBlank()) continue
+                return body
+            } catch (_: Exception) {
+                // Próxima URL (ou desiste em silêncio, sem travar a UI).
+            }
+        }
+        return null
+    }
+
     /** Busca o manifesto (IO) quando necessário. Nunca lança. */
     suspend fun fetchIfNeeded(context: Context) {
-        if (LIBRARY_MANIFEST_URL.isBlank()) return
+        if (LIBRARY_MANIFEST_URL.isBlank() && LIBRARY_MANIFEST_RAW_URL.isBlank()) return
         ensureLoadedFromDisk(context)
         if (cachedImages != null &&
             System.currentTimeMillis() - cachedAtMs <= CACHE_TTL_MS
         ) return
         try {
-            val request = Request.Builder()
-                .url(LIBRARY_MANIFEST_URL)
-                .header("Accept", "application/json")
-                .build()
-            val body = BiBiGynApp.okHttpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return
-                response.body?.string() ?: return
-            }
+            val body = fetchManifestBody() ?: return
             val parsed = parseManifest(body)
             cachedImages = parsed
             cachedAtMs = System.currentTimeMillis()
