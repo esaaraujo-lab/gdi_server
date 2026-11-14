@@ -90,7 +90,8 @@ class FileAdapter(
             cardBg.background = CardGradient.drawable(res, baseColor)
 
             // Thumb real quando houver; sem ela, a imagem da biblioteca
-            // pelo nome do arquivo/pasta (camada 3); sem match, a capa
+            // pelo nome do arquivo/pasta (camada 3); sem match, a imagem
+            // 'geral' (fallback da camada 3); sem manifesto, a capa
             // gerada do drive (onda 2 — nunca monograma).
             val coverRes = com.meggy.app.util.ThumbArt.coverResForPath(currentFolderPath)
             val thumbUrl = LibraryCovers.remoteCover(item.thumbnailLink, item.name, currentFolderPath)
