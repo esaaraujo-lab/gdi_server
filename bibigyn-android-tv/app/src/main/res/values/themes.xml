@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Base app theme — Material 3, dark, Meggy pink/purple accents. -->
-    <style name="Theme.Meggy" parent="Theme.Material3.Dark.NoActionBar">
+    <!-- Base app theme — Material 3, dark, BiBi orange accents. -->
+    <style name="Theme.BiBiFit" parent="Theme.Material3.Dark.NoActionBar">
         <item name="colorPrimary">@color/md_primary</item>
         <item name="colorOnPrimary">@color/md_on_primary</item>
         <item name="colorPrimaryContainer">@color/md_primary_container</item>
@@ -34,7 +34,7 @@
     </style>
 
     <!-- Splash theme — no action bar, gradient background, no content until activity loads. -->
-    <style name="Theme.Meggy.Splash" parent="Theme.Meggy">
+    <style name="Theme.BiBiFit.Splash" parent="Theme.BiBiFit">
         <item name="android:windowBackground">@drawable/gradient_meggy</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
     </style>
