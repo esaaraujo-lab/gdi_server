@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">VOVÓ FIT</string>
+    <string name="app_name">Vovó Fit</string>
+    <string name="app_subtitle">Plataforma de Estudos</string>
 
     <!-- Login -->
     <string name="login_welcome">Bem-vindo de volta</string>
@@ -23,4 +24,39 @@
     <!-- Misc -->
     <string name="ok">OK</string>
     <string name="cancel">Cancelar</string>
+    <!-- v2.7.6 — descrições de acessibilidade + textos do redesign -->
+    <string name="thumb_desc">Thumbnail da aula</string>
+    <string name="fav_desc">Adicionar à Minha lista</string>
+    <string name="explore_cta">Explorar →</string>
+    <string name="continue_watching">Continue assistindo</string>
+    <string name="continue_from_where">Continuar de onde parou</string>
+    <string name="explore_drives">Explorar drives</string>
+    <string name="search_hint">Buscar cursos, aulas e concursos…</string>
+    <string name="results_label">Resultados</string>
+    <string name="recent_searches">Buscas recentes</string>
+    <string name="mylist_title">Minha lista</string>
+    <string name="settings_title">Ajustes</string>
+    <string name="tab_summary">Resumo</string>
+    <string name="tab_lessons">Aulas</string>
+    <string name="tab_questions">Questões</string>
+    <string name="tab_flashcards">Flashcards</string>
+    <string name="cta_continue">▶ Continuar assistindo</string>
+    <string name="cta_watch">▶ Assistir</string>
+    <string name="no_summary">Ainda não há resumo gerado para este curso.</string>
+    <!-- v2.7.6 — estados da descrição da aula (aba Resumo, Elton 00:21). -->
+    <string name="summary_state_generated">Descrição gerada pela Meggy</string>
+    <string name="summary_state_provisional">Descrição provisória — a Meggy ainda vai gerar o texto completo</string>
+    <string name="summary_state_generating">Gerando descrição com a Meggy…</string>
+    <string name="summary_state_none">Ainda não há descrição gerada para esta aula.</string>
+    <string name="summary_state_no_files">Esta aula não tem transcrição nem PDF para a Meggy ler.</string>
+    <string name="summary_state_scanned">Sem material legível para gerar a descrição — o PDF parece escaneado e não há transcrição.</string>
+    <string name="summary_state_no_text">O material desta aula não tem texto legível para a Meggy ler.</string>
+    <string name="no_questions">Ainda não há questões geradas para este curso.</string>
+    <string name="no_flashcards">Ainda não há flashcards gerados para este curso.</string>
+    <string name="about_meggy">Vovó Fit — Android TV</string>
+    <string name="active_account">Conta ativa</string>
+    <string name="logout">Sair da conta</string>
+    <string name="no_subtitles">Sem legendas disponíveis para esta aula</string>
+    <string name="subtitles_off_settings">Legendas desligadas nos Ajustes</string>
+    <string name="rest_mode_hint">🌙 Modo descanso — toque na tela para sair</string>
 </resources>
