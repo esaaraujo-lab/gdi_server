@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  v1.0.6 — Player · TV (mesmos ids do celular) + simplificação
+  v1.0.7 — Player · TV (mesmos ids do celular) + simplificação
   do player (Elton 10:31, patch 1.0.5).
   TV: vídeo em TELA CHEIA imediata; barra grande embaixo (pause rosa,
   Descanso, velocidade, sair da tela cheia) + tempo + progresso.
+  v1.0.7 (Elton 11:47/11:48): ⛶ FORA da TV (gone nos 2 botoes, ids
+  mantidos) + barra cinematografica: disco escuro modesto, chips como
+  icones discretos (state layer), scrim 72% na base, emoji ⏸ -> ❚❚.
   Sem botão de tela cheia aqui (a TV já É tela cheia). Sem playlist
   embutida (gaveta + "A seguir" removidas — a playlist vive na página),
   sem botões −10s/+10s no rodapé (o pulo continua pelas setas do
@@ -127,8 +130,8 @@
             android:focusable="true"
             android:gravity="center"
             android:text="▶"
-            android:textColor="@color/md_on_primary"
-            android:textSize="28sp"
+            android:textColor="@android:color/white"
+            android:textSize="36sp"
             android:visibility="gone" />
 
         <!-- Barra superior: título + ações -->
@@ -223,7 +226,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="bottom"
-            android:background="@drawable/top_gradient"
+            android:background="@drawable/player_scrim_bottom"
             android:orientation="vertical"
             android:paddingHorizontal="@dimen/spacing_lg"
             android:paddingBottom="@dimen/spacing_md"
@@ -245,7 +248,7 @@
                     android:focusable="true"
                     android:gravity="center"
                     android:text="❚❚"
-                    android:textColor="@color/md_on_primary"
+                    android:textColor="@android:color/white"
                     android:textSize="36sp" />
 
                 <View
@@ -279,12 +282,13 @@
                     android:gravity="center"
                     android:paddingHorizontal="@dimen/spacing_lg"
                     android:text="1.0×"
-                    android:textColor="@color/md_primary"
+                    android:textColor="@android:color/white"
                     android:textSize="@dimen/text_chip"
                     android:textStyle="bold" />
 
                 <TextView
                     android:id="@+id/btn_exit_fullscreen"
+                    android:visibility="gone"
                     android:layout_width="72dp"
                     android:layout_height="72dp"
                     android:background="@drawable/player_chip_bg"
@@ -416,7 +420,7 @@
                         android:gravity="center"
                         android:paddingHorizontal="@dimen/spacing_lg"
                         android:text="1.0×"
-                        android:textColor="@color/md_primary"
+                        android:textColor="@android:color/white"
                         android:textSize="@dimen/text_chip"
                         android:textStyle="bold" />
 
@@ -438,6 +442,7 @@
 
                     <TextView
                         android:id="@+id/btn_fullscreen"
+                        android:visibility="gone"
                         android:layout_width="48dp"
                         android:layout_height="48dp"
                         android:layout_marginStart="@dimen/spacing_sm"
