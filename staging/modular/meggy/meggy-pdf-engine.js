@@ -15,11 +15,25 @@
 // v91 — AI OCR routing:
 //   • extractPdfText(url, progressCb, opts) — opts.useAiOcr = true (or set
 //     window.__gdiMeggy.pdf.useAiOcr = true) tries CF Workers AI vision model
-//     (llava-1.5-7b-hf, then uform-gen2-qwen-500m) BEFORE Tesseract.
-//   • CF AI is reached via /api/ai/ocr worker endpoint (POST {model, image, prompt}).
+//     BEFORE Tesseract.
+//   • CF AI is reached via /api/ai/ocr worker endpoint (POST {image, prompt}
+//     — model é opcional: o servidor resolve on-demand desde a v2.15.4).
 //     If the endpoint is missing (HTTP 404) or network fails, getCfAI() returns
-//     null and ocrPageWithAI() returns null — caller falls back to Tesseract.
+//     null and ocrPageWithAI() returns null — caller falls back to Tesseract
+//     (só com opt-in desde a v2.15.4) ou devolve o motivo real do erro.
 //   • The probe result is cached in _cfAiAvailable so we don't spam 404s per page.
+//
+// ★ v2.15.4 — OCR REATIVADO, SEM LIMITES (ordem do Elton 2026-11-13 23:08).
+//   Motivo da desativação na v1.0.152: o Tesseract.js na THREAD PRINCIPAL
+//   bloqueava 5+ min por PDF — por isso o fallback de OCR foi removido e
+//   extractPdfText passou a dar throw "OCR desativado". A reativação NÃO
+//   traz o Tesseract de volta como default: o OCR agora é por IA
+//   (/api/ai/ocr, modelos de visão resolvidos on-demand no servidor, com
+//   fallback multi-modelo) e o Tesseract só roda com opt-in explícito
+//   (opts.useTesseract / allowTesseract). Sem teto de páginas, sem teto de
+//   caracteres, sem teto global de tempo — o PDF inteiro é processado, com
+//   progresso honesto (fases ocr-init / ocr-page / ocr-done via progressCb)
+//   e erro ESTRUTURADO com o motivo real se a IA falhar.
 //
 // Guard: window.__gdiMeggyPdf
 // Depends on: window.__gdiMeggy.utils (none strictly required, since
@@ -108,22 +122,34 @@
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // v91: AI OCR ROUTING — CF Workers AI vision models (llava / uform)
+  // v91: AI OCR ROUTING — CF Workers AI vision models
   // ═══════════════════════════════════════════════════════════════
-  // Master toggle: set window.__gdiMeggy.pdf.useAiOcr = true, OR pass
-  // {useAiOcr:true} as 3rd arg of extractPdfText().
-  // When enabled, ocrPdfPage tries CF AI vision FIRST (fast, accurate for
-  // typed/printed text in PT-BR); if CF AI is unavailable or returns empty,
-  // falls back to Tesseract (existing behavior).
+  // Master toggle: set window.__gdiMeggy.pdf.useAiOcr = false to DISABLE,
+  //   OR pass {useAiOcr:false} as 3rd arg of extractPdfText().
+  // ★ v2.15.4: o DEFAULT agora é TRUE (OCR reativado, sem limites).
+  //   When enabled, ocrPdfPage tries CF AI vision FIRST (fast, accurate for
+  //   typed/printed text in PT-BR). O modelo é resolvido ON-DEMAND no
+  //   servidor (/api/ai/ocr) — o cliente não fixa mais modelos.
+  //   Se a IA falhar, o motivo estruturado fica em _lastOcrError e o
+  //   chamador o exibe; Tesseract só com opt-in (v1.0.152: bloqueava a
+  //   thread principal 5+ min).
   let _aiOcrConfig={
-    visionModel:'@cf/llava-hf/llava-1.5-7b-hf',       // primary — accurate, multi-lingual
-    fallbackModel:'@cf/unum/uform-gen2-qwen-500m',    // smaller/faster fallback
-    prompt:'Extract all visible text from this image. Return only the raw text content, preserving line breaks and reading order. Do not add commentary or markdown formatting.'
+    // ★ v2.15.4: null = o SERVIDOR resolve o modelo on-demand
+    //   (CF_MODELS_BY_ROLE.vision) e avança sozinho se depreciar. Os modelos
+    //   hardcoded da v91 (llava-1.5-7b-hf, uform-gen2-qwen-500m) saíram do
+    //   default; setAiOcrConfig() ainda aceita override explícito.
+    visionModel:null,
+    fallbackModel:null,
+    prompt:'Transcreva TODO o texto visível desta imagem (português), preservando parágrafos, quebras de linha e ordem de leitura. Responda apenas com o texto transcrito, sem comentários nem formatação markdown.'
   };
   // _cfAiAvailable: null=unknown (try once), true=available, false=known-unavailable
   // (cached after the first 404/network error so we don't spam failed requests
   // per page). Caller can force a re-probe by setting it back to null.
   let _cfAiAvailable=null;
+  // ★ v2.15.4: último erro ESTRUTURADO do OCR {reason, detail} (ou null).
+  //   Preenchido por ocrPageWithAI() a cada falha — é o que os fluxos de
+  //   resumo/quiz/batalhão exibem ao usuário em vez de erro genérico.
+  let _lastOcrError=null;
 
   // Helper: Uint8Array → base64 (chunked to avoid call-stack overflow on large images)
   function _uint8ToBase64(bytes){
@@ -139,7 +165,10 @@
   // getCfAI: returns a stub that proxies .run(model, params) to /api/ai/ocr.
   // Returns null when CF AI is known to be unavailable (cached probe result).
   // The browser can't reach the CF Workers AI binding directly — the worker
-  // endpoint /api/ai/ocr (POST {model, image, prompt}) does the proxy.
+  // endpoint /api/ai/ocr (POST {image, prompt} + model opcional) does the proxy.
+  // ★ v2.15.4: model null/undefined = o servidor resolve on-demand; o erro
+  //   HTTP agora é PARSEADO (o servidor devolve {reason, detail}) e vira
+  //   Error com .reason/.detail — nunca mais só "CF AI OCR HTTP 502".
   function getCfAI(){
     if(_cfAiAvailable===false)return null;
     return {
@@ -148,14 +177,12 @@
         const imageB64=_uint8ToBase64(params.image);
         let r;
         try{
+          const reqBody={image:imageB64,prompt:params.prompt};
+          if(model)reqBody.model=model; // ★ v2.15.4: sem modelo → servidor resolve
           r=await fetch('/api/ai/ocr',{
             method:'POST',
             headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({
-              model:model,
-              image:imageB64,
-              prompt:params.prompt
-            })
+            body:JSON.stringify(reqBody)
           });
         }catch(e){
           _cfAiAvailable=false; // network error → don't retry per-page
@@ -163,9 +190,21 @@
         }
         if(r.status===404){
           _cfAiAvailable=false; // endpoint missing (older worker) → don't retry
-          throw new Error('CF AI OCR endpoint not available (404)');
+          const e404=new Error('CF AI OCR endpoint not available (404)');
+          e404.reason='ocr_unavailable'; e404.detail='O servidor ainda não tem o endpoint /api/ai/ocr (worker antigo).';
+          throw e404;
         }
-        if(!r.ok)throw new Error('CF AI OCR HTTP '+r.status);
+        if(!r.ok){
+          let d={};
+          try{ d=await r.json(); }catch(_){}
+          // ★ v2.15.4: NÃO marca _cfAiAvailable=false aqui — 502/503 pode ser
+          //   transitório (IA fora do ar); só 404/rede é "sabidamente ausente".
+          const e=new Error('OCR indisponível: '+((d&&d.detail)||(d&&d.error)||('HTTP '+r.status)));
+          e.reason=(d&&d.reason)||'ai_down';
+          e.detail=(d&&d.detail)||(d&&d.error)||e.message;
+          e.status=r.status;
+          throw e;
+        }
         _cfAiAvailable=true;
         return await r.json();
       }
@@ -183,9 +222,14 @@
   }
 
   // ocrPageWithAI: tries CF Workers AI vision model on a rendered canvas.
-  // Returns extracted text on success, or null on failure (caller falls back
-  // to Tesseract). progressCb is the same shape used by ocrPdfPage:
+  // Returns extracted text on success, or null on failure (caller decides:
+  // Tesseract opt-in, or structured error via _lastOcrError).
+  // progressCb is the same shape used by ocrPdfPage:
   //   progressCb(pageNum, pageTotal, progress0to1)
+  // ★ v2.15.4: UMA tentativa por página — o servidor (/api/ai/ocr) já faz o
+  //   fallback multi-modelo (resolução on-demand). O loop cliente de 2
+  //   modelos hardcoded (v91) saiu. A falha é REGISTRADA em _lastOcrError
+  //   {reason, detail} — nunca engolida em silêncio.
   async function ocrPageWithAI(canvas, progressCb, pageNum, pageTotal){
     try{
       // HTMLCanvasElement uses toBlob (callback-based); wrap in Promise.
@@ -201,29 +245,26 @@
       const cfAI=getCfAI();
       if(!cfAI)throw new Error('CF AI not available');
       if(progressCb)progressCb(pageNum,pageTotal,0.5);
-      // Try primary vision model first, then fallback model.
-      const models=[_aiOcrConfig.visionModel,_aiOcrConfig.fallbackModel];
-      for(const model of models){
-        try{
-          const result=await cfAI.run(model,{
-            image:new Uint8Array(arrayBuffer),
-            prompt:_aiOcrConfig.prompt
-          });
-          const text=String((result&&(result.response||result.description||result.text||''))||'').trim();
-          if(text.length>5){
-            if(progressCb)progressCb(pageNum,pageTotal,1);
-            return text;
-          }
-          console.warn('[Meggy] AI OCR model',model,'returned empty text — trying next');
-        }catch(e){
-          // If CF AI is now known-unavailable, abort model loop (no point retrying).
-          if(_cfAiAvailable===false)throw e;
-          console.warn('[Meggy] AI OCR model',model,'failed:',e.message,'— trying next');
-        }
+      // ★ v2.15.4: sem modelo explícito (null) → o servidor resolve on-demand;
+      //   só envia modelo se setAiOcrConfig() definiu um override explícito.
+      const result=await cfAI.run(_aiOcrConfig.visionModel||null,{
+        image:new Uint8Array(arrayBuffer),
+        prompt:_aiOcrConfig.prompt
+      });
+      const text=String((result&&(result.response||result.description||result.text||''))||'').trim();
+      if(text.length>5){
+        if(progressCb)progressCb(pageNum,pageTotal,1);
+        return text;
       }
-      return null; // all models failed or returned empty
+      // Resposta vazia: a IA não leu nada nesta página.
+      _lastOcrError={reason:'ocr_empty',detail:'A IA não retornou texto para esta página.'};
+      console.warn('[Meggy] AI OCR returned empty text for page',pageNum);
+      return null;
     }catch(e){
-      console.warn('[Meggy] AI OCR falhou, caindo para Tesseract:',e.message);
+      // ★ v2.15.4: guarda o motivo ESTRUTURADO (reason/detail do servidor)
+      //   para o chamador exibir o motivo real — nunca reduzido a "OCR falhou".
+      _lastOcrError={reason:(e&&e.reason)||'ai_down',detail:(e&&e.detail)||(e&&e.message)||String(e)};
+      console.warn('[Meggy] AI OCR falhou na página',pageNum+':',_lastOcrError.detail);
       return null;
     }
   }
@@ -234,8 +275,12 @@
   //   - scale 3x (melhor precisão que 2x, ainda razoável em memória)
   //   - PSM 3 (auto page segmentation — funciona para texto corrido e múltiplas colunas)
   //   - idiomas: português + inglês
-  // ★ v91: opts.useAiOcr = true tenta CF Workers AI vision model ANTES do Tesseract.
-  //   Se a IA falhar (endpoint 404, rede, ou resposta vazia), cai para Tesseract.
+  // ★ v2.15.4: AI OCR é o DEFAULT (ordem do Elton — sem limites).
+  //   Se a IA falhar e NÃO houver opt-in de Tesseract, vira ERRO com o
+  //   motivo real (nunca moagem silenciosa nem fallback automático para o
+  //   Tesseract — foi ele que bloqueou a thread 5+ min na v1.0.152).
+  //   Opt-in de Tesseract: opts.useTesseract===true ou
+  //   window.__gdiMeggy.pdf.allowTesseract===true.
   async function ocrPdfPage(pdfjs,doc,pageNum,progressCb,opts){
     const page=await doc.getPage(pageNum);
     // escala 3x para melhorar precisão do OCR (testado: 2x = muita falha, 3x = bom)
@@ -249,14 +294,22 @@
     ctx.fillRect(0,0,canvas.width,canvas.height);
     await page.render({canvasContext:ctx,viewport}).promise;
 
-    // ★ v91: AI OCR (CF Workers AI vision) — try first if enabled
-    const useAiOcr=!!(opts&&opts.useAiOcr);
+    // ★ v2.15.4: AI OCR (CF Workers AI vision) — default ON. Opt-out
+    //   explícito: opts.useAiOcr===false ou namespace useAiOcr===false.
+    const useAiOcr=!((opts&&opts.useAiOcr===false)||(window.__gdiMeggy.pdf&&window.__gdiMeggy.pdf.useAiOcr===false));
     if(useAiOcr){
       const aiText=await ocrPageWithAI(canvas,progressCb,pageNum,doc.numPages);
       if(aiText&&aiText.trim().length>5){
         return aiText;
       }
-      // else fall through to Tesseract
+      const allowTess=!!((opts&&opts.useTesseract)||(window.__gdiMeggy.pdf&&window.__gdiMeggy.pdf.allowTesseract));
+      if(!allowTess){
+        const err=new Error('OCR indisponível: '+((_lastOcrError&&_lastOcrError.detail)||'a IA não retornou texto para esta página.'));
+        err.reason=(_lastOcrError&&_lastOcrError.reason)||'ai_down';
+        err.ocrReason=err.reason;
+        throw err;
+      }
+      // else fall through to Tesseract (opt-in explícito)
     }
 
     const Tesseract=await ensureTesseract();
@@ -307,52 +360,33 @@
     return txt;
   }
 
-  // ── Extract text from PDF (up to 30 pages, ~8000 chars) ──
+  // ── Extract text from PDF (PDF INTEIRO, sem teto de páginas/chars) ──
   // FIX: alguns PDFs têm texto selecionável mas getTextContent() básico
   // retorna vazio (fontes com encoding custom, text runs fragmentados).
   // Usa opções avançadas + fallback em annotations.
   // ★FIX v2: erros descritivos (não engole mais silenciosamente) + retry
   // com opções alternativas de fetch + fallback para PDFs escaneados.
-  // ★FIX v3: OCR (Tesseract.js) como fallback quando pdf.js retorna vazio.
+  // ★FIX v3: OCR como fallback quando pdf.js retorna vazio.
   //   - Suporta um callback de progresso (para mostrar "OCR: página 3/11…")
-  //   - Limita a 8 páginas no OCR (tempo total ~2-4 min para PDF grande)
-  //   - Idiomas: português + inglês
-  // ★ v91: opts.useAiOcr = true (or window.__gdiMeggy.pdf.useAiOcr = true)
-  //   tenta CF Workers AI vision model ANTES do Tesseract no fallback de OCR.
+  //     com fases {phase:'ocr-init'|'ocr-page'|'ocr-done'}
+  //   - ★ v2.15.4: SEM LIMITE de páginas no OCR (ordem do Elton) — o PDF
+  //     inteiro é processado, por IA via /api/ai/ocr (default ON)
+  //   - Idiomas do Tesseract (só opt-in): português + inglês
+  // ★ v91: opts.useAiOcr = false desliga a IA (default ON desde a v2.15.4).
   async function extractPdfText(url, progressCb, opts){
-    // ★ FIX 20-6 #8 (Agent 16): 60s overall deadline for PDF extraction.
-    //    The extraction loop iterates up to 500 pages of pdf.js getTextContent
-    //    (lines 371-406) and, on scanned PDFs, falls through to a Tesseract
-    //    OCR loop that can run 2-4 minutes (15 pages × ~10s/page, plus
-    //    tesseract.js CDN download + lang model fetch). Without a deadline,
-    //    a stalled CDN (pdf.js script tag hanging on `s.onload`), an
-    //    unresponsive worker, or a pathological PDF would leave the user
-    //    staring at the loading spinner forever — no way to cancel or know
-    //    it had hung.
-    //
-    //    Implementation: race the existing body against a 60s timeout Promise.
-    //    Whichever settles first wins:
-    //      • work resolves → clearTimeout in .finally, return result
-    //      • timeout rejects → clearTimeout in .finally (already fired),
-    //        throw the timeout Error to the caller (who shows setError)
-    //    IMPORTANT: the inner try/finally inside `_work` STILL runs
-    //    `doc.destroy()` even when the timeout wins, because Promise.race
-    //    doesn't cancel the loser — the inner async IIFE keeps executing
-    //    in the background and its finally block fires when it eventually
-    //    settles. This prevents the PDFDocumentProxy leak that FIX-MEGGY
-    //    #22 (Agent 7) explicitly guarded against.
-    const EXTRACT_TIMEOUT_MS=60000; // ★ v1.0.146: 60s→180s — PDFs grandes precisam de mais tempo
-    let _t=null;
-    const _timeout=new Promise(function(_,reject){
-      _t=setTimeout(function(){
-        reject(new Error('Tempo limite excedido na extração do PDF (60s). O arquivo pode ser muito grande, escaneado, ou o CDN do Tesseract/pdf.js está lento. Tente um PDF menor ou recarregue a página.'));
-      }, EXTRACT_TIMEOUT_MS);
-    });
-
-    const _work=(async function(){
+    // ★ v2.15.4: SEM teto global de tempo (ordem do Elton — sem limites).
+    //   O teto de 60s (FIX 20-6 #8) foi REMOVIDO: um PDF escaneado grande
+    //   precisa de 1 chamada de IA por página sem texto, e 60s não cobre
+    //   nem 10 páginas. O progresso é honesto (progressCb por página, fases
+    //   ocr-init/ocr-page/ocr-done), então o usuário sempre vê onde parou
+    //   — sem spinner infinito sem texto. Se a rede travar de verdade, o
+    //   fetch falha e o erro real sobe para o chamador. doc.destroy()
+    //   continua garantido pelo try/finally abaixo.
     const pdfjs=await ensurePdfjs();
-    // Resolve AI OCR flag: explicit opt > namespace flag > false (default)
-    const useAiOcr=!!((opts&&opts.useAiOcr) || (window.__gdiMeggy.pdf && window.__gdiMeggy.pdf.useAiOcr));
+    // Resolve AI OCR flag: explicit opt > namespace flag > true (default)
+    // ★ v2.15.4: default TRUE (reativado, sem limites) — era false.
+    const _flagOff=((opts&&opts.useAiOcr===false)||(window.__gdiMeggy.pdf&&window.__gdiMeggy.pdf.useAiOcr===false));
+    const useAiOcr=!_flagOff;
 
     // ★ Tenta fetch com credenciais same-origin primeiro; se falhar,
     // tenta sem credenciais (alguns workers rejeitam cookies em fetch cross-origin)
@@ -395,7 +429,8 @@
       // ★ v87-FIX-MEGGY-MODULES BUG 5: raise page cap 100 -> 500 so Meggy
       //    reads the entirety of large PDFs (user: "deve ler a totalidade
       //    de paginas dos pdfs, para gerar os resumos").
-      const n=Math.min(doc.numPages,30); // ★ v1.0.152: 500→30 pages
+      const n=doc.numPages; // ★ v2.15.4: SEM LIMITE de páginas (ordem do Elton) — v1.0.152 tinha Math.min(numPages,30)
+      const pageTexts=[]; // ★ v2.15.4: texto por página (p/ OCR só das páginas sem texto)
       let txt='';
 
       for(let i=1;i<=n;i++){
@@ -429,59 +464,80 @@
           }catch(_){}
         }
 
+        pageTexts.push(pageText);
         txt+=pageText+'\n\n';
-        // ★ v87-FIX-MEGGY-MODULES BUG 5: raise per-extraction char cap
-        //    50000 -> 200000 so we keep ~4x more text before bailing.
-        if(txt.length>50000)break; // ★ v1.0.152: 200K→50K
+        // ★ v2.15.4: SEM teto de caracteres (v1.0.152 cortava em 50K e
+        //   parava o loop) — o texto integral vai para o chamador, que
+        //   fatia para o prompt da IA como antes (ex.: 15000 chars).
       }
 
       // ★ fallback: tenta extrair de annotations/form fields
       // (alguns PDFs têm texto em campos de formulário)
+      let extraTxt=''; // ★ v2.15.4: texto de annotations/form fields (fora do pageTexts)
       if(!txt.trim()||txt.trim().length<50){
         try{
           for(let i=1;i<=n;i++){
             const pg=await doc.getPage(i);
             const annots=await pg.getAnnotations();
             for(const a of annots){
-              if(a.fieldValue&&typeof a.fieldValue==='string')txt+=a.fieldValue+'\n';
-              if(a.contents&&typeof a.contents==='string')txt+=a.contents+'\n';
+              if(a.fieldValue&&typeof a.fieldValue==='string'){txt+=a.fieldValue+'\n';extraTxt+=a.fieldValue+'\n';}
+              if(a.contents&&typeof a.contents==='string'){txt+=a.contents+'\n';extraTxt+=a.contents+'\n';}
             }
             if(txt.length>10000)break;
           }
         }catch(_){}
       }
 
-      // ★ v1.0.152: OCR DESATIVADO — Tesseract bloqueia a thread por 5+ min.
-      // Se o PDF não tem texto selecionável, retorna vazio e o meggy-cache.js
-      // usa o nome da aula como fallback para a IA gerar o resumo.
-
       // (doc.destroy() agora tratado pelo finally — v80-FIX-MEGGY BUG 2)
+      // ★ v2.15.4: OCR REATIVADO (ordem do Elton 2026-11-13, SEM LIMITES).
+      //   Páginas sem texto selecionável (<20 chars) passam pelo OCR por IA
+      //   (/api/ai/ocr) — TODAS elas, sem teto de páginas. Motivo da
+      //   desativação na v1.0.152: o Tesseract na thread principal bloqueava
+      //   5+ min; a IA não bloqueia a thread (e o Tesseract agora é só
+      //   opt-in via opts.useTesseract). Progresso honesto via progressCb
+      //   com {phase:'ocr-init'|'ocr-page'|'ocr-done'} — os handlers vivos
+      //   em meggy-summaries.js / meggy-questions.js já tratam essas fases.
+      const _ocrNeeded=[];
+      for(let i=0;i<n;i++){ if(!pageTexts[i]||pageTexts[i].trim().length<20)_ocrNeeded.push(i+1); }
+      if(_ocrNeeded.length){
+        if(progressCb)try{ progressCb({phase:'ocr-init',page:0,total:_ocrNeeded.length}); }catch(_){}
+        let ocrFail=0, ocrOk=0;
+        for(const pgNum of _ocrNeeded){
+          if(progressCb)try{ progressCb({phase:'ocr-page',page:pgNum,total:n,progress:ocrOk/_ocrNeeded.length}); }catch(_){}
+          try{
+            const ocrTxt=await ocrPdfPage(pdfjs,doc,pgNum,progressCb,{useAiOcr:useAiOcr,useTesseract:!!(opts&&opts.useTesseract)});
+            if(ocrTxt&&ocrTxt.trim().length>5){ pageTexts[pgNum-1]=ocrTxt; ocrOk++; }
+            else ocrFail++;
+          }catch(e){
+            ocrFail++;
+            // Se a IA nem rodou (ex.: opt-out useAiOcr:false e o Tesseract
+            // falhou), o motivo da falha é o erro capturado — não some.
+            if(!_lastOcrError)_lastOcrError={reason:'ocr_unavailable',detail:(e&&e.message)||String(e)};
+          }
+        }
+        txt=pageTexts.join('\n\n')+(extraTxt?('\n\n'+extraTxt):'');
+        if(progressCb)try{ progressCb({phase:'ocr-done',chars:txt.trim().length}); }catch(_){}
+        // Se o OCR não leu NADA e o PDF continua sem texto, o erro traz o
+        // motivo REAL da IA (nunca "OCR desativado" nem ok:true vazio).
+        if(txt.trim().length<50){
+          const r=_lastOcrError||{};
+          const err=new Error('OCR indisponível: '+(r.detail||'a IA não conseguiu ler este PDF')+' — tente novamente em alguns minutos.'+(ocrFail?(' ('+ocrFail+' página(s) sem leitura.)'):''));
+          err.reason=r.reason||'ai_down';
+          err.ocrReason=err.reason;
+          throw err;
+        }
+      }
       // limpa texto: remove espaços excessivos, decodifica entidades
       txt=txt.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim();
-      // ★ v87-FIX-MEGGY-MODULES BUG 5: keep 200000 chars of final text
-      //    (was 50000). 200K chars ≈ 50K tokens — fits modern 128K-context LLMs.
-      const result=txt.slice(0,50000); // ★ v1.0.152: 200K→50K
-      if(!result||result.length<50){
-        // ★ v2.15.3 (item 4): mensagem honesta — o OCR está DESATIVADO
-        //   (v1.0.152: Tesseract bloqueia a thread por 5+ min) e nunca é
-        //   tentado aqui; dizer que "o OCR falhou" era falso. PDF sem texto
-        //   selecionável = PDF escaneado (só imagens) — OCR desativado.
-        //   Reativar o OCR (por IA via /api/ai/ocr) é decisão pendente do Elton.
-        throw new Error('PDF sem texto selecionável — PDF escaneado (só imagens) e OCR desativado. Possíveis causas:\n• PDF é composto só de imagens (escaneado) e o OCR está desativado\n• PDF está criptografado ou corrompido\n\nTente abrir o PDF num leitor comum para confirmar o conteúdo.');
+      // ★ v2.15.4: SEM slice — devolve o texto INTEGRAL (v1.0.152 cortava
+      //   em 50K). Quem chama fatia para o prompt da IA como antes.
+      if(!txt||txt.length<50){
+        throw new Error('PDF sem texto selecionável — PDF escaneado (só imagens) e o OCR por IA não retornou texto. Possíveis causas:\n• PDF é composto só de imagens e a IA não conseguiu ler o conteúdo\n• PDF está criptografado ou corrompido\n\nTente abrir o PDF num leitor comum para confirmar o conteúdo.');
       }
-      return result;
+      return txt;
     } finally {
       try { if(doc) doc.destroy(); } catch(_){}
     }
-    })(); // end _work IIFE
-
-    // ★ FIX 20-6 #8 (Agent 16): race work against the 60s timeout. The
-    //    .finally clears the timer regardless of which side won so we don't
-    //    leak a setTimeout arm that fires after success (no-op reject on a
-    //    resolved Promise is harmless, but cleaner to clear).
-    return Promise.race([_work, _timeout]).finally(function(){
-      if(_t){ try{ clearTimeout(_t); }catch(_){} _t=null; }
-    });
   }
 
   // ── Namespace exports ──
@@ -497,9 +553,15 @@
     ocrPageWithAI,
     getCfAI,
     setAiOcrConfig,
-    // Master toggle (set window.__gdiMeggy.pdf.useAiOcr = true to enable AI-first OCR).
-    // Can also be enabled per-call via extractPdfText(url, cb, {useAiOcr:true}).
-    useAiOcr: false,
+    // ★ v2.15.4: Master toggle — default TRUE (OCR por IA reativado, sem
+    //   limites). Desligar: window.__gdiMeggy.pdf.useAiOcr = false, ou
+    //   por chamada via extractPdfText(url, cb, {useAiOcr:false}).
+    useAiOcr: true,
+    // ★ v2.15.4: Tesseract (thread principal) só com opt-in explícito —
+    //   foi ele que bloqueou a thread 5+ min e motivou a desativação v1.0.152.
+    allowTesseract: false,
+    // ★ v2.15.4: último erro estruturado do OCR {reason, detail} (ou null).
+    get lastOcrError(){ return _lastOcrError; },
     // Expose config (read-only mirror; use setAiOcrConfig() to mutate).
     // Returning a getter would freeze the shape — instead we expose the live object.
     aiOcrConfig: _aiOcrConfig
