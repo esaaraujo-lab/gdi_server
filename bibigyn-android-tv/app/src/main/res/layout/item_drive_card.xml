@@ -26,7 +26,8 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <!-- Tile de ícone (rosa da marca, monograma escuro) -->
+        <!-- v2.1.9 (e): card ESCURO com quadrado rosa de ícone
+             (conceito home) — antes o tile inteiro era rosa. -->
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="@dimen/drive_tile_height">
@@ -35,15 +36,17 @@
                 android:id="@+id/drive_bg"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:background="@color/drive_icon_tile" />
+                android:background="@color/tile_bg" />
 
             <TextView
                 android:id="@+id/drive_icon"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:layout_gravity="center"
+                android:background="@drawable/drive_icon_tile_bg"
                 android:gravity="center"
                 android:textColor="@color/drive_icon_tile_text"
-                android:textSize="52sp"
+                android:textSize="28sp"
                 android:textStyle="bold" />
 
             <!-- ★ Favorito do drive -->
