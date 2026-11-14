@@ -1,13 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  v2.1.5 — Design tokens (3 tiers, design-tokens skill).
+
+  Tier 1 — PRIMITIVOS: valores crus da marca (hex por valor).
+  Tier 2 — SEMÂNTICOS: papéis M3 (primary / surface / onSurface ...) que
+  apontam para primitivos. Os layouts usam SÓ estes.
+  Tier 3 — COMPONENTE: papéis de um componente específico (foco, hero,
+  progresso) que apontam para semânticos.
+
+  Geometria (espaçamento / raio / elevação) vive em dimens.xml e é
+  IDÊNTICA nos 3 apps. Cor e tipo são POR MARCA.
+  Evolução futura: gerar este arquivo a partir de um token JSON (DTCG)
+  com Style Dictionary — ver REDESIGN_NOTES.md.
+-->
 <resources>
-    <!-- Meggy brand -->
-    <color name="meggy_pink">#FFFF8B9F</color>
-    <color name="meggy_pink_dark">#FFE0657F</color>
+
+    <!-- ── Tier 1 · primitivos de marca: BiBi Fit (laranja #FF6B35;
+  nomes meggy_* mantidos por compatibilidade com os drawables antigos) ── -->
+    <color name="meggy_pink">#FFFF6B35</color>
+    <color name="meggy_pink_dark">#FFE04A00</color>
     <color name="meggy_purple">#FFC026D3</color>
-    <color name="meggy_purple_deep">#FF7B1FA2</color>
+    <color name="meggy_purple_deep">#FF7B2D12</color>
     <color name="meggy_teal">#FF5DDEDA</color>
 
-    <!-- Material 3 dark palette -->
+    <!-- ── Tier 2 · semânticos M3 (tema escuro) ── -->
     <color name="md_background">#FF0D0E12</color>
     <color name="md_surface">#FF16181F</color>
     <color name="md_surface_variant">#FF232634</color>
@@ -19,9 +35,9 @@
     <color name="md_on_surface">#FFEAEAF0</color>
     <color name="md_on_surface_variant">#FFC0C4D0</color>
 
-    <color name="md_primary">#FFFF8B9F</color>
+    <color name="md_primary">#FFFF6B35</color>
     <color name="md_on_primary">#FF1A0A0F</color>
-    <color name="md_primary_container">#FF7B1FA2</color>
+    <color name="md_primary_container">#FF7B2D12</color>
     <color name="md_on_primary_container">#FFFFEAF1</color>
 
     <color name="md_secondary">#FFC026D3</color>
@@ -50,15 +66,26 @@
     <color name="accent_red">#FF6B6B</color>
     <color name="accent_teal">#4ECDC4</color>
 
+    <!-- ── Tier 3 · componentes ── -->
     <!-- v1.8.0 — Tile accents (Netflix/Disney inspired) -->
     <color name="tile_bg">#FF0F1218</color>
     <color name="tile_bg_focused">#FF161B22</color>
     <color name="tile_scrim_top">#66000000</color>
     <color name="tile_scrim_bottom">#F00D0E12</color>
-    <color name="tile_focus_ring">#FFFF8B9F</color>
-    <color name="tile_focus_halo">#33FF8B9F</color>
+    <color name="tile_focus_ring">#FFFF6B35</color>
+    <color name="tile_focus_halo">#33FF6B35</color>
     <color name="tile_title">#FFFFFFFF</color>
     <color name="tile_subtitle">#FFC0C4D0</color>
-    <color name="hero_pink_accent">#FFFF8B9F</color>
+    <color name="hero_pink_accent">#FFFF6B35</color>
     <color name="header_scrim">#F00D0E12</color>
+
+    <!-- v2.1.5 — componentes do redesign -->
+    <!-- Fundo da pílula do badge do hero (rosa a 12% sobre o hero). -->
+    <color name="hero_badge_bg">#1FFF6B35</color>
+    <!-- Trilho da barra de progresso do card (branco a 20%). -->
+    <color name="progress_track">#33FFFFFF</color>
+    <!-- Fundo do tile de ícone do drive (rosa sólido, conceito home). -->
+    <color name="drive_icon_tile">#FFFF6B35</color>
+    <!-- Texto sobre o tile de ícone do drive (rosa bem escuro). -->
+    <color name="drive_icon_tile_text">#FF1A0A0F</color>
 </resources>
