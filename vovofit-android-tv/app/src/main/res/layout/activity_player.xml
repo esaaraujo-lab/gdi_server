@@ -1,205 +1,682 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  v2.3.0 — Player layout (restored to v2.1.1 state, then removed prev/next arrows).
-
-  Changes vs v2.2.0:
-  • REMOVED the bottom lesson navigation bar (lesson_nav_bar) — user feedback.
-  • REMOVED prev_button (⏮) and next_button (⏭) from the top bar — user feedback.
-  • Kept ALL other features: title, speed, sleep mode (🌙), sleep timer (⏰),
-    playlist sidebar (☰), gestures (double-tap seek, swipe), auto-hide controls.
-
-  The user can still navigate between lessons via the playlist sidebar (☰).
+  v1.0.4 — Player (conceitos player celular + player TV v2).
+  Dois modos, mesma activity:
+  • Retrato (celular): vídeo 16:9 no topo + controles abaixo (−10s,
+    tempo, +10s, velocidade, CC, tela cheia) + título + curso +
+    Anterior/Próxima + "A seguir" + bottom nav. Controller nativo
+    do ExoPlayer ativo.
+  • Fullscreen (celular, via botão; TV, sempre): vídeo ocupa a tela,
+    barra de controles grande embaixo (pause rosa, −10s, +10s, tempo,
+    progresso, Descanso, CC, velocidade, sair da tela cheia).
+    Controller nativo desligado; barra própria.
+  Áudio (mp3/podcast): MESMO player — a área de vídeo vira a CAPA
+  do episódio (thumb/monograma); sem CC; mesmos controles, mesmo
+  progresso/retomada e Descanso. SEM logo sobre o vídeo (verificado:
+  o player antigo não desenhava logo nenhum — e nenhum foi adicionado).
+  Descanso (🌙, modo existente v1.3.0): overlay preto SÓ sobre a
+  superfície de vídeo (a barra fica acessível); áudio e progresso
+  continuam; qualquer interação com os controles restaura o vídeo.
 -->
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@android:color/black">
 
-    <androidx.media3.ui.PlayerView
-        android:id="@+id/player_view"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        app:resize_mode="fit"
-        app:use_controller="true"
-        app:show_buffering="when_playing"
-        app:animation_enabled="true"
-        app:surface_type="surface_view" />
-
-    <!-- Playlist sidebar -->
+    <!-- Área do vídeo / capa de áudio -->
     <FrameLayout
-        android:id="@+id/playlist_container"
-        android:layout_width="320dp"
-        android:layout_height="match_parent"
-        android:layout_gravity="end"
-        android:background="#E6000000"
-        android:visibility="gone">
+        android:id="@+id/player_container"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@android:color/black"
+        app:layout_constraintDimensionRatio="16:9"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="64dp"
-            android:paddingHorizontal="16dp"
-            android:paddingVertical="12dp"
-            android:text="Playlist"
-            android:textColor="#E6EDF3"
-            android:textSize="15sp"
-            android:textStyle="bold" />
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/playlist_recycler"
+        <androidx.media3.ui.PlayerView
+            android:id="@+id/player_view"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:layout_marginTop="112dp"
-            android:layout_marginBottom="16dp"
-            android:clipToPadding="false"
-            android:paddingHorizontal="8dp" />
+            app:animation_enabled="true"
+            app:resize_mode="fit"
+            app:show_buffering="when_playing"
+            app:surface_type="surface_view"
+            app:use_controller="true" />
+
+        <!-- Capa do episódio (áudio/podcast) — sobre o vídeo preto -->
+        <LinearLayout
+            android:id="@+id/audio_cover"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <FrameLayout
+                android:layout_width="200dp"
+                android:layout_height="200dp">
+
+                <View
+                    android:id="@+id/audio_cover_bg"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/card_gradient_pink" />
+
+                <ImageView
+                    android:id="@+id/audio_cover_image"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="centerCrop"
+                    android:visibility="gone"
+                    android:contentDescription="@string/thumb_desc" />
+
+                <TextView
+                    android:id="@+id/audio_cover_monogram"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:textColor="@color/tile_title"
+                    android:textSize="64sp"
+                    android:textStyle="bold" />
+            </FrameLayout>
+
+            <TextView
+                android:id="@+id/audio_cover_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_lg"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@android:color/white"
+                android:textSize="@dimen/text_detail_course"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/audio_cover_sub"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textColor="@color/md_on_surface_variant"
+                android:textSize="@dimen/text_card_subtitle" />
+        </LinearLayout>
+
+        <!-- Overlay preto do modo Descanso (só sobre o vídeo) -->
+        <View
+            android:id="@+id/sleep_overlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@android:color/black"
+            android:clickable="true"
+            android:focusable="true"
+            android:visibility="gone" />
+
+        <!-- Play/pause central (quando pausado) -->
+        <TextView
+            android:id="@+id/center_play_pause"
+            android:layout_width="@dimen/play_fab_size"
+            android:layout_height="@dimen/play_fab_size"
+            android:layout_gravity="center"
+            android:background="@drawable/btn_play_circle"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:text="▶"
+            android:textColor="@color/md_on_primary"
+            android:textSize="28sp"
+            android:visibility="gone" />
+
+        <!-- Barra superior: título + ações -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top"
+            android:background="@drawable/top_gradient"
+            android:orientation="vertical"
+            android:paddingHorizontal="@dimen/spacing_lg"
+            android:paddingBottom="@dimen/spacing_sm"
+            android:paddingTop="@dimen/spacing_lg">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/title_label"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:shadowColor="#80000000"
+                    android:shadowDx="0"
+                    android:shadowDy="1"
+                    android:shadowRadius="4"
+                    android:singleLine="true"
+                    android:textColor="@android:color/white"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/restart_button"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:minWidth="48dp"
+                    android:text="↺"
+                    android:textColor="@android:color/white"
+                    android:textSize="20sp"
+                    app:cornerRadius="16dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/sleep_timer_button"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:minWidth="48dp"
+                    android:text="⏰"
+                    android:textColor="@android:color/white"
+                    app:cornerRadius="16dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/fav_button"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:minWidth="48dp"
+                    android:text="☆"
+                    android:textColor="@android:color/white"
+                    app:cornerRadius="16dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/playlist_button"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:minWidth="48dp"
+                    android:text="☰"
+                    android:textColor="@android:color/white"
+                    app:cornerRadius="16dp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/sleep_timer_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:shadowColor="#80000000"
+                android:shadowDx="0"
+                android:shadowDy="1"
+                android:shadowRadius="3"
+                android:textColor="@color/md_primary"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- Barra de controles grande (fullscreen / TV) -->
+        <LinearLayout
+            android:id="@+id/custom_bar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:background="@drawable/top_gradient"
+            android:orientation="vertical"
+            android:paddingHorizontal="@dimen/spacing_lg"
+            android:paddingBottom="@dimen/spacing_md"
+            android:paddingTop="@dimen/spacing_sm"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/btn_play_pause_bar"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:background="@drawable/btn_play_circle"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="❚❚"
+                    android:textColor="@color/md_on_primary"
+                    android:textSize="24sp" />
+
+                <TextView
+                    android:id="@+id/btn_seek_back_bar"
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:layout_marginStart="@dimen/spacing_lg"
+                    android:background="@drawable/chip_outline"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="◀10"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/btn_seek_fwd_bar"
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:layout_marginStart="@dimen/spacing_sm"
+                    android:background="@drawable/chip_outline"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="10▶"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    android:layout_weight="1" />
+
+                <TextView
+                    android:id="@+id/btn_rest_bar"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:layout_marginEnd="@dimen/spacing_sm"
+                    android:background="@drawable/chip_outline"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:paddingHorizontal="@dimen/spacing_lg"
+                    android:text="🌙 Descanso"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_chip" />
+
+                <TextView
+                    android:id="@+id/btn_cc_bar"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:layout_marginEnd="@dimen/spacing_sm"
+                    android:background="@drawable/chip_outline"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:paddingHorizontal="@dimen/spacing_lg"
+                    android:text="CC"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_chip"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/btn_speed_bar"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:layout_marginEnd="@dimen/spacing_sm"
+                    android:background="@drawable/chip_outline"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:paddingHorizontal="@dimen/spacing_lg"
+                    android:text="1.0×"
+                    android:textColor="@color/md_primary"
+                    android:textSize="@dimen/text_chip"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/btn_exit_fullscreen"
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:background="@drawable/chip_outline"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="⛶"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="22sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/bar_time_label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="00:00 / 00:00"
+                    android:textColor="@android:color/white"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <SeekBar
+                    android:id="@+id/bar_seek_bar"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/spacing_lg"
+                    android:layout_weight="1"
+                    android:focusable="true"
+                    android:max="1000"
+                    android:progressDrawable="@drawable/progress_horizontal"
+                    android:thumb="@drawable/seek_thumb" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Sidebar da playlist -->
+        <FrameLayout
+            android:id="@+id/playlist_container"
+            android:layout_width="320dp"
+            android:layout_height="match_parent"
+            android:layout_gravity="end"
+            android:background="#E6000000"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="64dp"
+                android:paddingHorizontal="@dimen/spacing_lg"
+                android:paddingVertical="@dimen/spacing_md"
+                android:text="Playlist"
+                android:textColor="#E6EDF3"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/playlist_recycler"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_marginBottom="@dimen/spacing_lg"
+                android:layout_marginTop="112dp"
+                android:clipToPadding="false"
+                android:paddingHorizontal="@dimen/spacing_sm" />
+        </FrameLayout>
+
+        <!-- Hint de gesto (centro, transitório) -->
+        <TextView
+            android:id="@+id/seek_gesture_hint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:background="#CC000000"
+            android:elevation="8dp"
+            android:paddingHorizontal="22dp"
+            android:paddingVertical="10dp"
+            android:textColor="@android:color/white"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
+        <!-- Indicador de swipe (topo, transitório) -->
+        <TextView
+            android:id="@+id/swipe_indicator"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginTop="80dp"
+            android:background="#CC000000"
+            android:elevation="8dp"
+            android:paddingHorizontal="22dp"
+            android:paddingVertical="10dp"
+            android:textColor="@android:color/white"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
     </FrameLayout>
 
-    <!-- Top gradient + title + buttons overlay -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:layout_gravity="top"
-        android:background="@drawable/top_gradient"
-        android:paddingHorizontal="16dp"
-        android:paddingTop="16dp"
-        android:paddingBottom="10dp">
+    <!-- Infos abaixo do vídeo (retrato, celular) -->
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/info_scroll"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@color/md_background"
+        android:fillViewport="true"
+        app:layout_constraintBottom_toTopOf="@id/bottom_nav"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/player_container">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
+            android:orientation="vertical"
+            android:paddingHorizontal="@dimen/content_margin"
+            android:paddingBottom="@dimen/spacing_lg"
+            android:paddingTop="@dimen/spacing_lg">
+
+            <!-- Linha de controles (retrato) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/btn_seek_back_info"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="@drawable/chip_outline"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="−10s"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_chip"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/info_time_label"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="@dimen/spacing_md"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:text="00:00 / 00:00"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_card_title"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/btn_seek_fwd_info"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="@drawable/chip_outline"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="+10s"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_chip"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/btn_speed_info"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:layout_marginStart="@dimen/spacing_sm"
+                    android:background="@drawable/chip_outline"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:paddingHorizontal="@dimen/spacing_lg"
+                    android:text="1.0×"
+                    android:textColor="@color/md_primary"
+                    android:textSize="@dimen/text_chip"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/btn_cc_info"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:layout_marginStart="@dimen/spacing_sm"
+                    android:background="@drawable/chip_outline"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:paddingHorizontal="@dimen/spacing_lg"
+                    android:text="CC"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_chip"
+                    android:textStyle="bold" />
+
+
+                <TextView
+                    android:id="@+id/btn_rest_info"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:layout_marginStart="@dimen/spacing_sm"
+                    android:background="@drawable/chip_outline"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:paddingHorizontal="@dimen/spacing_lg"
+                    android:text="🌙 Descanso"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_chip"
+                    android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/btn_fullscreen"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_marginStart="@dimen/spacing_sm"
+                    android:background="@drawable/chip_outline"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="⛶"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="20sp" />
+            </LinearLayout>
+
+            <!-- Card "Continuar de onde parou" (áudio com posição salva) -->
+            <LinearLayout
+                android:id="@+id/audio_resume_card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_lg"
+                android:background="@drawable/tile_focus_border"
+                android:orientation="vertical"
+                android:padding="@dimen/spacing_lg"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Continuar de onde parou"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_card_title"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/audio_resume_text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:textColor="@color/md_primary"
+                    android:textSize="@dimen/text_card_subtitle" />
+            </LinearLayout>
+
+            <!-- Título + curso -->
+            <TextView
+                android:id="@+id/title_info"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_lg"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/text_detail_title"
+                android:textStyle="bold" />
 
             <TextView
-                android:id="@+id/title_label"
-                android:layout_width="0dp"
+                android:id="@+id/course_info"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:textColor="@android:color/white"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:ellipsize="end"
-                android:singleLine="true"
-                android:shadowColor="#80000000"
-                android:shadowDx="0"
-                android:shadowDy="1"
-                android:shadowRadius="4" />
+                android:layout_marginTop="4dp"
+                android:textColor="@color/md_primary"
+                android:textSize="@dimen/text_detail_course" />
 
-            <!-- v2.3.0: REMOVED prev_button (⏮) and next_button (⏭) per user request.
-                 Navigation between lessons is done via the playlist sidebar (☰). -->
-
-            <!-- v2.3.2: ↺ Reiniciar button — restarts the current video from 0 -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/restart_button"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="wrap_content"
+            <!-- Anterior / Próxima -->
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:minWidth="48dp"
-                android:text="↺"
-                android:textSize="20sp"
-                android:textColor="@android:color/white"
-                app:cornerRadius="16dp"  android:focusable="true" android:focusableInTouchMode="true"/>
+                android:layout_marginTop="@dimen/spacing_lg"
+                android:orientation="horizontal">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/speed_button"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minWidth="56dp"
-                android:text="1.0x"
-                android:textColor="@android:color/white"
-                app:strokeColor="@android:color/white"
-                app:strokeWidth="1dp"
-                app:cornerRadius="16dp"  android:focusable="true" android:focusableInTouchMode="true"/>
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/btn_prev"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_marginEnd="@dimen/spacing_sm"
+                    android:layout_weight="1"
+                    android:background="@drawable/chip_outline"
+                    android:focusable="true"
+                    android:text="← Anterior"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_button" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/sleep_button"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minWidth="48dp"
-                android:text="🌙"
-                android:textColor="@android:color/white"
-                app:cornerRadius="16dp"  android:focusable="true" android:focusableInTouchMode="true"/>
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/btn_next"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_marginStart="@dimen/spacing_sm"
+                    android:layout_weight="1"
+                    android:background="@drawable/chip_outline"
+                    android:focusable="true"
+                    android:text="Próxima aula →"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_button" />
+            </LinearLayout>
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/sleep_timer_button"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="wrap_content"
+            <!-- A seguir -->
+            <TextView
+                android:id="@+id/up_next_label"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:minWidth="48dp"
-                android:text="⏰"
-                android:textColor="@android:color/white"
-                app:cornerRadius="16dp"  android:focusable="true" android:focusableInTouchMode="true"/>
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:text="A seguir"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/text_section_title"
+                android:textStyle="bold" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/fav_button"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="wrap_content"
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/up_next_recycler"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:minWidth="48dp"
-                android:text="☆"
-                android:textColor="@android:color/white"
-                app:cornerRadius="16dp"  android:focusable="true" android:focusableInTouchMode="true"/>
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/playlist_button"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minWidth="48dp"
-                android:text="☰"
-                android:textColor="@android:color/white"
-                app:cornerRadius="16dp"  android:focusable="true" android:focusableInTouchMode="true"/>
+                android:layout_marginTop="@dimen/spacing_md"
+                android:clipToPadding="false"
+                android:nestedScrollingEnabled="false"
+                android:overScrollMode="never" />
         </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
 
-        <TextView
-            android:id="@+id/sleep_timer_label"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:textColor="#FFFF8B9F"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:shadowColor="#80000000"
-            android:shadowDx="0"
-            android:shadowDy="1"
-            android:shadowRadius="3"
-            android:visibility="gone" />
-    </LinearLayout>
-
-    <!-- v2.0.0: Seek gesture hint (center overlay, transient) -->
-    <TextView
-        android:id="@+id/seek_gesture_hint"
-        android:layout_width="wrap_content"
+    <!-- Bottom nav (retrato, celular) -->
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottom_nav"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:background="#CC000000"
-        android:paddingHorizontal="22dp"
-        android:paddingVertical="10dp"
-        android:textColor="@android:color/white"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        android:visibility="gone"
-        android:elevation="8dp" />
-
-    <!-- v2.0.0: Swipe indicator (top-center overlay, transient) -->
-    <TextView
-        android:id="@+id/swipe_indicator"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:layout_marginTop="80dp"
-        android:background="#CC000000"
-        android:paddingHorizontal="22dp"
-        android:paddingVertical="10dp"
-        android:textColor="@android:color/white"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        android:visibility="gone"
-        android:elevation="8dp" />
-
-</FrameLayout>
+        android:layout_marginHorizontal="@dimen/content_margin"
+        android:layout_marginBottom="@dimen/spacing_md"
+        android:background="@drawable/nav_bar_background"
+        android:elevation="@dimen/elevation_3"
+        app:itemActiveIndicatorStyle="@style/NavIndicatorPill"
+        app:itemIconTint="@color/bottom_nav_item_color"
+        app:itemTextColor="@color/bottom_nav_item_color"
+        app:labelVisibilityMode="labeled"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:menu="@menu/bottom_nav_menu" />
+</androidx.constraintlayout.widget.ConstraintLayout>
