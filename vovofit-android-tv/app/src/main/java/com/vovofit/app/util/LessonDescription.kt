@@ -69,6 +69,34 @@ object LessonDescription {
     const val DETAIL_POLL_ATTEMPTS = 6
     const val POLL_DELAY_MS = 30_000L
 
+    // ───────── gancho de abertura (Elton 19:43, onda 2) ─────────
+    //
+    // O texto descritivo exibido (aba Resumo) comeca com um GANCHO sorteado
+    // a cada exibicao, combinado com o resumo da Meggy. O sorteio e POR
+    // EXIBICAO, nao por aula: o resumo guardado (cache local / servidor)
+    // continua CRU — o gancho so existe na hora de mostrar ([withHook]).
+    // Sem resumo gerado nao ha gancho (a provisoria e so o nome da aula;
+    // o branco continua branco — nunca inventar conteudo).
+    val DESCRIPTION_HOOKS = listOf(
+        "Nesta aula exploramos...",
+        "Vamos aprender...",
+        "Nesta aula, você vai descobrir...",
+        "Prepare-se para mergulhar em...",
+        "Hoje vamos ver..."
+    )
+
+    /**
+     * Combina um gancho aleatorio com o resumo gerado. Devolve o resumo
+     * intacto quando vazio ou quando ja comeca com um dos ganchos
+     * (nunca duplica o gancho numa re-exibicao).
+     */
+    fun withHook(summary: String): String {
+        val clean = summary.trim()
+        if (clean.isEmpty()) return summary
+        if (DESCRIPTION_HOOKS.any { clean.startsWith(it, ignoreCase = true) }) return summary
+        return "${DESCRIPTION_HOOKS.random()} $clean"
+    }
+
     // ───────── (b)/(c) — heurística de "nome real de aula" ─────────
     //
     // Regra exata (nada de adivinhar na hora do teste):
