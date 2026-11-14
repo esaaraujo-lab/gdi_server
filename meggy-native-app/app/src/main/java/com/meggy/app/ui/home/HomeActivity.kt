@@ -35,6 +35,7 @@ import com.meggy.app.util.PlaylistManager
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.Format
 import com.meggy.app.util.ThumbArt
+import com.meggy.app.util.LibraryCovers
 import com.meggy.app.util.TvUtils
 import com.meggy.app.util.FocusAnimator
 import com.meggy.app.util.setWordEllipsized
@@ -48,6 +49,21 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var binding: ActivityHomeBinding
     private lateinit var api: ApiService
     private var heroRotator: HeroRotator? = null
+    // Onda 2 (a) — capa do admin por drivePath (GET
+    // /api/featured-courses → cover_url), carregada em 2º plano.
+    private var featuredCoverByPath: Map<String, String> = emptyMap()
+    private var drivesAdapter: DriveRailAdapter? = null
+    // v2.7.11 camada (3) — recents p/ re-aplicar o destaque da TV
+    // quando o manifesto da biblioteca chega (onReady).
+    private var homeRecents: List<SessionManager.RecentItem> = emptyList()
+    private val libraryReadyListener: () -> Unit = {
+        if (!isFinishing && !isDestroyed) {
+            heroRotator?.refreshHeroArt()
+            binding.railContinue.adapter?.notifyDataSetChanged()
+            drivesAdapter?.notifyDataSetChanged()
+            setupFeaturedContinue(homeRecents)
+        }
+    }
     private var lastFocusContinue = 0
     private var lastFocusDrives = 0
 
@@ -113,6 +129,35 @@ class HomeActivity : AppCompatActivity() {
         setupHero()
         setupContinueRail()
         setupDrivesRail()
+        fetchFeaturedCovers()
+        // v2.7.11 camada (3) — busca o manifesto da biblioteca em
+        // 2º plano; quando chegar, o listener re-aplica as capas.
+        LibraryCovers.warmUp(this)
+        LibraryCovers.addOnReadyListener(libraryReadyListener)
+    }
+
+    /**
+     * Onda 2 (a) — busca as capas do admin (best-effort, silenciosa:
+     * sem a rota/campo, o mapa fica vazio e a UI usa (b)/(c)). Quando
+     * chega capa, atualiza os cards de drive e re-aplica a capa do
+     * hero atual por cima da thumb/capa gerada que já está na tela.
+     */
+    private fun fetchFeaturedCovers() {
+        lifecycleScope.launch {
+            val courses = withContext(Dispatchers.IO) { api.getFeaturedCourses() }
+                ?: return@launch
+            val map = courses.mapNotNull { c ->
+                val url = c.coverUrl?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                c.coursePath to url
+            }.toMap()
+            if (map.isEmpty()) return@launch
+            featuredCoverByPath = map
+            drivesAdapter?.setFeaturedCovers(map)
+            val current = heroRotator?.currentItem() ?: return@launch
+            if (current.coverUrl?.isNotBlank() == true) return@launch
+            if (map[current.drivePath].isNullOrBlank()) return@launch
+            heroRotator?.refreshHeroArt()
+        }
     }
 
     override fun onResume() {
@@ -191,6 +236,12 @@ class HomeActivity : AppCompatActivity() {
         }
 
         fun start() { handler.postDelayed(rotateRunnable, 8000L) }
+
+        // Onda 2 (a) — destaque atual + re-render da arte quando as
+        // capas do admin chegam (fetchFeaturedCovers).
+        fun currentItem(): HeroItem = items[index]
+        fun refreshHeroArt() { loadHeroArt(items[index]) }
+
         fun stop() { handler.removeCallbacks(rotateRunnable) }
 
         private fun next() {
@@ -232,11 +283,30 @@ class HomeActivity : AppCompatActivity() {
          * drivePath). Sem thumb no Drive, fica o gradiente escuro limpo
          * — sem bola de monograma.
          */
+        /**
+         * v2.7.11 onda 2 — hierarquia da capa do hero:
+         *   (a) cover_url do destaque (HeroItem.coverUrl, foto do admin);
+         *   (b) thumb do Drive do 1º vídeo da pasta;
+         *   (c) imagem da biblioteca por tipo de aula
+         *       (LibraryCovers — nome do destaque/curso);
+         *   (d) capa gerada do drive (ThumbArt.coverResForPath).
+         * Nunca monograma nem gradiente liso como capa: sem (a) nem
+         * (b), o hero mostra a capa gerada (antes: gradiente escuro).
+         */
         private fun loadHeroArt(item: HeroItem) {
+            val adminCover = item.coverUrl?.takeIf { it.isNotBlank() }
+                ?: featuredCoverByPath[item.drivePath]?.takeIf { it.isNotBlank() }
+            if (adminCover != null) { showHeroArtUrl(adminCover, item); return }
             val cached = heroThumbCache[item.drivePath]
-            if (cached != null) { showHeroArt(cached); return }
-            if (heroThumbCache.containsKey(item.drivePath)) { showHeroArt(null); return }
-            showHeroArt(null)
+            if (cached != null) { showHeroArtUrl(cached, item); return }
+            if (heroThumbCache.containsKey(item.drivePath)) {
+                // Thumb (2) conhecida como ausente → biblioteca (3)
+                // por nome do destaque/curso; sem match, capa gerada (4).
+                val libraryUrl = LibraryCovers.resolve(item.title, item.driveName, item.drivePath)
+                if (libraryUrl != null) showHeroArtUrl(libraryUrl, item) else showHeroCover(item)
+                return
+            }
+            showHeroCover(item)
             lifecycleScope.launch {
                 val thumb = withContext(Dispatchers.IO) {
                     runCatching { api.listFolder(item.drivePath, 1) }.getOrNull()
@@ -244,25 +314,27 @@ class HomeActivity : AppCompatActivity() {
                         ?.thumbnailLink
                 }
                 heroThumbCache[item.drivePath] = thumb
-                if (items[index] == item) showHeroArt(thumb)
+                // Re-avalia a hierarquia (a) > (b) > (c): a capa do
+                // admin pode ter chegado depois que esta busca começou
+                // — sem isso a thumb (b) sobrescreveria a capa (a).
+                if (items[index] == item) loadHeroArt(item)
             }
         }
 
-        private fun showHeroArt(thumb: String?) {
-            if (thumb.isNullOrBlank()) {
-                binding.heroImage.visibility = View.GONE
-                binding.heroScrim.visibility = View.GONE
-                return
-            }
+        private fun showHeroArtUrl(thumb: String, item: HeroItem) {
+            val coverRes = ThumbArt.coverResForPath(item.drivePath)
             binding.heroImage.visibility = View.VISIBLE
             binding.heroScrim.visibility = View.VISIBLE
             binding.heroImage.load(thumb) {
-                error(R.drawable.hero_dark_gradient)
-                listener(onError = { _, _ ->
-                    binding.heroImage.visibility = View.GONE
-                    binding.heroScrim.visibility = View.GONE
-                })
+                error(coverRes)
+                listener(onError = { _, _ -> showHeroCover(item) })
             }
+        }
+
+        private fun showHeroCover(item: HeroItem) {
+            binding.heroImage.visibility = View.VISIBLE
+            binding.heroScrim.visibility = View.VISIBLE
+            binding.heroImage.setImageResource(ThumbArt.coverResForPath(item.drivePath))
         }
 
     }
@@ -272,6 +344,7 @@ class HomeActivity : AppCompatActivity() {
     private fun setupContinueRail() {
         val sm = SessionManager.get(this)
         val recents = sm.getRecents()
+        homeRecents = recents
 
         if (recents.isEmpty()) {
             binding.labelContinue.visibility = View.GONE
@@ -396,16 +469,24 @@ class HomeActivity : AppCompatActivity() {
         binding.featuredTimeText.text = Format.positionText(pos, dur)
         // v2.7.11 — sem monograma: arte-padrão do drive quando não há
         // thumb (o ícone do drive vem do path da pasta do vídeo).
+        // v2.7.11 onda 2 — sem thumb do Drive, o destaque da TV
+        // mostra a capa gerada do drive (nunca o emoji do drive).
         fun showFeaturedFallback() {
-            binding.featuredThumb.visibility = View.GONE
-            binding.featuredFallbackIcon.visibility = View.VISIBLE
-            binding.featuredFallbackIcon.text = ThumbArt.driveIconFor(best.folderPath)
-        }
-        if (!best.thumbnailLink.isNullOrBlank()) {
             binding.featuredThumb.visibility = View.VISIBLE
             binding.featuredFallbackIcon.visibility = View.GONE
-            binding.featuredThumb.load(best.thumbnailLink) {
-                error(com.meggy.app.R.drawable.card_gradient_pink)
+            binding.featuredThumb.setImageResource(ThumbArt.coverResForPath(best.folderPath))
+        }
+        // v2.7.11 camada (3): sem thumb do Drive, a imagem da
+        // biblioteca por tipo de aula; sem match, a capa gerada (4).
+        val featuredRemote = LibraryCovers.remoteCover(
+            best.thumbnailLink, best.videoName,
+            extractCourseName(best.folderPath), best.folderPath
+        )
+        if (featuredRemote != null) {
+            binding.featuredThumb.visibility = View.VISIBLE
+            binding.featuredFallbackIcon.visibility = View.GONE
+            binding.featuredThumb.load(featuredRemote) {
+                error(ThumbArt.coverResForPath(best.folderPath))
                 listener(onError = { _, _ -> showFeaturedFallback() })
             }
         } else {
@@ -600,10 +681,11 @@ class HomeActivity : AppCompatActivity() {
         binding.railDrives.layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         binding.railDrives.addItemDecoration(RailGutterDecoration(8))
-        binding.railDrives.adapter = DriveRailAdapter(DriveItem.ALL) { drive ->
+        drivesAdapter = DriveRailAdapter(DriveItem.ALL, featuredCoverByPath) { drive ->
             lastFocusDrives = DriveItem.ALL.indexOf(drive)
             openDrive(drive)
         }
+        binding.railDrives.adapter = drivesAdapter
     }
 
     private fun openDrive(drive: DriveItem) {
@@ -636,6 +718,7 @@ class HomeActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        LibraryCovers.removeOnReadyListener(libraryReadyListener)
         super.onDestroy()
         heroRotator?.stop()
     }
