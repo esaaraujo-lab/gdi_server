@@ -11,12 +11,13 @@ import com.meggy.app.R
 import com.meggy.app.data.DriveItem
 import com.meggy.app.data.FileItem
 import com.meggy.app.data.colorFromString
-import com.meggy.app.data.monogramFor
 import com.meggy.app.databinding.ItemSearchResultBinding
 import com.meggy.app.util.CardGradient
 import com.meggy.app.util.FocusAnimator
 import com.meggy.app.util.Format
 import com.meggy.app.util.SessionManager
+import com.meggy.app.util.ThumbArt
+import com.meggy.app.util.LibraryCovers
 import com.meggy.app.util.TvUtils
 
 /**
@@ -76,9 +77,22 @@ class SearchResultAdapter(
                     resultTitle.text = d.name
                     resultMeta.text = if (d.isConcurso) "Concurso · ${d.tagline}" else "Curso · ${d.tagline}"
                     resultBg.background = CardGradient.drawable(res, colorFromString(d.name))
-                    resultThumb.visibility = View.GONE
-                    resultMonogram.visibility = View.VISIBLE
-                    resultMonogram.text = monogramFor(d.name)
+                    // v2.7.11 onda 2 + camada (3) — resultado de drive:
+                    // imagem da biblioteca pelo nome do drive; sem match,
+                    // a capa gerada do drive (nunca monograma).
+                    resultThumb.visibility = View.VISIBLE
+                    resultMonogram.visibility = View.GONE
+                    val libraryUrl = LibraryCovers.resolve(d.name)
+                    if (libraryUrl != null) {
+                        resultThumb.load(libraryUrl) {
+                            error(ThumbArt.coverResForDriveIndex(d.index))
+                            listener(onError = { _, _ ->
+                                resultThumb.setImageResource(ThumbArt.coverResForDriveIndex(d.index))
+                            })
+                        }
+                    } else {
+                        resultThumb.setImageResource(ThumbArt.coverResForDriveIndex(d.index))
+                    }
                     resultProgressRow.visibility = View.GONE
                     resultPill.visibility = View.GONE
                 }
@@ -96,15 +110,22 @@ class SearchResultAdapter(
                         else -> f.humanSize
                     }
                     resultBg.background = CardGradient.drawable(res, colorFromString(f.name))
-                    val thumb = f.thumbnailLink
+                    // v2.7.11 onda 2 + camada (3) — sem thumb, a imagem
+                    // da biblioteca pelo nome do arquivo/pasta; sem match,
+                    // a capa gerada do drive (nunca monograma).
+                    val coverRes = ThumbArt.coverResForPath(f.folderPath ?: "")
+                    val thumb = LibraryCovers.remoteCover(f.thumbnailLink, f.name, f.folderPath)
                     if (!thumb.isNullOrBlank() && (f.isVideo || f.isAudio || f.isPdf)) {
                         resultThumb.visibility = View.VISIBLE
                         resultMonogram.visibility = View.GONE
-                        resultThumb.load(thumb) { error(R.drawable.card_gradient_pink) }
+                        resultThumb.load(thumb) {
+                            error(coverRes)
+                            listener(onError = { _, _ -> resultThumb.setImageResource(coverRes) })
+                        }
                     } else {
-                        resultThumb.visibility = View.GONE
-                        resultMonogram.visibility = View.VISIBLE
-                        resultMonogram.text = monogramFor(f.name)
+                        resultThumb.visibility = View.VISIBLE
+                        resultMonogram.visibility = View.GONE
+                        resultThumb.setImageResource(coverRes)
                     }
                     // Progresso quando retomável.
                     val fp = f.folderPath ?: ""
