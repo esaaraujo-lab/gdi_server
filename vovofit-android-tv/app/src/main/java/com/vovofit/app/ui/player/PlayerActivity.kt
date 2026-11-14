@@ -879,7 +879,7 @@ class PlayerActivity : AppCompatActivity() {
                         ts.setParameters(
                             ts.buildUponParameters()
                                 .setRendererDisabled(C.TRACK_TYPE_TEXT, false)
-                                .setSelectionOverride(r, groups, TrackSelectionOverride(group, t))
+                                .setOverrideForType(TrackSelectionOverride(group, t))
                         )
                         updateCcActiveState()
                         return
