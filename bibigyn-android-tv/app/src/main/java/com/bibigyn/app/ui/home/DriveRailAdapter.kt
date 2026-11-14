@@ -1,15 +1,18 @@
 package com.bibigyn.app.ui.home
 
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AnimationUtils
 import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
+import coil.load
 import com.bibigyn.app.R
 import com.bibigyn.app.data.DriveItem
 import com.bibigyn.app.util.setWordEllipsized
 import com.bibigyn.app.databinding.ItemDriveCardBinding
 import com.bibigyn.app.util.FocusAnimator
+import com.bibigyn.app.util.CoverLibrary
 import com.bibigyn.app.util.SessionManager
 import com.bibigyn.app.util.TvUtils
 
@@ -23,8 +26,20 @@ import com.bibigyn.app.util.TvUtils
  */
 class DriveRailAdapter(
     private val drives: List<DriveItem>,
+    /**
+     * Onda 2 (a) — capa do admin por coursePath ("/6:/" → URL).
+     * Vazio na construção (o GET roda em 2º plano); atualizado por
+     * [setFeaturedCovers] quando a resposta chega.
+     */
+    private var featuredCovers: Map<String, String> = emptyMap(),
     private val onClick: (DriveItem) -> Unit
 ) : RecyclerView.Adapter<DriveRailAdapter.VH>() {
+
+    /** Atualiza as capas do admin e redesenha os cards. */
+    fun setFeaturedCovers(covers: Map<String, String>) {
+        featuredCovers = covers
+        notifyDataSetChanged()
+    }
 
     inner class VH(val binding: ItemDriveCardBinding) : RecyclerView.ViewHolder(binding.root) {
         init {
@@ -49,6 +64,51 @@ class DriveRailAdapter(
             driveMeta.setWordEllipsized(drive.tagline)
 
             val coursePath = "/${drive.index}:/"
+            // Onda 2 — capa do card: (a) capa do admin, (b) (o drive
+            // raiz não tem vídeo direto — sem thumb), (c) capa gerada
+            // do drive. A foto fica atrás do chip de ícone; sem capa,
+            // o tile segue escuro com o ícone (nunca monograma).
+            val adminCover = featuredCovers[coursePath]?.takeIf { it.isNotBlank() }
+            val generatedCover = DriveItem.coverResForDrive(drive.index)
+            // Camada 3 — biblioteca por tipo (nome do drive →
+            // tagline → caminho). Sem match, (4) capa gerada.
+            val libraryUrl = CoverLibrary.resolve(
+                holder.itemView.context, drive.name, drive.tagline, coursePath
+            )
+            val showLibraryOrGenerated: () -> Unit = {
+                if (!libraryUrl.isNullOrBlank()) {
+                    driveCover.visibility = View.VISIBLE
+                    driveCover.load(libraryUrl) {
+                        error(generatedCover ?: R.drawable.card_gradient_pink)
+                        listener(onError = { _, _ ->
+                            if (generatedCover != null) {
+                                driveCover.setImageResource(generatedCover)
+                            }
+                        })
+                    }
+                } else if (generatedCover != null) {
+                    driveCover.visibility = View.VISIBLE
+                    driveCover.setImageResource(generatedCover)
+                } else {
+                    driveCover.visibility = View.GONE
+                }
+            }
+            when {
+                adminCover != null -> {
+                    driveCover.visibility = View.VISIBLE
+                    driveCover.load(adminCover) {
+                        error(generatedCover ?: R.drawable.card_gradient_pink)
+                        listener(onError = { _, _ -> showLibraryOrGenerated() })
+                    }
+                }
+                libraryUrl != null -> showLibraryOrGenerated()
+                generatedCover != null -> {
+                    driveCover.visibility = View.VISIBLE
+                    driveCover.setImageResource(generatedCover)
+                }
+                else -> driveCover.visibility = View.GONE
+            }
+
             val sm = SessionManager.get(holder.itemView.context)
             driveFavStar.text = if (sm.isFavoriteCourse(coursePath)) "⭐" else "☆"
             driveFavStar.setOnClickListener {
