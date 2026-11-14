@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  v1.0.4 — Card de drive (home "Explorar drives", conceito home).
-  Tile de ícone rosa com o emoji do drive (DriveItem.icon) + nome 14sp
+  v1.0.8 — Card de drive (home "Explorar drives", conceito home).
+  Card ESCURO com quadrado de ícone na cor da marca + nome 14sp
   + linha de metadados (DriveItem.tagline, texto curado — sem
   contagens inventadas). Foco via FocusAnimator.attachCard().
 -->
@@ -26,25 +26,27 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <!-- Tile de ícone (rosa da marca, monograma escuro) -->
+        <!-- v1.0.8 — card ESCURO com quadrado de ícone na cor da marca
+             (conceito); o tile ROSA em tela cheia saiu. -->
         <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="@dimen/drive_tile_height">
+            android:layout_height="wrap_content"
+            android:padding="@dimen/spacing_md">
 
-            <View
-                android:id="@+id/drive_bg"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:background="@color/drive_icon_tile" />
+            <FrameLayout
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/drive_icon_bg">
 
-            <TextView
-                android:id="@+id/drive_icon"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:gravity="center"
-                android:textColor="@color/drive_icon_tile_text"
-                android:textSize="52sp"
-                android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/drive_icon"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:textColor="@color/drive_icon_tile_text"
+                    android:textSize="28sp"
+                    android:textStyle="bold" />
+            </FrameLayout>
 
             <!-- ★ Favorito do drive -->
             <TextView
