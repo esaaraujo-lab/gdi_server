@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v1.0.4 — Fundo flutuante da bottom nav (M3): surface_container,
+     cantos 28dp, elevação aplicada na view. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="28dp" />
+    <solid android:color="@color/md_surface_container" />
+</shape>
