@@ -2714,6 +2714,17 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 .meggy-summary-body code {
   font-family: 'SF Mono', 'Consolas', monospace;
 }
+/* ★ v2.15.5 item 10: elementos MD na view /resumos (tabelas, citações,
+   código em bloco, hr e links — .gdi-isa-summary-body já os tem). */
+.meggy-summary-body table { border-collapse: collapse; width: 100%; margin: 10px 0; display: block; overflow-x: auto; }
+.meggy-summary-body th, .meggy-summary-body td { border: 1px solid var(--ferreto-border, #30363d); padding: 8px 10px; text-align: left; font-size: 13px; }
+.meggy-summary-body th { background: rgba(255,255,255,0.08); font-weight: 600; }
+.meggy-summary-body blockquote { border-left: 3px solid #ff8b9f; margin: 10px 0; padding: 4px 14px; color: #9aa4b8; font-style: italic; background: rgba(255,139,159,0.06); border-radius: 0 8px 8px 0; }
+.meggy-summary-body pre { background: rgba(0,0,0,0.3); padding: 12px; border-radius: 8px; overflow-x: auto; }
+.meggy-summary-body hr { border: none; border-top: 1px solid var(--ferreto-border, #30363d); margin: 16px 0; }
+.meggy-summary-body a { color: #5ddeda; }
+.meggy-summary-body ul, .meggy-summary-body ol { margin: 0 0 12px; padding-left: 24px; }
+.meggy-summary-body li { margin: 4px 0; }
 
 /* ─── Light theme overrides ─── */
 [data-bs-theme="light"] .meggy-study-item {
@@ -2862,6 +2873,14 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 .meggy-ai-msg.bot ul, .meggy-ai-msg.bot ol { margin: 6px 0; padding-left: 22px; }
 .meggy-ai-msg.bot li { margin: 3px 0; }
 .meggy-ai-msg.bot strong { color: #5ddeda; }
+/* ★ v2.15.5 item 10: elementos MD no chat da Meggy. */
+.meggy-ai-msg.bot table { border-collapse: collapse; width: 100%; margin: 10px 0; display: block; overflow-x: auto; }
+.meggy-ai-msg.bot th, .meggy-ai-msg.bot td { border: 1px solid rgba(255,255,255,0.15); padding: 6px 8px; text-align: left; font-size: 12px; }
+.meggy-ai-msg.bot th { background: rgba(255,255,255,0.08); font-weight: 600; }
+.meggy-ai-msg.bot blockquote { border-left: 3px solid #ff8b9f; margin: 8px 0; padding: 2px 12px; color: #9aa4b8; font-style: italic; }
+.meggy-ai-msg.bot pre { background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; overflow-x: auto; margin: 8px 0; }
+.meggy-ai-msg.bot hr { border: none; border-top: 1px solid rgba(255,255,255,0.15); margin: 12px 0; }
+.meggy-ai-msg.bot a { color: #5ddeda; }
 .meggy-ai-msg.user {
   align-self: flex-end;
   background: linear-gradient(135deg, #ff8b9f, #c026d3);
