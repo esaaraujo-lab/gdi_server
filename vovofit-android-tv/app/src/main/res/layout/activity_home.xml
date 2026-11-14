@@ -59,6 +59,7 @@
 
             <!-- Hero -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/heroCard"
                 android:layout_width="match_parent"
                 android:layout_height="@dimen/hero_height"
                 android:layout_marginTop="@dimen/spacing_lg"
@@ -76,18 +77,19 @@
                         android:layout_height="match_parent"
                         android:background="@drawable/card_gradient_pink" />
 
-                    <!-- Marca do hero (monograma do título) -->
-                    <TextView
-                        android:id="@+id/heroIcon"
-                        android:layout_width="72dp"
-                        android:layout_height="72dp"
-                        android:layout_gravity="top|end"
-                        android:layout_margin="@dimen/spacing_lg"
-                        android:background="@drawable/btn_play_circle"
-                        android:gravity="center"
-                        android:textColor="@color/md_on_primary"
-                        android:textSize="32sp"
-                        android:textStyle="bold" />
+                    <!-- v1.0.8 — arte real do drive (capa local cover_*) -->
+                    <ImageView
+                        android:id="@+id/heroArt"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="centerCrop"
+                        android:contentDescription="@string/thumb_desc" />
+
+                    <!-- Scrim escuro (texto legível sobre a foto) -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/bottom_gradient" />
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -141,41 +143,8 @@
                             android:textSize="@dimen/text_button"
                             android:textStyle="bold" />
 
-                        <LinearLayout
-                            android:id="@+id/heroDots"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="@dimen/spacing_sm"
-                            android:orientation="horizontal" />
                     </LinearLayout>
 
-                    <TextView
-                        android:id="@+id/heroPrev"
-                        android:layout_width="36dp"
-                        android:layout_height="36dp"
-                        android:layout_gravity="center_vertical|start"
-                        android:layout_marginStart="@dimen/spacing_sm"
-                        android:background="@drawable/btn_play_circle"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:gravity="center"
-                        android:text="‹"
-                        android:textColor="@color/md_on_surface"
-                        android:textSize="24sp" />
-
-                    <TextView
-                        android:id="@+id/heroNext"
-                        android:layout_width="36dp"
-                        android:layout_height="36dp"
-                        android:layout_gravity="center_vertical|end"
-                        android:layout_marginEnd="@dimen/spacing_sm"
-                        android:background="@drawable/btn_play_circle"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:gravity="center"
-                        android:text="›"
-                        android:textColor="@color/md_on_surface"
-                        android:textSize="24sp" />
                 </FrameLayout>
             </com.google.android.material.card.MaterialCardView>
 
@@ -229,14 +198,13 @@
                                 android:visibility="gone"
                                 android:contentDescription="@string/thumb_desc" />
 
-                            <TextView
-                                android:id="@+id/featuredMonogram"
+                            <!-- v1.0.8 — capa do drive quando não há thumb -->
+                            <ImageView
+                                android:id="@+id/featuredArt"
                                 android:layout_width="match_parent"
                                 android:layout_height="match_parent"
-                                android:gravity="center"
-                                android:textColor="@color/tile_title"
-                                android:textSize="@dimen/text_monogram"
-                                android:textStyle="bold" />
+                                android:scaleType="centerCrop"
+                                android:contentDescription="@string/thumb_desc" />
                         </FrameLayout>
 
                         <LinearLayout
