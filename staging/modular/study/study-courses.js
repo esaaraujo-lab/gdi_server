@@ -2317,7 +2317,15 @@
     e.stopPropagation();
     const courseKey = btn.dataset && btn.dataset.courseKey;
     if(!courseKey) return;
-    const ok = confirm('Reescanear este curso? O cache compartilhado será invalidado e o scan recomeçará.');
+    // ★ v2.15.4 Q3: gdiModal em vez do confirm() nativo (auto-dispensado
+    //   em navegador automatizado → o rescan nunca executava). Sem gdiModal:
+    //   toast + NÃO executa (nunca sem confirmação).
+    let ok = false;
+    try {
+      if (typeof window.gdiModal === 'function') ok = await window.gdiModal({ title: 'Reescanear curso', message: 'Reescanear este curso? O cache compartilhado será invalidado e o scan recomeçará.', confirmText: 'Reescanear', cancelText: 'Cancelar', danger: true });
+      else if (typeof window.showToast === 'function') { window.showToast('Confirmação indisponível — recarregue a página e tente de novo'); return; }
+      else { console.warn('[Reescanear] gdiModal indisponível'); return; }
+    } catch (_) { return; }
     if(!ok) return;
     try{
       if(window.gdiCourseScanner && typeof window.gdiCourseScanner.rescanCourse === 'function'){
@@ -2663,7 +2671,8 @@
   // ★ v2.15.3 (item 4): motivo estruturado do quiz → HTML. O modal NÃO
   //   sobrescreve mais o bodyEl com a mensagem genérica quando o banco
   //   fica em 0 — renderiza o motivo real que generateQuestions devolveu
-  //   (no_text / ai_down / bad_format / extract_timeout / no_pdf).
+  //   (no_text / ocr_failed / ai_down / bad_format / extract_timeout / no_pdf).
+  //   ★ v2.15.4: 'ocr_failed' = o OCR por IA falhou (detail traz o motivo real).
   function quizFailureHtml(res){
     res=res||{};
     const reason=res.reason||'unknown';
@@ -2672,7 +2681,10 @@
     let title='Não foi possível gerar questões dos PDFs deste módulo.', sub='';
     if(reason==='no_text'){
       title='Os PDFs deste módulo não têm texto selecionável.';
-      sub='PDFs escaneados (só imagens) — OCR desativado. '+n+' de '+tested+' PDF(s) testado(s) '+(tot>tested?'(de '+tot+' no módulo) ':'')+'têm texto'+(res.pdfName?(' — ex.: '+res.pdfName):'')+'. Use PDFs com texto ou ative o OCR por IA.';
+      sub='PDFs escaneados (só imagens) e o OCR por IA não encontrou texto legível. '+n+' de '+tested+' PDF(s) testado(s) '+(tot>tested?'(de '+tot+' no módulo) ':'')+'têm texto'+(res.pdfName?(' — ex.: '+res.pdfName):'')+'. '+(detail||'');
+    }else if(reason==='ocr_failed'){
+      title='O OCR por IA falhou nestes PDFs.';
+      sub=detail||'A IA não conseguiu ler as páginas escaneadas. Tente de novo em alguns minutos.';
     }else if(reason==='ai_down'){
       title='A Meggy (IA) está indisponível no momento.';
       sub=detail||'Tente de novo em alguns minutos.';
