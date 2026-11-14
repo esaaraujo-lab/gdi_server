@@ -29,7 +29,7 @@ import com.vovofit.app.util.TvUtils
  * Header com avatar + "Minha lista" + "N itens salvos" em rosa; abas
  * Cursos / Aulas / Concursos (Concursos = cursos favoritos cujo path
  * é um drive de concurso — Vovó Fit: nenhum drive é concurso). Cards com
- * chip de tipo, thumb/monograma, título, progresso real + % (aulas),
+ * chip de tipo, thumb/capa do drive, título, progresso real + % (aulas),
  * ⭐ rosa para remover e botão rosa "Continuar" (cursos).
  * "12 de 45 aulas" NÃO existe sem listar a pasta — omitido
  * (documentado nas REDESIGN_NOTES). Nova seção "Documentos marcados"
