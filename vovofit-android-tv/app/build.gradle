@@ -21,8 +21,8 @@ android {
         // ★ VOVÓ FIT v1.0.1 — Initial release (fork of BiBi Fit).
         //   4 drives: Queima Diária (12), Todo Dia (13), Clube de Casa (14), Saúde e Fitness (15).
         //   Brand: deep teal #0F3D3E + lime green #A3E635. Tag prefix vovofit-v*.
-        versionCode 4
-        versionName "1.0.3"
+        versionCode 5
+        versionName "1.0.4"
     }
 
     // ★ v1.4.0: Signing config com keystore FIXA (mesma em todos os builds)
@@ -68,6 +68,17 @@ dependencies {
     implementation 'androidx.media3:media3-exoplayer:1.2.1'
     implementation 'androidx.media3:media3-ui:1.2.1'
     implementation 'androidx.media3:media3-common:1.2.1'
+    // v1.0.4: cache de vídeo (VideoCache) + fonte OkHttp autenticada.
+    implementation 'androidx.media3:media3-datasource:1.2.1'
+    implementation 'androidx.media3:media3-datasource-okhttp:1.2.1'
+    implementation 'androidx.media3:media3-database:1.2.1'
+    // v1.0.4: leitor de MD (Markwon + tabelas + tachado) e busca no texto
+    // do PDF (pdfbox-android — só para extração de texto; a renderização
+    // continua no PdfRenderer nativo).
+    implementation 'io.noties.markwon:core:4.6.2'
+    implementation 'io.noties.markwon:ext-tables:4.6.2'
+    implementation 'io.noties.markwon:ext-strikethrough:4.6.2'
+    implementation 'com.tom-roush:pdfbox-android:2.0.27.0'
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'
