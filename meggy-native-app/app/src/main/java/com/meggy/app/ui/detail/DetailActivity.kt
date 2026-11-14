@@ -235,6 +235,7 @@ class DetailActivity : AppCompatActivity() {
             val progress = sm.getResumeProgress(r.folderPath, r.videoName)
             RailItem(
                 title = r.videoName,
+                displayTitle = Format.lessonDisplayTitle(r.videoName, shortFolder),
                 subtitle = shortFolder,
                 icon = "🎥",
                 hasProgress = progress > 0,
