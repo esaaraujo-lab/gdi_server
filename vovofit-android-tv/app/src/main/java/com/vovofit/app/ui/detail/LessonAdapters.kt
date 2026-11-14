@@ -5,15 +5,16 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
-import coil.load
 import com.vovofit.app.R
 import com.vovofit.app.data.FileItem
 import com.vovofit.app.data.colorFromString
-import com.vovofit.app.data.monogramFor
+import com.vovofit.app.data.coverResForPath
 import com.vovofit.app.databinding.ItemLessonCardBinding
 import com.vovofit.app.databinding.ItemLessonChildBinding
 import com.vovofit.app.databinding.ItemLessonHeaderBinding
 import com.vovofit.app.util.CardGradient
+import com.vovofit.app.util.CoverLibrary
+import com.vovofit.app.util.loadCoverChain
 import com.vovofit.app.util.FocusAnimator
 import com.vovofit.app.util.Format
 import com.vovofit.app.util.SessionManager
@@ -185,7 +186,7 @@ class LessonListAdapter(
 
 /**
  * v1.0.4 — Grade TV/tablet largo (2 colunas): card por aula com
- * thumb/monograma, título, chips ("▶ Vídeo MM:SS" / "PDF" / "N PDFS"),
+ * thumb/capa do drive, título, chips ("▶ Vídeo MM:SS" / "PDF" / "N PDFS"),
  * "% concluída" + barra rosa. Clique = reproduz o vídeo da aula.
  */
 class LessonGridAdapter(
@@ -230,16 +231,15 @@ class LessonGridAdapter(
 
         with(holder.binding) {
             lessonCardBg.background = CardGradient.drawable(res, colorFromString(group.folder.name))
-            val thumb = video?.thumbnailLink
-            if (!thumb.isNullOrBlank()) {
-                lessonCardThumb.visibility = View.VISIBLE
-                lessonCardMonogram.visibility = View.GONE
-                lessonCardThumb.load(thumb) { error(R.drawable.card_gradient_pink) }
-            } else {
-                lessonCardThumb.visibility = View.GONE
-                lessonCardMonogram.visibility = View.VISIBLE
-                lessonCardMonogram.text = monogramFor(group.folder.name)
-            }
+            // v1.0.8 camada 3 — (2) thumb > (3) imagem da biblioteca
+            // pelo nome/pasta da aula > (4) capa do drive (nunca monograma).
+            val coverRes = coverResForPath(group.folderPath)
+            lessonCardThumb.visibility = View.VISIBLE
+            lessonCardMonogram.visibility = View.GONE
+            lessonCardThumb.loadCoverChain(
+                video?.thumbnailLink, coverRes,
+                group.folder.name, group.folderPath
+            )
             lessonCardTitle.text = group.folder.name
             if (video != null) {
                 lessonCardChipVideo.visibility = View.VISIBLE
