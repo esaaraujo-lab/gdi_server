@@ -1,6 +1,8 @@
 package com.vovofit.app.data
 
 import android.graphics.Color
+
+import com.vovofit.app.R
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -214,6 +216,8 @@ data class HeroItem(
     val icon: String,             // emoji shown in hero corner
     val colorHint: String? = null // optional colorFromString hint
 ) {
+    /** v1.0.8 — arte do hero = capa do drive do destaque. */
+    val coverRes: Int get() = driveCoverRes(driveIndexFromPath(drivePath) ?: 15)
     companion object {
         /**
          * VOVÓ FIT — 4 destaques, um por drive (Queima Diária, Todo Dia,
@@ -286,4 +290,48 @@ fun monogramFor(title: String): String {
     if (words.isEmpty()) return "M"
     if (words.size == 1) return words[0].take(2).uppercase()
     return (words[0].take(1) + words[1].take(1)).uppercase()
+}
+
+/**
+ * v1.0.8 — Arte de capa por drive (drawables locais cover_*, foto real):
+ * usada como arte do hero e como fallback dos cards "Continue assistindo"
+ * quando o Drive nao devolve thumb (ou o Coil falha). Monograma nunca
+ * mais como thumb: a capa garante arte mesmo sem rede. Os 4 drives da
+ * Vovo sao os indices 12-15 (QUEIMA DIARIA, TODO DIA, CLUBE DE CASA,
+ * SAUDE E FITNESS).
+ */
+fun driveCoverRes(driveIndex: Int): Int = when (driveIndex) {
+    12 -> R.drawable.cover_queima_diaria
+    13 -> R.drawable.cover_todo_dia
+    14 -> R.drawable.cover_clube_casa
+    15 -> R.drawable.cover_saude_fitness
+    else -> R.drawable.cover_saude_fitness
+}
+
+/** v1.0.8 — Indice do drive no inicio do path ("/12:/Queima/..." -> 12). */
+fun driveIndexFromPath(path: String?): Int? {
+    if (path.isNullOrBlank()) return null
+    return Regex("""^/?(\d+):""").find(path.trim())?.groupValues?.get(1)?.toIntOrNull()
+}
+
+/**
+ * v1.0.8 — Arte de capa por drive (drawables locais cover_*, foto real):
+ * usada como arte do hero e como fallback dos cards "Continue assistindo"
+ * quando o Drive nao devolve thumb (ou o Coil falha). Monograma nunca
+ * mais como thumb: a capa garante arte mesmo sem rede. Os 4 drives da
+ * Vovo sao os indices 12-15 (QUEIMA DIARIA, TODO DIA, CLUBE DE CASA,
+ * SAUDE E FITNESS).
+ */
+fun driveCoverRes(driveIndex: Int): Int = when (driveIndex) {
+    12 -> R.drawable.cover_queima_diaria
+    13 -> R.drawable.cover_todo_dia
+    14 -> R.drawable.cover_clube_casa
+    15 -> R.drawable.cover_saude_fitness
+    else -> R.drawable.cover_saude_fitness
+}
+
+/** v1.0.8 — Indice do drive no inicio do path ("/12:/Queima/..." -> 12). */
+fun driveIndexFromPath(path: String?): Int? {
+    if (path.isNullOrBlank()) return null
+    return Regex("""^/?(\d+):""").find(path.trim())?.groupValues?.get(1)?.toIntOrNull()
 }
