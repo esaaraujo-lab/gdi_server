@@ -32,6 +32,7 @@ import com.bibigyn.app.ui.search.SearchActivity
 import com.bibigyn.app.ui.settings.SettingsActivity
 import com.bibigyn.app.util.AuthHelper
 import com.bibigyn.app.util.CrossFolderPlaylist
+import com.bibigyn.app.util.CoverLibrary
 import com.bibigyn.app.util.PlaylistManager
 import com.bibigyn.app.util.SessionManager
 import com.bibigyn.app.util.Format
@@ -51,6 +52,10 @@ class HomeActivity : AppCompatActivity() {
     // v2.1.9: arte do hero por drivePath (primeiro vídeo do drive) —
     // 1 busca por drive, depois cache em memória até o app fechar.
     private val heroThumbCache = mutableMapOf<String, String?>()
+    // Onda 2 (a) — capa do admin por coursePath (GET
+    // /api/featured-courses → cover_url), carregada em 2º plano.
+    private var featuredCoverByPath: Map<String, String> = emptyMap()
+    private var drivesAdapter: DriveRailAdapter? = null
     private var lastFocusContinue = 0
     private var lastFocusDrives = 0
 
@@ -116,6 +121,76 @@ class HomeActivity : AppCompatActivity() {
         setupHero()
         setupContinueRail()
         setupDrivesRail()
+        fetchFeaturedCovers()
+        // Camada 3 — biblioteca de capas por tipo (Elton 2026-11-14
+        // 19:50): busca o manifesto em 2º plano; quando chega,
+        // re-aplica a arte do hero e redesenha os rails (os cards
+        // passam a resolver a imagem da biblioteca). Sem URL / sem
+        // rede / sem match, nada muda — e nunca há toast de erro.
+        CoverLibrary.warmUp(this) {
+            if (isFinishing || isDestroyed) return@warmUp
+            heroRotator?.refreshArt()
+            drivesAdapter?.notifyDataSetChanged()
+            binding.railContinue.adapter?.notifyDataSetChanged()
+            setupFeaturedContinue(SessionManager.get(this).getRecents())
+        }
+    }
+
+    /**
+     * Onda 2 (a) — busca as capas do admin (best-effort, silenciosa:
+     * sem a rota/campo, o mapa fica vazio e a UI usa (b)/(c)). Quando
+     * chega capa, atualiza os cards de drive e re-aplica a capa do
+     * hero atual por cima da thumb/capa gerada que já está na tela.
+     */
+    private fun fetchFeaturedCovers() {
+        lifecycleScope.launch {
+            val courses = withContext(Dispatchers.IO) { api.getFeaturedCourses() }
+                ?: return@launch
+            val map = courses.mapNotNull { c ->
+                val url = c.coverUrl?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                c.coursePath to url
+            }.toMap()
+            if (map.isEmpty()) return@launch
+            featuredCoverByPath = map
+            drivesAdapter?.setFeaturedCovers(map)
+            val current = heroRotator?.currentItem() ?: return@launch
+            val cover = current.coverUrl?.takeIf { it.isNotBlank() }
+                ?: map[current.drivePath] ?: return@launch
+            binding.heroThumb.visibility = View.VISIBLE
+            binding.heroThumb.load(cover) {
+                error(R.drawable.card_gradient_pink)
+            }
+        }
+    }
+
+    /**
+     * Onda 2 (c) — capa gerada do drive no hero (quando não há (a)
+     * capa do admin nem (b) thumb do Drive). Só aplica se o hero
+     * ainda for o atual.
+     */
+    private fun applyGeneratedHeroCover(hero: HeroItem) {
+        // Camada 3 — biblioteca por tipo (título → drive → caminho):
+        // sem ela, (4) capa gerada do drive.
+        val libraryUrl = CoverLibrary.resolve(
+            this, hero.title, hero.driveName, hero.drivePath
+        )
+        if (!libraryUrl.isNullOrBlank()) {
+            if (heroRotator?.currentItem() != hero) return
+            binding.heroThumb.visibility = View.VISIBLE
+            binding.heroThumb.load(libraryUrl) {
+                error(R.drawable.card_gradient_pink)
+                listener(onError = { _, _ -> applyGeneratedDriveCover(hero) })
+            }
+            return
+        }
+        applyGeneratedDriveCover(hero)
+    }
+
+    private fun applyGeneratedDriveCover(hero: HeroItem) {
+        val coverRes = DriveItem.coverResForPath(hero.drivePath) ?: return
+        if (heroRotator?.currentItem() != hero) return
+        binding.heroThumb.visibility = View.VISIBLE
+        binding.heroThumb.load(coverRes)
     }
 
     override fun onResume() {
@@ -164,26 +239,43 @@ class HomeActivity : AppCompatActivity() {
                 startActivity(intent)
             },
             onRenderArt = { hero ->
-                // v2.1.9 (a): arte real do hero — thumb do primeiro
-                // vídeo do drive (cache por drivePath). Sem arte, o
-                // hero fica no gradiente escuro LIMPO (sem monograma).
-                lifecycleScope.launch {
-                    val thumb = if (heroThumbCache.containsKey(hero.drivePath)) {
-                        heroThumbCache[hero.drivePath]
-                    } else {
-                        fetchHeroThumb(hero.drivePath)
-                            .also { heroThumbCache[hero.drivePath] = it }
+                // Onda 2 — hierarquia da capa do hero: (a) capa do
+                // admin (HeroItem.coverUrl ou featuredCoverByPath),
+                // (b) thumb do Drive (1º vídeo da pasta, onda 1),
+                // (c) capa gerada do drive. Nunca monograma nem
+                // gradiente liso como capa.
+                val adminCover = hero.coverUrl?.takeIf { it.isNotBlank() }
+                    ?: featuredCoverByPath[hero.drivePath]
+                if (!adminCover.isNullOrBlank()) {
+                    if (heroRotator?.currentItem() == hero) {
+                        binding.heroThumb.visibility = View.VISIBLE
+                        binding.heroThumb.load(adminCover) {
+                            error(R.drawable.card_gradient_pink)
+                        }
                     }
-                    // O usuário pode ter avançado o carrossel durante
-                    // a busca na rede — só aplica se o hero for o atual.
-                    if (heroRotator?.currentItem() != hero) return@launch
-                    if (thumb.isNullOrBlank()) return@launch
-                    binding.heroThumb.visibility = View.VISIBLE
-                    binding.heroThumb.load(thumb) {
-                        error(R.drawable.card_gradient_pink)
-                        listener(onError = { _, _ ->
-                            binding.heroThumb.visibility = View.GONE
-                        })
+                } else {
+                    lifecycleScope.launch {
+                        val thumb = if (heroThumbCache.containsKey(hero.drivePath)) {
+                            heroThumbCache[hero.drivePath]
+                        } else {
+                            fetchHeroThumb(hero.drivePath)
+                                .also { heroThumbCache[hero.drivePath] = it }
+                        }
+                        // O usuário pode ter avançado o carrossel
+                        // durante a busca — só aplica se o hero for
+                        // o atual.
+                        if (heroRotator?.currentItem() != hero) return@launch
+                        if (thumb.isNullOrBlank()) {
+                            applyGeneratedHeroCover(hero)
+                            return@launch
+                        }
+                        binding.heroThumb.visibility = View.VISIBLE
+                        binding.heroThumb.load(thumb) {
+                            error(R.drawable.card_gradient_pink)
+                            listener(onError = { _, _ ->
+                                applyGeneratedHeroCover(hero)
+                            })
+                        }
                     }
                 }
             }
@@ -258,6 +350,11 @@ class HomeActivity : AppCompatActivity() {
         fun start() { handler.postDelayed(rotateRunnable, 8000L) }
         fun stop() { handler.removeCallbacks(rotateRunnable) }
         fun currentItem(): HeroItem = items[index]
+
+        /** Re-aplica a arte do destaque atual (ex.: o manifesto da
+         *  camada 3 acabou de chegar e um card pode trocar a capa
+         *  gerada pela imagem da biblioteca). */
+        fun refreshArt() { onRenderArt(items[index]) }
 
         private fun next() {
             index = (index + 1) % items.size
@@ -408,21 +505,24 @@ class HomeActivity : AppCompatActivity() {
         binding.featuredProgress.progress = progress
         binding.featuredProgressText.text = "$progress% concluído"
         binding.featuredTimeText.text = Format.positionText(pos, dur)
-        // v2.1.9 (b): sem thumb → arte do drive (ícone), nunca monograma.
+        // Onda 2 + camada 3 — "Continuar de onde parou": (b) thumb
+        // do Drive; sem ela (ou se ela falhar), (3) biblioteca por
+        // tipo, depois (4) capa gerada do drive; a arte do drive
+        // (ícone) só aparece quando não há capa gerada para o drive.
+        val featuredCoverRes = DriveItem.coverResForPath(best.folderPath)
         binding.featuredDriveArt.text = DriveItem.iconForPath(best.folderPath)
         if (!best.thumbnailLink.isNullOrBlank()) {
             binding.featuredThumb.visibility = View.VISIBLE
             binding.featuredDriveArt.visibility = View.GONE
             binding.featuredThumb.load(best.thumbnailLink) {
-                error(com.bibigyn.app.R.drawable.card_gradient_pink)
+                error(featuredCoverRes
+                    ?: com.bibigyn.app.R.drawable.card_gradient_pink)
                 listener(onError = { _, _ ->
-                    binding.featuredThumb.visibility = View.GONE
-                    binding.featuredDriveArt.visibility = View.VISIBLE
+                    showFeaturedFallback(best, featuredCoverRes)
                 })
             }
         } else {
-            binding.featuredThumb.visibility = View.GONE
-            binding.featuredDriveArt.visibility = View.VISIBLE
+            showFeaturedFallback(best, featuredCoverRes)
         }
         binding.featuredContinue.setOnClickListener {
             continueWatching(best.folderPath, best.videoName, extractCourseName(best.folderPath))
@@ -441,6 +541,45 @@ class HomeActivity : AppCompatActivity() {
             continueWatching(best.folderPath, best.videoName, extractCourseName(best.folderPath))
         }
         FocusAnimator.attachCard(binding.featuredCard, true)
+    }
+
+    /**
+     * Camada 3 → 4 no "Continuar de onde parou": (3) imagem da
+     * biblioteca por tipo (nome da aula → curso → caminho), depois
+     * (4) capa gerada do drive.
+     */
+    private fun showFeaturedFallback(
+        best: SessionManager.RecentItem,
+        featuredCoverRes: Int?
+    ) {
+        val libraryUrl = CoverLibrary.resolve(
+            this, best.videoName,
+            extractCourseName(best.folderPath), best.folderPath
+        )
+        if (!libraryUrl.isNullOrBlank()) {
+            binding.featuredThumb.visibility = View.VISIBLE
+            binding.featuredDriveArt.visibility = View.GONE
+            binding.featuredThumb.load(libraryUrl) {
+                error(featuredCoverRes
+                    ?: com.bibigyn.app.R.drawable.card_gradient_pink)
+                listener(onError = { _, _ ->
+                    showFeaturedGenerated(featuredCoverRes)
+                })
+            }
+            return
+        }
+        showFeaturedGenerated(featuredCoverRes)
+    }
+
+    private fun showFeaturedGenerated(featuredCoverRes: Int?) {
+        if (featuredCoverRes != null) {
+            binding.featuredThumb.visibility = View.VISIBLE
+            binding.featuredDriveArt.visibility = View.GONE
+            binding.featuredThumb.load(featuredCoverRes)
+        } else {
+            binding.featuredThumb.visibility = View.GONE
+            binding.featuredDriveArt.visibility = View.VISIBLE
+        }
     }
 
     /**
@@ -613,10 +752,13 @@ class HomeActivity : AppCompatActivity() {
         binding.railDrives.layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         binding.railDrives.addItemDecoration(RailGutterDecoration(8))
-        binding.railDrives.adapter = DriveRailAdapter(DriveItem.ALL) { drive ->
+        drivesAdapter = DriveRailAdapter(
+            DriveItem.ALL, featuredCoverByPath
+        ) { drive ->
             lastFocusDrives = DriveItem.ALL.indexOf(drive)
             openDrive(drive)
         }
+        binding.railDrives.adapter = drivesAdapter
     }
 
     private fun openDrive(drive: DriveItem) {
