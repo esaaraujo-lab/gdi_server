@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  v2.7.6 — Card de drive (home "Explorar drives", conceito home).
-  Tile de ícone rosa com o emoji do drive (DriveItem.icon) + nome 14sp
-  + linha de metadados (DriveItem.tagline, texto curado — sem
-  contagens inventadas). Foco via FocusAnimator.attachCard().
+  v2.7.11 — Card de drive (home "Explorar drives", conceito home).
+  Card ESCURO + quadrado rosa com o ícone do drive + nome + metadados
+  (DriveItem.tagline, texto curado — sem contagens inventadas).
+  Antes (2.7.6): o tile inteiro era ROSA. Foco via FocusAnimator.attachCard().
+  Mesmos ids do celular (ViewBinding único).
 -->
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -21,63 +22,38 @@
     app:strokeWidth="0dp"
     app:strokeColor="@color/tile_focus_ring">
 
-    <LinearLayout
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:layout_height="wrap_content">
 
-        <!-- Tile de ícone (rosa da marca, monograma escuro) -->
-        <FrameLayout
-            android:layout_width="match_parent"
-            android:layout_height="@dimen/drive_tile_height">
-
-            <View
-                android:id="@+id/drive_bg"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:background="@color/drive_icon_tile" />
-
-            <TextView
-                android:id="@+id/drive_icon"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:gravity="center"
-                android:textColor="@color/drive_icon_tile_text"
-                android:textSize="52sp"
-                android:textStyle="bold" />
-
-            <!-- ★ Favorito do drive -->
-            <TextView
-                android:id="@+id/drive_fav_star"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:layout_gravity="top|end"
-                android:layout_marginTop="@dimen/spacing_sm"
-                android:layout_marginEnd="@dimen/spacing_sm"
-                android:background="@drawable/badge_resume"
-                android:clickable="true"
-                android:contentDescription="@string/fav_desc"
-                android:focusable="true"
-                android:focusableInTouchMode="true"
-                android:gravity="center"
-                android:text="☆"
-                android:textColor="@color/tile_title"
-                android:textSize="16sp" />
-        </FrameLayout>
-
-        <!-- Nome + metadados -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingHorizontal="@dimen/spacing_md"
-            android:paddingTop="@dimen/spacing_sm"
-            android:paddingBottom="@dimen/spacing_md">
+            android:padding="@dimen/spacing_md">
 
+            <!-- Quadrado rosa com o ícone do drive -->
+            <FrameLayout
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/drive_icon_square">
+
+                <TextView
+                    android:id="@+id/drive_icon"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:textColor="@color/drive_icon_tile_text"
+                    android:textSize="28sp"
+                    android:textStyle="bold" />
+            </FrameLayout>
+
+            <!-- Nome + metadados -->
             <TextView
                 android:id="@+id/drive_name"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_sm"
                 android:ellipsize="end"
                 android:maxLines="2"
                 android:textColor="@color/tile_title"
@@ -94,5 +70,23 @@
                 android:textColor="@color/tile_subtitle"
                 android:textSize="@dimen/text_drive_meta" />
         </LinearLayout>
-    </LinearLayout>
+
+        <!-- ★ Favorito do drive -->
+        <TextView
+            android:id="@+id/drive_fav_star"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="@dimen/spacing_sm"
+            android:layout_marginEnd="@dimen/spacing_sm"
+            android:background="@drawable/badge_resume"
+            android:clickable="true"
+            android:contentDescription="@string/fav_desc"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:gravity="center"
+            android:text="☆"
+            android:textColor="@color/tile_title"
+            android:textSize="16sp" />
+    </FrameLayout>
 </com.google.android.material.card.MaterialCardView>
