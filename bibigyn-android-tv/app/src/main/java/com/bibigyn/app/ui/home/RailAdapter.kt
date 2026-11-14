@@ -8,10 +8,12 @@ import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.bibigyn.app.R
+import com.bibigyn.app.data.DriveItem
 import com.bibigyn.app.data.FileItem
 import com.bibigyn.app.data.colorFromString
 import com.bibigyn.app.databinding.ItemRailCardBinding
 import com.bibigyn.app.util.CardGradient
+import com.bibigyn.app.util.CoverLibrary
 import com.bibigyn.app.util.FocusAnimator
 import com.bibigyn.app.util.Format
 import com.bibigyn.app.util.SessionManager
@@ -82,25 +84,52 @@ class RailAdapter(
             val baseColor = colorFromString(item.colorHint ?: item.title)
             cardBg.background = CardGradient.drawable(res, baseColor)
 
-            // v2.1.9: thumb real quando houver; sem thumb (ou se o Coil
-            // falhar — ex.: áudio sem thumb no Drive), arte do drive.
-            // O monograma foi removido: nunca mais letras como thumb.
+            // Onda 2: thumb real quando houver; sem thumb (ou se o
+            // Coil falhar — ex.: áudio sem thumb no Drive), (c) capa
+            // gerada do drive; a arte do drive só quando não há capa
+            // gerada. Nunca mais monograma como thumb.
             cardDriveArt.text = item.driveIcon
+            val coverRes = item.file?.folderPath
+                ?.let { DriveItem.coverResForPath(it) }
+            val showGeneratedOrDriveArt = {
+                if (coverRes != null) {
+                    cardThumbnail.visibility = View.VISIBLE
+                    cardDriveArt.visibility = View.GONE
+                    cardThumbnail.load(coverRes)
+                } else {
+                    cardThumbnail.visibility = View.GONE
+                    cardDriveArt.visibility = View.VISIBLE
+                }
+            }
+            // Camada 3 — biblioteca por tipo (aula → curso → caminho);
+            // sem match, (4) capa gerada / arte do drive. O thumb
+            // falhando e o sem-thumb caem aqui (showDriveArt).
+            val showDriveArt = {
+                val libraryUrl = CoverLibrary.resolve(
+                    ctx, item.title, item.subtitle, item.file?.folderPath
+                )
+                if (!libraryUrl.isNullOrBlank()) {
+                    cardThumbnail.visibility = View.VISIBLE
+                    cardDriveArt.visibility = View.GONE
+                    cardThumbnail.load(libraryUrl) {
+                        error(coverRes ?: R.drawable.card_gradient_pink)
+                        listener(onError = { _, _ -> showGeneratedOrDriveArt() })
+                    }
+                } else {
+                    showGeneratedOrDriveArt()
+                }
+            }
             val thumb = item.thumbnailUrl ?: item.file?.thumbnailLink
             if (!thumb.isNullOrBlank()) {
                 cardThumbnail.visibility = View.VISIBLE
                 cardDriveArt.visibility = View.GONE
                 cardThumbnail.load(thumb) {
-                    error(R.drawable.card_gradient_pink)
-                    listener(onError = { _, _ ->
-                        cardThumbnail.visibility = View.GONE
-                        cardDriveArt.visibility = View.VISIBLE
-                    })
+                    error(coverRes ?: R.drawable.card_gradient_pink)
+                    listener(onError = { _, _ -> showDriveArt() })
                 }
                 cardThumbnail.setOnClickListener(null)
             } else {
-                cardThumbnail.visibility = View.GONE
-                cardDriveArt.visibility = View.VISIBLE
+                showDriveArt()
             }
 
             // Progresso real: barra + "% concluído · Xmin restantes".
