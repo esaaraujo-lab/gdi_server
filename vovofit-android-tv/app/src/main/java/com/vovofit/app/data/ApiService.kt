@@ -98,15 +98,15 @@ class ApiService(private val context: Context) {
                 if (files != null) {
                     for (i in 0 until files.length()) {
                         val f = files.getJSONObject(i)
-                        items.add(FileItem(
-                            name = f.optString("name"),
-                            mimeType = f.optString("mimeType"),
-                            id = f.optString("id"),
-                            driveId = f.optString("driveId"),
-                            link = f.optString("link", null),
-                            size = f.optLong("size", 0L),
-                            modifiedTime = f.optString("modifiedTime", null)
-                        ))
+                        // v1.0.8 — usar FileItem.fromJson: a construcao
+                        // manual acima descartava thumbnailLink (e
+                        // folderPath/folderLabel). Sem thumb, o addRecent
+                        // salvava o recent SEM thumb e o card caia no
+                        // monograma — era a causa-raiz dos monogramas no
+                        // "Continue assistindo". O fromJson ainda gera o
+                        // fallback drive.google.com/thumbnail?id=<id>
+                        // quando a API nao devolve thumbnailLink.
+                        items.add(FileItem.fromJson(f))
                     }
                 }
                 val next = if (json.isNull("nextPageToken")) null
