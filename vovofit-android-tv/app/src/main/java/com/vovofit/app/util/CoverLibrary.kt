@@ -28,16 +28,16 @@ import kotlinx.coroutines.launch
  *       hipopressivos), resolvida pelo manifesto no jsDelivr;
  *   (4) arte padrão gerada — capa local do drive (`cover_*`, foto 16:9
  *       em drawable-nodpi).
- * Sem match na (3), cai na (4). Sem URL configurada, sem rede ou fetch
- * falhando, a (3) é pulada EM SILÊNCIO (nunca trava a tela, nunca toast
- * de erro por isso) e a cadeia cai na (4).
+ * Sem match na (3) com manifesto carregado, cai na imagem 'geral'
+ * (ainda camada 3). Sem manifesto (rede falhou nos dois hosts ou o
+ * fetch nunca rodou), a (3) é pulada EM SILÊNCIO (nunca trava a tela,
+ * nunca toast de erro por isso) e a cadeia cai na (4).
  *
  * ── CONTRATO DO MANIFESTO (formato esperado) ──
  *
- * O manifesto é um JSON servido no jsDelivr, gerado por OUTRA equipe
- * (ela ainda está gerando as imagens; o formato exato não foi fixado
- * quando este código foi escrito). O formato SUGERIDO — e o que a outra
- * equipe deve seguir — é:
+ * O manifesto é um JSON servido no jsDelivr (v1, publicado e
+ * verificado ao vivo 2026-11-14: 58 entradas, md5
+ * d3280cb57cc79073734ce8c446d6009f, 14.950 bytes). O formato é:
  *
  *     {
  *       "version": 1,
@@ -66,6 +66,9 @@ import kotlinx.coroutines.launch
  *       "id" também entra como keyword quando não há "keywords"/"name".
  *     - url: campo "url" OU campo "image".
  *   Entradas sem URL ou sem keyword são descartadas.
+ *   Keywords com menos de 3 caracteres são IGNORADAS (contrato §3:
+ *   'pf' NÃO casa sozinho — o casamento de PF depende de 'policia
+ *   federal' / 'agente da policia federal' / 'agente pf').
  *
  * ── RESOLUÇÃO POR NOME ──
  *
@@ -74,16 +77,22 @@ import kotlinx.coroutines.launch
  *    sem pontuação (qualquer sequência de não [a-z0-9] vira um espaço:
  *    "Hipopressivos — Aula 03" -> "hipopressivos aula 03"), espaços
  *    colapsados, sem espaços nas pontas.
- * 2. Ordem de tentativa (do mais específico ao mais geral): o chamador
- *    passa os nomes nessa ordem — nome da aula, depois pasta, depois
- *    curso/drive. O PRIMEIRO nome que tiver algum match vence (a
- *    especificidade manda, mesmo que um nome mais geral tivesse uma
- *    keyword mais longa).
- * 3. Dentro de um nome: uma keyword casa quando aparece como substring
- *    do nome normalizado ("cardio" casa "cardio hiit aula 01").
- *    Ganha o match MAIS LONGO (a keyword mais longa); empate -> a
- *    PRIMEIRA entrada do manifesto (ordem do arquivo).
- * 4. Sem match em nenhum nome -> null (o chamador cai na camada 4).
+ * 2. Casamento em TODOS os nomes juntos (contrato
+ *    COVER_LIBRARY_NOTES.md §3): o chamador passa os nomes (aula,
+ *    pasta, curso/drive) e o resolver considera TODOS — vence a
+ *    keyword MAIS LONGA entre todos eles, seja qual for o nome onde
+ *    ela casou. Empate -> a PRIMEIRA entrada do manifesto (ordem do
+ *    arquivo; as específicas vêm primeiro). Ex.: aula "Cardio" numa
+ *    pasta "Musculação" casa "musculacao" (10) e não "cardio" (6).
+ * 3. Uma keyword casa quando aparece como substring do nome
+ *    normalizado ("cardio" casa "cardio hiit aula 01"). Keywords com
+ *    menos de 3 caracteres são IGNORADAS ('pf' NÃO casa sozinho — o
+ *    casamento de PF depende de 'policia federal' / 'agente da policia
+ *    federal' / 'agente pf', já nas keywords de 'pf').
+ * 4. Sem match em nenhum nome (manifesto carregado) -> a imagem
+ *    'geral' (última do manifesto, keyword 'meggy') — fallback
+ *    explícito da camada 3. Sem manifesto carregado, devolve null e
+ *    o chamador cai na camada (4) arte padrão.
  *
  * ── CACHE / FETCH ──
  *
@@ -94,25 +103,35 @@ import kotlinx.coroutines.launch
  * já houver um fetch em andamento). Sem URL configurada, não há fetch
  * nenhum — `resolve` só devolve null e a camada 3 é pulada.
  *
- * ── COMO LIGAR ──
+ * ── LIGAÇÃO (2026-11-14, onda final) ──
  *
- * ÚNICO PONTO DE LIGAÇÃO: a constante [LIBRARY_MANIFEST_URL] abaixo.
- * Quando o Elton mandar a URL do manifesto publicado no jsDelivr,
- * colar a URL nela (1 linha, este arquivo). Nada mais precisa mudar:
- * todos os pontos de capa do app já chamam [resolve] / [loadCoverChain].
+ * LIGADO: [LIBRARY_MANIFEST_URL] tem a URL do manifesto publicado
+ * (v1, 58 imagens, md5 d3280cb57cc79073734ce8c446d6009f) e
+ * [LIBRARY_MANIFEST_URL_RAW] é o fallback (raw.githubusercontent.com)
+ * usado quando o jsDelivr falha (403 transitório "Package size
+ * exceeded the configured limit of 50 MB" logo após commits — ver
+ * COVER_LIBRARY_NOTES.md §6). Todos os pontos de capa do app já
+ * chamam [resolve] / [loadCoverChain]; nada mais precisa mudar.
  */
 object CoverLibrary {
 
     /**
      * ÚNICO PONTO DE LIGAÇÃO — URL do manifesto da biblioteca no jsDelivr.
-     * AINDA NÃO EXISTE: a outra equipe está gerando as imagens + o manifesto.
-     * Para ligar, colar aqui a URL publicada, por exemplo:
-     *   "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/covers/cover-library.json"
-     * Enquanto estiver vazia, a camada 3 é pulada em silêncio e a cadeia
-     * de capa cai direto da (2) para a (4). NÃO colocar nenhuma outra URL
-     * aqui (não é BASE_URL nem endpoint de IA).
+     * LIGADO 2026-11-14 (onda final): manifesto v1 publicado e verificado
+     * ao vivo (58 imagens, md5 d3280cb57cc79073734ce8c446d6009f, 14.950
+     * bytes). NÃO colocar nenhuma outra URL aqui (não é BASE_URL nem
+     * endpoint de IA).
      */
-    const val LIBRARY_MANIFEST_URL = "" // TODO: ligar quando o Elton mandar a URL do manifesto no jsDelivr
+    const val LIBRARY_MANIFEST_URL = "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/cover-manifest.json"
+
+    /**
+     * Fallback do manifesto (mesmo conteúdo, sem CDN): tentado quando o
+     * fetch no jsDelivr falha (sem rede, HTTP != 200 ou JSON inválido —
+     * ex.: o 403 transitório "Package size exceeded the configured limit
+     * of 50 MB" logo após commits, ver COVER_LIBRARY_NOTES.md §6).
+     * O raw serve o mesmo arquivo desde o início.
+     */
+    const val LIBRARY_MANIFEST_URL_RAW = "https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/staging/modular/meggy/covers/cover-manifest.json"
 
     /** TTL do cache do manifesto: 24h. */
     private val TTL_MS: Long = TimeUnit.HOURS.toMillis(24)
@@ -177,7 +196,7 @@ object CoverLibrary {
                     val key = keys.next()
                     if (key == "version") continue
                     val url = root.optString(key).takeIf { it.isNotBlank() } ?: continue
-                    val kw = normalize(key).takeIf { it.isNotBlank() } ?: continue
+                    val kw = normalize(key).takeIf { it.length >= 3 } ?: continue
                     out.add(LibraryImage(id = key, keywords = listOf(kw), url = url))
                 }
             }
@@ -197,14 +216,14 @@ object CoverLibrary {
             val kwArr = o.optJSONArray("keywords")
             if (kwArr != null) {
                 for (j in 0 until kwArr.length()) {
-                    normalize(kwArr.optString(j)).takeIf { it.isNotBlank() }?.let { keywords.add(it) }
+                    normalize(kwArr.optString(j)).takeIf { it.length >= 3 }?.let { keywords.add(it) }
                 }
             }
             if (keywords.isEmpty()) {
-                normalize(o.optString("name")).takeIf { it.isNotBlank() }?.let { keywords.add(it) }
+                normalize(o.optString("name")).takeIf { it.length >= 3 }?.let { keywords.add(it) }
             }
             if (keywords.isEmpty()) {
-                normalize(o.optString("id")).takeIf { it.isNotBlank() }?.let { keywords.add(it) }
+                normalize(o.optString("id")).takeIf { it.length >= 3 }?.let { keywords.add(it) }
             }
             if (keywords.isEmpty()) continue
             out.add(LibraryImage(id = o.optString("id"), keywords = keywords, url = url))
@@ -252,12 +271,41 @@ object CoverLibrary {
     }
 
     /**
+     * Busca o manifesto (jsDelivr primeiro; se falhar, o raw) e devolve
+     * o corpo JSON quando parseia em ao menos 1 entrada. Null quando os
+     * dois hosts falham (sem rede, HTTP != 200, JSON inválido/vazio).
+     * Sem exceção: qualquer falha numa URL cai para a próxima.
+     */
+    private fun fetchManifestText(): String? {
+        for (url in listOf(LIBRARY_MANIFEST_URL, LIBRARY_MANIFEST_URL_RAW)) {
+            try {
+                val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 10_000
+                    readTimeout = 15_000
+                    instanceFollowRedirects = true
+                }
+                try {
+                    if (conn.responseCode != HttpURLConnection.HTTP_OK) continue
+                    val body = conn.inputStream.bufferedReader().use { it.readText() }
+                    if (parseManifest(body).isNotEmpty()) return body
+                } finally {
+                    conn.disconnect()
+                }
+            } catch (_: Exception) {
+                // Próxima URL (raw) — falha silenciosa por host.
+            }
+        }
+        return null
+    }
+
+    /**
      * Busca o manifesto em 2º plano (nunca bloqueia a UI) e atualiza o
      * cache. Idempotente: sem URL configurada, com cache fresco (< 24h)
      * ou com um fetch já em andamento, não faz nada. Qualquer falha
-     * (sem rede, HTTP != 200, JSON inválido) é engolida em silêncio —
-     * a camada 3 simplesmente não é usada até a próxima tentativa.
-     * Chamado na abertura do app (VovoFitApp) e na abertura da home.
+     * (sem rede, HTTP != 200 nos dois hosts, JSON inválido) é engolida
+     * em silêncio — a camada 3 simplesmente não é usada até a próxima
+     * tentativa. Chamado na abertura do app (VovoFitApp) e na abertura
+     * da home.
      */
     fun refreshAsync(context: Context) {
         if (LIBRARY_MANIFEST_URL.isBlank()) return
@@ -267,21 +315,11 @@ object CoverLibrary {
         val appContext = context.applicationContext
         fetchScope.launch {
             try {
-                val conn = (URL(LIBRARY_MANIFEST_URL).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 10_000
-                    readTimeout = 15_000
-                    instanceFollowRedirects = true
-                }
-                try {
-                    if (conn.responseCode != HttpURLConnection.HTTP_OK) return@launch
-                    val body = conn.inputStream.bufferedReader().use { it.readText() }
-                    val parsed = parseManifest(body)
-                    if (parsed.isEmpty()) return@launch
-                    cached = parsed
-                    persist(appContext, body)
-                } finally {
-                    conn.disconnect()
-                }
+                val body = fetchManifestText() ?: return@launch
+                val parsed = parseManifest(body)
+                if (parsed.isEmpty()) return@launch
+                cached = parsed
+                persist(appContext, body)
             } catch (_: Exception) {
                 // Silêncio: sem rede ou manifesto fora do ar -> camada 3
                 // pulada; a próxima abertura tenta de novo.
@@ -294,30 +332,39 @@ object CoverLibrary {
     // ──────────── resolução ────────────
 
     /**
-     * Resolve a imagem da biblioteca p/ os nomes dados, na ordem
-     * (aula, pasta, curso/drive). O primeiro nome com match vence; dentro
-     * dele, a keyword MAIS LONGA vence; empate -> primeira do manifesto.
-     * Sem manifesto carregado, sem match ou sem nomes -> null.
+     * Resolve a imagem da biblioteca p/ os nomes dados (aula, pasta,
+     * curso/drive — contrato COVER_LIBRARY_NOTES.md §3): vence a
+     * keyword MAIS LONGA entre TODOS os nomes juntos; empate -> a
+     * PRIMEIRA entrada do manifesto (o laço externo é o manifesto, por
+     * isso o empate resolve pela ordem do arquivo). Sem match com o
+     * manifesto carregado -> a imagem 'geral' (fallback explícito da
+     * camada 3). Sem manifesto carregado ou sem nomes -> null (o
+     * chamador cai na camada 4).
      */
     fun resolve(context: Context, vararg names: String?): String? {
         ensureLoaded(context)
         val entries = cached ?: return null
         if (entries.isEmpty()) return null
-        for (raw in names) {
-            val name = raw?.let { normalize(it) }?.takeIf { it.isNotBlank() } ?: continue
-            var bestUrl: String? = null
-            var bestLen = -1
-            for (entry in entries) {
-                for (kw in entry.keywords) {
-                    if (kw.isNotBlank() && name.contains(kw) && kw.length > bestLen) {
-                        bestLen = kw.length
-                        bestUrl = entry.url
-                    }
+        val normalized = names.mapNotNull { raw ->
+            raw?.let { normalize(it) }?.takeIf { it.isNotBlank() }
+        }
+        if (normalized.isEmpty()) return null
+        var bestUrl: String? = null
+        var bestLen = -1
+        for (entry in entries) {
+            for (kw in entry.keywords) {
+                if (kw.length < 3) continue
+                if (kw.length <= bestLen) continue
+                if (normalized.any { name -> name.contains(kw) }) {
+                    bestLen = kw.length
+                    bestUrl = entry.url
                 }
             }
-            if (bestUrl != null) return bestUrl
         }
-        return null
+        if (bestUrl != null) return bestUrl
+        // Fallback explícito da camada 3: manifesto carregado e nenhum
+        // match -> imagem 'geral' (última do manifesto, keyword 'meggy').
+        return entries.firstOrNull { it.id == "geral" }?.url
     }
 }
 
@@ -332,7 +379,8 @@ object CoverLibrary {
  *   (4) sem `remoteUrl` e sem match: `fallbackRes` (capa local do drive).
  * Nunca lança e nunca mostra erro: sem match ou sem manifesto, cai na (4).
  *
- * `names` na ordem aula -> pasta -> curso/drive (ver [CoverLibrary.resolve]).
+ * `names` na ordem aula -> pasta -> curso/drive (ver [CoverLibrary.resolve]:
+ * a keyword mais longa entre TODOS os nomes vence; sem match, 'geral').
  * `placeholderRes` é opcional (só o hero o usa, como antes).
  */
 fun ImageView.loadCoverChain(
