@@ -12,13 +12,13 @@ import coil.load
 import com.meggy.app.R
 import com.meggy.app.data.FileItem
 import com.meggy.app.data.colorFromString
-import com.meggy.app.data.monogramFor
 import com.meggy.app.databinding.ItemRailCardBinding
 import com.meggy.app.util.CardGradient
 import com.meggy.app.util.FocusAnimator
 import com.meggy.app.util.Format
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.TvUtils
+import com.meggy.app.util.LibraryCovers
 
 /**
  * v2.7.6 — Grade de arquivos (detalhe/navegação).
@@ -89,23 +89,26 @@ class FileAdapter(
             val baseColor = colorFromString(item.name)
             cardBg.background = CardGradient.drawable(res, baseColor)
 
-            // Thumb real quando houver; monograma quando não houver.
-            val thumbUrl = item.thumbnailLink
+            // Thumb real quando houver; sem ela, a imagem da biblioteca
+            // pelo nome do arquivo/pasta (camada 3); sem match, a capa
+            // gerada do drive (onda 2 — nunca monograma).
+            val coverRes = com.meggy.app.util.ThumbArt.coverResForPath(currentFolderPath)
+            val thumbUrl = LibraryCovers.remoteCover(item.thumbnailLink, item.name, currentFolderPath)
             if (thumbUrl != null && (item.isVideo || item.isPdf || item.isAudio)) {
                 cardThumbnail.visibility = View.VISIBLE
                 cardMonogram.visibility = View.GONE
                 cardThumbnail.load(thumbUrl) {
-                    error(R.drawable.card_gradient_pink)
-                    // Patch: se a arte falhar a carregar, volta ao monograma.
+                    error(coverRes)
                     listener(onError = { _, _ ->
-                        cardThumbnail.visibility = View.GONE
-                        cardMonogram.visibility = View.VISIBLE
+                        cardThumbnail.visibility = View.VISIBLE
+                        cardMonogram.visibility = View.GONE
+                        cardThumbnail.setImageResource(coverRes)
                     })
                 }
             } else {
-                cardThumbnail.visibility = View.GONE
-                cardMonogram.visibility = View.VISIBLE
-                cardMonogram.text = monogramFor(item.name)
+                cardThumbnail.visibility = View.VISIBLE
+                cardMonogram.visibility = View.GONE
+                cardThumbnail.setImageResource(coverRes)
             }
 
             // Progresso real para vídeos.
