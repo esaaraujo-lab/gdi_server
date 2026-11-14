@@ -9,7 +9,6 @@ import coil.load
 import com.meggy.app.R
 import com.meggy.app.data.FileItem
 import com.meggy.app.data.colorFromString
-import com.meggy.app.data.monogramFor
 import com.meggy.app.databinding.ItemLessonCardBinding
 import com.meggy.app.databinding.ItemLessonChildBinding
 import com.meggy.app.databinding.ItemLessonHeaderBinding
@@ -17,6 +16,8 @@ import com.meggy.app.util.CardGradient
 import com.meggy.app.util.FocusAnimator
 import com.meggy.app.util.Format
 import com.meggy.app.util.SessionManager
+import com.meggy.app.util.ThumbArt
+import com.meggy.app.util.LibraryCovers
 import com.meggy.app.util.TvUtils
 
 /**
@@ -230,15 +231,26 @@ class LessonGridAdapter(
 
         with(holder.binding) {
             lessonCardBg.background = CardGradient.drawable(res, colorFromString(group.folder.name))
-            val thumb = video?.thumbnailLink
+            // v2.7.11 onda 2 + camada (3) — sem thumb do vídeo, a
+            // imagem da biblioteca pelo nome da aula/pasta; sem match,
+            // a capa gerada do drive (nunca monograma).
+            val coverRes = ThumbArt.coverResForPath(group.folderPath)
+            val thumb = LibraryCovers.remoteCover(
+                video?.thumbnailLink, group.folder.name, group.folderPath
+            )
             if (!thumb.isNullOrBlank()) {
                 lessonCardThumb.visibility = View.VISIBLE
                 lessonCardMonogram.visibility = View.GONE
-                lessonCardThumb.load(thumb) { error(R.drawable.card_gradient_pink) }
+                lessonCardThumb.load(thumb) {
+                    error(coverRes)
+                    listener(onError = { _, _ ->
+                        lessonCardThumb.setImageResource(coverRes)
+                    })
+                }
             } else {
-                lessonCardThumb.visibility = View.GONE
-                lessonCardMonogram.visibility = View.VISIBLE
-                lessonCardMonogram.text = monogramFor(group.folder.name)
+                lessonCardThumb.visibility = View.VISIBLE
+                lessonCardMonogram.visibility = View.GONE
+                lessonCardThumb.setImageResource(coverRes)
             }
             lessonCardTitle.text = group.folder.name
             if (video != null) {
