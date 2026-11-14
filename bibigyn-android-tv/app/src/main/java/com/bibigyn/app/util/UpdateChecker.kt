@@ -27,6 +27,33 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
+ * v2.1.9 — AUTO-UPDATE (ordem do Elton 2026-11-14 19:34): o máximo
+ * automático que o Android permite —
+ *   1. CHECAGEM automática na abertura: SplashActivity (LAUNCHER) +
+ *      HomeActivity onCreate/onResume, via checkForUpdateThrottled
+ *      (1x/24h, falha de rede/HTTP não queima a janela, 2.1.7);
+ *   2. DOWNLOAD automático em segundo plano quando há versão nova:
+ *      no automático NÃO há diálogo modal de progresso (só um toast
+ *      discreto "Baixando vX em segundo plano"); o diálogo com barra
+ *      + Cancelar continua SÓ na checagem manual (Ajustes);
+ *   3. INSTALADOR automático ao terminar o download — ADIADO quando
+ *      o PlayerActivity está em primeiro plano (nunca interrompe a
+ *      reprodução; a instalação pendente é salva em prefs e lançada
+ *      quando o app volta à home) e SEM re-oferecer a mesma versão
+ *      (KEY_OFFERED_VERSION: quem dispensou o instalador não é
+ *      incomodado de novo a cada abertura; a checagem manual em
+ *      Ajustes sempre re-oferece).
+ *   Wi-Fi: "Baixar só no Wi-Fi" (SessionManager.wifiOnlyDownloads)
+ *   controla SÓ a escrita do cache de vídeo (VideoCache) — NÃO é um
+ *   ajuste geral de downloads. O APK da atualização (~17 MB) baixa
+ *   em qualquer conexão (decisão documentada da 2.1.9).
+ * LIMITES REAIS (não há como contornar sem privilégios de sistema):
+ *   - o Android EXIGE o toque do usuário em "Instalar" no instalador
+ *     do sistema (não existe instalação silenciosa p/ app normal);
+ *   - a permissão "Instalar apps desconhecidos" é concedida uma vez;
+ *     sem ela, o fluxo 2.7.4 abre os ajustes e guarda o APK como
+ *     pendente (retoma sozinho na próxima abertura).
+ *
  * v2.1.7 — UpdateChecker com filtro por tag prefix bibigyn-v*
  *
  * ★ Mudanças v2.7.4 (instalação dentro do app):
@@ -72,6 +99,16 @@ object UpdateChecker {
         // 1) APK pendente primeiro — nunca atrasado pelo throttle. Se
         // instalou, retorna (o checkForUpdate faria a mesma instalação).
         if (resumePendingApk(context)) return
+        // 1b) v2.1.9: instalação adiada (o download terminou com o
+        // player em primeiro plano) — lança agora, na home. Também
+        // nunca é atrasada pelo throttle.
+        if (resumePendingInstall(context)) return
+        // 1c) v2.1.9: guarda em memória (30 s) p/ a dupla checagem
+        // Splash (abertura) + Home (1,5 s depois) não disparar 2
+        // downloads do mesmo APK antes de o timestamp gravar.
+        val nowAttempt = System.currentTimeMillis()
+        if (nowAttempt - lastCheckAttemptMs < 30_000L) return
+        lastCheckAttemptMs = nowAttempt
         // 2) Throttle: 1×/24h.
         val prefs = context.getSharedPreferences(PREFS_UPDATE, Context.MODE_PRIVATE)
         val last = prefs.getLong(KEY_LAST_CHECK, 0L)
@@ -107,16 +144,64 @@ object UpdateChecker {
     }
 
 
+    /**
+     * v2.1.9 — retoma uma instalação adiada (download concluído com o
+     * player em primeiro plano). Retorna true quando lançou o
+     * instalador. Falso quando não há nada pendente, o arquivo sumiu
+     * (limpa as prefs), o player ainda está em primeiro plano ou a
+     * Activity de contexto está morrendo — nesses casos a instalação
+     * continua adiada, sem erro e sem toast.
+     */
+    fun resumePendingInstall(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_UPDATE, Context.MODE_PRIVATE)
+        val pending = prefs.getString(KEY_PENDING_INSTALL, null) ?: return false
+        val file = File(pending)
+        if (!file.exists()) {
+            prefs.edit().remove(KEY_PENDING_INSTALL)
+                .remove(KEY_PENDING_INSTALL_VERSION).apply()
+            return false
+        }
+        if (playerForeground) return false
+        if (context is Activity && (context.isFinishing || context.isDestroyed)) return false
+        val version = prefs.getString(KEY_PENDING_INSTALL_VERSION, null)
+        prefs.edit().remove(KEY_PENDING_INSTALL)
+            .remove(KEY_PENDING_INSTALL_VERSION).apply()
+        installApk(context, file, version, auto = true)
+        return true
+    }
+
+    /** Alias legível p/ a Home (onResume → checkForUpdateThrottled). */
+    fun maybeLaunchPendingInstall(context: Context): Boolean =
+        resumePendingInstall(context)
+
     private const val GITHUB_RELEASES_API = "https://api.github.com/repos/esaaraujo-lab/gdi_server/releases?per_page=100"
     private const val TAG_PREFIX = "bibigyn-v"
     private const val PREFS_NAME = "meggy_update"
     private const val KEY_DOWNLOADED_VERSION = "downloaded_version"
     private const val KEY_PENDING_APK = "pending_apk_path"
+    // v2.1.9 — auto-update: versão já oferecida (instalador lançado) e
+    // instalação adiada (player em primeiro plano quando o download
+    // terminou). Prefs "meggy_update" (nome herdado, interno, 2.1.7).
+    private const val KEY_OFFERED_VERSION = "offered_version"
+    private const val KEY_PENDING_INSTALL = "pending_install_apk"
+    private const val KEY_PENDING_INSTALL_VERSION = "pending_install_version"
+
+    // v2.1.9: guarda em memória contra a dupla checagem Splash+Home
+    // (a Splash dispara ao abrir e a Home 1,5 s depois, antes de a
+    // primeira resposta HTTP gravar o timestamp do throttle).
+    @Volatile
+    private var lastCheckAttemptMs = 0L
+
+    @Volatile
+    private var playerForeground = false
+    fun setPlayerForeground(inForeground: Boolean) { playerForeground = inForeground }
 
     fun checkForUpdate(context: Context, currentVersion: String, showFeedback: Boolean = false) {
         // ★ v2.7.4: APK pendente (usuário acabou de conceder a permissão de
         // instalar) — dispara a instalação agora, sem baixar de novo.
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        // v2.1.9: instalação adiada tem prioridade sobre nova checagem.
+        if (resumePendingInstall(context)) return
         val pendingPath = prefs.getString(KEY_PENDING_APK, null)
         if (!pendingPath.isNullOrBlank()) {
             val pendingFile = File(pendingPath)
@@ -131,6 +216,11 @@ object UpdateChecker {
         }
 
         val localVersion = currentVersion.replace(TAG_PREFIX, "").replace("v", "").trim()
+        // v2.1.9: automático = checagem sem feedback (abertura do app);
+        // manual = Ajustes → "Verificar atualizações" (showFeedback).
+        // O automático baixa em silêncio e não re-oferece a mesma
+        // versão; o manual mostra diálogo/toasts e sempre re-oferece.
+        val auto = !showFeedback
 
         Thread {
             try {
@@ -207,11 +297,17 @@ object UpdateChecker {
                     val downloadedFile = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
 
                     if (downloadedFile.exists() && lastDownloaded == remoteVersion) {
-                        showToast(context, "Instalando v$remoteVersion...")
-                        installApk(context, downloadedFile)
+                        if (!auto) showToast(context, "Instalando v$remoteVersion...")
+                        installApk(context, downloadedFile, remoteVersion, auto)
                     } else {
-                        showToast(context, "Baixando v$remoteVersion...$sizeStr")
-                        downloadInApp(context, apkUrl, fileName, remoteVersion, apkSize, prefs)
+                        // v2.1.9: no automático, UM toast discreto (o
+                        // download roda em 2º plano, sem diálogo modal).
+                        if (auto) {
+                            showToast(context, "Baixando v$remoteVersion em segundo plano...$sizeStr")
+                        } else {
+                            showToast(context, "Baixando v$remoteVersion...$sizeStr")
+                        }
+                        downloadInApp(context, apkUrl, fileName, remoteVersion, apkSize, prefs, auto)
                     }
                 } else {
                     if (showFeedback) showToast(context, "Voce esta na versao mais recente (v$localVersion)")
@@ -257,7 +353,8 @@ object UpdateChecker {
     private fun downloadInApp(
         context: Context, url: String, fileName: String,
         remoteVersion: String, expectedSize: Long,
-        prefs: android.content.SharedPreferences
+        prefs: android.content.SharedPreferences,
+        auto: Boolean = false
     ) {
         val mainHandler = Handler(Looper.getMainLooper())
         val cancelled = AtomicBoolean(false)
@@ -265,8 +362,11 @@ object UpdateChecker {
         var progressBar: ProgressBar? = null
         var progressText: TextView? = null
 
-        // Diálogo de progresso (só quando o contexto é uma Activity).
-        if (context is Activity) {
+        // Diálogo de progresso — SÓ na checagem manual (Activity e
+        // !auto). No automático o download é silencioso (só o toast
+        // discreto da checagem); um diálogo modal na abertura do app
+        // bloquearia a home sem motivo (2.1.9).
+        if (context is Activity && !auto) {
             mainHandler.post {
                 val bar = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
                     max = 100
@@ -335,13 +435,21 @@ object UpdateChecker {
                 }
                 mainHandler.post { dialog?.dismiss() }
                 prefs.edit().putString(KEY_DOWNLOADED_VERSION, remoteVersion).apply()
-                installApk(context, target)
+                installApk(context, target, remoteVersion, auto)
             } catch (e: InterruptedException) {
                 mainHandler.post { dialog?.dismiss() }
                 target.delete()
-                showToast(context, "Download cancelado")
+                if (!auto) showToast(context, "Download cancelado")
             } catch (e: Exception) {
                 mainHandler.post { dialog?.dismiss() }
+                if (auto) {
+                    // v2.1.9: falha SILENCIOSA no automático — sem toast,
+                    // sem fallback com notificação do sistema; limpa o
+                    // timestamp do throttle p/ a próxima abertura tentar
+                    // de novo (uma falha de download não queima 24h).
+                    prefs.edit().remove(KEY_LAST_CHECK).apply()
+                    return@Thread
+                }
                 // Fallback: fluxo antigo via DownloadManager do sistema.
                 showToast(context, "Download direto falhou — tentando pelo sistema...")
                 downloadAndInstall(context, url, fileName, remoteVersion, prefs)
@@ -371,7 +479,7 @@ object UpdateChecker {
                         val file = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
                         if (file.exists()) {
                             prefs.edit().putString(KEY_DOWNLOADED_VERSION, remoteVersion).apply()
-                            installApk(context, file)
+                            installApk(context, file, remoteVersion, auto = false)
                         }
                         try { context.unregisterReceiver(this) } catch (_: Exception) {}
                     }
@@ -396,7 +504,36 @@ object UpdateChecker {
      *     diálogo com o caminho do APK em vez de falhar em silêncio.
      *  3. Se o instalador abrir, confirma com toast.
      */
-    private fun installApk(context: Context, file: File) {
+    private fun installApk(
+        context: Context, file: File,
+        remoteVersion: String? = null, auto: Boolean = false
+    ) {
+        // v2.1.9 — AUTOMÁTICO, antes de tudo:
+        // (a) player em primeiro plano (ou contexto morrendo) → ADIA:
+        //     salva o APK em prefs e NÃO abre o instalador por cima da
+        //     reprodução; a home lança quando o player fechar.
+        // (b) mesma versão já oferecida → NÃO lança de novo: quem
+        //     dispensou o instalador não é incomodado a cada abertura.
+        //     A checagem manual (auto=false) ignora o gate e re-oferece.
+        // A versão oferecida é registrada ANTES de lançar, para o
+        // instalador dispensado não reaparecer na próxima abertura.
+        if (auto) {
+            if (playerForeground ||
+                (context is Activity && (context.isFinishing || context.isDestroyed))
+            ) {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                prefs.edit().putString(KEY_PENDING_INSTALL, file.absolutePath)
+                    .putString(KEY_PENDING_INSTALL_VERSION, remoteVersion).apply()
+                return
+            }
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            if (!remoteVersion.isNullOrBlank() &&
+                prefs.getString(KEY_OFFERED_VERSION, "") == remoteVersion
+            ) return
+            if (!remoteVersion.isNullOrBlank()) {
+                prefs.edit().putString(KEY_OFFERED_VERSION, remoteVersion).apply()
+            }
+        }
         // Passo 1: permissão de instalar de fontes desconhecidas.
         if (!canInstallPackages(context)) {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
