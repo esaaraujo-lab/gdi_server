@@ -36,6 +36,7 @@ import com.bibigyn.app.util.PlaylistManager
 import com.bibigyn.app.util.SessionManager
 import com.bibigyn.app.util.Format
 import com.bibigyn.app.util.TvUtils
+import com.bibigyn.app.util.setWordEllipsized
 import com.bibigyn.app.util.UpdateChecker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -183,8 +184,8 @@ class HomeActivity : AppCompatActivity() {
         private fun render(animate: Boolean) {
             val item = items[index]
             binding.heroBadge.text = item.badge
-            binding.heroTitle.text = item.title
-            binding.heroSubtitle.text = item.subtitle
+            binding.heroTitle.setWordEllipsized(item.title)
+            binding.heroSubtitle.setWordEllipsized(item.subtitle)
             // v2.1.5: monograma (sem emoji) — não há foto de hero nos dados.
             binding.heroIcon.text = monogramFor(item.title)
             updateDots()
@@ -304,8 +305,8 @@ class HomeActivity : AppCompatActivity() {
         val pos = sm.getResume(best.folderPath, best.videoName)
         val dur = sm.getResumeDuration(best.folderPath, best.videoName)
         binding.featuredSection.visibility = View.VISIBLE
-        binding.featuredTitle.text = best.videoName
-        binding.featuredSubtitle.text = extractCourseName(best.folderPath)
+        binding.featuredTitle.setWordEllipsized(best.videoName)
+        binding.featuredSubtitle.setWordEllipsized(extractCourseName(best.folderPath))
         binding.featuredProgress.progress = progress
         binding.featuredProgressText.text = "$progress% concluído"
         binding.featuredTimeText.text = Format.positionText(pos, dur)
@@ -451,7 +452,7 @@ class HomeActivity : AppCompatActivity() {
                     if (playable.size > 1) {
                         val idx = playable.indexOfFirst { it.name == videoName }
                         PlaylistManager.setPlaylist(playable, if (idx >= 0) idx else 0, this@HomeActivity)
-                        launchPlayer(BiBiGynApp.BASE_URL + clickedVideo.link, videoName, folderPath)
+                        launchPlayer(BiBiGynApp.BASE_URL + clickedVideo.link, videoName, folderPath, clickedVideo.thumbnailLink)
                         return@launch
                     } else {
                         val result = withContext(Dispatchers.IO) {
@@ -460,7 +461,7 @@ class HomeActivity : AppCompatActivity() {
                         if (result.items.isNotEmpty()) {
                             PlaylistManager.setPlaylist(result.items, result.startIndex, this@HomeActivity)
                         }
-                        launchPlayer(BiBiGynApp.BASE_URL + clickedVideo.link, videoName, folderPath)
+                        launchPlayer(BiBiGynApp.BASE_URL + clickedVideo.link, videoName, folderPath, clickedVideo.thumbnailLink)
                         return@launch
                     }
                 }
@@ -479,11 +480,11 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 
-    private fun launchPlayer(url: String, title: String, folderPath: String) {
+    private fun launchPlayer(url: String, title: String, folderPath: String, thumbnailLink: String? = null) {
         SessionManager.get(this).saveLastWatched(folderPath, title)
-        SessionManager.get(this).addRecent(folderPath, title)
-        // v2.1.5: a thumb do recent é salva pelo PlayerActivity
-        // (addRecent com thumbnailLink) — aqui não há thumb disponível.
+        // Patch: passa a thumb do vídeo (quando conhecida) para o recent,
+        // para o card "Continue assistindo" mostrar a foto em vez do monograma.
+        SessionManager.get(this).addRecent(folderPath, title, thumbnailLink)
         val intent = Intent(this, PlayerActivity::class.java)
         intent.putExtra(PlayerActivity.EXTRA_URL, url)
         intent.putExtra(PlayerActivity.EXTRA_TITLE, title)
