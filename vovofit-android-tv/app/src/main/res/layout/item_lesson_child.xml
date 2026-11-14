@@ -33,14 +33,14 @@
             android:textSize="16sp"
             android:visibility="gone" />
 
-        <ImageView
+        <TextView
             android:id="@+id/childIcon"
             android:layout_width="28dp"
             android:layout_height="28dp"
             android:layout_gravity="center"
-            android:src="@drawable/ic_doc"
-            android:tint="@color/md_primary"
-            android:visibility="gone" />
+            android:gravity="center"
+            android:textColor="@color/md_primary"
+            android:textSize="20sp" />
     </FrameLayout>
 
     <LinearLayout
