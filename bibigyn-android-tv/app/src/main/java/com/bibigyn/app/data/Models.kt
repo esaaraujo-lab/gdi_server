@@ -1,6 +1,7 @@
 package com.bibigyn.app.data
 
 import android.graphics.Color
+import com.bibigyn.app.R
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -47,6 +48,26 @@ data class DriveItem(
             val idx = folderPath.trim('/').split('/').firstOrNull()
                 ?.removeSuffix(":")?.toIntOrNull() ?: return "🎥"
             return ALL.firstOrNull { it.index == idx }?.icon ?: "🎥"
+        }
+
+        /**
+         * Onda 2 (c) — capa gerada do drive (res/drawable-nodpi/
+         * cover_<slug>.jpg, 16:9, foto realista sem texto). Fallback
+         * FINAL da hierarquia da capa quando não há (a) cover_url do
+         * admin nem (b) thumb do Drive. Null = drive sem capa gerada
+         * (só nesse caso a UI cai para a arte do drive).
+         */
+        fun coverResForDrive(index: Int): Int? = when (index) {
+            6 -> R.drawable.cover_clube_fit
+            7 -> R.drawable.cover_hipopressivos
+            else -> null
+        }
+
+        /** Capa gerada do drive dono de um path ("/6:/..." → Clube Fit). */
+        fun coverResForPath(folderPath: String): Int? {
+            val idx = folderPath.trim('/').split('/').firstOrNull()
+                ?.removeSuffix(":")?.toIntOrNull() ?: return null
+            return coverResForDrive(idx)
         }
     }
 }
@@ -221,7 +242,15 @@ data class HeroItem(
     val drivePath: String,        // BrowseActivity drivePath
     val driveName: String,        // displayed in browse
     val icon: String,             // emoji shown in hero corner
-    val colorHint: String? = null // optional colorFromString hint
+    val colorHint: String? = null, // optional colorFromString hint
+    /**
+     * Onda 2 (a) — foto de capa definida pelo admin no curso em
+     * destaque (GET /api/featured-courses → cover_url). Null = sem
+     * capa do admin → a UI usa (b) thumb do Drive, depois (c) a capa
+     * gerada do drive. O hero curado (ALL) mantém null até o admin
+     * definir a capa — a capa vem do mapa em HomeActivity.
+     */
+    val coverUrl: String? = null
 ) {
     companion object {
         /**
@@ -247,6 +276,56 @@ data class HeroItem(
                 icon = "🧘"
             )
         )
+    }
+}
+
+// ──────────────────────────── v2.1.9 onda 2: cursos em destaque ────────────────────────────
+
+/**
+ * Um curso em destaque do admin (D1 featured_courses), devolvido por
+ * GET /api/featured-courses → {ok, courses:[{id, coursePath,
+ * courseName, icon, color, sortOrder, addedAt, cover_url}]}.
+ * A rota existe no worker v2 (handleFeaturedList); a v2.15.6
+ * acrescenta `cover_url` (foto de capa definida pelo admin). O parse
+ * é defensivo: cover_url ausente/vazio → null (a UI cai para a thumb
+ * do Drive e depois para a capa gerada — nunca quebra a tela).
+ * Não inventa endpoint: a rota já existe; só o campo é novo.
+ */
+data class FeaturedCourse(
+    val id: Long,
+    val coursePath: String,
+    val courseName: String,
+    val icon: String?,
+    val color: String?,
+    val sortOrder: Int,
+    /** Onda 2 (a) — foto de capa do admin. Null quando o backend ainda não a devolve. */
+    val coverUrl: String?
+) {
+    companion object {
+        fun fromJson(o: JSONObject): FeaturedCourse {
+            // cover_url (snake_case do worker) ou coverUrl (camelCase);
+            // ausente/vazio → null.
+            val cover = o.optString("cover_url", "").takeIf { it.isNotBlank() }
+                ?: o.optString("coverUrl", "").takeIf { it.isNotBlank() }
+            return FeaturedCourse(
+                id = o.optLong("id", 0L),
+                coursePath = o.optString("coursePath", o.optString("course_path", "")),
+                courseName = o.optString("courseName", o.optString("course_name", "")),
+                icon = o.optString("icon", "").takeIf { it.isNotBlank() },
+                color = o.optString("color", "").takeIf { it.isNotBlank() },
+                sortOrder = o.optInt("sortOrder", o.optInt("sort_order", 0)),
+                coverUrl = cover
+            )
+        }
+
+        fun parseList(arr: JSONArray?): List<FeaturedCourse> {
+            if (arr == null) return emptyList()
+            val out = ArrayList<FeaturedCourse>(arr.length())
+            for (i in 0 until arr.length()) {
+                runCatching { out.add(fromJson(arr.getJSONObject(i))) }
+            }
+            return out
+        }
     }
 }
 
