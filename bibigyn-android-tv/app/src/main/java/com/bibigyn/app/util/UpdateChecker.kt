@@ -27,9 +27,9 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * v2.1.3 — UpdateChecker com filtro por tag prefix bibigyn-v*
+ * v2.7.4 — UpdateChecker com filtro por tag prefix native-v*
  *
- * ★ Mudanças v2.1.3 (instalação dentro do app):
+ * ★ Mudanças v2.7.4 (instalação dentro do app):
  *  - Download IN-APP com progresso visível (diálogo com barra de progresso
  *    + % + Cancelar) via OkHttp — em algumas TVs o DownloadManager não
  *    mostra nada e o usuário não sabe que está baixando. O DownloadManager
@@ -45,19 +45,71 @@ import java.util.concurrent.atomic.AtomicBoolean
  *  - Confirmação: toast "Instalador aberto — confirme a instalação" quando
  *    o instalador é disparado com sucesso.
  *  - A consulta de versão SEMPRE vai à API de releases do GitHub e pega a
- *    primeira release com prefixo bibigyn-v* (per_page=100 para a release
+ *    primeira release com prefixo native-v* (per_page=100 para a release
  *    nunca cair da primeira página). Nenhum cache de versão.
  */
 object UpdateChecker {
 
+    private const val PREFS_UPDATE = "meggy_update"
+    private const val KEY_LAST_CHECK = "last_check_ms"
+    private const val CHECK_INTERVAL_MS = 24L * 60 * 60 * 1000 // 24h
+
+    /**
+     * v2.1.5 — Checagem com throttle (máx. 1×/24h, persistido em prefs).
+     *
+     * Motivo (UPDATECHECKER_DIAGNOSIS.md): a 2.7.2 só checava no onCreate
+     * da Home e falhava 100% silenciosa — por isso o Elton ficou na 2.7.2.
+     * Agora a Home re-checa também no onResume, mas o throttle impede
+     * chamadas repetidas à API do GitHub (limite 60 req/h sem auth).
+     *
+     * O resume de um APK pendente NUNCA é adiado pelo throttle: um APK
+     * já baixado tem que instalar na hora, mesmo que a checagem esteja
+     * dentro da janela de 24h.
+     */
+    fun checkForUpdateThrottled(context: Context, currentVersion: String) {
+        // 1) APK pendente primeiro — nunca atrasado pelo throttle. Se
+        // instalou, retorna (o checkForUpdate faria a mesma instalação).
+        if (resumePendingApk(context)) return
+        // 2) Throttle: 1×/24h.
+        val prefs = context.getSharedPreferences(PREFS_UPDATE, Context.MODE_PRIVATE)
+        val last = prefs.getLong(KEY_LAST_CHECK, 0L)
+        val now = System.currentTimeMillis()
+        if (now - last < CHECK_INTERVAL_MS) return
+        prefs.edit().putLong(KEY_LAST_CHECK, now).apply()
+        checkForUpdate(context, currentVersion, showFeedback = false)
+    }
+
+    /**
+     * v2.1.5 — Retoma a instalação de um APK já baixado (KEY_PENDING_APK),
+     * se existir. Mesma lógica do início de checkForUpdate (v2.7.4),
+     * extraída para ser chamada antes do throttle. Retorna true quando
+     * instalou (ou quando não havia APK pendente instalável — o
+     * chamador decide se segue para a checagem de rede).
+     */
+    fun resumePendingApk(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_UPDATE, Context.MODE_PRIVATE)
+        val pending = prefs.getString(KEY_PENDING_APK, null) ?: return false
+        val file = java.io.File(pending)
+        if (!file.exists()) {
+            prefs.edit().remove(KEY_PENDING_APK).apply()
+            return false
+        }
+        if (!canInstallPackages(context)) return false
+        prefs.edit().remove(KEY_PENDING_APK).apply()
+        showToast(context, "Instalando atualização...")
+        installApk(context, file)
+        return true
+    }
+
+
     private const val GITHUB_RELEASES_API = "https://api.github.com/repos/esaaraujo-lab/gdi_server/releases?per_page=100"
-    private const val TAG_PREFIX = "bibigyn-v"
-    private const val PREFS_NAME = "bibigyn_update"
+    private const val TAG_PREFIX = "native-v"
+    private const val PREFS_NAME = "meggy_update"
     private const val KEY_DOWNLOADED_VERSION = "downloaded_version"
     private const val KEY_PENDING_APK = "pending_apk_path"
 
     fun checkForUpdate(context: Context, currentVersion: String, showFeedback: Boolean = false) {
-        // ★ v2.1.3: APK pendente (usuário acabou de conceder a permissão de
+        // ★ v2.7.4: APK pendente (usuário acabou de conceder a permissão de
         // instalar) — dispara a instalação agora, sem baixar de novo.
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val pendingPath = prefs.getString(KEY_PENDING_APK, null)
@@ -84,7 +136,7 @@ object UpdateChecker {
                 val request = Request.Builder()
                     .url(GITHUB_RELEASES_API)
                     .header("Accept", "application/vnd.github+json")
-                    .header("User-Agent", "BiBiFit-UpdateChecker")
+                    .header("User-Agent", "BiBiNative/2.1-UpdateChecker")
                     .build()
                 val response = client.newCall(request).execute()
                 if (!response.isSuccessful) {
@@ -100,7 +152,7 @@ object UpdateChecker {
 
                 val releasesArray = JSONArray(body)
 
-                // Busca a primeira release com tag prefix "bibigyn-v"
+                // Busca a primeira release com tag prefix "native-v"
                 var remoteVersion = ""
                 var apkUrl: String? = null
                 var apkSize = 0L
@@ -126,7 +178,7 @@ object UpdateChecker {
                 }
 
                 if (remoteVersion.isEmpty()) {
-                    if (showFeedback) showToast(context, "Nenhuma release bibigyn-v* encontrada")
+                    if (showFeedback) showToast(context, "Nenhuma release native-v* encontrada")
                     return@Thread
                 }
 
@@ -139,7 +191,7 @@ object UpdateChecker {
                 // Versao remota e mais nova → download in-app + install
                 if (isNewer(remoteVersion, localVersion) && apkUrl != null) {
                     val sizeStr = if (apkSize > 0) " (${apkSize / 1024 / 1024} MB)" else ""
-                    val fileName = "bibigyn-$remoteVersion.apk"
+                    val fileName = "meggy-$remoteVersion.apk"
 
                     val lastDownloaded = prefs.getString(KEY_DOWNLOADED_VERSION, "") ?: ""
                     val downloadedFile = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
@@ -188,7 +240,7 @@ object UpdateChecker {
     }
 
     /**
-     * ★ v2.1.3: download IN-APP com progresso visível.
+     * ★ v2.7.4: download IN-APP com progresso visível.
      * Diálogo com barra de progresso + % + botão Cancelar (funciona em TV).
      * Em caso de falha, cai para o DownloadManager do sistema (fluxo antigo).
      */
@@ -245,7 +297,7 @@ object UpdateChecker {
                     .build()
                 val request = Request.Builder()
                     .url(url)
-                    .header("User-Agent", "BiBiFit-UpdateChecker")
+                    .header("User-Agent", "BiBiNative/2.1-UpdateChecker")
                     .build()
                 val response = client.newCall(request).execute()
                 if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
@@ -327,7 +379,7 @@ object UpdateChecker {
     }
 
     /**
-     * ★ v2.1.3: instala o APK com o fluxo completo:
+     * ★ v2.7.4: instala o APK com o fluxo completo:
      *  1. Se a permissão de fontes desconhecidas não foi concedida, abre a
      *     tela do sistema para concedê-la e guarda o APK como pendente.
      *  2. Se nenhum instalador resolve o intent (algumas TVs), mostra um
