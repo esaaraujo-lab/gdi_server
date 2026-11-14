@@ -39,6 +39,7 @@ import com.bibigyn.app.BiBiGynApp
 import com.bibigyn.app.R
 import com.bibigyn.app.data.ApiService
 import com.bibigyn.app.data.FileItem
+import com.bibigyn.app.data.DriveItem
 import com.bibigyn.app.data.colorFromString
 import com.bibigyn.app.data.monogramFor
 import com.bibigyn.app.databinding.ActivityPlayerBinding
@@ -47,6 +48,7 @@ import com.bibigyn.app.ui.mylist.MyListActivity
 import com.bibigyn.app.ui.search.SearchActivity
 import com.bibigyn.app.ui.settings.SettingsActivity
 import com.bibigyn.app.util.CardGradient
+import com.bibigyn.app.util.CoverLibrary
 import com.bibigyn.app.util.Format
 import com.bibigyn.app.util.PlaylistManager
 import com.bibigyn.app.util.DescriptionPregenerator
@@ -285,6 +287,9 @@ class PlayerActivity : AppCompatActivity() {
         binding = ActivityPlayerBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Camada 3 — biblioteca de capas por tipo (a capa de
+        // áudio resolve a imagem quando o manifesto já chegou).
+        CoverLibrary.warmUp(this)
         PlaylistManager.loadPlaylist(this)
 
         var item = PlaylistManager.getCurrent()
@@ -526,12 +531,12 @@ class PlayerActivity : AppCompatActivity() {
         if (!thumb.isNullOrBlank()) {
             binding.audioCoverImage.visibility = View.VISIBLE
             binding.audioCoverMonogram.visibility = View.GONE
-            binding.audioCoverImage.load(thumb) { error(R.drawable.card_gradient_pink) }
+            binding.audioCoverImage.load(thumb) {
+                error(R.drawable.card_gradient_pink)
+                listener(onError = { _, _ -> showLibraryOrGeneratedAudioCover(item) })
+            }
         } else {
-            binding.audioCoverImage.visibility = View.GONE
-            binding.audioCoverMonogram.visibility = View.VISIBLE
-            binding.audioCoverMonogram.text = monogramFor(item.name)
-            binding.audioCoverBg.background = CardGradient.drawable(resources, colorFromString(item.name))
+            showLibraryOrGeneratedAudioCover(item)
         }
         // Card "Continuar de onde parou — Parado em 12:34".
         if (isAudio && openedResumeMs > 0) {
@@ -539,6 +544,43 @@ class PlayerActivity : AppCompatActivity() {
             binding.audioResumeText.text = "Continuar de onde parou — Parado em ${Format.mmss(openedResumeMs)}"
         } else {
             binding.audioResumeCard.visibility = View.GONE
+        }
+    }
+
+    /**
+     * Camada 3 → 4 na capa de áudio: (3) imagem da biblioteca por
+     * tipo (nome do áudio → rótulo da pasta → caminho), depois
+     * (4) capa gerada do drive / monograma.
+     */
+    private fun showLibraryOrGeneratedAudioCover(item: FileItem) {
+        val libraryUrl = CoverLibrary.resolve(
+            this, item.name, item.folderLabel, item.folderPath
+        )
+        if (!libraryUrl.isNullOrBlank()) {
+            binding.audioCoverImage.visibility = View.VISIBLE
+            binding.audioCoverMonogram.visibility = View.GONE
+            binding.audioCoverImage.load(libraryUrl) {
+                error(R.drawable.card_gradient_pink)
+                listener(onError = { _, _ -> showGeneratedAudioCover(item) })
+            }
+            return
+        }
+        showGeneratedAudioCover(item)
+    }
+
+    private fun showGeneratedAudioCover(item: FileItem) {
+        // Onda 2 (c): sem thumb, a capa gerada do drive no lugar
+        // do monograma; o monograma só quando não há capa gerada.
+        val coverRes = item.folderPath?.let { DriveItem.coverResForPath(it) }
+        if (coverRes != null) {
+            binding.audioCoverImage.visibility = View.VISIBLE
+            binding.audioCoverMonogram.visibility = View.GONE
+            binding.audioCoverImage.load(coverRes)
+        } else {
+            binding.audioCoverImage.visibility = View.GONE
+            binding.audioCoverMonogram.visibility = View.VISIBLE
+            binding.audioCoverMonogram.text = monogramFor(item.name)
+            binding.audioCoverBg.background = CardGradient.drawable(resources, colorFromString(item.name))
         }
     }
 
