@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  v2.7.6 — Card de rail · TV (mesmos ids do celular).
+  Estrutura: imagem 16:9 (foto real via Coil quando houver, monograma
+  tipográfico quando não houver — NUNCA emoji de câmera) + título
+  16sp (máx. 2 linhas) + subtítulo 14sp (1 linha) + barra de
+  progresso rosa + texto "% concluído · Xmin restantes".
+  Foco: anel 3dp na cor da marca via FocusAnimator.attachCard()
+  (stroke do card) + escala 1.06×/1.10× + elevação.
+  Raio 12dp, sem hex/dp solto (tokens em dimens.xml / colors.xml).
+-->
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/card_root"
+    android:layout_width="@dimen/tv_card_width"
+    android:layout_height="wrap_content"
+    android:layout_marginEnd="@dimen/rail_gap"
+    android:clickable="true"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    android:foreground="?attr/selectableItemBackground"
+    app:cardCornerRadius="@dimen/radius_md"
+    app:cardElevation="@dimen/elevation_0"
+    app:cardBackgroundColor="@color/tile_bg"
+    app:strokeWidth="0dp"
+    app:strokeColor="@color/tile_focus_ring">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- Área da imagem 16:9 -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/tv_card_image_height">
+
+            <!-- Gradiente do curso (colorFromString) — fundo + placeholder -->
+            <View
+                android:id="@+id/card_bg"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/card_gradient_pink" />
+
+            <!-- Foto real (Coil) — visível só quando há thumbnail -->
+            <ImageView
+                android:id="@+id/card_thumbnail"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:visibility="gone"
+                android:contentDescription="@string/thumb_desc" />
+
+            <!-- Monograma tipográfico (fallback) — iniciais do título -->
+            <TextView
+                android:id="@+id/card_monogram"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:textColor="@color/tile_title"
+                android:textSize="48sp"
+                android:textStyle="bold"
+                android:alpha="0.95" />
+
+            <!-- Sombra superior (contraste dos badges) -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layout_gravity="top"
+                android:background="@drawable/tile_overlay_top" />
+
+            <!-- Badge ✓ assistido (topo, direita) -->
+            <TextView
+                android:id="@+id/watched_badge"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="top|end"
+                android:layout_margin="@dimen/spacing_sm"
+                android:background="@drawable/badge_watched"
+                android:gravity="center"
+                android:text="✓"
+                android:textColor="@color/tile_title"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
+            <!-- ★ Favorito (topo, direita, abaixo do ✓) -->
+            <TextView
+                android:id="@+id/fav_star"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_gravity="top|end"
+                android:layout_marginTop="42dp"
+                android:layout_marginEnd="@dimen/spacing_sm"
+                android:background="@drawable/badge_resume"
+                android:clickable="true"
+                android:contentDescription="@string/fav_desc"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:gravity="center"
+                android:text="☆"
+                android:textColor="@color/tile_title"
+                android:textSize="16sp"
+                android:visibility="gone" />
+
+            <!-- Badge ▶ continuar (topo, esquerda) -->
+            <TextView
+                android:id="@+id/continue_badge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|start"
+                android:layout_margin="@dimen/spacing_sm"
+                android:background="@drawable/badge_resume"
+                android:paddingHorizontal="9dp"
+                android:paddingVertical="3dp"
+                android:text="▶ continuar"
+                android:textColor="@color/md_primary"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <!-- Conteúdo abaixo da imagem -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="@dimen/spacing_md"
+            android:paddingTop="@dimen/spacing_sm"
+            android:paddingBottom="@dimen/spacing_md">
+
+            <TextView
+                android:id="@+id/card_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:lineSpacingExtra="1dp"
+                android:maxLines="2"
+                android:textColor="@color/tile_title"
+                android:textSize="@dimen/tv_card_title"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/card_subtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:alpha="0.92"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/tile_subtitle"
+                android:textSize="@dimen/tv_card_meta" />
+
+            <!-- Progresso: barra + "% concluído · Xmin restantes" -->
+            <LinearLayout
+                android:id="@+id/progress_row"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <ProgressBar
+                    android:id="@+id/card_progress"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="4dp"
+                    android:max="100"
+                    android:progressDrawable="@drawable/progress_horizontal" />
+
+                <TextView
+                    android:id="@+id/card_progress_text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textColor="@color/md_primary"
+                    android:textSize="22sp" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>
