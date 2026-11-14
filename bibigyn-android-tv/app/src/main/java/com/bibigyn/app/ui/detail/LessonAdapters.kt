@@ -14,6 +14,7 @@ import com.bibigyn.app.databinding.ItemLessonCardBinding
 import com.bibigyn.app.databinding.ItemLessonChildBinding
 import com.bibigyn.app.databinding.ItemLessonHeaderBinding
 import com.bibigyn.app.util.CardGradient
+import com.bibigyn.app.util.CoverLibrary
 import com.bibigyn.app.util.FocusAnimator
 import com.bibigyn.app.util.Format
 import com.bibigyn.app.util.SessionManager
@@ -230,15 +231,40 @@ class LessonGridAdapter(
 
         with(holder.binding) {
             lessonCardBg.background = CardGradient.drawable(res, colorFromString(group.folder.name))
+            // Camada 3 — biblioteca por tipo (pasta da aula →
+            // vídeo → caminho); sem thumb (ou se ela falhar), a
+            // imagem da biblioteca; sem match, o monograma.
+            val showLibraryOrMonogram = {
+                val libraryUrl = CoverLibrary.resolve(
+                    ctx, group.folder.name, video?.name, group.folderPath
+                )
+                if (!libraryUrl.isNullOrBlank()) {
+                    lessonCardThumb.visibility = View.VISIBLE
+                    lessonCardMonogram.visibility = View.GONE
+                    lessonCardThumb.load(libraryUrl) {
+                        error(R.drawable.card_gradient_pink)
+                        listener(onError = { _, _ ->
+                            lessonCardThumb.visibility = View.GONE
+                            lessonCardMonogram.visibility = View.VISIBLE
+                            lessonCardMonogram.text = monogramFor(group.folder.name)
+                        })
+                    }
+                } else {
+                    lessonCardThumb.visibility = View.GONE
+                    lessonCardMonogram.visibility = View.VISIBLE
+                    lessonCardMonogram.text = monogramFor(group.folder.name)
+                }
+            }
             val thumb = video?.thumbnailLink
             if (!thumb.isNullOrBlank()) {
                 lessonCardThumb.visibility = View.VISIBLE
                 lessonCardMonogram.visibility = View.GONE
-                lessonCardThumb.load(thumb) { error(R.drawable.card_gradient_pink) }
+                lessonCardThumb.load(thumb) {
+                    error(R.drawable.card_gradient_pink)
+                    listener(onError = { _, _ -> showLibraryOrMonogram() })
+                }
             } else {
-                lessonCardThumb.visibility = View.GONE
-                lessonCardMonogram.visibility = View.VISIBLE
-                lessonCardMonogram.text = monogramFor(group.folder.name)
+                showLibraryOrMonogram()
             }
             lessonCardTitle.text = group.folder.name
             if (video != null) {
