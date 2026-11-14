@@ -2499,9 +2499,11 @@
       try{
         const res=await attachFoldersToConcurso(chosenConcurso.id, list.map(f=>f.path));
         const n=(res&&res.scanned&&typeof res.scanned.totalMatched==='number')?res.scanned.totalMatched:((res&&res.attached&&res.attached.length)||0);
+        // ★ v2.15.2 (E): "vinculadas" = totalMatched, "encontradas" = totalFound.
+        const nFound=(res&&res.scanned&&typeof res.scanned.totalFound==='number')?res.scanned.totalFound:n;
         const skipped=(res&&Array.isArray(res.skipped))?res.skipped.length:0;
         close();
-        toast215('✅ '+n+' aulas vinculadas ao concurso "'+(chosenConcurso.name||'')+'"'+(skipped?' ('+skipped+' já estavam anexadas)':''));
+        toast215('✅ '+n+' aulas vinculadas ao concurso "'+(chosenConcurso.name||'')+'" ('+nFound+' encontradas)'+(skipped?' ('+skipped+' já estavam anexadas)':''));
         try{ if(typeof opts.onAttached==='function')await opts.onAttached(res, chosenConcurso); }catch(_){}
       }catch(err){
         // ★ fecha o seletor ANTES do gdiModal: o gdiModal remove todos os
@@ -2528,7 +2530,9 @@
     }catch(_){ return 0; }
   }
   // PDFs do módulo: 1º as aulas já escaneadas (sem I/O de Drive); se não
-  // houver nenhuma, lista o Drive (pasta + 1 nível de subpastas, máx. 20).
+  // houver nenhuma, lista o Drive recursivamente (profundidade 3, máx. 40
+  // listagens, máx. 20 PDFs — mesma enumeração da prévia do servidor e do
+  // helper _v215ListModulePdfsRecursive do shell).
   async function listModulePdfs(courseKey, modulePath){
     const out=[]; const seen=new Set();
     const push=(name,url)=>{
@@ -2566,17 +2570,30 @@
         const nm=f.name||f.title||'';
         if(/\.pdf$/i.test(nm))push(nm, f.path||f.url||(base+encodeURIComponent(nm)));
       }
-      for(const sp of subs.slice(0,5)){
-        if(out.length>=20)break;
-        try{
-          const sub=window.gdiListAllFiles?await window.gdiListAllFiles(sp, pw):[];
-          const sbase=sp.endsWith('/')?sp:sp+'/';
-          for(const f of (sub||[])){
-            if(!f)continue;
-            const nm=f.name||f.title||'';
-            if((f.mimeType&&f.mimeType.includes('pdf'))||/\.pdf$/i.test(nm))push(nm, f.path||f.url||(sbase+encodeURIComponent(nm)));
+      // ★ v2.15.2 (B): BFS até profundidade 3 — antes só 1 nível e no
+      //   máximo 5 subpastas: os PDFs das "Aula NN" (N>5, profundidade 2)
+      //   eram invisíveis e o quiz dizia "Nenhum PDF encontrado".
+      const queue=[]; const seenDirs=new Set([base]);
+      for(const sp of subs){ if(!seenDirs.has(sp)){ seenDirs.add(sp); queue.push({p:sp,d:1}); } }
+      let listings=1;
+      while(queue.length&&out.length<20&&listings<40){
+        const cur=queue.shift();
+        let sub=[];
+        try{ sub=window.gdiListAllFiles?await window.gdiListAllFiles(cur.p, pw):[]; }catch(_){ continue; }
+        listings++;
+        const sbase=cur.p.endsWith('/')?cur.p:cur.p+'/';
+        for(const f of (sub||[])){
+          if(!f)continue;
+          const isF=f.mimeType==='application/vnd.google-apps.folder'||f.type==='folder'||f.dir===true||(f.mimeType&&f.mimeType.includes('folder'));
+          if(isF){
+            const p=f.path||(sbase+encodeURIComponent(f.name||''));
+            const pp=p.endsWith('/')?p:p+'/';
+            if(cur.d<3&&!seenDirs.has(pp)){ seenDirs.add(pp); queue.push({p:pp,d:cur.d+1}); }
+            continue;
           }
-        }catch(_){}
+          const nm=f.name||f.title||'';
+          if((f.mimeType&&f.mimeType.includes('pdf'))||/\.pdf$/i.test(nm))push(nm, f.path||f.url||(sbase+encodeURIComponent(nm)));
+        }
       }
     }catch(_){}
     return out.slice(0,20);
