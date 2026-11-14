@@ -96,6 +96,11 @@ class FileAdapter(
                 cardMonogram.visibility = View.GONE
                 cardThumbnail.load(thumbUrl) {
                     error(R.drawable.card_gradient_pink)
+                    // Patch: se a arte falhar a carregar, volta ao monograma.
+                    listener(onError = { _, _ ->
+                        cardThumbnail.visibility = View.GONE
+                        cardMonogram.visibility = View.VISIBLE
+                    })
                 }
             } else {
                 cardThumbnail.visibility = View.GONE
