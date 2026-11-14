@@ -33,7 +33,7 @@ class SessionManager private constructor(context: Context) {
         set(value) = prefs.edit().putString(KEY_USERNAME, value).apply()
 
     /**
-     * ★ v2.1.2: Persisted password — used by ApiService.validateOrReLogin() to
+     * ★ v2.7.3: Persisted password — used by ApiService.validateOrReLogin() to
      * auto re-login when the server cookie expires after a few days.
      * NOTE: This is intentionally preserved by clearSession() so the user does
      * not have to re-enter credentials just because the cookie expired.
@@ -42,6 +42,22 @@ class SessionManager private constructor(context: Context) {
     var password: String?
         get() = prefs.getString(KEY_PASSWORD, null)
         set(value) = prefs.edit().putString(KEY_PASSWORD, value).apply()
+
+    /**
+     * v1.0.4 — Sessão no host de IA (AiService).
+     *
+     * Separada da sessão principal porque o host de IA pode ser outro
+     * worker (staging-c/meuc) com outro KV de sessões: o cookie da
+     * produção (educa.eu.org) NÃO vale no meuc (KV ENV próprio) e
+     * pode valer no staging-c (KV ENV compartilhado com a produção —
+     * não garantido). O AiService tenta primeiro este cookie, depois
+     * o principal, e por fim faz login no host de IA com as
+     * credenciais guardadas (username/password) e grava aqui.
+     * O fullLogout() também a remove (logout completo limpa tudo).
+     */
+    var aiSessionCookie: String?
+        get() = prefs.getString(KEY_AI_SESSION, null)
+        set(value) = prefs.edit().putString(KEY_AI_SESSION, value).apply()
 
     val isLoggedIn: Boolean get() = !sessionCookie.isNullOrEmpty()
 
@@ -58,7 +74,7 @@ class SessionManager private constructor(context: Context) {
     }
 
     /**
-     * ★ v2.1.2: Full logout — also wipes username + password so the next
+     * ★ v2.7.3: Full logout — also wipes username + password so the next
      * launch forces manual re-authentication. Called from SettingsActivity
      * when the user explicitly logs out.
      */
@@ -67,6 +83,7 @@ class SessionManager private constructor(context: Context) {
             .remove(KEY_SESSION)
             .remove(KEY_USERNAME)
             .remove(KEY_PASSWORD)
+            .remove(KEY_AI_SESSION)
             .apply()
     }
 
@@ -189,8 +206,15 @@ class SessionManager private constructor(context: Context) {
     // Each entry: { folder, video, ts }. Deduped by (folder, video).
 
     /** Adds (or moves to top) a (folder, video) entry in the recents list. */
-    fun addRecent(folderPath: String, videoName: String) {
+    fun addRecent(folderPath: String, videoName: String, thumbnailLink: String? = null) {
         val arr = recentArray()
+        // v1.0.4: preserva a thumb já salva quando a nova chamada não traz
+        // uma (ex.: launchPlayer sem thumb apagava a thumb salva pelo player).
+        val oldThumb = (0 until arr.length()).map { arr.getJSONObject(it) }
+            .firstOrNull {
+                it.optString("folder") == folderPath && it.optString("video") == videoName
+            }?.optString("thumb").takeIf { !it.isNullOrBlank() }
+        val thumb = thumbnailLink.takeIf { !it.isNullOrBlank() } ?: oldThumb
         // Remove any existing entry with the same (folder, video)
         val filtered = (0 until arr.length()).map { arr.getJSONObject(it) }
             .filter {
@@ -201,6 +225,7 @@ class SessionManager private constructor(context: Context) {
         entry.put("folder", folderPath)
         entry.put("video", videoName)
         entry.put("ts", System.currentTimeMillis())
+        if (!thumb.isNullOrBlank()) entry.put("thumb", thumb)
         newList.add(0, entry)
         // Cap at 8
         while (newList.size > 8) newList.removeAt(newList.size - 1)
@@ -218,7 +243,8 @@ class SessionManager private constructor(context: Context) {
             out.add(RecentItem(
                 folderPath = o.optString("folder"),
                 videoName = o.optString("video"),
-                timestamp = o.optLong("ts", 0L)
+                timestamp = o.optLong("ts", 0L),
+                thumbnailLink = o.optString("thumb").takeIf { it.isNotBlank() }
             ))
         }
         return out
@@ -229,10 +255,54 @@ class SessionManager private constructor(context: Context) {
         return try { JSONArray(raw) } catch (_: Exception) { JSONArray() }
     }
 
+    // ───────── v1.0.4: descrições geradas das aulas (aba Resumo) ─────────
+    //
+    // Cache local do texto explicativo gerado pela Meggy, chaveado pelo
+    // path da pasta da aula. Mesmo padrão dos recents (JSONArray de
+    // objetos {path, text, at}, mais recente primeiro, teto de 200).
+    // A fonte da verdade é o servidor (cache ISA + pasta .gdi-resumos);
+    // isto só evita baixar de novo o que já foi lido — a próxima
+    // abertura da aula é instantânea, como no diagrama ("Guardado —
+    // abre na hora da próxima vez").
+
+    /** Descrição gerada guardada para a pasta da aula (ou null). */
+    fun getLessonDescription(lessonPath: String): String? {
+        val arr = descriptionArray()
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            if (o.optString("path") == lessonPath) return o.optString("text").takeIf { it.isNotBlank() }
+        }
+        return null
+    }
+
+    /** Guarda (ou substitui) a descrição gerada da pasta da aula. */
+    fun saveLessonDescription(lessonPath: String, text: String) {
+        if (text.isBlank()) return
+        val arr = descriptionArray()
+        val filtered = (0 until arr.length()).map { arr.getJSONObject(it) }
+            .filter { it.optString("path") != lessonPath }
+        val newList = ArrayList(filtered)
+        val entry = JSONObject()
+        entry.put("path", lessonPath)
+        entry.put("text", text)
+        entry.put("at", System.currentTimeMillis())
+        newList.add(0, entry)
+        while (newList.size > MAX_LESSON_DESCRIPTIONS) newList.removeAt(newList.size - 1)
+        val out = JSONArray()
+        newList.forEach { out.put(it) }
+        prefs.edit().putString(KEY_LESSON_DESCRIPTIONS, out.toString()).apply()
+    }
+
+    private fun descriptionArray(): JSONArray {
+        val raw = prefs.getString(KEY_LESSON_DESCRIPTIONS, null) ?: return JSONArray()
+        return try { JSONArray(raw) } catch (_: Exception) { JSONArray() }
+    }
+
     data class RecentItem(
         val folderPath: String,
         val videoName: String,
-        val timestamp: Long
+        val timestamp: Long,
+        val thumbnailLink: String? = null
     )
 
     // ───────── v2.0.0: Favorites ("Minha lista") ─────────
@@ -277,10 +347,10 @@ class SessionManager private constructor(context: Context) {
         }
     }
 
-    // ───────── v1.0.2: Favorite COURSES ("Minha lista" — cursos/pastas) ─────────
+    // ───────── v2.7.4: Favorite COURSES ("Minha lista" — cursos/pastas) ─────────
     //
-    // Um curso é uma pasta do Drive (drive raiz "/12:/" ou subpasta
-    // "/12:/Queima Diária/..."). Guardado como JSON [{drivePath, name}].
+    // Um curso é uma pasta do Drive (drive raiz "/3:/" ou subpasta
+    // "/9:/Tribunais/..."). Guardado como JSON [{drivePath, name}].
     // Separado dos favoritos de arquivo (favorites_v1) porque um curso
     // não é um FileItem.
 
@@ -349,8 +419,113 @@ class SessionManager private constructor(context: Context) {
         get() = prefs.getInt(KEY_SLEEP_TIMER_MIN, 0)
         set(value) = prefs.edit().putInt(KEY_SLEEP_TIMER_MIN, value).apply()
 
+    // ───────── v1.0.4: Ajustes reais (ver REDESIGN_NOTES.md) ─────────
+
+    /** Lembrete diário de estudo às 19:00 (StudyReminder). Padrão: desligado. */
+    var notificationsEnabled: Boolean
+        get() = prefs.getBoolean(KEY_NOTIFICATIONS, false)
+        set(value) = prefs.edit().putBoolean(KEY_NOTIFICATIONS, value).apply()
+
+    /**
+     * "Baixar só no Wi-Fi": quando ligado, o cache de vídeo do ExoPlayer
+     * (VideoCache) só GRAVA em Wi-Fi. Padrão: ligado.
+     */
+    var wifiOnlyDownloads: Boolean
+        get() = prefs.getBoolean(KEY_WIFI_ONLY, true)
+        set(value) = prefs.edit().putBoolean(KEY_WIFI_ONLY, value).apply()
+
+    /**
+     * Legendas: controla a renderização de trilhas de texto no player
+     * (DefaultTrackSelector). As aulas atuais não trazem trilha de legenda,
+     * então o controle fica dormente até o conteúdo ter legendas.
+     * Padrão: ligado.
+     */
+    var subtitlesEnabled: Boolean
+        get() = prefs.getBoolean(KEY_SUBTITLES, true)
+        set(value) = prefs.edit().putBoolean(KEY_SUBTITLES, value).apply()
+
+    /**
+     * Qualidade do vídeo: "auto" | "hd" | "sd". Aplicada via
+     * DefaultTrackSelector, MAS só quando houver mais de uma trilha de
+     * vídeo (renditions adaptativas) — as aulas atuais são MP4 progressivo
+     * de trilha única, e limitar a única trilha apagaria o vídeo.
+     * Padrão: "auto".
+     */
+    var videoQuality: String
+        get() = prefs.getString(KEY_VIDEO_QUALITY, "auto") ?: "auto"
+        set(value) = prefs.edit().putString(KEY_VIDEO_QUALITY, value).apply()
+
+    // ───────── v1.0.4: buscas recentes (máx. 5) ─────────
+
+    fun addRecentSearch(query: String) {
+        val q = query.trim()
+        if (q.length < 2) return
+        val list = getRecentSearches().toMutableList()
+        list.removeAll { it.equals(q, ignoreCase = true) }
+        list.add(0, q)
+        while (list.size > 5) list.removeAt(list.size - 1)
+        prefs.edit().putString(KEY_RECENT_SEARCHES, JSONArray(list).toString()).apply()
+    }
+
+    fun getRecentSearches(): List<String> {
+        val raw = prefs.getString(KEY_RECENT_SEARCHES, null) ?: return emptyList()
+        return try {
+            val arr = JSONArray(raw)
+            (0 until arr.length()).map { arr.optString(it) }.filter { it.isNotBlank() }
+        } catch (_: Exception) { emptyList() }
+    }
+
+    // ───────── v1.0.4: documentos marcados (leitores PDF/MD) ─────────
+
+    data class Bookmark(val path: String, val name: String, val kind: String)
+
+    fun toggleBookmark(path: String, name: String, kind: String): Boolean {
+        val list = getBookmarks().toMutableList()
+        val existing = list.indexOfFirst { it.path == path }
+        return if (existing >= 0) {
+            list.removeAt(existing); saveBookmarks(list); false
+        } else {
+            list.add(0, Bookmark(path, name, kind)); saveBookmarks(list); true
+        }
+    }
+
+    fun isBookmarked(path: String): Boolean = getBookmarks().any { it.path == path }
+
+    fun getBookmarks(): List<Bookmark> {
+        val raw = prefs.getString(KEY_BOOKMARKS, null) ?: return emptyList()
+        return try {
+            val arr = JSONArray(raw)
+            (0 until arr.length()).map {
+                val o = arr.getJSONObject(it)
+                Bookmark(o.optString("path"), o.optString("name"), o.optString("kind"))
+            }
+        } catch (_: Exception) { emptyList() }
+    }
+
+    private fun saveBookmarks(list: List<Bookmark>) {
+        val out = JSONArray()
+        list.forEach {
+            val o = JSONObject()
+            o.put("path", it.path); o.put("name", it.name); o.put("kind", it.kind)
+            out.put(o)
+        }
+        prefs.edit().putString(KEY_BOOKMARKS, out.toString()).apply()
+    }
+
+    /** Escala da fonte do leitor de MD (A−/A+, 0.7–2.0). Padrão 1.0. */
+    var mdFontScale: Float
+        get() = prefs.getFloat(KEY_MD_FONT_SCALE, 1.0f)
+        set(value) = prefs.edit().putFloat(KEY_MD_FONT_SCALE, value.coerceIn(0.7f, 2.0f)).apply()
+
+    /** Última página lida de um PDF (retomar de onde parou). */
+    fun savePdfPage(path: String, page: Int) {
+        prefs.edit().putInt("pdf_page_${path.hashCode()}", page).apply()
+    }
+
+    fun getPdfPage(path: String): Int = prefs.getInt("pdf_page_${path.hashCode()}", 0)
+
     companion object {
-        private const val PREFS_NAME = "vovofit_session"
+        private const val PREFS_NAME = "meggy_session"
         private const val KEY_SESSION = "session_cookie"
         private const val KEY_USERNAME = "username"
         private const val KEY_PASSWORD = "password"
@@ -360,6 +535,16 @@ class SessionManager private constructor(context: Context) {
         private const val KEY_DEFAULT_SPEED = "default_speed"
         private const val KEY_AUTOPLAY_NEXT = "autoplay_next"
         private const val KEY_SLEEP_TIMER_MIN = "sleep_timer_min"
+        private const val KEY_NOTIFICATIONS = "notifications_enabled"
+        private const val KEY_WIFI_ONLY = "wifi_only_downloads"
+        private const val KEY_SUBTITLES = "subtitles_enabled"
+        private const val KEY_VIDEO_QUALITY = "video_quality"
+        private const val KEY_RECENT_SEARCHES = "recent_searches_v1"
+        private const val KEY_BOOKMARKS = "bookmarks_v1"
+        private const val KEY_MD_FONT_SCALE = "md_font_scale"
+        private const val KEY_AI_SESSION = "ai_session_cookie"
+        private const val KEY_LESSON_DESCRIPTIONS = "lesson_descriptions_v1"
+        private const val MAX_LESSON_DESCRIPTIONS = 200
 
         @Volatile private var instance: SessionManager? = null
         fun get(context: Context): SessionManager =
