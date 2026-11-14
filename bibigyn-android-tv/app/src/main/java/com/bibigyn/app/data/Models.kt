@@ -37,6 +37,17 @@ data class DriveItem(
             DriveItem(6,  "CLUBE FIT",                   null, "💪", "Treinos + saúde"),
             DriveItem(7,  "HIPOPRESSIVOS",               null, "🧘", "Exercícios guiados")
         )
+
+        /**
+         * v2.1.9 — ícone do drive dono de um path ("/6:/..." → "💪").
+         * Fallback do card quando NÃO há thumb no Drive (ex.: áudios,
+         * que o Drive não thumbna): arte do drive, nunca monograma.
+         */
+        fun iconForPath(folderPath: String): String {
+            val idx = folderPath.trim('/').split('/').firstOrNull()
+                ?.removeSuffix(":")?.toIntOrNull() ?: return "🎥"
+            return ALL.firstOrNull { it.index == idx }?.icon ?: "🎥"
+        }
     }
 }
 
