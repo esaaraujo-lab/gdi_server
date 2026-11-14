@@ -227,7 +227,10 @@
     }
     _battalionRunning.add(courseKey);
     try{
-      const body={courseKey, coursePath, lessonName, pdfs:pdfList.map(p=>({name:p.name||'',url:p.url||'',text:p.text||''}))};
+      // ★ v2.15.3 (item 3): repassa text + no_text do cliente — o servidor
+      //   pula PDFs sem texto e registra o motivo em skipped[]; sem no_text
+      //   o servidor não distingue "sem texto" de "cliente antigo".
+      const body={courseKey, coursePath, lessonName, pdfs:pdfList.map(p=>({name:p.name||'',url:p.url||'',text:p.text||'',no_text:!!p.no_text}))};
       const r=await fetch('/api/ai/battalion',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       const d=await r.json();
       return !!(d&&d.ok);
