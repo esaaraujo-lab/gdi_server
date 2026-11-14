@@ -1,10 +1,12 @@
 package com.meggy.app.ui.home
 
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AnimationUtils
 import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
+import coil.load
 import com.meggy.app.R
 import com.meggy.app.data.DriveItem
 import com.meggy.app.util.setWordEllipsized
@@ -12,6 +14,7 @@ import com.meggy.app.databinding.ItemDriveCardBinding
 import com.meggy.app.util.FocusAnimator
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.TvUtils
+import com.meggy.app.util.LibraryCovers
 
 /**
  * v2.7.6 — Rail "Explorar drives" (conceito home).
@@ -24,8 +27,20 @@ import com.meggy.app.util.TvUtils
  */
 class DriveRailAdapter(
     private val drives: List<DriveItem>,
+    /**
+     * Onda 2 (a) — capa do admin por drivePath ("/0:/" → URL).
+     * Vazio na construção (o GET roda em 2º plano); atualizado por
+     * [setFeaturedCovers] quando a resposta chega.
+     */
+    private var featuredCovers: Map<String, String> = emptyMap(),
     private val onClick: (DriveItem) -> Unit
 ) : RecyclerView.Adapter<DriveRailAdapter.VH>() {
+
+    /** Atualiza as capas do admin e redesenha os cards. */
+    fun setFeaturedCovers(covers: Map<String, String>) {
+        featuredCovers = covers
+        notifyDataSetChanged()
+    }
 
     inner class VH(val binding: ItemDriveCardBinding) : RecyclerView.ViewHolder(binding.root) {
         init {
@@ -51,6 +66,30 @@ class DriveRailAdapter(
             driveMeta.visibility = if (drive.tagline.isBlank()) View.GONE else View.VISIBLE
 
             val coursePath = "/${drive.index}:/"
+            // Onda 2 (a) — capa do admin por trás do conteúdo do
+            // card (só quando o admin definiu cover_url). Sem capa,
+            // o card segue exatamente como antes (gone = sem mudança
+            // visual); o else é obrigatório (view reciclada).
+            val adminCover = featuredCovers[coursePath]?.takeIf { it.isNotBlank() }
+            // v2.7.11 camada (3): sem capa do admin, a imagem da
+            // biblioteca pelo nome do drive/curso; sem match, o card
+            // segue como antes (sem foto de fundo).
+            val driveCoverUrl = adminCover
+                ?: LibraryCovers.resolve(drive.name, drive.tagline)
+            if (driveCoverUrl != null) {
+                driveCover.visibility = View.VISIBLE
+                driveScrim.visibility = View.VISIBLE
+                driveCover.load(driveCoverUrl) {
+                    listener(onError = { _, _ ->
+                        driveCover.visibility = View.GONE
+                        driveScrim.visibility = View.GONE
+                    })
+                }
+            } else {
+                driveCover.visibility = View.GONE
+                driveScrim.visibility = View.GONE
+            }
+
             val sm = SessionManager.get(holder.itemView.context)
             driveFavStar.text = if (sm.isFavoriteCourse(coursePath)) "⭐" else "☆"
             driveFavStar.setOnClickListener {
