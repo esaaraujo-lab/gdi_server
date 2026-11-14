@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  v2.1.6 — Player · TV (mesmos ids do celular) + simplificação
+  v2.1.7 — Player · TV (mesmos ids do celular) + simplificação
   do player (Elton 10:31, patch 2.1.6).
   TV: vídeo em TELA CHEIA imediata; barra grande embaixo (pause rosa,
-  Descanso, CC, velocidade, sair da tela cheia) + tempo + progresso.
+  Descanso, velocidade, sair da tela cheia) + tempo + progresso.
   Sem botão de tela cheia aqui (a TV já É tela cheia). Sem playlist
   embutida (gaveta + "A seguir" removidas — a playlist vive na página),
   sem botões −10s/+10s no rodapé (o pulo continua pelas setas do
@@ -122,7 +122,7 @@
             android:layout_width="@dimen/play_fab_size"
             android:layout_height="@dimen/play_fab_size"
             android:layout_gravity="center"
-            android:background="@drawable/btn_play_circle"
+            android:background="@drawable/player_play_bg"
             android:clickable="true"
             android:focusable="true"
             android:gravity="center"
@@ -133,6 +133,7 @@
 
         <!-- Barra superior: título + ações -->
         <LinearLayout
+            android:id="@+id/top_bar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="top"
@@ -239,7 +240,7 @@
                     android:id="@+id/btn_play_pause_bar"
                     android:layout_width="96dp"
                     android:layout_height="96dp"
-                    android:background="@drawable/btn_play_circle"
+                    android:background="@drawable/player_play_bg"
                     android:clickable="true"
                     android:focusable="true"
                     android:gravity="center"
@@ -257,7 +258,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="48dp"
                     android:layout_marginEnd="@dimen/spacing_sm"
-                    android:background="@drawable/chip_outline"
+                    android:background="@drawable/player_chip_bg"
                     android:clickable="true"
                     android:focusable="true"
                     android:gravity="center"
@@ -266,27 +267,13 @@
                     android:textColor="@color/md_on_surface"
                     android:textSize="@dimen/text_chip" />
 
-                <TextView
-                    android:id="@+id/btn_cc_bar"
-                    android:layout_width="wrap_content"
-                    android:layout_height="48dp"
-                    android:layout_marginEnd="@dimen/spacing_sm"
-                    android:background="@drawable/chip_outline"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center"
-                    android:paddingHorizontal="@dimen/spacing_lg"
-                    android:text="CC"
-                    android:textColor="@color/md_on_surface"
-                    android:textSize="@dimen/text_chip"
-                    android:textStyle="bold" />
-
+                
                 <TextView
                     android:id="@+id/btn_speed_bar"
                     android:layout_width="wrap_content"
                     android:layout_height="48dp"
                     android:layout_marginEnd="@dimen/spacing_sm"
-                    android:background="@drawable/chip_outline"
+                    android:background="@drawable/player_chip_bg"
                     android:clickable="true"
                     android:focusable="true"
                     android:gravity="center"
@@ -300,7 +287,7 @@
                     android:id="@+id/btn_exit_fullscreen"
                     android:layout_width="72dp"
                     android:layout_height="72dp"
-                    android:background="@drawable/chip_outline"
+                    android:background="@drawable/player_chip_bg"
                     android:clickable="true"
                     android:focusable="true"
                     android:gravity="center"
@@ -423,7 +410,7 @@
                         android:id="@+id/btn_speed_info"
                         android:layout_width="wrap_content"
                         android:layout_height="48dp"
-                        android:background="@drawable/chip_outline"
+                        android:background="@drawable/player_chip_bg"
                         android:clickable="true"
                         android:focusable="true"
                         android:gravity="center"
@@ -433,27 +420,13 @@
                         android:textSize="@dimen/text_chip"
                         android:textStyle="bold" />
 
-                    <TextView
-                        android:id="@+id/btn_cc_info"
-                        android:layout_width="wrap_content"
-                        android:layout_height="48dp"
-                        android:layout_marginStart="@dimen/spacing_sm"
-                        android:background="@drawable/chip_outline"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:gravity="center"
-                        android:paddingHorizontal="@dimen/spacing_lg"
-                        android:text="CC"
-                        android:textColor="@color/md_on_surface"
-                        android:textSize="@dimen/text_chip"
-                        android:textStyle="bold" />
-
+                    
                     <TextView
                         android:id="@+id/btn_rest_info"
                         android:layout_width="wrap_content"
                         android:layout_height="48dp"
                         android:layout_marginStart="@dimen/spacing_sm"
-                        android:background="@drawable/chip_outline"
+                        android:background="@drawable/player_chip_bg"
                         android:clickable="true"
                         android:focusable="true"
                         android:gravity="center"
@@ -468,7 +441,7 @@
                         android:layout_width="48dp"
                         android:layout_height="48dp"
                         android:layout_marginStart="@dimen/spacing_sm"
-                        android:background="@drawable/chip_outline"
+                        android:background="@drawable/player_chip_bg"
                         android:clickable="true"
                         android:focusable="true"
                         android:gravity="center"
