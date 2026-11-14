@@ -10,9 +10,9 @@ import coil.load
 import com.meggy.app.R
 import com.meggy.app.data.FileItem
 import com.meggy.app.data.colorFromString
-import com.meggy.app.data.monogramFor
 import com.meggy.app.databinding.ItemRailCardBinding
 import com.meggy.app.util.CardGradient
+import com.meggy.app.util.ThumbArt
 import com.meggy.app.util.FocusAnimator
 import com.meggy.app.util.Format
 import com.meggy.app.util.SessionManager
@@ -23,13 +23,18 @@ import com.meggy.app.util.setWordEllipsized
  * v2.7.6 — Rail "Continue assistindo" (conceito home).
  *
  * Card 16:9: foto real via Coil quando há thumbnail (RailItem.thumbnailUrl
- * ou FileItem.thumbnailLink), monograma tipográfico quando não há —
- * NUNCA emoji de câmera. Título 16sp (máx. 2 linhas), subtítulo 14sp,
+ * ou FileItem.thumbnailLink), arte-padrão do drive (ícone) quando não há —
+ * NUNCA monograma com letras, NUNCA emoji de câmera. Título 16sp
+ * (máx. 2 linhas), subtítulo 14sp,
  * barra de progresso rosa + "% concluído · Xmin restantes".
  * Foco: FocusAnimator.attachCard (anel 3dp da marca + escala + elevação).
  */
 data class RailItem(
+    // v2.7.11 — `title` é o nome CRU do arquivo (identidade do item: o
+    // clique casa por videoName). `displayTitle` é o título LIMPO
+    // (Format.lessonDisplayTitle) exibido no card; null = mostra title.
     val title: String,
+    val displayTitle: String? = null,
     val subtitle: String,
     val icon: String,
     val hasProgress: Boolean,
@@ -68,31 +73,34 @@ class RailAdapter(
         val ctx = holder.itemView.context
 
         with(holder.binding) {
-            cardTitle.setWordEllipsized(item.title)
+            cardTitle.setWordEllipsized(item.displayTitle ?: item.title)
             cardSubtitle.setWordEllipsized(item.subtitle)
+            // v2.7.11 — subtítulo vazio (título já traz o curso) some,
+            // em vez de deixar uma linha em branco no card.
+            cardSubtitle.visibility = if (item.subtitle.isBlank()) View.GONE else View.VISIBLE
 
             val baseColor = colorFromString(item.colorHint ?: item.title)
             cardBg.background = CardGradient.drawable(res, baseColor)
 
-            // Thumb fotográfica quando houver; monograma quando não houver.
+            // v2.7.11 — thumb fotográfica quando houver; arte-padrão do
+            // drive (ícone) quando não houver OU quando o Coil falhar.
+            // Monograma com letras NUNCA mais é thumb.
             val thumb = item.thumbnailUrl ?: item.file?.thumbnailLink
+            fun showFallbackArt() {
+                cardThumbnail.visibility = View.GONE
+                cardFallbackIcon.visibility = View.VISIBLE
+                cardFallbackIcon.text = ThumbArt.driveIconFor(item.file?.folderPath ?: "")
+            }
             if (!thumb.isNullOrBlank()) {
                 cardThumbnail.visibility = View.VISIBLE
-                cardMonogram.visibility = View.GONE
+                cardFallbackIcon.visibility = View.GONE
                 cardThumbnail.load(thumb) {
                     error(R.drawable.card_gradient_pink)
-                    // Patch: se a arte falhar a carregar, volta ao monograma
-                    // (antes ficava só o gradiente, sem arte nem monograma).
-                    listener(onError = { _, _ ->
-                        cardThumbnail.visibility = View.GONE
-                        cardMonogram.visibility = View.VISIBLE
-                    })
+                    listener(onError = { _, _ -> showFallbackArt() })
                 }
                 cardThumbnail.setOnClickListener(null)
             } else {
-                cardThumbnail.visibility = View.GONE
-                cardMonogram.visibility = View.VISIBLE
-                cardMonogram.text = monogramFor(item.title)
+                showFallbackArt()
             }
 
             // Progresso real: barra + "% concluído · Xmin restantes".
