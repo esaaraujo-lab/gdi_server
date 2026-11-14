@@ -1,26 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- v1.0.4 — Anel de foco de TV (android-tv-design skill):
+     borda 3dp na cor da marca (tile_focus_ring), raio 12dp, fundo
+     surface quando focado. NÃO é só cor: o FocusAnimator adiciona
+     escala (1.1× TV / 1.06× celular) + elevação 16dp + 180ms ease-out. -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Focused (D-pad) — bright accent border + subtle background change -->
     <item android:state_focused="true">
         <shape android:shape="rectangle">
-            <solid android:color="#252A38" />
-            <stroke android:width="3dp" android:color="#FF8B9F" />
-            <corners android:radius="14dp" />
+            <corners android:radius="@dimen/radius_md" />
+            <solid android:color="@color/tile_bg_focused" />
+            <stroke
+                android:width="@dimen/focus_ring_width"
+                android:color="@color/tile_focus_ring" />
         </shape>
     </item>
-    <!-- Pressed — slightly brighter -->
-    <item android:state_pressed="true">
-        <shape android:shape="rectangle">
-            <solid android:color="#2A3040" />
-            <stroke android:width="2dp" android:color="#5DDEDA" />
-            <corners android:radius="14dp" />
-        </shape>
-    </item>
-    <!-- Default — no border -->
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="@android:color/transparent" />
-            <corners android:radius="14dp" />
+            <corners android:radius="@dimen/radius_md" />
+            <solid android:color="@color/tile_bg" />
         </shape>
     </item>
 </selector>
