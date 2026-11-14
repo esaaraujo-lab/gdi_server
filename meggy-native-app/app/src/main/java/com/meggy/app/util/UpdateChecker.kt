@@ -56,6 +56,8 @@ object UpdateChecker {
 
     /**
      * v2.7.6 — Checagem com throttle (máx. 1×/24h, persistido em prefs).
+     * v2.7.9 — timestamp só após HTTP 200 + corpo válido
+     * (antes era gravado ANTES da rede e uma falha queimava a janela).
      *
      * Motivo (UPDATECHECKER_DIAGNOSIS.md): a 2.7.2 só checava no onCreate
      * da Home e falhava 100% silenciosa — por isso o Elton ficou na 2.7.2.
@@ -75,7 +77,10 @@ object UpdateChecker {
         val last = prefs.getLong(KEY_LAST_CHECK, 0L)
         val now = System.currentTimeMillis()
         if (now - last < CHECK_INTERVAL_MS) return
-        prefs.edit().putLong(KEY_LAST_CHECK, now).apply()
+        // v2.7.9 — o timestamp NÃO é gravado aqui: só após uma
+        // resposta bem-sucedida (HTTP 200 + corpo JSON válido) dentro de
+        // checkForUpdate. Uma checagem que falha (sem rede / rate limit)
+        // não queima a janela de 24h.
         checkForUpdate(context, currentVersion, showFeedback = false)
     }
 
@@ -151,6 +156,11 @@ object UpdateChecker {
                 }
 
                 val releasesArray = JSONArray(body)
+
+                // v2.7.9 — checagem OK (HTTP 200 + corpo válido): grava o
+                // timestamp do throttle agora. Falhas de rede/HTTP acima
+                // retornam antes daqui e não queimam a janela de 24h.
+                prefs.edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).apply()
 
                 // Busca a primeira release com tag prefix "native-v"
                 var remoteVersion = ""
