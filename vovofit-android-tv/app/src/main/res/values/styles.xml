@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v1.0.4 — Estilos do redesign. -->
+<resources>
+    <!-- Indicador ativo da bottom nav (M3): pílula rosa a 12%. -->
+    <style name="NavIndicatorPill" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
+        <item name="android:background">@drawable/nav_indicator_pill</item>
+    </style>
+</resources>
