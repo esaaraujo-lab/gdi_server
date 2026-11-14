@@ -48,7 +48,7 @@ body.gdi-fv .gdi-player-wrap iframe{
 .gdi-player-wrap:-webkit-full-screen,
 .gdi-player-wrap:-moz-full-screen,
 .gdi-player-wrap:-ms-fullscreen {
-  width:100vw!important; height:100vh!important; max-width:none!important;
+  width:100vw!important; height:100vh!important; height:100dvh!important; max-width:none!important;
   max-height:none!important; background:#000!important;
   border-radius:0!important; border:0!important; box-shadow:none!important;
   display:flex!important; align-items:center!important; justify-content:center!important;
@@ -170,6 +170,19 @@ body.gdi-fv .gdi-player-wrap iframe{
   Bus.onGlobal('watched:changed',updBtn);
   Bus.onGlobal('user:ready',updBtn);
   Bus.onGlobal('video:switched',()=>setTimeout(updBtn,150));
+  // ★ v2.15.4 P1-04 — FALSO POSITIVO COMPROVADO POR CÓDIGO (só
+  //   documentado, sem guarda): o init do M10 só pode rodar no boot
+  //   (runAll via DOMContentLoaded/load em gdi-core.js), quando o player
+  //   ainda não existe — nenhuma rota do shell abre o player
+  //   (_playVideoInline só roda por clique). Os outros gatilhos de runAll
+  //   estão mortos sob o shell: não há #content no HTML do shell (só
+  //   #meggy-root) → o MutationObserver nem existe; e ninguém emite Bus
+  //   'page:change' no código vivo (só listeners; app.min.js, que poderia
+  //   emitir, nem é carregado pelo shell). Logo #gdi-slot-modes nunca é
+  //   criado sob o shell e não há id duplicado de #gdi-watched-btn. Se um
+  //   dia reativarem page:change ou o #content, reavaliar — o guarda
+  //   seria: retornar cedo se existir
+  //   .gdi-study-bar .gdi-mode-btn[data-mode].
   window.GDI_MODULES.push({name:'focus-modes',init:function(){
     const study=document.getElementById('gdi-study');
     const wrap=document.querySelector('.gdi-player-wrap');
@@ -200,7 +213,13 @@ body.gdi-fv .gdi-player-wrap iframe{
       const ifr=document.querySelector('#gdi-mat-body iframe');
       if(ifr){const base=ifr.src.split('#')[0];if(!base.endsWith('.html'))ifr.src=base+'#zoom='+z;}
     }
+    // ★ v2.15.4 P1-03: quando o shell está ativo (grid #gdi-study-grid
+    //   existe), o SHELL gerencia os modos via classes mode-fv/mode-fm no
+    //   grid (visibility, sem destruir iframes). O inline display:none
+    //   daqui divergia do CSS do shell e vencia o override "never hide" —
+    //   desativado nesse caso (o shell já faz o foco sozinho).
     function applyLayout(m){
+      if(document.getElementById('gdi-study-grid'))return;
       const{grid,left,right}=findLayout();
       if(grid){
         if(m==='fv'||m==='fm')grid.style.setProperty('grid-template-columns','1fr','important');
