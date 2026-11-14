@@ -17,26 +17,35 @@ import org.json.JSONObject
 /**
  * One of the 12 hardcoded root drives shown on the home screen.
  */
+/**
+ * v2.7.6 — `tagline` é a linha de metadados do card do drive na home
+ * (texto curado, descritivo — NUNCA contagens inventadas: o app não
+ * lista o conteúdo do drive sem abrir). `isConcurso` marca os drives
+ * de concurso, usados pelo filtro "Concursos" da busca e pela aba
+ * "Concursos" da Minha lista.
+ */
 data class DriveItem(
     val index: Int,
     val name: String,
     val rootFolderId: String?,
-    val icon: String = "📁"
+    val icon: String = "📁",
+    val tagline: String = "",
+    val isConcurso: Boolean = false
 ) {
     companion object {
         val ALL: List<DriveItem> = listOf(
-            DriveItem(0,  "RETA FINAL TRTs",                "18pNVx52TY5ImVTTEyxp30oEQJCnKgzL7", "⚖️"),
-            DriveItem(1,  "CURSOS - PLATAFORMAS COMPLETAS", "1lZo5wBhqC44yEySqX6rjyzBuJEEvGPs7", "📚"),
-            DriveItem(2,  "VESTIBULARES PLATAFORMAS",       null, "🎯"),
-            DriveItem(3,  "VESTIBULARES ISOLADAS",          null, "🎨"),
-            DriveItem(4,  "MUSICA E CANTO",                 null, "🎼"),
-            DriveItem(5,  "CARREIRAS EDUCACIONAIS",         null, "🏆"),
-            DriveItem(6,  "CLUBE FIT",                      null, "💪"),
-            DriveItem(7,  "HIPOPRESSIVOS",                  null, "🧘"),
-            DriveItem(8,  "SAÚDE E MEDICINA",               null, "⚕️"),
-            DriveItem(9,  "TUDO DE TRIBUNAIS",              null, "⚖️"),
-            DriveItem(10, "ALFACON 2026",                   null, "🎓"),
-            DriveItem(11, "PREPARATÓRIO OAB",               null, "🛡️")
+            DriveItem(0,  "RETA FINAL TRTs",                "18pNVx52TY5ImVTTEyxp30oEQJCnKgzL7", "⚖️", "Simulados + resumos", true),
+            DriveItem(1,  "CURSOS - PLATAFORMAS COMPLETAS", "1lZo5wBhqC44yEySqX6rjyzBuJEEvGPs7", "📚", "Cursos completos"),
+            DriveItem(2,  "VESTIBULARES PLATAFORMAS",       null, "🎯", "Aulas + materiais"),
+            DriveItem(3,  "VESTIBULARES ISOLADAS",          null, "🎨", "Aulas avulsas"),
+            DriveItem(4,  "MUSICA E CANTO",                 null, "🎼", "Aulas de música"),
+            DriveItem(5,  "CARREIRAS EDUCACIONAIS",         null, "🏆", "Carreiras da educação"),
+            DriveItem(6,  "CLUBE FIT",                      null, "💪", "Treinos + saúde"),
+            DriveItem(7,  "HIPOPRESSIVOS",                  null, "🧘", "Exercícios guiados"),
+            DriveItem(8,  "SAÚDE E MEDICINA",               null, "⚕️", "Residências + cursos"),
+            DriveItem(9,  "TUDO DE TRIBUNAIS",              null, "⚖️", "Tribunais completos", true),
+            DriveItem(10, "ALFACON 2026",                   null, "🎓", "Alfacon 2026", true),
+            DriveItem(11, "PREPARATÓRIO OAB",               null, "🛡️", "1ª e 2ª fase", true)
         )
     }
 }
@@ -70,6 +79,19 @@ data class FileItem(
                 name.endsWith(".mov", true) ||
                 name.endsWith(".avi", true)
     val isPdf: Boolean get() = mimeType == "application/pdf" || name.endsWith(".pdf", true)
+
+    /** v2.7.6: Markdown (.md/.markdown) — abre no leitor de MD embutido. */
+    val isMarkdown: Boolean
+        get() = name.endsWith(".md", true) || name.endsWith(".markdown", true) ||
+            name.endsWith(".txt", true)
+
+    /** v2.7.6: arquivo de legenda (.vtt/.srt) — sidecar da aula. */
+    val isSubtitle: Boolean
+        get() = name.endsWith(".vtt", true) || name.endsWith(".srt", true)
+
+    /** v2.7.6: transcrição da aula (pasta/arquivo "Transcrição"/"transcript"). */
+    val isTranscript: Boolean
+        get() = name.contains("transcri", true) || name.contains("transcript", true)
 
     /** Human-readable file size, e.g. "1.4 GB". */
     val humanSize: String
@@ -194,7 +216,7 @@ sealed class LoginResult {
 data class HeroItem(
     val title: String,
     val subtitle: String,
-    val badge: String,            // e.g. "🐕 DESTAQUE DA SEMANA"
+    val badge: String,            // e.g. "DESTAQUE DA SEMANA"
     val drivePath: String,        // BrowseActivity drivePath
     val driveName: String,        // displayed in browse
     val icon: String,             // emoji shown in hero corner
@@ -210,7 +232,7 @@ data class HeroItem(
             HeroItem(
                 title = "PF — Agente da Polícia Federal",
                 subtitle = "Preparatório completo. 45 aulas em vídeo HD.",
-                badge = "🐕 DESTAQUE DA SEMANA",
+                badge = "DESTAQUE DA SEMANA",
                 drivePath = "/0:/",
                 driveName = "RETA FINAL TRTs",
                 icon = "⚖️"
@@ -218,7 +240,7 @@ data class HeroItem(
             HeroItem(
                 title = "Tribunais — Completo",
                 subtitle = "Material atualizado para 2026. Aulas + PDFs.",
-                badge = "⚖️ EM ALTA",
+                badge = "EM ALTA",
                 drivePath = "/9:/",
                 driveName = "TUDO DE TRIBUNAIS",
                 icon = "⚖️"
@@ -226,7 +248,7 @@ data class HeroItem(
             HeroItem(
                 title = "Alfacon 2026",
                 subtitle = "Cursos completos da plataforma Alfacon.",
-                badge = "🎓 NOVIDADE",
+                badge = "NOVIDADE",
                 drivePath = "/10:/",
                 driveName = "ALFACON 2026",
                 icon = "🎓"
@@ -234,7 +256,7 @@ data class HeroItem(
             HeroItem(
                 title = "Preparatório OAB",
                 subtitle = "Tudo para a 1ª e 2ª fase da OAB.",
-                badge = "🛡️ DESTAQUE",
+                badge = "DESTAQUE",
                 drivePath = "/11:/",
                 driveName = "PREPARATÓRIO OAB",
                 icon = "🛡️"
@@ -242,7 +264,7 @@ data class HeroItem(
             HeroItem(
                 title = "Vestibulares — Plataformas",
                 subtitle = "Aulas de major vestibulares do país.",
-                badge = "🎯 DESTAQUE",
+                badge = "DESTAQUE",
                 drivePath = "/2:/",
                 driveName = "VESTIBULARES PLATAFORMAS",
                 icon = "🎯"
@@ -250,7 +272,7 @@ data class HeroItem(
             HeroItem(
                 title = "Saúde e Medicina",
                 subtitle = "Residências, especializações e atualizações.",
-                badge = "⚕️ DESTAQUE",
+                badge = "DESTAQUE",
                 drivePath = "/8:/",
                 driveName = "SAÚDE E MEDICINA",
                 icon = "⚕️"
@@ -280,4 +302,18 @@ fun colorFromString(str: String): Int {
     var hash = 0
     for (c in str) hash = c.code + ((hash shl 5) - hash)
     return STRING_COLOR_PALETTE[Math.floorMod(hash, STRING_COLOR_PALETTE.size)]
+}
+
+/**
+ * v2.7.6 — Monograma de fallback tipográfico (conceitos): até 2 letras
+ * das iniciais do título, sobre o gradiente da cor do curso. Usado
+ * quando não há thumbnail fotográfica — NUNCA placeholder cinza com
+ * emoji de câmera. "Direito Constitucional — Aula 08" → "DC".
+ */
+fun monogramFor(title: String): String {
+    val words = title.split(Regex("[^\p{L}0-9]+"))
+        .filter { it.isNotBlank() && it[0].isLetterOrDigit() }
+    if (words.isEmpty()) return "M"
+    if (words.size == 1) return words[0].take(2).uppercase()
+    return (words[0].take(1) + words[1].take(1)).uppercase()
 }
