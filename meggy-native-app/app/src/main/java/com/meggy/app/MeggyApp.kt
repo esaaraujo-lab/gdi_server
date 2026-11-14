@@ -1,6 +1,9 @@
 package com.meggy.app
 
+import android.app.Activity
 import android.app.Application
+import android.app.Application.ActivityLifecycleCallbacks
+import android.os.Bundle
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -32,10 +35,34 @@ class MeggyApp : Application() {
 
         lateinit var okHttpClient: OkHttpClient
             private set
+
+        // v2.7.11 — activity em 1º plano (auto-update): o instalador
+        // NUNCA abre por cima do player. Atualizado pelos callbacks de
+        // ciclo de vida registrados no onCreate().
+        @Volatile var currentResumedActivity: Class<*>? = null
+            private set
+
+        /** Verdadeiro quando o PlayerActivity está em primeiro plano. */
+        fun isPlayerForeground(): Boolean =
+            currentResumedActivity?.name == "com.meggy.app.ui.player.PlayerActivity"
     }
     
     override fun onCreate() {
         super.onCreate()
+        // v2.7.11 — rastreia a activity em 1º plano (auto-update).
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            override fun onActivityResumed(activity: Activity) {
+                currentResumedActivity = activity.javaClass
+            }
+            override fun onActivityPaused(activity: Activity) {
+                if (currentResumedActivity == activity.javaClass) currentResumedActivity = null
+            }
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
+            override fun onActivityStarted(activity: Activity) {}
+            override fun onActivityStopped(activity: Activity) {}
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+            override fun onActivityDestroyed(activity: Activity) {}
+        })
         okHttpClient = OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
