@@ -106,12 +106,15 @@
       document.getElementById('meggy-theme-btn').onclick = () => Shell.toggleTheme();
       document.getElementById('meggy-logout-btn').onclick = () => Shell.logout();
 
-      // Search — redirect to /0:search?q=... (GDIndex search)
+      // ★ v2.15.5 (item 7): busca global abre a tela de resultados real
+      //   (/search) — o '/0:search?q=...' antigo era um pseudo-caminho de
+      //   drive: o roteador caía no default → Home, sem resultados. O
+      //   GDIndex search está morto sob o shell (loadFullGDIndex desativado).
       const searchInput = document.getElementById('meggy-search-input');
       searchInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter' && searchInput.value.trim()) {
           const q = encodeURIComponent(searchInput.value.trim());
-          Shell.router.navigate('/0:search?q=' + q);
+          Shell.router.navigate('/search?q=' + q);
         }
       });
 
@@ -217,7 +220,8 @@
         '/conquistas': 'conquistas',
         '/apps': 'apps',
         '/resumos': 'resumos',
-        '/plano': 'plano'
+        '/plano': 'plano',
+        '/search': 'search'
       },
 
       init() {
@@ -287,6 +291,7 @@
         case 'apps':      Shell._estudosView(main, 'apps'); break;
         case 'resumos':   Shell.views.resumos(main); break;
         case 'plano':     Shell._estudosView(main, 'plano'); break;
+        case 'search':     Shell.views.search(main); break;
         default:          Shell.views.home(main);
       }
     },
@@ -447,7 +452,7 @@
               // ★ v2.6: lista única via API /api/courses/unified (cursos + concursos + destaque)
               const container = document.getElementById('meggy-cursos-container');
               try {
-                const r = await fetch('/api/courses/unified', { headers: { 'Accept': 'application/json' }, credentials: 'include' });
+                const r = await fetch('/api/courses/unified', { headers: { 'Accept': 'application/json' }, credentials: 'include', cache: 'no-store' });
                 if (r.ok) {
                   const data = await r.json();
                   const items = (data && data.items) || [];
@@ -503,7 +508,10 @@
                         try {
                           const r = await fetch('/api/concursos/' + encodeURIComponent(id), { method: 'DELETE', credentials: 'include' });
                           const d = await r.json().catch(() => ({}));
-                          if (!r.ok || !d.ok) throw new Error((d && (d.error || d.message)) || ('HTTP ' + r.status));
+                          // ★ v2.15.5 (item 6): 404 = o servidor já não tem o
+                          //   item — prossegue com a limpeza local e o re-render.
+                          const _gone404 = r.status === 404;
+                          if ((!r.ok && !_gone404) || (!d.ok && !_gone404)) throw new Error((d && (d.error || d.message)) || ('HTTP ' + r.status));
                           // ★ v2.15.2 (I): invalidar o cache unificado — sem
                           //   isso o módulo re-renderizava a lista antiga e
                           //   o card do concurso ficava até o reload.
@@ -522,7 +530,11 @@
                         try {
                           const r = await fetch('/api/courses/remove', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ coursePath: cp }) });
                           const d = await r.json().catch(() => ({}));
-                          if (!r.ok || !d.ok) throw new Error((d && (d.error || d.message)) || ('HTTP ' + r.status));
+                          // ★ v2.15.5 (item 6): 404 = "curso não encontrado" no
+                          //   servidor (curso só-local, nunca registrado) —
+                          //   a remoção local prossegue; só outra falha aborta.
+                          const _gone404 = r.status === 404;
+                          if ((!r.ok && !_gone404) || (!d.ok && !_gone404)) throw new Error((d && (d.error || d.message)) || ('HTTP ' + r.status));
                           // ★ v2.14.8: o módulo lê os cursos do localStorage (LS_MANUAL) — se
                           //   o fallback só apaga no servidor, o curso volta no reload/render
                           //   do módulo. Limpa o manual + ocultos e invalida o cache unificado.
@@ -561,11 +573,89 @@
         })();
       },
 
+      // ★ v2.15.5 (item 7): tela de resultados da busca global — rota real
+      //   '/search?q=...'. Busca nas rotas VIVAS do worker: aulas no D1
+      //   (GET /api/d1/lessons/search) + cursos por nome no unificado.
+      //   Nunca navega p/ pseudo-caminho de drive (o antigo '/0:search'
+      //   caía na Home). Sem confirm()/alert()/prompt().
+      search(el) {
+        const q = (new URLSearchParams(window.location.search).get('q') || '').trim();
+        const input = document.getElementById('meggy-search-input');
+        if (input && input.value !== q) input.value = q;
+        el.innerHTML = `
+          <div class="meggy-view-header">
+            <h1 class="meggy-view-title">🔍 Busca</h1>
+          </div>
+          <div id="meggy-search-results">
+            <div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Buscando…</div></div>
+          </div>
+        `;
+        const box = document.getElementById('meggy-search-results');
+        if (!q) {
+          box.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">🔍</div><div class="meggy-placeholder-title">Busque por uma aula ou curso</div><div class="meggy-placeholder-desc">Digite no campo de busca no topo e pressione Enter.</div></div>';
+          return;
+        }
+        const esc = Shell._esc;
+        const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        const nq = norm(q);
+        const openLesson = (p) => { if (p) location.href = p + (p.includes('?') ? '&' : '?') + 'a=view'; };
+        (async () => {
+          let lessons = [], courses = [], err = null;
+          try {
+            const [rl, ru] = await Promise.all([
+              fetch('/api/d1/lessons/search?q=' + encodeURIComponent(q) + '&limit=50', { credentials: 'include', cache: 'no-store' }),
+              fetch('/api/courses/unified', { credentials: 'include', cache: 'no-store' })
+            ]);
+            const dl = await rl.json().catch(() => ({}));
+            const du = await ru.json().catch(() => ({}));
+            if (dl && dl.ok) lessons = dl.lessons || [];
+            else if (dl && dl.error) err = dl.error;
+            if (du && du.ok) courses = (du.items || []).filter(it => norm(it.name || '').includes(nq) || norm(it.coursePath || '').includes(nq));
+          } catch (e) { err = e.message; }
+          if (!box.isConnected) return;
+          if (err && !lessons.length && !courses.length) {
+            box.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">⚠️</div><div class="meggy-placeholder-title">Erro na busca</div><div class="meggy-placeholder-desc">' + esc(err) + '</div></div>';
+            return;
+          }
+          let html = '<div style="color:#9aa4b8;font-size:13px;margin-bottom:14px;">Resultados para <b style="color:#e6edf3;">' + esc(q) + '</b> — ' + courses.length + ' curso(s) · ' + lessons.length + ' aula(s)</div>';
+          if (courses.length) {
+            html += '<div class="meggy-continue-section"><h2>📚 Cursos</h2><div class="meggy-cards-grid">' + courses.map(it => {
+              const name = it.name || 'Curso';
+              const badge = it.kind === 'concurso' ? '📌 Concurso' : it.kind === 'featured' ? '⭐ Em destaque' : '📚 Curso';
+              const meta = badge + (it.kind === 'concurso' ? '' : ' · ' + (it.total || 0) + ' aulas');
+              return '<div class="meggy-card" data-search-course="' + esc(it.coursePath || '') + '" data-search-concurso="' + esc(it.concursoId || '') + '" style="cursor:pointer;"><div class="meggy-card-icon">' + esc(it.icon || '📚') + '</div><div class="meggy-card-title">' + esc(name) + '</div><div class="meggy-card-meta">' + esc(meta) + '</div></div>';
+            }).join('') + '</div></div>';
+          }
+          if (lessons.length) {
+            html += '<div class="meggy-continue-section"><h2>🎬 Aulas</h2><div style="display:flex;flex-direction:column;gap:8px;">' + lessons.map(l => {
+              const name = l.lesson_name || l.lesson_path || 'Aula';
+              const course = (l.course_path || '').split('/').filter(Boolean).pop() || '';
+              const badges = [(l.has_summary ? '📝 Resumo' : ''), (l.has_questions ? '🧠 Questões' : ''), (l.has_flashcards ? '🗂️ Flashcards' : '')].filter(Boolean).join(' · ');
+              return '<div class="meggy-card" data-search-lesson="' + esc(l.lesson_path || '') + '" style="cursor:pointer;display:flex;gap:12px;align-items:center;"><div class="meggy-card-icon" style="font-size:20px;">🎬</div><div style="flex:1;min-width:0;"><div class="meggy-card-title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(name) + '</div><div class="meggy-card-meta">' + esc(course) + (badges ? ' · ' + esc(badges) : '') + '</div></div></div>';
+            }).join('') + '</div></div>';
+          }
+          if (!courses.length && !lessons.length) {
+            html += '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">🔍</div><div class="meggy-placeholder-title">Nenhum resultado</div><div class="meggy-placeholder-desc">Nada encontrado para "' + esc(q) + '". Tente outro termo.</div></div>';
+          }
+          box.innerHTML = html;
+          box.querySelectorAll('[data-search-lesson]').forEach(card => { card.onclick = () => openLesson(card.dataset.searchLesson); });
+          box.querySelectorAll('[data-search-course]').forEach(card => {
+            card.onclick = () => {
+              if (card.dataset.searchConcurso) { Shell.router.navigate('/cursos'); setTimeout(() => { if (Shell.views.concursoDetail) Shell.views.concursoDetail(document.getElementById('meggy-main'), card.dataset.searchConcurso); }, 50); return; }
+              const cp = card.dataset.searchCourse;
+              if (cp) { Shell.router.navigate('/drives'); setTimeout(() => Shell.views._renderDrives(cp), 50); }
+            };
+          });
+        })();
+      },
+
       // ★ v2.15.3 (item 7): re-busca o unificado e re-renderiza a faixa
       //   "💡 Dica da Meggy" (#meggy-cursos-tips). Chamado na entrada da
       //   view cursos e após cada remoção/ocultação/adição no módulo.
       _refreshCursosTips() {
-        fetch('/api/courses/unified', { credentials: 'include' }).then(r => r.json()).then(d => { if (d && d.ok) Shell.views._renderCursosTips(d.items || []); }).catch(() => {});
+        // ★ v2.15.5 (item 5): no-store — sem isto o navegador servia a lista
+        //   pré-remoção e a dica continuava citando o curso removido.
+        fetch('/api/courses/unified', { credentials: 'include', cache: 'no-store' }).then(r => r.json()).then(d => { if (d && d.ok) Shell.views._renderCursosTips(d.items || []); }).catch(() => {});
       },
 
       // ★ v2.6: faixa de dicas da Meggy na área Meus Cursos (a partir do progresso)
@@ -649,6 +739,9 @@
             if (window.gdiListAllFiles) {
               const pw = window.gdiGetPw ? window.gdiGetPw() : '';
               window.gdiListAllFiles(path, pw).then(files => {
+                // ★ v2.15.5 (item 4): fetch defasado (o usuário já navegou
+                //   para outra pasta) não sobrescreve a lista atual.
+                if (Shell.state.currentFolderPath !== path) return;
                 if (!files || !files.length) {
                   container.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">📁</div><div class="meggy-placeholder-title">Pasta vazia</div></div>';
                   return;
@@ -701,12 +794,19 @@
                   const n = container.querySelectorAll('.v215-folder-check:checked').length;
                   if (selBtn) { selBtn.disabled = n === 0; selBtn.style.opacity = n === 0 ? '0.5' : '1'; selBtn.textContent = '＋ Adicionar selecionadas (' + n + ')'; }
                 };
+                // ★ v2.15.5 (item 4): seleção por caminho (Set guardado no
+                //   container, sobrevive ao re-render) + re-aplicação; o botão
+                //   lê o Set, nunca o DOM do momento.
+                const drivesChecked = (container.__v215Checked && typeof container.__v215Checked.values === 'function') ? container.__v215Checked : (container.__v215Checked = Shell.views._v215NewFolderSelection());
+                drivesChecked.prune(path);
                 container.querySelectorAll('.v215-folder-check').forEach(cb => {
                   cb.addEventListener('click', e => e.stopPropagation());
-                  cb.addEventListener('change', updateSel);
+                  cb.addEventListener('change', () => { const p = cb.dataset.path; if (cb.checked) drivesChecked.add(p); else drivesChecked.remove(p); updateSel(); });
                 });
+                drivesChecked.applyTo(container);
+                updateSel();
                 if (selBtn) selBtn.onclick = () => {
-                  const paths = Array.from(container.querySelectorAll('.v215-folder-check:checked')).map(cb => cb.dataset.path);
+                  const paths = drivesChecked.values();
                   if (paths.length) Shell.views._v215AttachFlow(paths, document.getElementById('meggy-main'));
                 };
                 // Video clicks — open INLINE player with full playlist (todos os vídeos da pasta)
@@ -1256,13 +1356,11 @@
                 fetch(link).then(r => r.text()).then(async txt => {
                   const el = document.getElementById('gdi-mat-md');
                   if (el) {
-                    // ★ C2: usar marked.js + DOMPurify (carregados globalmente) em vez de regex
+                    // ★ v2.15.5 item 10: renderer único (marked+DOMPurify
+                    //    ou o vendored quando o CDN falha) — fim do MD cru.
+                    //    'let' porque o toolbar abaixo REATRIBUI h.
                     await Shell._ensureMdLibs();
-                    let h;
-                    if (window.marked) {
-                      try { h = window.marked.parse(txt); if (window.DOMPurify) h = window.DOMPurify.sanitize(h); }
-                      catch(_) { h = Shell._esc(txt).replace(/\n/g,'<br>'); }
-                    } else { h = Shell._esc(txt).replace(/\n/g,'<br>'); }
+                    let h = Shell._renderMd(txt);
                     // ★ Toolbar com botão Baixar PDF (sticky no topo)
                     h = '<div style="margin-bottom:12px;padding:8px 12px;background:rgba(255,139,159,0.08);border:1px solid rgba(255,139,159,0.2);border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:2;backdrop-filter:blur(8px);">' +
                         '<span style="font-size:12px;color:#9aa4b8;"><i class="bi bi-file-earmark-text"></i> ' + Shell._esc(m.name) + '</span>' +
@@ -1862,22 +1960,10 @@
         });
       },
 
+      // ★ v2.15.5 item 10: delega ao renderer único (era regex próprio
+      //    sem tabelas/citações/links e com <li> sem <ul>).
       _mdToHtml(text) {
-        if (!text || typeof text !== 'string') return '';
-        let s = String(text);
-        s = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        return s.replace(/^#### (.+)$/gm, '<h4 style="color:#5ddeda;margin:10px 0 4px;font-size:14px;">$1</h4>')
-                .replace(/^### (.+)$/gm, '<h3 style="color:#ff8b9f;margin:12px 0 6px;">$1</h3>')
-                .replace(/^## (.+)$/gm, '<h2 style="color:#ff8b9f;margin:16px 0 8px;">$1</h2>')
-                .replace(/^# (.+)$/gm, '<h1 style="color:#ff8b9f;margin:20px 0 10px;font-size:20px;">$1</h1>')
-                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-                .replace(/\*(.+?)\*/g, '<em>$1</em>')
-                .replace(/^- (.+)$/gm, '<li style="margin-left:20px;">$1</li>')
-                .replace(/^(\d+)\. (.+)$/gm, '<li style="margin-left:20px;">$1. $2</li>')
-                .replace(/```([\s\S]*?)```/g, '<pre style="background:rgba(0,0,0,.3);padding:10px;border-radius:6px;overflow:auto;font-size:12px;">$1</pre>')
-                .replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,.3);padding:1px 4px;border-radius:3px;font-size:12px;">$1</code>')
-                .replace(/\n\n/g, '</p><p style="margin:8px 0;">')
-                .replace(/\n/g, '<br>');
+        return Shell._renderMd(text);
       },
 
       _esc(s) {
@@ -2087,6 +2173,9 @@
         modal.style.display = 'flex';
 
         let selectedPath = '';
+        // ★ v2.15.5 (item 4): geração da listagem + seleção por caminho.
+        let acBrowseSeq = 0;
+        const acChecked = Shell.views._v215NewFolderSelection();
         const browser = document.getElementById('meggy-add-course-browser');
         const selectedDiv = document.getElementById('meggy-add-course-selected');
         const pathSpan = document.getElementById('meggy-add-course-path');
@@ -2094,6 +2183,9 @@
 
         // ★ Navegador de pastas recursivo (usa gdiListAllFiles)
         async function browseFolder(path) {
+          // ★ v2.15.5 (item 4): guarda de geração — fetch defasado não
+          //   sobrescreve a lista atual.
+          const mySeq = ++acBrowseSeq;
           browser.innerHTML = '<div style="text-align:center;padding:20px;color:#9aa4b8;"><div class="spinner-border" style="color:#ff8b9f;"></div><div style="margin-top:8px;">Carregando...</div></div>';
           if (!window.gdiListAllFiles) {
             browser.innerHTML = '<div style="padding:20px;color:#ff8b9f;">gdiListAllFiles não disponível. Tente novamente.</div>';
@@ -2150,6 +2242,9 @@
 
             // Listar pastas do drive
             const files = await window.gdiListAllFiles(path, '');
+            // ★ v2.15.5 (item 4): descarta a resposta se outra navegação já começou.
+            if (mySeq !== acBrowseSeq) return;
+            acChecked.prune(path);
             const folders = files.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
             if (folders.length === 0) {
               html += '<div style="padding:20px;text-align:center;color:#6b7488;">Nenhuma subpasta encontrada. Você pode selecionar esta pasta como curso.</div>';
@@ -2183,12 +2278,16 @@
               const n = browser.querySelectorAll('.v215-folder-check:checked').length;
               if (selBtn) { selBtn.disabled = n === 0; selBtn.style.opacity = n === 0 ? '0.5' : '1'; selBtn.textContent = '＋ Adicionar selecionadas (' + n + ')'; }
             };
+            // ★ v2.15.5 (item 4): seleção por caminho (Set, capturada no
+            //   'change') + re-aplicação a cada carregamento; o botão lê o Set.
             browser.querySelectorAll('.v215-folder-check').forEach(cb => {
               cb.addEventListener('click', e => e.stopPropagation());
-              cb.addEventListener('change', updateSel);
+              cb.addEventListener('change', () => { const p = cb.dataset.path; if (cb.checked) acChecked.add(p); else acChecked.remove(p); updateSel(); });
             });
+            acChecked.applyTo(browser);
+            updateSel();
             if (selBtn) selBtn.onclick = () => {
-              const paths = Array.from(browser.querySelectorAll('.v215-folder-check:checked')).map(cb => cb.dataset.path);
+              const paths = acChecked.values();
               if (paths.length) Shell.views._v215AttachFlow(paths, parentEl);
             };
             const selectBtn = browser.querySelector('.select-folder-btn');
@@ -2501,6 +2600,32 @@ el.scrollTop = 0;
         Shell.views.cursos(el);
       },
 
+      // ★ v2.15.5 (item 4): estado de seleção de pastas por CAMINHO estável.
+      //   O checkbox já carregava data-path, mas a seleção era lida do DOM
+      //   no momento do botão — qualquer re-render/reordenação entre o clique
+      //   no checkbox e o botão trocava a pasta (penal → previdenciario). A
+      //   seleção agora é capturada no 'change' (por caminho, nunca por
+      //   índice/posição), re-aplicada a cada carregamento da lista
+      //   (applyTo) e podada para a pasta atual (prune).
+      _v215NewFolderSelection() {
+        const set = new Set();
+        return {
+          has: (p) => set.has(p),
+          add: (p) => { if (p) set.add(p); },
+          remove: (p) => { set.delete(p); },
+          clear: () => { set.clear(); },
+          values: () => Array.from(set),
+          count: () => set.size,
+          prune: (prefix) => { const pre = String(prefix || ''); if (!pre) return; for (const p of Array.from(set)) if (!String(p).startsWith(pre)) set.delete(p); },
+          applyTo: (root) => {
+            if (!root || typeof root.querySelectorAll !== 'function') return 0;
+            let n = 0;
+            root.querySelectorAll('.v215-folder-check').forEach(cb => { const on = set.has(cb.dataset.path); cb.checked = on; if (on) n++; });
+            return n;
+          },
+        };
+      },
+
       // ═══ Wizard: criar concurso em 4 passos ═══
       // ★ v2.15.3 (item 2): garante as horas no resultado do /scan. O /scan
       //   novo devolve totalHours/totalMinutes (+ truncated); se vier sem
@@ -2516,6 +2641,15 @@ el.scrollTop = 0;
             if (prev.totalMinutes != null) scanResult.totalMinutes = prev.totalMinutes;
             if (prev.truncated != null) scanResult.truncated = prev.truncated;
             if (Array.isArray(prev.folders)) scanResult._previewFolders = prev.folders;
+            // ★ v2.15.5 (item 2): a prévia projeta o total pós-anexo — é o
+            //   número que o detalhe vai mostrar; usa-o quando o /scan não
+            //   trouxe os totais vinculados (servidor antigo).
+            if (prev.projectedTotal != null && scanResult.linkedTotal == null) {
+              scanResult.linkedTotal = prev.projectedTotal;
+              scanResult.linkedMinutes = prev.projectedMinutes;
+              scanResult.linkedHours = prev.projectedHours;
+              scanResult.linkedByDiscipline = prev.projectedByDiscipline;
+            }
           }
         } catch (_) {}
         return scanResult;
@@ -2525,8 +2659,10 @@ el.scrollTop = 0;
       //   aviso de contagem truncada. '' quando não há horas nem aviso.
       _v215WizardStep4HoursHtml(r) {
         r = r || {};
-        const hasHours = (r.totalHours != null || r.totalMinutes != null);
-        const hrs = (r.totalHours != null) ? r.totalHours : Math.round(((r.totalMinutes || 0) / 60) * 10) / 10;
+        // ★ v2.15.5 (item 2): horas das aulas VINCULADAS (D1, pós-anexo) —
+        //   as mesmas do detalhe; sem elas, cai para as horas da enumeração.
+        const hasHours = (r.linkedHours != null || r.linkedMinutes != null || r.totalHours != null || r.totalMinutes != null);
+        const hrs = (r.linkedHours != null) ? r.linkedHours : (r.totalHours != null ? r.totalHours : Math.round((((r.linkedMinutes != null ? r.linkedMinutes : r.totalMinutes) || 0) / 60) * 10) / 10);
         let h = '';
         if (hasHours) {
           h += '<div style="display:flex;gap:12px;justify-content:center;margin-bottom:16px;">' +
@@ -2552,6 +2688,9 @@ el.scrollTop = 0;
         let concursoId = null;
         let concursoName = '';
         let selectedFolders = [];
+        // ★ v2.15.5 (item 4): geração da listagem + seleção por caminho.
+        let cwBrowseSeq = 0;
+        let cwChecked = Shell.views._v215NewFolderSelection();
         let disciplinas = [];
         let scanResult = null;
         let banca = '';
@@ -2624,7 +2763,7 @@ el.scrollTop = 0;
               '<div style="font-size:13px;color:#9aa4b8;margin-bottom:8px;">Selecione as pastas com suas aulas. Navegue até a pasta desejada e clique em "Adicionar".</div>' +
               discHTML +
               '<div id="cw-folder-selected" style="margin-bottom:8px;font-size:12px;color:#9aa4b8;">Pastas selecionadas: <span id="cw-selected-count">' + selectedFolders.length + '</span></div>' +
-              '<div id="cw-folder-selected-list" style="margin-bottom:8px;">' + selectedFolders.map((p,i) => '<div style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:rgba(255,139,159,0.08);border:1px solid rgba(255,139,159,0.2);border-radius:6px;margin-bottom:4px;font-size:11px;color:#e6edf3;"><span style="flex:1;word-break:break-all;">' + Shell._esc(p) + '</span><button class="cw-remove-folder" data-idx="' + i + '" style="background:none;border:none;color:#ff6b6b;cursor:pointer;font-size:14px;">✕</button></div>').join('') + '</div>' +
+              '<div id="cw-folder-selected-list" style="margin-bottom:8px;">' + selectedFolders.map((p) => '<div style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:rgba(255,139,159,0.08);border:1px solid rgba(255,139,159,0.2);border-radius:6px;margin-bottom:4px;font-size:11px;color:#e6edf3;"><span style="flex:1;word-break:break-all;">' + Shell._esc(p) + '</span><button class="cw-remove-folder" data-path="' + Shell._esc(p) + '" style="background:none;border:none;color:#ff6b6b;cursor:pointer;font-size:14px;">✕</button></div>').join('') + '</div>' +
               '<div id="cw-breadcrumb" style="font-size:11px;color:#6b7488;margin-bottom:6px;word-break:break-all;"></div>' +
               '<div id="cw-folder-list" style="max-height:260px;overflow-y:auto;border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:4px;"><div style="padding:20px;text-align:center;color:#6b7488;font-size:12px;">Carregando drives...</div></div>';
             footerHTML =
@@ -2635,9 +2774,12 @@ el.scrollTop = 0;
               '</div>';
           } else if (step === 4) {
             const r = scanResult || {};
-            const totalFound = r.totalFound || 0;
-            const totalMatched = r.totalMatched || 0;
-            const byDisc = r.byDiscipline || {};
+            // ★ v2.15.5 (item 2): o passo 4 mostra os totais VINCULADOS (D1,
+            //   pós-anexo) — a mesma fonte do detalhe. Sem eles (servidor
+            //   antigo), cai para os totais da enumeração do /scan.
+            const totalFound = (r.linkedTotal != null ? r.linkedTotal : (r.totalFound || 0));
+            const totalMatched = (r.linkedTotal != null ? r.linkedTotal : (r.totalMatched || 0));
+            const byDisc = (r.linkedByDiscipline || r.byDiscipline || {});
             let byDiscHTML = '';
             const discNames = Object.keys(byDisc);
             if (discNames.length > 0) {
@@ -2811,6 +2953,9 @@ el.scrollTop = 0;
             async function browseFolder(path) {
               const listEl = document.getElementById('cw-folder-list');
               if (!listEl) return;
+              // ★ v2.15.5 (item 4): guarda de geração — um fetch defasado (o
+              //   usuário já navegou p/ outra pasta) não sobrescreve a lista.
+              const mySeq = ++cwBrowseSeq;
               listEl.innerHTML = '<div style="padding:20px;text-align:center;color:#6b7488;font-size:12px;"><div class="spinner-border spinner-border-sm"></div> Carregando...</div>';
               updateBreadcrumb();
               try {
@@ -2835,6 +2980,10 @@ el.scrollTop = 0;
                   });
                   if (!r.ok) { listEl.innerHTML = '<div style="padding:20px;text-align:center;color:#ff6b6b;">Erro ao carregar.</div>'; return; }
                   const data = await r.json();
+                  // ★ v2.15.5 (item 4): descarta a resposta se outra navegação
+                  //   já começou ou se a lista foi recriada (render) no meio.
+                  if (mySeq !== cwBrowseSeq || !modal.contains(listEl)) return;
+                  cwChecked.prune(path);
                   const files = (data.data && data.data.files) || [];
                   const folders = files.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
                   if (folders.length === 0) {
@@ -2865,21 +3014,32 @@ el.scrollTop = 0;
                   const n = modal.querySelectorAll('.cw-folder-check:checked').length;
                   if (cwSelBtn) { cwSelBtn.disabled = n === 0; cwSelBtn.style.opacity = n === 0 ? '0.5' : '1'; cwSelBtn.textContent = '＋ Adicionar selecionadas (' + n + ')'; }
                 };
+                // ★ v2.15.5 (item 4): a seleção vive no Set por caminho
+                //   (capturada no 'change'), nunca na posição — e é re-aplicada
+                //   a cada carregamento da lista (a lista pode reordenar ou ser
+                //   substituída por um fetch defasado entre o clique e o botão).
                 modal.querySelectorAll('.cw-folder-check').forEach(cb => {
                   cb.addEventListener('click', e => e.stopPropagation());
-                  cb.addEventListener('change', cwUpdateSel);
+                  cb.addEventListener('change', () => { const p = cb.dataset.path; if (cb.checked) cwChecked.add(p); else cwChecked.remove(p); cwUpdateSel(); });
                 });
+                cwChecked.applyTo(modal);
+                cwUpdateSel();
                 if (cwSelBtn) cwSelBtn.onclick = () => {
-                  const paths = Array.from(modal.querySelectorAll('.cw-folder-check:checked')).map(cb => cb.dataset.path);
+                  // ★ v2.15.5 (item 4): lê o Set (capturado no 'change' por
+                  //   caminho), não o DOM do momento — a lista pode ter sido
+                  //   re-renderizada/reordenada depois do clique no checkbox.
+                  const paths = cwChecked.values();
                   let added = 0;
                   paths.forEach(p => { if (selectedFolders.indexOf(p) < 0) { selectedFolders.push(p); added++; } });
+                  paths.forEach(p => cwChecked.remove(p));
                   if (added) {
                     const cnt = document.getElementById('cw-selected-count');
                     if (cnt) cnt.textContent = String(selectedFolders.length);
                     const selList = document.getElementById('cw-folder-selected-list');
-                    if (selList) selList.innerHTML = selectedFolders.map((p, i) => '<div style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:rgba(255,139,159,0.08);border:1px solid rgba(255,139,159,0.2);border-radius:6px;margin-bottom:4px;font-size:11px;color:#e6edf3;"><span style="flex:1;word-break:break-all;">' + Shell._esc(p) + '</span><button class="cw-remove-folder" data-idx="' + i + '" style="background:none;border:none;color:#ff6b6b;cursor:pointer;font-size:14px;">✕</button></div>').join('');
+                    if (selList) selList.innerHTML = selectedFolders.map((p) => '<div style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:rgba(255,139,159,0.08);border:1px solid rgba(255,139,159,0.2);border-radius:6px;margin-bottom:4px;font-size:11px;color:#e6edf3;"><span style="flex:1;word-break:break-all;">' + Shell._esc(p) + '</span><button class="cw-remove-folder" data-path="' + Shell._esc(p) + '" style="background:none;border:none;color:#ff6b6b;cursor:pointer;font-size:14px;">✕</button></div>').join('');
                     modal.querySelectorAll('.cw-remove-folder').forEach(btn => {
-                      btn.onclick = () => { const idx = parseInt(btn.dataset.idx, 10); selectedFolders.splice(idx, 1); render(); };
+                      // ★ v2.15.5 (item 4): remover por caminho estável, nunca por índice.
+                      btn.onclick = () => { const p = btn.dataset.path; selectedFolders = selectedFolders.filter(x => x !== p); render(); };
                     });
                   }
                   browseFolder(currentBrowsePath);
@@ -2904,8 +3064,9 @@ el.scrollTop = 0;
             // Remove folder buttons
             modal.querySelectorAll('.cw-remove-folder').forEach(btn => {
               btn.onclick = () => {
-                const idx = parseInt(btn.dataset.idx, 10);
-                selectedFolders.splice(idx, 1);
+                // ★ v2.15.5 (item 4): remover por caminho estável, nunca por índice.
+                const p = btn.dataset.path;
+                selectedFolders = selectedFolders.filter(x => x !== p);
                 render();
               };
             });
@@ -2933,6 +3094,17 @@ el.scrollTop = 0;
                     const m = await Shell.views._v215Api('/api/concursos/' + encodeURIComponent(concursoId) + '/sources', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folderPaths: selectedFolders }) });
                     scanResult.modulesCreated = (m.attached || []).length;
                     scanResult.modulesSkipped = (m.skipped || []).length;
+                    // ★ v2.15.5 (item 2): o anexo re-escaneia (2ª enumeração)
+                    //   e pode vincular mais aulas que o /scan viu — o passo 4
+                    //   passa a mostrar os totais pós-anexo (D1), que são os
+                    //   mesmos que o detalhe vai mostrar.
+                    if (m && m.scanned && m.scanned.linkedTotal != null) {
+                      scanResult.linkedTotal = m.scanned.linkedTotal;
+                      scanResult.linkedMinutes = m.scanned.linkedMinutes;
+                      scanResult.linkedHours = m.scanned.linkedHours;
+                      scanResult.linkedByDiscipline = m.scanned.linkedByDiscipline;
+                      if (m.scanned.truncated) scanResult.truncated = true;
+                    }
                   } catch (me) {
                     scanResult.modulesError = me.message || 'não foi possível criar os módulos';
                   }
@@ -3059,9 +3231,17 @@ el.scrollTop = 0;
                 _lessons.forEach(l => {
                   const icon = (l.name || '').endsWith('.mp4') ? '🎬' : (l.name || '').endsWith('.pdf') ? '📄' : '🎵';
                   const intensivoBadge = l.isIntensivo ? ' <span style="color:#ffd43b;font-size:10px;">⚡</span>' : '';
+                  // ★ v2.15.5 (item 3): a pasta de origem distingue os arquivos
+                  //   repetidos ("001 - aula.mp3" ×9) — linha 1: pasta; linha 2:
+                  //   arquivo. Sem pasta, volta ao rótulo único de antes.
+                  const _lf = (l.folder || Shell.views._v215LessonFolder(l.path || ''));
                   html += '<div class="meggy-study-list" style="display:flex;align-items:center;gap:8px;padding:8px;cursor:pointer;border-radius:6px;" onmouseover="this.style.background=\'rgba(255,255,255,0.03)\'" onmouseout="this.style.background=\'transparent\'">';
                   html += '<span style="font-size:16px;">' + icon + '</span>';
-                  html += '<span style="color:#e6edf3;font-size:13px;flex:1;word-break:break-word;">' + Shell._esc(l.name) + '</span>';
+                  if (_lf) {
+                    html += '<span style="flex:1;min-width:0;"><span style="display:block;font-size:11px;color:#8b949e;word-break:break-word;">' + Shell._esc(_lf) + '</span><span style="display:block;color:#e6edf3;font-size:13px;word-break:break-word;">' + Shell._esc(l.name) + '</span></span>';
+                  } else {
+                    html += '<span style="color:#e6edf3;font-size:13px;flex:1;word-break:break-word;">' + Shell._esc(l.displayName || l.name) + '</span>';
+                  }
                   if (l.topico) html += '<span style="color:#8b949e;font-size:11px;">' + Shell._esc(l.topico) + '</span>';
                   html += intensivoBadge;
                   html += '</div>';
@@ -3323,6 +3503,28 @@ el.scrollTop = 0;
             Shell.views._v215PlayLesson(decodeURIComponent(lp), decodeURIComponent(nm), cid);
           };
         });
+      },
+
+      // ★ v2.15.5 (item 3): pasta de origem de uma aula vinculada — o
+      //   penúltimo segmento do lesson_path, decodificado. Fallback no cliente
+      //   p/ payloads antigos (sem folder/displayName do servidor).
+      _v215LessonFolder(lessonPath) {
+        const segs = String(lessonPath || '').split('/').filter(Boolean);
+        if (segs.length < 3) return '';
+        let raw = segs[segs.length - 2] || '';
+        try { raw = decodeURIComponent(raw); } catch (_) {}
+        return raw;
+      },
+
+      _v215LessonDisplayName(l) {
+        if (!l) return '';
+        if (l.displayName) return l.displayName;
+        const folder = l.folder || Shell.views._v215LessonFolder(l.path || '');
+        const name = String(l.name || '').trim();
+        if (!folder) return name;
+        if (!name) return folder;
+        if (name === folder) return name;
+        return folder + ' — ' + name;
       },
 
       // Resolve lesson_path (ex.: /1:/TJSP/Dir/Aula 03.mp4) para o link de
@@ -3657,10 +3859,14 @@ el.scrollTop = 0;
           let bh = '<div style="font-size:13px;color:#e6edf3;margin-bottom:4px;">Prévia — anexar a <b>📌 ' + Shell.views._esc(conc.name) + '</b></div>';
           bh += '<div style="font-size:12px;color:#9aa4b8;margin-bottom:12px;">Confira antes de confirmar. Nada é anexado até você confirmar.</div>';
           (prev.folders || []).forEach(f => {
-            const hrs = f.estHours != null ? f.estHours : Math.round(((f.estMinutes || 0) / 60) * 10) / 10;
+            // ★ v2.15.5 (item 2): a prévia mostra o total PROJETADO pós-anexo
+            //   (já vinculadas + novas) — igual ao detalhe após confirmar.
+            const hrs = (f.projectedHours != null ? f.projectedHours : (f.estHours != null ? f.estHours : Math.round(((f.estMinutes || 0) / 60) * 10) / 10));
+            const fTotal = (f.projectedTotal != null ? f.projectedTotal : (f.lessons || 0));
+            const fBreak = (f.alreadyLinked ? ' (' + f.alreadyLinked + ' já vinculadas · +' + (f.newMatched || 0) + ' novas)' : '');
             bh += '<div style="padding:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;margin-bottom:6px;">' +
-              '<div style="font-size:13px;color:#e6edf3;font-weight:600;">📁 ' + Shell.views._esc(f.name || Shell.views._v215FolderName(f.path)) + '</div>' +
-              '<div style="font-size:12px;color:#9aa4b8;margin-top:4px;">📄 ' + (f.pdfs || 0) + ' PDFs · 🎬 ' + (f.videos || 0) + ' vídeos' + (f.audios ? ' · 🎵 ' + f.audios + ' áudios' : '') + ' · ' + (f.lessons || 0) + ' aulas · ' + (f.matched || 0) + ' vinculadas · ~' + hrs + 'h estimadas</div></div>';
+              '<div style="font-size:13px;color:#e6edf3;font-weight:600;">📁 ' + Shell._esc(f.name || Shell.views._v215FolderName(f.path)) + '</div>' +
+              '<div style="font-size:12px;color:#9aa4b8;margin-top:4px;">📄 ' + (f.pdfs || 0) + ' PDFs · 🎬 ' + (f.videos || 0) + ' vídeos' + (f.audios ? ' · 🎵 ' + f.audios + ' áudios' : '') + ' · ' + fTotal + ' aulas' + fBreak + ' · ~' + hrs + 'h estimadas</div></div>';
           });
           const perFolderDups = (prev.folders || []).flatMap(f => (f.duplicates || []).map(dd => ({ name: dd.name, folders: dd.inFolders || dd.folders || [], alreadyInConcurso: dd.alreadyInConcurso })));
           const allDups = (prev.duplicates || []).concat(perFolderDups);
@@ -3669,8 +3875,8 @@ el.scrollTop = 0;
           }
           // ★ v2.15.2 (E): totais do servidor (antes vinham undefined);
           //   se ausentes, soma as pastas — nunca "0 aulas · ~h".
-          const totL = (prev.totalLessons != null ? prev.totalLessons : (prev.folders || []).reduce((a, f) => a + (f.lessons || 0), 0));
-          const totH = (prev.totalHours != null ? prev.totalHours : Math.round(((prev.folders || []).reduce((a, f) => a + (f.estMinutes || 0), 0) / 60) * 10) / 10);
+          const totL = (prev.projectedTotal != null ? prev.projectedTotal : (prev.totalLessons != null ? prev.totalLessons : (prev.folders || []).reduce((a, f) => a + (f.lessons || 0), 0)));
+          const totH = (prev.projectedHours != null ? prev.projectedHours : (prev.totalHours != null ? prev.totalHours : Math.round(((prev.folders || []).reduce((a, f) => a + (f.estMinutes || 0), 0) / 60) * 10) / 10));
           bh += '<div style="font-size:13px;color:#e6edf3;">Total: <b>' + totL + ' aulas</b> · ~' + totH + 'h' + (prev.totalMatched != null ? ' · ' + prev.totalMatched + ' vinculadas' : '') + (prev.totalFound != null ? ' · ' + prev.totalFound + ' arquivos' : '') + '</div>';
           if (bodyEl) bodyEl.innerHTML = bh;
           const footerEl = document.getElementById('v215a-footer');
@@ -4170,9 +4376,10 @@ el.scrollTop = 0;
           const r = await fetch('/api/ai', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: msg, messages: []}) });
           const d = await r.json();
           const resp = d.response || 'Sem resposta';
-          // Render markdown if marked.js is available
-          let html = resp;
-          if (window.marked) { try { html = window.marked.parse(resp); if (window.DOMPurify) html = window.DOMPurify.sanitize(html); } catch(_) {} }
+          // ★ v2.15.5 item 10: renderer único — sem marked, o vendored
+          //    formata; nunca insere a resposta crua (XSS).
+          await Shell._ensureMdLibs();
+          const html = Shell._renderMd(resp);
           document.getElementById('meggy-ai-typing').innerHTML = html;
         } catch (e) { document.getElementById('meggy-ai-typing').textContent = 'Erro: ' + e.message; }
         msgs.scrollTop = msgs.scrollHeight;
@@ -4194,7 +4401,10 @@ el.scrollTop = 0;
         const r = await fetch('/api/ai', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: msg, messages: []}) });
         const d = await r.json();
         const text = d.response || d.markdown || 'Sem resposta';
-        let h = text.replace(/^### (.+)$/gm,'<h3 style="color:#ff8b9f;margin:12px 0 6px;">$1</h3>').replace(/^## (.+)$/gm,'<h2 style="color:#ff8b9f;margin:16px 0 8px;">$1</h2>').replace(/^# (.+)$/gm,'<h1 style="color:#ff8b9f;margin:20px 0 10px;">$1</h1>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/^- (.+)$/gm,'<li>$1</li>').replace(/\n/g,'<br>');
+        // ★ v2.15.5 item 10: renderer único (o regex anterior não escapava
+        //    o texto — XSS — e não cobria tabelas/código/citações/links).
+        await Shell._ensureMdLibs();
+        const h = Shell._renderMd(text);
         body.innerHTML = `<div style="padding:16px;font-size:13px;color:#e6edf3;">${h}</div>`;
       } catch (e) { body.innerHTML = 'Erro: ' + e.message; }
     },
@@ -4318,6 +4528,9 @@ el.scrollTop = 0;
           document.head.appendChild(s);
         }
         if (!window.marked) { pending++; loadScript('https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js'); }
+        // ★ v2.15.5 item 10: renderer MD vendored (mesma origem, sem CDN)
+        //    — garante formatação mesmo com jsDelivr fora.
+        if (!window.gdiRenderMd) { pending++; loadScript('/modular/meggy/meggy-md.js?v=' + (window.CACHE_VERSION || '183')); }
         if (!window.DOMPurify) { pending++; loadScript('https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js'); }
         if (pending === 0) { Shell._mdLibsLoaded = true; resolve(); }
       });
@@ -4396,6 +4609,10 @@ el.scrollTop = 0;
       return Shell._renderMd(txt);
     },
 
+    // ★ v2.15.5 item 10: cadeia — marked+DOMPurify (CDN) → renderer
+    //    vendored gdiRenderMd (mesma origem, seguro por construção) →
+    //    escape+br (último recurso). Cobre títulos, listas, tabelas,
+    //    código, citações, links etc. mesmo com o CDN fora.
     _renderMd(txt) {
       if (!txt || typeof txt !== 'string') return '';
       if (window.marked) {
@@ -4404,9 +4621,14 @@ el.scrollTop = 0;
           if (window.DOMPurify) {
             try { return window.DOMPurify.sanitize(html); } catch (_) {}
           }
-          // Fallback sem DOMPurify: escape + br
+          if (typeof window.gdiRenderMd === 'function') {
+            try { return window.gdiRenderMd(txt); } catch (_) {}
+          }
           return Shell._esc(txt).replace(/\n/g, '<br>');
         } catch (_) {}
+      }
+      if (typeof window.gdiRenderMd === 'function') {
+        try { return window.gdiRenderMd(txt); } catch (_) {}
       }
       return Shell._esc(txt).replace(/\n/g, '<br>');
     },
@@ -4807,7 +5029,7 @@ el.scrollTop = 0;
   window._downloadMdAsPdf = function(name) {
     const text = window._lastMdText || '';
     const lesson = name || 'Resumo';
-    const html = (window.marked && window.DOMPurify) ? window.DOMPurify.sanitize(window.marked.parse(text)) : (function(t){ return t.replace(/^### (.+)$/gm, '<h3>$1</h3>').replace(/^## (.+)$/gm, '<h2>$1</h2>').replace(/^# (.+)$/gm, '<h1>$1</h1>').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/^- (.+)$/gm, '<li>$1</li>').replace(/\n/g, '<br>'); })(text);
+    const html = Shell._renderMd(text);
     const w = window.open('', '_blank');
     if (!w) { Shell.views._v215Toast('Permita pop-ups para baixar o PDF'); return; }
     w.document.write('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>' + lesson + ' — Resumo Meggy</title><style>');
@@ -4854,7 +5076,7 @@ el.scrollTop = 0;
     } else if (isFlashcards && Array.isArray(window._lastIsaText)) {
       html = '<p>Ver na tela.</p>';
     } else {
-      html = (window.marked && window.DOMPurify) ? window.DOMPurify.sanitize(window.marked.parse(text)) : (function(t){ return t.replace(/^### (.+)$/gm, '<h3>$1</h3>').replace(/^## (.+)$/gm, '<h2>$1</h2>').replace(/^# (.+)$/gm, '<h1>$1</h1>').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/^- (.+)$/gm, '<li>$1</li>').replace(/\n/g, '<br>'); })(text);
+      html = Shell._renderMd(text);
     }
     const w = window.open('', '_blank');
     if (!w) { Shell.views._v215Toast('Permita pop-ups para baixar o PDF'); return; }
