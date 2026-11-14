@@ -10,7 +10,6 @@ import coil.load
 import com.bibigyn.app.R
 import com.bibigyn.app.data.FileItem
 import com.bibigyn.app.data.colorFromString
-import com.bibigyn.app.data.monogramFor
 import com.bibigyn.app.databinding.ItemRailCardBinding
 import com.bibigyn.app.util.CardGradient
 import com.bibigyn.app.util.FocusAnimator
@@ -23,8 +22,10 @@ import com.bibigyn.app.util.setWordEllipsized
  * v2.1.5 — Rail "Continue assistindo" (conceito home).
  *
  * Card 16:9: foto real via Coil quando há thumbnail (RailItem.thumbnailUrl
- * ou FileItem.thumbnailLink), monograma tipográfico quando não há —
- * NUNCA emoji de câmera. Título 16sp (máx. 2 linhas), subtítulo 14sp,
+ * ou FileItem.thumbnailLink); sem thumb, arte do drive (ícone do drive
+ * sobre o gradiente escuro) — NUNCA monograma nem emoji de câmera.
+ * Título limpo (Format.lessonTitle), subtítulo = curso, barra de
+ * progresso rosa + "% concluído · Xmin restantes".
  * barra de progresso rosa + "% concluído · Xmin restantes".
  * Foco: FocusAnimator.attachCard (anel 3dp da marca + escala + elevação).
  */
@@ -39,7 +40,12 @@ data class RailItem(
     val colorHint: String? = null,
     val file: FileItem? = null,
     /** v2.1.5: thumb fotográfica do item (recents / FileItem). */
-    val thumbnailUrl: String? = null
+    val thumbnailUrl: String? = null,
+    /**
+     * v2.1.9 — ícone do drive/curso (DriveItem.iconForPath): arte de
+     * fallback do card quando NÃO há thumb no Drive. Nunca monograma.
+     */
+    val driveIcon: String = "🎥"
 )
 
 class RailAdapter(
@@ -68,31 +74,33 @@ class RailAdapter(
         val ctx = holder.itemView.context
 
         with(holder.binding) {
-            cardTitle.setWordEllipsized(item.title)
+            // v2.1.9: título limpo ("001 - aula.mp4" → "Aula 01"/tema);
+            // o item.title continua cru — o clique casa por ele.
+            cardTitle.setWordEllipsized(Format.lessonTitle(item.title, item.subtitle))
             cardSubtitle.setWordEllipsized(item.subtitle)
 
             val baseColor = colorFromString(item.colorHint ?: item.title)
             cardBg.background = CardGradient.drawable(res, baseColor)
 
-            // Thumb fotográfica quando houver; monograma quando não houver.
+            // v2.1.9: thumb real quando houver; sem thumb (ou se o Coil
+            // falhar — ex.: áudio sem thumb no Drive), arte do drive.
+            // O monograma foi removido: nunca mais letras como thumb.
+            cardDriveArt.text = item.driveIcon
             val thumb = item.thumbnailUrl ?: item.file?.thumbnailLink
             if (!thumb.isNullOrBlank()) {
                 cardThumbnail.visibility = View.VISIBLE
-                cardMonogram.visibility = View.GONE
+                cardDriveArt.visibility = View.GONE
                 cardThumbnail.load(thumb) {
                     error(R.drawable.card_gradient_pink)
-                    // Patch: se a arte falhar a carregar, volta ao monograma
-                    // (antes ficava só o gradiente, sem arte nem monograma).
                     listener(onError = { _, _ ->
                         cardThumbnail.visibility = View.GONE
-                        cardMonogram.visibility = View.VISIBLE
+                        cardDriveArt.visibility = View.VISIBLE
                     })
                 }
                 cardThumbnail.setOnClickListener(null)
             } else {
                 cardThumbnail.visibility = View.GONE
-                cardMonogram.visibility = View.VISIBLE
-                cardMonogram.text = monogramFor(item.title)
+                cardDriveArt.visibility = View.VISIBLE
             }
 
             // Progresso real: barra + "% concluído · Xmin restantes".
