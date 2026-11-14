@@ -17,18 +17,27 @@ import org.json.JSONObject
 /**
  * One of the 4 hardcoded root drives shown on the home screen.
  */
+/**
+ * v1.0.4 — `tagline` é a linha de metadados do card do drive na home
+ * (texto curado, descritivo — NUNCA contagens inventadas: o app não
+ * lista o conteúdo do drive sem abrir). `isConcurso` marca os drives
+ * de concurso, usados pelo filtro "Concursos" da busca e pela aba
+ * "Concursos" da Minha lista.
+ */
 data class DriveItem(
     val index: Int,
     val name: String,
     val rootFolderId: String?,
-    val icon: String = "📁"
+    val icon: String = "📁",
+    val tagline: String = "",
+    val isConcurso: Boolean = false
 ) {
     companion object {
         val ALL: List<DriveItem> = listOf(
-            DriveItem(12, "QUEIMA DIÁRIA",    null, "🔥"),
-            DriveItem(13, "TODO DIA",         null, "📅"),
-            DriveItem(14, "CLUBE DE CASA",    null, "🏠"),
-            DriveItem(15, "SAÚDE E FITNESS",  null, "❤️")
+            DriveItem(12, "QUEIMA DIÁRIA",    null, "🔥", "Treinos intensos"),
+            DriveItem(13, "TODO DIA",         null, "📅", "Rotinas diárias"),
+            DriveItem(14, "CLUBE DE CASA",    null, "🏠", "Treinos em casa"),
+            DriveItem(15, "SAÚDE E FITNESS",  null, "❤️", "Bem-estar total")
         )
     }
 }
@@ -62,6 +71,19 @@ data class FileItem(
                 name.endsWith(".mov", true) ||
                 name.endsWith(".avi", true)
     val isPdf: Boolean get() = mimeType == "application/pdf" || name.endsWith(".pdf", true)
+
+    /** v1.0.4: Markdown (.md/.markdown) — abre no leitor de MD embutido. */
+    val isMarkdown: Boolean
+        get() = name.endsWith(".md", true) || name.endsWith(".markdown", true) ||
+            name.endsWith(".txt", true)
+
+    /** v1.0.4: arquivo de legenda (.vtt/.srt) — sidecar da aula. */
+    val isSubtitle: Boolean
+        get() = name.endsWith(".vtt", true) || name.endsWith(".srt", true)
+
+    /** v1.0.4: transcrição da aula (pasta/arquivo "Transcrição"/"transcript"). */
+    val isTranscript: Boolean
+        get() = name.contains("transcri", true) || name.contains("transcript", true)
 
     /** Human-readable file size, e.g. "1.4 GB". */
     val humanSize: String
@@ -202,7 +224,7 @@ data class HeroItem(
             HeroItem(
                 title = "Queima Diária — Treinos Intensos",
                 subtitle = "High-intensity workouts que aceleram seu metabolismo.",
-                badge = "🔥 DESTAQUE DA SEMANA",
+                badge = "DESTAQUE DA SEMANA",
                 drivePath = "/12:/",
                 driveName = "QUEIMA DIÁRIA",
                 icon = "🔥"
@@ -210,7 +232,7 @@ data class HeroItem(
             HeroItem(
                 title = "Todo Dia — Movimento Constante",
                 subtitle = "Rotinas diárias para manter o corpo ativo.",
-                badge = "📅 EM ALTA",
+                badge = "EM ALTA",
                 drivePath = "/13:/",
                 driveName = "TODO DIA",
                 icon = "📅"
@@ -218,7 +240,7 @@ data class HeroItem(
             HeroItem(
                 title = "Clube de Casa — Fitness em Casa",
                 subtitle = "Treinos completos sem sair de casa.",
-                badge = "🏠 NOVIDADE",
+                badge = "NOVIDADE",
                 drivePath = "/14:/",
                 driveName = "CLUBE DE CASA",
                 icon = "🏠"
@@ -226,7 +248,7 @@ data class HeroItem(
             HeroItem(
                 title = "Saúde e Fitness — Bem-estar Total",
                 subtitle = "Cuidado completo do corpo e da mente.",
-                badge = "❤️ RECOMENDADO",
+                badge = "RECOMENDADO",
                 drivePath = "/15:/",
                 driveName = "SAÚDE E FITNESS",
                 icon = "❤️"
@@ -256,4 +278,12 @@ fun colorFromString(str: String): Int {
     var hash = 0
     for (c in str) hash = c.code + ((hash shl 5) - hash)
     return STRING_COLOR_PALETTE[Math.floorMod(hash, STRING_COLOR_PALETTE.size)]
+}
+
+fun monogramFor(title: String): String {
+    val words = title.split(Regex("[^\\p{L}0-9]+"))
+        .filter { it.isNotBlank() && it[0].isLetterOrDigit() }
+    if (words.isEmpty()) return "M"
+    if (words.size == 1) return words[0].take(2).uppercase()
+    return (words[0].take(1) + words[1].take(1)).uppercase()
 }
