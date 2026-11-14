@@ -263,6 +263,18 @@
       const main = document.getElementById('meggy-main');
       if (!main) return;
 
+      // ★ v2.15.6 (P6): deep link ?a=view — um caminho de ficheiro
+      //   (/N:/…/aula.mp4) com ?a=view abre o player em vez de cair na
+      //   Home (o roteador só conhece as rotas fixas; os links "Continuar",
+      //   os resultados de busca e os links partilhados morriam aqui).
+      let _decPath = path;
+      try { _decPath = decodeURIComponent(path); } catch (_) {}
+      const _aView = new URLSearchParams(window.location.search || '');
+      if (_aView.get('a') === 'view' && /^\/\d+:\//.test(path) && /\.(mp4|webm|mov|mkv|m4v|mp3|m4a|ogg|wav|aac|pdf)$/i.test(_decPath)) {
+        Shell.views._openLessonPath(path);
+        return;
+      }
+
       // Scroll to top on view change
       main.scrollTop = 0;
 
@@ -388,8 +400,13 @@
           if (!list.length) { sec.innerHTML = ''; return; }
           sec.innerHTML = '<div class="meggy-continue-section"><h2>⭐ Cursos em destaque</h2><div class="meggy-cards-grid">' + list.map(c => {
             const name = Shell._esc(c.courseName || c.coursePath || 'Curso');
+            // ★ v2.15.6 (capa 4a): exibe a coverUrl (16:9) quando há capa;
+            //   sem coverUrl, mantém o emoji (nunca inventa imagem).
+            const cover = c.coverUrl
+              ? '<img src="' + Shell._esc(c.coverUrl) + '" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px 10px 0 0;display:block;" onerror="this.style.display=\'none\'">'
+              : '<div class="meggy-card-icon">' + Shell._esc(c.icon || '📚') + '</div>';
             return '<div class="meggy-card" data-course="' + Shell._esc(c.coursePath || '') + '">' +
-              '<div class="meggy-card-icon">' + Shell._esc(c.icon || '📚') + '</div>' +
+              cover +
               '<div class="meggy-card-title">' + name + '</div>' +
               '<div class="meggy-card-meta">Curso em destaque</div>' +
             '</div>';
@@ -470,8 +487,13 @@
                         const idAttr = it.kind === 'concurso' ? ' data-concurso-id="' + Shell._esc(it.concursoId) + '"' : ' data-course="' + Shell._esc(it.coursePath || '') + '"';
                         const rmBtn = it.kind === 'featured' ? '' :
                           '<button class="' + (it.kind === 'concurso' ? 'concurso-remove-btn' : 'course-remove-btn') + '" data-' + (it.kind === 'concurso' ? 'concurso-id="' + Shell._esc(it.concursoId) + '" data-concurso-name="' + Shell._esc(name) + '"' : 'course-path="' + Shell._esc(it.coursePath || '') + '" data-course-name="' + Shell._esc(name) + '"') + ' title="Remover" style="position:absolute;top:8px;right:8px;background:transparent;border:0;color:#8b949e;cursor:pointer;font-size:14px;padding:2px 6px;border-radius:6px;">✕</button>';
+                        // ★ v2.15.6 (capa 4a): mesma regra da home — coverUrl
+                        //   16:9 quando há capa; emoji quando não há.
+                        const __cover = it.coverUrl
+                          ? '<img src="' + Shell._esc(it.coverUrl) + '" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px 10px 0 0;display:block;" onerror="this.style.display=\'none\'">'
+                          : '<div class="meggy-card-icon">' + Shell._esc(it.icon || '📚') + '</div>';
                         return '<div class="meggy-card"' + idAttr + ' style="cursor:pointer;position:relative;">' + rmBtn +
-                          '<div class="meggy-card-icon">' + Shell._esc(it.icon || '📚') + '</div>' +
+                          __cover +
                           '<div class="meggy-card-title">' + Shell._esc(name) + '</div>' +
                           '<div class="meggy-card-meta">' + Shell._esc(meta) + '</div>' +
                         '</div>';
@@ -598,7 +620,10 @@
         const esc = Shell._esc;
         const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
         const nq = norm(q);
-        const openLesson = (p) => { if (p) location.href = p + (p.includes('?') ? '&' : '?') + 'a=view'; };
+        // ★ v2.15.6 (P6): abre a aula no player inline, sem reload — o
+        //   location.href p/ ?a=view recarregava a página e o boot caía na
+        //   Home (o renderView não honrava ?a=view).
+        const openLesson = (p) => { if (p) Shell.views._openLessonPath(p); };
         (async () => {
           let lessons = [], courses = [], err = null;
           try {
@@ -849,6 +874,49 @@
       },
 
       // ═══ PÁGINA DE VÍDEO — Layout Alfacon exato (vídeo + materiais lado a lado) ═══
+      // ★ v2.15.6 (P6): abre uma aula pelo caminho /N:/…/ficheiro — resolve a
+      //   pasta-pai, monta a playlist com os vídeos da pasta e abre o player
+      //   inline. Ponto único de entrada p/ clique no resultado da busca,
+      //   linhas do detalhe do concurso e deep link ?a=view. Nunca usa
+      //   location.href (o reload caía na Home). Fallback: abre a pasta-pai
+      //   em /drives, nunca a Home.
+      async _openLessonPath(lessonPath) {
+        const main = document.getElementById('meggy-main');
+        if (!lessonPath) return;
+        const clean = String(lessonPath).split('?')[0];
+        const slash = clean.lastIndexOf('/');
+        const folderPath = slash > 0 ? clean.slice(0, slash + 1) : '/';
+        let fileName = clean.slice(slash + 1);
+        try { fileName = decodeURIComponent(fileName); } catch (_) {}
+        const openParent = () => {
+          Shell.router.navigate('/drives');
+          setTimeout(() => Shell.views._renderDrives(folderPath), 50);
+        };
+        try {
+          let files = [];
+          if (typeof window.gdiListAllFiles === 'function') {
+            files = (await window.gdiListAllFiles(folderPath)) || [];
+          } else {
+            const r = await fetch(folderPath, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ page_token: null, page_index: 0 }) });
+            if (!r.ok) { openParent(); return; }
+            const d = await r.json();
+            files = (d.data && d.data.files) || [];
+          }
+          const videos = files.filter(f => /\.(mp4|webm|mov|mkv|m4v|mp3|m4a|ogg|wav|aac)$/i.test(f.name || '') || String(f.mimeType || '').indexOf('video') === 0 || String(f.mimeType || '').indexOf('audio') === 0);
+          const playlist = videos.map(f => ({ link: f.link || (folderPath + encodeURIComponent(f.name)), name: f.name, size: f.size ? String(f.size) : '', folder: '' }));
+          let idx = playlist.findIndex(v => { let n = String(v.link || '').split('/').pop() || ''; try { n = decodeURIComponent(n); } catch (_) {} return n === fileName; });
+          if (idx < 0) {
+            playlist.unshift({ link: clean, name: fileName, size: '', folder: '' });
+            idx = 0;
+          }
+          Shell.state.previousFolderPath = Shell.state.currentFolderPath;
+          Shell.state.currentFolderPath = folderPath;
+          Shell.views._playVideoInline(playlist[idx].link, playlist[idx].name, playlist, idx);
+        } catch (e) {
+          if (main) main.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">⚠️</div><div class="meggy-placeholder-title">Erro ao abrir a aula</div><div class="meggy-placeholder-desc">' + Shell._esc(e.message) + '</div></div>';
+        }
+      },
+
       _playVideoInline(link, name, playlist, currentIndex) {
         const main = document.getElementById('meggy-main');
         if (!main) return;
@@ -914,6 +982,7 @@
                   <div style="flex:1;min-width:0;">
                     <div id="gdi-file-header-name" style="font-size:15px;font-weight:600;color:#e6edf3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${name}</div>
                     <div id="gdi-file-header-meta" style="font-size:12px;color:#6b7488;">${fileSize}</div>
+                    <div id="gdi-lesson-desc" style="font-size:12px;color:#9aa4b8;line-height:1.5;"></div>
                   </div>
                 </div>
                 <div class="gdi-player-wrap" style="background:#000;border:1px solid rgba(255,255,255,0.09);border-radius:16px;overflow:hidden;max-width:860px;width:100%;box-shadow:0 10px 30px -12px rgba(0,0,0,0.55);">
@@ -1081,6 +1150,7 @@
           });
           document.getElementById('gdi-prev-btn').disabled = idx === 0;
           document.getElementById('gdi-next-btn').disabled = idx >= pl.length - 1;
+          updateLessonDescription();
           main.scrollTop = 0;
         }
 
@@ -1222,6 +1292,27 @@
           const bodyEl = document.getElementById('gdi-mat-body');
           const statusEl = document.getElementById('gdi-mat-status');
           if (!tabsEl || !bodyEl) return;
+          // ★ v2.15.6 (PROVA EXTRA): as abas da Meggy (Resumo/Questões/
+          //   Pílulas/Flashcards) existem SEMPRE no player — antes elas só
+          //   eram criadas quando a pasta tinha PDF/MD/TXT, e na aula
+          //   "001 - aula.mp4" (só vídeo) o player dizia "Nenhum material
+          //   encontrado" e NÃO tinha as abas que o painel da Meggy cita.
+          //   As abas geram a partir do nome/contexto da aula quando não
+          //   há material (showISA usa só o ctx nesse caso) — por isso o
+          //   ramo "sem material" e o catch também as renderizam. O guard
+          //   evita duplicar se o catch rodar depois delas já criadas.
+          function renderIsaTabs() {
+            if (tabsEl.querySelector('.gdi-mat-isa')) return;
+            [{id:'isa-summary',icon:'bi-stars',label:'Resumo Meggy'},{id:'isa-questions',icon:'bi-patch-question',label:'Questões'},{id:'isa-mindmap',icon:'bi-capsule',label:'Pílulas'},{id:'isa-flashcards',icon:'bi-card-text',label:'Flashcards'}].forEach(it => {
+              const tab = document.createElement('button');
+              tab.className = 'gdi-mat-tab gdi-mat-isa';
+              tab.style.cssText = 'display:inline-flex;flex-direction:row;align-items:center;gap:6px;padding:7px 12px;background:rgba(124,77,255,0.08);border:1px solid rgba(124,77,255,0.2);border-radius:999px;cursor:pointer;font-size:13px;font-weight:500;color:#a78bfa;font-family:inherit;transition:all 0.15s;white-space:nowrap;';
+              tab.dataset.mat = it.id;
+              tab.innerHTML = `<i class="bi ${it.icon}" style="font-size:16px;"></i><span style="font-size:13px;font-weight:600;">${it.label}</span>`;
+              tab.onclick = () => showISA(it.id);
+              tabsEl.appendChild(tab);
+            });
+          }
           tabsEl.innerHTML = '<span style="font-size:12px;color:#6b7488;padding:8px;">Buscando…</span>';
           if (statusEl) statusEl.textContent = 'buscando…';
           bodyEl.innerHTML = '';
@@ -1295,8 +1386,9 @@
 
             tabsEl.innerHTML = '';
             if (!materials.length) {
-              if (statusEl) statusEl.textContent = 'sem material';
-              bodyEl.innerHTML = '<div style="text-align:center;padding:40px;color:#6b7488;"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material encontrado.</div></div>';
+              if (statusEl) statusEl.textContent = 'sem material — a Meggy gera a partir da aula';
+              renderIsaTabs();
+              bodyEl.innerHTML = '<div style="text-align:center;padding:40px 24px;color:#9aa4b8;"><div style="font-size:15px;font-weight:600;color:#e6edf3;margin-bottom:8px;">🐩 Nenhum material nesta pasta</div><div style="font-size:13px;line-height:1.6;">Esta aula só tem o vídeo — sem PDF ou apostila. Use as abas <b style="color:#a78bfa;">Resumo Meggy</b>, <b style="color:#a78bfa;">Questões</b>, <b style="color:#a78bfa;">Pílulas</b> ou <b style="color:#a78bfa;">Flashcards</b> acima: a Meggy gera o conteúdo a partir do nome e do contexto da aula.</div></div>';
               return;
             }
             if (statusEl) statusEl.textContent = materials.length + ' material(is)';
@@ -1331,16 +1423,7 @@
               tabsEl.appendChild(tab);
             });
 
-            // ISA tabs (Meggy)
-            [{id:'isa-summary',icon:'bi-stars',label:'Resumo Meggy'},{id:'isa-questions',icon:'bi-patch-question',label:'Questões'},{id:'isa-mindmap',icon:'bi-capsule',label:'Pílulas'},{id:'isa-flashcards',icon:'bi-card-text',label:'Flashcards'}].forEach(it => {
-              const tab = document.createElement('button');
-              tab.className = 'gdi-mat-tab gdi-mat-isa';
-              tab.style.cssText = 'display:inline-flex;flex-direction:row;align-items:center;gap:6px;padding:7px 12px;background:rgba(124,77,255,0.08);border:1px solid rgba(124,77,255,0.2);border-radius:999px;cursor:pointer;font-size:13px;font-weight:500;color:#a78bfa;font-family:inherit;transition:all 0.15s;white-space:nowrap;';
-              tab.dataset.mat = it.id;
-              tab.innerHTML = `<i class="bi ${it.icon}" style="font-size:16px;"></i><span style="font-size:13px;font-weight:600;">${it.label}</span>`;
-              tab.onclick = () => showISA(it.id);
-              tabsEl.appendChild(tab);
-            });
+            renderIsaTabs();
 
             function showMaterial(i) {
               document.querySelectorAll('.gdi-mat-tab').forEach(t => { t.classList.remove('active'); t.removeAttribute('aria-current'); t.style.background = 'rgba(255,255,255,0.06)'; t.style.borderColor = 'rgba(255,255,255,0.12)'; t.style.color = '#c9d1d9'; });
@@ -1702,12 +1785,113 @@
             if (materials.length > 0) showMaterial(0);
           } catch (e) {
             console.error('[Shell] loadMaterials:', e);
-            tabsEl.innerHTML = '';
+            try { renderIsaTabs(); } catch (_) { tabsEl.innerHTML = ''; }
             if (statusEl) statusEl.textContent = 'não foi possível carregar';
             bodyEl.innerHTML = `<div style="text-align:center;padding:40px 24px;color:#e6edf3;"><div style="font-weight:700;margin-bottom:8px;">Não foi possível carregar o material</div><div style="font-size:14px;line-height:1.5;color:#9aa4b8;">Verifique sua conexão e toque na aba novamente.</div></div>`;
           }
         }
+        // ★ v2.15.6 (PROVA EXTRA): descrição da aula sob o título.
+        //   Regra do Elton: (1) descrição da Meggy se existir (resumo no
+        //   cache ISA, mesma chave do showISA); (2) nome real da pasta
+        //   como descrição provisória; (3) nome genérico ("001 -
+        //   aula.mp4") fica EM BRANCO até a Meggy processar — nunca se
+        //   inventa descrição. Sem resumo, a aula dispara a geração
+        //   (clicando a aba Resumo Meggy, 1x por sessão por aula) e
+        //   mostra o progresso no próprio bloco + no painel de materiais.
+        function lessonDescCacheKey() {
+          const cur = (pl && pl[idx]) || {};
+          const rawName = cur.origName || cur.name || '';
+          let _rk;
+          try { _rk = decodeURIComponent((Shell.state.currentFolderPath || '') + rawName); } catch (_) { _rk = (Shell.state.currentFolderPath || '') + rawName; }
+          return encodeURI(_rk);
+        }
+        function triggerIsaSummaryTab() {
+          // Clica a aba Resumo Meggy quando ela existir (o loadMaterials
+          // a cria com ~500ms de atraso) — espera até 10s.
+          return new Promise((resolve) => {
+            let tries = 0;
+            const tick = () => {
+              const t = document.querySelector('.gdi-mat-tab[data-mat="isa-summary"]');
+              if (t) { try { t.click(); } catch (_) {} resolve(true); return; }
+              if (++tries >= 20) { resolve(false); return; }
+              setTimeout(tick, 500);
+            };
+            tick();
+          });
+        }
+        function lessonDescScheduleRefresh() {
+          setTimeout(() => { try { updateLessonDescription(); } catch (_) {} }, 45000);
+          setTimeout(() => { try { updateLessonDescription(); } catch (_) {} }, 90000);
+        }
+        async function autoGenLessonDescription() {
+          // 1x por sessão por aula — a geração em si leva 30-60s e o
+          // refresh de 45s/90s confirma o resumo no cache.
+          const cacheKey = lessonDescCacheKey();
+          let tried = false;
+          try { tried = sessionStorage.getItem('gdi-desc-auto:' + cacheKey) === '1'; } catch (_) {}
+          if (tried) return false;
+          try { sessionStorage.setItem('gdi-desc-auto:' + cacheKey, '1'); } catch (_) {}
+          const clicked = await triggerIsaSummaryTab();
+          if (clicked) lessonDescScheduleRefresh();
+          return clicked;
+        }
+        async function updateLessonDescription() {
+          const descEl = document.getElementById('gdi-lesson-desc');
+          if (!descEl) return;
+          const cur = (pl && pl[idx]) || {};
+          const rawName = cur.origName || cur.name || '';
+          let folderLabel = cur.folderLabel || cur.folder || '';
+          if (!folderLabel) {
+            try { const _segs = (Shell.state.currentFolderPath || '').split('/').filter(Boolean); folderLabel = _segs.length ? decodeURIComponent(_segs[_segs.length - 1]) : ''; } catch (_) {}
+          }
+          const generic = Shell.views._v215LessonNameIsGeneric(rawName);
+          const provName = generic ? folderLabel : rawName;
+          const provIsReal = !!provName && !Shell.views._v215LessonNameIsGeneric(provName);
+          // (1) Descrição da Meggy — resumo no cache ISA.
+          let summary = '';
+          try {
+            const r = await fetch('/api/ai/cache?key=' + encodeURIComponent(lessonDescCacheKey()), { headers: { 'Accept': 'application/json' }, credentials: 'include' });
+            if (r.ok) { const d = await r.json().catch(() => null); if (d && d.cached && typeof d.cached.summary === 'string' && d.cached.summary.length > 50) summary = d.cached.summary; }
+          } catch (_) {}
+          const esc = (Shell.views && Shell.views._esc) ? Shell.views._esc : Shell._esc;
+          if (summary) {
+            const plain = String(summary).replace(/[#>*`_|\[\]()]/g, ' ').replace(/\s+/g, ' ').trim();
+            const excerpt = plain.slice(0, 280) + (plain.length > 280 ? '…' : '');
+            descEl.innerHTML = '<div><span style="color:#ff8b9f;font-weight:600;">🐩 ' + esc(Shell.views._v215LessonDescHook(rawName || folderLabel)) + '</span> ' + esc(excerpt) + ' <a href="#" id="gdi-desc-more" style="color:#5ddeda;white-space:nowrap;">Ver resumo completo</a></div>';
+            const more = document.getElementById('gdi-desc-more');
+            if (more) more.onclick = (e) => { e.preventDefault(); const t = document.querySelector('.gdi-mat-tab[data-mat="isa-summary"]'); if (t) t.click(); };
+            return;
+          }
+          // (2) Nome real da pasta como descrição provisória.
+          if (provIsReal) {
+            descEl.innerHTML = '<div>' + esc(provName) + ' <span style="color:#6b7488;">— descrição provisória; a Meggy ainda não gerou o resumo desta aula.</span> <a href="#" id="gdi-desc-gen" style="color:#5ddeda;white-space:nowrap;">🐩 Gerar descrição</a></div>';
+            const gen = document.getElementById('gdi-desc-gen');
+            if (gen) gen.onclick = async (e) => {
+              e.preventDefault();
+              descEl.innerHTML = '<div style="color:#9aa4b8;">🐩 A Meggy está criando a descrição desta aula… acompanhe no painel de materiais.</div>';
+              if (await triggerIsaSummaryTab()) lessonDescScheduleRefresh();
+            };
+            return;
+          }
+          // (3) Nome genérico: EM BRANCO até a Meggy processar — dispara
+          // a geração 1x por sessão; se já tentou, mostra só o botão.
+          let tried = false;
+          try { tried = sessionStorage.getItem('gdi-desc-auto:' + lessonDescCacheKey()) === '1'; } catch (_) {}
+          if (!tried) {
+            descEl.innerHTML = '<div style="color:#9aa4b8;">🐩 A Meggy está criando a descrição desta aula… acompanhe no painel de materiais.</div>';
+            autoGenLessonDescription();
+          } else {
+            descEl.innerHTML = '<div style="color:#6b7488;">A Meggy ainda não gerou a descrição desta aula. <a href="#" id="gdi-desc-retry" style="color:#5ddeda;white-space:nowrap;">🐩 Tentar gerar de novo</a></div>';
+            const retry = document.getElementById('gdi-desc-retry');
+            if (retry) retry.onclick = async (e) => {
+              e.preventDefault();
+              descEl.innerHTML = '<div style="color:#9aa4b8;">🐩 A Meggy está criando a descrição desta aula… acompanhe no painel de materiais.</div>';
+              if (await triggerIsaSummaryTab()) lessonDescScheduleRefresh();
+            };
+          }
+        }
         setTimeout(loadMaterials, 500);
+        updateLessonDescription();
 
         // Anotações
         const notesInput = document.getElementById('gdi-note-input');
@@ -2631,11 +2815,38 @@ el.scrollTop = 0;
       //   novo devolve totalHours/totalMinutes (+ truncated); se vier sem
       //   horas (servidor antigo), chama /sources/preview como fallback com
       //   as mesmas pastas e preenche os totais a partir da prévia.
+      // ★ v2.15.6 (P2): prévia/anexo paginados — a enumeração do servidor
+      //   tem teto de 40 listagens por chamada; pastas além do teto (ex.:
+      //   Módulo II) só aparecem quando o cliente retoma do cursor
+      //   (pending) até truncated=false. Sem o loop, a prévia e o anexo
+      //   paravam na 1ª fatia e o detalhe ficava incompleto.
+      async _v215PreviewPaged(concursoId, folderPaths) {
+        let body = { folderPaths: folderPaths || [] };
+        let d = null;
+        for (let a = 0; a < 20; a++) {
+          d = await Shell.views._v215Api('/api/concursos/' + encodeURIComponent(concursoId) + '/sources/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+          if (!d || !d.truncated) break;
+          body = { folderPaths: folderPaths || [], resume: d.pending || {}, accum: { folders: d.folders || [], seenNewPaths: d.seenNewPaths || [], enumErrors: d.enumErrors || [] } };
+        }
+        return d;
+      },
+      async _v215AttachPaged(concursoId, folderPaths) {
+        let body = { folderPaths: folderPaths || [] };
+        let d = null, firstAttached = null, firstSkipped = null;
+        for (let a = 0; a < 20; a++) {
+          d = await Shell.views._v215Api('/api/concursos/' + encodeURIComponent(concursoId) + '/sources', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+          if (firstAttached === null) { firstAttached = d.attached; firstSkipped = d.skipped; }
+          if (!d.scanned || !d.scanned.truncated) break;
+          body = { folderPaths: folderPaths || [], resume: (d.scanned && d.scanned.pending) || {} };
+        }
+        if (d) { d.attached = firstAttached || d.attached; d.skipped = firstSkipped || d.skipped; }
+        return d;
+      },
       async _v215EnsureScanHours(concursoId, scanResult, folderPaths) {
         if (!scanResult) return scanResult;
         if (scanResult.totalHours != null || scanResult.totalMinutes != null) return scanResult;
         try {
-          const prev = await Shell.views._v215Api('/api/concursos/' + encodeURIComponent(concursoId) + '/sources/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folderPaths: folderPaths || [] }) });
+          const prev = await Shell.views._v215PreviewPaged(concursoId, folderPaths || []);
           if (prev) {
             if (prev.totalHours != null) scanResult.totalHours = prev.totalHours;
             if (prev.totalMinutes != null) scanResult.totalMinutes = prev.totalMinutes;
@@ -2935,10 +3146,13 @@ el.scrollTop = 0;
                 let html = '<span style="color:#ff8b9f;cursor:pointer;" id="cw-bc-root">📁 Drives</span>';
                 let acc = '';
                 parts.forEach((p, i) => {
-                  acc += (i === 0 ? '/' : '/') + p;
-                  if (i === 0 && p.endsWith(':')) { acc = '/' + p + '/'; }
-                  else if (i === 0) { acc = '/' + p; }
-                  else { acc = acc + '/' + p; }
+                  // ★ v2.15.6 (P4b): um único append por segmento — o
+                  //   código antigo somava o segmento duas vezes (i>0) e
+                  //   ainda colava '/' extra após o drive ('/9://…'), então
+                  //   o clique no breadcrumb navegava p/ um caminho
+                  //   duplicado que o fetch não resolvia ("Erro ao carregar.").
+                  if (i === 0) { acc = '/' + p + (p.endsWith(':') ? '/' : ''); }
+                  else { acc += (acc.endsWith('/') ? '' : '/') + p + '/'; }
                   html += ' / <span style="color:#9aa4b8;cursor:pointer;" class="cw-bc-part" data-path="' + Shell._esc(acc) + '">' + Shell._esc(decodeURIComponent(p)) + '</span>';
                 });
                 bc.innerHTML = html;
@@ -2978,6 +3192,11 @@ el.scrollTop = 0;
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ page_token: null, page_index: 0 })
                   });
+                  // ★ v2.15.6 (P4b): a guarda de geração vale também p/
+                  //   o erro — um fetch defasado que falha NÃO pode
+                  //   sobrescrever a lista atual (antes, a guarda só existia
+                  //   após r.json()).
+                  if (mySeq !== cwBrowseSeq || !modal.contains(listEl)) return;
                   if (!r.ok) { listEl.innerHTML = '<div style="padding:20px;text-align:center;color:#ff6b6b;">Erro ao carregar.</div>'; return; }
                   const data = await r.json();
                   // ★ v2.15.5 (item 4): descarta a resposta se outra navegação
@@ -3078,12 +3297,20 @@ el.scrollTop = 0;
               scanBtn.disabled = true;
               scanBtn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Escaneando...';
               try {
-                const r = await fetch('/api/concursos/' + encodeURIComponent(concursoId) + '/scan', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ folderPaths: selectedFolders })
-                });
-                const d = await r.json();
+                // ★ v2.15.6 (P2): /scan paginado — retoma do cursor até
+                //   truncated=false (v. _v215PreviewPaged).
+                let scanBody = { folderPaths: selectedFolders };
+                let d = null;
+                for (let a = 0; a < 20; a++) {
+                  const r = await fetch('/api/concursos/' + encodeURIComponent(concursoId) + '/scan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(scanBody)
+                  });
+                  d = await r.json();
+                  if (!d || !d.ok || !d.truncated) break;
+                  scanBody = { folderPaths: selectedFolders, resume: d.pending || {} };
+                }
                 if (d.ok) {
                   scanResult = d;
                   // ★ v2.15.2 (D): o anexo do assistente também cria os
@@ -3091,7 +3318,7 @@ el.scrollTop = 0;
                   //   Adicionar esta pasta ao curso") — antes só alimentava
                   //   o scan e o detalhe mostrava "Nenhuma pasta anexada".
                   try {
-                    const m = await Shell.views._v215Api('/api/concursos/' + encodeURIComponent(concursoId) + '/sources', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folderPaths: selectedFolders }) });
+                    const m = await Shell.views._v215AttachPaged(concursoId, selectedFolders);
                     scanResult.modulesCreated = (m.attached || []).length;
                     scanResult.modulesSkipped = (m.skipped || []).length;
                     // ★ v2.15.5 (item 2): o anexo re-escaneia (2ª enumeração)
@@ -3235,7 +3462,9 @@ el.scrollTop = 0;
                   //   repetidos ("001 - aula.mp3" ×9) — linha 1: pasta; linha 2:
                   //   arquivo. Sem pasta, volta ao rótulo único de antes.
                   const _lf = (l.folder || Shell.views._v215LessonFolder(l.path || ''));
-                  html += '<div class="meggy-study-list" style="display:flex;align-items:center;gap:8px;padding:8px;cursor:pointer;border-radius:6px;" onmouseover="this.style.background=\'rgba(255,255,255,0.03)\'" onmouseout="this.style.background=\'transparent\'">';
+                  // ★ v2.15.6 (PROVA EXTRA): a linha é clicável — abre a
+                  //   aula no player (antes só destacava ao passar o rato).
+                  html += '<div class="meggy-study-list" data-lesson-path="' + Shell._esc(l.path || '') + '" style="display:flex;align-items:center;gap:8px;padding:8px;cursor:pointer;border-radius:6px;" onmouseover="this.style.background=\'rgba(255,255,255,0.03)\'" onmouseout="this.style.background=\'transparent\'">';
                   html += '<span style="font-size:16px;">' + icon + '</span>';
                   if (_lf) {
                     html += '<span style="flex:1;min-width:0;"><span style="display:block;font-size:11px;color:#8b949e;word-break:break-word;">' + Shell._esc(_lf) + '</span><span style="display:block;color:#e6edf3;font-size:13px;word-break:break-word;">' + Shell._esc(l.name) + '</span></span>';
@@ -3261,6 +3490,11 @@ el.scrollTop = 0;
           html += '<div id="v215-errors" style="margin-top:20px;"></div>';
 
           el.innerHTML = html;
+
+          // ★ v2.15.6 (PROVA EXTRA): cada linha de aula abre a aula no player.
+          el.querySelectorAll('.meggy-study-list[data-lesson-path]').forEach(row => {
+            row.onclick = () => { const p = row.dataset.lessonPath; if (p) Shell.views._openLessonPath(p); };
+          });
 
           // Accordion toggle
           el.querySelectorAll('.meggy-tree-head').forEach(head => {
@@ -3363,6 +3597,12 @@ el.scrollTop = 0;
               this.style.border = 'none';
               if (tabIntensivo) { tabIntensivo.style.background = ''; tabIntensivo.style.color = ''; }
               el.querySelectorAll('.meggy-tree-node').forEach(n => n.style.display = 'block');
+              // ★ v2.15.6 (PROVA EXTRA): "Curso Completo" expande TODOS os
+              //   acordeões (antes só mostrava os nós — os filhos continuavam
+              //   fechados e o botão parecia não fazer nada) e mostra todas
+              //   as linhas (limpa o filtro intensivo).
+              el.querySelectorAll('.meggy-tree-children').forEach(ch => { ch.style.display = 'block'; });
+              el.querySelectorAll('.meggy-tree-chevron').forEach(ch => { ch.textContent = '▼'; });
               el.querySelectorAll('.meggy-study-list').forEach(l => l.style.display = 'flex');
             };
           }
@@ -3849,7 +4089,7 @@ el.scrollTop = 0;
           if (nextBtn) { nextBtn.disabled = true; nextBtn.textContent = 'Gerando prévia…'; }
           let prev;
           try {
-            prev = await Shell.views._v215Api('/api/concursos/' + encodeURIComponent(concursoId) + '/sources/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folderPaths: folderPaths }) });
+            prev = await Shell.views._v215PreviewPaged(concursoId, folderPaths);
           } catch (e) {
             Shell.views._v215Err('Não foi possível gerar a prévia', e.message);
             if (nextBtn) { nextBtn.disabled = false; nextBtn.textContent = 'Ver prévia →'; }
@@ -3888,7 +4128,7 @@ el.scrollTop = 0;
               const cbtn = document.getElementById('v215a-confirm');
               if (cbtn) { cbtn.disabled = true; cbtn.textContent = 'Anexando…'; }
               try {
-                const d = await Shell.views._v215Api('/api/concursos/' + encodeURIComponent(concursoId) + '/sources', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folderPaths: folderPaths }) });
+                const d = await Shell.views._v215AttachPaged(concursoId, folderPaths);
                 const sc = d.scanned || {};
                 // ★ v2.15.2 (E): "vinculadas" = totalMatched, "encontradas" =
                 //   totalFound — sem trocar os dois.
@@ -4051,7 +4291,7 @@ el.scrollTop = 0;
       //   sem texto, text:'' + no_text:true (nunca finge que tem texto).
       //   Extrai em lotes de 5 em paralelo (mesmo padrão do anexo manual
       //   em study-courses.js); cada falha é isolada (não aborta os outros).
-      async _v215ExtractPdfTexts(pdfs) {
+      async _v215ExtractPdfTexts(pdfs, onProgress) {
         const list = (pdfs || []).map(p => ({ name: p.name || '', url: p.url || p.link || '', link: p.link || '', text: '', no_text: true, noTextReason: '' }));
         const extract = (window.gdiIsaPdf && window.gdiIsaPdf.extractPdfText) || (window.__gdiMeggy && window.__gdiMeggy.pdf && window.__gdiMeggy.pdf.extractPdfText);
         if (!extract) { list.forEach(p => { p.noTextReason = 'extrator de PDF indisponível'; }); return list; }
@@ -4062,7 +4302,7 @@ el.scrollTop = 0;
             const fetchUrl = p.url || p.link;
             if (!fetchUrl) { p.noTextReason = 'sem URL para baixar'; return; }
             try {
-              const txt = await extract(fetchUrl);
+              const txt = await extract(fetchUrl, function (prog) { try { if (typeof onProgress === 'function') onProgress(p, prog); } catch (_) {} });
               const t = String(txt || '').trim();
               if (t.length >= 50) { p.text = t.slice(0, 15000); p.no_text = false; }
               else { p.noTextReason = 'texto extraível curto (' + t.length + ' chars)'; }
@@ -4077,7 +4317,52 @@ el.scrollTop = 0;
       //   done}) numa linha de status dentro de #v215-sources — antes só
       //   havia um setTimeout cego de 30s que re-renderizava as fontes e
       //   os contadores 0/0/0 nunca saíam do zero. Ao concluir, re-renderiza
-      //   as fontes (contagens atualizadas). opts: {intervalMs, maxPolls}.
+      //   as fontes (contagens atualizadas). opts: {intervalMs, maxPolls,
+      //   clientSkipped:[{name, reason}]} — pulados do cliente (PDFs sem
+      //   texto, que nem foram enviados ao servidor) p/ o resumo final.
+      // ── v2.15.6 (P9/PROVA EXTRA): helpers puros da descrição/resumo ──
+      // _v215LessonNameIsGeneric: nome de arquivo genérico ("001 - aula",
+      //   "video", "Aula 03") não descreve nada — nunca vira descrição.
+      _v215LessonNameIsGeneric(name) {
+        const base = String(name || '').replace(/\.[a-z0-9]+$/i, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        if (!base) return true;
+        if (/^\d+$/.test(base)) return true;
+        if (/^\d+\s*[-–.]?\s*(aula|video|lesson|capitulo|parte|material)?$/.test(base)) return true;
+        if (/^(aula|video|lesson|capitulo|parte|material)(\s+\d+)?$/.test(base)) return true;
+        return false;
+      },
+      // _v215LessonDescHook: gancho fixo por aula (determinístico pelo
+      //   nome — estável entre renders; é frase-modelo, não conteúdo
+      //   inventado: o conteúdo vem sempre do resumo da Meggy).
+      _v215LessonDescHook(lessonName) {
+        const hooks = ['Nesta aula exploramos…', 'Vamos aprender…', 'Nesta aula você vai entender…', 'O foco desta aula é…', 'Prepare-se: nesta aula…'];
+        let h = 0; const s = String(lessonName || '');
+        for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+        return hooks[h % hooks.length];
+      },
+      // _v215BattalionSummaryHtml: o resumo HONESTO do fim do job —
+      //   quantos PDFs geraram, quantos foram pulados e por quê, e o que
+      //   fazer (OCR). Puro (só string in/out) p/ o harness testar.
+      //   skipped: [{name, reason}] — reason 'no_text'/'generate_failed'
+      //   ou o motivo real da extração (ex.: "pdf.js não conseguiu...").
+      _v215BattalionSummaryHtml(processed, total, skipped) {
+        const sk = Array.isArray(skipped) ? skipped : [];
+        const esc = (Shell.views && Shell.views._esc) ? Shell.views._esc : (function (s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); });
+        const friendlyReason = (r) => {
+          const reason = String(r || '');
+          if (!reason || reason === 'no_text') return 'sem texto extraível';
+          if (reason === 'generate_failed') return 'a IA não conseguiu gerar';
+          return reason;
+        };
+        const hasNoText = sk.some(function (s2) { const r = String((s2 && s2.reason) || ''); return r === 'no_text' || r.indexOf('pdf.js') >= 0 || r.indexOf('OCR') >= 0 || r.indexOf('sem texto') >= 0; });
+        const ocrHint = hasNoText ? ' Os PDFs pulados não tinham texto extraível (são escaneados — só imagens) e o OCR por IA já tentou ler cada página; se a IA não conseguiu, confira se o PDF abre num leitor comum e toque em "Gerar resumo + flashcards" de novo.' : '';
+        const list = sk.slice(0, 3).map(function (s2) { return esc(s2.name || '') + ': ' + esc(friendlyReason(s2.reason)); }).join('; ');
+        const extra = sk.length > 3 ? ' (+ ' + (sk.length - 3) + ' outro(s))' : '';
+        if ((processed || 0) > 0) {
+          return '🐩 Materiais prontos: ' + processed + ' de ' + (total || processed) + ' PDF(s) processado(s)' + (sk.length ? ' · ' + sk.length + ' pulado(s): ' + list + extra + '.' + ocrHint : '.');
+        }
+        return '⚠️ A Meggy não gerou materiais deste módulo — nenhum dos ' + (total || sk.length || 0) + ' PDFs tinha texto para ler' + (sk.length ? ': ' + list + extra + '.' : '.') + ocrHint;
+      },
       //   Devolve uma Promise que resolve no fim do poll (done ou teto).
       _v215PollBattalionStatus(el, concursoId, courseKey, opts) {
         opts = opts || {};
@@ -4105,27 +4390,41 @@ el.scrollTop = 0;
         };
         let polls = 0;
         return new Promise((resolve) => {
+          const clientSkipped = (opts && Array.isArray(opts.clientSkipped)) ? opts.clientSkipped : [];
           const tick = async () => {
             polls++;
             try {
               const st = await getStatus();
-              const done = !!(st && (st.done === true || st.battalionDone === true));
-              const total = (st && (st.total != null ? st.total : st.pdfsFound)) || 0;
-              const processed = (st && (st.processed != null ? st.processed : st.pdfsDone)) || 0;
-              const skipped = (st && Array.isArray(st.skipped)) ? st.skipped : [];
-              if (done) {
-                if (processed > 0) {
-                  renderStatus('🐩 Materiais prontos: ' + processed + ' de ' + (total || processed) + ' PDF(s) processado(s)' + (skipped.length ? ' · ' + skipped.length + ' sem texto' : '') + '.');
-                  Shell.views._v215Toast('🐩 Resumo + flashcards prontos (' + processed + ' PDF(s)).');
-                } else {
-                  const why = skipped.length ? ' — ' + skipped.slice(0, 3).map(s2 => Shell.views._esc(s2.name || '') + ': ' + Shell.views._esc(s2.reason || 'sem texto')).join('; ') : ' — nenhum PDF tinha texto extraível.';
-                  renderStatus('⚠️ A Meggy não gerou materiais deste módulo' + why);
-                  Shell.views._v215Err('A Meggy não gerou materiais', 'Nenhum PDF processado' + why);
-                }
+              // ★ v2.15.6 (P9): o status devolve um ENVELOPE
+              //   {ok, processed, job} — total/processado/skipped/done
+              //   vivem dentro de `job`, não no envelope. Antes o poll
+              //   lia os campos no envelope (sempre undefined → total "?"
+              //   — o "(0/? PDFs)" do Passo 10) e nunca via done=true
+              //   quando o job terminava com 0 processados. `finished`
+              //   (W1) é o fim REAL do job, com 0 ou mais processados.
+              const job = (st && st.job && typeof st.job === 'object') ? st.job : st;
+              const done = !!(job && (job.done === true || job.battalionDone === true));
+              const finished = !!(job && job.finished === true);
+              const total = (job && (job.total != null ? job.total : job.pdfsFound)) || 0;
+              const processed = (job && typeof job.processed === 'number') ? job.processed : ((job && job.pdfsDone) || 0);
+              const skipped = (job && Array.isArray(job.skipped)) ? job.skipped : [];
+              // Mescla os pulados do cliente (PDFs sem texto, que nem
+              // foram enviados ao servidor) com os do servidor, sem
+              // duplicar por nome — o resumo final lista todos.
+              const allSkipped = skipped.slice();
+              clientSkipped.forEach(function (c) {
+                if (c && c.name && !allSkipped.some(function (s2) { return (s2.name || '') === c.name; })) allSkipped.push(c);
+              });
+              if (done || finished) {
+                renderStatus(Shell.views._v215BattalionSummaryHtml(processed, total, allSkipped));
+                if (processed > 0) Shell.views._v215Toast('🐩 Resumo + flashcards prontos (' + processed + ' PDF(s)).');
+                else Shell.views._v215Err('A Meggy não gerou materiais', 'Nenhum PDF processado — os motivos estão no status acima.');
                 try { Shell.views._v215RenderSources(el, concursoId, null); } catch (_) {}
                 resolve(st); return;
               }
-              renderStatus('🐩 A Meggy está gerando resumo + flashcards… (' + processed + '/' + (total || '?') + ' PDFs)');
+              renderStatus(total > 0
+                ? '🐩 A Meggy está gerando resumo + flashcards… (' + processed + '/' + total + ' PDFs)'
+                : '🐩 A Meggy está enumerando os PDFs do módulo…');
             } catch (e) {
               renderStatus('🐩 Gerando resumo + flashcards… (não foi possível verificar o progresso)');
             }
@@ -4148,9 +4447,38 @@ el.scrollTop = 0;
           //   concluído com 0 gerações. Sem texto, o item vai com text:''
           //   + no_text:true (nunca como se tivesse texto).
           if (btn) btn.textContent = '🐩 Lendo PDFs (' + pdfs.length + ')…';
-          const withText = await Shell.views._v215ExtractPdfTexts(pdfs);
+          const withText = await Shell.views._v215ExtractPdfTexts(pdfs, function (cur, prog) {
+            if (!btn) return;
+            const pg = (prog && prog.phase === 'ocr-page') ? ' — OCR pág. ' + (prog.page || '?') + '/' + (prog.total || '?') : '';
+            btn.textContent = '🐩 Lendo ' + String(cur.name || '').slice(0, 24) + pg + '…';
+          });
           const withTextCount = withText.filter(p => !p.no_text).length;
-          const pdfList = withText.map(p => ({ name: p.name, url: p.url || (p.link ? (String(p.link).startsWith('http') ? p.link : window.location.origin + p.link) : ''), text: p.no_text ? '' : (p.text || ''), no_text: !!p.no_text }));
+          const clientSkipped = withText.filter(function (p) { return p.no_text; }).map(function (p) { return { name: p.name, reason: p.noTextReason || 'sem texto extraível' }; });
+          // ★ v2.15.6 (P9): sem NENHUM PDF com texto, NÃO posta ao
+          //   batalhão e NÃO faz poll — o job terminaria com 0 depois de
+          //   minutos de "(0/? PDFs)" (o OCR por IA, página a página e sem
+          //   teto, já correu na extração acima e foi o que demorou). O
+          //   resumo honesto (qual PDF, por quê, e o que fazer) aparece
+          //   NA HORA, sem espera — o OCR em si NÃO foi limitado.
+          if (!withTextCount) {
+            const _box = el && el.querySelector ? el.querySelector('#v215-sources') : null;
+            let _st = _box ? _box.querySelector('#v215-battalion-status') : null;
+            if (_box && !_st) {
+              _st = document.createElement('div');
+              _st.id = 'v215-battalion-status';
+              _st.style.cssText = 'font-size:12px;color:#9aa4b8;margin-bottom:8px;';
+              if (_box.prepend) _box.prepend(_st);
+            }
+            if (_st) _st.innerHTML = Shell.views._v215BattalionSummaryHtml(0, pdfs.length, clientSkipped);
+            Shell.views._v215Err('PDFs sem texto extraível', 'Os ' + pdfs.length + ' PDF(s) deste módulo são escaneados (só imagens) e nem o OCR por IA conseguiu extrair texto' + (clientSkipped.length ? ': ' + clientSkipped.slice(0, 3).map(function (p) { return p.name + ' — ' + p.reason; }).join('; ') : '') + '. Confira se os PDFs abrem num leitor comum e tente de novo — ou adicione PDFs com texto selecionável.');
+            return;
+          }
+          // ★ v2.15.6 (P9): ao servidor vão SÓ os PDFs com texto — o
+          //   total do job passa a ser o total REAL (antes o job contava
+          //   também os sem texto, que o servidor pulava em silêncio, e
+          //   o progresso nunca batia). Os sem texto já estão no resumo
+          //   final via clientSkipped (abaixo, no poll).
+          const pdfList = withText.filter(function (p) { return !p.no_text; }).map(p => ({ name: p.name, url: p.url || (p.link ? (String(p.link).startsWith('http') ? p.link : window.location.origin + p.link) : ''), text: p.text || '', no_text: false }));
           let ok = false;
           const isa = window.gdiIsaPdf || (window.__gdiMeggy && window.__gdiMeggy.summaries);
           if (isa && typeof isa.startBattalion === 'function') {
@@ -4164,15 +4492,10 @@ el.scrollTop = 0;
             } catch (_) { ok = false; }
           }
           if (!ok) { Shell.views._v215Err('Não foi possível iniciar a geração', 'O batalhão da Meggy não aceitou este módulo. Tente de novo em alguns minutos.'); return; }
-          const _ocrWhy=(withText.filter(function(p){return p.no_text&&p.noTextReason;}).map(function(p){return p.noTextReason;})[0]||''); // ★ v2.15.4: motivo real da falha de OCR
-          if (!withTextCount) {
-            Shell.views._v215Err('PDFs sem texto extraível', 'Os ' + pdfs.length + ' PDF(s) deste módulo são escaneados (só imagens) e o OCR por IA não conseguiu ler o conteúdo' + (_ocrWhy ? (' (' + _ocrWhy + ')') : '') + '. A geração foi iniciada, mas o servidor deve pular os PDFs sem texto; acompanhe o status abaixo.');
-          } else {
-            Shell.views._v215Toast('🐩 A Meggy está gerando resumo + flashcards deste módulo em segundo plano (' + withTextCount + ' de ' + pdfs.length + ' PDFs com texto' + (pdfs.length - withTextCount ? ', ' + (pdfs.length - withTextCount) + ' sem texto' : '') + ').');
-          }
+          Shell.views._v215Toast('🐩 A Meggy está gerando resumo + flashcards deste módulo em segundo plano (' + withTextCount + ' de ' + pdfs.length + ' PDFs com texto' + (pdfs.length - withTextCount ? ', ' + (pdfs.length - withTextCount) + ' sem texto' : '') + ').');
           // ★ v2.15.3 (item 3): poll do status real em vez do setTimeout
           //   cego de 30s — mostra progresso/erro e re-renderiza ao concluir.
-          try { Shell.views._v215PollBattalionStatus(el, concursoId, source.coursePath); } catch (_) { setTimeout(() => { try { const box = el.querySelector ? el.querySelector('#v215-sources') : null; if (box && document.body.contains(box)) Shell.views._v215RenderSources(el, concursoId, null); } catch (_) {} }, 30000); }
+          try { Shell.views._v215PollBattalionStatus(el, concursoId, source.coursePath, { clientSkipped: clientSkipped }); } catch (_) { setTimeout(() => { try { const box = el.querySelector ? el.querySelector('#v215-sources') : null; if (box && document.body.contains(box)) Shell.views._v215RenderSources(el, concursoId, null); } catch (_) {} }, 30000); }
         } catch (e) {
           Shell.views._v215Err('Não foi possível gerar os materiais', e.message || 'Erro ao listar a pasta do módulo.');
         } finally {
@@ -4205,7 +4528,16 @@ el.scrollTop = 0;
             if (!bodyEl) return;
             if (!d || !d.ok || !d.plan) { bodyEl.innerHTML = '<div style="color:#ff6b6b;font-size:13px;">Não foi possível carregar o plano.</div>'; return; }
             const p = d.plan, s = p.summary;
-            let h = '<div style="font-size:13px;color:#9aa4b8;margin-bottom:12px;">' + Shell._esc(p.banca || '') + ' · ' + s.totalDays + ' dias · ' + s.dailyHours + 'h/dia · ' + s.totalHours + 'h · ' + s.altaSharePct + '% nas altas</div>';
+            // ★ v2.15.6: selo de origem + nota do edital no plano da Meggy
+            let originHtml = '';
+            if (p.origin === 'meggy-ai') originHtml += '<div style="display:inline-block;background:rgba(255,139,159,.15);border:1px solid rgba(255,139,159,.4);color:#ff8b9f;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:600;margin-bottom:8px;">🐩 Gerado pela Meggy</div>';
+            else if (p.origin === 'deterministico') originHtml += '<div style="display:inline-block;background:rgba(255,212,59,.1);border:1px solid rgba(255,212,59,.3);color:#ffd43b;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:600;margin-bottom:8px;">🎯 Plano determinístico</div>';
+            if (p.editalNote) originHtml += '<div style="font-size:12px;color:#9aa4b8;margin-bottom:8px;">' + Shell._esc(p.editalNote) + '</div>';
+            // ★ v2.15.6-banca: mostra o perfil da banca usado (2ª fonte do plano)
+            if (p.bancaProfile && p.bancaProfile.banca) originHtml += '<div style="font-size:12px;color:#5ddeda;margin-bottom:8px;">📊 Histórico da banca ' + Shell._esc(p.bancaProfile.banca) + ': ' + (p.bancaProfile.disciplinas ? p.bancaProfile.disciplinas.length : 0) + ' disciplinas do perfil semeado (o que mais cai historicamente).</div>';
+            // ★ merge v2.15.6-crossed: selo de cruzamento no modal
+            if (p.crossed) originHtml += '<div style="font-size:12px;color:#5ddeda;margin-bottom:8px;">🔀 Cruzado: edital + histórico da banca.</div>';
+            let h = originHtml + '<div style="font-size:13px;color:#9aa4b8;margin-bottom:12px;">' + Shell._esc(p.banca || '') + ' · ' + s.totalDays + ' dias · ' + s.dailyHours + 'h/dia · ' + s.totalHours + 'h · ' + s.altaSharePct + '% nas altas</div>';
             h += '<div style="display:flex;flex-direction:column;gap:8px;">';
             p.days.forEach(dy => {
               h += '<div style="padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><div style="font-size:12px;color:#5ddeda;font-weight:600;margin-bottom:4px;">Dia ' + dy.day + ' · ' + Shell._esc(dy.date) + ' · ' + dy.minutos + ' min</div>';
@@ -4245,10 +4577,15 @@ el.scrollTop = 0;
           const btn = document.getElementById('pm-build');
           btn.disabled = true; btn.textContent = 'Montando...';
           try {
-            const r = await fetch('/api/plans/build', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ concursoId, banca, totalDays, dailyHours }) });
+            // ★ v2.15.6: o botão "Montar plano com a Meggy" agora chama de
+            //   verdade a Meggy (POST /api/plans/generate — IA); o botão
+            //   "Montar plano" segue no determinístico (/api/plans/build).
+            const useMeggy = !!(opts && opts.meggy);
+            const r = await fetch(useMeggy ? '/api/plans/generate' : '/api/plans/build', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(useMeggy ? { concursoId, banca, totalDays, dailyHours, useAi: true } : { concursoId, banca, totalDays, dailyHours }) });
             const d = await r.json();
             if (!d.ok) throw new Error(d.error || ('HTTP ' + r.status));
             if (d.summary && d.summary.withRealLessons) Shell.views._v215Toast('🐩 Plano montado com a Meggy: ' + (d.summary.lessonsLinked || 0) + ' aulas reais vinculadas' + (d.summary.lessonsWatched ? ' (' + d.summary.lessonsWatched + ' já assistidas)' : ''));
+            if (useMeggy && d.fallback) Shell.views._v215Toast('⚠️ A IA estava indisponível — plano determinístico montado.');
             close();
             if (concursoId) Shell.views.concursoDetail(document.getElementById('meggy-main'), concursoId);
           } catch (e) { Shell.views._v215Err('Não foi possível montar o plano', e.message); btn.disabled = false; btn.textContent = ((opts && opts.meggy) ? '🐩 Montar plano com a Meggy' : '🎯 Montar plano'); }
