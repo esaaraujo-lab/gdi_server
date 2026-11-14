@@ -2,6 +2,7 @@ package com.vovofit.app
 
 import android.app.Application
 import okhttp3.OkHttpClient
+import com.vovofit.app.util.CoverLibrary
 import java.util.concurrent.TimeUnit
 
 class VovoFitApp : Application() {
@@ -36,6 +37,9 @@ class VovoFitApp : Application() {
     
     override fun onCreate() {
         super.onCreate()
+        // v1.0.8 — camada 3 das capas: busca o manifesto da biblioteca
+        // em 2o plano (silencioso; sem URL configurada, nao faz nada).
+        CoverLibrary.refreshAsync(this)
         okHttpClient = OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
