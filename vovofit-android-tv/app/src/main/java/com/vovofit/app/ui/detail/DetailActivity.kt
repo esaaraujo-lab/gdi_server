@@ -136,7 +136,8 @@ class DetailActivity : AppCompatActivity() {
         // real quando houver.
         binding.heroImage.loadCoverChain(
             null, driveCoverRes(driveIndexFromPath(currentPath) ?: 15),
-            folderName, currentPath
+            folderName, currentPath,
+            strict = true
         )
         binding.heroImage.visibility = View.VISIBLE
         binding.heroMonogram.visibility = View.GONE
@@ -350,7 +351,8 @@ class DetailActivity : AppCompatActivity() {
             binding.heroMonogram.visibility = View.GONE
             binding.heroImage.loadCoverChain(
                 firstThumb, driveCoverRes(driveIndexFromPath(currentPath) ?: 15),
-                folderName, currentPath
+                folderName, currentPath,
+                strict = true
             )
 
             // Chips reais: N aulas, N pastas, X% concluído. Sem "HD".
