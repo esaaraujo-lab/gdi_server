@@ -21,6 +21,7 @@ import com.bibigyn.app.BiBiGynApp
 import com.bibigyn.app.R
 import com.bibigyn.app.data.ApiService
 import com.bibigyn.app.data.DriveItem
+import com.bibigyn.app.data.FileItem
 import com.bibigyn.app.data.HeroItem
 import com.bibigyn.app.databinding.ActivityHomeBinding
 import com.bibigyn.app.ui.browse.BrowseActivity
