@@ -50,6 +50,13 @@
   const fmtMin=m=>{m=Math.round(m);return m>=60?Math.floor(m/60)+'h'+String(m%60).padStart(2,'0'):m+'min'};
   const dayKey=t=>{const d=new Date(t||Date.now());return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
   const dateBr=t=>new Date(t).toLocaleDateString('pt-BR');
+  // ★ v2.15.16 (R): canónico ÚNICO do rebase legado de caminhos de curso
+  //   (o mesmo mapa LEGACY_COURSE_PATH_REBASE do worker, 1 entrada:
+  //   /11:/CURSOS 2026 → /9:/CURSOS 2026). Antes vivia duplicado em
+  //   __canon21510/__canon21510g (só dentro do detalhe) e o cartão em
+  //   destaque nunca passava por ele — o click abria /11: (drive errado).
+  const __LEGACY_COURSE_PATH_REBASE = [['/11:/CURSOS 2026', '/9:/CURSOS 2026']];
+  const __canonCoursePath = function(p){ var x = String(p || ''); try { x = decodeURIComponent(x); } catch (_) {} for (var _ri = 0; _ri < __LEGACY_COURSE_PATH_REBASE.length; _ri++) { var _a = __LEGACY_COURSE_PATH_REBASE[_ri][0], _b = __LEGACY_COURSE_PATH_REBASE[_ri][1]; if (x === _a || x.indexOf(_a + '/') === 0) { x = _b + x.slice(_a.length); break; } } return x; };
 
   // ═══ HANDLER GLOBAL DE ADICIONAR CURSO (definido no carregamento do módulo) ═══
   // Sempre disponível — não depende de showAddCourseModal ter rodado.
@@ -747,7 +754,12 @@
         }catch(_){}
       }
       if(it.kind==='concurso') out.push({kind:'concurso', key:'concurso:'+it.concursoId, concursoId:it.concursoId, name:it.name, examDate:it.examDate||'', total:it.total||0, lessons:new Set(), watched:0});
-      else if(it.kind==='featured') out.push({kind:'featured', key:'featured:'+it.coursePath, coursePath:it.coursePath, name:it.name, icon:it.icon||'⭐', color:it.color||'', coverUrl:it.coverUrl||null, total:it.total||0, lessons:new Set(), watched:0});
+      // ★ v2.15.16 (R): o registo em destaque guarda o caminho antigo
+      //   (/11:/CURSOS 2026) mas a pasta vive no drive 9 — o cartão usava
+      //   o caminho tal qual e abria o drive errado. Canónico aqui, no
+      //   carregamento do registo, p/ o click (e qualquer consumidor do
+      //   cartão) já receber /9:/CURSOS 2026.
+      else if(it.kind==='featured') out.push({kind:'featured', key:'featured:'+__canonCoursePath(it.coursePath), coursePath:__canonCoursePath(it.coursePath), name:it.name, icon:it.icon||'⭐', color:it.color||'', coverUrl:it.coverUrl||null, total:it.total||0, lessons:new Set(), watched:0});
     }
     __unifiedCache=out; __unifiedAt=now;
     return out;
@@ -2097,7 +2109,7 @@
       //   e _cp são canónicos: gémeos colapsam e o solto-na-raiz não-mídia
       //   é 0, como no lessonFolderKey do worker (86 = 86 = 86 no mesmo
       //   snapshot; no snapshot: detalhe D1-only 87 → 86, +4 gémeos → 86).
-      var __canon21510 = function(p){ var x = String(p || ''); try { x = decodeURIComponent(x); } catch (_) {} if (x === '/11:/CURSOS 2026' || x.indexOf('/11:/CURSOS 2026/') === 0) x = '/9:/CURSOS 2026' + x.slice('/11:/CURSOS 2026'.length); return x; };
+      var __canon21510 = function(p){ return __canonCoursePath(p); };  // ★ v2.15.16 (R): delega p/ o canónico único (mesmo comportamento)
       var _best = new Map();
       var _isMedia = function(l){ var t = String((l && l.type) || '').toLowerCase(); if (t === 'video' || t === 'audio') return true; var _re = /\.mp4$|\.mp3$|\.mkv$|\.webm$|\.m4a$|\.wav$|\.ogg$/; var _pn = String((l && l.path) || '').toLowerCase(); var _nn = String((l && l.name) || '').toLowerCase(); return _re.test(_pn) || _re.test(_nn); };
       var _cp = '';
@@ -2227,7 +2239,7 @@
 
       <div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;">
         <button id="gdi-detail-continue" class="gdi-btn gdi-btn-primary" style="font-size:12px;flex:1;justify-content:center;" disabled><i class="bi bi-hourglass-split"></i> Verificando próxima aula…</button>
-        <a href="${escHtml(coursePath)}" class="gdi-mode-btn" style="font-size:12px;flex:1;justify-content:center;text-decoration:none;display:inline-flex;align-items:center;gap:6px;" title="Abrir pasta no Drive"><i class="bi bi-folder2-open"></i> Ir para o Drive</a>
+        <a href="${escHtml(__canonCoursePath(coursePath))}" class="gdi-mode-btn" style="font-size:12px;flex:1;justify-content:center;text-decoration:none;display:inline-flex;align-items:center;gap:6px;" title="Abrir pasta no Drive"><i class="bi bi-folder2-open"></i> Ir para o Drive</a>
         <button id="gdi-detail-quiz" class="gdi-mode-btn" style="font-size:12px;flex:1;justify-content:center;" title="Gerar questões dos PDFs deste curso e abrir o quiz">🧠 Quiz deste módulo</button>
       </div>
 
@@ -2254,7 +2266,7 @@
           //   Direito Constitucional — 38 aulas · 5 assistidas · 33 restantes
           // etc.
           if(!lessons.length && !total){
-            return '<div class="gdi-notes-empty"><i class="bi bi-info-circle" style="font-size:18px;color:var(--ferreto-text-muted,#8b949e);vertical-align:middle;"></i> <span style="vertical-align:middle;">Nenhuma aula encontrada ainda.</span><div style="margin-top:8px;font-size:12px;"><a href="'+escHtml(coursePath)+'" style="color:var(--ferreto-secondary,#5ddeda);text-decoration:underline;"><i class="bi bi-folder2-open"></i> Abrir pasta no Drive</a></div></div>';
+            return '<div class="gdi-notes-empty"><i class="bi bi-info-circle" style="font-size:18px;color:var(--ferreto-text-muted,#8b949e);vertical-align:middle;"></i> <span style="vertical-align:middle;">Nenhuma aula encontrada ainda.</span><div style="margin-top:8px;font-size:12px;"><a href="'+escHtml(__canonCoursePath(coursePath))+'" style="color:var(--ferreto-secondary,#5ddeda);text-decoration:underline;"><i class="bi bi-folder2-open"></i> Abrir pasta no Drive</a></div></div>';
           }
           // Agrupa por disciplina: a pasta imediatamente dentro do curso
           // path típico: /9:/Curso/TRT/Direito Administrativo/Bloco I/001 - aula.mp4
@@ -2266,7 +2278,7 @@
           //   (o mesmo mapa do dedupe, B6) e, se o strip ainda falhar,
           //   tira drive + 1ª pasta (o curso). O path do grupo usa o cp
           //   canónico, por isso o clique abre a pasta certa.
-          var __canon21510g = function(p){ var x = String(p || ''); try { x = decodeURIComponent(x); } catch (_) {} if (x === '/11:/CURSOS 2026' || x.indexOf('/11:/CURSOS 2026/') === 0) x = '/9:/CURSOS 2026' + x.slice('/11:/CURSOS 2026'.length); return x; };
+          var __canon21510g = function(p){ return __canonCoursePath(p); };  // ★ v2.15.16 (R): delega p/ o canónico único (mesmo comportamento)
           const groups = {};
           for(const l of lessons){
             // extrai disciplina do path (relativo ao coursePath)
