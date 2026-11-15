@@ -534,9 +534,9 @@ class DetailActivity : AppCompatActivity() {
      * capa gerada.
      */
     private fun showGeneratedHeroCover() {
-        // Camada 3 — biblioteca por tipo (nome da pasta → caminho):
-        // sem ela, (4) capa gerada / monograma.
-        val libraryUrl = CoverLibrary.resolve(this, folderName, currentPath)
+        // Camada 3 ESTRITA — biblioteca por tipo (nome da pasta → caminho):
+        // sem ela, (4) capa gerada / monograma (nunca o livro 'geral' — 2.1.11).
+        val libraryUrl = CoverLibrary.resolveStrict(this, folderName, currentPath)
         if (!libraryUrl.isNullOrBlank()) {
             binding.heroImage.visibility = View.VISIBLE
             binding.heroMonogram.visibility = View.GONE
