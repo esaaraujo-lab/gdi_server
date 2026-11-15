@@ -439,6 +439,59 @@
                         android:textSize="@dimen/text_card_subtitle" />
                 </com.google.android.material.textfield.TextInputLayout>
 
+                <!-- Frente R4B — filtro da lista plana (só no layout do
+                     celular; a TV/largo usa a grade e não tem estes ids —
+                     o código lê-os por findViewById, nunca pelo binding). -->
+                <LinearLayout
+                    android:id="@+id/filterChipsRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_md"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/chipFilterAll"
+                        android:layout_width="wrap_content"
+                        android:layout_height="@dimen/chip_height"
+                        android:layout_marginEnd="@dimen/spacing_sm"
+                        android:background="@drawable/chip_outline"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:paddingHorizontal="@dimen/spacing_md"
+                        android:text="@string/flat_filter_all"
+                        android:textColor="@color/md_on_surface_variant"
+                        android:textSize="@dimen/text_chip" />
+
+                    <TextView
+                        android:id="@+id/chipFilterVideos"
+                        android:layout_width="wrap_content"
+                        android:layout_height="@dimen/chip_height"
+                        android:layout_marginEnd="@dimen/spacing_sm"
+                        android:background="@drawable/chip_outline"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:paddingHorizontal="@dimen/spacing_md"
+                        android:text="@string/flat_filter_videos"
+                        android:textColor="@color/md_on_surface_variant"
+                        android:textSize="@dimen/text_chip" />
+
+                    <TextView
+                        android:id="@+id/chipFilterMaterials"
+                        android:layout_width="wrap_content"
+                        android:layout_height="@dimen/chip_height"
+                        android:background="@drawable/chip_outline"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:paddingHorizontal="@dimen/spacing_md"
+                        android:text="@string/flat_filter_materials"
+                        android:textColor="@color/md_on_surface_variant"
+                        android:textSize="@dimen/text_chip" />
+                </LinearLayout>
+
                 <TextView
                     android:id="@+id/labelContinue"
                     android:layout_width="match_parent"
