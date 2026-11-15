@@ -22,6 +22,7 @@ import com.google.android.material.snackbar.Snackbar
 import com.bibigyn.app.BiBiGynApp
 import com.bibigyn.app.R
 import com.bibigyn.app.data.AiService
+import com.bibigyn.app.data.AdminDrive
 import com.bibigyn.app.data.ApiService
 import com.bibigyn.app.data.FileItem
 import com.bibigyn.app.data.DriveItem
@@ -37,6 +38,7 @@ import com.bibigyn.app.ui.reader.MdReaderActivity
 import com.bibigyn.app.ui.reader.PdfReaderActivity
 import com.bibigyn.app.ui.search.SearchActivity
 import com.bibigyn.app.ui.settings.SettingsActivity
+import com.bibigyn.app.util.AdminDriveUi
 import com.bibigyn.app.util.AuthHelper
 import com.bibigyn.app.util.CoverLibrary
 import com.bibigyn.app.util.Format
@@ -99,6 +101,10 @@ class DetailActivity : AppCompatActivity() {
     private lateinit var api: ApiService
     private var currentPath: String = "/"
     private var folderName: String = "Detalhe"
+    // Ronda 10 Frente C — drive do admin que abriu este detalhe
+    // (null = drive fixo; ver AdminDriveUi). Enquanto não for
+    // null, o hero usa a sub-capa e as pastas usam subfolderCovers.
+    private var adminDrive: AdminDrive? = null
     private var fileAdapter: com.bibigyn.app.ui.browse.FileAdapter? = null
     private var lessonListAdapter: LessonListAdapter? = null
     private var lessonGridAdapter: LessonGridAdapter? = null
@@ -137,6 +143,13 @@ class DetailActivity : AppCompatActivity() {
         CoverLibrary.warmUp(this)
         currentPath = intent.getStringExtra("drivePath") ?: "/"
         folderName = intent.getStringExtra("folderName") ?: "Detalhe"
+        // Ronda 10 Frente C — lê o drive do admin dos extras
+        // (null nos drives fixos) e activa as capas de sub-pasta.
+        adminDrive = AdminDriveUi.adminDriveFromIntent(intent)
+        adminDrive?.let { drive ->
+            val root = AdminDriveUi.adminDriveRootFromIntent(intent) ?: currentPath
+            AdminDriveUi.setSubfolderCovers(root, drive.subfolderCovers)
+        }
 
         // Hero
         binding.heroTitle.text = folderName
@@ -224,6 +237,14 @@ class DetailActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        // Ronda 10 Frente C — re-activa as capas de sub-pasta
+        // do drive do admin (um detalhe-filho destruído limpa
+        // o registo ao sair; ao voltar, este detalhe volta a
+        // valer).
+        adminDrive?.let { drive ->
+            val root = AdminDriveUi.adminDriveRootFromIntent(intent) ?: currentPath
+            AdminDriveUi.setSubfolderCovers(root, drive.subfolderCovers)
+        }
         // Restaura o foco no rail "Continuar de onde parou" (TV).
         if (TvUtils.isTv(this) && binding.railContinue.visibility == View.VISIBLE) {
             binding.railContinue.post {
@@ -240,6 +261,9 @@ class DetailActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        // Ronda 10 Frente C — desactiva as capas de sub-pasta
+        // do drive do admin.
+        AdminDriveUi.clearSubfolderCovers()
         descriptionJob?.cancel()
         qfJob?.cancel()
         super.onDestroy()
@@ -399,11 +423,23 @@ class DetailActivity : AppCompatActivity() {
             }
             allFiles = files
 
-            // Hero: (b) foto do 1º vídeo (thumb real) ou (c) capa
-            // gerada do drive — nunca monograma como capa.
+            // Ronda 10 Frente C — drive do admin: (0) sub-capa do
+            // admin; sem ela, a sub-capa GENÉRICA ('geral' do
+            // manifesto); sem nenhuma, a hierarquia actual (b)/(c).
             val firstThumb = files.firstOrNull { (it.isVideo || it.isAudio) && !it.thumbnailLink.isNullOrBlank() }
                 ?.thumbnailLink
-            if (!firstThumb.isNullOrBlank()) {
+            val adminSubCover = adminDrive?.let { admin ->
+                admin.subCoverUrl?.takeIf { it.isNotBlank() }
+                    ?: AdminDriveUi.generalCoverUrl(this@DetailActivity)
+            }
+            if (adminSubCover != null) {
+                binding.heroImage.visibility = View.VISIBLE
+                binding.heroMonogram.visibility = View.GONE
+                binding.heroImage.load(adminSubCover) {
+                    error(R.drawable.card_gradient_pink)
+                    listener(onError = { _, _ -> showGeneratedHeroCover() })
+                }
+            } else if (!firstThumb.isNullOrBlank()) {
                 binding.heroImage.visibility = View.VISIBLE
                 binding.heroMonogram.visibility = View.GONE
                 binding.heroImage.load(firstThumb) {
@@ -1399,6 +1435,9 @@ class DetailActivity : AppCompatActivity() {
         val intent = Intent(this, DetailActivity::class.java)
         intent.putExtra("drivePath", newPath)
         intent.putExtra("folderName", file.name)
+        // Ronda 10 Frente C — o detalhe-filho herda o drive do
+        // admin (sub-capa + capas de sub-pasta continuam a valer).
+        AdminDriveUi.forwardAdminDrive(this.intent, intent)
         startActivity(intent)
     }
 
@@ -1436,6 +1475,9 @@ class DetailActivity : AppCompatActivity() {
         val intent = Intent(this, DetailActivity::class.java)
         intent.putExtra("drivePath", newPath)
         intent.putExtra("folderName", file.name)
+        // Ronda 10 Frente C — o detalhe-filho herda o drive do
+        // admin (sub-capa + capas de sub-pasta continuam a valer).
+        AdminDriveUi.forwardAdminDrive(this.intent, intent)
         startActivity(intent)
     }
 
