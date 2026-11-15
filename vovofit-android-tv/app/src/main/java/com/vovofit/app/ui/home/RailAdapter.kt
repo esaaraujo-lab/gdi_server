@@ -48,7 +48,6 @@ data class RailItem(
 
 class RailAdapter(
     private val items: List<RailItem>,
-    private val onClick: (RailItem) -> Unit,
     /**
      * Frente A (TV) — roteamento D-pad explícito dos cards do rail.
      * O FocusFinder ignora vistas fora do viewport do ScrollView
@@ -57,7 +56,11 @@ class RailAdapter(
      * padrão (o host que não passa nada não muda nada).
      */
     private val nextFocusUpId: Int = View.NO_ID,
-    private val nextFocusDownId: Int = View.NO_ID
+    private val nextFocusDownId: Int = View.NO_ID,
+    // Build-fix 2.7.16: onClick em ULTIMO — os call sites usam trailing
+    // lambda; com onClick em 2o a lambda ligava a nextFocusDownId (Int)
+    // e onClick ficava sem valor (compileReleaseKotlin falhou na 2.7.15).
+    private val onClick: (RailItem) -> Unit
 ) : RecyclerView.Adapter<RailAdapter.VH>() {
 
     inner class VH(val binding: ItemRailCardBinding) : RecyclerView.ViewHolder(binding.root) {
