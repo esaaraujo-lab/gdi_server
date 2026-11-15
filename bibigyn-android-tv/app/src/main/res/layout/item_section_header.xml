@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Frente R4B — cabeçalho de secção da lista plana (Vídeos / Materiais).
+     Título + contagem ("Vídeos · 13"), mesmo estilo do sectionLabel. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/sectionHeaderTitle"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="@dimen/spacing_md"
+    android:textColor="@color/md_on_surface"
+    android:textSize="@dimen/text_section_title"
+    android:textStyle="bold" />
