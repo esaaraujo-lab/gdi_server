@@ -7,6 +7,7 @@ import com.bibigyn.app.util.SessionManager
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 
@@ -150,6 +151,156 @@ class ApiService(private val context: Context) {
         } catch (_: Exception) {
             null
         }
+    }
+
+    // ── Ronda 10 Frente B: drives do admin ──
+
+    /**
+     * Ronda 10 Frente B — GET /api/admin-drives: drives que o admin
+     * adicionou por ID (tabela D1 admin_drives — dependência do servidor
+     * v2.15.x, AINDA NÃO EXISTE: hoje dá 404). Best-effort e silencioso:
+     * null em qualquer falha (rede/auth/rota ausente) — o ecrã "Gerir
+     * drives" mostra "função indisponível" e NÃO uma lista vazia
+     * enganadora. O admin vê TODOS os drives que criou, em qualquer APK
+     * (o filtro por targetApps é da Frente C, na Home).
+     */
+    suspend fun getAdminDrives(): List<AdminDrive>? {
+        val request = Request.Builder()
+            .url("${BiBiGynApp.BASE_URL}/api/admin-drives")
+            .header("Cookie", "session=${sessionManager.sessionCookie ?: ""}")
+            .build()
+        return try {
+            val response = BiBiGynApp.okHttpClient.newCall(request).execute()
+            if (!response.isSuccessful) return null
+            val body = response.body?.string() ?: return null
+            val json = JSONObject(body)
+            if (!json.optBoolean("ok", false)) return null
+            AdminDrive.parseList(json.optJSONArray("drives"))
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Ronda 10 Frente B — POST /api/admin/admin-drives/add
+     * {driveId, name, targetApps[], coverUrl?, subCoverUrl?,
+     * subfolderCovers?}. Só ADMIN_USERS no servidor (403 a não-admins).
+     * 404 → Unavailable (rota ainda não existe); erro legível em pt-BR.
+     */
+    suspend fun addAdminDrive(
+        driveId: String,
+        name: String,
+        targetApps: List<String>,
+        coverUrl: String?,
+        subCoverUrl: String?,
+        subfolderCovers: Map<String, String>
+    ): AdminDriveResult {
+        val body = JSONObject().apply {
+            put("driveId", driveId)
+            put("name", name)
+            put("targetApps", JSONArray(targetApps))
+            if (coverUrl != null) put("coverUrl", coverUrl)
+            if (subCoverUrl != null) put("subCoverUrl", subCoverUrl)
+            if (subfolderCovers.isNotEmpty()) {
+                val covers = JSONObject()
+                for ((path, url) in subfolderCovers) covers.put(path, url)
+                put("subfolderCovers", covers)
+            }
+        }.toString()
+        val request = Request.Builder()
+            .url("${BiBiGynApp.BASE_URL}/api/admin/admin-drives/add")
+            .post(body.toRequestBody("application/json".toMediaTypeOrNull()))
+            .header("Cookie", "session=${sessionManager.sessionCookie ?: ""}")
+            .build()
+        return try {
+            val response = BiBiGynApp.okHttpClient.newCall(request).execute()
+            adminPostResult(response.code, response.body?.string())
+        } catch (_: Exception) {
+            AdminDriveResult.Error("Não foi possível guardar. Verifique a conexão e tente novamente.")
+        }
+    }
+
+    /** Ronda 10 Frente B — POST /api/admin/admin-drives/delete {id}. */
+    suspend fun deleteAdminDrive(id: Long): AdminDriveResult {
+        val body = JSONObject().apply { put("id", id) }.toString()
+        val request = Request.Builder()
+            .url("${BiBiGynApp.BASE_URL}/api/admin/admin-drives/delete")
+            .post(body.toRequestBody("application/json".toMediaTypeOrNull()))
+            .header("Cookie", "session=${sessionManager.sessionCookie ?: ""}")
+            .build()
+        return try {
+            val response = BiBiGynApp.okHttpClient.newCall(request).execute()
+            adminPostResult(response.code, response.body?.string())
+        } catch (_: Exception) {
+            AdminDriveResult.Error("Não foi possível remover. Verifique a conexão e tente novamente.")
+        }
+    }
+
+    /**
+     * Ronda 10 Frente B — GET /api/me → {ok, user, isAdmin}: fonte de
+     * verdade do papel de admin (dependência v2.15.x, AINDA NÃO EXISTE:
+     * hoje dá 404). Em 404/erro/rede, FALLBACK PROVISÓRIO VERIFICADO
+     * (não inventado): o username guardado é exatamente o da sessão e
+     * o servidor só aceita como admin ADMIN_USERS =
+     * ['elton@araujo.eu.org'] — username == esse email ⇒ admin. O
+     * servidor continua a ser o executor: os POSTs admin dão 403 a
+     * não-admins, por isso o fallback só decide o que a UI MOSTRA.
+     * O resultado é guardado em SessionManager com o username a que
+     * diz respeito (revalidado quando o username muda).
+     */
+    suspend fun checkAdmin(): Boolean {
+        val user = sessionManager.username
+        val fromServer: Boolean? = try {
+            val request = Request.Builder()
+                .url("${BiBiGynApp.BASE_URL}/api/me")
+                .header("Cookie", "session=${sessionManager.sessionCookie ?: ""}")
+                .build()
+            val response = BiBiGynApp.okHttpClient.newCall(request).execute()
+            if (response.code == 404) null
+            else if (!response.isSuccessful) null
+            else {
+                val json = JSONObject(response.body?.string() ?: "")
+                if (!json.optBoolean("ok", true)) null
+                else json.optBoolean("isAdmin", false)
+            }
+        } catch (_: Exception) {
+            null
+        }
+        val admin = fromServer ?: (user == ADMIN_FALLBACK_EMAIL)
+        sessionManager.cacheIsAdmin(user, admin)
+        return admin
+    }
+
+    /**
+     * Ronda 10 Frente B — traduz o HTTP + corpo de um POST admin num
+     * AdminDriveResult. 404 = rota inexistente (Unavailable); 401 =
+     * sessão expirada; 403 = não-admin; 2xx com ok:false = mensagem
+     * "error" do servidor quando a houver.
+     */
+    private fun adminPostResult(code: Int, body: String?): AdminDriveResult {
+        if (code == 404) return AdminDriveResult.Unavailable
+        if (code == 401) return AdminDriveResult.Error("Sessão expirada. Entre novamente.")
+        if (code == 403) return AdminDriveResult.Error("Só o administrador pode gerir drives.")
+        if (code !in 200..299) {
+            return AdminDriveResult.Error("Não foi possível concluir. Verifique a conexão e tente novamente.")
+        }
+        val json = try { JSONObject(body ?: "") } catch (_: Exception) { null }
+        if (json == null || !json.optBoolean("ok", false)) {
+            val serverMsg = json?.optString("error", "")?.takeIf { it.isNotBlank() }
+            return AdminDriveResult.Error(
+                serverMsg ?: "Não foi possível concluir. Verifique a conexão e tente novamente."
+            )
+        }
+        return AdminDriveResult.Success
+    }
+
+    companion object {
+        /**
+         * Ronda 10 Frente B — fallback PROVISÓRIO de admin (ver
+         * checkAdmin): o único admin no servidor é
+         * ADMIN_USERS = ['elton@araujo.eu.org'].
+         */
+        const val ADMIN_FALLBACK_EMAIL = "elton@araujo.eu.org"
     }
 
     /**
