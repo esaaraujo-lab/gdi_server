@@ -4,7 +4,9 @@
      nada de rosa solido nem laranja. O rosa da marca fica SO para o
      anel de FOCO (player_play_ring). Antes o estado normal era o
      btn_play_circle rosa (foto: circulo rosa gigante + pause laranja).
-     Tamanho: 48dp no celular, 72dp na TV (player_fab_size, Frente E). -->
+     Tamanho (Frente R3A): SO o disco central — 44dp no celular, 56dp na TV
+     (player_center_size). O botao da barra ja nao usa este drawable: e
+     so-icone (player_bar_btn_bg), sem disco. -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_pressed="true" android:drawable="@drawable/player_play_ring" />
     <item android:state_focused="true" android:drawable="@drawable/player_play_ring" />
