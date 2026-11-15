@@ -36,12 +36,13 @@ import com.bibigyn.app.ui.reader.PdfReaderActivity
 import com.bibigyn.app.ui.search.SearchActivity
 import com.bibigyn.app.ui.settings.SettingsActivity
 import com.bibigyn.app.util.AuthHelper
-import com.bibigyn.app.util.CrossFolderPlaylist
 import com.bibigyn.app.util.CoverLibrary
 import com.bibigyn.app.util.Format
 import com.bibigyn.app.util.LessonDescription
+import com.bibigyn.app.util.MaterialSaver
 import com.bibigyn.app.util.PlaylistManager
 import com.bibigyn.app.util.SessionManager
+import com.bibigyn.app.util.TapFeedback
 import com.bibigyn.app.util.TvUtils
 import com.bibigyn.app.util.FocusAnimator
 import kotlinx.coroutines.Dispatchers
@@ -292,6 +293,26 @@ class DetailActivity : AppCompatActivity() {
     }
 
     private fun continueWatching(folderPath: String, videoName: String, shortFolder: String) {
+        // Frente H — caminho rápido: o recent já guarda o link de
+        // playback (SessionManager.addRecent, parâmetro link), por isso
+        // o "Continuar assistindo" navega IMEDIATAMENTE para o player,
+        // sem o listFolder prévio. A playlist interfolder é enriquecida
+        // em 2º plano pelo PlayerActivity (enrichPlaylistInBackground).
+        val sm = SessionManager.get(this)
+        val recent = sm.getRecents().firstOrNull {
+            it.folderPath == folderPath && it.videoName == videoName
+        }
+        val fastLink = recent?.link?.takeIf { it.isNotBlank() }
+        if (fastLink != null) {
+            val item = FileItem(
+                name = videoName, mimeType = "video/mp4", id = "",
+                driveId = null, link = fastLink, size = 0L, modifiedTime = null,
+                folderPath = folderPath
+            )
+            PlaylistManager.setPlaylist(listOf(item), 0, this)
+            launchPlayer(BiBiGynApp.BASE_URL + fastLink, videoName, folderPath, recent.thumbnailLink)
+            return
+        }
         Snackbar.make(binding.root, "Carregando \"$videoName\"...", Snackbar.LENGTH_SHORT).show()
         lifecycleScope.launch {
             val files = withContext(Dispatchers.IO) { api.listFolder(folderPath) }
@@ -309,12 +330,12 @@ class DetailActivity : AppCompatActivity() {
                         launchPlayer(BiBiGynApp.BASE_URL + clickedVideo.link, videoName, folderPath, clickedVideo.thumbnailLink)
                         return@launch
                     } else {
-                        val result = withContext(Dispatchers.IO) {
-                            CrossFolderPlaylist.build(folderPath, clickedVideo, api)
-                        }
-                        if (result.items.isNotEmpty()) {
-                            PlaylistManager.setPlaylist(result.items, result.startIndex, this@DetailActivity)
-                        }
+                        // Frente H — sem esperar pela montagem interfolder:
+                        // navega já com só este vídeo; o player enriquece
+                        // a fila em 2º plano (enrichPlaylistInBackground).
+                        PlaylistManager.setPlaylist(
+                            listOf(clickedVideo.copy(folderPath = folderPath)), 0, this@DetailActivity
+                        )
                         launchPlayer(BiBiGynApp.BASE_URL + clickedVideo.link, videoName, folderPath, clickedVideo.thumbnailLink)
                         return@launch
                     }
@@ -326,6 +347,7 @@ class DetailActivity : AppCompatActivity() {
             startActivity(intent)
         }
     }
+
 
     private fun calculateSpanCount(): Int {
         val displayMetrics = resources.displayMetrics
@@ -485,6 +507,27 @@ class DetailActivity : AppCompatActivity() {
                 LessonDescription.withHook(cached),
                 getString(R.string.summary_state_generated)
             )
+            // Frente K — o resumo ja estava no cache local, mas as
+            // pilulas/questoes podem nunca ter ido para a pasta de
+            // materiais (o cache local so guarda o resumo). Em 2o
+            // plano, sem tocar na UI: le o pacote gerado no servidor
+            // e grava o que faltar (best-effort, idempotente).
+            lifecycleScope.launch {
+                runCatching {
+                    val materialNames = files.filter { it.isPdf || it.isMarkdown }.map { it.name }
+                    val bundle = LessonDescription.fetchGenerated(
+                        this@DetailActivity, currentPath, materialNames,
+                        LessonDescription.lessonFilePath(currentPath, files)
+                    )
+                    val filePath = LessonDescription.lessonFilePath(currentPath, files)
+                    if (bundle != null && filePath != null) {
+                        MaterialSaver.saveGenerated(
+                            this@DetailActivity, filePath, folderName,
+                            bundle.summary, bundle.mindmap, bundle.questionsJson
+                        )
+                    }
+                }
+            }
             return
         }
         // (b)/(c) provisória imediata (ou branco) enquanto resolve.
@@ -505,13 +548,15 @@ class DetailActivity : AppCompatActivity() {
                     sm.saveLessonDescription(currentPath, outcome.text)
                     // Onda 2: gancho sorteado na exibição (o texto
                     // guardado continua sem gancho).
-                    // Grava na pasta de materiais (best-effort).
+                    // Frente K — grava resumo + pilulas + questoes na
+                    // pasta de materiais (UM caminho: MaterialSaver).
                     val filePath = LessonDescription.lessonFilePath(currentPath, files)
                     if (filePath != null) {
-                        val fileName = LessonDescription.folderFileName(
-                            this@DetailActivity, folderName
+                        MaterialSaver.saveGenerated(
+                            this@DetailActivity, filePath, folderName,
+                            outcome.bundle.summary, outcome.bundle.mindmap,
+                            outcome.bundle.questionsJson
                         )
-                        AiService.saveToFolder(this@DetailActivity, filePath, fileName, outcome.text)
                     }
                     showDescription(
                         LessonDescription.withHook(outcome.text),
@@ -776,8 +821,14 @@ class DetailActivity : AppCompatActivity() {
         val fullUrl = BiBiGynApp.BASE_URL + link
         when {
             file.isVideo || file.isAudio -> {
-                // Playlist: mesma pasta primeiro; se só 1 item, a
-                // montagem interfolder existente (CrossFolderPlaylist).
+                // Frente H — navegação IMEDIATA: a playlist da mesma
+                // pasta (quando há >1 vídeo) ou só o vídeo tocado segue
+                // já para o player. A montagem interfolder
+                // (CrossFolderPlaylist: 1 listFolder ao pai + 1 por cada
+                // pasta-irmã, em lotes de 6) corria ANTES da navegação e
+                // deixava o toque sem resposta durante segundos; agora
+                // corre em 2º plano dentro do PlayerActivity, depois de
+                // o player já estar visível a mostrar "A carregar".
                 val group = lessonGroups.find { it.folderPath == folderPath }
                 val siblings = group?.children
                     ?.filter { (it.isVideo || it.isAudio) && !it.link.isNullOrEmpty() }
@@ -785,20 +836,12 @@ class DetailActivity : AppCompatActivity() {
                 val idx = siblings.indexOfFirst { it.id == file.id }
                 if (siblings.size > 1 && idx >= 0) {
                     PlaylistManager.setPlaylist(siblings, idx, this)
-                    launchPlayer(fullUrl, file.name, folderPath, file.thumbnailLink)
                 } else {
-                    lifecycleScope.launch {
-                        val result = withContext(Dispatchers.IO) {
-                            CrossFolderPlaylist.build(folderPath, file, api)
-                        }
-                        if (result.items.size > 1) {
-                            PlaylistManager.setPlaylist(result.items, result.startIndex, this@DetailActivity)
-                        } else if (siblings.isNotEmpty() && idx >= 0) {
-                            PlaylistManager.setPlaylist(siblings, idx, this@DetailActivity)
-                        }
-                        launchPlayer(fullUrl, file.name, folderPath, file.thumbnailLink)
-                    }
+                    PlaylistManager.setPlaylist(
+                        listOf(file.copy(folderPath = folderPath)), 0, this
+                    )
                 }
+                launchPlayer(fullUrl, file.name, folderPath, file.thumbnailLink)
             }
             file.isPdf -> openPdf(file, folderPath)
             file.isMarkdown -> openMd(file, folderPath)
@@ -812,6 +855,7 @@ class DetailActivity : AppCompatActivity() {
         }
     }
 
+
     private fun openFile(file: FileItem) {
         val link = file.link
         if (link.isNullOrEmpty()) return
@@ -821,22 +865,14 @@ class DetailActivity : AppCompatActivity() {
             val playIndex = playableItems.indexOfFirst { it.id == file.id }
             if (playableItems.size > 1 && playIndex >= 0) {
                 PlaylistManager.setPlaylist(playableItems, playIndex, this)
-                launchPlayer(fullUrl, file.name, currentPath, file.thumbnailLink)
             } else {
-                lifecycleScope.launch {
-                    binding.loadingView.visibility = View.VISIBLE
-                    val result = withContext(Dispatchers.IO) {
-                        CrossFolderPlaylist.build(currentPath, file, api)
-                    }
-                    binding.loadingView.visibility = View.GONE
-                    if (result.items.size > 1) {
-                        PlaylistManager.setPlaylist(result.items, result.startIndex, this@DetailActivity)
-                    } else if (playableItems.isNotEmpty() && playIndex >= 0) {
-                        PlaylistManager.setPlaylist(playableItems, playIndex, this@DetailActivity)
-                    }
-                    launchPlayer(fullUrl, file.name, currentPath, file.thumbnailLink)
-                }
+                // Frente H — ver openFileInFolder: navega já com só este
+                // vídeo; a playlist interfolder é enriquecida pelo player.
+                PlaylistManager.setPlaylist(
+                    listOf(file.copy(folderPath = currentPath)), 0, this
+                )
             }
+            launchPlayer(fullUrl, file.name, currentPath, file.thumbnailLink)
         } else if (file.isPdf) {
             openPdf(file, currentPath)
         } else if (file.isMarkdown) {
@@ -847,6 +883,7 @@ class DetailActivity : AppCompatActivity() {
             try { startActivity(intent) } catch (_: Exception) {}
         }
     }
+
 
     /** v2.1.5: PDF abre no leitor embutido (não mais app externo). */
     private fun openPdf(file: FileItem, folderPath: String) {
@@ -867,15 +904,21 @@ class DetailActivity : AppCompatActivity() {
     }
 
     private fun launchPlayer(url: String, title: String, folderPath: String, thumbnailLink: String? = null) {
+        // Frente H — guarda contra duplo toque: um toque = uma navegação;
+        // toques repetidos no mesmo vídeo dentro de 1,5 s são ignorados.
+        if (!TapFeedback.tryNavigate(url)) return
         val sm = SessionManager.get(this)
         sm.saveLastWatched(folderPath, title)
-        sm.addRecent(folderPath, title, thumbnailLink)
+        // Frente H — guarda o link de playback no recent (além da thumb):
+        // o "Continuar assistindo" passa a navegar sem listFolder prévio.
+        sm.addRecent(folderPath, title, thumbnailLink, url.removePrefix(BiBiGynApp.BASE_URL).takeIf { it != url })
         val intent = Intent(this, PlayerActivity::class.java)
         intent.putExtra(PlayerActivity.EXTRA_URL, url)
         intent.putExtra(PlayerActivity.EXTRA_TITLE, title)
         intent.putExtra(PlayerActivity.EXTRA_FOLDER_PATH, folderPath)
         startActivity(intent)
     }
+
 
     private fun heroGradient(baseColor: Int): GradientDrawable {
         val r = Color.red(baseColor)
