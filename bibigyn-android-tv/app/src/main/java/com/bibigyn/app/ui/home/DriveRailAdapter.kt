@@ -19,10 +19,12 @@ import com.bibigyn.app.util.TvUtils
 /**
  * v2.1.5 — Rail "Explorar drives" (conceito home).
  *
- * Tile de ícone rosa com o emoji do drive (2.7.5) + nome 14sp +
+ * Tile de capa 16:9 (foto do drive) + nome 14sp +
  * linha de metadados (DriveItem.tagline, texto curado). Foco via
  * FocusAnimator.attachCard (anel 3dp da marca + escala + elevação).
- * O tile rosa é o token `drive_icon_tile` (por marca: rosa/laranja/lima).
+ * 2.1.11: o emoji do drive saiu do tile (imagem + nome bastam —
+ * Elton 2026-11-14 22:21); a capa é a foto do drive (admin →
+ * biblioteca estrita → gerada), nunca o livro 'geral'.
  */
 class DriveRailAdapter(
     private val drives: List<DriveItem>,
@@ -59,20 +61,22 @@ class DriveRailAdapter(
     override fun onBindViewHolder(holder: VH, position: Int) {
         val drive = drives[position]
         with(holder.binding) {
-            driveIcon.text = drive.icon  // patch: emoji do drive de volta (2.7.5)
+            driveIcon.text = drive.icon  // 2.1.11: fora da tela — imagem + nome bastam (Elton 2026-11-14 22:21)
+            driveIcon.visibility = View.GONE
             driveName.setWordEllipsized(drive.name)
             driveMeta.setWordEllipsized(drive.tagline)
 
             val coursePath = "/${drive.index}:/"
             // Onda 2 — capa do card: (a) capa do admin, (b) (o drive
             // raiz não tem vídeo direto — sem thumb), (c) capa gerada
-            // do drive. A foto fica atrás do chip de ícone; sem capa,
-            // o tile segue escuro com o ícone (nunca monograma).
+            // do drive. 2.1.11: a foto É a capa do tile (sem chip de
+            // ícone); sem capa, o tile segue escuro (nunca monograma).
             val adminCover = featuredCovers[coursePath]?.takeIf { it.isNotBlank() }
             val generatedCover = DriveItem.coverResForDrive(drive.index)
-            // Camada 3 — biblioteca por tipo (nome do drive →
-            // tagline → caminho). Sem match, (4) capa gerada.
-            val libraryUrl = CoverLibrary.resolve(
+            // Camada 3 ESTRITA — biblioteca por tipo (nome do drive →
+            // tagline → caminho). Sem match, (4) capa gerada (nunca
+            // o livro 'geral' — 2.1.11).
+            val libraryUrl = CoverLibrary.resolveStrict(
                 holder.itemView.context, drive.name, drive.tagline, coursePath
             )
             val showLibraryOrGenerated: () -> Unit = {
