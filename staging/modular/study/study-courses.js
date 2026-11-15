@@ -822,7 +822,9 @@
     </div>
     <div id="gdi-featured-wrap" style="display:none;margin-bottom:18px;"><b style="color:var(--ferreto-text,#f0f6fc);font-size:14px;">⭐ Cursos em destaque</b><div class="gdi-courses" id="gdi-featured-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-top:10px;"></div></div>
     <div id="gdi-own-wrap"><b style="color:var(--ferreto-text,#f0f6fc);font-size:14px;">📚 Meus Cursos</b><div class="gdi-courses" id="gdi-own-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-top:10px;"></div></div>
-    <div id="gdi-courses-pager" style="margin-top:14px;text-align:center;"></div>`;
+    <div id="gdi-courses-pager" style="margin-top:14px;text-align:center;"></div>
+    <!-- ★ v2.15.10 (B — P2/P8): Contagens do D1 atualizadas às — carimbo da leitura do unificado (__unifiedAt); sem ele a prévia não dizia de quando era o número. -->
+    <div style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;margin-top:10px;text-align:center;">📊 Contagens do D1 atualizadas às ${__unifiedAt ? new Date(__unifiedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'} — mudam enquanto o scanner insere aulas.</div>`;
     const grid=box.querySelector('#gdi-own-grid');
     const featGrid=box.querySelector('#gdi-featured-grid');
     const featWrap=box.querySelector('#gdi-featured-wrap');
@@ -2084,6 +2086,18 @@
     //   NÃO muda — lessons.length já é o nº de pastas. Se o scan terminou,
     //   scannedCount (arquivos) é travado no nº de pastas.
     (function(){
+      // ★ v2.15.10 (B — P2/P8): canónico p/ a dedupe — descodifica (%20 →
+      //   espaço) + rebase legado /11:/CURSOS 2026 → /9:/CURSOS 2026 (o
+      //   mesmo mapa LEGACY_COURSE_PATH_REBASE do worker e
+      //   __scanLessonFolderCount do gdi-study.js, que já o fazia). Antes
+      //   a chave era só o dirname descodificado: a mesma pasta sob /11:
+      //   (local: watched/scanner, grafia da chave do curso) e /9: (D1,
+      //   que o by-course já rebaseia) contava 2×, e o _cp /11: nunca era
+      //   igual ao dirname /9: dos ficheiros soltos na raiz. Agora _key
+      //   e _cp são canónicos: gémeos colapsam e o solto-na-raiz não-mídia
+      //   é 0, como no lessonFolderKey do worker (86 = 86 = 86 no mesmo
+      //   snapshot; no snapshot: detalhe D1-only 87 → 86, +4 gémeos → 86).
+      var __canon21510 = function(p){ var x = String(p || ''); try { x = decodeURIComponent(x); } catch (_) {} if (x === '/11:/CURSOS 2026' || x.indexOf('/11:/CURSOS 2026/') === 0) x = '/9:/CURSOS 2026' + x.slice('/11:/CURSOS 2026'.length); return x; };
       var _best = new Map();
       var _isMedia = function(l){ var t = String((l && l.type) || '').toLowerCase(); if (t === 'video' || t === 'audio') return true; var _re = /\.mp4$|\.mp3$|\.mkv$|\.webm$|\.m4a$|\.wav$|\.ogg$/; var _pn = String((l && l.path) || '').toLowerCase(); var _nn = String((l && l.name) || '').toLowerCase(); return _re.test(_pn) || _re.test(_nn); };
       var _cp = '';
@@ -2091,11 +2105,11 @@
       // permite o bloco rodar também sem ele (ex.: harness v2.15.5, que
       // sintetiza a função só com (c, lessons, ...)) — aí cai p/ c.key e,
       // sem nem isso, p/ o menor dirname (a raiz do curso).
-      try { _cp = decodeURIComponent((typeof coursePath !== 'undefined' ? coursePath : ((c && c.key) || ''))); } catch (_e) { _cp = (typeof coursePath !== 'undefined' ? coursePath : ((c && c.key) || '')); }
-      if (!_cp) { try { var _short = null; for (var _i2 = 0; _i2 < lessons.length; _i2++) { var _p2 = String((lessons[_i2] && lessons[_i2].path) || ''); try { _p2 = decodeURIComponent(_p2); } catch (_e2) {} var _s2 = _p2.lastIndexOf('/'); var _d2 = _s2 > 0 ? _p2.slice(0, _s2) : _p2; if (_d2.length > 9 && _d2.slice(-9) === '/material') _d2 = _d2.slice(0, -9); if (_d2 && (!_short || _d2.length < _short.length)) _short = _d2; } _cp = _short || ''; } catch (_e3) {} }
+      try { _cp = __canon21510((typeof coursePath !== 'undefined' ? coursePath : ((c && c.key) || ''))); } catch (_e) { _cp = __canon21510((typeof coursePath !== 'undefined' ? coursePath : ((c && c.key) || ''))); }
+      if (!_cp) { try { var _short = null; for (var _i2 = 0; _i2 < lessons.length; _i2++) { var _p2 = String((lessons[_i2] && lessons[_i2].path) || ''); try { _p2 = __canon21510(_p2); } catch (_e2) {} var _s2 = _p2.lastIndexOf('/'); var _d2 = _s2 > 0 ? _p2.slice(0, _s2) : _p2; if (_d2.length > 9 && _d2.slice(-9) === '/material') _d2 = _d2.slice(0, -9); if (_d2 && (!_short || _d2.length < _short.length)) _short = _d2; } _cp = _short || ''; } catch (_e3) {} }
       var _key = function(l){
         var p = String((l && l.path) || '');
-        try { p = decodeURIComponent(p); } catch (_e) {}
+        try { p = __canon21510(p); } catch (_e) {}
         var s = p.lastIndexOf('/');
         var d = s > 0 ? p.slice(0, s) : p;
         if (d.length > 9 && d.slice(-9) === '/material') d = d.slice(0, -9);
@@ -2245,15 +2259,24 @@
           // Agrupa por disciplina: a pasta imediatamente dentro do curso
           // path típico: /9:/Curso/TRT/Direito Administrativo/Bloco I/001 - aula.mp4
           // disciplina = "Direito Administrativo" (primeiro segmento após coursePath)
+          // ★ v2.15.10 (B — P2/P8): o strip falhava SEMPRE — cp era
+          //   /11:/CURSOS 2026 e as aulas do D1 chegam rebaseadas p/
+          //   /9:/… (by-course), por isso TODAS caíam na disciplina "9:"
+          //   (o 1º segmento do caminho inteiro). Canónico nos dois lados
+          //   (o mesmo mapa do dedupe, B6) e, se o strip ainda falhar,
+          //   tira drive + 1ª pasta (o curso). O path do grupo usa o cp
+          //   canónico, por isso o clique abre a pasta certa.
+          var __canon21510g = function(p){ var x = String(p || ''); try { x = decodeURIComponent(x); } catch (_) {} if (x === '/11:/CURSOS 2026' || x.indexOf('/11:/CURSOS 2026/') === 0) x = '/9:/CURSOS 2026' + x.slice('/11:/CURSOS 2026'.length); return x; };
           const groups = {};
           for(const l of lessons){
             // extrai disciplina do path (relativo ao coursePath)
             let rel = l.path;
-            try{ rel = decodeURIComponent(l.path); }catch(_){ rel = l.path; }
+            try{ rel = __canon21510g(l.path); }catch(_){ rel = l.path; }
             // remove coursePath do início
             let cp = coursePath;
-            try{ cp = decodeURIComponent(coursePath); }catch(_){ cp = coursePath; }
+            try{ cp = __canon21510g(coursePath); }catch(_){ cp = coursePath; }
             if(rel.indexOf(cp) === 0) rel = rel.slice(cp.length);
+            else { var _m21510 = rel.match(/^\/\d+:\/[^/]+\/(.*)$/); if (_m21510) rel = '/' + _m21510[1]; }
             const segs = rel.split('/').filter(Boolean);
             // disciplina = primeiro segmento após o curso (ou "Aulas" se estiver na raiz)
             const disc = segs.length > 1 ? segs[0] : (segs.length === 1 ? 'Aulas' : 'Outros');
