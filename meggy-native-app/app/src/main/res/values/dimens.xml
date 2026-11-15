@@ -86,7 +86,9 @@
     <!-- ── Fallback TV (lint MissingDefaultResource) ── -->
     <!-- Estes valores SÓ são usados pelos layouts de TV
          (layout-television); a base existe apenas como fallback
-         exigido pelo lint — numa TV, values-television vence. -->
+         exigido pelo lint — numa TV, values-television vence.
+         Frente C: fallback alinhado aos valores reais da TV (150x210dp);
+         antes 156x224dp, valores que nunca chegavam a renderizar. -->
     <dimen name="tv_title_lg">48sp</dimen>
     <dimen name="tv_title_md">36sp</dimen>
     <dimen name="tv_section_title">28sp</dimen>
@@ -105,8 +107,8 @@
     <dimen name="tv_hero_height">340dp</dimen>
     <dimen name="tv_card_width">200dp</dimen>
     <dimen name="tv_card_image_height">112dp</dimen>
-    <dimen name="tv_drive_card_width">156dp</dimen>
-    <dimen name="tv_drive_card_height">224dp</dimen>
+    <dimen name="tv_drive_card_width">150dp</dimen>
+    <dimen name="tv_drive_card_height">210dp</dimen>
     <dimen name="tv_detail_hero_width">800dp</dimen>
     <dimen name="tv_play_fab_size">120dp</dimen>
     <dimen name="tv_rail_gap">8dp</dimen>
