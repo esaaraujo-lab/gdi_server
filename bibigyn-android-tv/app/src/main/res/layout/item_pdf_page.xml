@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Frente I — item de página do scroll contínuo: a página (bitmap do
+  PdfRenderer) ocupa a largura útil do ecrã × zoom; ao ampliar, rola
+  na horizontal dentro do item (o scroll vertical é do RecyclerView).
+  A largura/altura do ImageView são definidas pelo adapter.
+-->
+<HorizontalScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:fillViewport="true"
+    android:scrollbars="none">
+
+    <FrameLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:padding="8dp">
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:cardBackgroundColor="@android:color/white"
+            app:cardCornerRadius="@dimen/radius_md"
+            app:cardElevation="@dimen/elevation_3">
+
+            <ImageView
+                android:id="@+id/pageImage"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="Página do PDF"
+                android:scaleType="fitXY" />
+        </com.google.android.material.card.MaterialCardView>
+    </FrameLayout>
+</HorizontalScrollView>
