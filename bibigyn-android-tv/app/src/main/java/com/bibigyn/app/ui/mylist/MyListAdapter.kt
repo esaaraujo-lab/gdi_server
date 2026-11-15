@@ -107,7 +107,7 @@ class MyListAdapter(
                     listener(onError = { _, _ -> showLibraryOrCover() })
                 }
             } else {
-                showLibraryOrMonogram()
+                showLibraryOrCover()
             }
 
             val sm = SessionManager.get(ctx)
