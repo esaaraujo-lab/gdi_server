@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "images": [
     {
       "id": "tjsc",
@@ -161,7 +161,18 @@
       "keywords": [
         "treinamento funcional",
         "treino funcional",
-        "funcional"
+        "funcional",
+        "treino em casa",
+        "bonde",
+        "missao sarada",
+        "sarada",
+        "lar 2025",
+        "pascoa fit",
+        "folia fit",
+        "saiba como executar",
+        "sangue suor e lagrimas",
+        "semana corpo dos sonhos",
+        "corpo dos sonhos"
       ],
       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/treino-funcional.jpg"
     },
@@ -217,7 +228,10 @@
       "keywords": [
         "musculacao",
         "hipertrofia",
-        "treino de forca"
+        "treino de forca",
+        "treino em academia",
+        "treinos de superiores",
+        "pam"
       ],
       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/musculacao.jpg"
     },
@@ -257,7 +271,8 @@
       "keywords": [
         "pernas",
         "quadriceps",
-        "agachamento"
+        "agachamento",
+        "treinos de inferiores"
       ],
       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/pernas.jpg"
     },
@@ -276,7 +291,8 @@
         "abdomen",
         "abdominal",
         "core",
-        "prancha"
+        "prancha",
+        "abdominais"
       ],
       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/abdomen-core.jpg"
     },
@@ -287,7 +303,14 @@
         "aerobico",
         "hiit",
         "corrida",
-        "esteira"
+        "esteira",
+        "tabata",
+        "ciclo insano",
+        "insano",
+        "insana",
+        "esquenta",
+        "fritar",
+        "the flash"
       ],
       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/cardio.jpg"
     },
@@ -302,7 +325,10 @@
       "id": "gluteos",
       "keywords": [
         "gluteos",
-        "gluteo"
+        "gluteo",
+        "bumbum",
+        "bumbum de aco",
+        "gap"
       ],
       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/gluteos.jpg"
     },
@@ -446,7 +472,10 @@
     {
       "id": "informatica",
       "keywords": [
-        "informatica"
+        "informatica",
+        "tecnologia da informacao",
+        "programacao",
+        "coding"
       ],
       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/informatica.jpg"
     },
@@ -485,7 +514,10 @@
     {
       "id": "pilates",
       "keywords": [
-        "pilates"
+        "pilates",
+        "gestacao",
+        "gestante",
+        "gravida"
       ],
       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/pilates.jpg"
     },
@@ -501,7 +533,8 @@
     {
       "id": "yoga",
       "keywords": [
-        "yoga"
+        "yoga",
+        "se cuida"
       ],
       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/yoga.jpg"
     },
