@@ -392,6 +392,19 @@
   line-height: 1.35;
 }
 
+/* ★ v2.15.30 (A): título do tile de DRIVE — 3 linhas em vez de 2.
+   Prova: o nome mais comprido ("CURSOS - PLATAFORMAS COMPLETAS",
+   28 chars) não cabe em 2 linhas no tile de ~166px do celular
+   (conteúdo ~138px a 14px) — o Passo 28 viu "CURSOS - PLATAFORMAS…"
+   mesmo com o clamp 2 + overflow-wrap:anywhere da v2.15.28-B
+   (a 9-10px/char, o nome precisa de 3 linhas). 3 linhas cobrem-no
+   mesmo no pior caso (~10px/char). Só os tiles de drive usam esta
+   classe; os de pasta/vídeo dentro de um drive ficam com o clamp 2
+   de .meggy-card-title. */
+.meggy-card-title-drive {
+  -webkit-line-clamp: 3;
+}
+
 .meggy-card-meta {
   font-size: 12px;
   color: #6b7488;
