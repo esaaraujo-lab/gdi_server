@@ -12,6 +12,7 @@ import com.meggy.app.data.DriveItem
 import com.meggy.app.util.setWordEllipsized
 import com.meggy.app.databinding.ItemDriveCardBinding
 import com.meggy.app.util.FocusAnimator
+import com.meggy.app.util.TapFeedback
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.TvUtils
 import com.meggy.app.util.LibraryCovers
@@ -58,6 +59,7 @@ class DriveRailAdapter(
                 if (pos != RecyclerView.NO_POSITION) onClick(drives[pos])
             }
             FocusAnimator.attachCard(binding.driveCardRoot, TvUtils.isTv(binding.root.context))
+            TapFeedback.attachPress(binding.driveCardRoot, TvUtils.isTv(binding.root.context))
             // Frente A (TV): nextFocus explícito (ver params).
             if (nextFocusUpId != View.NO_ID) itemView.nextFocusUpId = nextFocusUpId
             if (nextFocusDownId != View.NO_ID) itemView.nextFocusDownId = nextFocusDownId
