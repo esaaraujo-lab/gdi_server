@@ -292,6 +292,10 @@ object LibraryCovers {
     fun resolveStrict(vararg names: String?): String? = resolveInternal(names, allowGeneral = false)
 
     private fun resolveInternal(names: Array<out String?>, allowGeneral: Boolean): String? {
+        // Ronda 10 Frente C — capa de sub-pasta do drive do admin
+        // (AdminDriveUi.subfolderCoverFor): POR CIMA da resolução por
+        // biblioteca; sem entrada no mapa, null e o fluxo segue igual.
+        AdminDriveUi.subfolderCoverFor(*names)?.let { return it }
         val images = manifest
         if (images.isEmpty()) return null
         // 2.7.13 — candidatos do mais específico ao mais genérico (ver o
