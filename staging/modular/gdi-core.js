@@ -1032,10 +1032,30 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     if(!nm){try{nm=decodeURIComponent(window.location.pathname.split('/').filter(Boolean).pop()||'')}catch(_){nm=''}}
     return nm.replace(/\.[a-z0-9]+$/i,'').toLowerCase().trim();
   }
+  // ★ v2.15.8-E (abas de IA — dono único do painel): o shell.js
+  //   (_playVideoInline → loadMaterials) E este módulo M9 constroem o
+  //   MESMO painel (#gdi-mat-tabs / #gdi-mat-body). Quem escreve por
+  //   último apaga o outro: o build() tardio apagava as abas ISA do
+  //   shell ("Não foi possível carregar os materiais." no catch,
+  //   "Nenhum material encontrado" sem material) e a geração do
+  //   showISA (30-60s) sumia junto. Regra: as abas do shell são
+  //   <button class="gdi-mat-tab">; as do M9 são <div>. Se o shell
+  //   já renderizou, o M9 NÃO toca no painel (ele é o fallback p/ o
+  //   player legado, sem shell). Checado DEPOIS de cada await — o
+  //   guard de entrada (lastKey) não via as abas criadas durante a
+  //   espera/listagem.
+  function shellOwnsMaterialsPanel(){
+    try{
+      const tabs=document.getElementById('gdi-mat-tabs');
+      return !!(tabs && tabs.querySelector('button.gdi-mat-tab'));
+    }catch(_){return false;}
+  }
   function ensurePanel(){
     const right=document.getElementById('gdi-slot-right');
     if(!right)return null;
     if(!right.dataset.m9){
+      // ★ v2.15.8-E: não apagar o painel do shell (ver shellOwnsMaterialsPanel). // E2-ensurePanel-nao-apaga-shell
+      if(shellOwnsMaterialsPanel())return{tabsEl:document.getElementById('gdi-mat-tabs'),bodyEl:document.getElementById('gdi-mat-body'),statusEl:document.getElementById('gdi-mat-status')};
       right.dataset.m9='1';
       right.innerHTML=`<div class="gdi-mat-head"><strong><i class="bi bi-journal-bookmark-fill" style="color:var(--ferreto-primary,#7aa2ff);"></i> Materiais da aula</strong><span id="gdi-mat-status"></span></div>
       <div class="gdi-mat-tabs" id="gdi-mat-tabs"><span class="gdi-mat-loading">Buscando PDFs da aula\u2026</span></div>
@@ -1108,6 +1128,12 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       }
     }
     if(!panel||!panel.tabsEl||!panel.bodyEl)return;
+    // ★ v2.15.8-E: o shell pode ter renderizado DURANTE a espera
+    //   (slots:ready até 5s) ou o build pode ter sido re-disparado
+    //   (o loader re-roda os módulos) com o painel do shell já vivo —
+    //   nunca escrever por cima das abas dele nem do resultado da
+    //   geração em curso. Checagem aqui E depois da listagem (E5). // E3-posse-apos-resolucao
+    if(shellOwnsMaterialsPanel())return;
     const{tabsEl,bodyEl,statusEl}=panel;
     const UI=window.UI||{};
     const curPath=window.location.pathname;
@@ -1163,19 +1189,36 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         }
       }
       found=here.filter(isMaterial);
+      let _listFailed=false;
       if(!found.length){
         const subs=here.filter(x=>x.mimeType==='application/vnd.google-apps.folder').slice(0,20);
         for(const sf of subs){
           const fp=fPath+encodeURIComponent(sf.name)+'/';
-          found=found.concat((await gdiListAllFiles(fp,gdiGetPw(fp))).filter(isMaterial));
+          // ★ v2.15.8-E: uma subpasta com listagem falhando NÃO pode
+          //   derrubar o painel inteiro (era o throw que caía no catch
+          //   "Não foi possível carregar os materiais." e apagava as
+          //   abas ISA do shell) — pula a subpasta e segue.
+          try{ found=found.concat((await gdiListAllFiles(fp,gdiGetPw(fp))).filter(isMaterial)); }catch(_){ console.warn('[GDI Materiais] subpasta sem listar:',fp); _listFailed=true; }
           if(found.length)break;
         }
       }
-      if(!found.length)found=(await gdiListAllFiles(pPath,gdiGetPw(pPath))).filter(isMaterial);
+      // ★ v2.15.8-E: idem p/ a pasta pai — falha aqui também não derruba o painel. // E4-subpasta-sem-listar
+      if(!found.length){ try{ found=(await gdiListAllFiles(pPath,gdiGetPw(pPath))).filter(isMaterial); }catch(_){ console.warn('[GDI Materiais] pasta pai sem listar:',pPath); _listFailed=true; found=[]; } }
+      // ★ v2.15.8-E: se TODAS as listagens falharam (nada achado E houve
+      //   falha), o erro é real — deixa subir p/ o catch, que mostra
+      //   "Não foi possível carregar os materiais." no player legado e
+      //   preserva o painel do shell (E6). Sem falha, é só pasta vazia.
+      if(!found.length && _listFailed)throw new Error('listagem de materiais falhou');
       const seen=new Set();const uniq=[];
       found.forEach(x=>{if(!seen.has(x.name)){seen.add(x.name);uniq.push(x)}});
       const pdfs=uniq.slice(0,12);
       if(myGen!==gen)return;
+      // ★ v2.15.8-E: re-checar a posse DEPOIS da listagem — o shell
+      //   pode ter renderizado durante ela (loadMaterials a +500ms;
+      //   a geração do showISA leva 30-60s). Se o shell é o dono,
+      //   volta sem tocar em tabsEl/bodyEl: nem o "Nenhum material
+      //   encontrado" nem o resultado gerado somem. // E5-posse-apos-listagem
+      if(shellOwnsMaterialsPanel())return;
       if(!pdfs.length){
         if(tabsEl.isConnected){
           tabsEl.innerHTML='';
@@ -1521,6 +1564,11 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       console.log('[GDI Materiais] aula:',base||'(sem nome)','\u2192',items.length,'PDFs:',items.map(x=>x.tabLabel).join(' | '));
     }catch(err){
       if(myGen!==gen)return;
+      // ★ v2.15.8-E: se o shell é o dono do painel, o erro de
+      //   listagem do M9 NÃO apaga as abas dele — o loadMaterials
+      //   do shell degrada sozinho (abas ISA + "Não foi possível
+      //   carregar o material", no singular). // E6-catch-preserva-shell
+      if(shellOwnsMaterialsPanel())return;
       if(statusEl)statusEl.textContent='sem PDF';
       if(bodyEl)bodyEl.innerHTML=`<div class="gdi-mat-empty"><i class="bi bi-wifi-off" style="font-size:34px;"></i><div>N\u00e3o foi poss\u00edvel carregar os materiais.</div></div>`;
     }
