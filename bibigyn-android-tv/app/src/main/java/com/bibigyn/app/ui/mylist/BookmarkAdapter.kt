@@ -7,7 +7,7 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.bibigyn.app.R
-import com.bibigyn.app.data.monogramFor
+import com.bibigyn.app.data.DriveItem
 import com.bibigyn.app.util.CoverLibrary
 import com.bibigyn.app.databinding.ItemMylistCardBinding
 import com.bibigyn.app.util.FocusAnimator
@@ -45,26 +45,28 @@ class BookmarkAdapter(
             mylistTitle.text = b.name
             mylistMeta.text = b.path
             // Camada 3 — biblioteca por tipo (nome do marcador →
-            // caminho); sem match, o monogram (o bookmark não tem
-            // thumb do Drive para a camada 2).
-            val libraryUrl = CoverLibrary.resolve(
+            // caminho), ESTRITA (2.1.12, sem 'geral'); sem match, a
+            // capa gerada do drive (nunca monograma; o bookmark não
+            // tem thumb do Drive para a camada 2).
+            val coverRes = DriveItem.coverResForPath(b.path)
+            val libraryUrl = CoverLibrary.resolveStrict(
                 holder.itemView.context, b.name, b.path
             )
             if (!libraryUrl.isNullOrBlank()) {
                 mylistThumb.visibility = android.view.View.VISIBLE
                 mylistMonogram.visibility = android.view.View.GONE
                 mylistThumb.load(libraryUrl) {
-                    error(R.drawable.card_gradient_pink)
+                    error(coverRes ?: R.drawable.card_gradient_pink)
                     listener(onError = { _, _ ->
-                        mylistThumb.visibility = android.view.View.GONE
-                        mylistMonogram.visibility = android.view.View.VISIBLE
-                        mylistMonogram.text = monogramFor(b.name)
+                        mylistThumb.visibility = android.view.View.VISIBLE
+                        mylistMonogram.visibility = android.view.View.GONE
+                        mylistThumb.setImageResource(coverRes ?: R.drawable.card_gradient_pink)
                     })
                 }
             } else {
-                mylistMonogram.text = monogramFor(b.name)
-                mylistThumb.visibility = android.view.View.GONE
-                mylistMonogram.visibility = android.view.View.VISIBLE
+                mylistThumb.visibility = android.view.View.VISIBLE
+                mylistMonogram.visibility = android.view.View.GONE
+                mylistThumb.setImageResource(coverRes ?: R.drawable.card_gradient_pink)
             }
             mylistProgressRow.visibility = android.view.View.GONE
             mylistContinue.visibility = android.view.View.GONE
