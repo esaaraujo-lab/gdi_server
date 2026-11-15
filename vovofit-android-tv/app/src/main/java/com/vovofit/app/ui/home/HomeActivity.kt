@@ -20,6 +20,7 @@ import com.vovofit.app.VovoFitApp
 import com.vovofit.app.R
 import com.vovofit.app.data.ApiService
 import com.vovofit.app.data.DriveItem
+import com.vovofit.app.data.FileItem
 import com.vovofit.app.data.HeroItem
 import com.vovofit.app.databinding.ActivityHomeBinding
 import com.vovofit.app.ui.browse.BrowseActivity
