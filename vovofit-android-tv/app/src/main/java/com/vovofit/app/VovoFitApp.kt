@@ -11,25 +11,30 @@ class VovoFitApp : Application() {
         const val BASE_URL = "https://educa.eu.org"
 
         /**
-         * v1.0.4 — Base das rotas de IA da Meggy (batalhão, resumos,
+         * v1.0.12 — Base das rotas de IA da Meggy (batalhão, resumos,
          * materiais, legendas, OCR).
          *
-         * Por padrão é o MESMO host do app (BASE_URL). VERIFICADO
-         * 2026-11-14: a produção (educa.eu.org, worker pré-v2) NÃO tem
-         * nenhuma dessas rotas (nenhum registro de
-         * /api/ai/battalion, /api/ai/summaries, /api/materials/... no
-         * worker de produção auditado) — contra ela, as chamadas de IA
-         * devolvem 404 e o app trata como "geração indisponível"
-         * (nunca finge que gerou). As rotas existem no worker v2.15.4
-         * deployado em staging-c e no meuc:
-         *   staging-c: https://meggy-staging.aprovado.workers.dev
-         *   meuc:      https://meuc.urso.workers.dev
-         * Para testar a geração ao vivo, trocar esta constante para um
-         * desses hosts (1 linha). A geração ao vivo na produção depende
-         * do deploy da v2 nela — ordem do Elton pendente. Ver
-         * REDESIGN_NOTES.md ("Descrição da aula").
+         * DECISÃO DO ELTON 2026-11-14 22:42: a IA aponta para o STAGING
+         * (staging-c.urso.workers.dev), NÃO para a produção. Motivo:
+         * a produção (educa.eu.org, worker pré-v2) tem as rotas de IA
+         * antigas — o status do batalhão NÃO traz o objeto `job` —
+         * então o app nunca completava a geração por lá; o staging tem
+         * o contrato v2 que o app espera (ver AiService). BASE_URL
+         * (listagem, cursos, download, login) CONTINUA
+         * https://educa.eu.org — só a IA mudou de host. Consequência:
+         * o estado da IA (resumos, jobs, materials_meta) é o do SANDBOX
+         * (D1 meggy-staging), não o da produção. /api/ai/subtitles NÃO
+         * existe em nenhum worker — a legenda continua só via .vtt/.srt
+         * que já exista na pasta.
+         *
+         * Autenticação (AiService): o cookie da sessão do educa NÃO
+         * vale no staging (outro host). A 1ª chamada de IA manda o
+         * cookie do educa, leva 401, e o AiService faz login no staging
+         * com as credenciais guardadas (SessionManager) e repete a
+         * chamada com o cookie do staging (aiSessionCookie). Nenhuma
+         * ação do usuário é necessária.
          */
-        const val AI_BASE_URL = BASE_URL
+        const val AI_BASE_URL = "https://staging-c.urso.workers.dev"
 
         lateinit var okHttpClient: OkHttpClient
             private set
