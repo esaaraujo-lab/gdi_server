@@ -59,6 +59,7 @@ import com.meggy.app.util.DescriptionPregenerator
 import com.meggy.app.util.FocusAnimator
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.LessonDescription
+import com.meggy.app.util.MarkdownRenderer
 import com.meggy.app.util.MaterialSaver
 import com.meggy.app.util.LibraryCovers
 import com.meggy.app.util.SubtitleFetcher
@@ -1999,7 +2000,11 @@ class PlayerActivity : AppCompatActivity() {
         val summaryCard = mat<LinearLayout>(R.id.materials_summary_card)
         if (data.summary != null) {
             summaryCard?.visibility = View.VISIBLE
-            mat<TextView>(R.id.materials_summary_text)?.text = data.summary
+            // Ronda 9 Frente A — a prévia também é Markdown: renderiza
+            // formatado (o cartão continua com maxLines=4 no layout).
+            mat<TextView>(R.id.materials_summary_text)?.let {
+                MarkdownRenderer.renderMarkdown(it, data.summary)
+            }
             summaryCard?.setOnClickListener { showFullSummary() }
         } else {
             summaryCard?.visibility = View.GONE
@@ -2154,16 +2159,18 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    /** Resumo completo num diálogo (texto corrido, como na aba Resumo). */
+    /** Ronda 9 Frente A — resumo completo num diálogo, Markdown formatado (como na aba Resumo). */
     private fun showFullSummary() {
         val summary = materialsSummary ?: return
         val text = TextView(this).apply {
-            text = summary
             textSize = 15f
             setTextIsSelectable(true)
             setTextColor(ContextCompat.getColor(this@PlayerActivity, R.color.md_on_surface))
             setPadding(8, 8, 8, 8)
         }
+        // Ronda 9 Frente A — o resumo é Markdown: renderiza formatado
+        // (Markwon, mesma config do MdReaderActivity), nunca texto cru.
+        MarkdownRenderer.renderMarkdown(text, summary)
         val scroll = ScrollView(this).apply { addView(text) }
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
