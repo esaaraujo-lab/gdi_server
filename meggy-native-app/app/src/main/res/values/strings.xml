@@ -59,4 +59,19 @@
     <string name="no_subtitles">Sem legendas disponíveis para esta aula</string>
     <string name="subtitles_off_settings">Legendas desligadas nos Ajustes</string>
     <string name="rest_mode_hint">🌙 Modo descanso — toque na tela para sair</string>
+    <!-- Frente J — resumo do PDF pela Meggy -->
+    <string name="pdf_summary_title">✨ Resumo da Meggy</string>
+    <string name="pdf_summary_close">Fechar</string>
+    <string name="pdf_summary_regenerate">Gerar novamente</string>
+    <string name="pdf_summary_cached">Resumo guardado anteriormente — toque em "Gerar novamente" para refazer.</string>
+    <string name="pdf_summary_saved">Guardado na pasta de materiais e no cache da Meggy.</string>
+    <string name="pdf_summary_save_failed">Resumo gerado, mas não foi possível guardá-lo na pasta de materiais.</string>
+    <string name="pdf_summary_searching_saved">A procurar um resumo já guardado…</string>
+    <string name="pdf_summary_extracting">A extrair o texto do PDF…</string>
+    <string name="pdf_summary_ocr">A ler a página %1$d de %2$d (OCR)…</string>
+    <string name="pdf_summary_generating">A gerar o resumo com a Meggy…</string>
+    <string name="pdf_summary_no_text">Este PDF não tem texto legível — parece escaneado e a Meggy não conseguiu lê-lo por OCR.</string>
+    <string name="pdf_summary_unavailable">A IA da Meggy não está disponível neste servidor.</string>
+    <string name="pdf_summary_rate_limited">Limite de mensagens da Meggy por hora atingido. Tente novamente mais tarde.</string>
+    <string name="pdf_summary_failed">Não foi possível gerar o resumo. Verifique a conexão e tente novamente.</string>
 </resources>
