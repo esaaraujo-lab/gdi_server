@@ -1764,13 +1764,16 @@
                 function _isaCachedField(entry, field) {
                   if (!entry) return null;
                   const v = entry[field];
+                  // ★ v2.15.13-B2-selo-unificado-leitura: a leitura das abas usa
+                  //   a MESMA validação por forma que o selo — sem isto
+                  //   a aba exibia a recusa nova como conteúdo.
                   if (field === 'questions') {
-                    if (Array.isArray(v) && v.length) return v;
-                    if (typeof v === 'string' && v && !Shell._isIsaRefusal(v)) return v;
+                    if (Array.isArray(v) && Shell._isIsaValidContent('questions', v)) return v;
+                    if (typeof v === 'string' && v && Shell._isIsaValidContent('questions', v)) return v;
                     return null;
                   }
                   if (typeof v !== 'string' || !v) return null;
-                  return Shell._isIsaRefusal(v) ? null : v;
+                  return Shell._isIsaValidContent(field, v) ? v : null;
                 }
                 function isaCacheProbeKeys() {
                   const _pdfBase = lessonName.replace(/\.[a-z0-9]+$/i, '');
@@ -1883,12 +1886,39 @@
                 }
 
                 // ─── 2. Extrair materiais (MD/TXT/PDF com pdf.js) ───
+                // ★ v2.15.13-D3a-lista-retry: o gdiListAllFiles era chamado
+                //   1x sem retry e os catch (e) { /* skip */ } silenciosos
+                //   tornavam "falha de listagem" indistinguível de "sem
+                //   ficheiros" — a extração intermitente do Passo 17 ("sem
+                //   conteúdo da aula" numa tentativa, conteúdo real na
+                //   seguinte) não deixava rasto. Agora: 1 retry (500 ms) e
+                //   registo — {ok:false, failed:true} + console.warn com a
+                //   pasta — quando a listagem falha 2x; {ok:true} quando a
+                //   pasta lista mas não tem ficheiros extraíveis (o caso
+                //   real da Aula 09: só o vídeo). _materialListFailed fica
+                //   registado p/ o warn final (ver D4).
+                let _materialListFailed = false;
+                async function _listLessonFiles(_p) {
+                  let _lastErr = null;
+                  for (let _a = 0; _a < 2; _a++) {
+                    try {
+                      const _f = await window.gdiListAllFiles(_p, '');
+                      if (Array.isArray(_f)) return { ok: true, files: _f, failed: false };
+                      _lastErr = new Error('gdiListAllFiles devolveu non-array');
+                    } catch (e) { _lastErr = e; }
+                    if (_a === 0) await new Promise((res) => setTimeout(res, 500));
+                  }
+                  console.warn('[Shell] gdiListAllFiles falhou 2x em ' + _p + ':', _lastErr);
+                  return { ok: false, files: [], failed: true };
+                }
                 setLoading('📖 Extraindo material da aula…');
                 let materialContent = '';
                 let materialsList = [];
                 try {
                   if (window.gdiListAllFiles && lessonPath) {
-                    const files = await window.gdiListAllFiles(lessonPath, '');
+                    const _listed = await _listLessonFiles(lessonPath); // ★ v2.15.13-D3b
+                    if (!_listed.ok) _materialListFailed = true;
+                    const files = _listed.files;
                     materialsList = files.filter(f => {
                       const ext = (f.name.split('.').pop() || '').toLowerCase();
                       return ext === 'pdf' || ext === 'md' || ext === 'txt' || ext === 'html';
@@ -1930,11 +1960,15 @@
                 // ★ Subpastas (especialmente "material") se não encontrou conteúdo suficiente
                 if (materialContent.length < 200 && window.gdiListAllFiles && lessonPath) {
                   try {
-                    const files = await window.gdiListAllFiles(lessonPath, '');
+                    const _listed2 = await _listLessonFiles(lessonPath); // ★ v2.15.13-D3c
+                    if (!_listed2.ok) _materialListFailed = true;
+                    const files = _listed2.files;
                     const subs = files.filter(f => f.mimeType === 'application/vnd.google-apps.folder').slice(0, 5);
                     for (const sf of subs) {
                       const fp = lessonPath + encodeURIComponent(sf.name) + '/';
-                      const subFiles = await window.gdiListAllFiles(fp, '');
+                      const _subListed = await _listLessonFiles(fp); // ★ v2.15.13-D3d
+                      if (!_subListed.ok) _materialListFailed = true;
+                      const subFiles = _subListed.files;
                       const subMats = subFiles.filter(f => {
                         const ext = (f.name.split('.').pop() || '').toLowerCase();
                         return ext === 'pdf' || ext === 'md' || ext === 'txt';
@@ -1961,7 +1995,7 @@
                       }
                       if (materialContent.length > 200) break;
                     }
-                  } catch (e) { /* skip */ }
+                  } catch (e) { console.warn('[Shell] material extract (subpastas):', e); /* ★ v2.15.13-D3e — era skip silencioso */ }
                 }
 
                 if (materialContent.length > 80000) {
@@ -1971,7 +2005,32 @@
                 const courseName = lessonPath.split('/').filter(Boolean).slice(-1)[0] || '';
                 const driveName = window.drive_names && window.drive_names[+(lessonPath.split('/')[1] || '0').replace(':','')] || '';
                 const ctx = 'Aula: ' + lessonName + '\nCurso: ' + courseName + '\nDrive: ' + driveName;
-                const hasContent = materialContent.length > 100;
+                // ★ v2.15.13-D4-resumo-cache-como-material: a cadeia NÃO
+                //   usava o resumo ISA em cache como material — mas o
+                //   drawer USA (Tier 1, v2.15.10-C, _drawerLessonMaterial).
+                //   A Aula 09 não tem ficheiros extraíveis na pasta (só o
+                //   vídeo) e TEM um resumo real em cache (gerado no Passo
+                //   16, salvo no Drive) — sem isto os prompts corriam só
+                //   com ctx (nome/curso/drive) e o modelo recusava
+                //   não-deterministicamente ("sem conteúdo da aula",
+                //   Passo 17 tentativa 2) ou gerava do conhecimento
+                //   paramétrico. _isaCachedField valida: uma recusa em
+                //   cache vale como AUSENTE (B7), por isso uma recusa
+                //   nunca vira "material". Só quando a extração da pasta
+                //   deu <100 chars. Se a listagem falhou (D3), fica o
+                //   registo de que se gerou sem a pasta listada.
+                let hasContent = materialContent.length > 100;
+                let _materialSource = hasContent ? 'files' : 'none';
+                if (!hasContent) {
+                  let _cs = null;
+                  try { _cs = _isaCachedField(cached, 'summary'); } catch (_) { _cs = null; }
+                  if (typeof _cs === 'string' && _cs.length > 100) {
+                    materialContent = _cs;
+                    hasContent = materialContent.length > 100;
+                    _materialSource = 'cache';
+                  }
+                }
+                if (_materialListFailed) console.warn('[Shell] material extract: listagem da pasta falhou (ver D3) — material=' + _materialSource);
 
                 // ─── 3. generateAll: gerar resumo + pílulas + questões em paralelo ───
                 // Produção gera TUDO de uma vez (Promise.allSettled). Se o usuário pediu só um tipo,
@@ -1980,18 +2039,35 @@
 
                 const textSlice = hasContent ? materialContent : ctx;
                 const sliceCap = hasContent ? 80000 : 2000;
+                // ★ v2.15.13-D5a-ctx-only-instrucao — opção (i), NÃO (ii):
+                //   quando NÃO há material NEM resumo em cache, o prompt é
+                //   só a identificação da aula; sem esta instrução o modelo
+                //   pede o material ao utilizador ("sem conteúdo da aula",
+                //   Passo 17). Com ela, DEVE usar o seu conhecimento do
+                //   tema e NUNCA pedir o material. Escolha (i) pela
+                //   evidência: a geração só-com-ctx produziu conteúdo
+                //   CORRETO 2/3 das vezes no Passo 17 (pílulas reais
+                //   05:19/05:25; tema padrão de Direito Penal) e a
+                //   validação estrutural da Frente B é a rede p/ recusas
+                //   que ainda passarem. A opção (ii) ("Sem material", sem
+                //   gerar) deixaria a aula sem nada embora o tema seja
+                //   gerável. A nota só entra quando _materialSource é
+                //   'none' (nem ficheiros, nem resumo em cache).
+                const CTX_ONLY_NOTE = (_materialSource === 'none')
+                  ? '\n\nNOTA IMPORTANTE: não há ficheiros de material nesta aula — só a identificação acima (nome da aula, curso, drive). NÃO peças o material ao utilizador nem digas que precisas dele: usa o teu conhecimento do tema indicado pelo nome da aula e gera o conteúdo na mesma, com o rigor de um examinador de concurso.'
+                  : '';
 
                 // ★ Prompts (replica de produção — meggy-cache.js:785-821)
                 const RESUMO_PROMPTS = [
                   // Nível 7 (rico)
-                  'Você é um professor especialista em concursos públicos. Leia TODO o material abaixo e crie um RESUMO PROFUNDO E DETALHADO em Markdown.\n\nREQUISITOS:\n- Mínimo 2000 caracteres (NÃO seja breve)\n- ABERTURA (GANCHO): abra o resumo com uma prévia daquela aula, em texto corrido, no espírito de "Nessa aula vamos estudar [assunto específico da aula]..." — varie a cada geração ("Nessa aula vamos estudar...", "Nesta aula, vamos mergulhar em...", "Hoje vamos estudar..."). Nunca abra com título fixo nem frase genérica.\n- Estruture com ## títulos e ### subtítulos\n- Para CADA tópico: explique o conceito, dê EXEMPLOS práticos, e destaque pegadinhas de prova\n- Use **negrito** para palavras-chave e dispositivos legais\n- Use listas com marcadores para enumerações\n- Inclua uma seção ## Pegadinhas de Prova no final\n- Inclua uma seção ## Resumo Rápido com 5-10 bullets dos pontos mais importantes\n\nNÃO omita nenhum tema. Seja PROFUNDO, não conciso.\n\nMaterial:\n' + textSlice.slice(0, sliceCap),
+                  'Você é um professor especialista em concursos públicos. Leia TODO o material abaixo e crie um RESUMO PROFUNDO E DETALHADO em Markdown.\n\nREQUISITOS:\n- Mínimo 2000 caracteres (NÃO seja breve)\n- ABERTURA (GANCHO): abra o resumo com uma prévia daquela aula, em texto corrido, no espírito de "Nessa aula vamos estudar [assunto específico da aula]..." — varie a cada geração ("Nessa aula vamos estudar...", "Nesta aula, vamos mergulhar em...", "Hoje vamos estudar..."). Nunca abra com título fixo nem frase genérica.\n- Estruture com ## títulos e ### subtítulos\n- Para CADA tópico: explique o conceito, dê EXEMPLOS práticos, e destaque pegadinhas de prova\n- Use **negrito** para palavras-chave e dispositivos legais\n- Use listas com marcadores para enumerações\n- Inclua uma seção ## Pegadinhas de Prova no final\n- Inclua uma seção ## Resumo Rápido com 5-10 bullets dos pontos mais importantes\n\nNÃO omita nenhum tema. Seja PROFUNDO, não conciso.\n\nMaterial:\n' + textSlice.slice(0, sliceCap) + CTX_ONLY_NOTE, // ★ v2.15.13-D5b
                   // Nível 5 (médio)
-                  'Crie um resumo DETALHADO em Markdown deste material. Use ## títulos, **negrito** e - bullets. Inclua ## Pegadinhas de Prova no final. Material:\n' + textSlice.slice(0, 20000),
+                  'Crie um resumo DETALHADO em Markdown deste material. Use ## títulos, **negrito** e - bullets. Inclua ## Pegadinhas de Prova no final. Material:\n' + textSlice.slice(0, 20000) + CTX_ONLY_NOTE, // ★ v2.15.13-D5c
                   // Nível 3 (simples)
-                  'Crie um resumo em Markdown deste material. Use ## títulos e bullets. Material:\n' + textSlice.slice(0, 10000)
+                  'Crie um resumo em Markdown deste material. Use ## títulos e bullets. Material:\n' + textSlice.slice(0, 10000) + CTX_ONLY_NOTE // ★ v2.15.13-D5d
                 ];
-                const PILULAS_PROMPT = 'Crie "Pílulas" deste material — pontos-chave para revisão rápida ANTES da prova. Formato Markdown:\n# Pílulas de Revisão\n\n## Conceitos Essenciais\n- **Conceito 1**: explicação curta com exemplo\n- **Conceito 2**: explicação curta\n\n## Pegadinhas Rápidas\n- ⚠️ Pegadinha 1\n- ⚠️ Pegadinha 2\n\n## Mnemônicos\n- Dica para memorizar\n\nMáximo 20 bullets no total. Seja OBJETIVO mas COMPLETO.\n\nConteúdo:\n' + textSlice.slice(0, 15000);
-                const QUESTOES_PROMPT = 'Você é um examinador de concurso público brasileiro experiente. Baseado neste material, gere 10 questões de concurso em JSON array. Misture:\n- 6 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"legalText":"...","explanation":"...","fundamentacao":"..."}\n- 4 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"legalText":"...","explanation":"...","fundamentacao":"..."}\n\nCAMPOS:\n- statement: enunciado claro, contexto completo\n- legalText: o dispositivo legal aplicável (ex: "art. 5º, CF")\n- explanation: explicação técnica do acerto/erro\n- fundamentacao: fundamentação didática completa\n\nSem comentários, só JSON.\n\n' + textSlice.slice(0, 60000);
+                const PILULAS_PROMPT = 'Crie "Pílulas" deste material — pontos-chave para revisão rápida ANTES da prova. Formato Markdown:\n# Pílulas de Revisão\n\n## Conceitos Essenciais\n- **Conceito 1**: explicação curta com exemplo\n- **Conceito 2**: explicação curta\n\n## Pegadinhas Rápidas\n- ⚠️ Pegadinha 1\n- ⚠️ Pegadinha 2\n\n## Mnemônicos\n- Dica para memorizar\n\nMáximo 20 bullets no total. Seja OBJETIVO mas COMPLETO.\n\nConteúdo:\n' + textSlice.slice(0, 15000) + CTX_ONLY_NOTE; // ★ v2.15.13-D5e
+                const QUESTOES_PROMPT = 'Você é um examinador de concurso público brasileiro experiente. Baseado neste material, gere 10 questões de concurso em JSON array. Misture:\n- 6 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"legalText":"...","explanation":"...","fundamentacao":"..."}\n- 4 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"legalText":"...","explanation":"...","fundamentacao":"..."}\n\nCAMPOS:\n- statement: enunciado claro, contexto completo\n- legalText: o dispositivo legal aplicável (ex: "art. 5º, CF")\n- explanation: explicação técnica do acerto/erro\n- fundamentacao: fundamentação didática completa\n\nSem comentários, só JSON.\n\n' + textSlice.slice(0, 60000) + CTX_ONLY_NOTE; // ★ v2.15.13-D5f
                 // ★ v2.15.12-D2a-prompt-escalado: o retry E13 repetia o MESMO
                 //   prompt byte-idêntico — uma falha SISTEMÁTICA de formato
                 //   (ex.: o modelo de raciocínio devolve <think> + prosa)
@@ -2238,7 +2314,7 @@
                       //   retry de 3 níveis existe para isto). Se os 3 níveis
                       //   recusarem, value fica null e a aba mostra 'Não foi
                       //   possível gerar' — nunca sela recusa.
-                      if (r && r.length > 200 && !Shell._isIsaRefusal(r)) return { field: 'summary', value: r };
+                      if (Shell._isIsaValidContent('summary', r)) return { field: 'summary', value: r }; // ★ v2.15.13-B3-gates-forma-resumo
                       if (r && r.length > 200) _isaLastErr = new Error('a IA recusou gerar o resumo (sem conteúdo da aula)');
                     } catch (e) { _isaLastErr = e; /* try next level */ }
                   }
@@ -2258,7 +2334,7 @@
                       //   como pílulas; o retry (3 tentativas) continua. Sem isto
                       //   a recusa passava o limiar de 50 chars e era guardada
                       //   como 'mindmap' (foi o que aconteceu na chave órfã).
-                      if (_r && _r.length > 50 && !Shell._isIsaRefusal(_r)) return { field: 'mindmap', value: _r };
+                      if (Shell._isIsaValidContent('mindmap', _r)) return { field: 'mindmap', value: _r }; // ★ v2.15.13-B3-gates-forma-pilulas
                       _isaLastErr = new Error((_r && _r.length > 50) ? 'a IA recusou gerar as pílulas (sem conteúdo da aula)' : 'resposta vazia da IA');
                     } catch (e) {
                       _isaLastErr = e;
@@ -2289,7 +2365,10 @@
                       //   "JSON inválido" — dizê-lo como tal esconde a causa
                       //   (sem conteúdo da aula), como o resumo (B5) e as
                       //   pílulas (B6) já distinguem.
-                      _isaLastErr = (Shell._isIsaRefusal && Shell._isIsaRefusal(_lastRaw))
+                      // ★ v2.15.13-B3-gates-forma-erro-questoes: prosa sem "[" não é
+                      //   JSON — é recusa (sem conteúdo da aula); só um
+                      //   texto COM "[" que falha o parse é "JSON inválido".
+                      _isaLastErr = ((Shell._isIsaRefusal && Shell._isIsaRefusal(_lastRaw)) || (typeof _lastRaw === 'string' && _lastRaw.trim() && _lastRaw.indexOf('[') === -1))
                         ? new Error('a IA recusou gerar as questões (sem conteúdo da aula)')
                         : new Error('a IA devolveu questões fora do formato JSON esperado');
                     } catch (e) {
@@ -2345,8 +2424,8 @@
                 // ★ v2.15.11-B4-pasta-limpa: a recusa também não vai p/
                 //   a pasta da aula como .md (o cache não era o único
                 //   sítio onde ela ficava persistida como "resumo").
-                if (gen.summary && !Shell._isIsaRefusal(gen.summary)) saveToFolder('resumo', user + '_' + safeLesson + '.md', gen.summary);
-                if (gen.mindmap && !Shell._isIsaRefusal(gen.mindmap)) saveToFolder('resumo', user + '_pilulas_' + safeLesson + '.md', gen.mindmap);
+                if (gen.summary && Shell._isIsaValidContent('summary', gen.summary)) saveToFolder('resumo', user + '_' + safeLesson + '.md', gen.summary); // ★ v2.15.13-B3-gates-forma-pasta
+                if (gen.mindmap && Shell._isIsaValidContent('mindmap', gen.mindmap)) saveToFolder('resumo', user + '_pilulas_' + safeLesson + '.md', gen.mindmap); // ★ v2.15.13-B3-gates-forma-pasta
                 if (gen.questions && gen.questions.length) saveToFolder('questoes', user + '_' + safeName(courseName || lessonName) + '.json', JSON.stringify(gen.questions, null, 2));
                 // ★ v2.15.12-D5-partilhar-pool: o showISA é o ÚNICO caminho
                 //   de geração das abas do player (a Aula 09 não tem PDF —
@@ -2361,7 +2440,7 @@
                 //   re-gerar não duplica). Só o conteúdo gerado AGORA —
                 //   o cache-hit retorna antes e não volta a partilhar.
                 try {
-                  if (gen.summary && !Shell._isIsaRefusal(gen.summary)) {
+                  if (gen.summary && Shell._isIsaValidContent('summary', gen.summary)) { // ★ v2.15.13-B3-gates-forma-partilha
                     fetch('/api/ai/shared-summaries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lessonName: lessonName, summary: gen.summary, questions: gen.questions.length ? gen.questions : null }) }).catch(() => {});
                   }
                   if (gen.questions && gen.questions.length) {
@@ -3004,9 +3083,21 @@
             Shell.__sharedSubjects = (d && d.ok) ? d : { summaryLessons: [], flashcardSubjects: [] };
           }
         } catch (_) {}
+        // ★ v2.15.13-E2-3-assunto-por-kind: flashcardSubjects tem TODOS os
+        //   subjects de shared_flashcards, incluindo assuntos com só
+        //   flashcards puros (statement NULL) — em /questoes esses assuntos
+        //   apareciam no dropdown e a lista vinha vazia, porque a lista
+        //   pede kind=question (só linhas com statement). Agora a seleção
+        //   é a do kind da aba atual: resumos -> summaryLessons; questoes
+        //   -> questionSubjects (o campo novo do endpoint; se o worker
+        //   ainda não o devolver, cai p/ flashcardSubjects, o total
+        //   antigo); flashcards -> flashcardSubjects (total, que é
+        //   exatamente o que a aba lista, sem filtro de kind).
         const subjects = kind === 'resumos'
           ? (Shell.__sharedSubjects.summaryLessons || [])
-          : (Shell.__sharedSubjects.flashcardSubjects || []);
+          : kind === 'questoes'
+            ? (Shell.__sharedSubjects.questionSubjects || Shell.__sharedSubjects.flashcardSubjects || [])
+            : (Shell.__sharedSubjects.flashcardSubjects || []);
         if (kind === 'resumos') subjectSel.querySelector('option').textContent = 'Todas as aulas';
         subjects.forEach((s) => {
           const o = document.createElement('option');
@@ -3016,7 +3107,19 @@
         (Shell.__sharedAuthors || []).forEach((a) => {
           const o = document.createElement('option');
           o.value = a.author;
-          o.textContent = a.author + ' (' + ((a.summaries || 0) + (a.flashcards || 0)) + ')';
+          // ★ v2.15.13-E3-contagem-por-kind: o total antigo
+          //   (summaries + flashcards) era o MESMO nas três abas, mas cada
+          //   aba lista só o seu kind — um autor com 1 resumo e 0 questões
+          //   mostrava "(1)" em /questoes e a lista vinha vazia (Passo 17).
+          //   Agora a contagem é a do kind da aba atual: resumos ->
+          //   summaries; questoes -> questions (o campo novo do endpoint;
+          //   se o worker ainda não o devolver, cai p/ o total antigo);
+          //   flashcards -> flashcards (total de linhas, que é exatamente
+          //   o que a aba lista, sem filtro de kind).
+          const _n = kind === 'resumos' ? (a.summaries || 0)
+            : kind === 'questoes' ? (a.questions != null ? a.questions : (a.summaries || 0) + (a.flashcards || 0))
+            : (a.flashcards || 0);
+          o.textContent = a.author + ' (' + _n + ')';
           authorSel.appendChild(o);
         });
         const loadList = async () => {
@@ -6160,6 +6263,46 @@ el.scrollTop = 0;
       return REFUSAL_PATTERNS.some((re) => re.test(t));
     },
 
+    // ★ v2.15.13-B1-validacao-forma: validade ESTRUTURAL do conteúdo
+    //   guardado/gerado, por campo — a autoridade, acima do detetor por
+    //   padrões (primeira passagem, barato). Um texto que pede material
+    //   ou não tem a forma esperada é recusa, seja qual for a redação
+    //   (Passo 17: a nova recusa "eu preciso do conteúdo da aula" não
+    //   diz "não posso/consigo" e o detetor devolve false — mas é prosa
+    //   sem cabeçalhos nem bullets, por isso falha aqui). A MESMA função
+    //   vive no worker (isIsaValidContent); manter sincronizadas. Resumo
+    //   = texto longo com estrutura markdown; pílulas = lista com 3 ou
+    //   mais itens; questões = array com 1 ou mais objetos com
+    //   enunciado (string crua não-recusa passa, como antes — o batalhão
+    //   guarda-a assim quando o parse falha).
+    _isIsaValidContent(field, value) {
+      if (field === 'questions') {
+        if (Array.isArray(value)) {
+          if (!value.length) return false;
+          return value.some(function (q) {
+            if (!q || typeof q !== 'object') return false;
+            const s = q.statement || q.question || q.text;
+            return typeof s === 'string' && !!s.trim();
+          });
+        }
+        if (typeof value === 'string') return value.trim().length >= 10 && !Shell._isIsaRefusal(value);
+        return false;
+      }
+      if (typeof value !== 'string' || !value) return false;
+      if (Shell._isIsaRefusal(value)) return false;
+      const lines = String(value).split('\n');
+      let headings = 0, bullets = 0;
+      for (let i = 0; i < lines.length; i++) {
+        const t = lines[i].trim();
+        if (/^#{1,3}\s+\S/.test(t)) headings++;
+        else if (/^(-|\*|•)\s+\S/.test(t)) bullets++;
+        else if (/^\d+[.)]\s+\S/.test(t)) bullets++;
+      }
+      if (field === 'summary') return value.length >= 200 && (headings >= 1 || bullets >= 3);
+      if (field === 'mindmap') return value.length >= 50 && bullets >= 3;
+      return false;
+    },
+
     // ★ v2.15.11-B1-detector-recusa (selo): partes da cadeia por VALOR
     //   VÁLIDO, não por presença — resumo/pílulas que sejam recusa não
     //   selam; questões contam só como array (o batalhão pode guardar
@@ -6168,9 +6311,13 @@ el.scrollTop = 0;
     _isaChainParts(fullCache) {
       const parts = [];
       if (!fullCache) return parts;
-      if (typeof fullCache.summary === 'string' && fullCache.summary && !Shell._isIsaRefusal(fullCache.summary)) parts.push('✓ Resumo');
-      if (typeof fullCache.mindmap === 'string' && fullCache.mindmap && !Shell._isIsaRefusal(fullCache.mindmap)) parts.push('✓ Pílulas');
-      if (Array.isArray(fullCache.questions) && fullCache.questions.length) parts.push('✓ ' + fullCache.questions.length + ' questões + flashcards');
+      // ★ v2.15.13-B2-selo-unificado: o selo é calculado pela MESMA
+      //   validação por forma que as abas usam (ver _isaCachedField e
+      //   _isaCachedRefusal) — uma recusa em prosa sem forma não sela,
+      //   seja qual for a redação; questões contam só como array válido.
+      if (Shell._isIsaValidContent('summary', fullCache.summary)) parts.push('✓ Resumo');
+      if (Shell._isIsaValidContent('mindmap', fullCache.mindmap)) parts.push('✓ Pílulas');
+      if (Array.isArray(fullCache.questions) && Shell._isIsaValidContent('questions', fullCache.questions)) parts.push('✓ ' + fullCache.questions.length + ' questões + flashcards');
       return parts;
     },
 
@@ -6182,22 +6329,26 @@ el.scrollTop = 0;
     _isaSanitizeEntry(entry) {
       const out = { summary: null, questions: null, mindmap: null, lessonName: (entry && entry.lessonName) || '' };
       if (!entry) return out;
-      if (typeof entry.summary === 'string' && entry.summary && !Shell._isIsaRefusal(entry.summary)) out.summary = entry.summary;
-      if (typeof entry.mindmap === 'string' && entry.mindmap && !Shell._isIsaRefusal(entry.mindmap)) out.mindmap = entry.mindmap;
-      if (Array.isArray(entry.questions) && entry.questions.length) out.questions = entry.questions;
-      else if (typeof entry.questions === 'string' && entry.questions && !Shell._isIsaRefusal(entry.questions)) out.questions = entry.questions;
+      // ★ v2.15.13-B4-save-forma-shell: o POST rejeita por FORMA, não só por
+      //   padrão — uma recusa em prosa sem estrutura não é gravada.
+      if (typeof entry.summary === 'string' && entry.summary && Shell._isIsaValidContent('summary', entry.summary)) out.summary = entry.summary;
+      if (typeof entry.mindmap === 'string' && entry.mindmap && Shell._isIsaValidContent('mindmap', entry.mindmap)) out.mindmap = entry.mindmap;
+      if (Array.isArray(entry.questions) && Shell._isIsaValidContent('questions', entry.questions)) out.questions = entry.questions;
+      else if (typeof entry.questions === 'string' && entry.questions && Shell._isIsaValidContent('questions', entry.questions)) out.questions = entry.questions;
       return out;
     },
 
     // ★ v2.15.12-B2a-pilulas-ambar-helper: o campo em cache é uma RECUSA?
     //   Ponto único da decisão do estado âmbar da aba Pílulas (B2b):
-    //   devolve true só quando o campo existe em cache como string e É
-    //   uma recusa (detetor B1) — um campo ausente/null ou um valor real
-    //   devolve false (a aba cai na geração, comportamento B9).
+    //   devolve true só quando o campo existe em cache como string e é
+    //   INVÁLIDO — recusa por padrão OU sem a forma esperada (★
+    //   v2.15.13-B2-selo-unificado-ambar-helper: a MESMA validação por forma que o
+    //   selo). Um campo ausente/null ou um valor real devolve false (a
+    //   aba cai na geração, comportamento B9).
     _isaCachedRefusal(entry, field) {
       if (!entry) return false;
       const v = entry[field];
-      return typeof v === 'string' && !!v && Shell._isIsaRefusal(v);
+      return typeof v === 'string' && !!v && !Shell._isIsaValidContent(field, v);
     },
 
     _renderMd(txt) {
@@ -6253,8 +6404,11 @@ el.scrollTop = 0;
         if (parts.length > 1) {
           chainBadge = '<div class="meggy-chain-badge"><i class="bi bi-check-circle-fill"></i> <b>Gerado em cadeia:</b> ' + parts.join(' · ') + '</div>';
         }
-        const _refusedSummary = typeof fullCache.summary === 'string' && Shell._isIsaRefusal(fullCache.summary);
-        const _refusedMindmap = typeof fullCache.mindmap === 'string' && Shell._isIsaRefusal(fullCache.mindmap);
+        // ★ v2.15.13-B2-selo-unificado-ambar-render: o âmbar usa a MESMA validação
+        //   por forma que o selo — um campo presente mas sem forma válida
+        //   avisa; um campo ausente não (nunca gerado ≠ recusa).
+        const _refusedSummary = typeof fullCache.summary === 'string' && fullCache.summary && !Shell._isIsaValidContent('summary', fullCache.summary);
+        const _refusedMindmap = typeof fullCache.mindmap === 'string' && fullCache.mindmap && !Shell._isIsaValidContent('mindmap', fullCache.mindmap);
         if (_refusedSummary || _refusedMindmap) {
           const _refusedLabel = (_refusedSummary && _refusedMindmap) ? 'resumo nem pílulas válidos' : _refusedSummary ? 'resumo válido' : 'pílulas válidas';
           chainBadge += '<div class="meggy-chain-badge" style="background:rgba(255,193,7,.08);border-color:rgba(255,193,7,.35);color:#ffc107;"><i class="bi bi-exclamation-triangle"></i> <b>Sem ' + _refusedLabel + ':</b> o conteúdo guardado é uma recusa da IA (sem material da aula). Toque em <b>Regerar</b> para gerar de novo.</div>';
