@@ -266,6 +266,10 @@ object CoverLibrary {
         names: Array<out String?>,
         allowGeneral: Boolean
     ): String? {
+        // Ronda 10 Frente C — capa de sub-pasta do drive do admin
+        // (AdminDriveUi.subfolderCoverFor): POR CIMA da resolução por
+        // biblioteca; sem entrada no mapa, null e o fluxo segue igual.
+        AdminDriveUi.subfolderCoverFor(*names)?.let { return it }
         ensureLoadedFromDisk(context)
         val images = cachedImages ?: return null
         if (images.isEmpty()) return null
