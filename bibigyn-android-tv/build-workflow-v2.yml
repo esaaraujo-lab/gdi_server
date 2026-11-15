@@ -1,8 +1,8 @@
-name: Build Meggy Native App (Elegant)
+name: Build BiBi Fit (Elegant)
 
 on:
   push:
-    tags: ['native-v*']
+    tags: ['bibigyn-v*']
   workflow_dispatch:
 
 permissions:
@@ -34,21 +34,21 @@ jobs:
           gradle-version: '8.2'
 
       - name: Build APK (release)
-        working-directory: meggy-native-app
+        working-directory: bibigyn-android-tv
         run: gradle assembleRelease --no-daemon --no-build-cache
 
       - name: Find APK
-        run: find meggy-native-app -name "*.apk" -type f
+        run: find bibigyn-android-tv -name "*.apk" -type f
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: meggy-elegant-apk
-          path: meggy-native-app/app/build/outputs/apk/release/*.apk
+          name: bibigyn-elegant-apk
+          path: bibigyn-android-tv/app/build/outputs/apk/release/*.apk
 
       - name: Release
-        if: startsWith(github.ref, 'refs/tags/native-v')
+        if: startsWith(github.ref, 'refs/tags/bibigyn-v')
         uses: softprops/action-gh-release@v2
         with:
-          files: meggy-native-app/app/build/outputs/apk/release/*.apk
+          files: bibigyn-android-tv/app/build/outputs/apk/release/*.apk
           generate_release_notes: true
