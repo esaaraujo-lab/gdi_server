@@ -38,6 +38,13 @@
     <string name="settings_title">Ajustes</string>
     <string name="tab_summary">Resumo</string>
     <string name="tab_lessons">Aulas</string>
+    <!-- Frente R4B — filtro e secções da lista plana. -->
+    <string name="flat_filter_all">Todos</string>
+    <string name="flat_filter_videos">Vídeos</string>
+    <string name="flat_filter_materials">Materiais</string>
+    <string name="flat_section_videos">Vídeos</string>
+    <string name="flat_section_materials">Materiais</string>
+    <string name="flat_empty_filter">Nada aqui com este filtro.</string>
     <string name="tab_questions">Questões</string>
     <string name="tab_flashcards">Flashcards</string>
     <string name="cta_continue">▶ Continuar assistindo</string>
@@ -74,4 +81,18 @@
     <string name="pdf_summary_unavailable">A IA da Meggy não está disponível neste servidor.</string>
     <string name="pdf_summary_rate_limited">Limite de mensagens da Meggy por hora atingido. Tente novamente mais tarde.</string>
     <string name="pdf_summary_failed">Não foi possível gerar o resumo. Verifique a conexão e tente novamente.</string>
+    <!-- Frente R4 — Materiais da aula no player (retrato) -->
+    <string name="materials_title">📚 Materiais</string>
+    <string name="materials_loading">A carregar materiais…</string>
+    <string name="materials_empty">Ainda sem materiais para esta aula.</string>
+    <string name="materials_error">Não foi possível carregar os materiais.</string>
+    <string name="materials_retry">Tentar de novo</string>
+    <string name="materials_summary_title">✨ Resumo</string>
+    <string name="materials_summary_more">Ver resumo completo →</string>
+    <string name="materials_summary_full_title">✨ Resumo da aula</string>
+    <string name="materials_pills_title">💡 Pílulas</string>
+    <string name="materials_questions_title">❓ Questões</string>
+    <string name="materials_files_title">📁 Ficheiros da pasta</string>
+    <string name="materials_answer">✓ Resposta: %1$s</string>
+    <string name="materials_close">Fechar</string>
 </resources>
