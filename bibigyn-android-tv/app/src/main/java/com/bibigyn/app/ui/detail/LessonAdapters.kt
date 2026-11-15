@@ -266,7 +266,7 @@ class LessonGridAdapter(
                     listener(onError = { _, _ -> showLibraryOrCover() })
                 }
             } else {
-                showLibraryOrMonogram()
+                showLibraryOrCover()
             }
             lessonCardTitle.text = group.folder.name
             if (video != null) {
