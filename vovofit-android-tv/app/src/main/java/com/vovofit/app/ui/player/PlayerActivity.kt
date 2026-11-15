@@ -30,6 +30,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
+import androidx.media3.common.PlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
@@ -42,6 +43,7 @@ import com.vovofit.app.data.ApiService
 import com.vovofit.app.data.FileItem
 import com.vovofit.app.data.coverResForPath
 import com.vovofit.app.util.LessonDescription
+import com.vovofit.app.util.MaterialSaver
 import com.vovofit.app.databinding.ActivityPlayerBinding
 import com.vovofit.app.ui.home.HomeActivity
 import com.vovofit.app.ui.mylist.MyListActivity
@@ -117,6 +119,11 @@ import kotlinx.coroutines.withContext
  * escondidos ou com o foco no vídeo; com os controles visíveis e o
  * foco num botão, as setas movem o foco — navegação padrão).
  *
+ * Frente E — controlos discretos (so visual, sem mexer em
+ * comportamento): disco de play/pausa 48dp/72dp (era 64dp/96dp), barra
+ * de progresso fina de 4dp e mais transparente, scrim 72% -> 60%
+ * (base) / 80% -> 60% (topo). O auto-hide (4s, fade 200ms) e o disco
+ * central so com controlos visiveis ja existiam (v2.7.9) e ficam.
  * DESCANSO (🌙, v1.3.0 + pill 23:50; Frente D: TELA CHEIA + persiste
  * na troca de aula): overlay preto sobre a TELA TODA (último filho da
  * raiz, acima das barras, da info e da bottom nav); o áudio e o
@@ -275,6 +282,8 @@ class PlayerActivity : AppCompatActivity() {
     /** v1.0.8 onda 2 — pastas cuja geracao ja foi disparada neste player. */
     private val triggeredLessonFolders = mutableSetOf<String>()
     private var playerInForeground = false
+    // Frente H — o enriquecimento da playlist (1× por sessão).
+    private var playlistEnriched = false
 
     private enum class SubtitleState { UNKNOWN, READY, GENERATING, NONE }
 
@@ -288,6 +297,11 @@ class PlayerActivity : AppCompatActivity() {
         isTv = TvUtils.isTv(this)
         binding = ActivityPlayerBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        // Frente H — o overlay "A carregar" já nasce visível no XML;
+        // esconde-se no 1º STATE_READY (ver o listener em
+        // initialisePlayer) — o aluno vê o player a carregar em vez
+        // de um ecrã preto sem feedback.
+        binding.playerLoading.visibility = View.VISIBLE
 
         PlaylistManager.loadPlaylist(this)
 
@@ -995,6 +1009,9 @@ class PlayerActivity : AppCompatActivity() {
         playerInForeground = true
         initialisePlayer()
         startPregenerator()
+        // Frente H — a playlist interfolder é montada aqui, em 2º plano,
+        // depois de o player já estar visível (ver a função).
+        enrichPlaylistInBackground()
     }
 
     override fun onStop() {
@@ -1002,6 +1019,7 @@ class PlayerActivity : AppCompatActivity() {
         playerInForeground = false
         descriptionPregenerator?.stop()
         releasePlayer()
+        playlistEnriched = false
     }
 
     /**
@@ -1063,11 +1081,78 @@ class PlayerActivity : AppCompatActivity() {
             when (val outcome = LessonDescription.triggerOnly(
                 this@PlayerActivity, folderPath, folderName, files
             )) {
-                is LessonDescription.Outcome.Ready ->
+                is LessonDescription.Outcome.Ready -> {
                     SessionManager.get(this@PlayerActivity)
                         .saveLessonDescription(folderPath, outcome.text)
+                    // Frente K — o gerado ja existia: garante resumo +
+                    // pilulas + questoes na pasta de materiais (o
+                    // mesmo caminho do detalhe: MaterialSaver).
+                    val lessonFile = LessonDescription.lessonFilePath(folderPath, files)
+                    if (lessonFile != null) {
+                        runCatching {
+                            MaterialSaver.saveGenerated(
+                                this@PlayerActivity, lessonFile, folderName,
+                                outcome.bundle.summary, outcome.bundle.mindmap,
+                                outcome.bundle.questionsJson
+                            )
+                        }
+                    }
+                }
                 else -> Unit
             }
+        }
+    }
+
+    /**
+     * Frente H — enriquecimento da playlist EM 2º PLANO, depois da
+     * navegação. Quando o vídeo tocado era o único da pasta, o
+     * Detail/Browse/Home já navegou com uma playlist de 1 item; a
+     * montagem interfolder (CrossFolderPlaylist: 1 listFolder ao pai +
+     * 1 por cada pasta-irmã, em lotes de 6) corria ANTES da navegação
+     * e deixava o toque sem resposta durante segundos. Agora corre
+     * aqui, com o player já visível a mostrar "A carregar", e os
+     * itens novos entram na fila do ExoPlayer sem interromper a
+     * reprodução (addMediaItems): os anteriores ao vídeo atual vão
+     * para o início (o atual passa ao índice startIndex) e os
+     * seguintes para logo a seguir a ele; o PlaylistManager é
+     * substituído pela lista completa no mesmo índice, por isso
+     * Anterior/Próxima e o autoplay continuam alinhados com o
+     * ExoPlayer. Corre no máximo 1× por sessão do player; falha de
+     * rede = ignora (a fila de 1 item continua válida).
+     */
+    private fun enrichPlaylistInBackground() {
+        if (playlistEnriched) return
+        val exo = player ?: return
+        if (PlaylistManager.size() > 1) {
+            playlistEnriched = true
+            return
+        }
+        val item = currentItem ?: return
+        val folder = item.folderPath
+            ?: intent.getStringExtra(EXTRA_FOLDER_PATH)
+            ?: return
+        if (item.link.isNullOrBlank()) return
+        playlistEnriched = true
+        lifecycleScope.launch {
+            val api = ApiService(this@PlayerActivity)
+            val result = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { com.vovofit.app.util.CrossFolderPlaylist.build(folder, item, api) }.getOrNull()
+            } ?: return@launch
+            if (result.items.size <= 1) return@launch
+            val p = player ?: return@launch
+            if (p.mediaItemCount != 1 || isFinishing || isDestroyed) return@launch
+            val current = PlaylistManager.getCurrent()
+            val target = result.items[result.startIndex]
+            if (current?.name != target.name) return@launch
+            if ((current.folderPath ?: "") != (target.folderPath ?: "")) return@launch
+            fun toMedia(f: FileItem) =
+                MediaItem.Builder().setUri(VovoFitApp.BASE_URL + (f.link ?: "")).build()
+            val before = result.items.subList(0, result.startIndex)
+            val after = result.items.subList(result.startIndex + 1, result.items.size)
+            if (before.isNotEmpty()) p.addMediaItems(0, before.map(::toMedia))
+            if (after.isNotEmpty()) p.addMediaItems(result.startIndex + 1, after.map(::toMedia))
+            PlaylistManager.setPlaylist(result.items, result.startIndex, this@PlayerActivity)
+            updatePrevNextButtons()
         }
     }
 
@@ -1133,9 +1218,16 @@ class PlayerActivity : AppCompatActivity() {
                     }
                 }
                 if (state == Player.STATE_READY) {
+                    // Frente H — 1º frame pronto: esconde o "A carregar".
+                    binding.playerLoading.visibility = View.GONE
                     applyVideoQuality()
                     applySubtitlesEnabled()
                 }
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                // Frente H — erro de playback: não deixar o "A carregar" preso.
+                binding.playerLoading.visibility = View.GONE
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -1261,6 +1353,9 @@ class PlayerActivity : AppCompatActivity() {
         setTitles(item)
         initialisePlayer()
         startPregenerator()
+        // Frente H — a playlist interfolder é montada aqui, em 2º plano,
+        // depois de o player já estar visível (ver a função).
+        enrichPlaylistInBackground()
     }
 
     private fun toggleFavoriteCurrent() {
