@@ -48,7 +48,7 @@ class BookmarkAdapter(
             // drive (ThumbArt) — nunca o livro 'geral' nem monograma.
             val coverRes = ThumbArt.coverResForPath(b.path)
             val libraryUrl = LibraryCovers.resolveStrict(
-                holder.itemView.context, b.name, b.path
+                b.name, b.path
             )
             if (libraryUrl != null) {
                 mylistThumb.visibility = android.view.View.VISIBLE
