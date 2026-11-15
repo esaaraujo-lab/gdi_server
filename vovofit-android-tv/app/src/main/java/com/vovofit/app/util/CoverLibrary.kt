@@ -357,11 +357,28 @@ object CoverLibrary {
     fun resolveStrict(context: Context, vararg names: String?): String? =
         resolveInternal(context, names, allowGeneral = false)
 
+    /**
+     * Ronda 10 Frente C — imagem 'geral' do manifesto (a sub-capa
+     * GENÉRICA do drive do admin — ver AdminDriveUi.generalCoverUrl).
+     * Ao contrário de resolve(context) sem nomes (que devolve null —
+     * o resolveInternal sai cedo sem candidatos), esta lê a entrada
+     * 'geral' directamente. Null sem manifesto carregado ou sem
+     * entrada 'geral' no manifesto.
+     */
+    fun generalCoverUrl(context: Context): String? {
+        ensureLoaded(context)
+        return cached?.firstOrNull { it.id == "geral" }?.url
+    }
+
     private fun resolveInternal(
         context: Context,
         names: Array<out String?>,
         allowGeneral: Boolean
     ): String? {
+        // Ronda 10 Frente C — capa de sub-pasta do drive do admin
+        // (AdminDriveUi.subfolderCoverFor): POR CIMA da resolução por
+        // biblioteca; sem entrada no mapa, null e o fluxo segue igual.
+        AdminDriveUi.subfolderCoverFor(*names)?.let { return it }
         ensureLoaded(context)
         val entries = cached ?: return null
         if (entries.isEmpty()) return null
