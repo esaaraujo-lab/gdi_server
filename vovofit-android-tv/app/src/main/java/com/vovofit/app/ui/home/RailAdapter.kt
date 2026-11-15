@@ -48,7 +48,16 @@ data class RailItem(
 
 class RailAdapter(
     private val items: List<RailItem>,
-    private val onClick: (RailItem) -> Unit
+    private val onClick: (RailItem) -> Unit,
+    /**
+     * Frente A (TV) — roteamento D-pad explícito dos cards do rail.
+     * O FocusFinder ignora vistas fora do viewport do ScrollView
+     * (o rail de baixo começa abaixo do fold), por isso o D-pad
+     * UP/DOWN entre rails precisa destes ids. NO_ID = roteamento
+     * padrão (o host que não passa nada não muda nada).
+     */
+    private val nextFocusUpId: Int = View.NO_ID,
+    private val nextFocusDownId: Int = View.NO_ID
 ) : RecyclerView.Adapter<RailAdapter.VH>() {
 
     inner class VH(val binding: ItemRailCardBinding) : RecyclerView.ViewHolder(binding.root) {
@@ -58,6 +67,9 @@ class RailAdapter(
                 if (pos != RecyclerView.NO_POSITION) onClick(items[pos])
             }
             FocusAnimator.attachCard(binding.cardRoot, TvUtils.isTv(binding.root.context))
+            // Frente A (TV): nextFocus explícito (ver params).
+            if (nextFocusUpId != View.NO_ID) itemView.nextFocusUpId = nextFocusUpId
+            if (nextFocusDownId != View.NO_ID) itemView.nextFocusDownId = nextFocusDownId
         }
     }
 
