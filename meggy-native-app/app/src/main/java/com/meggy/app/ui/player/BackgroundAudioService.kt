@@ -11,6 +11,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.media.app.NotificationCompat as MediaNotificationCompat
 import com.meggy.app.R
 
 /**
@@ -129,7 +130,7 @@ class BackgroundAudioService : Service() {
                     Intent(context, BackgroundAudioService::class.java).setAction(action),
                     flags
                 )
-            val style = NotificationCompat.MediaStyle().setShowActionsInCompactView(0, 1, 2)
+            val style = MediaNotificationCompat.MediaStyle().setShowActionsInCompactView(0, 1, 2)
             return NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(title)
