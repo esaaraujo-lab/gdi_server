@@ -18,6 +18,7 @@ import com.vovofit.app.util.CardGradient
 import com.vovofit.app.util.CoverLibrary
 import com.vovofit.app.util.loadCoverChain
 import com.vovofit.app.util.FocusAnimator
+import com.vovofit.app.util.TapFeedback
 import com.vovofit.app.util.Format
 import com.vovofit.app.util.SessionManager
 import com.vovofit.app.util.TvUtils
@@ -66,6 +67,7 @@ class FileAdapter(
                 if (item.isFolder) onFolder(item) else onFile(item)
             }
             FocusAnimator.attachCard(binding.cardRoot, TvUtils.isTv(binding.root.context))
+            TapFeedback.attachPress(binding.cardRoot, TvUtils.isTv(binding.root.context))
         }
     }
 
