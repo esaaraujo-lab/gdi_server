@@ -16,6 +16,7 @@ import com.vovofit.app.util.CardGradient
 import com.vovofit.app.util.CoverLibrary
 import com.vovofit.app.util.loadCoverChain
 import com.vovofit.app.util.FocusAnimator
+import com.vovofit.app.util.TapFeedback
 import com.vovofit.app.util.Format
 import com.vovofit.app.util.SessionManager
 import com.vovofit.app.util.TvUtils
@@ -82,6 +83,7 @@ class LessonListAdapter(
                 onToggleExpand(group, pos)
             }
             FocusAnimator.attach(binding.root, TvUtils.isTv(binding.root.context))
+            TapFeedback.attachPress(binding.root, TvUtils.isTv(binding.root.context))
         }
     }
 
@@ -99,6 +101,7 @@ class LessonListAdapter(
                 }
             }
             FocusAnimator.attach(binding.root, TvUtils.isTv(binding.root.context))
+            TapFeedback.attachPress(binding.root, TvUtils.isTv(binding.root.context))
         }
     }
 
@@ -210,6 +213,7 @@ class LessonGridAdapter(
                 onPlayLesson(groups[pos])
             }
             FocusAnimator.attachCard(binding.lessonCardRoot, TvUtils.isTv(binding.root.context))
+            TapFeedback.attachPress(binding.lessonCardRoot, TvUtils.isTv(binding.root.context))
         }
     }
 
