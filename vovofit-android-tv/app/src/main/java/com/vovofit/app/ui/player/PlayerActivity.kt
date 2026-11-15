@@ -208,7 +208,13 @@ class PlayerActivity : AppCompatActivity() {
                     }
                     if (isFullscreen && !controlsVisible) {
                         showControls()
-                        binding.btnPlayPauseBar.requestFocus()
+                        // Ronda 8 Frente B: na TV o botao play/pausa
+                        // da barra nao existe — UP entra na barra
+                        // pelo 1o chip restante (Descanso). No
+                        // celular continua o botao da barra
+                        // (nullable no binding: ?.).
+                        if (isTv) binding.btnRestBar.requestFocus()
+                        else binding.btnPlayPauseBar?.requestFocus()
                         return true
                     }
                 }
@@ -219,7 +225,11 @@ class PlayerActivity : AppCompatActivity() {
                     // Com o foco já na barra, deixa o sistema navegar
                     // (pills -> SeekBar) — não consome a tecla.
                     if (isFullscreen && controlsVisible && binding.playerView.hasFocus()) {
-                        binding.btnPlayPauseBar.requestFocus()
+                        // Ronda 8 Frente B: ver UP — na TV entra
+                        // pelo Descanso; no celular pelo botao
+                        // da barra (nullable no binding: ?.).
+                        if (isTv) binding.btnRestBar.requestFocus()
+                        else binding.btnPlayPauseBar?.requestFocus()
                         return true
                     }
                 }
@@ -228,9 +238,33 @@ class PlayerActivity : AppCompatActivity() {
                         exitSleepMode()
                         return true
                     }
-                    if (isFullscreen && !controlsVisible) {
+                    // Ronda 8 Frente B (Elton 2026-11-15 19:24):
+                    // na TV o OK do controlo E play/pause — o
+                    // disco central e o unico botao. Com os
+                    // controlos escondidos, OK pausa ou reproduz
+                    // logo (togglePlayPause mostra os controlos);
+                    // com os controlos visiveis, OK pausa ou
+                    // reproduz quando o foco esta no video, no
+                    // disco ou em lado nenhum; com o foco num
+                    // controlo da barra (Descanso, velocidade,
+                    // SeekBar, botoes do topo) a tecla cai no
+                    // super e activa esse controlo.
+                    if (isTv) {
+                        if (!controlsVisible) {
+                            togglePlayPause()
+                            return true
+                        }
+                        val f = currentFocus
+                        if (f == null || f == binding.playerView ||
+                            f == binding.centerPlayPause
+                        ) {
+                            togglePlayPause()
+                            return true
+                        }
+                        // Foco num controlo: cai no super (click dele).
+                    } else if (isFullscreen && !controlsVisible) {
                         showControls()
-                        binding.btnPlayPauseBar.requestFocus()
+                        binding.btnPlayPauseBar?.requestFocus()
                         return true
                     }
                 }
@@ -427,7 +461,11 @@ class PlayerActivity : AppCompatActivity() {
         // Controles da barra (fullscreen/TV) e da linha de info (retrato).
         // v1.0.5: sem botões −10s/+10s (o pulo continua por double-tap e
         // D-pad) e SEM playlist embutida (a playlist vive na página).
-        binding.btnPlayPauseBar.setOnClickListener { exitRestIfActive(); togglePlayPause() }
+        // Ronda 8 Frente B: o botao da barra so existe no layout
+        // do celular — na TV o binding e nullable (?.) e o
+        // listener nao e ligado; o disco central (abaixo) e o
+        // unico play/pause da TV.
+        binding.btnPlayPauseBar?.setOnClickListener { exitRestIfActive(); togglePlayPause() }
         binding.btnSpeedBar.setOnClickListener { exitRestIfActive(); cycleSpeed() }
         binding.btnSpeedInfo.setOnClickListener { exitRestIfActive(); cycleSpeed() }
         binding.btnRestBar.setOnClickListener { toggleSleepMode() }
@@ -448,9 +486,12 @@ class PlayerActivity : AppCompatActivity() {
         // v1.0.6 — feedback visual dos botões da barra (foco D-pad na TV
         // + escala + anel do seletor): sem isso o botão focado/pressionado
         // era indistinguível (chip_outline/btn_play_circle são estáticos).
-        // Barra pós-remoção do CC (Elton 11:16): play/pausa, Descanso,
+        // Barra pós-remoção do CC (Elton 11:16): Descanso,
         // velocidade, sair da tela cheia (+ pills do retrato).
-        listOf(
+        // Ronda 8 Frente B: o play/pausa da barra saiu (so o
+        // disco central na TV; no celular o botao continua) e o
+        // binding passou a nullable — listOfNotNull.
+        listOfNotNull(
             binding.btnPlayPauseBar, binding.btnRestBar,
             binding.btnSpeedBar, binding.btnExitFullscreen, binding.btnSpeedInfo,
             binding.btnRestInfo, binding.btnFullscreen,
@@ -690,10 +731,24 @@ class PlayerActivity : AppCompatActivity() {
         // aparecia sobre o preto quando o player pausava — ex.: fim do
         // timer de sono ou fim da playlist com autoplay desligado).
         val paused = p != null && !p.isPlaying && !sleepMode
-        binding.centerPlayPause.visibility = if (paused && controlsVisible) View.VISIBLE else View.GONE
+        // Ronda 8 Frente B: o disco central e o UNICO play/pause
+        // da TV — quando esta visivel (pausado) e o elemento
+        // focado; ao esconder (a reproduzir) devolve o foco ao
+        // video, para o D-pad nao ficar sem foco (o OK no video
+        // pausa/reproduz, ver dispatchKeyEvent).
+        if (paused && controlsVisible) {
+            binding.centerPlayPause.visibility = View.VISIBLE
+        } else {
+            if (binding.centerPlayPause.hasFocus()) binding.playerView.requestFocus()
+            binding.centerPlayPause.visibility = View.GONE
+        }
         // v1.0.7 — "❚❚" e glifo de TEXTO (branco, sobre o disco escuro);
         // o emoji "⏸" renderizava como quadrado LARANJA na TV (foto 11:48).
-        binding.btnPlayPauseBar.text = if (p?.isPlaying == true) "❚❚" else "▶"
+        // Ronda 8 Frente B: o botao da barra so existe no layout
+        // do celular (nullable no binding na TV) — o glifo dele
+        // continua a actualizar-se la; na TV nao ha botao nenhum
+        // para actualizar.
+        binding.btnPlayPauseBar?.text = if (p?.isPlaying == true) "❚❚" else "▶"
     }
 
     private fun playPrev() {
@@ -1016,10 +1071,21 @@ class PlayerActivity : AppCompatActivity() {
             binding.topBar.animate().alpha(1f).setDuration(200).start()
             // v1.0.6 — TV: o foco tem que entrar na barra (antes nenhum
             // botão recebia foco e o D-pad não alcançava os controles).
+            // Ronda 8 Frente B: sem botao play/pausa na barra da
+            // TV, o foco entra no disco central quando esta
+            // visivel (pausado) — o OK nele pausa/reproduz; a
+            // reproduzir o foco fica no video (o OK ai tambem
+            // pausa/reproduz, ver dispatchKeyEvent). O
+            // updateCenterPlayPause() no fim desta funcao
+            // actualiza a visibilidade do disco; chama-se ja
+            // aqui para o foco o encontrar visivel quando pausado.
             if (isTv) {
                 val f = currentFocus
                 if (f == null || f == binding.playerView) {
-                    binding.btnPlayPauseBar.requestFocus()
+                    updateCenterPlayPause()
+                    if (player?.isPlaying == false) {
+                        binding.centerPlayPause.requestFocus()
+                    }
                 }
             }
         } else {
