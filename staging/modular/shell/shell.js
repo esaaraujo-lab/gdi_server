@@ -794,7 +794,12 @@
                         //   biblioteca → arte padrão); sem coverUrl o cartão
                         //   marca-se p/ o upgrade da biblioteca.
                         const __cover = __v21528TileCoverHtml({ coverUrl: it.coverUrl }, it.icon || '📚');
-                        const __mark = (it.kind === 'concurso' || it.coverUrl) ? '' : ' data-v21528-cover="" data-v21528-cover-name="' + Shell._esc(name) + '" data-v21528-cover-path="' + Shell._esc(it.coursePath || '') + '"';
+                        // ★ v2.15.30 (B — item a): o concurso era excluído do marcador
+                        //   do upgrade da biblioteca (mesma omissão do módulo) — sem
+                        //   coverUrl ficava na arte padrão para sempre, mesmo havendo
+                        //   capa na biblioteca (ex. tj-sp-oficial.jpg p/ "TJSP –
+                        //   Oficial de Justiça"). A capa (__cover) já rendia aqui.
+                        const __mark = it.coverUrl ? '' : ' data-v21528-cover="" data-v21528-cover-name="' + Shell._esc(name) + '" data-v21528-cover-path="' + Shell._esc(it.coursePath || '') + '"';
                         return '<div class="meggy-card"' + idAttr + __mark + ' style="cursor:pointer;position:relative;">' + rmBtn +
                           __cover +
                           '<div class="meggy-card-title">' + Shell._esc(name) + '</div>' +
@@ -1086,13 +1091,26 @@
             // Show drives list
             const drives = window.drive_names || [];
             container.innerHTML = '<div class="meggy-cards-grid">' +
-              drives.map((name, i) => `
-                <div class="meggy-card" data-drive="${i}">
-                  <div class="meggy-card-icon">${['⚖️','📚','🎯','🎨','🎼','🏆','💪','🧘','⚕️','⚖️','🎓','🛡️'][i] || '📁'}</div>
-                  <div class="meggy-card-title">${name}</div>
-                  <div class="meggy-card-meta">Drive ${i}</div>
-                </div>`).join('') +
+              drives.map((name, i) => {
+                const icon = ['⚖️','📚','🎯','🎨','🎼','🏆','💪','🧘','⚕️','⚖️','🎓','🛡️'][i] || '📁';
+                // ★ v2.15.30 (A): capa pela MESMA hierarquia dos tiles de
+                //   curso (__v21528TileCoverHtml + upgrade da biblioteca):
+                //   o emoji solto não é capa — ALFACON e TUDO DE TRIBUNAIS
+                //   ficavam sem imagem. Sem coverUrl o cartão marca-se p/
+                //   o upgrade; a arte padrão (gradiente+ícone) nunca deixa
+                //   a área 16:9 vazia, e o <img> que falha volta p/ ela.
+                const cover = __v21528TileCoverHtml({}, icon);
+                const mark = ' data-v21528-cover="" data-v21528-cover-name="' + Shell._esc(name || '') + '" data-v21528-cover-path=""';
+                return '<div class="meggy-card" data-drive="' + i + '"' + mark + '>' +
+                  cover +
+                  '<div class="meggy-card-title meggy-card-title-drive" title="' + Shell._esc(name || '') + '">' + Shell._esc(name || '') + '</div>' +
+                  '<div class="meggy-card-meta">Drive ' + i + '</div>' +
+                '</div>';
+              }).join('') +
               '</div>';
+            // ★ v2.15.30 (A): upgrade das capas da biblioteca (assíncrono,
+            //   mesma chamada do bloco gémeo da Home).
+            __v21528UpgradeTileCovers(container).catch(() => {});
             container.querySelectorAll('.meggy-card[data-drive]').forEach(card => {
               card.onclick = () => Shell.views._renderDrives('/' + card.dataset.drive + ':/');
             });
