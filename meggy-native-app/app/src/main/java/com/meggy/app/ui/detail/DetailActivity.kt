@@ -540,7 +540,7 @@ class DetailActivity : AppCompatActivity() {
         val firstThumb = allFiles.firstOrNull { (it.isVideo || it.isAudio) && !it.thumbnailLink.isNullOrBlank() }
             ?.thumbnailLink
         val coverRes = ThumbArt.coverResForPath(currentPath)
-        val remote = LibraryCovers.remoteCover(firstThumb, folderName, currentPath)
+        val remote = LibraryCovers.remoteCoverStrict(firstThumb, folderName, currentPath)
         binding.heroImage.visibility = View.VISIBLE
         binding.heroMonogram.visibility = View.GONE
         if (remote != null) {
