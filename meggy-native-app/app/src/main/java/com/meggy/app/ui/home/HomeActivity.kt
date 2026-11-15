@@ -20,6 +20,7 @@ import com.meggy.app.MeggyApp
 import com.meggy.app.R
 import com.meggy.app.data.ApiService
 import com.meggy.app.data.DriveItem
+import com.meggy.app.data.FileItem
 import com.meggy.app.data.HeroItem
 import com.meggy.app.databinding.ActivityHomeBinding
 import com.meggy.app.ui.browse.BrowseActivity
