@@ -691,6 +691,23 @@
   // (window.renderCursos e window.gdiRefreshCentralPanel podem ser chamados por outros módulos)
   // ★ v2.6: busca concursos + em destaque do endpoint unificado (cache 60s)
   let __unifiedCache=null, __unifiedAt=0;
+  // ★ v2.15.7 (P8): totais D1 dos cursos do aluno (kind 'course' do
+  //   unificado), por chave normalizada — o loadUnifiedExtras antigo
+  //   descartava kind 'course' e o detalhe nunca via c.total.
+  let __unifiedCourseTotals={};
+  function __unifiedCourseTotalFor(key){
+    if(!key) return null;
+    try{
+      const k1=low(String(key));
+      if(__unifiedCourseTotals[k1]!=null) return __unifiedCourseTotals[k1];
+      let k2=null;
+      try{ k2=low(decodeURIComponent(String(key))); }catch(_){}
+      if(k2 && __unifiedCourseTotals[k2]!=null) return __unifiedCourseTotals[k2];
+      const k3=k1.endsWith('/')?k1.slice(0,-1):k1+'/';
+      if(__unifiedCourseTotals[k3]!=null) return __unifiedCourseTotals[k3];
+    }catch(_){}
+    return null;
+  }
   // ★ v2.10.2: invalida o cache unificado (criar/excluir concurso)
   function invalidateUnifiedCache(){ __unifiedCache=null; __unifiedAt=0; }
   async function loadUnifiedExtras(){
@@ -700,7 +717,17 @@
     const d=await r.json();
     if(!d||!d.ok||!Array.isArray(d.items)) throw new Error('unified failed');
     const out=[];
+    __unifiedCourseTotals={};
     for(const it of d.items){
+      // ★ v2.15.7 (P8): kind 'course' alimenta o mapa de totais (não vira
+      //   cartão — o curso local já está na grade via collectCourses).
+      if(it.kind==='course' && it.coursePath){
+        try{
+          const k=low(String(it.coursePath));
+          __unifiedCourseTotals[k]=it.total||0;
+          try{ const kd=low(decodeURIComponent(String(it.coursePath))); if(kd!==k) __unifiedCourseTotals[kd]=it.total||0; }catch(_){}
+        }catch(_){}
+      }
       if(it.kind==='concurso') out.push({kind:'concurso', key:'concurso:'+it.concursoId, concursoId:it.concursoId, name:it.name, examDate:it.examDate||'', total:it.total||0, lessons:new Set(), watched:0});
       else if(it.kind==='featured') out.push({kind:'featured', key:'featured:'+it.coursePath, coursePath:it.coursePath, name:it.name, icon:it.icon||'⭐', color:it.color||'', total:it.total||0, lessons:new Set(), watched:0});
     }
@@ -722,6 +749,10 @@
     const cs=collectCourses();
     // ★ v2.6: lista única — concursos + em destaque entram na mesma grade
     const __extras=await loadUnifiedExtras().catch(()=>[]);
+    // ★ v2.15.7 (P8): enriquece o curso LOCAL com o total D1 do unificado
+    //   (v. __unifiedCourseTotals em loadUnifiedExtras) — o cartão e o
+    //   detalhe passam a mostrar o mesmo total da prévia.
+    for (const c of cs) { const t = __unifiedCourseTotalFor(c.key); if (t != null) c.total = t; }
     const all=cs.concat(__extras);
     const hidden=listHiddenCourses();
     if(!all.length){
@@ -1979,37 +2010,87 @@
               path: sl.path,
               name: sl.name || realName(sl.path),
               watched: isWatched,
-              resumed: false
+              resumed: false,
+              type: sl.type || ''
             });
           }
         }
       }catch(_){}
     }
-    // ★ v2.15.6 (P8): fontes locais vazias → busca as aulas no D1
-    //   (/api/d1/lessons/by-course) e re-renderiza com elas. Sem isto, um
-    //   curso do unificado sem aulas locais mostrava "0 AULAS" e "Nenhuma
-    //   aula encontrada ainda" mesmo com o D1 cheio. Guarda _d1Merged p/
-    //   buscar uma só vez por curso; não mexe na enumeração do scanner.
-    if (!lessons.length && !c._d1Merged) {
+    // ★ v2.15.7 (P8): o merge do D1 é SEMPRE feito (não só com fontes
+    //   locais vazias). Antes o gate `!lessons.length` bloqueava o merge
+    //   sempre que havia QUALQUER aula local (assistida/resume/histórico
+    //   ou do scanner) — o detalhe listava só as 12 locais e o total
+    //   ficava em 12 mesmo com 180 no D1. Agora: com aulas locais,
+    //   renderiza na hora e re-renderiza quando o D1 chegar; sem aulas
+    //   locais, mostra "Carregando aulas…" e só renderiza com o D1.
+    //   Guarda _d1Merged p/ buscar uma só vez por curso.
+    //   FUSÃO A×C: o push mantém o `type:` da dedup (C, F1a) — sem ele
+    //   o dedupe por pasta não distingue vídeo de transcrição.
+    if (!c._d1Merged) {
       c._d1Merged = true;
-      box.innerHTML = '<div style="max-width:760px;margin:0 auto;padding:20px;text-align:center;color:#8b949e;font-size:13px;">Carregando aulas…</div>';
+      if (!lessons.length) box.innerHTML = '<div style="max-width:760px;margin:0 auto;padding:20px;text-align:center;color:#8b949e;font-size:13px;">Carregando aulas…</div>';
       try {
         fetch('/api/d1/lessons/by-course?path=' + encodeURIComponent(c.key), { credentials: 'include', cache: 'no-store' })
           .then(r => r.json()).then(d => {
             const dl = (d && d.ok && d.lessons) || [];
             if (dl.length) {
               c._d1Lessons = [];
-              dl.forEach(l => { const p = l.lesson_path; if (!p) return; c._d1Lessons.push({ path: String(p).split('?')[0], name: l.lesson_name || realName(p), watched: !!(w && w[p]), resumed: false }); });
+              dl.forEach(l => { const p = l.lesson_path; if (!p) return; c._d1Lessons.push({ path: String(p).split('?')[0], name: l.lesson_name || realName(p), watched: !!(w && w[p]), resumed: false, type: l.lesson_type || '' }); });
             }
             openCourseDetail(box, c);
           }).catch(() => { openCourseDetail(box, c); });
       } catch (_) { openCourseDetail(box, c); }
-      return;
+      if (!lessons.length) return;
     }
     if (Array.isArray(c._d1Lessons)) {
-      c._d1Lessons.forEach(sl => { if (!sl || !sl.path) return; const lp = low(sl.path); if (seen.has(lp)) return; seen.add(lp); lessons.push({ path: sl.path, name: sl.name || realName(sl.path), watched: !!sl.watched, resumed: false }); });
+      c._d1Lessons.forEach(sl => { if (!sl || !sl.path) return; const lp = low(sl.path); if (seen.has(lp)) return; seen.add(lp); lessons.push({ path: sl.path, name: sl.name || realName(sl.path), watched: !!sl.watched, resumed: false, type: sl.type || '' }); });
     }
     lessons.sort((a,b)=>a.name.localeCompare(b.name,'pt-BR',{numeric:true}));
+
+    // ★ v2.15.7 (dedup): 1 aula = 1 pasta de aula — a lista mesclada conta
+    //   ARQUIVOS (vídeo + transcrição + ebook da mesma Aula = 3 "aulas").
+    //   Dedupe por pasta ANTES do total: o vídeo é o representante da pasta
+    //   (ou áudio, ou o 1º arquivo); watched propaga (pasta assistida se
+    //   QUALQUER arquivo dela foi assistido); arquivo solto na raiz do
+    //   curso sem ser mídia não é aula. A linha total=Math.max(...) abaixo
+    //   NÃO muda — lessons.length já é o nº de pastas. Se o scan terminou,
+    //   scannedCount (arquivos) é travado no nº de pastas.
+    (function(){
+      var _best = new Map();
+      var _isMedia = function(l){ var t = String((l && l.type) || '').toLowerCase(); if (t === 'video' || t === 'audio') return true; var _re = /\.mp4$|\.mp3$|\.mkv$|\.webm$|\.m4a$|\.wav$|\.ogg$/; var _pn = String((l && l.path) || '').toLowerCase(); var _nn = String((l && l.name) || '').toLowerCase(); return _re.test(_pn) || _re.test(_nn); };
+      var _cp = '';
+      // coursePath é local de openCourseDetail (c.key); o typeof-guarda
+      // permite o bloco rodar também sem ele (ex.: harness v2.15.5, que
+      // sintetiza a função só com (c, lessons, ...)) — aí cai p/ c.key e,
+      // sem nem isso, p/ o menor dirname (a raiz do curso).
+      try { _cp = decodeURIComponent((typeof coursePath !== 'undefined' ? coursePath : ((c && c.key) || ''))); } catch (_e) { _cp = (typeof coursePath !== 'undefined' ? coursePath : ((c && c.key) || '')); }
+      if (!_cp) { try { var _short = null; for (var _i2 = 0; _i2 < lessons.length; _i2++) { var _p2 = String((lessons[_i2] && lessons[_i2].path) || ''); try { _p2 = decodeURIComponent(_p2); } catch (_e2) {} var _s2 = _p2.lastIndexOf('/'); var _d2 = _s2 > 0 ? _p2.slice(0, _s2) : _p2; if (_d2.length > 9 && _d2.slice(-9) === '/material') _d2 = _d2.slice(0, -9); if (_d2 && (!_short || _d2.length < _short.length)) _short = _d2; } _cp = _short || ''; } catch (_e3) {} }
+      var _key = function(l){
+        var p = String((l && l.path) || '');
+        try { p = decodeURIComponent(p); } catch (_e) {}
+        var s = p.lastIndexOf('/');
+        var d = s > 0 ? p.slice(0, s) : p;
+        if (d.length > 9 && d.slice(-9) === '/material') d = d.slice(0, -9);
+        if (_cp && d === _cp) { return _isMedia(l) ? ('\u0000' + p) : null; }
+        return d || null;
+      };
+      var _kept = [];
+      for (var i = 0; i < lessons.length; i++) {
+        var _l = lessons[i];
+        var _k = _key(_l);
+        if (_k === null) continue;
+        if (!_best.has(_k)) { _best.set(_k, _kept.length); _kept.push(_l); }
+        else {
+          var _old = _kept[_best.get(_k)];
+          if (_old) _old.watched = !!(_old.watched || _l.watched);
+          if (_isMedia(_l) && !_isMedia(_old)) { _l.watched = !!(_old.watched || _l.watched); _kept[_best.get(_k)] = _l; }
+        }
+      }
+      lessons.length = 0;
+      for (var j = 0; j < _kept.length; j++) lessons.push(_kept[j]);
+    })();
+    if (scanStatus === 'done' && lessons.length) scannedCount = lessons.length;
 
     // ★ v2.15.5 (item 9): contagem REAL — o total provisório acima ignorava
     //   as aulas escaneadas (o cartão, via unified/D1 ou via scanner, já as
@@ -2449,19 +2530,21 @@
   // POST /api/concursos/:id/sources/preview {folderPaths} → {folders,totalLessons,totalHours}
   // ★ v2.15.6 (P2): prévia paginada — retoma do cursor (pending) com o
   //   acumulado até truncated=false, senão o Módulo II (além das 40
-  //   listagens) não aparece nem na prévia nem no detalhe. Teto 20
-  //   tentativas p/ não loopar p/ sempre num cursor quebrado.
+  //   listagens) não aparece nem na prévia nem no detalhe.
+  // ★ v2.15.7 (P4): teto 40 tentativas (antes 20) — 2 pastas grandes
+  //   precisam de mais rounds p/ convergir com o orçamento justo por
+  //   pasta; o loop só anda quando há pending (truncated=false para).
   async function previewAttach(concursoId, folderPaths){
     let body={folderPaths:folderPaths};
     let d=null, r=null;
-    for(let a=0;a<20;a++){
+    for(let a=0;a<40;a++){
       r=await fetch('/api/concursos/'+encodeURIComponent(concursoId)+'/sources/preview',{
         method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',
         body:JSON.stringify(body)
       });
       d=await r.json().catch(()=>({}));
       if(!r.ok||!d.ok||!d.truncated)break;
-      body={folderPaths:folderPaths,resume:d.pending||{},accum:{folders:d.folders||[],seenNewPaths:d.seenNewPaths||[],enumErrors:d.enumErrors||[]}};
+      body={folderPaths:folderPaths,resume:d.pending||{},accum:{folders:d.folders||[],seenNewPaths:d.seenNewPaths||[],enumErrors:d.enumErrors||[],depthCut:d.depthCut||[],notFound:d.notFound||[]}};
     }
     if(!r.ok||!d.ok)throw new Error((d&&(d.error||d.message))||('HTTP '+r.status));
     return d;
@@ -2474,7 +2557,8 @@
     let body={folderPaths:folderPaths};
     let d=null, r=null;
     let firstAttached=null, firstSkipped=null, lastTotal=0;
-    for(let a=0;a<20;a++){
+    // ★ v2.15.7 (P4): teto 40 tentativas (antes 20) — v. previewAttach.
+    for(let a=0;a<40;a++){
       r=await fetch('/api/concursos/'+encodeURIComponent(concursoId)+'/sources',{
         method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',
         body:JSON.stringify(body)
