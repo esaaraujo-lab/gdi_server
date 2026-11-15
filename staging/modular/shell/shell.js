@@ -1321,6 +1321,11 @@
             if (!folderPath || !window.gdiListAllFiles) {
               tabsEl.innerHTML = '';
               if (statusEl) statusEl.textContent = 'sem material';
+              // ★ v2.15.6-resumo: as abas ISA existem SEMPRE (mesmo sem
+              //   pasta/listagem — elas geram a partir do nome/contexto
+              //   da aula). Antes este ramo apagava as abas e retornava
+              //   sem renderizá-las, contra a intenção da v2.15.6.
+              renderIsaTabs();
               bodyEl.innerHTML = '<div style="text-align:center;padding:40px;color:#6b7488;"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material.</div></div>';
               return;
             }
@@ -1466,6 +1471,19 @@
               if (activeTab) { activeTab.classList.add('active'); activeTab.setAttribute('aria-current', 'true'); activeTab.style.background = '#7c4dff'; activeTab.style.borderColor = '#7c4dff'; activeTab.style.color = '#fff'; }
               const lessonName = Shell.state.playerPlaylist?.[Shell.state.playerIndex]?.name || '';
               const lessonPath = Shell.state.currentFolderPath || '';
+              // ★ v2.15.6-resumo (Elton 22:04): chave do cache aqui, síncrona,
+              //   para a guarda de voo abaixo (o IIFE é assíncrono — calcular
+              //   a chave só lá dentro deixaria dois cliques criarem duas
+              //   gerações antes de qualquer um registrar a sua).
+              let _isaRawKey;
+              try { _isaRawKey = decodeURIComponent(lessonPath + lessonName); } catch (_) { _isaRawKey = lessonPath + lessonName; }
+              const _isaCacheKey = encodeURI(_isaRawKey); // encodeURI: %20 p/ espaços, %C3%A7 p/ ç, mantém / :
+              const _isaCacheKeyRaw = lessonPath + lessonName; // fallback p/ cache antigo com encoding parcial
+              // ★ v2.15.6-resumo (Elton 22:04): no celular o painel de
+              //   materiais fica ABAIXO da dobra — clicar na aba mostrava o
+              //   spinner/resultado fora da tela ("quando clico nada
+              //   acontece"). Rolar o painel para a vista ao clicar.
+              try { const _mb = document.getElementById('gdi-mat-body'); if (_mb && _mb.scrollIntoView) _mb.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) {}
 
               // ★ Loading UI (replica de produção: pink spinner + "Não feche esta aba")
               function setLoading(msg) {
@@ -1480,28 +1498,65 @@
 
               setLoading('🐩 Meggy está lendo o material e criando conteúdo…<br>⏱️ Tempo estimado: 30-60 segundos.');
 
-              (async () => {
+              // ★ v2.15.6-resumo: guarda de voo por aula — a descrição
+              //   auto-clica a aba "Resumo Meggy" ao abrir a aula E o aluno
+              //   clica de novo; sem guarda, duas gerações em paralelo
+              //   queimam o limite de 30 msgs/h da /api/ai e a segunda nem
+              //   vê o cache da primeira (ainda não salvo). Cliques
+              //   concorrentes da MESMA aula aguardam a geração em curso e
+              //   relêem o cache em vez de gerar tudo de novo.
+              Shell._isaInflight = Shell._isaInflight || {};
+              const _joinRun = Shell._isaInflight[_isaCacheKey] || null;
+              const _myRun = (async () => {
                 try {
                   const isaField = type.replace('isa-', ''); // summary | questions | mindmap | flashcards
-                  // ★ Normalizar cacheKey: decode→re-encode para match consistente com chaves do GDIndex/battalion
-                  // (lessonPath pode ter encoding parcial — alguns %20, alguns espaços raw, alguns ç raw)
-                  let _rawKey;
-                  try { _rawKey = decodeURIComponent(lessonPath + lessonName); } catch(_) { _rawKey = lessonPath + lessonName; }
-                  const cacheKey = encodeURI(_rawKey); // encodeURI: %20 para espaços, %C3%A7 para ç, mantém / :
-                  const cacheKeyRaw = lessonPath + lessonName; // fallback para cache antigo com encoding parcial
+                  const cacheKey = _isaCacheKey;
+                  const cacheKeyRaw = _isaCacheKeyRaw;
 
-                  // ─── 1. Cache check (GET /api/ai/cache?key=...) ───
-                  // ★ Tentar ambas as chaves (encoded e raw) para compatibilidade com cache antigo
-                  let cached = null;
-                  try {
-                    for (const k of [cacheKey, cacheKeyRaw]) {
-                      const cacheResp = await fetch('/api/ai/cache?key=' + encodeURIComponent(k), { headers: { 'Accept': 'application/json' }, credentials: 'include' });
-                      if (cacheResp.ok) {
-                        const cacheData = await cacheResp.json();
-                        if (cacheData && cacheData.cached) { cached = cacheData.cached; break; }
+                  // ★ v2.15.6-resumo: sonda de cache — vídeo, variante .pdf
+                  //   na mesma pasta e na pasta pai. O batalhão salva sob
+                  //   `courseKey/pdfName` (o PDF); a aba só procurava a
+                  //   chave do VÍDEO, então o resumo do batalhão nunca
+                  //   aparecia na aba ("resumos já gerados não carregam").
+                  async function probeCache() {
+                    const _pdfBase = lessonName.replace(/\.[a-z0-9]+$/i, '');
+                    const _pdfName = _pdfBase ? _pdfBase + '.pdf' : '';
+                    const _parentPath = lessonPath.replace(/[^/]+\/$/, '');
+                    const _keys = [cacheKey, cacheKeyRaw];
+                    if (_pdfName && /\.(mp4|webm|mov|m4v|avi|mkv|m3u8|mp3|m4a|ogg|wav|aac)$/i.test(lessonName)) {
+                      try { _keys.push(encodeURI(decodeURIComponent(lessonPath + _pdfName))); } catch (_) { _keys.push(lessonPath + _pdfName); }
+                      _keys.push(lessonPath + _pdfName);
+                      if (_parentPath && _parentPath !== lessonPath) {
+                        try { _keys.push(encodeURI(decodeURIComponent(_parentPath + _pdfName))); } catch (_) { _keys.push(_parentPath + _pdfName); }
+                        _keys.push(_parentPath + _pdfName);
                       }
                     }
-                  } catch (e) { /* cache miss é normal */ }
+                    for (const k of _keys) {
+                      try {
+                        const cacheResp = await fetch('/api/ai/cache?key=' + encodeURIComponent(k), { headers: { 'Accept': 'application/json' }, credentials: 'include' });
+                        if (cacheResp.ok) {
+                          const cacheData = await cacheResp.json();
+                          if (cacheData && cacheData.cached) return cacheData.cached;
+                        }
+                      } catch (e) { /* próxima chave */ }
+                    }
+                    return null;
+                  }
+
+                  // ─── 1. Cache check (GET /api/ai/cache?key=...) ───
+                  // Se a geração desta aula já está rodando, espera ela e
+                  // relê o cache (a geração anterior já salvou) em vez de
+                  // gerar tudo de novo em paralelo.
+                  if (_joinRun) {
+                    try { await _joinRun; } catch (_) {}
+                    const _jc = await probeCache();
+                    if (_jc && _jc[isaField]) {
+                      Shell._renderISAResult(type, _jc[isaField], bodyEl, lessonName, true, _jc);
+                      return;
+                    }
+                    // A geração anterior falhou sem salvar — gera de novo abaixo.
+                  }
+                  let cached = await probeCache();
 
                   // Se o tipo específico já está no cache, mostra direto
                   if (cached && cached[isaField]) {
@@ -1699,6 +1754,20 @@
                   }
 
                   // ─── PARALLEL GENERATION (Promise.allSettled) ───
+                  // ★ v2.15.6-resumo: guardar o ÚLTIMO erro da IA — antes ele
+                  //   era engolido e o usuário só via o texto genérico ("não
+                  //   foi possível gerar"), sem saber se era limite de
+                  //   mensagens, sessão expirada ou erro do provedor.
+                  let _isaLastErr = null;
+                  const _isaFailReason = (err) => {
+                    const m = String((err && err.message) || '');
+                    if (/429/.test(m)) return ' Motivo: a Meggy atingiu o limite de 30 mensagens por hora — aguarde um pouco e tente de novo.';
+                    if (/401/.test(m)) return ' Motivo: sua sessão expirou — saia e entre de novo, depois tente novamente.';
+                    const hm = m.match(/AI HTTP (\d+)/);
+                    if (hm) return ' Motivo: a IA devolveu HTTP ' + hm[1] + '.';
+                    if (m) return ' Motivo: ' + m.slice(0, 120);
+                    return '';
+                  };
                   const tasks = [];
                   // Task 1: resumo (3-level auto-retry)
                   tasks.push((async () => {
@@ -1707,19 +1776,19 @@
                         setLoading(i === 0 ? '✨ Gerando resumo profundo…' : i === 1 ? '✨ Tentando resumo médio…' : '✨ Tentando resumo simples…');
                         const r = await callIsa(RESUMO_PROMPTS[i], 'resumo');
                         if (r && r.length > 200) return { field: 'summary', value: r };
-                      } catch (e) { /* try next level */ }
+                      } catch (e) { _isaLastErr = e; /* try next level */ }
                     }
                     return { field: 'summary', value: null };
                   })());
                   // Task 2: pílulas
                   tasks.push((async () => {
                     try { setLoading('💊 Gerando pílulas de revisão…'); return { field: 'mindmap', value: await callIsa(PILULAS_PROMPT, 'mindmap') }; }
-                    catch (e) { return { field: 'mindmap', value: null }; }
+                    catch (e) { _isaLastErr = e; return { field: 'mindmap', value: null }; }
                   })());
                   // Task 3: questões (JSON)
                   tasks.push((async () => {
                     try { setLoading('❓ Gerando questões…'); const r = await callIsa(QUESTOES_PROMPT, 'questoes'); return { field: 'questions', value: parseQuestions(r), raw: r }; }
-                    catch (e) { return { field: 'questions', value: [] }; }
+                    catch (e) { _isaLastErr = e; return { field: 'questions', value: [] }; }
                   })());
 
                   const results = await Promise.allSettled(tasks);
@@ -1733,53 +1802,80 @@
                     }
                   });
 
-                  // ─── 4. Save to cache + material folder (fire-and-forget, não bloqueia render) ───
+                  // ─── 4. Save no cache (aguardado) + pasta (background) ───
+                  // ★ v2.15.6-resumo: o POST do cache é AGUARDADO — sem isso
+                  //   um clique concorrente (joiner da guarda de voo) ou o
+                  //   próximo clique não veria o resumo salvo e geraria tudo
+                  //   de novo. O save na pasta continua em background (o
+                  //   Drive é lento e não bloqueia o render). A falha do
+                  //   save é mostrada (antes era silenciosa e o resumo
+                  //   sumia na próxima visita sem explicação).
                   const user = (typeof GDIUser !== 'undefined' && GDIUser && GDIUser.state && GDIUser.state.user) || 'meggy';
                   const safeLesson = safeName(lessonName);
-                  // ★ Fire-and-forget: salva cache + material folder em background
-                  (async () => {
-                    try {
-                      await fetch('/api/ai/cache', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          key: cacheKey,
-                          summary: gen.summary,
-                          questions: gen.questions.length ? gen.questions : null,
-                          mindmap: gen.mindmap,
-                          lessonName: lessonName
-                        })
-                      });
-                    } catch (e) { console.warn('[Shell] cache save:', e); }
-                    // Save to material folder
-                    if (gen.summary) saveToFolder('resumo', user + '_' + safeLesson + '.md', gen.summary);
-                    if (gen.mindmap) saveToFolder('resumo', user + '_pilulas_' + safeLesson + '.md', gen.mindmap);
-                    if (gen.questions && gen.questions.length) saveToFolder('questoes', user + '_' + safeName(courseName || lessonName) + '.json', JSON.stringify(gen.questions, null, 2));
-                  })();
+                  let _cacheSaveOk = true;
+                  try {
+                    const _saveResp = await fetch('/api/ai/cache', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        key: cacheKey,
+                        summary: gen.summary,
+                        questions: gen.questions.length ? gen.questions : null,
+                        mindmap: gen.mindmap,
+                        lessonName: lessonName
+                      })
+                    });
+                    if (!_saveResp.ok) _cacheSaveOk = false;
+                  } catch (e) { console.warn('[Shell] cache save:', e); _cacheSaveOk = false; }
+                  // Save to material folder (fire-and-forget, como antes)
+                  if (gen.summary) saveToFolder('resumo', user + '_' + safeLesson + '.md', gen.summary);
+                  if (gen.mindmap) saveToFolder('resumo', user + '_pilulas_' + safeLesson + '.md', gen.mindmap);
+                  if (gen.questions && gen.questions.length) saveToFolder('questoes', user + '_' + safeName(courseName || lessonName) + '.json', JSON.stringify(gen.questions, null, 2));
 
                   // ─── 6. Render requested type ───
                   const cached2 = { summary: gen.summary, questions: gen.questions.length ? gen.questions : null, mindmap: gen.mindmap, lessonName: lessonName };
                   let toShow = gen[isaField];
                   if (type === 'isa-flashcards') toShow = gen.flashcards.length ? gen.flashcards : null;
                   if (isaField === 'questions' && (!toShow || !toShow.length)) toShow = null;
-                  if (!toShow && isaField !== 'flashcards') toShow = 'Não foi possível gerar este conteúdo. Tente novamente.';
+                  if (!toShow) toShow = type === 'isa-flashcards'
+                    ? 'Não foi possível gerar flashcards. Tente novamente.' + _isaFailReason(_isaLastErr)
+                    : 'Não foi possível gerar este conteúdo. Tente novamente.' + _isaFailReason(_isaLastErr);
 
-                  if (type === 'isa-flashcards') {
+                  if (type === 'isa-flashcards' && gen.flashcards.length) {
                     // Flashcards usa render especial (flip deck)
                     Shell._renderFlashcardDeck(bodyEl, { flashcards: gen.flashcards, lessonName: lessonName, questions: gen.questions });
                   } else {
                     Shell._renderISAResult(type, toShow, bodyEl, lessonName, false, cached2);
                   }
+                  if (!_cacheSaveOk && (gen.summary || gen.mindmap || (gen.questions && gen.questions.length))) {
+                    const _w = document.createElement('div');
+                    _w.style.cssText = 'margin-top:12px;padding:10px 14px;background:rgba(255,193,7,.08);border:1px solid rgba(255,193,7,.3);border-radius:10px;color:#ffc107;font-size:12px;line-height:1.5;';
+                    _w.textContent = '⚠️ O conteúdo foi gerado, mas não foi possível salvar no cache — ao voltar nesta aula, a Meggy vai gerar de novo.';
+                    bodyEl.appendChild(_w);
+                  }
+                  // ★ v2.15.6-resumo: o resultado pode demorar 30-60s — o
+                  //   usuário pode ter rolado para outro lugar; traz o
+                  //   painel de volta para a vista ao renderizar.
+                  try { if (bodyEl && bodyEl.scrollIntoView) bodyEl.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) {}
                 } catch (e) {
                   console.error('[Shell] showISA:', e);
+                  // ★ v2.15.6-resumo: "Tentar novamente" re-clica a aba ISA
+                  //   (antes recarregava o player INTEIRO — e a descrição
+                  //   auto-gerada não re-disparava, porque a sessão já
+                  //   estava marcada como tentada — então o retry não
+                  //   fazia nada de útil). O motivo do erro é mostrado.
                   bodyEl.innerHTML = '<div style="padding:20px;color:#ff8b9f;text-align:center;">' +
                     '<div style="font-size:36px;margin-bottom:12px;">⚠️</div>' +
                     '<div style="font-weight:600;margin-bottom:8px;">Não foi possível gerar este conteúdo</div>' +
-                    '<div style="font-size:14px;line-height:1.5;color:#9aa4b8;margin-bottom:16px;">Verifique sua conexão e toque em "Tentar novamente".</div>' +
-                    '<button class="meggy-header-btn" onclick="Shell.state.playerPlaylist && Shell.views._playVideoInline(Shell.state.playerPlaylist[Shell.state.playerIndex].link, Shell.state.playerPlaylist[Shell.state.playerIndex].name, Shell.state.playerPlaylist, Shell.state.playerIndex)" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-arrow-clockwise"></i> Tentar novamente</button>' +
+                    '<div style="font-size:14px;line-height:1.5;color:#9aa4b8;margin-bottom:16px;">Verifique sua conexão e toque em "Tentar novamente".' + Shell._esc((e && e.message) ? (' Motivo: ' + String(e.message).slice(0, 120)) : '') + '</div>' +
+                    '<button id="gdi-isa-retry" class="meggy-header-btn" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-arrow-clockwise"></i> Tentar novamente</button>' +
                   '</div>';
+                  const _retryBtn = bodyEl.querySelector('#gdi-isa-retry');
+                  if (_retryBtn) _retryBtn.onclick = () => { const _t = document.querySelector('.gdi-mat-tab[data-mat="' + type + '"]'); if (_t) _t.click(); };
                 }
               })();
+              Shell._isaInflight[_isaCacheKey] = _myRun;
+              _myRun.catch(() => {}).finally(() => { if (Shell._isaInflight[_isaCacheKey] === _myRun) delete Shell._isaInflight[_isaCacheKey]; });
             }
 
             if (materials.length > 0) showMaterial(0);
