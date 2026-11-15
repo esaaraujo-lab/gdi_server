@@ -12,15 +12,20 @@ import android.os.Bundle
 import android.os.CountDownTimer
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.view.GestureDetector
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.SeekBar
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -38,6 +43,7 @@ import coil.load
 import com.google.android.material.snackbar.Snackbar
 import com.bibigyn.app.BiBiGynApp
 import com.bibigyn.app.R
+import com.bibigyn.app.data.AiService
 import com.bibigyn.app.data.ApiService
 import com.bibigyn.app.data.FileItem
 import com.bibigyn.app.data.DriveItem
@@ -46,11 +52,14 @@ import com.bibigyn.app.data.monogramFor
 import com.bibigyn.app.databinding.ActivityPlayerBinding
 import com.bibigyn.app.ui.home.HomeActivity
 import com.bibigyn.app.ui.mylist.MyListActivity
+import com.bibigyn.app.ui.reader.MdReaderActivity
+import com.bibigyn.app.ui.reader.PdfReaderActivity
 import com.bibigyn.app.ui.search.SearchActivity
 import com.bibigyn.app.ui.settings.SettingsActivity
 import com.bibigyn.app.util.CardGradient
 import com.bibigyn.app.util.CoverLibrary
 import com.bibigyn.app.util.Format
+import com.bibigyn.app.util.LessonDescription
 import com.bibigyn.app.util.PlaylistManager
 import com.bibigyn.app.util.DescriptionPregenerator
 import com.bibigyn.app.util.FocusAnimator
@@ -63,6 +72,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 
 /**
  * v2.1.8 — Player (conceitos player celular + TV player v2, Elton 23:50)
@@ -164,6 +174,20 @@ import kotlinx.coroutines.withContext
  *    trilha de vídeo (as aulas são MP4 progressivo de uma só versão).
  *  - Cache de vídeo (VideoCache, 500 MB LRU) com escrita gateada
  *    pelo Wi-Fi quando "Baixar só no Wi-Fi" está ligado.
+ *
+ * Frente R4C — ÁUDIO EM 2º PLANO (tela apagada/bloqueada): o áudio
+ * da aula CONTINUA (o vídeo deixa de renderizar, o que é esperado).
+ * Como: (1) o ExoPlayer segura um PARTIAL_WAKE_LOCK enquanto toca
+ * (setWakeMode(C.WAKE_MODE_LOCAL) em initialisePlayer); (2) o
+ * BackgroundAudioService corre em 1º plano (mediaPlayback) durante
+ * toda a reprodução, com a notificação de media (play/pausa,
+ * ±10s, parar); (3) o onStop NÃO liberta o player quando a tela
+ * apagou com a aula a tocar — só volta a ligá-lo em onStart.
+ * O serviço arranca em initialisePlayer (activity em 1º plano)
+ * porque no Android 12+ um startForegroundService() no onStop
+ * lança ForegroundServiceStartNotAllowedException. Respeita o
+ * Descanso (nada aqui sai dele) e a pausa prévia (pausado =
+ * liberta como antes; nada retoma sozinho). Fim da aula intacto.
  */
 class PlayerActivity : AppCompatActivity() {
 
@@ -329,8 +353,27 @@ class PlayerActivity : AppCompatActivity() {
     // v2.7.6 — pré-geração das descrições das próximas aulas (Elton 00:21).
     private var descriptionPregenerator: DescriptionPregenerator? = null
     private var playerInForeground = false
+    // Frente R4C — áudio em 2º plano (tela apagada): true enquanto o
+    // player sobreviveu ao onStop com a tela apagada (o serviço está
+    // a correr e o onStart tem de religar a superfície em vez de
+    // recriar o player). false = comportamento antigo (libertar).
+    private var backgroundAudioActive = false
+    // Frente R4C — controlos do player para o serviço de áudio (o
+    // serviço NUNCA guarda o ExoPlayer; o player continua a pertencer
+    // a esta Activity). Registado em onCreate, retirado em onDestroy.
+    private val backgroundAudioControls = object : BackgroundAudioService.PlaybackControls {
+        override fun isPlaying(): Boolean = player?.isPlaying == true
+        override fun togglePlayPause() = this@PlayerActivity.togglePlayPause()
+        override fun seekByMs(deltaMs: Long) = seekBy(deltaMs)
+        override fun stopPlaybackFromNotification() = this@PlayerActivity.stopPlaybackFromNotification()
+        override fun currentTitle(): String = displayTitle(currentItem)
+    }
     // Frente H — o enriquecimento da playlist (1× por sessão).
     private var playlistEnriched = false
+
+    // Frente R4 — Materiais da aula no retrato (ver bloco no fim da classe).
+    private var materialsJob: Job? = null
+    private var materialsSummary: String? = null
 
     private enum class SubtitleState { UNKNOWN, READY, GENERATING, NONE }
 
@@ -354,6 +397,9 @@ class PlayerActivity : AppCompatActivity() {
         // áudio resolve a imagem quando o manifesto já chegou).
         CoverLibrary.warmUp(this)
         PlaylistManager.loadPlaylist(this)
+        // Frente R4C — o serviço de áudio em 2º plano controla o
+        // player por esta interface (retirada em onDestroy).
+        BackgroundAudioService.registerControls(backgroundAudioControls)
 
         var item = PlaylistManager.getCurrent()
         if (item == null || item.link.isNullOrEmpty()) {
@@ -1198,11 +1244,18 @@ class PlayerActivity : AppCompatActivity() {
         // reprodução — o download que terminar agora fica adiado e
         // lança quando o player fechar (ver UpdateChecker).
         UpdateChecker.setPlayerForeground(true)
-        initialisePlayer()
+        // Frente R4C — regresso com a tela apagada: o player NÃO foi
+        // libertado (ver onStop) — só volta a ligar a superfície e os
+        // atualizadores; NÃO recria a aula nem perde a posição.
+        if (player != null && backgroundAudioActive) reattachPlayerAfterBackground() else initialisePlayer()
         startPregenerator()
         // Frente H — a playlist interfolder é montada aqui, em 2º plano,
         // depois de o player já estar visível (ver a função).
         enrichPlaylistInBackground()
+        // Frente R4 — materiais da aula em baixo (retrato, celular):
+        // carrega em 2º plano ao abrir; nunca atrasa o vídeo. Na TV
+        // não carrega (a secção não existe no layout-television).
+        loadMaterials()
     }
 
     override fun onStop() {
@@ -1212,6 +1265,19 @@ class PlayerActivity : AppCompatActivity() {
         cancelRemoteScrub()
         UpdateChecker.setPlayerForeground(false)
         descriptionPregenerator?.stop()
+        // Frente R4C — a tela apagou com a aula A TOCAR: NÃO libertar
+        // o player (o releasePlayer() é o que matava o áudio). O
+        // serviço já corre desde o início da reprodução (ver
+        // initialisePlayer) e mantém o processo em 1º plano; o wake
+        // lock de áudio do ExoPlayer (WAKE_MODE_LOCAL) mantém o CPU
+        // acordado. Se a aula estava pausada, ou se o utilizador
+        // saiu (tela acesa / Voltar), o comportamento antigo
+        // mantém-se: libertar (ver o releasePlayer() abaixo).
+        if (!isFinishing && isScreenOff() && isPlaybackActive()) {
+            backgroundAudioActive = true
+            playlistEnriched = false
+            return
+        }
         releasePlayer()
         playlistEnriched = false
     }
@@ -1347,6 +1413,22 @@ class PlayerActivity : AppCompatActivity() {
         exo.pauseAtEndOfMediaItems = !SessionManager.get(this).autoplayNext
         exo.playWhenReady = true
 
+        // Frente R4C — wake lock SÓ de áudio (PARTIAL_WAKE_LOCK): o
+        // ExoPlayer segura-o enquanto toca e liberta-o ao pausar; a
+        // tela continua apagada (nada de SCREEN_DIM/BRIGHT). Sem isto
+        // o CPU dormia e o áudio morria com a tela, mesmo com o
+        // serviço em 1º plano.
+        exo.setWakeMode(C.WAKE_MODE_LOCAL)
+        // Frente R4C — o serviço de áudio arranca AQUI, com a
+        // activity em 1º plano: no Android 12+ um
+        // startForegroundService() a partir do onStop (app em 2º
+        // plano) lança ForegroundServiceStartNotAllowedException —
+        // por isso o serviço corre durante toda a reprodução e NÃO
+        // só quando a tela apaga (a notificação de media fica visível
+        // enquanto a aula toca, como nas apps de música/podcast).
+        // Para em releasePlayer()/onDestroy().
+        BackgroundAudioService.start(this)
+
         exo.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_ENDED) {
@@ -1370,6 +1452,9 @@ class PlayerActivity : AppCompatActivity() {
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 updateCenterPlayPause()
+                // Frente R4C — play/pausa (da UI ou da notificação):
+                // a notificação passa a mostrar o estado certo.
+                BackgroundAudioService.refresh(this@PlayerActivity)
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -1391,6 +1476,9 @@ class PlayerActivity : AppCompatActivity() {
                         setTitles(newItem)
                         updateAudioCover(newItem)
                         updatePrevNextButtons()
+                        // Frente R4C — a aula mudou: a notificação
+                        // passa a mostrar o título novo.
+                        BackgroundAudioService.refresh(this@PlayerActivity)
                                         updateFavButton()
                         // v2.7.6 (fix): retomar a posição salva + aplicar a
                         // velocidade padrão — antes zerava os dois.
@@ -1408,6 +1496,8 @@ class PlayerActivity : AppCompatActivity() {
                         // playNext/playPrev NÃO chamam exitSleepMode).
                         if (sleepMode) binding.sleepOverlay.visibility = View.VISIBLE
                         ensureSubtitles()
+                        // Frente R4 — a aula mudou: recarrega os materiais.
+                        loadMaterials()
                     }
                 }
             }
@@ -1486,6 +1576,8 @@ class PlayerActivity : AppCompatActivity() {
                 updateSpeedLabels()
                 p.play()
                 startPregenerator()
+                // Frente R4 — a aula mudou: recarrega os materiais.
+                loadMaterials()
                 return
             }
         }
@@ -1497,6 +1589,8 @@ class PlayerActivity : AppCompatActivity() {
         // Frente H — a playlist interfolder é montada aqui, em 2º plano,
         // depois de o player já estar visível (ver a função).
         enrichPlaylistInBackground()
+        // Frente R4 — a aula mudou: recarrega os materiais.
+        loadMaterials()
     }
 
     private fun toggleFavoriteCurrent() {
@@ -1518,6 +1612,10 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun releasePlayer() {
+        // Frente R4C — sem player não há áudio em 2º plano: a
+        // notificação some e o serviço para (não fica órfão).
+        BackgroundAudioService.stop(this)
+        backgroundAudioActive = false
         // Frente B (Ronda 3) — o player some, o scrub some com ele.
         cancelRemoteScrub()
         saveJob?.cancel()
@@ -1537,6 +1635,65 @@ class PlayerActivity : AppCompatActivity() {
         p.release()
         player = null
         trackSelector = null
+    }
+
+    // ──────────── Frente R4C — áudio em 2º plano (tela apagada) ────────────
+
+    /** Frente R4C — true quando a tela está apagada/bloqueada. */
+    private fun isScreenOff(): Boolean {
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        return !pm.isInteractive
+    }
+
+    /** Frente R4C — a tocar ou em buffer com playWhenReady (não fim/pausa). */
+    private fun isPlaybackActive(): Boolean {
+        val p = player ?: return false
+        if (!p.playWhenReady) return false
+        return p.playbackState == Player.STATE_READY || p.playbackState == Player.STATE_BUFFERING
+    }
+
+    /**
+     * Frente R4C — regresso ao player depois da tela apagada: o
+     * ExoPlayer NUNCA foi libertado — só volta a ligar a superfície
+     * (o PlayerView recria-a sozinho ao voltar; a re-atribuição
+     * garante-o), repõe os atualizadores e desliga o serviço (a
+     * notificação some porque a Activity voltou a estar visível).
+     * NÃO recria a aula nem faz seek: a posição é a que o player
+     * tem (o ciclo de guardar a posição continuou a correr com a
+     * tela apagada). O modo Descanso sobrevive (o overlay volta a
+     * ficar visível; nada aqui chama exitSleepMode).
+     */
+    private fun reattachPlayerAfterBackground() {
+        val exo = player ?: return
+        backgroundAudioActive = false
+        binding.playerView.player = exo
+        binding.playerView.useController = !isFullscreen
+        updateCenterPlayPause()
+        updatePrevNextButtons()
+        startTimeUpdater()
+        // O saveJob NÃO foi cancelado (não houve releasePlayer), por
+        // isso não se reinicia: o ciclo de 2s continuou a guardar a
+        // posição com a tela apagada.
+        BackgroundAudioService.stop(this)
+        if (sleepMode) {
+            binding.sleepOverlay.visibility = View.VISIBLE
+            hideControls()
+        } else {
+            showControls()
+        }
+    }
+
+    /**
+     * Frente R4C — ação ⏹ da notificação: pausa, guarda a posição
+     * (releasePlayer), para o serviço e fecha o player. Não retoma
+     * sozinha: se a aula estava pausada antes de a tela apagar, o
+     * serviço nem sequer fica com a notificação em pausa — o player
+     * já tinha sido libertado no onStop.
+     */
+    private fun stopPlaybackFromNotification() {
+        player?.pause()
+        releasePlayer()
+        finish()
     }
 
     private fun isWatched(item: FileItem?): Boolean {
@@ -1602,8 +1759,376 @@ class PlayerActivity : AppCompatActivity() {
     override fun onDestroy() {
         // Frente B (Ronda 3) — sem callbacks pendentes no handler.
         cancelRemoteScrub()
+        // Frente R4 — cancela o carregamento dos materiais.
+        materialsJob?.cancel()
         super.onDestroy()
         stopSleepTimer()
+        // Frente R4C — retira os controlos e garante que o serviço
+        // não fica órfão (a Activity é a dona do player).
+        BackgroundAudioService.registerControls(null)
+        BackgroundAudioService.stop(this)
+    }
+
+    // ──────────── Frente R4 — Materiais da aula (retrato) ────────────
+    //
+    // Secção "📚 Materiais" por baixo do botão "Próxima aula" (só no
+    // layout de retrato — res/layout/activity_player.xml; a TV NÃO tem
+    // a secção e NÃO carrega nada: loadMaterials() retorna logo se
+    // isTv). Carrega AUTOMATICAMENTE ao abrir a aula, em 2º plano:
+    // o vídeo arranca em onStart/initialisePlayer sem esperar por isto.
+    //
+    // Fontes (tudo o que já existe — NENHUM endpoint inventado):
+    //   resumo + pílulas + questões — LessonDescription.fetchGenerated()
+    //     (cache ISA: GET /api/ai/summaries?key=, 2 courseKeys × nomes
+    //     dos PDFs/MDs; fallback: GET /api/materials/load-from-folder,
+    //     materialType=resumo);
+    //   pílulas/questões em falta — AiService.loadFromFolder(..., "flashcard")
+    //     e (..., "questoes") (pastas .gdi-flashcards/ e .gdi-questoess/);
+    //   resumo em falta — cache local (SessionManager.getLessonDescription,
+    //     o mesmo que a aba Resumo do detalhe mostra);
+    //   ficheiros da pasta — ApiService.listFolder(folderPath) (a MESMA
+    //     chamada que ensureSubtitles() já faz aqui); PDF → leitor da
+    //     ronda 2 (PdfReaderActivity), .md → MdReaderActivity, outros →
+    //     app externa (o mesmo comportamento do openFile do detalhe).
+    // A secção só existe no layout do telemóvel: os ids são lidos por
+    // findViewById (nullable) e NUNCA pelo binding — o binding gerado
+    // exige os ids em TODAS as variantes do layout e a TV não os tem
+    // (crash no inflate da TV); com findViewById a TV simplesmente
+    // não os encontra e nada acontece.
+    //
+    // Estados: a carregar (spinner + texto, sem bloquear o vídeo);
+    // vazio (uma linha discreta, sem espaço gigante); erro (texto
+    // curto + "Tentar de novo" — sem crash, sem bounce para o login:
+    // o vídeo está a tocar e um bounce matava a reprodução).
+    // Recarrega a cada troca de aula (Anterior/Próxima/autoplay).
+
+    /** Uma questão do pacote gerado (formato do batalhão, worker.js:7760). */
+    private data class MaterialsQuestion(
+        val statement: String,
+        val options: List<String>,
+        val answer: String?
+    )
+
+    private data class MaterialsData(
+        val summary: String?,
+        val pills: List<String>,
+        val questions: List<MaterialsQuestion>,
+        val files: List<FileItem>
+    )
+
+    /** Atalho findViewById nullable (ver nota no topo da secção). */
+    private fun <T : View> mat(id: Int): T? = findViewById(id)
+
+    private fun materialsFolderPath(): String? =
+        currentItem?.folderPath?.takeIf { it.isNotBlank() }
+            ?: intent.getStringExtra(EXTRA_FOLDER_PATH)?.takeIf { it.isNotBlank() }
+
+    /**
+     * Carrega os materiais da aula atual em 2º plano (lifecycleScope).
+     * Nunca atrasa o vídeo: o player arranca em onStart, independente
+     * disto. Best-effort: falha de rede vira estado de erro com retry.
+     */
+    private fun loadMaterials() {
+        if (isTv) return
+        materialsJob?.cancel()
+        val section = mat<View>(R.id.materials_section) ?: return
+        val folderPath = materialsFolderPath()
+        if (folderPath.isNullOrBlank()) {
+            showMaterialsEmpty()
+            return
+        }
+        section.visibility = View.VISIBLE
+        mat<View>(R.id.materials_loading)?.visibility = View.VISIBLE
+        mat<View>(R.id.materials_empty)?.visibility = View.GONE
+        mat<View>(R.id.materials_error)?.visibility = View.GONE
+        mat<View>(R.id.materials_content)?.visibility = View.GONE
+        materialsJob = lifecycleScope.launch {
+            val data = try {
+                val api = ApiService(this@PlayerActivity)
+                val files = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching { api.listFolder(folderPath) }.getOrNull()
+                }
+                if (files == null) {
+                    showMaterialsError()
+                    return@launch
+                }
+                val materialNames = files.filter { it.isPdf || it.isMarkdown }.map { it.name }
+                val lessonFile = LessonDescription.lessonFilePath(folderPath, files)
+                val bundle = LessonDescription.fetchGenerated(
+                    this@PlayerActivity, folderPath, materialNames, lessonFile
+                )
+                val summary = bundle?.summary
+                    ?: SessionManager.get(this@PlayerActivity).getLessonDescription(folderPath)
+                val pillsText = bundle?.mindmap
+                    ?: lessonFile?.let { AiService.loadFromFolder(this@PlayerActivity, it, "flashcard") }
+                val questionsText = bundle?.questionsJson
+                    ?: lessonFile?.let { AiService.loadFromFolder(this@PlayerActivity, it, "questoes") }
+                MaterialsData(
+                    summary = summary?.takeIf { it.isNotBlank() },
+                    pills = parseMaterialsPills(pillsText),
+                    questions = parseMaterialsQuestions(questionsText),
+                    files = materialsLessonFiles(files)
+                )
+            } catch (_: Exception) {
+                showMaterialsError()
+                return@launch
+            }
+            if (isFinishing || isDestroyed) return@launch
+            renderMaterials(data)
+        }
+    }
+
+    /** Estado vazio: uma linha discreta (nunca um espaço gigante). */
+    private fun showMaterialsEmpty() {
+        mat<View>(R.id.materials_section)?.visibility = View.VISIBLE
+        mat<View>(R.id.materials_loading)?.visibility = View.GONE
+        mat<View>(R.id.materials_empty)?.visibility = View.VISIBLE
+        mat<View>(R.id.materials_error)?.visibility = View.GONE
+        mat<View>(R.id.materials_content)?.visibility = View.GONE
+    }
+
+    /** Estado de erro: texto curto + "Tentar de novo" (sem crash). */
+    private fun showMaterialsError() {
+        mat<View>(R.id.materials_section)?.visibility = View.VISIBLE
+        mat<View>(R.id.materials_loading)?.visibility = View.GONE
+        mat<View>(R.id.materials_empty)?.visibility = View.GONE
+        mat<View>(R.id.materials_error)?.visibility = View.VISIBLE
+        mat<View>(R.id.materials_content)?.visibility = View.GONE
+        mat<View>(R.id.materials_retry)?.setOnClickListener { loadMaterials() }
+    }
+
+    private fun renderMaterials(data: MaterialsData) {
+        if (data.summary == null && data.pills.isEmpty() &&
+            data.questions.isEmpty() && data.files.isEmpty()
+        ) {
+            showMaterialsEmpty()
+            return
+        }
+        mat<View>(R.id.materials_section)?.visibility = View.VISIBLE
+        mat<View>(R.id.materials_loading)?.visibility = View.GONE
+        mat<View>(R.id.materials_empty)?.visibility = View.GONE
+        mat<View>(R.id.materials_error)?.visibility = View.GONE
+        mat<View>(R.id.materials_content)?.visibility = View.VISIBLE
+        // Resumo (prévia + tocar para abrir completo).
+        materialsSummary = data.summary
+        val summaryCard = mat<LinearLayout>(R.id.materials_summary_card)
+        if (data.summary != null) {
+            summaryCard?.visibility = View.VISIBLE
+            mat<TextView>(R.id.materials_summary_text)?.text = data.summary
+            summaryCard?.setOnClickListener { showFullSummary() }
+        } else {
+            summaryCard?.visibility = View.GONE
+        }
+        renderMaterialsPills(data.pills)
+        renderMaterialsQuestions(data.questions)
+        renderMaterialsFiles(data.files)
+    }
+
+    /** Pílulas: o mindmap é Markdown em bullets ("- ..."). */
+    private fun parseMaterialsPills(text: String?): List<String> {
+        if (text.isNullOrBlank()) return emptyList()
+        return text.lines()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("#") }
+            .map { it.removePrefix("- ").removePrefix("* ").removePrefix("• ").trim() }
+            .filter { it.isNotEmpty() }
+            .take(20)
+    }
+
+    /**
+     * Questões: JSON array do batalhão ({type, statement, options[],
+     * correct, correctText, ...} — worker.js:7760). Se vier texto
+     * corrido (pasta de materiais antiga), mostra-o como uma só
+     * questão de texto — nunca deita fora conteúdo.
+     */
+    private fun parseMaterialsQuestions(text: String?): List<MaterialsQuestion> {
+        if (text.isNullOrBlank()) return emptyList()
+        return try {
+            val arr = JSONArray(text)
+            val out = ArrayList<MaterialsQuestion>()
+            for (i in 0 until minOf(arr.length(), 10)) {
+                val o = arr.optJSONObject(i) ?: continue
+                val statement = o.optString("statement").takeIf { it.isNotBlank() }
+                    ?: o.optString("question").takeIf { it.isNotBlank() }
+                    ?: o.optString("q").takeIf { it.isNotBlank() }
+                    ?: continue
+                val options = ArrayList<String>()
+                val opts = o.optJSONArray("options")
+                if (opts != null) {
+                    for (j in 0 until opts.length()) {
+                        opts.optString(j).takeIf { it.isNotBlank() }?.let { options.add(it) }
+                    }
+                }
+                val answer = o.optString("correctText").takeIf { it.isNotBlank() }
+                    ?: o.optString("answer").takeIf { it.isNotBlank() }
+                out.add(MaterialsQuestion(statement, options, answer))
+            }
+            out
+        } catch (_: Exception) {
+            listOf(MaterialsQuestion(text.trim(), emptyList(), null))
+        }
+    }
+
+    /** Ficheiros a mostrar: PDFs, MDs e outros — sem vídeos/áudios
+     * (são aulas), sem pastas e sem legendas .vtt/.srt. */
+    private fun materialsLessonFiles(files: List<FileItem>): List<FileItem> =
+        files.filter { f -> !f.isFolder && !f.isVideo && !f.isAudio && !f.isSubtitle }
+
+    private fun renderMaterialsPills(pills: List<String>) {
+        val title = mat<TextView>(R.id.materials_pills_title)
+        val list = mat<LinearLayout>(R.id.materials_pills_list)
+        if (pills.isEmpty()) {
+            title?.visibility = View.GONE
+            list?.visibility = View.GONE
+            return
+        }
+        title?.visibility = View.VISIBLE
+        list?.visibility = View.VISIBLE
+        list?.removeAllViews()
+        val pad = (12 * resources.displayMetrics.density).toInt()
+        for (pill in pills) {
+            list?.addView(TextView(this).apply {
+                text = "•  $pill"
+                textSize = 14f
+                setTextColor(ContextCompat.getColor(this@PlayerActivity, R.color.md_on_surface))
+                setPadding(0, pad / 2, 0, pad / 2)
+            })
+        }
+    }
+
+    private fun renderMaterialsQuestions(questions: List<MaterialsQuestion>) {
+        val title = mat<TextView>(R.id.materials_questions_title)
+        val list = mat<LinearLayout>(R.id.materials_questions_list)
+        if (questions.isEmpty()) {
+            title?.visibility = View.GONE
+            list?.visibility = View.GONE
+            return
+        }
+        title?.visibility = View.VISIBLE
+        list?.visibility = View.VISIBLE
+        list?.removeAllViews()
+        val pad = (12 * resources.displayMetrics.density).toInt()
+        val letters = listOf("A", "B", "C", "D", "E", "F")
+        for ((idx, q) in questions.withIndex()) {
+            list?.addView(TextView(this).apply {
+                text = "${idx + 1}. ${q.statement}"
+                textSize = 14f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setTextColor(ContextCompat.getColor(this@PlayerActivity, R.color.md_on_surface))
+                setPadding(0, pad, 0, pad / 2)
+            })
+            for ((oi, opt) in q.options.withIndex()) {
+                list?.addView(TextView(this).apply {
+                    text = "   ${letters.getOrElse(oi) { "•" }}) $opt"
+                    textSize = 14f
+                    setTextColor(ContextCompat.getColor(this@PlayerActivity, R.color.md_on_surface))
+                    setPadding(0, pad / 4, 0, pad / 4)
+                })
+            }
+            if (!q.answer.isNullOrBlank()) {
+                list?.addView(TextView(this).apply {
+                    text = getString(R.string.materials_answer, q.answer)
+                    textSize = 14f
+                    setTextColor(ContextCompat.getColor(this@PlayerActivity, R.color.md_primary))
+                    setPadding(0, pad / 2, 0, pad / 2)
+                })
+            }
+        }
+    }
+
+    private fun renderMaterialsFiles(files: List<FileItem>) {
+        val title = mat<TextView>(R.id.materials_files_title)
+        val list = mat<LinearLayout>(R.id.materials_files_list)
+        if (files.isEmpty()) {
+            title?.visibility = View.GONE
+            list?.visibility = View.GONE
+            return
+        }
+        title?.visibility = View.VISIBLE
+        list?.visibility = View.VISIBLE
+        list?.removeAllViews()
+        val folderPath = materialsFolderPath() ?: return
+        val pad = (12 * resources.displayMetrics.density).toInt()
+        for (file in files) {
+            val icon = when {
+                file.isPdf -> "📄"
+                file.isMarkdown -> "📝"
+                else -> "📎"
+            }
+            list?.addView(TextView(this).apply {
+                text = "$icon  ${file.name}"
+                textSize = 14f
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                setTextColor(ContextCompat.getColor(this@PlayerActivity, R.color.md_on_surface))
+                setPadding(0, pad / 2, 0, pad / 2)
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { openMaterialFile(file, folderPath) }
+            })
+        }
+    }
+
+    /** Resumo completo num diálogo (texto corrido, como na aba Resumo). */
+    private fun showFullSummary() {
+        val summary = materialsSummary ?: return
+        val text = TextView(this).apply {
+            text = summary
+            textSize = 15f
+            setTextIsSelectable(true)
+            setTextColor(ContextCompat.getColor(this@PlayerActivity, R.color.md_on_surface))
+            setPadding(8, 8, 8, 8)
+        }
+        val scroll = ScrollView(this).apply { addView(text) }
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 16, 48, 16)
+            addView(scroll)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.materials_summary_full_title))
+            .setView(layout)
+            .setPositiveButton(R.string.materials_close, null)
+            .show()
+    }
+
+    /** Abre um ficheiro da pasta: PDF → leitor (ronda 2), .md → leitor
+     * de MD, outros → app externa (igual ao openFile do detalhe). */
+    private fun openMaterialFile(file: FileItem, folderPath: String) {
+        when {
+            file.isPdf -> openPdf(file, folderPath)
+            file.isMarkdown -> openMd(file, folderPath)
+            else -> {
+                val url = BiBiGynApp.BASE_URL + (file.link ?: "")
+                val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                try { startActivity(intent) } catch (_: Exception) {}
+            }
+        }
+    }
+
+    /** v2.7.6: PDF abre no leitor embutido (igual ao detalhe). */
+    private fun openPdf(file: FileItem, folderPath: String) {
+        val intent = Intent(this, PdfReaderActivity::class.java)
+        intent.putExtra(PdfReaderActivity.EXTRA_URL, BiBiGynApp.BASE_URL + (file.link ?: ""))
+        intent.putExtra(PdfReaderActivity.EXTRA_NAME, file.name)
+        intent.putExtra(PdfReaderActivity.EXTRA_PATH, materialFilePath(folderPath, file.name))
+        startActivity(intent)
+    }
+
+    /** .md/transcrição abre no leitor de MD embutido (igual ao detalhe). */
+    private fun openMd(file: FileItem, folderPath: String) {
+        val intent = Intent(this, MdReaderActivity::class.java)
+        intent.putExtra(MdReaderActivity.EXTRA_URL, BiBiGynApp.BASE_URL + (file.link ?: ""))
+        intent.putExtra(MdReaderActivity.EXTRA_NAME, file.name)
+        intent.putExtra(MdReaderActivity.EXTRA_PATH, materialFilePath(folderPath, file.name))
+        startActivity(intent)
+    }
+
+    /** Path completo ".../Aula/ficheiro" (a pasta pode vir sem "/"). */
+    private fun materialFilePath(folderPath: String, fileName: String): String {
+        val base = if (folderPath.endsWith("/")) folderPath else "$folderPath/"
+        return "$base$fileName"
     }
 
     companion object {
