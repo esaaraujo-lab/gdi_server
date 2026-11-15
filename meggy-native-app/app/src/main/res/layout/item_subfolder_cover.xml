@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Ronda 10 Frente B — uma linha caminho → link de capa de sub-pasta
+  no formulário de AdminDrivesActivity. Linhas com os dois campos
+  vazios são ignoradas ao guardar.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="@dimen/spacing_sm"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+    <EditText
+        android:id="@+id/inputSubPath"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:background="@drawable/chip_outline"
+        android:focusable="true"
+        android:hint="@string/admin_drives_subpath_hint"
+        android:inputType="text"
+        android:padding="@dimen/spacing_md"
+        android:textColor="@color/md_on_surface"
+        android:textColorHint="@color/md_on_surface_variant" />
+
+    <EditText
+        android:id="@+id/inputSubUrl"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/spacing_sm"
+        android:layout_weight="1"
+        android:background="@drawable/chip_outline"
+        android:focusable="true"
+        android:hint="@string/admin_drives_suburl_hint"
+        android:inputType="textUri"
+        android:padding="@dimen/spacing_md"
+        android:textColor="@color/md_on_surface"
+        android:textColorHint="@color/md_on_surface_variant" />
+
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/btnRemoveSubCover"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginStart="@dimen/spacing_sm"
+        android:background="@drawable/chip_outline"
+        android:focusable="true"
+        android:text="✕"
+        android:textColor="@color/md_on_surface"
+        android:textSize="16sp" />
+</LinearLayout>
