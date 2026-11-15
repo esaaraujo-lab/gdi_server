@@ -18,6 +18,7 @@ import com.meggy.app.ui.home.HomeActivity
 import com.meggy.app.ui.login.LoginActivity
 import com.meggy.app.ui.mylist.MyListActivity
 import com.meggy.app.ui.search.SearchActivity
+import com.meggy.app.util.FocusAnimator
 import com.meggy.app.util.PlaylistManager
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.StudyReminder
@@ -193,6 +194,20 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         binding.btnLogout.setOnClickListener { logout() }
+
+        // Frente G (TV) — interruptores, botões +/−, "Verificar
+        // atualizações" e "Sair" são focáveis mas sem feedback
+        // de foco (fundos estáticos): o D-pad chegava sem se ver
+        // onde estava (mesmo padrão da Frente A no detalhe).
+        if (TvUtils.isTv(this)) {
+            listOf(binding.switchNotifications, binding.switchAutoplay,
+                binding.switchWifiOnly, binding.switchSubtitles,
+                binding.btnSpeedDown, binding.btnSpeedUp,
+                binding.btnSleepDown, binding.btnSleepUp,
+                binding.btnQualityDown, binding.btnQualityUp,
+                binding.btnCheckUpdate, binding.btnLogout)
+                .forEach { FocusAnimator.attach(it, true) }
+        }
 
         binding.aboutText.text = buildString {
             append("APK Completo da Meggy — celular e TV\n")
