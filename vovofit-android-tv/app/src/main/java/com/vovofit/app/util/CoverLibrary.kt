@@ -341,7 +341,25 @@ object CoverLibrary {
      * camada 3). Sem manifesto carregado ou sem nomes -> null (o
      * chamador cai na camada 4).
      */
-    fun resolve(context: Context, vararg names: String?): String? {
+    fun resolve(context: Context, vararg names: String?): String? =
+        resolveInternal(context, names, allowGeneral = true)
+
+    /**
+     * Resolve ESTRITO (1.0.11, banners dos drives): igual a [resolve],
+     * mas SEM o fallback 'geral'. Sem match, devolve null e o chamador
+     * cai na camada (4) — a capa local do drive. Usar em superfícies
+     * por drive/curso (tile de drive, hero, detalhe do curso): o livro
+     * 'geral' não é banner de nenhum curso — Queima Diária e os outros
+     * drives Vovó não casam nenhuma keyword (Elton 2026-11-14 22:21).
+     */
+    fun resolveStrict(context: Context, vararg names: String?): String? =
+        resolveInternal(context, names, allowGeneral = false)
+
+    private fun resolveInternal(
+        context: Context,
+        names: Array<out String?>,
+        allowGeneral: Boolean
+    ): String? {
         ensureLoaded(context)
         val entries = cached ?: return null
         if (entries.isEmpty()) return null
@@ -364,6 +382,8 @@ object CoverLibrary {
         if (bestUrl != null) return bestUrl
         // Fallback explícito da camada 3: manifesto carregado e nenhum
         // match -> imagem 'geral' (última do manifesto, keyword 'meggy').
+        // Estrito (resolveStrict): sem 'geral' — cai na camada 4.
+        if (!allowGeneral) return null
         return entries.firstOrNull { it.id == "geral" }?.url
     }
 }
@@ -382,14 +402,20 @@ object CoverLibrary {
  * `names` na ordem aula -> pasta -> curso/drive (ver [CoverLibrary.resolve]:
  * a keyword mais longa entre TODOS os nomes vence; sem match, 'geral').
  * `placeholderRes` é opcional (só o hero o usa, como antes).
+ * `strict` (1.0.11): camada (3) sem o fallback 'geral' — usar em
+ * superfícies por drive/curso (hero, detalhe do curso).
  */
 fun ImageView.loadCoverChain(
     remoteUrl: String?,
     fallbackRes: Int,
     vararg names: String?,
-    placeholderRes: Int? = null
+    placeholderRes: Int? = null,
+    strict: Boolean = false
 ) {
-    val libUrl = CoverLibrary.resolve(context, *names)
+    // 1.0.11 — strict=true: camada (3) sem o fallback 'geral' (o livro
+    // não é banner de curso); sem match, cai na (4) capa local.
+    val libUrl = if (strict) CoverLibrary.resolveStrict(context, *names)
+        else CoverLibrary.resolve(context, *names)
     if (!remoteUrl.isNullOrBlank()) {
         load(remoteUrl) {
             if (placeholderRes != null) placeholder(placeholderRes)
