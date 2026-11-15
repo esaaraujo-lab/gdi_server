@@ -21,6 +21,7 @@ import com.vovofit.app.util.AuthHelper
 import com.vovofit.app.util.CrossFolderPlaylist
 import com.vovofit.app.util.PlaylistManager
 import com.vovofit.app.util.SessionManager
+import com.vovofit.app.util.TvUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -144,6 +145,17 @@ class BrowseActivity : AppCompatActivity() {
                 val watched = files.filter { it.isVideo && sm.isWatched(currentPath, it.name) }
                     .map { it.name }.toSet()
                 adapter.setResumeAndWatched(resumed, watched)
+            }
+            // Frente A (TV) — a Browse não definia foco inicial
+            // nenhum: o 1º D-pad caía na seta "voltar" da toolbar.
+            // Com a grade carregada, o foco vai para o 1º card
+            // (só TV; sem itens, findViewHolder devolve null e nada
+            // acontece).
+            if (TvUtils.isTv(this@BrowseActivity)) {
+                binding.recycler.post {
+                    binding.recycler.findViewHolderForAdapterPosition(0)
+                        ?.itemView?.requestFocus()
+                }
             }
         }
     }
