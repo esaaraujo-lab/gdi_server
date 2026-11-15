@@ -948,24 +948,51 @@
   // persistence was broken because syncCoursesFromDrive was defined + exported
   // but NEVER called. Now it runs first, then autoScanPending picks up the
   // restored courses and background-scans them for lesson counts.
+  // ★ v2.15.32 (B — sync perdido): o sync SÓ corria no 'user:ready'
+  //   (v1.0.84), mas o Bus NÃO tem replay: o _load() do GDIUser
+  //   (gdi-utils.js) emite 'user:ready' no arranque da página,
+  //   ANTES de o loader (cadeia sequencial de ~10 fetches) avaliar
+  //   este módulo e registar o listener — o evento perde-se e o
+  //   sync nunca corre nesse load. Sem sync, o LS manual fica o
+  //   snapshot antigo e o renderCursos (que só lê o LS) nunca vê
+  //   os cursos novos do D1. O timer de arranque abaixo corre o
+  //   MESMO sync 5s após o módulo carregar; o guarda garante UMA
+  //   só corrida por load (o timer do user:ready e o de arranque
+  //   disputam; quem dispara primeiro corre, o outro salta o sync
+  //   mas mantém o autoScanPending). A página do shell só é servida
+  //   autenticada (401 → /login) e o login é navegação completa,
+  //   por isso o sync de arranque corre com sessão válida.
+  let _syncCoursesOnceFired=false;
+  function _runSyncCoursesOnce(){
+    if(_syncCoursesOnceFired) return Promise.resolve(false);
+    _syncCoursesOnceFired=true;
+    if(typeof syncCoursesFromDrive!=='function') return Promise.resolve(false);
+    // ★ v1.0.98 FIX: log sync failures instead of swallowing silently (Agent 7)
+    return syncCoursesFromDrive().catch(e=>console.warn('[sync] failed:', e && e.message));
+  }
   if(typeof Bus !== 'undefined' && typeof Bus.onGlobal === 'function'){
     Bus.onGlobal('user:ready', function(){
       setTimeout(function(){
         try{
           // ★ v1.0.84: sync courses from Drive FIRST, so user sees their courses on any device.
-          if(typeof syncCoursesFromDrive === 'function'){
-            // ★ v1.0.98 FIX: log sync failures instead of swallowing silently (Agent 7)
-            syncCoursesFromDrive().catch(e=>console.warn('[sync] failed:', e && e.message)).finally(()=>{
-              try{ autoScanPending(); }catch(_){}
-            });
-          } else {
+          // ★ v2.15.32 (B): via _runSyncCoursesOnce — UMA só corrida
+          //   por load (v. nota acima); o finally mantém o autoScan.
+          _runSyncCoursesOnce().finally(()=>{
             try{ autoScanPending(); }catch(_){}
-          }
+          });
         }catch(_){
           try{ autoScanPending(); }catch(_){}
         }
       }, 5000);
     });
+    // ★ v2.15.32 (B): timer de arranque — cobre o 'user:ready'
+    //   perdido (ver nota acima). Disputa com o timer do user:ready;
+    //   o guarda _runSyncCoursesOnce deixa passar só o primeiro.
+    setTimeout(function(){
+      try{
+        _runSyncCoursesOnce().finally(()=>{ try{ autoScanPending(); }catch(_){} });
+      }catch(_){ try{ autoScanPending(); }catch(_){} }
+    }, 5000);
     // Also try on page:change (in case user navigates and modules are ready)
     // ★ FIX 20-6 #1 (Agent 6): track the setTimeout id and clear it before
     //    scheduling a new one. Without this, every page:change emission would
