@@ -741,6 +741,176 @@
     return null;
   }
   function invalidateUnifiedCache(){ __unifiedCache=null; __unifiedAt=0; }
+  // ★ v2.15.28 (A — capas em destaque) — START
+  //   DIAGNÓSTICO (provado no código, v. notas da ronda):
+  //   (1) o front web NUNCA usou a biblioteca de capas — o tile em
+  //       destaque mostrava <img> SÓ com coverUrl do D1 (admin); sem
+  //       ela, ficava sem imagem nenhuma (faixa vazia no topo);
+  //   (2) as regras .gdi-course/.gdi-course-stat-num/-label vivem SÓ
+  //       em study-panel.js (não carregado — removido do loader) e no
+  //       legado gdi-study.js (substituído): sem display:block, o nº e
+  //       o rótulo colam-se ("0Aulas") e o cartão fica sem fundo/padding;
+  //   (3) o total 0 vem do /api/courses/unified (nº de pastas de aula
+  //       no D1 p/ o caminho canónico do destaque) — dado do servidor:
+  //       destaque ainda não indexado, ou pasta contentora (ex. OUTROS
+  //       CONCURSOS) cujas aulas vivem nos subcursos. O front não
+  //       inventa contagem: mostra o estado real ("Em breve").
+  //   Hierarquia da capa (a mesma dos APKs — LibraryCovers.kt):
+  //   (1) coverUrl do admin, (2) thumb do Drive (quando o payload a
+  //   trouxer — o unificado não a envia p/ destaque), (3) biblioteca
+  //   por tipo (cover-manifest.json), (4) arte padrão (gradiente+ícone,
+  //   sempre disponível — o tile NUNCA fica com a faixa vazia).
+  //   O manifesto @main do jsDelivr está STALE (59 entradas, md5
+  //   e6a95fcd — verificado 2026-11-15 ~16:57 UTC); o novo (81, md5
+  //   eb3d0427) só serve no raw e no URL com o SHA do commit — por isso
+  //   o pin __COVER_PIN e a reescrita @main → @pin nas URLs das
+  //   imagens; sem o pin o fix dependeria do @main virar. Cópia gémea
+  //   em shell.js (mesma semântica; os dois ficheiros não partilham
+  //   timing de carga — o shell arranca antes do loader).
+  const __COVER_PIN='d2fc4ac7';
+  const __COVER_MANIFEST_URLS=[
+    'https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@'+__COVER_PIN+'/staging/modular/meggy/covers/cover-manifest.json',
+    'https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/staging/modular/meggy/covers/cover-manifest.json',
+    'https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/cover-manifest.json'
+  ];
+  const __COVER_FETCH_TIMEOUT_MS=2500;
+  const __COVER_MIN_KEYWORD=3; // ★ igual ao APK (LibraryCovers.kt)
+  let __coverManifestPromise=null;
+  // ★ igual a LibraryCovers.normalize(): NFD sem acentos, minúsculas,
+  //   [^a-z0-9]+ → ' ', trim, colapsa espaços.
+  function __coverNorm(t){
+    try{
+      return String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
+    }catch(_){ return String(t||'').toLowerCase(); }
+  }
+  // ★ parse tolerante (igual ao APK): {"images":[...]} ou [...] plano.
+  function __coverParseManifest(text){
+    try{
+      const d=(typeof text==='string')?JSON.parse(text):text;
+      const arr=Array.isArray(d)?d:((d&&Array.isArray(d.images))?d.images:null);
+      if(!arr) return [];
+      const out=[];
+      for(const e of arr){
+        if(!e||typeof e.url!=='string'||!/^https?:\/\//i.test(e.url)) continue;
+        const kws=Array.isArray(e.keywords)?e.keywords.map(__coverNorm).filter(Boolean):[];
+        if(!kws.length) continue;
+        out.push({id:String(e.id||''),keywords:kws,url:e.url});
+      }
+      return out;
+    }catch(_){ return []; }
+  }
+  // ★ as URLs das imagens no manifesto usam @main (stale) — reescreve
+  //   p/ o pin, p/ as capas novas carregarem mesmo com o @main parado.
+  function __coverRewritePinned(url){
+    const u=String(url||'');
+    return u.indexOf('esaaraujo-lab/gdi_server@main/')>=0
+      ? u.replace('esaaraujo-lab/gdi_server@main/','esaaraujo-lab/gdi_server@'+__COVER_PIN+'/') : u;
+  }
+  function __coverFetchJson(url){
+    try{
+      const ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
+      let timer=null;
+      if(ctrl) timer=setTimeout(function(){ try{ctrl.abort();}catch(_){} },__COVER_FETCH_TIMEOUT_MS);
+      return fetch(url,{headers:{'Accept':'application/json'},cache:'no-store',signal:ctrl?ctrl.signal:undefined}).then(function(r){
+        if(timer)clearTimeout(timer);
+        if(!r||!r.ok) throw new Error('HTTP '+(r&&r.status));
+        return r.text();
+      }).then(function(t){ return __coverParseManifest(t); }).catch(function(e){ if(timer)clearTimeout(timer); throw e; });
+    }catch(e){ return Promise.reject(e); }
+  }
+  // ★ manifesto em cache na sessão (1 fetch); null = sem manifesto
+  //   (a cadeia cai na arte padrão, sem bloquear o render).
+  async function __coverManifest(){
+    if(__coverManifestPromise) return __coverManifestPromise;
+    __coverManifestPromise=(async function(){
+      for(const u of __COVER_MANIFEST_URLS){
+        try{ const imgs=await __coverFetchJson(u); if(Array.isArray(imgs)&&imgs.length) return imgs; }catch(_){}
+      }
+      return null;
+    })();
+    return __coverManifestPromise;
+  }
+  // ★ resolve ESTRITO, igual a LibraryCovers.resolveStrict(): candidatos
+  //   = nome, depois segmentos do caminho do fim p/ o início; por
+  //   candidato, a keyword MAIS LONGA (≥3 chars) contida nele vence; o
+  //   empate fica com a PRIMEIRA entrada do manifesto (> estrito). Sem
+  //   match → null (sem fallback "geral" — o chamador cai na arte (4)).
+  function __coverLibraryUrl(images,name,coursePath){
+    if(!Array.isArray(images)||!images.length) return null;
+    const cands=[];
+    const raws=[name,coursePath];
+    for(let i=0;i<raws.length;i++){
+      const raw=raws[i]; if(raw==null||raw==='') continue;
+      const segs=String(raw).split('/').reverse();
+      for(let j=0;j<segs.length;j++){ const n=__coverNorm(segs[j]); if(n) cands.push(n); }
+    }
+    for(let ci=0;ci<cands.length;ci++){
+      const cand=cands[ci];
+      let best=null,bestLen=0;
+      for(let ii=0;ii<images.length;ii++){
+        const im=images[ii]; if(!im||!Array.isArray(im.keywords)) continue;
+        for(let ki=0;ki<im.keywords.length;ki++){
+          const kw=im.keywords[ki];
+          if(!kw||kw.length<__COVER_MIN_KEYWORD) continue;
+          if(kw.length<=bestLen) continue;
+          if(cand.indexOf(kw)>=0){ best=im; bestLen=kw.length; }
+        }
+      }
+      if(best) return __coverRewritePinned(best.url);
+    }
+    return null;
+  }
+  // ★ (4) arte padrão — sempre disponível, sem rede.
+  function __coverDefaultArt(icon,hidden){
+    return '<div class="gdi-course-cover-default" style="width:100%;aspect-ratio:16/9;border-radius:10px 10px 0 0;display:'+(hidden?'none':'flex')+';align-items:center;justify-content:center;background:var(--ferreto-grad,linear-gradient(135deg,#ff8b9f 0%,#c026d3 55%,#5ddeda 130%));"><span style="font-size:34px;line-height:1;">'+esc(icon||'⭐')+'</span></div>';
+  }
+  // ★ (1) coverUrl / (2) thumb / (4) arte padrão — síncrono. A (3)
+  //   biblioteca chega depois, via __upgradeTileCovers (o <img> que
+  //   falha volta p/ a arte em vez de sumir — nunca há faixa vazia).
+  function __tileCoverHtml(c,icon){
+    const u=c?((c.coverUrl||c.thumbUrl||c.thumbnail||'')):'';
+    if(typeof u==='string'&&/^https?:\/\//i.test(u)) return '<img src="'+esc(u)+'" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px 10px 0 0;display:block;" onerror="this.style.display=\'none\';var n=this.nextElementSibling;if(n)n.style.display=\'flex\';">'+__coverDefaultArt(icon,true);
+    return __coverDefaultArt(icon,false);
+  }
+  // ★ contagem do tile: total>0 mostra o nº; total 0 mostra o estado
+  //   real ("Em breve") — nunca "0 Aulas" como se o curso fosse vazio.
+  function __tileStatsHtml(c){
+    const t=c?((c.total)||0):0;
+    if(t>0) return '<div class="gdi-course-stats" style="grid-template-columns:repeat(1,1fr);"><div class="gdi-course-stat"><span class="gdi-course-stat-num">'+t+'</span><span class="gdi-course-stat-label">Aulas</span></div></div>';
+    return '<div class="gdi-course-stats" style="grid-template-columns:repeat(1,1fr);"><div class="gdi-course-stat"><span class="gdi-course-stat-num" style="font-size:15px;color:#ffd43b;">Em breve</span><span class="gdi-course-stat-label">Aulas em indexação</span></div></div>';
+  }
+  // ★ upgrade assíncrono: cartões marcados (sem coverUrl) ganham a capa
+  //   da biblioteca quando o manifesto chega. Não bloqueia o render;
+  //   gen (quando dado) impede upgrades de grades já re-renderizadas.
+  async function __upgradeTileCovers(root,gen){
+    try{
+      if(!root||typeof root.querySelectorAll!=='function') return;
+      if(gen!==undefined&&gen!==null&&root.__filterGen!==undefined&&root.__filterGen!==gen) return;
+      const imgs=await __coverManifest();
+      if(!imgs) return;
+      if(gen!==undefined&&gen!==null&&root.__filterGen!==undefined&&root.__filterGen!==gen) return;
+      const cards=root.querySelectorAll('[data-v21528-cover]');
+      for(let i=0;i<cards.length;i++){
+        try{
+          const card=cards[i];
+          if(!card||card.isConnected===false) continue;
+          const url=__coverLibraryUrl(imgs,(card.dataset&&card.dataset.v21528CoverName)||'',(card.dataset&&card.dataset.v21528CoverPath)||'');
+          if(!url) continue;
+          const art=card.querySelector?card.querySelector('.gdi-course-cover-default'):null;
+          if(!art) continue;
+          const img=document.createElement('img');
+          img.src=url; img.alt='';
+          img.style.cssText='width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px 10px 0 0;display:block;';
+          img.onerror=(function(im,a){ return function(){ try{im.style.display='none';a.style.display='flex';}catch(_){} }; })(img,art);
+          if(art.parentNode&&art.parentNode.insertBefore) art.parentNode.insertBefore(img,art);
+          else if(card.insertBefore) card.insertBefore(img,art);
+          art.style.display='none';
+          if(card.removeAttribute) card.removeAttribute('data-v21528-cover');
+        }catch(_){}
+      }
+    }catch(_){}
+  }
+  // ★ v2.15.28 (A — capas em destaque) — END
   async function loadUnifiedExtras(){
     const now=Date.now();
     if(__unifiedCache && now-__unifiedAt<60000) return __unifiedCache;
@@ -877,6 +1047,9 @@
       const slice=ownFiltered.slice(currentPage*PAGE_SIZE,(currentPage+1)*PAGE_SIZE);
       // ★ v1.0.98 FIX: generation token to prevent stale cards from async race (Agent 15 Bug 3)
       const __gen=(box.__filterGen=(box.__filterGen||0)+1);
+      // ★ v2.15.28 (A): upgrade das capas da biblioteca (assíncrono, sem
+      //   bloquear o render) — os cartões em destaque já estão no DOM.
+      __upgradeTileCovers(box,__gen).catch(()=>{});
       // limpar grid
       grid.innerHTML='';
       if(!slice.length){
@@ -887,6 +1060,10 @@
         const targets=await Promise.all(slice.map(c=>c.kind?Promise.resolve(null):bestIn(c.key).catch(()=>null)));
         if(box.__filterGen!==__gen)return;  // ★ v1.0.98 FIX: stale — abort
         slice.forEach((c,i)=>renderCourseCard(grid,c,box,targets[i]));
+        // ★ v2.15.28 (A): os cartões próprios rendem depois — o upgrade
+        //   corre outra vez p/ eles (o manifesto está em cache; os de
+        //   destaque já atualizados não têm o marcador e são ignorados).
+        __upgradeTileCovers(box,__gen).catch(()=>{});
       })().catch(e=>{console.warn('[renderCursos] card render failed:',e&&e.message);});  // ★ CYCLE2-2 FIX: catch fire-and-forget IIFE — renderCourseCard is sync and could throw on DOM bugs.
       // paginação
       if(totalPages>1){
@@ -909,19 +1086,21 @@
       if(c.kind==='concurso'||c.kind==='featured'){
         const isConcurso=c.kind==='concurso';
         const el=document.createElement('div');el.className='gdi-course';el.style.cursor='pointer';
+        // ★ v2.15.28 (A): capa pela hierarquia (coverUrl → biblioteca →
+        //   arte padrão); sem coverUrl o cartão marca-se p/ o upgrade
+        //   assíncrono da biblioteca (nunca fica com a faixa vazia).
+        if(!isConcurso&&!c.coverUrl){ try{ el.setAttribute('data-v21528-cover',''); el.setAttribute('data-v21528-cover-name',c.name||''); el.setAttribute('data-v21528-cover-path',c.coursePath||''); }catch(_){} }
         el.innerHTML=`
-        ${(!isConcurso && c.coverUrl)?'<img src="'+esc(c.coverUrl)+'" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px 10px 0 0;display:block;" onerror="this.style.display=\'none\'">':''}
+        ${!isConcurso?`<div class="gdi-course-cover">${__tileCoverHtml(c,c.icon||'⭐')}</div>`:''}
         <div class="gdi-course-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-          <b style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;">
+          <b class="gdi-course-title" title="${esc(c.name||'')}" style="flex:1;min-width:0;display:flex;align-items:flex-start;gap:6px;">
             <span style="font-size:18px;flex:none;">${isConcurso?'📌':(c.icon||'⭐')}</span>
-            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.name||'')}</span>
+            <span style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;white-space:normal;overflow-wrap:break-word;">${esc(c.name||'')}</span>
           </b>
           ${isConcurso?'<button class="gdi-course-remove" title="Remover concurso" style="background:transparent;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:14px;padding:2px 6px;flex:none;border-radius:6px;"><i class="bi bi-x-lg"></i></button>':''}
         </div>
         <small style="color:var(--ferreto-secondary,#5ddeda);font-size:10px;display:block;margin-top:2px;">${isConcurso?'Concurso':'Curso em destaque'}${c.examDate?' · 📅 '+esc(c.examDate):''}</small>
-        <div class="gdi-course-stats">
-          <div class="gdi-course-stat"><span class="gdi-course-stat-num">${c.total||0}</span><span class="gdi-course-stat-label">Aulas</span></div>
-        </div>`;
+        ${__tileStatsHtml(c)}`;
         grid.appendChild(el);
         const removeBtn=el.querySelector('.gdi-course-remove');
         if(removeBtn&&isConcurso){
@@ -973,14 +1152,17 @@
       const remaining=Math.max(0,_cardTotal-c.watched);
       const el=document.createElement('div');el.className='gdi-course';
       el.style.cursor='pointer';
+      // ★ v2.15.28 (A): mesma hierarquia de capa do destaque; sem
+      //   coverUrl o cartão marca-se p/ o upgrade da biblioteca.
+      if(!c.coverUrl){ try{ el.setAttribute('data-v21528-cover',''); el.setAttribute('data-v21528-cover-name',name); el.setAttribute('data-v21528-cover-path',c.key||''); }catch(_){} }
       // ★ destaque visual para curso manual: border-left com a cor do manualCourse
       if(isManual)el.style.borderLeft='4px solid '+color;
       el.innerHTML=`
-        ${c.coverUrl?'<img src="'+esc(c.coverUrl)+'" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px 10px 0 0;display:block;" onerror="this.style.display=\'none\'">':''}
+        ${c.coverUrl?`<div class="gdi-course-cover"><span class="gdi-course-cover-icon">${icon}</span><img src="${esc(c.coverUrl)}" alt="" onerror="this.style.display='none'"></div>`:`<div class="gdi-course-cover">${__tileCoverHtml(c,icon)}</div>`}
         <div class="gdi-course-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-          <b title="${escHtml(_mcName||courseName(c.key))}" style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;">
+          <b class="gdi-course-title" title="${escHtml(_mcName||courseName(c.key))}" style="flex:1;min-width:0;display:flex;align-items:flex-start;gap:6px;">
             ${isManual?`<span style="font-size:18px;flex:none;">${icon}</span>`:''}
-            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(name)}</span>
+            <span style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;white-space:normal;overflow-wrap:break-word;">${escHtml(name)}</span>
           </b>
           <button class="gdi-course-remove" title="${isManual?'Remover curso manual':'Remover curso'}" style="background:transparent;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:14px;padding:2px 6px;flex:none;border-radius:6px;transition:all .15s;"><i class="bi bi-x-lg"></i></button>
         </div>
