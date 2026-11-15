@@ -5,9 +5,11 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.meggy.app.data.monogramFor
+import coil.load
 import com.meggy.app.databinding.ItemMylistCardBinding
 import com.meggy.app.util.FocusAnimator
+import com.meggy.app.util.LibraryCovers
+import com.meggy.app.util.ThumbArt
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.TvUtils
 
@@ -41,9 +43,29 @@ class BookmarkAdapter(
             mylistTypeChip.text = b.kind.uppercase()
             mylistTitle.text = b.name
             mylistMeta.text = b.path
-            mylistMonogram.text = monogramFor(b.name)
-            mylistThumb.visibility = android.view.View.GONE
-            mylistMonogram.visibility = android.view.View.VISIBLE
+            // 2.7.13 camada (3) ESTRITA: imagem da biblioteca pelo
+            // nome/caminho do marcador; sem match, a capa gerada do
+            // drive (ThumbArt) — nunca o livro 'geral' nem monograma.
+            val coverRes = ThumbArt.coverResForPath(b.path)
+            val libraryUrl = LibraryCovers.resolveStrict(
+                holder.itemView.context, b.name, b.path
+            )
+            if (libraryUrl != null) {
+                mylistThumb.visibility = android.view.View.VISIBLE
+                mylistMonogram.visibility = android.view.View.GONE
+                mylistThumb.load(libraryUrl) {
+                    error(coverRes)
+                    listener(onError = { _, _ ->
+                        mylistThumb.visibility = android.view.View.VISIBLE
+                        mylistMonogram.visibility = android.view.View.GONE
+                        mylistThumb.setImageResource(coverRes)
+                    })
+                }
+            } else {
+                mylistThumb.visibility = android.view.View.VISIBLE
+                mylistMonogram.visibility = android.view.View.GONE
+                mylistThumb.setImageResource(coverRes)
+            }
             mylistProgressRow.visibility = android.view.View.GONE
             mylistContinue.visibility = android.view.View.GONE
             mylistFav.visibility = android.view.View.GONE
