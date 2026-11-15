@@ -72,6 +72,11 @@ import kotlinx.coroutines.withContext
  * v2.1.7 — controles da barra: feedback visual (seletores +
  * FocusAnimator), foco D-pad entra na barra, barra invisível
  * some com GONE (não intercepta mais toques).
+ * Frente R3A (Plyr, SO visual): botao play/pausa da barra SO-ICONE
+ * (sem disco; player_bar_btn_bg — foco com anel da marca + FocusAnimator),
+ * disco central 44dp/56dp, progresso 5dp / thumb 13dp / trilho branco 25%,
+ * scrim da base 75% (gradiente Plyr). NADA de comportamento muda:
+ * auto-hide 4s, descanso (Frente D) e seek (Frente B) intactos.
  *
  * DOIS MODOS (mesma Activity, mesmos componentes):
  *  - Retrato (celular): vídeo 16:9 + controles do ExoPlayer + linha de
@@ -163,6 +168,16 @@ import kotlinx.coroutines.withContext
 class PlayerActivity : AppCompatActivity() {
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // Frente B (Ronda 3) — largar a tecla termina o scrub
+        // (hold-to-scrub). So consome o UP quando ha um scrub ativo;
+        // sem scrub, o UP cai no super como antes.
+        if (event.action == KeyEvent.ACTION_UP && remoteScrubbing &&
+            (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
+                event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)
+        ) {
+            stopRemoteScrub()
+            return true
+        }
         if (event.action == KeyEvent.ACTION_DOWN) {
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_UP -> {
@@ -203,16 +218,24 @@ class PlayerActivity : AppCompatActivity() {
                         exitSleepMode()
                         return true
                     }
-                    // v2.1.6 — setas do D-pad: ±10s (o pulo continua sem
-                    // os botões do rodapé). Só quando o foco está no
-                    // vídeo (ou os controles estão escondidos): com os
-                    // controles visíveis e o foco num botão, as setas
-                    // movem o foco — navegação padrão do D-pad. Em
-                    // retrato o controller nativo trata as teclas.
-                    if (isFullscreen && (!controlsVisible || binding.playerView.hasFocus())) {
+                    // Frente B (Ronda 3) — setas do D-pad: seek SEMPRE
+                    // em fullscreen/TV, mesmo com os controlos visíveis
+                    // e o foco num botão da barra — ou NA SeekBar. A
+                    // interceção é ao nível do dispatchKeyEvent, antes
+                    // da distribuição do foco: a tecla nunca chega à
+                    // navegação de foco nem ao onKeyDown da SeekBar (que
+                    // a consumiria para mexer no progresso). O foco fica
+                    // onde estava; o vídeo não pausa. Em retrato o
+                    // controller nativo trata as teclas (isFullscreen =
+                    // false → cai no super.dispatchKeyEvent).
+                    if (isFullscreen) {
                         val back = event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT
-                        seekBy(if (back) -10_000L else 10_000L)
-                        showSeekHint(if (back) "⏪ -10s" else "⏩ +10s")
+                        // Repetições do sistema (repeatCount > 0): o
+                        // timer do scrub é quem manda — ignoram-se para
+                        // não haver dois seeks por tick.
+                        if (event.repeatCount == 0) {
+                            startRemoteScrub(if (back) -1 else 1)
+                        }
                         return true
                     }
                 }
@@ -272,6 +295,30 @@ class PlayerActivity : AppCompatActivity() {
     private var isTv = false
     private var isAudio = false
     private var seekBarDragging = false
+    // Frente B (Ronda 3) — seek com o controlo remoto na TV
+    // (hold-to-scrub). Ver dispatchKeyEvent, startRemoteScrub e
+    // remoteScrubTick. Sem imports novos: usa o handler que ja
+    // existe e Format.mmss (ja importado).
+    private var remoteScrubbing = false
+    private var remoteScrubDirection = 1 // +1 frente, -1 tras
+    private var remoteScrubTargetMs = 0L
+    private var remoteScrubTicks = 0
+    private var remoteScrubItem: FileItem? = null
+    private val remoteScrubRunnable = Runnable { remoteScrubTick() }
+    private val hideSeekHintRunnable = Runnable {
+        binding.seekGestureHint.animate().alpha(0f).setDuration(300)
+            .withEndAction { binding.seekGestureHint.visibility = View.GONE }.start()
+    }
+    // Progressao do scrub (passo por tick do timer):
+    //   <1s premido: 10s/tick - <3s: 30s/tick - depois: 60s/tick.
+    // 1o tick 400ms apos o DOWN (atraso tipico do repeat do Android);
+    // ticks seguintes a cada 150ms. Guarda: 60s de hold no maximo.
+    private val REMOTE_SCRUB_FIRST_DELAY_MS = 400L
+    private val REMOTE_SCRUB_INTERVAL_MS = 150L
+    private val REMOTE_SCRUB_FAST_AFTER_MS = 1_000L
+    private val REMOTE_SCRUB_FASTEST_AFTER_MS = 3_000L
+    private val REMOTE_SCRUB_MAX_HOLD_MS = 60_000L
+    private val REMOTE_SCRUB_HINT_HIDE_DELAY_MS = 900L
     private var subtitleState: SubtitleState = SubtitleState.UNKNOWN
     private var subtitleFetchJob: Job? = null
     private var subtitleRetryCount = 0
@@ -749,6 +796,114 @@ class PlayerActivity : AppCompatActivity() {
         binding.seekGestureHint.animate().alpha(0f).setStartDelay(600).setDuration(400)
             .withEndAction { binding.seekGestureHint.visibility = View.GONE }.start()
     }
+    // ──────────── Frente B (Ronda 3) — hold-to-scrub (TV) ────────────
+
+    /**
+     * Começa o scrub remoto numa direção. 1o passo imediato (±10s);
+     * o timer repete o passo enquanto a tecla estiver premida
+     * (ver remoteScrubTick). Robustez: o timer — e NAO as repetições
+     * do sistema (getRepeatCount) — é quem repete o seek, por isso
+     * funciona tanto com comandos que enviam DOWN repetidos como com
+     * comandos Bluetooth que só enviam um DOWN + um UP; as repetições
+     * do sistema são ignoradas no dispatchKeyEvent para não haver
+     * dois seeks por tick. Trocar de direção a meio do hold reinicia
+     * o scrub na nova direção.
+     */
+    private fun startRemoteScrub(direction: Int) {
+        val p = player ?: return
+        if (remoteScrubbing) {
+            if (direction == remoteScrubDirection) return
+            stopRemoteScrub()
+        }
+        remoteScrubDirection = direction
+        remoteScrubTargetMs = p.currentPosition.coerceAtLeast(0)
+        remoteScrubTicks = 0
+        remoteScrubItem = currentItem
+        remoteScrubbing = true
+        remoteScrubStep()
+        handler.removeCallbacks(remoteScrubRunnable)
+        handler.postDelayed(remoteScrubRunnable, REMOTE_SCRUB_FIRST_DELAY_MS)
+    }
+
+    /** Passo do scrub por tempo premido (ver constantes acima). */
+    private fun remoteScrubStepMs(): Long = when {
+        remoteScrubTicks * REMOTE_SCRUB_INTERVAL_MS < REMOTE_SCRUB_FAST_AFTER_MS -> 10_000L
+        remoteScrubTicks * REMOTE_SCRUB_INTERVAL_MS < REMOTE_SCRUB_FASTEST_AFTER_MS -> 30_000L
+        else -> 60_000L
+    }
+
+    /** Um tick do timer: avança um passo e reagenda-se. */
+    private fun remoteScrubTick() {
+        if (!remoteScrubbing) return
+        remoteScrubTicks++
+        if (remoteScrubTicks * REMOTE_SCRUB_INTERVAL_MS > REMOTE_SCRUB_MAX_HOLD_MS) {
+            stopRemoteScrub()
+            return
+        }
+        remoteScrubStep()
+        if (remoteScrubbing) {
+            handler.postDelayed(remoteScrubRunnable, REMOTE_SCRUB_INTERVAL_MS)
+        }
+    }
+
+    /**
+     * Um passo do scrub: soma o passo ao destino acumulado (não à
+     * posição ao vivo — o seekTo é assíncrono e a posição lida
+     * atrasar-se-ia, acumulando erro), limita a [0, duração], faz o
+     * seek, e atualiza AO VIVO a barra, os rótulos e a bolha do tempo
+     * destino. O atualizador periódico está suspenso durante o scrub
+     * (ver startTimeUpdater) para não lutar com estes valores.
+     * Para no fim do item ou se a aula mudar (o player pode avançar
+     * sozinho para a próxima aula ao chegar ao fim).
+     */
+    private fun remoteScrubStep() {
+        val p = player ?: run { stopRemoteScrub(); return }
+        if (currentItem != remoteScrubItem || p.playbackState == Player.STATE_ENDED) {
+            stopRemoteScrub()
+            return
+        }
+        val dur = p.duration.coerceAtLeast(0)
+        remoteScrubTargetMs = (remoteScrubTargetMs + remoteScrubDirection * remoteScrubStepMs())
+            .coerceIn(0L, dur)
+        p.seekTo(remoteScrubTargetMs)
+        if (dur > 0) {
+            binding.barSeekBar.progress = (remoteScrubTargetMs * 1000 / dur).toInt()
+            val label = "${Format.mmss(remoteScrubTargetMs)} / ${Format.mmss(dur)}"
+            binding.barTimeLabel.text = label
+            binding.infoTimeLabel.text = label
+        }
+        showScrubHint(remoteScrubTargetMs, dur)
+        showControls()
+    }
+
+    /**
+     * Bolha do tempo destino durante o scrub ("⏪ 12:34 / 48:20").
+     * Reutiliza o seekGestureHint (o mesmo do double-tap) mas sem o
+     * fade automático do showSeekHint: cancela qualquer animação em
+     * curso e fica visível até stopRemoteScrub agendar o fade.
+     */
+    private fun showScrubHint(targetMs: Long, durMs: Long) {
+        val arrow = if (remoteScrubDirection < 0) "⏪" else "⏩"
+        binding.seekGestureHint.text = "$arrow ${Format.mmss(targetMs)} / ${Format.mmss(durMs)}"
+        binding.seekGestureHint.visibility = View.VISIBLE
+        binding.seekGestureHint.alpha = 1f
+        binding.seekGestureHint.animate().cancel()
+        handler.removeCallbacks(hideSeekHintRunnable)
+    }
+
+    /** Fim do scrub ao largar a tecla: a bolha some 900ms depois. */
+    private fun stopRemoteScrub() {
+        if (!remoteScrubbing) return
+        cancelRemoteScrub()
+        handler.postDelayed(hideSeekHintRunnable, REMOTE_SCRUB_HINT_HIDE_DELAY_MS)
+    }
+
+    /** Cancela o scrub sem agendar nada (onStop/onDestroy/releasePlayer). */
+    private fun cancelRemoteScrub() {
+        remoteScrubbing = false
+        handler.removeCallbacks(remoteScrubRunnable)
+        handler.removeCallbacks(hideSeekHintRunnable)
+    }
 
     private fun showSleepTimerDialog() {
         val options = arrayOf("Off", "15 min", "30 min", "45 min", "60 min")
@@ -1053,6 +1208,8 @@ class PlayerActivity : AppCompatActivity() {
     override fun onStop() {
         super.onStop()
         playerInForeground = false
+        // Frente B (Ronda 3) — o timer do scrub não sobrevive à saída.
+        cancelRemoteScrub()
         UpdateChecker.setPlayerForeground(false)
         descriptionPregenerator?.stop()
         releasePlayer()
@@ -1299,7 +1456,10 @@ class PlayerActivity : AppCompatActivity() {
                 val label = "${Format.mmss(pos)} / ${Format.mmss(dur)}"
                 binding.barTimeLabel.text = label
                 binding.infoTimeLabel.text = label
-                if (!seekBarDragging && dur > 0) {
+                // Frente B (Ronda 3) — durante o scrub remoto a barra
+                // e os rótulos são atualizados pelo remoteScrubStep
+                // (a partir do destino); o atualizador não os toca.
+                if (!seekBarDragging && !remoteScrubbing && dur > 0) {
                     binding.barSeekBar.progress = (pos * 1000 / dur).toInt()
                 }
             }
@@ -1358,6 +1518,8 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun releasePlayer() {
+        // Frente B (Ronda 3) — o player some, o scrub some com ele.
+        cancelRemoteScrub()
         saveJob?.cancel()
         saveJob = null
         timeJob?.cancel()
@@ -1438,6 +1600,8 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        // Frente B (Ronda 3) — sem callbacks pendentes no handler.
+        cancelRemoteScrub()
         super.onDestroy()
         stopSleepTimer()
     }
