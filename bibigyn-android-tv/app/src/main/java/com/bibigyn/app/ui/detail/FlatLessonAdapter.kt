@@ -114,7 +114,7 @@ class FlatLessonAdapter(
                     listener(onError = { _, _ -> showLibraryOrCover() })
                 }
             } else {
-                showLibraryOrMonogram()
+                showLibraryOrCover()
             }
 
             val dur = if (item.isVideo || item.isAudio) sm.getResumeDuration(folderPath, item.name) else 0L
