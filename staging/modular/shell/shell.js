@@ -278,6 +278,18 @@
       // Scroll to top on view change
       main.scrollTop = 0;
 
+      // ★ v2.15.8 (B): caminho de PASTA do Drive (/N:/...) sem rota — abre
+      //   Explorar Drives nessa pasta em vez de cair na Home. O link "Ir
+      //   para o Drive" do detalhe (href=/11:/...) e URLs de pasta coladas
+      //   morriam aqui (routes só conhece as rotas fixas). Ficheiros de
+      //   mídia sem ?a=view continuam a cair na Home (comportamento atual).
+      if (view === 'home' && /^\/\d+:\//.test(path) && !/\.(mp4|webm|mov|mkv|m4v|mp3|m4a|ogg|wav|aac|pdf)$/i.test(_decPath)) {
+        Shell.state.currentView = 'drives';
+        Shell.sidebar.updateActive('/drives');
+        Shell.views.drives(main, path);
+        return;
+      }
+
       switch (view) {
         case 'home':      Shell.views.home(main); break;
         case 'cursos':    Shell.views.cursos(main); break;
@@ -795,7 +807,12 @@
                 //   para outra pasta) não sobrescreve a lista atual.
                 if (Shell.state.currentFolderPath !== path) return;
                 if (!files || !files.length) {
-                  container.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">📁</div><div class="meggy-placeholder-title">Pasta vazia</div></div>';
+                  // ★ v2.15.8 (B): pasta sem itens ≠ pasta inexistente —
+                  //   consulta o status no worker antes de dizer "Pasta
+                  //   vazia" (v. _renderDrivesEmpty). /11:/CURSOS 2026 não
+                  //   existe no drive 11 (not-found real, provado na
+                  //   v2.15.7) e aparecia como "Pasta vazia" sem explicação.
+                  Shell.views._renderDrivesEmpty(container, path);
                   return;
                 }
                 const folders = files.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
@@ -898,6 +915,79 @@
           console.error('[Shell] drives view:', e);
           container.innerHTML = `<div class="meggy-placeholder"><div class="meggy-placeholder-icon">⚠️</div><div class="meggy-placeholder-title">Erro</div><div class="meggy-placeholder-desc">${e.message}</div></div>`;
         }
+      },
+
+      // ★ v2.15.8 (B): cache curto do folder-status por caminho (60 s) —
+      //   navegar p/ a mesma pasta não re-pergunta ao worker.
+      _folderStatusCache: new Map(),
+
+      // ★ v2.15.8 (B): modelo PURO da explicação de pasta vazia (testável —
+      //   v. v2.15.8-test-B.js). Devolve null p/ pasta que EXISTE (vazia de
+      //   verdade) ou p/ status desconhecido; senão o modelo not-found.
+      _drivesEmptyInfo(path, st) {
+        if (!st || !st.ok || st.exists !== false) return null;
+        const segs = String(path || '').split('/').filter(Boolean);
+        const folder = segs.length ? segs[segs.length - 1] : '';
+        let folderName = folder;
+        try { folderName = decodeURIComponent(folder); } catch (_) {}
+        const twin = (st.canonicalPath && st.canonicalPath !== path && st.canonicalExists) ? st.canonicalPath : null;
+        return {
+          kind: 'not-found',
+          folderName: folderName,
+          driveName: st.driveName || '',
+          blocked: st.blocked || null,
+          twinPath: twin,
+          twinDriveName: st.canonicalDriveName || ''
+        };
+      },
+
+      // ★ v2.15.8 (B): estado vazio do Explorar Drives com explicação.
+      //   Pasta inexistente (not-found) mostra O MOTIVO + o caminho
+      //   canônico (gêmeo) quando ele existe; pasta vazia de verdade
+      //   mantém o "Pasta vazia" de antes. Falha no status → "Pasta
+      //   vazia" (fail-safe, nunca pior que antes).
+      async _renderDrivesEmpty(container, path) {
+        const emptyHtml = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">📁</div><div class="meggy-placeholder-title">Pasta vazia</div></div>';
+        if (!/^\/\d+:\//.test(String(path || ''))) { container.innerHTML = emptyHtml; return; }
+        let st = null;
+        try {
+          const now = Date.now();
+          const cached = Shell.views._folderStatusCache.get(path);
+          if (cached && now - cached.t < 60000) st = cached.v;
+          else {
+            const r = await fetch('/api/drive/folder-status?path=' + encodeURIComponent(path), { credentials: 'include', cache: 'no-store' });
+            st = await r.json().catch(() => null);
+            if (st) Shell.views._folderStatusCache.set(path, { t: now, v: st });
+          }
+        } catch (_) { st = null; }
+        if (Shell.state.currentFolderPath !== path) return;
+        const info = Shell.views._drivesEmptyInfo(path, st);
+        if (!info) { container.innerHTML = emptyHtml; return; }
+        const esc = Shell._esc || (function(s){ return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); });
+        let countHtml = '';
+        if (info.twinPath) {
+          try {
+            const r2 = await fetch('/api/d1/lessons/by-course?path=' + encodeURIComponent(info.twinPath), { credentials: 'include', cache: 'no-store' });
+            const d2 = await r2.json().catch(() => null);
+            if (Shell.state.currentFolderPath !== path) return;
+            if (d2 && d2.ok && typeof d2.lessonFolders === 'number' && d2.lessonFolders > 0) {
+              countHtml = '<div style="margin-top:8px;font-size:13px;color:#e6edf3;">📚 <b>' + d2.lessonFolders + ' aulas</b> indexadas no D1 sob o caminho canônico.</div>';
+            }
+          } catch (_) {}
+        }
+        container.innerHTML = '<div class="meggy-placeholder">'
+          + '<div class="meggy-placeholder-icon">⛔</div>'
+          + '<div class="meggy-placeholder-title">Pasta não encontrada neste drive</div>'
+          + '<div class="meggy-placeholder-desc">A pasta <b>' + esc(info.folderName) + '</b>' + (info.driveName ? ' não existe no drive <b>' + esc(info.driveName) + '</b>' : ' não existe neste drive') + '.'
+          + (info.blocked ? ' O scanner já tentou indexar este caminho e registrou <b>' + esc(info.blocked.status || info.blocked.kind || 'not_found') + '</b>' + (info.blocked.last_error ? ' — ' + esc(info.blocked.last_error) : '') + '.' : '')
+          + '</div>'
+          + countHtml
+          + (info.twinPath
+            ? '<div style="margin-top:14px;"><button class="meggy-header-btn" id="meggy-drives-open-twin"><i class="bi bi-folder2-open"></i> Abrir no drive ' + esc(info.twinDriveName || '') + '</button></div>'
+            : '<div style="margin-top:14px;"><button class="meggy-header-btn" onclick="Shell.router.navigate(\'/drives\')">← Voltar aos drives</button></div>')
+          + '</div>';
+        const twinBtn = container.querySelector('#meggy-drives-open-twin');
+        if (twinBtn) twinBtn.onclick = function(){ Shell.views._renderDrives(info.twinPath); };
       },
 
       // ═══ PÁGINA DE VÍDEO — Layout Alfacon exato (vídeo + materiais lado a lado) ═══
@@ -1967,11 +2057,16 @@
         function triggerIsaSummaryTab() {
           // Clica a aba Resumo Meggy quando ela existir (o loadMaterials
           // a cria com ~500ms de atraso) — espera até 10s.
+          // ★ v2.15.8-E: se a aba SUMIU (o M9 legado apagava o painel —
+          //   ver gdi-core.js shellOwnsMaterialsPanel), o poll sozinho
+          //   nunca a acharia: recria as abas do shell 1× e segue o poll. // S1-trigger-recria-abas
           return new Promise((resolve) => {
             let tries = 0;
+            let _reloaded = false;
             const tick = () => {
               const t = document.querySelector('.gdi-mat-tab[data-mat="isa-summary"]');
               if (t) { try { t.click(); } catch (_) {} resolve(true); return; }
+              if (!_reloaded) { _reloaded = true; try { loadMaterials(); } catch (_) {} }
               if (++tries >= 20) { resolve(false); return; }
               setTimeout(tick, 500);
             };
@@ -2018,7 +2113,8 @@
             const excerpt = plain.slice(0, 280) + (plain.length > 280 ? '…' : '');
             descEl.innerHTML = '<div><span style="color:#ff8b9f;font-weight:600;">🐩 ' + esc(Shell.views._v215LessonDescHook(rawName || folderLabel)) + '</span> ' + esc(excerpt) + ' <a href="#" id="gdi-desc-more" style="color:#5ddeda;white-space:nowrap;">Ver resumo completo</a></div>';
             const more = document.getElementById('gdi-desc-more');
-            if (more) more.onclick = (e) => { e.preventDefault(); const t = document.querySelector('.gdi-mat-tab[data-mat="isa-summary"]'); if (t) t.click(); };
+            // ★ v2.15.8-E: a aba pode ter sumido (o M9 apagava o painel) — o clique era no-op silencioso. Recria as abas do shell e clica quando aparecerem (até 10s). // S2-ver-resumo-recria-abas
+            if (more) more.onclick = (e) => { e.preventDefault(); const t0 = document.querySelector('.gdi-mat-tab[data-mat="isa-summary"]'); if (t0) { t0.click(); return; } try { loadMaterials(); } catch (_) {} let _n = 0; const _tick = () => { const t = document.querySelector('.gdi-mat-tab[data-mat="isa-summary"]'); if (t) { try { t.click(); } catch (_) {} return; } if (++_n >= 20) return; setTimeout(_tick, 500); }; _tick(); };
             return;
           }
           // (2) Nome real da pasta como descrição provisória.
@@ -2983,21 +3079,38 @@ el.scrollTop = 0;
         let body = { folderPaths: folderPaths || [] };
         let d = null;
         // ★ v2.15.7 (P4): teto 40 tentativas (antes 20) — v. previewAttach.
+        // ★ v2.15.8 (D — P4): pending vazio ou sem progresso NÃO é motivo
+        //   p/ outra volta — o servidor não tem mais o que retomar (o
+        //   truncated fica true com pending vazio quando um nó queima em
+        //   enumErrors — v. enumerateModuleFiles). Sem isto o assistente
+        //   re-enumerava do zero até o teto de 40 voltas.
+        let _prevPendKey = null, _prevFolders = -1;
         for (let a = 0; a < 40; a++) {
           d = await Shell.views._v215Api('/api/concursos/' + encodeURIComponent(concursoId) + '/sources/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
           if (!d || !d.truncated) break;
-          body = { folderPaths: folderPaths || [], resume: d.pending || {}, accum: { folders: d.folders || [], seenNewPaths: d.seenNewPaths || [], enumErrors: d.enumErrors || [], depthCut: d.depthCut || [], notFound: d.notFound || [] } };
+          const _pendKey = JSON.stringify(d.pending || {});
+          const _folders = (d.folders || []).length;
+          if (_pendKey === '{}' || (_pendKey === _prevPendKey && _folders === _prevFolders)) { d.truncated = false; break; }
+          _prevPendKey = _pendKey; _prevFolders = _folders;
         }
         return d;
       },
       async _v215AttachPaged(concursoId, folderPaths) {
         let body = { folderPaths: folderPaths || [] };
         let d = null, firstAttached = null, firstSkipped = null;
+        // ★ v2.15.8 (D — P4): v. _v215PreviewPaged — pending vazio ou sem
+        //   progresso encerra o loop (o /sources tem o mesmo truncated
+        //   grudento do /scan).
+        let _prevPendKey = null, _prevLinked = -1;
         // ★ v2.15.7 (P4): teto 40 tentativas (antes 20) — v. previewAttach.
         for (let a = 0; a < 40; a++) {
           d = await Shell.views._v215Api('/api/concursos/' + encodeURIComponent(concursoId) + '/sources', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
           if (firstAttached === null) { firstAttached = d.attached; firstSkipped = d.skipped; }
-          if (!d.scanned || !d.scanned.truncated) break;
+          if (!d || !d.scanned || !d.scanned.truncated) break;
+          const _pendKey = JSON.stringify(d.scanned.pending || {});
+          const _linked = (d.scanned.linkedTotal != null) ? d.scanned.linkedTotal : -1;
+          if (_pendKey === '{}' || (_pendKey === _prevPendKey && _linked === _prevLinked)) { d.scanned.truncated = false; break; }
+          _prevPendKey = _pendKey; _prevLinked = _linked;
           body = { folderPaths: folderPaths || [], resume: (d.scanned && d.scanned.pending) || {} };
         }
         if (d) { d.attached = firstAttached || d.attached; d.skipped = firstSkipped || d.skipped; }
@@ -3056,6 +3169,12 @@ el.scrollTop = 0;
         }
         if (Array.isArray(r.depthCut) && r.depthCut.length) {
           h += '<div style="margin-top:0;margin-bottom:16px;padding:10px;background:rgba(255,212,59,0.06);border:1px solid rgba(255,212,59,0.25);border-radius:8px;font-size:12px;color:#ffd43b;">⚠️ ' + r.depthCut.length + ' pasta(s) além da profundidade máxima não foram enumeradas — aulas abaixo delas não entram na contagem.</div>';
+        }
+        if (Array.isArray(r.enumErrors) && r.enumErrors.length) {
+          h += '<div style="margin-top:0;margin-bottom:16px;padding:10px;background:rgba(248,81,73,0.08);border:1px solid rgba(248,81,73,0.3);border-radius:8px;font-size:12px;color:#ff8b8b;">⚠️ ' + r.enumErrors.length + ' pasta(s) não puderam ser listadas: ' + r.enumErrors.map(function(e){ return Shell._esc(String((e && (e.folder || e.path)) || '')); }).join(', ') + ' — as aulas delas não entraram na contagem.</div>';
+        }
+        if (r._scanStopped === 'no-progress') {
+          h += '<div style="margin-top:0;margin-bottom:16px;padding:10px;background:rgba(255,212,59,0.06);border:1px solid rgba(255,212,59,0.25);border-radius:8px;font-size:12px;color:#ffd43b;">⚠️ O servidor parou de devolver pastas novas — o scan parou com os totais já vinculados; dá para re-escanear depois no detalhe do concurso.</div>';
         }
         return h;
       },
@@ -3474,7 +3593,11 @@ el.scrollTop = 0;
                 //   truncated=false (v. _v215PreviewPaged).
                 let scanBody = { folderPaths: selectedFolders };
                 let d = null;
-                // ★ v2.15.7 (P4): teto 40 tentativas (antes 20) — v. previewAttach.
+                // ★ v2.15.8 (D — P4): progresso visível + parada quando o
+                //   servidor não tem mais o que retomar (pending vazio ou
+                //   sem progresso entre voltas — v. _v215PreviewPaged). Antes
+                //   o botão ficava em "Escaneando..." até o teto de 40 voltas.
+                let _prevPendKey = null, _prevLinked = -1;
                 for (let a = 0; a < 40; a++) {
                   const r = await fetch('/api/concursos/' + encodeURIComponent(concursoId) + '/scan', {
                     method: 'POST',
@@ -3483,6 +3606,11 @@ el.scrollTop = 0;
                   });
                   d = await r.json();
                   if (!d || !d.ok || !d.truncated) break;
+                  const _pendKey = JSON.stringify((d && d.pending) || {});
+                  const _linked = (d && d.linkedTotal != null) ? d.linkedTotal : -1;
+                  if (_pendKey === '{}' || (_pendKey === _prevPendKey && _linked === _prevLinked)) { d._scanStopped = (_pendKey === '{}' ? 'resume-exhausted' : 'no-progress'); d.truncated = false; break; }
+                  _prevPendKey = _pendKey; _prevLinked = _linked;
+                  scanBtn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Escaneando... volta ' + (a + 1) + '/40' + (_linked >= 0 ? ' · ' + _linked + ' aulas' : '');
                   scanBody = { folderPaths: selectedFolders, resume: d.pending || {} };
                 }
                 if (d.ok) {
