@@ -541,10 +541,11 @@
                     //   fresca (no-store), mas o D1 muda enquanto o scanner
                     //   corre; sem a hora, 88 aqui vs 86 no admin parecia
                     //   erro de contagem. snapshotAt vem do unificado (B2).
+                    //   ★ v2.15.11-A5: redação unificada para "Snapshot do D1 às" (igual ao admin e a /cursos).
                     container.innerHTML =
                       (__feat.length ? '<div class="meggy-continue-section"><h2>⭐ Cursos em destaque</h2><div class="meggy-cards-grid" style="' + __gridStyle + '">' + __feat.map(__cardHtml).join('') + '</div></div>' : '') +
                       (__own.length ? '<div class="meggy-continue-section"><h2>📚 Meus Cursos</h2><div class="meggy-cards-grid" style="' + __gridStyle + '">' + __own.map(__cardHtml).join('') + '</div></div>' : '') +
-                      '<div style="color:#9aa4b8;font-size:12px;margin-top:10px;">📊 Contagens do D1 às ' + ((data && data.snapshotAt) ? new Date(data.snapshotAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—') + ' — mudam enquanto o scanner insere aulas; recarregue a página para atualizar.</div>';
+                      '<div style="color:#9aa4b8;font-size:12px;margin-top:10px;">📊 Snapshot do D1 às ' + ((data && data.snapshotAt) ? new Date(data.snapshotAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—') + ' — mudam enquanto o scanner insere aulas; recarregue a página para atualizar.</div>';
                     container.querySelectorAll('.meggy-card[data-concurso-id]').forEach(card => {
                       card.onclick = () => Shell.views.concursoDetail(el, card.dataset.concursoId);
                     });
@@ -1728,6 +1729,25 @@
                 //   aula/pasta — a variante da pasta PAI (abaixo) é a única
                 //   que cruza pastas e hoje não tem nenhuma entrada ao vivo
                 //   (ver NOTES.md). // E3-probe-canonica
+                // ★ v2.15.11-B7-campo-cache: um campo em cache que seja uma
+                //   RECUSA vale como AUSENTE — a aba NÃO o exibe como
+                //   conteúdo e cai na geração (que, com o nome certo da
+                //   aula, usa o material real). Sem isto, o probeCache
+                //   devolvia a recusa guardada e o render selava-a como
+                //   resumo. Questões têm de ser array, ou string crua
+                //   não-recusa (o batalhão guarda-a assim quando o parse
+                //   falha e ela exibe-se como markdown).
+                function _isaCachedField(entry, field) {
+                  if (!entry) return null;
+                  const v = entry[field];
+                  if (field === 'questions') {
+                    if (Array.isArray(v) && v.length) return v;
+                    if (typeof v === 'string' && v && !Shell._isIsaRefusal(v)) return v;
+                    return null;
+                  }
+                  if (typeof v !== 'string' || !v) return null;
+                  return Shell._isIsaRefusal(v) ? null : v;
+                }
                 function isaCacheProbeKeys() {
                   const _pdfBase = lessonName.replace(/\.[a-z0-9]+$/i, '');
                   const _pdfName = _pdfBase ? _pdfBase + '.pdf' : '';
@@ -1776,8 +1796,12 @@
                 if (_joinRun) {
                   try { await _joinRun; } catch (_) {}
                   const _jc = await probeCache();
-                  if (_jc && _jc[isaField]) {
-                    Shell._renderISAResult(type, _jc[isaField], bodyEl, lessonName, true, _jc);
+                  // ★ v2.15.11-B8-joiner: campo em cache validado (recusa =
+                  //   ausente) — ver B7. O fullCache (_jc) continua a ser
+                  //   passado ao render: o selo (B2) é que decide o que selar.
+                  const _jcVal = _isaCachedField(_jc, isaField);
+                  if (_jcVal) {
+                    Shell._renderISAResult(type, _jcVal, bodyEl, lessonName, true, _jc);
                     return;
                   }
                   // ★ v2.15.10-E10-flashcards-joiner: Flashcards são DERIVADOS
@@ -1794,8 +1818,14 @@
                 let cached = await probeCache();
 
                 // Se o tipo específico já está no cache, mostra direto
-                if (cached && cached[isaField]) {
-                  Shell._renderISAResult(type, cached[isaField], bodyEl, lessonName, true, cached);
+                // ★ v2.15.11-B9-cache-hit: campo em cache validado (recusa =
+                //   ausente) — ver B7. Se o resumo em cache for uma recusa,
+                //   a aba NÃO a exibe: cai na geração com o material real
+                //   da aula; se a geração recusar de novo, mostra 'Não foi
+                //   possível gerar' — nunca sela a recusa.
+                const _cachedVal = _isaCachedField(cached, isaField);
+                if (_cachedVal) {
+                  Shell._renderISAResult(type, _cachedVal, bodyEl, lessonName, true, cached);
                   return;
                 }
                 // ★ v2.15.10-E11-flashcards-cache: Flashcards são DERIVADOS
@@ -2023,7 +2053,13 @@
                     try {
                       setLoading(i === 0 ? '✨ Gerando resumo profundo…' : i === 1 ? '✨ Tentando resumo médio…' : '✨ Tentando resumo simples…');
                       const r = await callIsa(RESUMO_PROMPTS[i], 'resumo');
-                      if (r && r.length > 200) return { field: 'summary', value: r };
+                      // ★ v2.15.11-B5-resumo-retry: uma RECUSA não é resumo — não
+                      //   conta como gerado; tenta o próximo nível de prompt (o
+                      //   retry de 3 níveis existe para isto). Se os 3 níveis
+                      //   recusarem, value fica null e a aba mostra 'Não foi
+                      //   possível gerar' — nunca sela recusa.
+                      if (r && r.length > 200 && !Shell._isIsaRefusal(r)) return { field: 'summary', value: r };
+                      if (r && r.length > 200) _isaLastErr = new Error('a IA recusou gerar o resumo (sem conteúdo da aula)');
                     } catch (e) { _isaLastErr = e; /* try next level */ }
                   }
                   return { field: 'summary', value: null };
@@ -2038,8 +2074,12 @@
                     try {
                       setLoading(_a === 0 ? '💊 Gerando pílulas de revisão…' : '💊 Gerando pílulas de revisão… (tentativa ' + (_a + 1) + ' de 3)');
                       const _r = await callIsa(PILULAS_PROMPT, 'mindmap');
-                      if (_r && _r.length > 50) return { field: 'mindmap', value: _r };
-                      _isaLastErr = new Error('resposta vazia da IA');
+                      // ★ v2.15.11-B6-pilulas-retry: idem resumo — recusa não conta
+                      //   como pílulas; o retry (3 tentativas) continua. Sem isto
+                      //   a recusa passava o limiar de 50 chars e era guardada
+                      //   como 'mindmap' (foi o que aconteceu na chave órfã).
+                      if (_r && _r.length > 50 && !Shell._isIsaRefusal(_r)) return { field: 'mindmap', value: _r };
+                      _isaLastErr = new Error((_r && _r.length > 50) ? 'a IA recusou gerar as pílulas (sem conteúdo da aula)' : 'resposta vazia da IA');
                     } catch (e) {
                       _isaLastErr = e;
                       if (/429|401/.test(String((e && e.message) || ''))) break;
@@ -2097,23 +2137,30 @@
                 const user = (typeof GDIUser !== 'undefined' && GDIUser && GDIUser.state && GDIUser.state.user) || 'meggy';
                 const safeLesson = safeName(lessonName);
                 let _cacheSaveOk = true;
+                // ★ v2.15.11-B3-save-limpo: a entrada passa pelo saneador
+                //   — uma recusa é gravada como null, nunca como resumo;
+                //   as questões/pílulas boas geradas juntas passam intactas.
+                //   A forma do POST não muda (key, summary, questions,
+                //   mindmap, lessonName).
                 try {
                   const _saveResp = await fetch('/api/ai/cache', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      key: cacheKey,
+                    body: JSON.stringify(Object.assign({ key: cacheKey }, Shell._isaSanitizeEntry({
                       summary: gen.summary,
                       questions: gen.questions.length ? gen.questions : null,
                       mindmap: gen.mindmap,
                       lessonName: lessonName
-                    })
+                    })))
                   });
                   if (!_saveResp.ok) _cacheSaveOk = false;
                 } catch (e) { console.warn('[Shell] cache save:', e); _cacheSaveOk = false; }
                 // Save to material folder (fire-and-forget, como antes)
-                if (gen.summary) saveToFolder('resumo', user + '_' + safeLesson + '.md', gen.summary);
-                if (gen.mindmap) saveToFolder('resumo', user + '_pilulas_' + safeLesson + '.md', gen.mindmap);
+                // ★ v2.15.11-B4-pasta-limpa: a recusa também não vai p/
+                //   a pasta da aula como .md (o cache não era o único
+                //   sítio onde ela ficava persistida como "resumo").
+                if (gen.summary && !Shell._isIsaRefusal(gen.summary)) saveToFolder('resumo', user + '_' + safeLesson + '.md', gen.summary);
+                if (gen.mindmap && !Shell._isIsaRefusal(gen.mindmap)) saveToFolder('resumo', user + '_pilulas_' + safeLesson + '.md', gen.mindmap);
                 if (gen.questions && gen.questions.length) saveToFolder('questoes', user + '_' + safeName(courseName || lessonName) + '.json', JSON.stringify(gen.questions, null, 2));
 
                 // ─── 6. Render requested type ───
@@ -2389,7 +2436,11 @@
           let summary = '';
           try {
             const r = await fetch('/api/ai/cache?key=' + encodeURIComponent(lessonDescCacheKey()), { headers: { 'Accept': 'application/json' }, credentials: 'include' });
-            if (r.ok) { const d = await r.json().catch(() => null); if (d && d.cached && typeof d.cached.summary === 'string' && d.cached.summary.length > 50) summary = d.cached.summary; }
+            // ★ v2.15.11-B10-descricao: a descrição acima do player lê o
+            //   mesmo cache ISA — uma recusa guardada não pode virar a
+            //   descrição da aula (length > 50 deixava-a passar). Sem
+            //   resumo válido, cai na descrição provisória / geração.
+            if (r.ok) { const d = await r.json().catch(() => null); if (d && d.cached && typeof d.cached.summary === 'string' && d.cached.summary.length > 50 && !Shell._isIsaRefusal(d.cached.summary)) summary = d.cached.summary; }
           } catch (_) {}
           const esc = (Shell.views && Shell.views._esc) ? Shell.views._esc : Shell._esc;
           if (summary) {
@@ -5484,7 +5535,7 @@ el.scrollTop = 0;
           const r = await fetch('/api/ai/cache?key=' + encodeURIComponent(key), { headers: { 'Accept': 'application/json' }, credentials: 'include' });
           if (r && r.ok) {
             const d = await r.json().catch(() => null);
-            if (d && d.cached && typeof d.cached.summary === 'string' && d.cached.summary.length > 50) return d.cached.summary;
+            if (d && d.cached && typeof d.cached.summary === 'string' && d.cached.summary.length > 50 && !Shell._isIsaRefusal(d.cached.summary)) return d.cached.summary; // ★ v2.15.11-B11-drawer: recusa não é material da aula — sem isto o drawer respondia a partir da recusa em cache (Tier 1); agora cai p/ o PDF real (Tier 2) ou p/ null honesto. 
           }
         } catch (_) {}
         return null;
@@ -5827,6 +5878,87 @@ el.scrollTop = 0;
     //    vendored gdiRenderMd (mesma origem, seguro por construção) →
     //    escape+br (último recurso). Cobre títulos, listas, tabelas,
     //    código, citações, links etc. mesmo com o CDN fora.
+    // ★ v2.15.11-B1-detector-recusa: detetor de RECUSA da IA — um texto
+    //   de recusa ("não recebi o conteúdo da aula", "me forneça o
+    //   material", "cole a transcrição"...) NÃO é um resumo e nunca pode
+    //   ser guardado nem selado como tal (Passo 15: a recusa da Aula 09
+    //   foi guardada no cache ISA e selada '✓ Resumo'). Padrões
+    //   case-insensitive, sem acentos (o texto é normalizado), com
+    //   tolerância a variações — NUNCA um único literal. O detetor lê o
+    //   texto INTEIRO (o gancho determinístico pode preceder a recusa
+    //   quando ela abre com '#' ou '⚠️' — ver battalionEnsureSummaryHook
+    //   no worker). A MESMA lista vive no worker (isIsaRefusalText) e o
+    //   harness compara as duas — manter sincronizadas. Falso positivo
+    //   a evitar: um resumo REAL que menciona 'transcrição' ou
+    //   'conteúdo da aula' no meio do texto legítimo — nenhum padrão
+    //   casa a palavra isolada (todos exigem o verbo de recusa ou o
+    //   pedido imperativo ao usuário).
+    _isIsaRefusal(text) {
+      if (!text || typeof text !== 'string') return false;
+      const t = String(text).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[*#_`>|]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (!t) return false;
+      const REFUSAL_PATTERNS = [
+        /nao recebi (ainda )?(o |nenhum |qualquer )?(conteudo|material|texto|arquivo)/,
+        /nao tenho (ainda )?(o |nenhum |qualquer )?(conteudo|material|texto|arquivo)/,
+        /nao possuo (o |nenhum )?(conteudo|material|texto)/,
+        /nao tenho acesso (ao |a )?(conteudo|material|transcricao|video|arquivo)/,
+        /nao tive acesso (ao |a )?(conteudo|material|transcricao)/,
+        /me passou apenas (as informacoes|os dados|o titulo|a identificacao|informacoes)/,
+        /apenas as informacoes de identificacao/,
+        /so (recebi|tenho) (as informacoes|o titulo|os dados)/,
+        /nao enviou (o |nenhum )?(conteudo|material|texto)/,
+        /(conteudo|material|arquivo|transcricao) nao (me )?foi (fornecido|enviado|disponibilizado|anexado)/,
+        /nenhum (material|conteudo) (foi )?(fornecido|enviado|recebido|disponibilizado)/,
+        /(conteudo|material) nao chegou/,
+        /nao ha (conteudo|material) (disponivel|nesta|neste|na |no |suficiente|para)/,
+        /sem o conteudo (da aula|necessario|para resumir|para gerar)/,
+        /falta o conteudo (da aula|necessario|para)/,
+        /preciso que voce (me )?(forneca|envie|cole|informe|anexe|compartilhe)/,
+        /me forneca (o |a |seu |sua )?(material|conteudo|texto|transcricao)/,
+        /forneca (o |a |seu |sua )?(material|conteudo|texto|transcricao)/,
+        /cole (a|o) (transcricao|texto|material|conteudo)/,
+        /envie (o|a) (conteudo|material|transcricao|texto)/,
+        /informe (o|a) (conteudo|material|transcricao|texto)/,
+        /anexe (o|a) (conteudo|material|arquivo|transcricao)/,
+        /compartilhe (comigo )?(o |a )?(conteudo|material|transcricao|texto)/,
+        /aguardando (o|a) (conteudo|material|transcricao)/,
+        /nao consigo (gerar|criar|fazer|elaborar|produzir) (o resumo|um resumo|este resumo|as pilulas|o conteudo|o material)/,
+        /nao foi possivel (resumir|fazer o resumo|fazer um resumo)/,
+        /nao foi possivel (gerar|criar|elaborar|produzir|fazer|montar)[\s\S]{0,120}(conteudo|material|transcricao|texto da aula)/,
+        /nao e possivel (gerar|criar|resumir|elaborar)[\s\S]{0,120}(conteudo|material|transcricao)/,
+      ];
+      return REFUSAL_PATTERNS.some((re) => re.test(t));
+    },
+
+    // ★ v2.15.11-B1-detector-recusa (selo): partes da cadeia por VALOR
+    //   VÁLIDO, não por presença — resumo/pílulas que sejam recusa não
+    //   selam; questões contam só como array (o batalhão pode guardar
+    //   uma string crua quando o parse falha — o comprimento dela não é
+    //   número de questões).
+    _isaChainParts(fullCache) {
+      const parts = [];
+      if (!fullCache) return parts;
+      if (typeof fullCache.summary === 'string' && fullCache.summary && !Shell._isIsaRefusal(fullCache.summary)) parts.push('✓ Resumo');
+      if (typeof fullCache.mindmap === 'string' && fullCache.mindmap && !Shell._isIsaRefusal(fullCache.mindmap)) parts.push('✓ Pílulas');
+      if (Array.isArray(fullCache.questions) && fullCache.questions.length) parts.push('✓ ' + fullCache.questions.length + ' questões + flashcards');
+      return parts;
+    },
+
+    // ★ v2.15.11-B1-detector-recusa (save): saneia UMA entrada antes do
+    //   POST ao cache — recusa vira null, o resto passa intacto (um
+    //   resumo recusado NÃO apaga as 10 questões boas geradas juntas).
+    //   Questões em string crua não-recusa passam (o batalhão guarda-as
+    //   assim quando o parse falha; exibem-se como markdown).
+    _isaSanitizeEntry(entry) {
+      const out = { summary: null, questions: null, mindmap: null, lessonName: (entry && entry.lessonName) || '' };
+      if (!entry) return out;
+      if (typeof entry.summary === 'string' && entry.summary && !Shell._isIsaRefusal(entry.summary)) out.summary = entry.summary;
+      if (typeof entry.mindmap === 'string' && entry.mindmap && !Shell._isIsaRefusal(entry.mindmap)) out.mindmap = entry.mindmap;
+      if (Array.isArray(entry.questions) && entry.questions.length) out.questions = entry.questions;
+      else if (typeof entry.questions === 'string' && entry.questions && !Shell._isIsaRefusal(entry.questions)) out.questions = entry.questions;
+      return out;
+    },
+
     _renderMd(txt) {
       if (!txt || typeof txt !== 'string') return '';
       if (window.marked) {
@@ -5867,14 +5999,24 @@ el.scrollTop = 0;
         : '<span class="meggy-cache-badge"><i class="bi bi-check2-circle"></i> salvo no Drive + pasta da aula</span>';
 
       // Chain badge (verde) — mostra o que foi gerado em cadeia
+      // ★ v2.15.11-B2-selo-cadeia: o selo é por VALOR VÁLIDO (ver
+      //   _isaChainParts), não por presença — o selo antigo
+      //   (`if (fullCache.summary)`) selava a recusa da Aula 09 como
+      //   '✓ Resumo' (Passo 15). Uma recusa em cache NÃO mostra
+      //   '✓ Resumo'/'✓ Pílulas'; mostra o aviso âmbar 'Sem resumo
+      //   válido' e sugere Regerar. O resto do selo não muda: um resumo
+      //   real continua a selar '✓ Resumo'.
       let chainBadge = '';
       if (fullCache) {
-        const parts = [];
-        if (fullCache.summary) parts.push('✓ Resumo');
-        if (fullCache.mindmap) parts.push('✓ Pílulas');
-        if (fullCache.questions && fullCache.questions.length) parts.push('✓ ' + fullCache.questions.length + ' questões + flashcards');
+        const parts = Shell._isaChainParts(fullCache);
         if (parts.length > 1) {
           chainBadge = '<div class="meggy-chain-badge"><i class="bi bi-check-circle-fill"></i> <b>Gerado em cadeia:</b> ' + parts.join(' · ') + '</div>';
+        }
+        const _refusedSummary = typeof fullCache.summary === 'string' && Shell._isIsaRefusal(fullCache.summary);
+        const _refusedMindmap = typeof fullCache.mindmap === 'string' && Shell._isIsaRefusal(fullCache.mindmap);
+        if (_refusedSummary || _refusedMindmap) {
+          const _refusedLabel = (_refusedSummary && _refusedMindmap) ? 'resumo nem pílulas válidos' : _refusedSummary ? 'resumo válido' : 'pílulas válidas';
+          chainBadge += '<div class="meggy-chain-badge" style="background:rgba(255,193,7,.08);border-color:rgba(255,193,7,.35);color:#ffc107;"><i class="bi bi-exclamation-triangle"></i> <b>Sem ' + _refusedLabel + ':</b> o conteúdo guardado é uma recusa da IA (sem material da aula). Toque em <b>Regerar</b> para gerar de novo.</div>';
         }
       }
 
