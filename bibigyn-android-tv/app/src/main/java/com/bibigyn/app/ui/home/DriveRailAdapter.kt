@@ -1,5 +1,6 @@
 package com.bibigyn.app.ui.home
 
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -16,6 +17,7 @@ import com.bibigyn.app.util.TapFeedback
 import com.bibigyn.app.util.CoverLibrary
 import com.bibigyn.app.util.SessionManager
 import com.bibigyn.app.util.TvUtils
+import com.bibigyn.app.util.TvAutoFit
 
 /**
  * v2.1.5 — Rail "Explorar drives" (conceito home).
@@ -60,6 +62,29 @@ class DriveRailAdapter(
             }
             FocusAnimator.attachCard(binding.driveCardRoot, TvUtils.isTv(binding.root.context))
             TapFeedback.attachPress(binding.driveCardRoot, TvUtils.isTv(binding.root.context))
+            // Ronda 7 Frente B — auto-ajuste TV (TvAutoFit): o tile passa a
+            // derivar do viewport medido; a proporcao 150:210 mantem-se.
+            // No celular e na 32" de referencia (escala 1.0) nada muda.
+            if (TvUtils.isTv(binding.root.context)) {
+                val fit = TvAutoFit.forContext(binding.root.context)
+                val driveLp = binding.driveCardRoot.layoutParams as ViewGroup.MarginLayoutParams
+                driveLp.width = fit.layoutPx(150f)
+                driveLp.height = fit.layoutPx(210f)
+                driveLp.marginEnd = fit.gapHalfPx(150f)
+                binding.driveCardRoot.layoutParams = driveLp
+                binding.driveName.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
+                binding.driveMeta.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(10.5f))
+                binding.driveFavStar.layoutParams = binding.driveFavStar.layoutParams.apply {
+                    width = fit.layoutPx(32f)
+                    height = fit.layoutPx(32f)
+                }
+                binding.driveFavStar.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(16f))
+                binding.driveIcon.layoutParams = binding.driveIcon.layoutParams.apply {
+                    width = fit.layoutPx(64f)
+                    height = fit.layoutPx(64f)
+                }
+                binding.driveIcon.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(32f))
+            }
             // Frente A (TV): nextFocus explícito (ver params).
             if (nextFocusUpId != View.NO_ID) itemView.nextFocusUpId = nextFocusUpId
             if (nextFocusDownId != View.NO_ID) itemView.nextFocusDownId = nextFocusDownId
