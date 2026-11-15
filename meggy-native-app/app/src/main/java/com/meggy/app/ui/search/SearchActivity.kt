@@ -20,7 +20,10 @@ import com.meggy.app.ui.home.HomeActivity
 import com.meggy.app.ui.mylist.MyListActivity
 import com.meggy.app.ui.player.PlayerActivity
 import com.meggy.app.ui.settings.SettingsActivity
+import com.meggy.app.util.FocusAnimator
+import com.meggy.app.util.PlaylistManager
 import com.meggy.app.util.SessionManager
+import com.meggy.app.util.TapFeedback
 import com.meggy.app.util.TvUtils
 
 /**
@@ -97,6 +100,14 @@ class SearchActivity : AppCompatActivity() {
         binding.chipAulas.setOnClickListener { setFilter(Filter.AULAS) }
         binding.chipResumos.setOnClickListener { setFilter(Filter.RESUMOS) }
 
+        // Frente G (TV) — os chips são focáveis mas os fundos são
+        // estáticos: sem FocusAnimator o D-pad chegava sem se ver
+        // onde estava (mesmo padrão da Frente A no detalhe).
+        if (TvUtils.isTv(this)) {
+            listOf(binding.chipAll, binding.chipConcursos, binding.chipCursos,
+                binding.chipAulas, binding.chipResumos).forEach { FocusAnimator.attach(it, true) }
+        }
+
         renderRecentSearches()
         setFilter(Filter.ALL)
         search("")
@@ -144,6 +155,8 @@ class SearchActivity : AppCompatActivity() {
                     binding.searchInput.setText(q)
                     binding.searchInput.setSelection(q.length)
                 }
+                // Frente G (TV) — chip de busca recente com foco visível.
+                if (TvUtils.isTv(this@SearchActivity)) FocusAnimator.attach(this, true)
             }
             binding.recentChips.addView(chip)
         }
@@ -242,8 +255,15 @@ class SearchActivity : AppCompatActivity() {
             return
         }
         val fullUrl = MeggyApp.BASE_URL + link
+        // Frente H — guarda contra duplo toque (um toque = uma navegação).
+        if (!TapFeedback.tryNavigate(fullUrl)) return
         SessionManager.get(this).saveLastWatched(file.folderPath ?: "/", file.name)
-        SessionManager.get(this).addRecent(file.folderPath ?: "/", file.name, file.thumbnailLink)
+        // Frente H — guarda o link no recent (ver DetailActivity).
+        SessionManager.get(this).addRecent(file.folderPath ?: "/", file.name, file.thumbnailLink, link)
+        // Frente G: a Search NÃO monta playlist — sem isto o
+        // PlayerActivity carregava a playlist persistida de uma
+        // sessão anterior e IGNORAVA o vídeo tocado aqui.
+        PlaylistManager.clear()
         val intent = Intent(this, PlayerActivity::class.java)
         intent.putExtra(PlayerActivity.EXTRA_URL, fullUrl)
         intent.putExtra(PlayerActivity.EXTRA_TITLE, file.name)
