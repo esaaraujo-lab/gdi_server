@@ -79,7 +79,7 @@ object ResumeSync {
      * ao vivo). Até lá, este objeto é só a costura: nenhum código o
      * chama e nada muda no resume local.
      */
-    const val SERVER_RESUME_PATH: String? = null
+    val SERVER_RESUME_PATH: String? = null
 
     /**
      * Lê a posição salva no servidor p/ (pasta, vídeo). Devolve null
