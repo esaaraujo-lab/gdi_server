@@ -169,9 +169,9 @@ class HomeActivity : AppCompatActivity() {
      * ainda for o atual.
      */
     private fun applyGeneratedHeroCover(hero: HeroItem) {
-        // Camada 3 — biblioteca por tipo (título → drive → caminho):
-        // sem ela, (4) capa gerada do drive.
-        val libraryUrl = CoverLibrary.resolve(
+        // Camada 3 ESTRITA — biblioteca por tipo (título → drive → caminho):
+        // sem ela, (4) capa gerada do drive (nunca o livro 'geral' — 2.1.11).
+        val libraryUrl = CoverLibrary.resolveStrict(
             this, hero.title, hero.driveName, hero.drivePath
         )
         if (!libraryUrl.isNullOrBlank()) {
@@ -546,13 +546,13 @@ class HomeActivity : AppCompatActivity() {
     /**
      * Camada 3 → 4 no "Continuar de onde parou": (3) imagem da
      * biblioteca por tipo (nome da aula → curso → caminho), depois
-     * (4) capa gerada do drive.
+     * (4) capa gerada do drive. (3) estrita — sem 'geral' (2.1.11).
      */
     private fun showFeaturedFallback(
         best: SessionManager.RecentItem,
         featuredCoverRes: Int?
     ) {
-        val libraryUrl = CoverLibrary.resolve(
+        val libraryUrl = CoverLibrary.resolveStrict(
             this, best.videoName,
             extractCourseName(best.folderPath), best.folderPath
         )
