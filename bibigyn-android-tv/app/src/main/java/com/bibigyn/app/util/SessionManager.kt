@@ -178,7 +178,7 @@ class SessionManager private constructor(context: Context) {
     }
 
     private fun resumeKey(folderPath: String, videoName: String): String =
-        "resume_$folderPath::$videoName"
+        "resume_${migrateLegacyCoursePath(folderPath)}::$videoName"
 
     // ───────── v2.1.0: per-(folder, video) duration ─────────
     //
@@ -212,7 +212,7 @@ class SessionManager private constructor(context: Context) {
     }
 
     private fun durKey(folderPath: String, videoName: String): String =
-        "dur_$folderPath::$videoName"
+        "dur_${migrateLegacyCoursePath(folderPath)}::$videoName"
 
     // ───────── per-(folder, video) watched flag (v1.2.0) ─────────
 
@@ -224,20 +224,22 @@ class SessionManager private constructor(context: Context) {
         prefs.getBoolean(watchedKey(folderPath, videoName), false)
 
     private fun watchedKey(folderPath: String, videoName: String): String =
-        "watched_$folderPath::$videoName"
+        "watched_${migrateLegacyCoursePath(folderPath)}::$videoName"
 
     // ───────── per-folder last watched (v1.1.0, retained) ─────────
 
     fun saveLastWatched(folderPath: String, videoName: String) {
+        val folderPath = migrateLegacyCoursePath(folderPath)
         prefs.edit().putString("last_watch_folder", folderPath)
             .putString("last_watch_video", videoName).apply()
         prefs.edit().putString("last_$folderPath", videoName).apply()
     }
 
     fun getLastWatched(folderPath: String): String? =
-        prefs.getString("last_$folderPath", null)
+        prefs.getString("last_${migrateLegacyCoursePath(folderPath)}", null)
 
-    fun getLastWatchedFolder(): String? = prefs.getString("last_watch_folder", null)
+    fun getLastWatchedFolder(): String? =
+        prefs.getString("last_watch_folder", null)?.let { migrateLegacyCoursePath(it) }
     fun getLastWatchedVideoName(): String? = prefs.getString("last_watch_video", null)
 
     // ───────── v2.0.0: Recent items (Continue Assistindo rail) ─────────
@@ -247,12 +249,13 @@ class SessionManager private constructor(context: Context) {
 
     /** Adds (or moves to top) a (folder, video) entry in the recents list. */
     fun addRecent(folderPath: String, videoName: String, thumbnailLink: String? = null, link: String? = null) {
+        val folderPath = migrateLegacyCoursePath(folderPath)
         val arr = recentArray()
         // v2.1.5: preserva a thumb já salva quando a nova chamada não traz
         // uma (ex.: launchPlayer sem thumb apagava a thumb salva pelo player).
         val oldThumb = (0 until arr.length()).map { arr.getJSONObject(it) }
             .firstOrNull {
-                it.optString("folder") == folderPath && it.optString("video") == videoName
+                migrateLegacyCoursePath(it.optString("folder")) == migrateLegacyCoursePath(folderPath) && it.optString("video") == videoName
             }?.optString("thumb").takeIf { !it.isNullOrBlank() }
         val thumb = thumbnailLink.takeIf { !it.isNullOrBlank() } ?: oldThumb
         // Frente H — preserva o link já salvo quando a nova chamada não traz
@@ -260,13 +263,13 @@ class SessionManager private constructor(context: Context) {
         // caminho rápido do "Continuar assistindo" perdia o link.
         val oldLink = (0 until arr.length()).map { arr.getJSONObject(it) }
             .firstOrNull {
-                it.optString("folder") == folderPath && it.optString("video") == videoName
+                migrateLegacyCoursePath(it.optString("folder")) == migrateLegacyCoursePath(folderPath) && it.optString("video") == videoName
             }?.optString("link").takeIf { !it.isNullOrBlank() }
         val savedLink = link.takeIf { !it.isNullOrBlank() } ?: oldLink
         // Remove any existing entry with the same (folder, video)
         val filtered = (0 until arr.length()).map { arr.getJSONObject(it) }
             .filter {
-                !(it.optString("folder") == folderPath && it.optString("video") == videoName)
+                !(migrateLegacyCoursePath(it.optString("folder")) == migrateLegacyCoursePath(folderPath) && it.optString("video") == videoName)
             }
         val newList = ArrayList(filtered)
         val entry = JSONObject()
@@ -292,7 +295,7 @@ class SessionManager private constructor(context: Context) {
         for (i in 0 until arr.length()) {
             val o = arr.getJSONObject(i)
             out.add(RecentItem(
-                folderPath = o.optString("folder"),
+                folderPath = migrateLegacyCoursePath(o.optString("folder")),
                 videoName = o.optString("video"),
                 timestamp = o.optLong("ts", 0L),
                 thumbnailLink = o.optString("thumb").takeIf { it.isNotBlank() },
@@ -371,21 +374,25 @@ class SessionManager private constructor(context: Context) {
         return try {
             val arr = JSONArray(raw)
             val out = ArrayList<FileItem>(arr.length())
-            for (i in 0 until arr.length()) out.add(FileItem.fromJson(arr.getJSONObject(i)))
+            for (i in 0 until arr.length()) {
+                val item = FileItem.fromJson(arr.getJSONObject(i))
+                out.add(if (item.folderPath.isNullOrBlank()) item
+                    else item.copy(folderPath = migrateLegacyCoursePath(item.folderPath)))
+            }
             out
         } catch (_: Exception) { emptyList() }
     }
 
     /** True if (folderPath, name) is in the favorites list. */
     fun isFavorite(folderPath: String?, name: String): Boolean {
-        val fp = folderPath ?: ""
+        val fp = migrateLegacyCoursePath(folderPath ?: "")
         return getFavorites().any { (it.folderPath ?: "") == fp && it.name == name }
     }
 
     /** Toggles favorite status. Returns true if item is now favorited. */
     fun toggleFavorite(item: FileItem): Boolean {
         val list = getFavorites().toMutableList()
-        val fp = item.folderPath ?: ""
+        val fp = migrateLegacyCoursePath(item.folderPath ?: "")
         val idx = list.indexOfFirst { (it.folderPath ?: "") == fp && it.name == item.name }
         return if (idx >= 0) {
             list.removeAt(idx)
@@ -419,7 +426,7 @@ class SessionManager private constructor(context: Context) {
             val out = ArrayList<FavCourse>(arr.length())
             for (i in 0 until arr.length()) {
                 val o = arr.getJSONObject(i)
-                val path = o.optString("drivePath", "")
+                val path = migrateLegacyCoursePath(o.optString("drivePath", ""))
                 val name = o.optString("name", "")
                 if (path.isNotBlank()) out.add(FavCourse(path, name.ifBlank { path }))
             }
@@ -429,10 +436,11 @@ class SessionManager private constructor(context: Context) {
 
     /** True if drivePath is in the favorite-courses list. */
     fun isFavoriteCourse(drivePath: String): Boolean =
-        getFavoriteCourses().any { it.drivePath == drivePath }
+        getFavoriteCourses().any { it.drivePath == migrateLegacyCoursePath(drivePath) }
 
     /** Toggles a course favorite. Returns true if it is now favorited. */
     fun toggleFavoriteCourse(drivePath: String, name: String): Boolean {
+        val drivePath = migrateLegacyCoursePath(drivePath)
         val list = getFavoriteCourses().toMutableList()
         val idx = list.indexOfFirst { it.drivePath == drivePath }
         return if (idx >= 0) {
@@ -535,6 +543,7 @@ class SessionManager private constructor(context: Context) {
     data class Bookmark(val path: String, val name: String, val kind: String)
 
     fun toggleBookmark(path: String, name: String, kind: String): Boolean {
+        val path = migrateLegacyCoursePath(path)
         val list = getBookmarks().toMutableList()
         val existing = list.indexOfFirst { it.path == path }
         return if (existing >= 0) {
@@ -544,7 +553,7 @@ class SessionManager private constructor(context: Context) {
         }
     }
 
-    fun isBookmarked(path: String): Boolean = getBookmarks().any { it.path == path }
+    fun isBookmarked(path: String): Boolean = getBookmarks().any { it.path == migrateLegacyCoursePath(path) }
 
     fun getBookmarks(): List<Bookmark> {
         val raw = prefs.getString(KEY_BOOKMARKS, null) ?: return emptyList()
@@ -552,7 +561,7 @@ class SessionManager private constructor(context: Context) {
             val arr = JSONArray(raw)
             (0 until arr.length()).map {
                 val o = arr.getJSONObject(it)
-                Bookmark(o.optString("path"), o.optString("name"), o.optString("kind"))
+                Bookmark(migrateLegacyCoursePath(o.optString("path")), o.optString("name"), o.optString("kind"))
             }
         } catch (_: Exception) { emptyList() }
     }
@@ -602,6 +611,33 @@ class SessionManager private constructor(context: Context) {
         private const val KEY_IS_ADMIN_USER = "is_admin_user"
         private const val KEY_LESSON_DESCRIPTIONS = "lesson_descriptions_v1"
         private const val MAX_LESSON_DESCRIPTIONS = 200
+
+        // ───────── Ronda 12: migração de caminhos guardados ─────────
+        //
+        // A organização antiga do drive 11 punha os cursos sob
+        // "/11:/CURSOS 2026/…" — esse prefixo já não existe no
+        // drive 11 (a organização vive hoje no drive 9, e os cursos
+        // do 11 estão directamente na raiz). Os caminhos guardados
+        // (favoritos de curso, favoritos de ficheiro, recents,
+        // bookmarks) guardam o drivePath LITERAL da altura em que
+        // foram marcados, por isso um favorito antigo continua a
+        // pedir um caminho inexistente (produção: 200 + files:[])
+        // mesmo depois de a navegação estar certa. Normalizar na
+        // LEITURA (o JSON guardado não é reescrito): "/11:/CURSOS
+        // 2026/<resto>" e a variante codificada "/11:/CURSOS%202026/
+        // <resto>" passam a "/11:/<resto>". ÂMBITO ESTRITO: só o
+        // prefixo /11:/ — o "/9:/CURSOS 2026/" existe e NÃO se toca.
+        // Forma guardada no app: espaço cru ("CURSOS 2026"), porque
+        // os caminhos guardados vêm do currentPath, construído com
+        // os nomes crus devolvidos pelo servidor; a variante %20 é
+        // aceite por defesa (ex.: caminho vindo do D1).
+        fun migrateLegacyCoursePath(path: String): String {
+            for (legacy in listOf("/11:/CURSOS 2026", "/11:/CURSOS%202026")) {
+                if (path == legacy || path == "$legacy/") return "/11:/"
+                if (path.startsWith("$legacy/")) return "/11:/" + path.removePrefix("$legacy/")
+            }
+            return path
+        }
 
         @Volatile private var instance: SessionManager? = null
         fun get(context: Context): SessionManager =
