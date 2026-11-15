@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -41,6 +42,7 @@ import com.vovofit.app.util.Format
 import com.vovofit.app.util.CoverLibrary
 import com.vovofit.app.util.loadCoverChain
 import com.vovofit.app.util.LessonDescription
+import com.vovofit.app.util.MarkdownRenderer
 import com.vovofit.app.util.MaterialSaver
 import com.vovofit.app.util.PlaylistManager
 import com.vovofit.app.util.SessionManager
@@ -51,6 +53,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * v1.0.4 — Detalhe da aula (conceito detalhe, escolhido pelo Elton 23:41).
@@ -103,6 +107,17 @@ class DetailActivity : AppCompatActivity() {
     // Frente R4B — filtro da lista plana (Todos / Vídeos / Materiais).
     private var flatFilter: FlatFilter = FlatFilter.ALL
     private var isFlatMode: Boolean = false
+    // Ronda 9 Frente B — questões/flashcards da aula (ver
+    // loadQuestionsFlashcards): carregados UMA vez por abertura, a
+    // partir do pacote ISA + da pasta de materiais (.gdi-questoess/
+    // e .gdi-flashcards/); nunca inventados — sem itens, o estado
+    // vazio honesto fica.
+    private var qfJob: Job? = null
+    private var qfLoaded: Boolean = false
+    private var qfQuestions: List<DetailQuestion> = emptyList()
+    private var qfFlashcards: List<DetailFlashcard> = emptyList()
+    private var qfQuestionsList: LinearLayout? = null
+    private var qfFlashcardsList: LinearLayout? = null
     private var lessonGroups: List<LessonGroup> = emptyList()
     private var allFiles: List<FileItem> = emptyList()
     private var currentTab: Tab = Tab.LESSONS
@@ -240,6 +255,7 @@ class DetailActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         descriptionJob?.cancel()
+        qfJob?.cancel()
         super.onDestroy()
     }
 
@@ -433,6 +449,11 @@ class DetailActivity : AppCompatActivity() {
             // Hero: progresso da aula mais recente em andamento.
             updateHeroProgress()
 
+            // Ronda 9 Frente B — questões/flashcards DA AULA (não do
+            // curso): mesmo âmbito do resumo; pasta de curso (só
+            // subpastas) fica no estado vazio honesto.
+            loadQuestionsFlashcards(files)
+
             if (files.isEmpty()) {
                 binding.emptyState.visibility = View.VISIBLE
                 binding.recycler.adapter = null
@@ -531,9 +552,9 @@ class DetailActivity : AppCompatActivity() {
         // (a) Cache local — instantâneo ("abre na hora da próxima vez").
         val cached = sm.getLessonDescription(currentPath)
         if (!cached.isNullOrBlank()) {
-            // v1.0.8 onda 2 — gancho sorteado a cada exibicao (o cache guarda
-            // o resumo cru; o gancho nunca e persistido).
-            showDescription(LessonDescription.withHook(cached), getString(R.string.summary_state_generated))
+            // Ronda 9 Frente A — sem gancho: o resumo guardado e o
+            // conteudo e e exibido formatado (Markdown).
+            showDescription(cached, getString(R.string.summary_state_generated), generated = true)
             // Frente K — o resumo ja estava no cache local, mas as
             // pilulas/questoes podem nunca ter ido para a pasta de
             // materiais (o cache local so guarda o resumo). Em 2o
@@ -583,7 +604,7 @@ class DetailActivity : AppCompatActivity() {
                             outcome.bundle.questionsJson
                         )
                     }
-                    showDescription(LessonDescription.withHook(outcome.text), getString(R.string.summary_state_generated))
+                    showDescription(outcome.text, getString(R.string.summary_state_generated), generated = true)
                 }
                 is LessonDescription.Outcome.Generating -> {
                     // Ainda gerando após 3 min: mantém o texto e avisa.
@@ -613,8 +634,11 @@ class DetailActivity : AppCompatActivity() {
         }
     }
 
-    private fun showDescription(text: String, state: String) {
-        binding.resumoText.text = text
+    // Ronda 9 Frente A — o resumo GERADO é Markdown: renderiza
+    // formatado; a provisória e os estados continuam texto simples.
+    private fun showDescription(text: String, state: String, generated: Boolean = false) {
+        if (generated) MarkdownRenderer.renderMarkdown(binding.resumoText, text)
+        else MarkdownRenderer.renderPlain(binding.resumoText, text)
         showDescriptionState(state)
     }
 
@@ -645,6 +669,507 @@ class DetailActivity : AppCompatActivity() {
         binding.heroTime.visibility = View.GONE
         binding.ctaContinue.text = getString(R.string.cta_watch)
         binding.detailFooter.text = ""
+    }
+
+    // ──────────── Ronda 9 Frente B — Questões/Flashcards da aula ────────────
+    //
+    // DIAGNÓSTICO (prints 2026-11-15 19:27, com.meggy.app): as abas
+    // existiam mas eram MORTAS — os painéis só tinham o TextView
+    // estático de vazio (no_questions/no_flashcards) e NENHUM código
+    // as carregava: selectTab() só muda a visibilidade. O resumo da
+    // MESMA aula aparece (gerado), por isso os itens existem no
+    // servidor — o app é que nunca os lia aqui.
+    //
+    // FONTES (tudo o que já existe — NENHUM endpoint inventado):
+    //   1. pacote ISA do batalhão — LessonDescription.fetchGenerated()
+    //      (GET /api/ai/summaries?key=<courseKey>/<material>, as
+    //      MESMAS chaves do resumo): questionsJson + mindmap viajam
+    //      no MESMO bundle do resumo (o batalhão gera os 3 por PDF,
+    //      na mesma run — worker: battalionGenSummary/Pills/Questions);
+    //      fetchQuestionsBundle() lê o pacote DIRETO quando ele tem
+    //      questões/pílulas mas NÃO tem resumo (o fetchGenerated só
+    //      devolve pacotes COM resumo);
+    //   2. pasta de materiais da aula — AiService.loadFromFolder(...,
+    //      "questoes") e (..., "flashcard") (discovery: o ficheiro
+    //      mais recente de .gdi-questoess/ e .gdi-flashcards/; o
+    //      MaterialSaver grava-os com os mesmos tipos);
+    //   3. flashcards sem ficheiro próprio: derivados DAS QUESTÕES
+    //      desta aula (frente = enunciado, verso = resposta +
+    //      explicação + base legal) — a MESMA transformação que o
+    //      batalhão faz no servidor (worker: battalionGenQuestions
+    //      grava os cards f/b); nunca de outra aula/curso.
+    // ÂMBITO: a aula (currentPath) — os itens são gerados POR
+    // MATERIAL (PDF/MD) da aula, nunca por curso; pasta de curso
+    // (só subpastas) não carrega nada e fica no vazio honesto
+    // ("para esta aula"). Sem itens no servidor → vazio honesto.
+    // Formatos aceites (todos os que o servidor produz): array JSON
+    // nu; objeto {questions:[...]} (banco da web por disciplina);
+    // texto corrido (1 questão de texto); pílulas em Markdown
+    // (bullets); cards {f,b}/{front,back}.
+    //
+    // RENDER: listas programáticas dentro dos painéis existentes
+    // (precedente da frente R4 no player — sem XML novo, sem
+    // RecyclerView novo: os adapters existentes são de FileItem/
+    // aulas, não de perguntas). Questão: tocar revela a resposta;
+    // tocar numa opção avalia-a (verde = certa, vermelho = errada)
+    // e revela a resposta. Flashcard: tocar vira o card. Cards
+    // focáveis (D-pad na TV) com anel rosa quando focados.
+
+    /** Uma questão gerada (formato do batalhão, worker.js). */
+    private data class DetailQuestion(
+        val statement: String,
+        val options: List<String>,
+        val correctIndex: Int,
+        val answer: String?,
+        val explanation: String?,
+        val legalText: String?
+    )
+
+    /** Um flashcard (frente/verso). */
+    private data class DetailFlashcard(val front: String, val back: String)
+
+    /**
+     * Carrega as questões e os flashcards DA AULA, uma vez por
+     * abertura, em 2º plano (nunca atrasa a tela). Ordem das fontes:
+     * pacote ISA (mesmas chaves do resumo) → pacote ISA direto
+     * (questões sem resumo) → pasta de materiais (discovery).
+     * Best-effort: falha de rede vira vazio honesto — nunca crash,
+     * nunca bounce para o login com a tela aberta.
+     */
+    private fun loadQuestionsFlashcards(files: List<FileItem>) {
+        qfJob?.cancel()
+        qfLoaded = false
+        // Pasta de curso (só subpastas) não é uma aula: nada a
+        // carregar — os textos de vazio (âmbito "esta aula") ficam.
+        if (!LessonDescription.isLessonFolder(files)) return
+        binding.questoesText.text = getString(R.string.qf_loading)
+        binding.flashcardsText.text = getString(R.string.qf_loading)
+        qfJob = lifecycleScope.launch {
+            val questions: List<DetailQuestion>
+            val flashcards: List<DetailFlashcard>
+            try {
+                val materialNames = files.filter { it.isPdf || it.isMarkdown }.map { it.name }
+                val lessonFile = LessonDescription.lessonFilePath(currentPath, files)
+                val bundle = LessonDescription.fetchGenerated(
+                    this@DetailActivity, currentPath, materialNames, lessonFile
+                )
+                var questionsText = bundle?.questionsJson
+                var pillsText = bundle?.mindmap
+                if (questionsText.isNullOrBlank() && pillsText.isNullOrBlank()) {
+                    val direct = fetchQuestionsBundle(materialNames)
+                    if (direct != null) {
+                        questionsText = direct.questionsJson
+                        pillsText = direct.mindmap
+                    }
+                }
+                if (questionsText.isNullOrBlank()) {
+                    questionsText = lessonFile?.let {
+                        AiService.loadFromFolder(this@DetailActivity, it, "questoes")
+                    }
+                }
+                if (pillsText.isNullOrBlank()) {
+                    pillsText = lessonFile?.let {
+                        AiService.loadFromFolder(this@DetailActivity, it, "flashcard")
+                    }
+                }
+                questions = parseDetailQuestions(questionsText)
+                val cards = parseDetailFlashcards(pillsText)
+                flashcards = if (cards.isNotEmpty()) cards
+                    else deriveFlashcardsFromQuestions(questions)
+            } catch (_: Exception) {
+                if (!isFinishing && !isDestroyed) {
+                    renderQuestionsFlashcards(emptyList(), emptyList())
+                }
+                return@launch
+            }
+            if (isFinishing || isDestroyed) return@launch
+            renderQuestionsFlashcards(questions, flashcards)
+        }
+    }
+
+    /**
+     * Lê o pacote ISA aceitando-o quando tem questões OU pílulas,
+     * mesmo sem resumo (o fetchGenerated só devolve pacotes COM
+     * resumo — uma run em que só as questões saíram ficaria
+     * invisível aqui). Mesmas chaves do fetchGenerated: pasta atual
+     * e pasta pai × nomes dos PDFs/MDs da aula.
+     */
+    private suspend fun fetchQuestionsBundle(
+        materialNames: List<String>
+    ): AiService.GeneratedBundle? {
+        val courseKeys = listOf(currentPath, LessonDescription.parentPath(currentPath)).distinct()
+        for (courseKey in courseKeys) {
+            for (name in materialNames) {
+                val bundle = AiService.getGeneratedBundle(this, "$courseKey/$name")
+                if (!bundle?.questionsJson.isNullOrBlank() ||
+                    !bundle?.mindmap.isNullOrBlank()
+                ) {
+                    return bundle
+                }
+            }
+        }
+        return null
+    }
+
+    /**
+     * Questões: array JSON do batalhão ({type, statement, options[],
+     * correct, correctText, explanation, legalText, ...}); ou objeto
+     * {questions:[...]} (banco da web); ou texto corrido (1 questão
+     * de texto, sem resposta — nunca se deita fora conteúdo). Máx.
+     * 10, como o player.
+     */
+    private fun parseDetailQuestions(text: String?): List<DetailQuestion> {
+        if (text.isNullOrBlank()) return emptyList()
+        val trimmed = text.trim()
+        return try {
+            val arr = when {
+                trimmed.startsWith("[") -> JSONArray(trimmed)
+                trimmed.startsWith("{") ->
+                    JSONObject(trimmed).optJSONArray("questions") ?: return emptyList()
+                else -> return listOf(
+                    DetailQuestion(trimmed, emptyList(), -1, null, null, null)
+                )
+            }
+            val out = ArrayList<DetailQuestion>()
+            for (i in 0 until minOf(arr.length(), 10)) {
+                val o = arr.optJSONObject(i) ?: continue
+                val statement = o.optString("statement").takeIf { it.isNotBlank() }
+                    ?: o.optString("question").takeIf { it.isNotBlank() }
+                    ?: o.optString("q").takeIf { it.isNotBlank() }
+                    ?: continue
+                val options = ArrayList<String>()
+                val opts = o.optJSONArray("options")
+                if (opts != null) {
+                    for (j in 0 until opts.length()) {
+                        opts.optString(j).takeIf { it.isNotBlank() }?.let { options.add(it) }
+                    }
+                }
+                val correctIndex = o.optInt("correct", -1)
+                    .let { if (it in options.indices) it else -1 }
+                val answer = o.optString("correctText").takeIf { it.isNotBlank() }
+                    ?: o.optString("answer").takeIf { it.isNotBlank() }
+                    ?: if (correctIndex >= 0) options[correctIndex] else null
+                val explanation = o.optString("explanation").takeIf { it.isNotBlank() }
+                    ?: o.optString("fundamentacao").takeIf { it.isNotBlank() }
+                val legalText = o.optString("legalText").takeIf { it.isNotBlank() }
+                    ?: o.optString("legal_text").takeIf { it.isNotBlank() }
+                out.add(
+                    DetailQuestion(statement, options, correctIndex, answer, explanation, legalText)
+                )
+            }
+            out
+        } catch (_: Exception) {
+            listOf(DetailQuestion(trimmed, emptyList(), -1, null, null, null))
+        }
+    }
+
+    /**
+     * Flashcards: cards {f,b}/{front,back} (JSON, nu ou em objeto
+     * {flashcards:[...]}/{cards:[...]}); ou pílulas em Markdown
+     * (bullets — o formato que o MaterialSaver grava como
+     * 'flashcard'): cada pílula vira um card (frente = "Pílula N",
+     * verso = o facto). Máx. 20.
+     */
+    private fun parseDetailFlashcards(text: String?): List<DetailFlashcard> {
+        if (text.isNullOrBlank()) return emptyList()
+        val trimmed = text.trim()
+        if (trimmed.startsWith("[")) {
+            return try {
+                parseDetailFlashcardArray(JSONArray(trimmed))
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+        if (trimmed.startsWith("{")) {
+            return try {
+                val obj = JSONObject(trimmed)
+                val arr = obj.optJSONArray("flashcards")
+                    ?: obj.optJSONArray("cards")
+                    ?: return emptyList()
+                parseDetailFlashcardArray(arr)
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+        return parseDetailPills(trimmed).mapIndexed { idx, pill ->
+            DetailFlashcard("💡 Pílula ${idx + 1}", pill)
+        }
+    }
+
+    /** Cards {f,b}/{front,back} de um array JSON (máx. 20). */
+    private fun parseDetailFlashcardArray(arr: JSONArray): List<DetailFlashcard> {
+        val out = ArrayList<DetailFlashcard>()
+        for (i in 0 until minOf(arr.length(), 20)) {
+            val o = arr.optJSONObject(i) ?: continue
+            val front = o.optString("f").takeIf { it.isNotBlank() }
+                ?: o.optString("front").takeIf { it.isNotBlank() } ?: continue
+            val back = o.optString("b").takeIf { it.isNotBlank() }
+                ?: o.optString("back").takeIf { it.isNotBlank() } ?: continue
+            out.add(DetailFlashcard(front, back))
+        }
+        return out
+    }
+
+    /** Pílulas: o mindmap é Markdown em bullets ("- ...") — igual ao player. */
+    private fun parseDetailPills(text: String?): List<String> {
+        if (text.isNullOrBlank()) return emptyList()
+        return text.lines()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("#") }
+            .map { it.removePrefix("- ").removePrefix("* ").removePrefix("• ").trim() }
+            .map { it.replace(Regex("^\\d+[.)]\\s+"), "").trim() }
+            .filter { it.isNotEmpty() }
+            .take(20)
+    }
+
+    /**
+     * Flashcards derivados DAS QUESTÕES desta aula (só quando não há
+     * ficheiro de flashcards nem pílulas): a mesma transformação que
+     * o batalhão faz no servidor (frente = enunciado, verso =
+     * resposta + explicação + base legal). Nada inventado: o verso
+     * usa só campos da própria questão.
+     */
+    private fun deriveFlashcardsFromQuestions(
+        questions: List<DetailQuestion>
+    ): List<DetailFlashcard> {
+        return questions.mapNotNull { q ->
+            val back = buildString {
+                if (!q.answer.isNullOrBlank()) append(q.answer)
+                if (!q.explanation.isNullOrBlank()) {
+                    if (isNotEmpty()) append("\n\n💡 ")
+                    append(q.explanation)
+                }
+                if (!q.legalText.isNullOrBlank()) {
+                    if (isNotEmpty()) append("\n\n⚖️ ")
+                    append(q.legalText)
+                }
+            }.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            DetailFlashcard(q.statement, back)
+        }
+    }
+
+    private fun renderQuestionsFlashcards(
+        questions: List<DetailQuestion>,
+        flashcards: List<DetailFlashcard>
+    ) {
+        qfLoaded = true
+        qfQuestions = questions
+        qfFlashcards = flashcards
+        renderQuestionsList()
+        renderFlashcardsList()
+    }
+
+    private fun renderQuestionsList() {
+        val list = qfQuestionsList ?: LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            binding.panelQuestoes.addView(this)
+            qfQuestionsList = this
+        }
+        list.removeAllViews()
+        if (!qfLoaded) return
+        if (qfQuestions.isEmpty()) {
+            binding.questoesText.text = getString(R.string.no_questions)
+            return
+        }
+        binding.questoesText.text = getString(R.string.qf_questions_hint)
+        for ((idx, q) in qfQuestions.withIndex()) {
+            list.addView(buildQuestionCard(q, idx))
+        }
+    }
+
+    private fun renderFlashcardsList() {
+        val list = qfFlashcardsList ?: LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            binding.panelFlashcards.addView(this)
+            qfFlashcardsList = this
+        }
+        list.removeAllViews()
+        if (!qfLoaded) return
+        if (qfFlashcards.isEmpty()) {
+            binding.flashcardsText.text = getString(R.string.no_flashcards)
+            return
+        }
+        binding.flashcardsText.text = getString(R.string.qf_flashcards_hint)
+        for (c in qfFlashcards) {
+            list.addView(buildFlashcardCard(c))
+        }
+    }
+
+    /** Fundo do card: superfície do tema, cantos 16dp, anel rosa quando focado (D-pad). */
+    private fun qfCardBackground(focused: Boolean): android.graphics.drawable.GradientDrawable {
+        return android.graphics.drawable.GradientDrawable().apply {
+            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+            cornerRadius = 16f * resources.displayMetrics.density
+            setColor(ContextCompat.getColor(this@DetailActivity, R.color.md_surface_container))
+            if (focused) {
+                setStroke(
+                    (2 * resources.displayMetrics.density).toInt(),
+                    ContextCompat.getColor(this@DetailActivity, R.color.md_primary)
+                )
+            }
+        }
+    }
+
+    /** Um card de questão: enunciado + opções + resposta oculta (tocar revela). */
+    private fun buildQuestionCard(q: DetailQuestion, index: Int): LinearLayout {
+        val density = resources.displayMetrics.density
+        val pad = (16 * density).toInt()
+        val gap = (12 * density).toInt()
+        val pink = ContextCompat.getColor(this, R.color.md_primary)
+        val onSurface = ContextCompat.getColor(this, R.color.md_on_surface)
+        val muted = ContextCompat.getColor(this, R.color.md_on_surface_variant)
+        val green = android.graphics.Color.parseColor("#81C784")
+        val red = android.graphics.Color.parseColor("#E57373")
+        val hasAnswer = !q.answer.isNullOrBlank()
+        var answerShown = false
+        var picked = -1
+
+        lateinit var answerView: TextView
+        lateinit var toggleView: TextView
+
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad, pad, pad)
+            background = qfCardBackground(false)
+            isClickable = hasAnswer
+            isFocusable = hasAnswer
+            onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
+                v.background = qfCardBackground(hasFocus)
+            }
+        }
+        card.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = gap }
+
+        val statementView = TextView(this).apply {
+            text = "${index + 1}. ${q.statement}"
+            textSize = 15f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setTextColor(onSurface)
+        }
+
+        val optionViews = ArrayList<TextView>()
+        val letters = listOf("A", "B", "C", "D", "E", "F")
+        for ((oi, opt) in q.options.withIndex()) {
+            val optView = TextView(this).apply {
+                text = "${letters.getOrElse(oi) { "•" }}) $opt"
+                textSize = 14f
+                setTextColor(onSurface)
+                setPadding(0, (6 * density).toInt(), 0, (6 * density).toInt())
+            }
+            if (q.correctIndex >= 0) {
+                optView.isClickable = true
+                optView.isFocusable = true
+                optView.setOnClickListener {
+                    picked = oi
+                    for ((oj, ov) in optionViews.withIndex()) {
+                        ov.setTextColor(
+                            when {
+                                oj == q.correctIndex -> green
+                                oj == picked -> red
+                                else -> onSurface
+                            }
+                        )
+                    }
+                    if (!answerShown) {
+                        answerShown = true
+                        answerView.visibility = View.VISIBLE
+                        toggleView.text = getString(R.string.qf_hide_answer)
+                    }
+                }
+            }
+            optionViews.add(optView)
+        }
+
+        if (hasAnswer) {
+            answerView = TextView(this).apply {
+                text = buildString {
+                    append(getString(R.string.materials_answer, q.answer!!))
+                    if (!q.explanation.isNullOrBlank()) append("\n\n💡 ${q.explanation}")
+                    if (!q.legalText.isNullOrBlank()) append("\n\n⚖️ ${q.legalText}")
+                }
+                textSize = 14f
+                setTextColor(pink)
+                setPadding(0, (8 * density).toInt(), 0, 0)
+                visibility = View.GONE
+            }
+            toggleView = TextView(this).apply {
+                text = getString(R.string.qf_show_answer)
+                textSize = 13f
+                setTextColor(muted)
+                setPadding(0, (8 * density).toInt(), 0, 0)
+            }
+            card.setOnClickListener {
+                answerShown = !answerShown
+                answerView.visibility = if (answerShown) View.VISIBLE else View.GONE
+                toggleView.text = getString(
+                    if (answerShown) R.string.qf_hide_answer else R.string.qf_show_answer
+                )
+            }
+        }
+
+        card.addView(statementView)
+        for (ov in optionViews) card.addView(ov)
+        if (hasAnswer) {
+            card.addView(answerView)
+            card.addView(toggleView)
+        }
+        return card
+    }
+
+    /** Um flashcard: tocar vira o card (frente ↔ verso). */
+    private fun buildFlashcardCard(c: DetailFlashcard): LinearLayout {
+        val density = resources.displayMetrics.density
+        val pad = (16 * density).toInt()
+        val gap = (12 * density).toInt()
+        val onSurface = ContextCompat.getColor(this, R.color.md_on_surface)
+        val muted = ContextCompat.getColor(this, R.color.md_on_surface_variant)
+        var showingBack = false
+
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad, pad, pad)
+            background = qfCardBackground(false)
+            isClickable = true
+            isFocusable = true
+            minimumHeight = (120 * density).toInt()
+            onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
+                v.background = qfCardBackground(hasFocus)
+            }
+        }
+        card.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = gap }
+
+        val bodyView = TextView(this).apply {
+            text = c.front
+            textSize = 16f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setTextColor(onSurface)
+        }
+        val hintView = TextView(this).apply {
+            text = getString(R.string.qf_card_reveal)
+            textSize = 13f
+            setTextColor(muted)
+            setPadding(0, (8 * density).toInt(), 0, 0)
+        }
+        card.setOnClickListener {
+            showingBack = !showingBack
+            bodyView.text = if (showingBack) c.back else c.front
+            bodyView.setTypeface(
+                null,
+                if (showingBack) android.graphics.Typeface.NORMAL
+                else android.graphics.Typeface.BOLD
+            )
+            hintView.text = getString(
+                if (showingBack) R.string.qf_card_back else R.string.qf_card_reveal
+            )
+        }
+        card.addView(bodyView)
+        card.addView(hintView)
+        return card
     }
 
     /** Monta os grupos de aulas (subpastas) + "Arquivos avulsos". */
