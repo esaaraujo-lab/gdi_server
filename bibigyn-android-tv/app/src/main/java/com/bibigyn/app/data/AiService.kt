@@ -51,9 +51,12 @@ import org.json.JSONObject
  *     → {ok:true, content, file, author} | {ok:false, reason:'not_found'}
  *
  *   POST /api/materials/save-in-folder
- *     body {lessonPath, materialType:'resumo', fileName, content}
- *     → {ok:true, file} — grava o resumo na pasta da aula
- *     (`.gdi-resumos/<fileName>`), a "pasta de materiais".
+ *     body {lessonPath, materialType, fileName, content}
+ *     → {ok:true, file} — grava o material na pasta da aula, a
+ *     "pasta de materiais" (`.gdi-<tipo>s/<fileName>`). Tipos
+ *     validos no worker: 'resumo' → `.gdi-resumos/`, 'questoes'
+ *     → `.gdi-questoess/`, 'flashcard' → `.gdi-flashcards/`
+ *     (Frente K: os tres sao gravados pelo [MaterialSaver]).
  *
  *   Auth: todas exigem `Cookie: session=<sessão>` (401 sem ela).
  *   ATENÇÃO: o worker tem um portão de auth para TODO /api/... — um 401
@@ -221,12 +224,31 @@ object AiService {
     // ───────── rotas ─────────
 
     /**
-     * Lê o resumo gerado do cache ISA.
-     * `key` = "<courseKey>/<pdfName>" — o MESMO nome enviado no POST.
-     * Retorna o texto do resumo (Markdown) ou null (sem resumo ainda,
-     * erro ou backend sem a rota).
+     * Frente K — pacote gerado pelo batalhao para UM material
+     * (uma chave `<courseKey>/<pdfName>` do cache ISA): o resumo
+     * (`summary`, Markdown), as pilulas (`mindmap`, Markdown em
+     * bullets) e as questoes (`questions`, array JSON — ou texto,
+     * conforme o worker as guardou). Qualquer campo pode ser null
+     * (o batalhao pode ter gerado so parte dos tres). O cache ISA
+     * e a fonte partilhada no servidor; a pasta de materiais no
+     * Drive (ver MaterialSaver, no pacote `util` de cada app)
+     * e o espelho por aula.
      */
-    suspend fun getSummary(context: Context, key: String): String? {
+    data class GeneratedBundle(
+        val summary: String?,
+        val mindmap: String?,
+        val questionsJson: String?
+    )
+
+    /**
+     * Le o pacote gerado do cache ISA (GET /api/ai/summaries?key=).
+     * Retorna null quando nao ha nada gerado (ou erro / backend
+     * sem a rota). O `summary` continua a ser o que decide
+     * "pronto" (ver LessonDescription) — as pilulas/questoes
+     * viajam junto no pacote para serem guardadas na pasta de
+     * materiais.
+     */
+    suspend fun getGeneratedBundle(context: Context, key: String): GeneratedBundle? {
         if (backendUnavailable) return null
         val encoded = URLEncoder.encode(key, "UTF-8")
         val res = get(context, "/api/ai/summaries?key=$encoded")
@@ -234,11 +256,31 @@ object AiService {
         return try {
             val json = JSONObject(res.body ?: return null)
             if (!json.optBoolean("ok", false)) return null
-            json.optJSONObject("cached")?.optString("summary")?.takeIf { it.isNotBlank() }
+            val cached = json.optJSONObject("cached") ?: return null
+            val summary = cached.optString("summary").takeIf { it.isNotBlank() }
+            val mindmap = cached.optString("mindmap").takeIf { it.isNotBlank() }
+            val questionsJson = if (!cached.isNull("questions")) {
+                val arr = cached.optJSONArray("questions")
+                if (arr != null) arr.toString()
+                else cached.optString("questions").takeIf { it.isNotBlank() }
+            } else {
+                null
+            }
+            if (summary == null && mindmap == null && questionsJson == null) return null
+            GeneratedBundle(summary, mindmap, questionsJson)
         } catch (_: Exception) {
             null
         }
     }
+
+    /**
+     * Lê o resumo gerado do cache ISA.
+     * `key` = "<courseKey>/<pdfName>" — o MESMO nome enviado no POST.
+     * Retorna o texto do resumo (Markdown) ou null (sem resumo ainda,
+     * erro ou backend sem a rota).
+     */
+    suspend fun getSummary(context: Context, key: String): String? =
+        getGeneratedBundle(context, key)?.summary
 
     /** Estado do job do batalhão para o curso (ou null em erro/rede). */
     suspend fun getBattalionStatus(context: Context, courseKey: String): BattalionStatus? {
@@ -386,6 +428,131 @@ object AiService {
             put("content", content)
         }.toString()
         val res = postJson(context, "/api/materials/save-in-folder", body)
+        if (res.code != 200) return false
+        return try {
+            JSONObject(res.body ?: return false).optBoolean("ok", false)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    // ───────── Frente J — resumo de UM pdf (leitor de PDF) ─────────
+    //
+    // Contratos VERIFICADOS no worker vivo (deploy-staging-c/worker.js):
+    //   POST /api/ai {message, messages:[], kind:"resumo"}
+    //     → {ok:true, response, provider, model, latency_ms, remaining}
+    //     Rota em worker.js:6274; handler handleAi em 14231; a resposta
+    //     é montada em 14876. `kind:"resumo"` é lido em 14591 e roteia
+    //     para o modelo de resumo. É o MESMO endpoint que a web usa
+    //     para o resumo de cada PDF (staging/modular/gdi-meggy.js:552,
+    //     callIsa → POST /api/ai {message, messages:[]}); a web NÃO
+    //     manda `kind`, mas o worker aceita-o (14591) — mandamos para
+    //     não depender da detecção por palavra-chave.
+    //   POST /api/ai/ocr {image, page, totalPages}
+    //     → {ok:true, response, model} — rota 6281, handler 14092.
+    //   POST /api/ai/summaries {key, summary, lessonName}
+    //     → {ok:true} — rota 6291, handler handleIsaCacheSave 1550;
+    //     grava em KV ('summary:'+key, 1590) e no Drive. É a MESMA
+    //     chave que getSummary lê — o detalhe da aula encontra o
+    //     resumo gerado aqui sem regenerar.
+    //   POST /api/materials/save-in-folder {lessonPath, materialType,
+    //     fileName, content} — já embrulhado em saveToFolder (acima);
+    //     grava o resumo na pasta `.gdi-resumos/` da aula (a "pasta
+    //     de materiais" — a Frente K é dona da UX/listagem dela; aqui
+    //     só se REUTILIZA a gravação existente).
+    // O worker NÃO extrai texto de PDF no servidor (ver doc do
+    // batalhão no topo): o app envia o texto que JÁ extrai com
+    // pdfbox (PdfReaderActivity) ou, sem camada de texto, o texto
+    // lido por OCR (POST /api/ai/ocr) a partir das páginas
+    // renderizadas. Nenhum endpoint novo foi inventado.
+
+    /** Resultado da geração de resumo de um PDF via POST /api/ai. */
+    sealed class PdfSummaryResult {
+        data class Ok(val text: String) : PdfSummaryResult()
+        /** Backend sem as rotas de IA (404 com sessão válida). */
+        object Unavailable : PdfSummaryResult()
+        /** Limite de 30 mensagens/hora do /api/ai (HTTP 429). */
+        object RateLimited : PdfSummaryResult()
+        /** Falha de rede/servidor ou resposta inválida. */
+        object Failed : PdfSummaryResult()
+    }
+
+    /**
+     * Gera um resumo (Markdown) a partir do `prompt` completo
+     * (prompt rico da web + texto do PDF — ver PdfReaderActivity).
+     * Síncrono: o /api/ai devolve o texto na resposta (ao contrário
+     * do batalhão, que é um job assíncrono por curso — pesado demais
+     * para um botão no leitor e sem courseKey conhecida aqui).
+     */
+    suspend fun generatePdfSummary(context: Context, prompt: String): PdfSummaryResult {
+        if (backendUnavailable) return PdfSummaryResult.Unavailable
+        val body = JSONObject().apply {
+            put("message", prompt)
+            put("messages", JSONArray())
+            put("kind", "resumo")
+        }.toString()
+        val res = postJson(context, "/api/ai", body)
+        if (res.code == 404) return PdfSummaryResult.Unavailable
+        if (res.code == 429) return PdfSummaryResult.RateLimited
+        if (res.code != 200) return PdfSummaryResult.Failed
+        return try {
+            val json = JSONObject(res.body ?: return PdfSummaryResult.Failed)
+            if (!json.optBoolean("ok", false)) return PdfSummaryResult.Failed
+            val text = json.optString("response").takeIf { it.isNotBlank() }
+                ?: return PdfSummaryResult.Failed
+            PdfSummaryResult.Ok(text)
+        } catch (_: Exception) {
+            PdfSummaryResult.Failed
+        }
+    }
+
+    /**
+     * OCR de uma página do PDF renderizada (JPEG em base64).
+     * POST /api/ai/ocr — o worker aceita base64 puro ou data-URL
+     * (14092) e devolve {ok, response} com o texto transcrito.
+     * Devolve o texto ou null (falha / sem texto na página).
+     */
+    suspend fun ocrPageImage(
+        context: Context,
+        imageB64: String,
+        page: Int,
+        totalPages: Int
+    ): String? {
+        if (backendUnavailable) return null
+        val body = JSONObject().apply {
+            put("image", imageB64)
+            put("page", page)
+            put("totalPages", totalPages)
+        }.toString()
+        val res = postJson(context, "/api/ai/ocr", body)
+        if (res.code != 200) return null
+        return try {
+            val json = JSONObject(res.body ?: return null)
+            if (!json.optBoolean("ok", false)) return null
+            json.optString("response").takeIf { it.isNotBlank() }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Grava o resumo no cache ISA (POST /api/ai/summaries).
+     * `key` = "<pastaDaAula>/<nomeDoPdf>" — a MESMA chave que
+     * [getSummary] lê. Best-effort: false não bloqueia a exibição.
+     */
+    suspend fun saveSummary(
+        context: Context,
+        key: String,
+        summary: String,
+        lessonName: String
+    ): Boolean {
+        if (backendUnavailable) return false
+        val body = JSONObject().apply {
+            put("key", key)
+            put("summary", summary)
+            put("lessonName", lessonName)
+        }.toString()
+        val res = postJson(context, "/api/ai/summaries", body)
         if (res.code != 200) return false
         return try {
             JSONObject(res.body ?: return false).optBoolean("ok", false)
