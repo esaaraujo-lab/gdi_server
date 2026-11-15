@@ -6,6 +6,7 @@ import android.view.ViewGroup
 import android.view.animation.AnimationUtils
 import android.widget.Toast
 import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.vovofit.app.R
@@ -32,7 +33,14 @@ import com.vovofit.app.util.TvUtils
  */
 class FileAdapter(
     private val onFolder: (FileItem) -> Unit,
-    private val onFile: (FileItem) -> Unit
+    private val onFile: (FileItem) -> Unit,
+    /**
+     * Frente A (TV) — id para o qual a 1ª linha da grade volta com
+     * UP (o detalhe passa R.id.tabAulas; o BrowseActivity não passa
+     * e mantém o roteamento padrão). Sem isto, UP da 1ª linha cai
+     * no FocusFinder, que ignora o que está fora do viewport.
+     */
+    private val firstRowNextFocusUpId: Int = View.NO_ID
 ) : ListAdapter<FileItem, FileAdapter.VH>(DIFF) {
 
     private var resumedNames: Set<String> = emptySet()
@@ -69,6 +77,23 @@ class FileAdapter(
             ViewGroup.LayoutParams.WRAP_CONTENT
         )
         return vh
+    }
+
+    /**
+     * Frente A (TV) — UP da 1ª linha da grade -> firstRowNextFocusUpId.
+     * Feito em onViewAttachedToWindow (e não no onBind) porque o
+     * prefetch do RecyclerView pode ligar o VH antes de ele ter
+     * pai — e o spanCount só se lê do LayoutManager do pai.
+     */
+    override fun onViewAttachedToWindow(holder: VH) {
+        super.onViewAttachedToWindow(holder)
+        if (firstRowNextFocusUpId == View.NO_ID) return
+        val pos = holder.bindingAdapterPosition
+        if (pos == RecyclerView.NO_POSITION) return
+        val span = (holder.itemView.parent as? RecyclerView)?.layoutManager
+            ?.let { it as? GridLayoutManager }?.spanCount ?: 1
+        holder.itemView.nextFocusUpId =
+            if (pos < span) firstRowNextFocusUpId else View.NO_ID
     }
 
     override fun onBindViewHolder(holder: VH, position: Int) {
