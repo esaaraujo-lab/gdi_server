@@ -449,7 +449,7 @@ class HomeActivity : AppCompatActivity() {
             recents.any { sm.hasResume(it.folderPath, it.videoName) }
         binding.railContinue.adapter = RailAdapter(
             railItems,
-            nextFocusUpId = if (hasFeatured) R.id.featuredCard else R.id.heroPlay,
+            nextFocusUpId = if (hasFeatured) R.id.featured_card else R.id.heroPlay,
             nextFocusDownId = R.id.railDrives
         ) { item ->
             lastFocusContinue = railItems.indexOf(item)
@@ -771,7 +771,7 @@ class HomeActivity : AppCompatActivity() {
         val featuredVisible = binding.featuredSection.visibility == View.VISIBLE
         val continueVisible = binding.railContinue.visibility == View.VISIBLE
         binding.heroPlay.nextFocusDownId =
-            if (featuredVisible) R.id.featuredCard
+            if (featuredVisible) R.id.featured_card
             else if (continueVisible) R.id.railContinue
             else R.id.railDrives
         binding.featuredCard.nextFocusUpId = R.id.heroPlay
@@ -787,7 +787,7 @@ class HomeActivity : AppCompatActivity() {
         // ("Continue assistindo", destaque ou hero — o que existir).
         val drivesUpId = when {
             binding.railContinue.visibility == View.VISIBLE -> R.id.railContinue
-            binding.featuredSection.visibility == View.VISIBLE -> R.id.featuredCard
+            binding.featuredSection.visibility == View.VISIBLE -> R.id.featured_card
             else -> R.id.heroPlay
         }
         drivesAdapter = DriveRailAdapter(
