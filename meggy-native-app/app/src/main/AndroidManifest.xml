@@ -111,5 +111,15 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- §9 (GOLDEN_RULES.md) — apaga o APK da pasta Download depois de
+             a instalação ser confirmada (MY_PACKAGE_REPLACED). -->
+        <receiver
+            android:name=".util.UpdateCleanupReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
     </application>
 </manifest>
