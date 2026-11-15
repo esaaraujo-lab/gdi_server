@@ -1009,7 +1009,9 @@
           // curso manual: clicar leva ao path no drive
           contBtn.disabled=false;
           contBtn.innerHTML=`<i class="bi bi-folder2-open"></i> Abrir pasta no Drive`;
-          contBtn.onclick=(e)=>{e.stopPropagation();location.href=c.key;};
+          // ★ v2.15.17 (B): curso manual — navegação in-app (location.href=c.key
+          //   cru caía no portão do worker → 302 p/ Home). c.key NÃO muda.
+          contBtn.onclick=(e)=>{e.stopPropagation();if(window.Shell&&window.Shell.router){window.Shell.router.navigate('/drives');setTimeout(()=>{if(window.Shell.views&&window.Shell.views._renderDrives)window.Shell.views._renderDrives(__canonCoursePath(c.key));},50);}};
           return;
         }
         if(tg){
@@ -2239,7 +2241,7 @@
 
       <div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;">
         <button id="gdi-detail-continue" class="gdi-btn gdi-btn-primary" style="font-size:12px;flex:1;justify-content:center;" disabled><i class="bi bi-hourglass-split"></i> Verificando próxima aula…</button>
-        <a href="${escHtml(__canonCoursePath(coursePath))}" class="gdi-mode-btn" style="font-size:12px;flex:1;justify-content:center;text-decoration:none;display:inline-flex;align-items:center;gap:6px;" title="Abrir pasta no Drive"><i class="bi bi-folder2-open"></i> Ir para o Drive</a>
+        <button id="gdi-detail-drive" class="gdi-mode-btn" style="font-size:12px;flex:1;justify-content:center;display:inline-flex;align-items:center;gap:6px;" title="Abrir pasta no Drive"><i class="bi bi-folder2-open"></i> Ir para o Drive</button>
         <button id="gdi-detail-quiz" class="gdi-mode-btn" style="font-size:12px;flex:1;justify-content:center;" title="Gerar questões dos PDFs deste curso e abrir o quiz">🧠 Quiz deste módulo</button>
       </div>
 
@@ -2266,7 +2268,7 @@
           //   Direito Constitucional — 38 aulas · 5 assistidas · 33 restantes
           // etc.
           if(!lessons.length && !total){
-            return '<div class="gdi-notes-empty"><i class="bi bi-info-circle" style="font-size:18px;color:var(--ferreto-text-muted,#8b949e);vertical-align:middle;"></i> <span style="vertical-align:middle;">Nenhuma aula encontrada ainda.</span><div style="margin-top:8px;font-size:12px;"><a href="'+escHtml(__canonCoursePath(coursePath))+'" style="color:var(--ferreto-secondary,#5ddeda);text-decoration:underline;"><i class="bi bi-folder2-open"></i> Abrir pasta no Drive</a></div></div>';
+            return '<div class="gdi-notes-empty"><i class="bi bi-info-circle" style="font-size:18px;color:var(--ferreto-text-muted,#8b949e);vertical-align:middle;"></i> <span style="vertical-align:middle;">Nenhuma aula encontrada ainda.</span><div style="margin-top:8px;font-size:12px;"><a href="#" class="gdi-detail-drive-link" data-drive-path="'+escHtml(coursePath)+'" style="color:var(--ferreto-secondary,#5ddeda);text-decoration:underline;"><i class="bi bi-folder2-open"></i> Abrir pasta no Drive</a></div></div>';
           }
           // Agrupa por disciplina: a pasta imediatamente dentro do curso
           // path típico: /9:/Curso/TRT/Direito Administrativo/Bloco I/001 - aula.mp4
@@ -2460,11 +2462,23 @@
         contBtn.innerHTML='<i class="bi bi-check2-all" style="color:#3fb950;"></i> Tudo em dia!';
       }
     }).catch(()=>{});
+    // ★ v2.15.17 (B): "Ir para o Drive" (#gdi-detail-drive) + link do estado
+    //   vazio (.gdi-detail-drive-link) — navegação in-app em vez do <a href>
+    //   cru p/ /N:/... (sem ?a=view o portão do worker faz 302 p/ Home).
+    //   Canonica-se SÓ aqui, no momento da navegação.
+    const _detailDrive = box.querySelector('#gdi-detail-drive');
+    if(_detailDrive) _detailDrive.onclick=()=>{ if(window.Shell&&window.Shell.router){window.Shell.router.navigate('/drives');setTimeout(()=>{if(window.Shell.views&&window.Shell.views._renderDrives)window.Shell.views._renderDrives(__canonCoursePath(coursePath));},50);} };
+    box.querySelectorAll('.gdi-detail-drive-link').forEach(a=>{
+      a.onclick=(e)=>{ e.preventDefault(); if(window.Shell&&window.Shell.router){window.Shell.router.navigate('/drives');setTimeout(()=>{if(window.Shell.views&&window.Shell.views._renderDrives)window.Shell.views._renderDrives(__canonCoursePath(a.dataset.drivePath||coursePath));},50);} };
+    });
     // ★ Task 18: click em disciplina → abre pasta no Drive (não aula individual)
     box.querySelectorAll('[data-disc-path]').forEach(el=>{
       el.onclick=()=>{
         const p=el.dataset.discPath;
-        if(p)location.href=p;  // abre a pasta da disciplina
+        // ★ v2.15.17 (B): navegação in-app — location.href=p (sem ?a=view)
+        //   caía no portão do worker → 302 p/ Home. p já é canónico (cp
+        //   canónico na origem); canonica-se na mesma (no-op p/ /9:/).
+        if(p){ if(window.Shell&&window.Shell.router){window.Shell.router.navigate('/drives');setTimeout(()=>{if(window.Shell.views&&window.Shell.views._renderDrives)window.Shell.views._renderDrives(__canonCoursePath(p));},50);} }
       };
     });
 
