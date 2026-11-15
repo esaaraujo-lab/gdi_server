@@ -548,12 +548,13 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /**
-     * Camada 3 → 4 na capa de áudio: (3) imagem da biblioteca por
-     * tipo (nome do áudio → rótulo da pasta → caminho), depois
-     * (4) capa gerada do drive / monograma.
+     * Camada 3 → 4 na capa de áudio: (3) imagem da biblioteca ESTRITA
+     * por tipo (2.1.12, sem 'geral'; nome do áudio → rótulo da pasta →
+     * caminho), depois (4) capa gerada do drive (monograma só quando o
+     * drive não tem capa gerada — os drives 6/7 sempre têm).
      */
     private fun showLibraryOrGeneratedAudioCover(item: FileItem) {
-        val libraryUrl = CoverLibrary.resolve(
+        val libraryUrl = CoverLibrary.resolveStrict(
             this, item.name, item.folderLabel, item.folderPath
         )
         if (!libraryUrl.isNullOrBlank()) {
