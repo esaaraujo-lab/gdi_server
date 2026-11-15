@@ -24,7 +24,7 @@ import android.content.Context
  * apk-redesign/ECOSYSTEM_AUDIT_BIBI_2.1.9.md):
  *   - JÁ VEM DO BACKEND / BD COMPARTILHADO: descrições e resumos
  *     (batalhão Meggy, /api/ai/battalion + /api/ai/summaries +
- *     /api/materials/* via AiService; BASE_URL educa.eu.org, mesma
+ *     /api/materials/... via AiService; BASE_URL educa.eu.org, mesma
  *     sessão por aparelho, dados por usuário); capas camada 1
  *     (coverUrl do admin, /api/featured-courses e /api/courses/unified);
  *     cursos/aulas (Drive + D1 via /api/...); legendas (/api/ai/subtitles).
