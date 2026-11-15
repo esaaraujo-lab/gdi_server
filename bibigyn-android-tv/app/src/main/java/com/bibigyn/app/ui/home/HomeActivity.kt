@@ -93,7 +93,7 @@ class HomeActivity : AppCompatActivity() {
         // v2.1.5: TV não tem bottom nav.
         if (TvUtils.isTv(this)) binding.bottomNav.visibility = View.GONE
 
-        binding.topSair.setOnClickListener { logout() }
+        binding.topSair?.setOnClickListener { logout() }
 
         // ★ v2.0.2: Bottom navigation — NO finish() on tab switch.
         // Each nav activity is declared with launchMode="singleTask" in the
@@ -850,8 +850,8 @@ class HomeActivity : AppCompatActivity() {
             fit.sideMarginPx(), fit.bottomMarginPx()
         )
         // Topo: nome da app + "Sair" (+ logo, so na Meggy).
-        binding.topTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(22f))
-        binding.topSair.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
+        binding.topTitle?.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(22f))
+        binding.topSair?.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
         // Hero: altura = fraccao da altura do viewport (heroScale);
         // texto com textScale; padding do bloco de texto com marginScale.
         binding.heroCard.layoutParams =
