@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Frente E — Thumb do SeekBar do player: 12dp (era 20dp em
+     seek_thumb.xml, que fica intocado). Circulo solido na cor da marca. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <size
+        android:width="12dp"
+        android:height="12dp" />
+    <solid android:color="@color/md_primary" />
+</shape>
