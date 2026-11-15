@@ -691,6 +691,9 @@
   // (window.renderCursos e window.gdiRefreshCentralPanel podem ser chamados por outros módulos)
   // ★ v2.6: busca concursos + em destaque do endpoint unificado (cache 60s)
   let __unifiedCache=null, __unifiedAt=0;
+  // ★ v2.15.8 (D — capas): capas dos cursos (gêmeo em destaque), nas
+  //   mesmas chaves do mapa de totais (v. __unifiedCourseTotals).
+  let __unifiedCourseCovers={};
   // ★ v2.15.7 (P8): totais D1 dos cursos do aluno (kind 'course' do
   //   unificado), por chave normalizada — o loadUnifiedExtras antigo
   //   descartava kind 'course' e o detalhe nunca via c.total.
@@ -709,6 +712,19 @@
     return null;
   }
   // ★ v2.10.2: invalida o cache unificado (criar/excluir concurso)
+  function __unifiedCourseCoverFor(key){
+    if(!key) return null;
+    try{
+      const k1=low(String(key));
+      if(__unifiedCourseCovers[k1]!=null) return __unifiedCourseCovers[k1];
+      let k2=null;
+      try{ k2=low(decodeURIComponent(String(key))); }catch(_){}
+      if(k2 && __unifiedCourseCovers[k2]!=null) return __unifiedCourseCovers[k2];
+      const k3=k1.endsWith('/')?k1.slice(0,-1):k1+'/';
+      if(__unifiedCourseCovers[k3]!=null) return __unifiedCourseCovers[k3];
+    }catch(_){}
+    return null;
+  }
   function invalidateUnifiedCache(){ __unifiedCache=null; __unifiedAt=0; }
   async function loadUnifiedExtras(){
     const now=Date.now();
@@ -718,6 +734,7 @@
     if(!d||!d.ok||!Array.isArray(d.items)) throw new Error('unified failed');
     const out=[];
     __unifiedCourseTotals={};
+    __unifiedCourseCovers={};
     for(const it of d.items){
       // ★ v2.15.7 (P8): kind 'course' alimenta o mapa de totais (não vira
       //   cartão — o curso local já está na grade via collectCourses).
@@ -726,10 +743,11 @@
           const k=low(String(it.coursePath));
           __unifiedCourseTotals[k]=it.total||0;
           try{ const kd=low(decodeURIComponent(String(it.coursePath))); if(kd!==k) __unifiedCourseTotals[kd]=it.total||0; }catch(_){}
+          if(it.coverUrl){ __unifiedCourseCovers[k]=it.coverUrl; try{ const kd=low(decodeURIComponent(String(it.coursePath))); if(kd!==k) __unifiedCourseCovers[kd]=it.coverUrl; }catch(_){} }
         }catch(_){}
       }
       if(it.kind==='concurso') out.push({kind:'concurso', key:'concurso:'+it.concursoId, concursoId:it.concursoId, name:it.name, examDate:it.examDate||'', total:it.total||0, lessons:new Set(), watched:0});
-      else if(it.kind==='featured') out.push({kind:'featured', key:'featured:'+it.coursePath, coursePath:it.coursePath, name:it.name, icon:it.icon||'⭐', color:it.color||'', total:it.total||0, lessons:new Set(), watched:0});
+      else if(it.kind==='featured') out.push({kind:'featured', key:'featured:'+it.coursePath, coursePath:it.coursePath, name:it.name, icon:it.icon||'⭐', color:it.color||'', coverUrl:it.coverUrl||null, total:it.total||0, lessons:new Set(), watched:0});
     }
     __unifiedCache=out; __unifiedAt=now;
     return out;
@@ -752,7 +770,7 @@
     // ★ v2.15.7 (P8): enriquece o curso LOCAL com o total D1 do unificado
     //   (v. __unifiedCourseTotals em loadUnifiedExtras) — o cartão e o
     //   detalhe passam a mostrar o mesmo total da prévia.
-    for (const c of cs) { const t = __unifiedCourseTotalFor(c.key); if (t != null) c.total = t; }
+    for (const c of cs) { const t = __unifiedCourseTotalFor(c.key); if (t != null) c.total = t; const cv = __unifiedCourseCoverFor(c.key); if (cv) c.coverUrl = cv; }
     const all=cs.concat(__extras);
     const hidden=listHiddenCourses();
     if(!all.length){
@@ -870,6 +888,7 @@
         const isConcurso=c.kind==='concurso';
         const el=document.createElement('div');el.className='gdi-course';el.style.cursor='pointer';
         el.innerHTML=`
+        ${(!isConcurso && c.coverUrl)?'<img src="'+esc(c.coverUrl)+'" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px 10px 0 0;display:block;" onerror="this.style.display=\'none\'">':''}
         <div class="gdi-course-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
           <b style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;">
             <span style="font-size:18px;flex:none;">${isConcurso?'📌':(c.icon||'⭐')}</span>
@@ -935,6 +954,7 @@
       // ★ destaque visual para curso manual: border-left com a cor do manualCourse
       if(isManual)el.style.borderLeft='4px solid '+color;
       el.innerHTML=`
+        ${c.coverUrl?'<img src="'+esc(c.coverUrl)+'" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px 10px 0 0;display:block;" onerror="this.style.display=\'none\'">':''}
         <div class="gdi-course-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
           <b title="${escHtml(_mcName||courseName(c.key))}" style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;">
             ${isManual?`<span style="font-size:18px;flex:none;">${icon}</span>`:''}
@@ -948,8 +968,15 @@
         }
         <div class="gdi-course-stats">
           ${isManual
-            ? `<div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:#ffd43b;">…</span><span class="gdi-course-stat-label">Batalhão</span></div>
-               <div class="gdi-course-stat"><span class="gdi-course-stat-num">0</span><span class="gdi-course-stat-label">Assistidas</span></div>`
+            // ★ v2.15.8 (B): curso manual COM total D1 (pastas, do unificado)
+            //   mostra o nº de aulas — antes mostrava sempre "… Batalhão"
+            //   mesmo com 78 pastas no D1, divergindo do cartão em destaque
+            //   do mesmo curso. Sem total conhecido, mantém o "…".
+            ? ((c.total || 0) > 0
+              ? `<div class="gdi-course-stat"><span class="gdi-course-stat-num">${c.total}</span><span class="gdi-course-stat-label">Aulas</span></div>
+               <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:#3fb950;">${c.watched || 0}</span><span class="gdi-course-stat-label">Assistidas</span></div>`
+              : `<div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:#ffd43b;">…</span><span class="gdi-course-stat-label">Batalhão</span></div>
+               <div class="gdi-course-stat"><span class="gdi-course-stat-num">0</span><span class="gdi-course-stat-label">Assistidas</span></div>`)
             : `<div class="gdi-course-stat"><span class="gdi-course-stat-num">${_cardTotal}</span><span class="gdi-course-stat-label">Aulas</span></div>
                <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:#3fb950;">${c.watched}</span><span class="gdi-course-stat-label">Feitas</span></div>
                <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:#ffd43b;">${remaining}</span><span class="gdi-course-stat-label">Restam</span></div>
@@ -2090,7 +2117,21 @@
       lessons.length = 0;
       for (var j = 0; j < _kept.length; j++) lessons.push(_kept[j]);
     })();
-    if (scanStatus === 'done' && lessons.length) scannedCount = lessons.length;
+    // ★ v2.15.8 (B): scannedCount conta ARQUIVOS (o scanner soma linhas) —
+    //   trava-o no nº de PASTAS já conhecido (a lista mesclada dedupada por
+    //   pasta, ou o total D1 unificado), senão o max() abaixo infla o
+    //   detalhe (233 arquivos vs 78 pastas). A linha do max() fica
+    //   byte-idêntica (check 9 do v2.15.5-test-front.js).
+    if (lessons.length) scannedCount = Math.min(scannedCount || 0, lessons.length);
+    else if ((c.total || 0) > 0) scannedCount = Math.min(scannedCount || 0, c.total);
+    // ★ v2.15.8 (B): o mesmo vale p/ c.totalLessons — ele vem do cache do
+    //   scanner (sp.lessonsFound), que pré-fix contava ARQUIVOS e só sobe
+    //   (nunca desce): um cache velho de 233 sobreviveria ao fix do
+    //   contador. Trava-o no nº de PASTAS conhecido (lista mesclada ou
+    //   total D1). Se o scan local achou MAIS pastas que o D1, lessons.length
+    //   no max() abaixo já as mostra — o teto nunca esconde aula real.
+    var _knownFolders = lessons.length || (c.total || 0);
+    if (_knownFolders > 0 && (c.totalLessons || 0) > _knownFolders) c.totalLessons = _knownFolders;
 
     // ★ v2.15.5 (item 9): contagem REAL — o total provisório acima ignorava
     //   as aulas escaneadas (o cartão, via unified/D1 ou via scanner, já as
