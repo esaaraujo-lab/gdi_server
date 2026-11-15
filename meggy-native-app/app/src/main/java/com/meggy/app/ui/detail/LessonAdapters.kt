@@ -14,6 +14,7 @@ import com.meggy.app.databinding.ItemLessonChildBinding
 import com.meggy.app.databinding.ItemLessonHeaderBinding
 import com.meggy.app.util.CardGradient
 import com.meggy.app.util.FocusAnimator
+import com.meggy.app.util.TapFeedback
 import com.meggy.app.util.Format
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.ThumbArt
@@ -82,6 +83,7 @@ class LessonListAdapter(
                 onToggleExpand(group, pos)
             }
             FocusAnimator.attach(binding.root, TvUtils.isTv(binding.root.context))
+            TapFeedback.attachPress(binding.root, TvUtils.isTv(binding.root.context))
         }
     }
 
@@ -99,6 +101,7 @@ class LessonListAdapter(
                 }
             }
             FocusAnimator.attach(binding.root, TvUtils.isTv(binding.root.context))
+            TapFeedback.attachPress(binding.root, TvUtils.isTv(binding.root.context))
         }
     }
 
@@ -210,6 +213,7 @@ class LessonGridAdapter(
                 onPlayLesson(groups[pos])
             }
             FocusAnimator.attachCard(binding.lessonCardRoot, TvUtils.isTv(binding.root.context))
+            TapFeedback.attachPress(binding.lessonCardRoot, TvUtils.isTv(binding.root.context))
         }
     }
 
