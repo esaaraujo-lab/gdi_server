@@ -282,11 +282,23 @@
     // ★ merge v2.15.6-crossed: selo de cruzamento — mantém a fonte e o
     //   perfil do desenho vencedor e acrescenta o selo quando cruzado.
     const crossed=(p.crossed?' 🔀 Cruzado: edital + histórico da banca':'');
-    if(s==='url') return '<span style="color:#5ddeda;font-size:11px;">📋 Edital: lido da URL'+perfil+crossed+'</span>';
-    if(s==='texto') return '<span style="color:#5ddeda;font-size:11px;">📋 Edital: texto colado'+perfil+crossed+'</span>';
-    if(s==='pdf') return '<span style="color:#5ddeda;font-size:11px;">📋 Edital: PDF enviado'+perfil+crossed+'</span>';
-    if(s==='url-falha') return '<span style="color:#fab005;font-size:11px;">⚠️ Edital na URL não pôde ser lido — plano sem o edital'+perfil+crossed+'</span>';
-    return '<span style="color:#fab005;font-size:11px;">⚠️ Sem edital — baseado no que mais cai na banca</span>';
+    // ★ v2.15.7 (item 12): "concurso apagado" — o plano sobreviveu sem o
+    //   concurso (órfão); a lista avisa em vez de fingir que está tudo bem.
+    const orphan=(p.orphaned?' · ⚠️ concurso apagado':'');
+    if(s==='url') return '<span style="color:#5ddeda;font-size:11px;">📋 Edital: lido da URL'+perfil+crossed+orphan+'</span>';
+    if(s==='texto') return '<span style="color:#5ddeda;font-size:11px;">📋 Edital: texto colado'+perfil+crossed+orphan+'</span>';
+    if(s==='pdf') return '<span style="color:#5ddeda;font-size:11px;">📋 Edital: PDF enviado'+perfil+crossed+orphan+'</span>';
+    // ★ v2.15.7 (item 11b): o build determinístico que usou as disciplinas
+    //   do edital já analisadas agora registra editalSource='analisado'
+    //   (antes: NULL → caía no "Sem edital" abaixo).
+    if(s==='analisado') return '<span style="color:#5ddeda;font-size:11px;">📋 Edital: disciplinas já analisadas'+perfil+crossed+orphan+'</span>';
+    if(s==='url-falha') return '<span style="color:#fab005;font-size:11px;">⚠️ Edital na URL não pôde ser lido — plano sem o edital'+perfil+crossed+orphan+'</span>';
+    // ★ v2.15.7 (item 11b): este ramo descartava o `crossed` — o plano
+    //   determinístico com disciplinas do edital aparecia como "Sem edital"
+    //   na lista enquanto o modal mostrava "🔀 Cruzado". O selo agora
+    //   acompanha o plano em TODOS os ramos (lista == modal), inclusive
+    //   p/ planos antigos sem edital_source na coluna.
+    return '<span style="color:#fab005;font-size:11px;">⚠️ Sem edital — baseado no que mais cai na banca'+crossed+orphan+'</span>';
   }
 
   async function extractEditalPdfText(file, onStatus){
@@ -301,6 +313,9 @@
   }
 
   function renderMeggyPlans(container, plans){
+    // ★ v2.15.7 (item 12): guarda o container p/ o ouvinte de
+    //   'gdi-plan-missing' (modal 404) poder re-ler a lista e podar o cartão.
+    _lastPlanContainer=container;
     const fmtDate=function(ts){ try{ return new Date(ts).toLocaleDateString('pt-BR'); }catch(_){ return ''; } };
     let listHtml='';
     if(plans.length){
@@ -310,7 +325,8 @@
           + '<div style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;margin-top:2px;">'+escHtml(p.banca||'')+(p.examDate?' · prova '+escHtml(p.examDate):'')+' · '+p.totalDays+' dias · '+p.dailyHours+'h/dia'+(p.createdAt?' · '+fmtDate(p.createdAt):'')+'</div>'
           + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;align-items:center;">'+planOriginBadge(p)+' '+planEditalBadge(p)+'</div></div>'
           + '<div style="display:flex;gap:6px;flex-shrink:0;"><button class="gdi-btn" data-plan-view="'+escHtml(p.id)+'" style="padding:6px 10px;font-size:12px;">📅 Ver plano</button>'
-          + '<button class="gdi-btn" data-plan-redo="'+escHtml(p.id)+'" style="padding:6px 10px;font-size:12px;">🔄 Refazer</button></div></div></div>';
+          + '<button class="gdi-btn" data-plan-redo="'+escHtml(p.id)+'" style="padding:6px 10px;font-size:12px;">🔄 Refazer</button>'
+          + '<button class="gdi-btn" data-plan-delete="'+escHtml(p.id)+'" style="padding:6px 10px;font-size:12px;">🗑️ Excluir</button></div></div></div>';
       }).join('');
     } else {
       listHtml='<div style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;padding:8px 0 14px;">Você ainda não tem plano. Monte o primeiro com a Meggy abaixo.</div>';
@@ -368,6 +384,31 @@
         if(q('#gdi-plan2-days')) q('#gdi-plan2-days').value=p.totalDays||'';
         const form=q('#gdi-plan2-generate');
         if(form) form.scrollIntoView({behavior:'smooth',block:'center'});
+      };
+    });
+    // ★ v2.15.7 (item 12): excluir plano — confirmação em 2 toques (sem
+    //   confirm() nativo: é auto-dispensado em navegadores móveis) e
+    //   DELETE /api/plans/:id; depois a lista é re-lida (o cartão some).
+    container.querySelectorAll('[data-plan-delete]').forEach(function(b){
+      b.onclick=async function(){
+        if(b.getAttribute('data-confirm')!=='1'){
+          b.setAttribute('data-confirm','1');
+          b.textContent='Confirmar exclusão?';
+          setTimeout(function(){ try{ if(b.isConnected){ b.removeAttribute('data-confirm'); b.textContent='🗑️ Excluir'; } }catch(_){} }, 5000);
+          return;
+        }
+        b.disabled=true; b.textContent='Excluindo...';
+        try{
+          const r=await fetch('/api/plans/'+encodeURIComponent(b.getAttribute('data-plan-delete')),{method:'DELETE',credentials:'same-origin'});
+          const d=await r.json();
+          if(!d||!d.ok) throw new Error((d&&d.error)||('HTTP '+r.status));
+          const plans=await fetchD1Plans();
+          renderMeggyPlans(container, plans);
+          const m=q('#gdi-plan2-msg'); if(m){ m.style.color='#9aa4b8'; m.textContent='🗑️ Plano excluído.'; }
+        }catch(e){
+          b.disabled=false; b.removeAttribute('data-confirm'); b.textContent='🗑️ Excluir';
+          const m=q('#gdi-plan2-msg'); if(m){ m.style.color='#ff6b6b'; m.textContent='Não foi possível excluir o plano: '+(e.message||e); }
+        }
       };
     });
   }
@@ -431,6 +472,21 @@
 
 
   // ── Namespace exposure ──
+  // ★ v2.15.7 (item 12): o modal (shell.js) avisa quando o plano aberto
+  //   não existe mais (lista desatualizada — ex.: o concurso foi apagado e
+  //   os planos foram junto em cascata). A lista é re-lida e o cartão some.
+  let _lastPlanContainer=null;
+  if(typeof window!=='undefined'&&window.addEventListener&&!window.__gdiPlanMissingWired){
+    window.__gdiPlanMissingWired=true;
+    window.addEventListener('gdi-plan-missing', async function(){
+      try{
+        if(!_lastPlanContainer||!_lastPlanContainer.isConnected) return;
+        const plans=await fetchD1Plans();
+        renderMeggyPlans(_lastPlanContainer, plans);
+      }catch(_){}
+    });
+  }
+
   window.__gdiStudy = window.__gdiStudy || {};
   window.__gdiStudy.plan = {
     renderAll: renderAll,
