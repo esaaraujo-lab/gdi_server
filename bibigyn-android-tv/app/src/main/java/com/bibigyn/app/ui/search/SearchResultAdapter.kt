@@ -148,7 +148,7 @@ class SearchResultAdapter(
                             listener(onError = { _, _ -> showLibraryOrCover() })
                         }
                     } else {
-                        showLibraryOrMonogram()
+                        showLibraryOrCover()
                     }
                     // Progresso quando retomável.
                     val fp = f.folderPath ?: ""
