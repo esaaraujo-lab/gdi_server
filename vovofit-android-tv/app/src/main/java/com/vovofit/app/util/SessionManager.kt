@@ -61,6 +61,42 @@ class SessionManager private constructor(context: Context) {
 
     val isLoggedIn: Boolean get() = !sessionCookie.isNullOrEmpty()
 
+    // ───────── Ronda 10 Frente B: papel de admin (cache) ─────────
+    //
+    // O app não tem endpoint de papel até o servidor ganhar GET /api/me
+    // (dependência v2.15.x); ApiService.checkAdmin() resolve o papel
+    // (servidor, ou fallback provisório username == ADMIN_USERS) e
+    // guarda-o aqui JUNTO com o username a que diz respeito — se o
+    // username mudar, o cache deixa de valer e é revalidado.
+    // clearSession()/fullLogout() limpam-no. O cache só decide o que a
+    // UI MOSTRA (a linha "Gerir drives"); o servidor continua a ser o
+    // executor (POSTs admin dão 403 a não-admins).
+
+    /** Papel de admin em cache (último valor resolvido). */
+    var isAdmin: Boolean
+        get() = prefs.getBoolean(KEY_IS_ADMIN, false)
+        set(value) = prefs.edit().putBoolean(KEY_IS_ADMIN, value).apply()
+
+    /** Username a que o isAdmin em cache diz respeito. */
+    var isAdminForUser: String?
+        get() = prefs.getString(KEY_IS_ADMIN_USER, null)
+        set(value) = prefs.edit().putString(KEY_IS_ADMIN_USER, value).apply()
+
+    /** isAdmin em cache, mas SÓ se for do username actual; null = sem cache válido. */
+    fun cachedIsAdmin(username: String?): Boolean? {
+        if (username.isNullOrBlank()) return null
+        return if (isAdminForUser == username) isAdmin else null
+    }
+
+    fun cacheIsAdmin(username: String?, admin: Boolean) {
+        isAdminForUser = username
+        isAdmin = admin
+    }
+
+    fun clearCachedAdmin() {
+        prefs.edit().remove(KEY_IS_ADMIN).remove(KEY_IS_ADMIN_USER).apply()
+    }
+
     /**
      * Clears only the session cookie + username, but PRESERVES the password
      * so ApiService.validateOrReLogin() can auto re-login when the cookie
@@ -70,6 +106,8 @@ class SessionManager private constructor(context: Context) {
         prefs.edit()
             .remove(KEY_SESSION)
             .remove(KEY_USERNAME)
+            .remove(KEY_IS_ADMIN)
+            .remove(KEY_IS_ADMIN_USER)
             .apply()
     }
 
@@ -84,6 +122,8 @@ class SessionManager private constructor(context: Context) {
             .remove(KEY_USERNAME)
             .remove(KEY_PASSWORD)
             .remove(KEY_AI_SESSION)
+            .remove(KEY_IS_ADMIN)
+            .remove(KEY_IS_ADMIN_USER)
             .apply()
     }
 
@@ -583,6 +623,8 @@ class SessionManager private constructor(context: Context) {
         private const val KEY_BOOKMARKS = "bookmarks_v1"
         private const val KEY_MD_FONT_SCALE = "md_font_scale"
         private const val KEY_AI_SESSION = "ai_session_cookie"
+        private const val KEY_IS_ADMIN = "is_admin"
+        private const val KEY_IS_ADMIN_USER = "is_admin_user"
         private const val KEY_LESSON_DESCRIPTIONS = "lesson_descriptions_v1"
         private const val MAX_LESSON_DESCRIPTIONS = 200
 
