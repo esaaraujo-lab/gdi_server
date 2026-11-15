@@ -13,6 +13,7 @@ import com.meggy.app.data.colorFromString
 import com.meggy.app.databinding.ItemMylistCardBinding
 import com.meggy.app.util.CardGradient
 import com.meggy.app.util.FocusAnimator
+import com.meggy.app.util.TapFeedback
 import com.meggy.app.util.LibraryCovers
 import com.meggy.app.util.ThumbArt
 import com.meggy.app.util.SessionManager
@@ -40,6 +41,7 @@ class MyListCourseAdapter(
                 onCourse(getItem(pos))
             }
             FocusAnimator.attach(binding.root, TvUtils.isTv(binding.root.context))
+            TapFeedback.attachPress(binding.root, TvUtils.isTv(binding.root.context))
         }
     }
 
