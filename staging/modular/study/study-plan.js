@@ -394,7 +394,11 @@
         if(b.getAttribute('data-confirm')!=='1'){
           b.setAttribute('data-confirm','1');
           b.textContent='Confirmar exclusão?';
-          setTimeout(function(){ try{ if(b.isConnected){ b.removeAttribute('data-confirm'); b.textContent='🗑️ Excluir'; } }catch(_){} }, 5000);
+          // ★ v2.15.9 (D): sem expiração — o armado fica até o 2º toque
+          //   confirmar, a lista re-renderizar (troca de aba / re-leitura)
+          //   ou o erro resetar o botão. O setTimeout de 5 s expirava o
+          //   confirmar no meio do 2º toque (o teste precisou de 2 cliques
+          //   em sequência rápida); a confirmação em 2 toques continua.
           return;
         }
         b.disabled=true; b.textContent='Excluindo...';
