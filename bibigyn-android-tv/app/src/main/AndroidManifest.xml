@@ -122,6 +122,13 @@
             android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
 
+        <!-- Ronda 10 Frente B: ecrã "Gerir drives" (só admin; ver
+             AdminDrivesActivity) — NÃO exportado, abre só a partir
+             de Ajustes quando checkAdmin() diz admin. -->
+        <activity android:name=".ui.settings.AdminDrivesActivity" android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
+
         <!-- ★ v1.6.0: FileProvider para UpdateChecker (instalar APK) -->
         <provider
             android:name="androidx.core.content.FileProvider"
