@@ -602,6 +602,12 @@
       //   caía na Home). Sem confirm()/alert()/prompt().
       search(el) {
         const q = (new URLSearchParams(window.location.search).get('q') || '').trim();
+        // ★ v2.15.7 (P6): guarda de geração — uma segunda busca (2º Enter,
+        //   navegação repetida, ou busca vazia) não pode ser sobrescrita
+        //   pela resposta defasada da primeira (o 1º clique caía num card
+        //   órfão). O contador fica aqui, antes do early-return de q vazio.
+        Shell.views._searchGen = (Shell.views._searchGen || 0) + 1;
+        const _gen = Shell.views._searchGen;
         const input = document.getElementById('meggy-search-input');
         if (input && input.value !== q) input.value = q;
         el.innerHTML = `
@@ -625,7 +631,7 @@
         //   Home (o renderView não honrava ?a=view).
         const openLesson = (p) => { if (p) Shell.views._openLessonPath(p); };
         (async () => {
-          let lessons = [], courses = [], err = null;
+          let lessons = [], courses = [], err = null, _lessonFolders = null;
           try {
             const [rl, ru] = await Promise.all([
               fetch('/api/d1/lessons/search?q=' + encodeURIComponent(q) + '&limit=50', { credentials: 'include', cache: 'no-store' }),
@@ -634,15 +640,22 @@
             const dl = await rl.json().catch(() => ({}));
             const du = await ru.json().catch(() => ({}));
             if (dl && dl.ok) lessons = dl.lessons || [];
+            if (dl && dl.lessonFolders != null) _lessonFolders = dl.lessonFolders; // ★ v2.15.7 (dedup): captura no escopo do try — 'dl' é const do try e não existe fora dele (F3b usava 'dl' fora do try → ReferenceError real).
             else if (dl && dl.error) err = dl.error;
             if (du && du.ok) courses = (du.items || []).filter(it => norm(it.name || '').includes(nq) || norm(it.coursePath || '').includes(nq));
           } catch (e) { err = e.message; }
-          if (!box.isConnected) return;
+          if (_gen !== Shell.views._searchGen || !box.isConnected) return;
           if (err && !lessons.length && !courses.length) {
             box.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">⚠️</div><div class="meggy-placeholder-title">Erro na busca</div><div class="meggy-placeholder-desc">' + esc(err) + '</div></div>';
             return;
           }
-          let html = '<div style="color:#9aa4b8;font-size:13px;margin-bottom:14px;">Resultados para <b style="color:#e6edf3;">' + esc(q) + '</b> — ' + courses.length + ' curso(s) · ' + lessons.length + ' aula(s)</div>';
+          // ★ v2.15.7 (dedup): o total da busca é o nº de PASTAS DE AULA
+          //   (lessonFolders do servidor); "mostrando N" quando o limite
+          //   de 50 pastas corta a lista.
+          let _totAulas = lessons.length;
+          let _totNote = '';
+          if (_lessonFolders != null) { _totAulas = _lessonFolders; if (_lessonFolders > lessons.length) _totNote = ' (mostrando ' + lessons.length + ')'; }
+          let html = '<div style="color:#9aa4b8;font-size:13px;margin-bottom:14px;">Resultados para <b style="color:#e6edf3;">' + esc(q) + '</b> — ' + courses.length + ' curso(s) · ' + _totAulas + ' aula(s)' + _totNote + '</div>';
           if (courses.length) {
             html += '<div class="meggy-continue-section"><h2>📚 Cursos</h2><div class="meggy-cards-grid">' + courses.map(it => {
               const name = it.name || 'Curso';
@@ -653,8 +666,22 @@
           }
           if (lessons.length) {
             html += '<div class="meggy-continue-section"><h2>🎬 Aulas</h2><div style="display:flex;flex-direction:column;gap:8px;">' + lessons.map(l => {
-              const name = l.lesson_name || l.lesson_path || 'Aula';
-              const course = (l.course_path || '').split('/').filter(Boolean).pop() || '';
+              // ★ v2.15.7 (P6): o título é a PASTA da aula ("Aula 09 - Crime
+              //   Doloso e Culposo — 001 - aula.mp4") — o lesson_name é
+              //   genérico ("001 - aula.mp4" ×201 no D1) e dois resultados
+              //   pareciam o mesmo card; a Aula 09 ESTAVA no resultado e
+              //   era indistinguível. O módulo vai no meta.
+              const _dec = (s) => { try { return decodeURIComponent(String(s || '')); } catch (_) { return String(s || ''); } };
+              const name = (() => {
+                try { if (typeof Shell.views._v215LessonDisplayName === 'function') return Shell.views._v215LessonDisplayName({ path: l.lesson_path || '', name: l.lesson_name || '' }); } catch (_) {}
+                const _f = _dec(String(l.lesson_path || '').split('/').filter(Boolean).slice(-2, -1)[0] || '');
+                const _nm = l.lesson_name || l.lesson_path || 'Aula';
+                return _f && _f !== _nm ? _f + ' — ' + _nm : _nm;
+              })();
+              const _lsegs = String(l.lesson_path || '').split('/').filter(Boolean);
+              const _mod = _lsegs.length >= 3 ? _dec(_lsegs[_lsegs.length - 3]) : '';
+              const _cc = _dec((l.course_path || '').split('/').filter(Boolean).pop() || '');
+              const course = _mod ? _mod + ' · ' + _cc : _cc;
               const badges = [(l.has_summary ? '📝 Resumo' : ''), (l.has_questions ? '🧠 Questões' : ''), (l.has_flashcards ? '🗂️ Flashcards' : '')].filter(Boolean).join(' · ');
               return '<div class="meggy-card" data-search-lesson="' + esc(l.lesson_path || '') + '" style="cursor:pointer;display:flex;gap:12px;align-items:center;"><div class="meggy-card-icon" style="font-size:20px;">🎬</div><div style="flex:1;min-width:0;"><div class="meggy-card-title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(name) + '</div><div class="meggy-card-meta">' + esc(course) + (badges ? ' · ' + esc(badges) : '') + '</div></div></div>';
             }).join('') + '</div></div>';
@@ -880,10 +907,20 @@
       //   linhas do detalhe do concurso e deep link ?a=view. Nunca usa
       //   location.href (o reload caía na Home). Fallback: abre a pasta-pai
       //   em /drives, nunca a Home.
+      // ★ v2.15.7 (P6): guarda de voo + feedback imediato. O 1º clique
+      //   parecia não fazer nada enquanto a listagem da pasta carregava
+      //   (list-worker frio + POST) e o 2º clique abria um 2º player por
+      //   cima do 1º — agora chamadas concorrentes p/ a mesma aula aguardam
+      //   a mesma promise (1 só _playVideoInline) e a main mostra
+      //   "Abrindo aula..." na hora.
       async _openLessonPath(lessonPath) {
         const main = document.getElementById('meggy-main');
         if (!lessonPath) return;
         const clean = String(lessonPath).split('?')[0];
+        Shell._openLessonInflight = Shell._openLessonInflight || {};
+        if (Shell._openLessonInflight[clean]) return Shell._openLessonInflight[clean];
+        if (main) main.innerHTML = '<div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Abrindo aula…</div></div>';
+        const _p = (async () => {
         const slash = clean.lastIndexOf('/');
         const folderPath = slash > 0 ? clean.slice(0, slash + 1) : '/';
         let fileName = clean.slice(slash + 1);
@@ -904,10 +941,21 @@
           }
           const videos = files.filter(f => /\.(mp4|webm|mov|mkv|m4v|mp3|m4a|ogg|wav|aac)$/i.test(f.name || '') || String(f.mimeType || '').indexOf('video') === 0 || String(f.mimeType || '').indexOf('audio') === 0);
           const playlist = videos.map(f => ({ link: f.link || (folderPath + encodeURIComponent(f.name)), name: f.name, size: f.size ? String(f.size) : '', folder: '' }));
-          let idx = playlist.findIndex(v => { let n = String(v.link || '').split('/').pop() || ''; try { n = decodeURIComponent(n); } catch (_) {} return n === fileName; });
+          // ★ v2.15.7 (P6): casa pelo NOME do ficheiro, não pela cauda do
+          //   link. O link real é "/download.aspx?file=…&expiry=…&mac=…"
+          //   (generateLink) — a cauda "download.aspx?file=…" nunca é o
+          //   nome do ficheiro, por isso o idx era SEMPRE -1 e o player
+          //   abria com o caminho cru "/9:/…/001 - aula.mp4", que o worker
+          //   redireciona p/ '/' (302): o <video> recebia HTML e falhava
+          //   ("Unable to play media", 0:00). O caminho cru nunca tocou.
+          const _decName = (s) => { let _n = String(s || ''); try { _n = decodeURIComponent(_n); } catch (_) {} return _n; };
+          const _normName = (s) => _decName(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+          let idx = playlist.findIndex(v => _decName(v.name) === fileName || (_normName(v.name) && _normName(v.name) === _normName(fileName)));
           if (idx < 0) {
-            playlist.unshift({ link: clean, name: fileName, size: '', folder: '' });
-            idx = 0;
+            // A aula não está na listagem da pasta: abre a pasta-pai em
+            // /drives (nunca a Home, nunca um link cru que o worker 302ia).
+            openParent();
+            return;
           }
           Shell.state.previousFolderPath = Shell.state.currentFolderPath;
           Shell.state.currentFolderPath = folderPath;
@@ -915,6 +963,9 @@
         } catch (e) {
           if (main) main.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">⚠️</div><div class="meggy-placeholder-title">Erro ao abrir a aula</div><div class="meggy-placeholder-desc">' + Shell._esc(e.message) + '</div></div>';
         }
+        })();
+        Shell._openLessonInflight[clean] = _p;
+        try { await _p; } finally { if (Shell._openLessonInflight) delete Shell._openLessonInflight[clean]; }
       },
 
       _playVideoInline(link, name, playlist, currentIndex) {
@@ -2931,17 +2982,19 @@ el.scrollTop = 0;
       async _v215PreviewPaged(concursoId, folderPaths) {
         let body = { folderPaths: folderPaths || [] };
         let d = null;
-        for (let a = 0; a < 20; a++) {
+        // ★ v2.15.7 (P4): teto 40 tentativas (antes 20) — v. previewAttach.
+        for (let a = 0; a < 40; a++) {
           d = await Shell.views._v215Api('/api/concursos/' + encodeURIComponent(concursoId) + '/sources/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
           if (!d || !d.truncated) break;
-          body = { folderPaths: folderPaths || [], resume: d.pending || {}, accum: { folders: d.folders || [], seenNewPaths: d.seenNewPaths || [], enumErrors: d.enumErrors || [] } };
+          body = { folderPaths: folderPaths || [], resume: d.pending || {}, accum: { folders: d.folders || [], seenNewPaths: d.seenNewPaths || [], enumErrors: d.enumErrors || [], depthCut: d.depthCut || [], notFound: d.notFound || [] } };
         }
         return d;
       },
       async _v215AttachPaged(concursoId, folderPaths) {
         let body = { folderPaths: folderPaths || [] };
         let d = null, firstAttached = null, firstSkipped = null;
-        for (let a = 0; a < 20; a++) {
+        // ★ v2.15.7 (P4): teto 40 tentativas (antes 20) — v. previewAttach.
+        for (let a = 0; a < 40; a++) {
           d = await Shell.views._v215Api('/api/concursos/' + encodeURIComponent(concursoId) + '/sources', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
           if (firstAttached === null) { firstAttached = d.attached; firstSkipped = d.skipped; }
           if (!d.scanned || !d.scanned.truncated) break;
@@ -2959,6 +3012,9 @@ el.scrollTop = 0;
             if (prev.totalHours != null) scanResult.totalHours = prev.totalHours;
             if (prev.totalMinutes != null) scanResult.totalMinutes = prev.totalMinutes;
             if (prev.truncated != null) scanResult.truncated = prev.truncated;
+            // ★ v2.15.7 (P4): a prévia de fallback também traz os avisos.
+            if (Array.isArray(prev.depthCut) && prev.depthCut.length) scanResult.depthCut = prev.depthCut;
+            if (Array.isArray(prev.notFound) && prev.notFound.length) scanResult.notFound = prev.notFound;
             if (Array.isArray(prev.folders)) scanResult._previewFolders = prev.folders;
             // ★ v2.15.5 (item 2): a prévia projeta o total pós-anexo — é o
             //   número que o detalhe vai mostrar; usa-o quando o /scan não
@@ -2991,6 +3047,15 @@ el.scrollTop = 0;
         }
         if (r.truncated) {
           h += '<div style="margin-top:0;margin-bottom:16px;padding:10px;background:rgba(255,212,59,0.06);border:1px solid rgba(255,212,59,0.25);border-radius:8px;font-size:12px;color:#ffd43b;">⚠️ Contagem parcial — a enumeração de pastas foi truncada pelo servidor; o total real de aulas/horas pode ser maior.</div>';
+        }
+        // ★ v2.15.7 (P4): avisos distintos p/ pastas não encontradas e p/
+        //   cortes de profundidade — antes os dois sumiam no "truncada" (ou
+        //   nem apareciam) e o usuário não sabia o que faltou.
+        if (Array.isArray(r.notFound) && r.notFound.length) {
+          h += '<div style="margin-top:0;margin-bottom:16px;padding:10px;background:rgba(248,81,73,0.08);border:1px solid rgba(248,81,73,0.3);border-radius:8px;font-size:12px;color:#ff8b8b;">⚠️ Pasta(s) não encontrada(s) neste drive: ' + r.notFound.map(p => Shell._esc(String(p))).join(', ') + ' — confira o caminho (ex.: a pasta pode estar em outro drive).</div>';
+        }
+        if (Array.isArray(r.depthCut) && r.depthCut.length) {
+          h += '<div style="margin-top:0;margin-bottom:16px;padding:10px;background:rgba(255,212,59,0.06);border:1px solid rgba(255,212,59,0.25);border-radius:8px;font-size:12px;color:#ffd43b;">⚠️ ' + r.depthCut.length + ' pasta(s) além da profundidade máxima não foram enumeradas — aulas abaixo delas não entram na contagem.</div>';
         }
         return h;
       },
@@ -3409,7 +3474,8 @@ el.scrollTop = 0;
                 //   truncated=false (v. _v215PreviewPaged).
                 let scanBody = { folderPaths: selectedFolders };
                 let d = null;
-                for (let a = 0; a < 20; a++) {
+                // ★ v2.15.7 (P4): teto 40 tentativas (antes 20) — v. previewAttach.
+                for (let a = 0; a < 40; a++) {
                   const r = await fetch('/api/concursos/' + encodeURIComponent(concursoId) + '/scan', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -3439,6 +3505,10 @@ el.scrollTop = 0;
                       scanResult.linkedHours = m.scanned.linkedHours;
                       scanResult.linkedByDiscipline = m.scanned.linkedByDiscipline;
                       if (m.scanned.truncated) scanResult.truncated = true;
+                      // ★ v2.15.7 (P4): o passo 4 mostra depthCut/notFound
+                      //   do anexo também (o /scan sozinho pode não tê-los).
+                      if (Array.isArray(m.scanned.depthCut)) { const seen = new Set((scanResult.depthCut || []).map(x => (x.folder || '') + '|' + (x.path || ''))); for (const dc of m.scanned.depthCut) { const k = (dc.folder || '') + '|' + (dc.path || ''); if (!seen.has(k)) { seen.add(k); (scanResult.depthCut = scanResult.depthCut || []).push(dc); } } }
+                      if (Array.isArray(m.scanned.notFound)) { const seenN = new Set(scanResult.notFound || []); for (const nf of m.scanned.notFound) if (!seenN.has(nf)) { seenN.add(nf); (scanResult.notFound = scanResult.notFound || []).push(nf); } }
                     }
                   } catch (me) {
                     scanResult.modulesError = me.message || 'não foi possível criar os módulos';
@@ -4634,7 +4704,13 @@ el.scrollTop = 0;
           fetch('/api/plans/' + encodeURIComponent(planId), { credentials: 'include' }).then(r => r.json()).then(d => {
             const bodyEl = document.getElementById('pm-body');
             if (!bodyEl) return;
-            if (!d || !d.ok || !d.plan) { bodyEl.innerHTML = '<div style="color:#ff6b6b;font-size:13px;">Não foi possível carregar o plano.</div>'; return; }
+            // ★ v2.15.7 (item 12): 404 "Plano não encontrado" = o plano
+            //   não existe mais (foi apagado, ou apagado junto com o
+            //   concurso) — a lista que o mostrava está desatualizada. A
+            //   mensagem diz isso e o evento 'gdi-plan-missing' pede à
+            //   /plano que re-leia a lista e pode o cartão. Outros erros
+            //   mantêm a mensagem genérica de antes.
+            if (!d || !d.ok || !d.plan) { if (d && d.error === 'Plano não encontrado') { bodyEl.innerHTML = '<div style="color:#ff6b6b;font-size:13px;">Este plano não existe mais — ele foi apagado (ou apagado junto com o concurso). Feche este modal e atualize a lista de planos.</div>'; try { window.dispatchEvent(new CustomEvent('gdi-plan-missing', { detail: { planId: planId } })); } catch (_) {} } else { bodyEl.innerHTML = '<div style="color:#ff6b6b;font-size:13px;">Não foi possível carregar o plano.</div>'; } return; }
             const p = d.plan, s = p.summary;
             // ★ v2.15.6: selo de origem + nota do edital no plano da Meggy
             let originHtml = '';
