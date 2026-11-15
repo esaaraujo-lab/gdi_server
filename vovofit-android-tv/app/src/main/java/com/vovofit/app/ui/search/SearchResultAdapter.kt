@@ -17,6 +17,7 @@ import com.vovofit.app.util.CardGradient
 import com.vovofit.app.util.CoverLibrary
 import com.vovofit.app.util.loadCoverChain
 import com.vovofit.app.util.FocusAnimator
+import com.vovofit.app.util.TapFeedback
 import com.vovofit.app.util.Format
 import com.vovofit.app.util.SessionManager
 import com.vovofit.app.util.TvUtils
@@ -59,6 +60,7 @@ class SearchResultAdapter(
                 }
             }
             FocusAnimator.attach(binding.root, TvUtils.isTv(binding.root.context))
+            TapFeedback.attachPress(binding.root, TvUtils.isTv(binding.root.context))
         }
     }
 
