@@ -214,7 +214,7 @@ class SessionManager private constructor(context: Context) {
     // Each entry: { folder, video, ts }. Deduped by (folder, video).
 
     /** Adds (or moves to top) a (folder, video) entry in the recents list. */
-    fun addRecent(folderPath: String, videoName: String, thumbnailLink: String? = null) {
+    fun addRecent(folderPath: String, videoName: String, thumbnailLink: String? = null, link: String? = null) {
         val arr = recentArray()
         // v2.7.6: preserva a thumb já salva quando a nova chamada não traz
         // uma (ex.: launchPlayer sem thumb apagava a thumb salva pelo player).
@@ -223,6 +223,14 @@ class SessionManager private constructor(context: Context) {
                 it.optString("folder") == folderPath && it.optString("video") == videoName
             }?.optString("thumb").takeIf { !it.isNullOrBlank() }
         val thumb = thumbnailLink.takeIf { !it.isNullOrBlank() } ?: oldThumb
+        // Frente H — preserva o link já salvo quando a nova chamada não traz
+        // um (o saveJob do player chama addRecent sem link); sem isto o
+        // caminho rápido do "Continuar assistindo" perdia o link.
+        val oldLink = (0 until arr.length()).map { arr.getJSONObject(it) }
+            .firstOrNull {
+                it.optString("folder") == folderPath && it.optString("video") == videoName
+            }?.optString("link").takeIf { !it.isNullOrBlank() }
+        val savedLink = link.takeIf { !it.isNullOrBlank() } ?: oldLink
         // Remove any existing entry with the same (folder, video)
         val filtered = (0 until arr.length()).map { arr.getJSONObject(it) }
             .filter {
@@ -234,6 +242,9 @@ class SessionManager private constructor(context: Context) {
         entry.put("video", videoName)
         entry.put("ts", System.currentTimeMillis())
         if (!thumb.isNullOrBlank()) entry.put("thumb", thumb)
+        // Frente H — link de playback: permite ao "Continuar assistindo"
+        // navegar para o player sem o listFolder prévio.
+        if (!savedLink.isNullOrBlank()) entry.put("link", savedLink)
         newList.add(0, entry)
         // Cap at 8
         while (newList.size > 8) newList.removeAt(newList.size - 1)
@@ -273,7 +284,9 @@ class SessionManager private constructor(context: Context) {
                 folderPath = o.optString("folder"),
                 videoName = o.optString("video"),
                 timestamp = o.optLong("ts", 0L),
-                thumbnailLink = o.optString("thumb").takeIf { it.isNotBlank() }
+                thumbnailLink = o.optString("thumb").takeIf { it.isNotBlank() },
+                // Frente H — link de playback (ausente nos recents antigos).
+                link = o.optString("link").takeIf { it.isNotBlank() }
             ))
         }
         return out
@@ -331,7 +344,9 @@ class SessionManager private constructor(context: Context) {
         val folderPath: String,
         val videoName: String,
         val timestamp: Long,
-        val thumbnailLink: String? = null
+        val thumbnailLink: String? = null,
+        // Frente H — link relativo de playback (BASE_URL + link).
+        val link: String? = null
     )
 
     // ───────── v2.0.0: Favorites ("Minha lista") ─────────
