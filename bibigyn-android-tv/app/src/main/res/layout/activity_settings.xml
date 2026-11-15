@@ -561,6 +561,65 @@
                 </LinearLayout>
             </LinearLayout>
 
+            <!-- ADMINISTRAÇÃO (Ronda 10 Frente B — só visível para admin) -->
+            <LinearLayout
+                android:id="@+id/rowAdminDrives"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:clickable="true"
+                android:focusable="true"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="ADMINISTRAÇÃO"
+                    android:textColor="@color/md_primary"
+                    android:textSize="@dimen/text_chip"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_sm"
+                    android:background="@drawable/tile_focus_border"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="@dimen/spacing_lg">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/admin_drives_row"
+                            android:textColor="@color/md_on_surface"
+                            android:textSize="@dimen/text_card_title" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="@string/admin_drives_row_sub"
+                            android:textColor="@color/md_on_surface_variant"
+                            android:textSize="@dimen/text_card_subtitle" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="›"
+                        android:textColor="@color/md_on_surface_variant"
+                        android:textSize="22sp" />
+                </LinearLayout>
+            </LinearLayout>
+
             <!-- Sair -->
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/btnLogout"
