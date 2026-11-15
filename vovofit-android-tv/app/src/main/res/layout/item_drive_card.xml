@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
+  Frente C (ronda APK) — altura FIXA do card (@dimen/drive_card_height,
+  210dp). Antes wrap_content: a altura variava com o nome (1 vs 2 linhas)
+  e, na Meggy, com a meta (GONE sem tagline).
+  Tile da capa flexivel (weight=1, absorve a folga) e bloco de texto
+  em baixo; drive_name minLines=2 (a meta fica sempre a mesma altura).
   1.0.11 — Card de drive (home "Explorar drives", conceito home).
   Card ESCURO com foto de capa 16:9 do drive + nome 14sp
   + linha de metadados (DriveItem.tagline, texto curado — sem
@@ -9,7 +14,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/drive_card_root"
     android:layout_width="@dimen/drive_card_width"
-    android:layout_height="wrap_content"
+    android:layout_height="@dimen/drive_card_height"
     android:layout_marginEnd="@dimen/rail_gap"
     android:clickable="true"
     android:focusable="true"
@@ -23,7 +28,7 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="match_parent"
         android:orientation="vertical">
 
         <!-- 1.0.11 — foto de capa 16:9 do drive (admin → biblioteca
@@ -31,7 +36,8 @@
              2026-11-14 22:21: imagem + nome bastam, sem ícone). -->
         <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="@dimen/drive_tile_height">
+            android:layout_height="0dp"
+            android:layout_weight="1">
 
             <View
                 android:id="@+id/drive_bg"
@@ -92,6 +98,7 @@
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
                 android:maxLines="2"
+                android:minLines="2"
                 android:textColor="@color/tile_title"
                 android:textSize="@dimen/text_drive_name"
                 android:textStyle="bold" />
