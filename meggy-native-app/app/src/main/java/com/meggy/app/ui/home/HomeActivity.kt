@@ -10,6 +10,7 @@ import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
 import android.widget.TextView
+import android.widget.Toast
 import android.view.animation.AlphaAnimation
 import android.view.animation.AnimationSet
 import android.view.animation.DecelerateInterpolator
@@ -21,6 +22,7 @@ import coil.load
 import com.meggy.app.BuildConfig
 import com.meggy.app.MeggyApp
 import com.meggy.app.R
+import com.meggy.app.data.AdminDrive
 import com.meggy.app.data.ApiService
 import com.meggy.app.data.DriveItem
 import com.meggy.app.data.FileItem
@@ -34,6 +36,7 @@ import com.meggy.app.ui.player.PlayerActivity
 import com.meggy.app.ui.search.SearchActivity
 import com.meggy.app.ui.settings.SettingsActivity
 import com.meggy.app.util.AuthHelper
+import com.meggy.app.util.DriveRailItem
 import com.meggy.app.util.PlaylistManager
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.TapFeedback
@@ -60,6 +63,11 @@ class HomeActivity : AppCompatActivity() {
     // Onda 2 (a) — capa do admin por drivePath (GET
     // /api/featured-courses → cover_url), carregada em 2º plano.
     private var featuredCoverByPath: Map<String, String> = emptyMap()
+    // Ronda 10 Frente C — drives do admin p/ este APK (GET
+    // /api/admin-drives, filtrados por targetApps) + itens do
+    // rail (fixos + admin) na ordem em que aparecem na Home.
+    private var adminDrives: List<AdminDrive> = emptyList()
+    private var driveRailItems: List<DriveRailItem> = emptyList()
     private var drivesAdapter: DriveRailAdapter? = null
     // v2.7.11 camada (3) — recents p/ re-aplicar o destaque da TV
     // quando o manifesto da biblioteca chega (onReady).
@@ -143,6 +151,10 @@ class HomeActivity : AppCompatActivity() {
         setupTvFocusChains()
         applyTvAutoFit()
         fetchFeaturedCovers()
+        // Ronda 10 Frente C — drives do admin (best-effort;
+        // sem rota, o rail mostra só os fixos). Re-fetch no
+        // onResume.
+        fetchAdminDrives()
         // v2.7.11 camada (3) — busca o manifesto da biblioteca em
         // 2º plano; quando chegar, o listener re-aplica as capas.
         LibraryCovers.warmUp(this)
@@ -190,6 +202,10 @@ class HomeActivity : AppCompatActivity() {
         // em destaque pode ter aparecido entretanto.
         setupContinueRail()
         setupTvFocusChains()
+        // Ronda 10 Frente C — re-busca os drives do admin ao
+        // voltar: o remover da Frente B faz o tile sumir sem
+        // reiniciar o app.
+        fetchAdminDrives()
         // v2.7.6: re-checa atualização ao voltar (throttle 1×/24h) e
         // restaura o foco nos rails (TV).
         UpdateChecker.checkForUpdateThrottled(this, BuildConfig.VERSION_NAME)
@@ -840,13 +856,75 @@ class HomeActivity : AppCompatActivity() {
             else -> R.id.heroPlay
         }
         drivesAdapter = DriveRailAdapter(
-            DriveItem.ALL, featuredCoverByPath,
+            buildDriveRailItems(), featuredCoverByPath,
             nextFocusUpId = drivesUpId
-        ) { drive ->
-            lastFocusDrives = DriveItem.ALL.indexOf(drive)
-            openDrive(drive)
+        ) { item ->
+            lastFocusDrives = driveRailItems.indexOf(item)
+            when (item) {
+                is DriveRailItem.Fixed -> openDrive(item.drive)
+                is DriveRailItem.Admin -> onAdminDriveClick(item.drive)
+            }
         }
         binding.railDrives.adapter = drivesAdapter
+    }
+
+    /**
+     * Ronda 10 Frente C — itens do rail de drives: os fixos primeiro
+     * (DriveItem.ALL, ordem actual) + os drives do admin a seguir
+     * (ordem do servidor). Guarda a lista p/ o foco da TV e p/ o
+     * clique (lastFocusDrives é a posição NESTA lista, não em ALL).
+     */
+    private fun buildDriveRailItems(): List<DriveRailItem> {
+        val items = ArrayList<DriveRailItem>(DriveItem.ALL.size + adminDrives.size)
+        items.addAll(DriveItem.ALL.map { DriveRailItem.Fixed(it) })
+        items.addAll(adminDrives.map { DriveRailItem.Admin(it) })
+        driveRailItems = items
+        return items
+    }
+
+    /**
+     * Ronda 10 Frente C — busca os drives do admin (GET
+     * /api/admin-drives — dependência do servidor v2.15.x, AINDA NÃO
+     * EXISTE: hoje dá 404 e getAdminDrives() devolve null). Best-effort
+     * e silencioso: null/falha → só os fixos, sem crash, sem toast.
+     * Filtra por targetApps p/ o APK actual (o admin vê TODOS no ecrã
+     * "Gerir drives"; na Home cada APK só mostra os seus). Chamado no
+     * onCreate e no onResume — o remover da Frente B faz o tile sumir
+     * sem reiniciar o app.
+     */
+    private fun fetchAdminDrives() {
+        lifecycleScope.launch {
+            val drives = withContext(Dispatchers.IO) {
+                runCatching { api.getAdminDrives() }.getOrNull()
+            }?.filter { it.targets(packageName) } ?: emptyList()
+            adminDrives = drives
+            drivesAdapter?.updateItems(buildDriveRailItems())
+        }
+    }
+
+    /**
+     * Ronda 10 Frente C — toque num drive do admin. LIMITE HONESTO: a
+     * rota de listagem por ID NÃO existe no servidor (dependência
+     * v2.15.x; o router só aceita /<idx>:/...), por isso o drive HOJE
+     * NÃO PODE listar o conteúdo. Mostra uma mensagem clara em pt-BR
+     * — NUNCA um bounce para o login (o listFolder()==null hoje
+     * significa sessão expirada; um drive do admin NÃO pode cair nesse
+     * caminho), NUNCA um crash, NUNCA uma lista vazia enganadora.
+     *
+     * TODO (Ronda 10 Frente C) — ponto de ligação: quando o servidor
+     * ganhar a listagem por ID (POST /api/drive/by-id ou equivalente),
+     * trocar o toast por navegar p/ o DetailActivity:
+     *   val intent = Intent(this, DetailActivity::class.java)
+     *   intent.putExtra("drivePath", <path da rota por ID>)
+     *   intent.putExtra("folderName", drive.name)
+     *   AdminDriveUi.putAdminDrive(intent, drive, <mesmo path>)
+     *   startActivity(intent)
+     * (o DetailActivity já sabe ler os extras: sub-capa + capas de
+     * sub-pasta — ver AdminDriveUi e DetailActivity.)
+     */
+    private fun onAdminDriveClick(drive: AdminDrive) {
+        Toast.makeText(this, R.string.admin_drive_not_openable_yet,
+            Toast.LENGTH_LONG).show()
     }
 
     private fun openDrive(drive: DriveItem) {
