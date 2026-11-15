@@ -29,6 +29,139 @@
   //   drive_names ainda por carregar) — o meta degrada p/ o formato antigo.
   const __driveNameOf = function(p){ var m = /^\/(\d+):/.exec(__canonCoursePath(p || '')); return (window.drive_names && m && window.drive_names[+m[1]]) || ''; };
 
+  // ★ v2.15.28 (A — capas em destaque) — START
+  //   Gémeo do bloco em study/study-courses.js (mesma semântica; o shell
+  //   arranca antes do loader, por isso não pode importar de lá). Ver o
+  //   comentário de diagnóstico no bloco gémeo: o front web nunca usou a
+  //   biblioteca de capas (só coverUrl do D1) e o manifesto @main está
+  //   STALE (59 entradas) — o pin + a reescrita @main → @pin evitam
+  //   depender dele. Usado pela Home (destaque) e pelo fallback /cursos.
+  const __V21528_COVER_PIN = 'd2fc4ac7';
+  const __V21528_COVER_MANIFEST_URLS = [
+    'https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@' + __V21528_COVER_PIN + '/staging/modular/meggy/covers/cover-manifest.json',
+    'https://raw.githubusercontent.com/esaaraujo-lab/gdi_server/main/staging/modular/meggy/covers/cover-manifest.json',
+    'https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/cover-manifest.json'
+  ];
+  const __V21528_COVER_FETCH_TIMEOUT_MS = 2500;
+  const __V21528_COVER_MIN_KEYWORD = 3;
+  let __v21528CoverManifestPromise = null;
+  function __v21528Esc(s){ try{ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;'); }catch(_){ return String(s || ''); } }
+  function __v21528CoverNorm(t){
+    try{
+      return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
+    }catch(_){ return String(t || '').toLowerCase(); }
+  }
+  function __v21528CoverParseManifest(text){
+    try{
+      const d = (typeof text === 'string') ? JSON.parse(text) : text;
+      const arr = Array.isArray(d) ? d : ((d && Array.isArray(d.images)) ? d.images : null);
+      if(!arr) return [];
+      const out = [];
+      for(const e of arr){
+        if(!e || typeof e.url !== 'string' || !/^https?:\/\//i.test(e.url)) continue;
+        const kws = Array.isArray(e.keywords) ? e.keywords.map(__v21528CoverNorm).filter(Boolean) : [];
+        if(!kws.length) continue;
+        out.push({ id: String(e.id || ''), keywords: kws, url: e.url });
+      }
+      return out;
+    }catch(_){ return []; }
+  }
+  function __v21528CoverRewritePinned(url){
+    const u = String(url || '');
+    return u.indexOf('esaaraujo-lab/gdi_server@main/') >= 0
+      ? u.replace('esaaraujo-lab/gdi_server@main/', 'esaaraujo-lab/gdi_server@' + __V21528_COVER_PIN + '/') : u;
+  }
+  function __v21528CoverFetchJson(url){
+    try{
+      const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+      let timer = null;
+      if(ctrl) timer = setTimeout(function(){ try{ ctrl.abort(); }catch(_){} }, __V21528_COVER_FETCH_TIMEOUT_MS);
+      return fetch(url, { headers: { 'Accept': 'application/json' }, cache: 'no-store', signal: ctrl ? ctrl.signal : undefined }).then(function(r){
+        if(timer) clearTimeout(timer);
+        if(!r || !r.ok) throw new Error('HTTP ' + (r && r.status));
+        return r.text();
+      }).then(function(t){ return __v21528CoverParseManifest(t); }).catch(function(e){ if(timer) clearTimeout(timer); throw e; });
+    }catch(e){ return Promise.reject(e); }
+  }
+  async function __v21528CoverManifest(){
+    if(__v21528CoverManifestPromise) return __v21528CoverManifestPromise;
+    __v21528CoverManifestPromise = (async function(){
+      for(const u of __V21528_COVER_MANIFEST_URLS){
+        try{ const imgs = await __v21528CoverFetchJson(u); if(Array.isArray(imgs) && imgs.length) return imgs; }catch(_){}
+      }
+      return null;
+    })();
+    return __v21528CoverManifestPromise;
+  }
+  function __v21528CoverLibraryUrl(images, name, coursePath){
+    if(!Array.isArray(images) || !images.length) return null;
+    const cands = [];
+    const raws = [name, coursePath];
+    for(let i = 0; i < raws.length; i++){
+      const raw = raws[i]; if(raw == null || raw === '') continue;
+      const segs = String(raw).split('/').reverse();
+      for(let j = 0; j < segs.length; j++){ const n = __v21528CoverNorm(segs[j]); if(n) cands.push(n); }
+    }
+    for(let ci = 0; ci < cands.length; ci++){
+      const cand = cands[ci];
+      let best = null, bestLen = 0;
+      for(let ii = 0; ii < images.length; ii++){
+        const im = images[ii]; if(!im || !Array.isArray(im.keywords)) continue;
+        for(let ki = 0; ki < im.keywords.length; ki++){
+          const kw = im.keywords[ki];
+          if(!kw || kw.length < __V21528_COVER_MIN_KEYWORD) continue;
+          if(kw.length <= bestLen) continue;
+          if(cand.indexOf(kw) >= 0){ best = im; bestLen = kw.length; }
+        }
+      }
+      if(best) return __v21528CoverRewritePinned(best.url);
+    }
+    return null;
+  }
+  function __v21528CoverDefaultArt(icon, hidden){
+    return '<div class="gdi-course-cover-default" style="width:100%;aspect-ratio:16/9;border-radius:10px 10px 0 0;display:' + (hidden ? 'none' : 'flex') + ';align-items:center;justify-content:center;background:var(--ferreto-grad,linear-gradient(135deg,#ff8b9f 0%,#c026d3 55%,#5ddeda 130%));"><span style="font-size:34px;line-height:1;">' + __v21528Esc(icon || '⭐') + '</span></div>';
+  }
+  function __v21528TileCoverHtml(c, icon){
+    const u = c ? ((c.coverUrl || c.thumbUrl || c.thumbnail || '')) : '';
+    if(typeof u === 'string' && /^https?:\/\//i.test(u)) return '<div class="meggy-card-cover"><img src="' + __v21528Esc(u) + '" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px 10px 0 0;display:block;" onerror="this.style.display=\'none\';var n=this.nextElementSibling;if(n)n.style.display=\'flex\';">' + __v21528CoverDefaultArt(icon, true) + '</div>';
+    return '<div class="meggy-card-cover">' + __v21528CoverDefaultArt(icon, false) + '</div>';
+  }
+  // ★ texto da contagem p/ o meta do fallback: total 0 em destaque =
+  //   "aulas em breve" (nunca "0 aulas").
+  function __v21528CountText(it){
+    if(it && it.kind === 'featured' && !((it.total) || 0)) return 'aulas em breve';
+    return ((it && it.total) || 0) + ' aulas';
+  }
+  async function __v21528UpgradeTileCovers(root, gen){
+    try{
+      if(!root || typeof root.querySelectorAll !== 'function') return;
+      if(gen !== undefined && gen !== null && root.__filterGen !== undefined && root.__filterGen !== gen) return;
+      const imgs = await __v21528CoverManifest();
+      if(!imgs) return;
+      if(gen !== undefined && gen !== null && root.__filterGen !== undefined && root.__filterGen !== gen) return;
+      const cards = root.querySelectorAll('[data-v21528-cover]');
+      for(let i = 0; i < cards.length; i++){
+        try{
+          const card = cards[i];
+          if(!card || card.isConnected === false) continue;
+          const url = __v21528CoverLibraryUrl(imgs, (card.dataset && card.dataset.v21528CoverName) || '', (card.dataset && card.dataset.v21528CoverPath) || '');
+          if(!url) continue;
+          const art = card.querySelector ? card.querySelector('.gdi-course-cover-default') : null;
+          if(!art) continue;
+          const img = document.createElement('img');
+          img.src = url; img.alt = '';
+          img.style.cssText = 'width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px 10px 0 0;display:block;';
+          img.onerror = (function(im, a){ return function(){ try{ im.style.display = 'none'; a.style.display = 'flex'; }catch(_){} }; })(img, art);
+          if(art.parentNode && art.parentNode.insertBefore) art.parentNode.insertBefore(img, art);
+          else if(card.insertBefore) card.insertBefore(img, art);
+          art.style.display = 'none';
+          if(card.removeAttribute) card.removeAttribute('data-v21528-cover');
+        }catch(_){}
+      }
+    }catch(_){}
+  }
+  // ★ v2.15.28 (A — capas em destaque) — END
+
   const Shell = {
     state: {
       currentView: 'home',
@@ -471,17 +604,20 @@
           if (!list.length) { sec.innerHTML = ''; return; }
           sec.innerHTML = '<div class="meggy-continue-section"><h2>⭐ Cursos em destaque</h2><div class="meggy-cards-grid">' + list.map(c => {
             const name = Shell._esc(c.courseName || c.coursePath || 'Curso');
-            // ★ v2.15.6 (capa 4a): exibe a coverUrl (16:9) quando há capa;
-            //   sem coverUrl, mantém o emoji (nunca inventa imagem).
-            const cover = c.coverUrl
-              ? '<img src="' + Shell._esc(c.coverUrl) + '" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px 10px 0 0;display:block;" onerror="this.style.display=\'none\'">'
-              : '<div class="meggy-card-icon">' + Shell._esc(c.icon || '📚') + '</div>';
-            return '<div class="meggy-card" data-course="' + Shell._esc(c.coursePath || '') + '">' +
+            // ★ v2.15.28 (A): capa pela hierarquia (coverUrl → biblioteca
+            //   → arte padrão); sem coverUrl o cartão marca-se p/ o upgrade
+            //   da biblioteca. A regra v2.15.6 (só coverUrl, sem imagem
+            //   quando não há) deixava o tile com a faixa vazia.
+            const cover = __v21528TileCoverHtml({ coverUrl: c.coverUrl }, c.icon || '📚');
+            const mark = c.coverUrl ? '' : ' data-v21528-cover="" data-v21528-cover-name="' + Shell._esc(c.courseName || '') + '" data-v21528-cover-path="' + Shell._esc(c.coursePath || '') + '"';
+            return '<div class="meggy-card" data-course="' + Shell._esc(c.coursePath || '') + '"' + mark + '>' +
               cover +
               '<div class="meggy-card-title">' + name + '</div>' +
               '<div class="meggy-card-meta">Curso em destaque</div>' +
             '</div>';
           }).join('') + '</div></div>';
+          // ★ v2.15.28 (A): upgrade das capas da biblioteca (assíncrono).
+          __v21528UpgradeTileCovers(sec).catch(() => {});
           sec.querySelectorAll('.meggy-card[data-course]').forEach(card => {
             card.onclick = () => {
               const cp = card.dataset.course;
@@ -648,16 +784,18 @@
                         //   canónico do drive (mesma regra B1) entra a seguir
                         //   ao badge; concursos mantêm-se sem drive.
                         const __drv = it.kind === 'concurso' ? '' : __driveNameOf(it.coursePath);
-                        const meta = badge + (__drv ? ' · ' + __drv : '') + (it.kind === 'concurso' ? '' : ' · ' + (it.total || 0) + ' aulas') + (it.percent != null && it.total ? ' · ' + it.percent + '% concluído' : '') + (it.examDate ? ' · 📅 ' + it.examDate : '');
+                        // ★ v2.15.28 (A): total 0 em destaque = "aulas em
+                        //   breve" (nunca "0 aulas").
+                        const meta = badge + (__drv ? ' · ' + __drv : '') + (it.kind === 'concurso' ? '' : ' · ' + __v21528CountText(it)) + (it.percent != null && it.total ? ' · ' + it.percent + '% concluído' : '') + (it.examDate ? ' · 📅 ' + it.examDate : '');
                         const idAttr = it.kind === 'concurso' ? ' data-concurso-id="' + Shell._esc(it.concursoId) + '"' : ' data-course="' + Shell._esc(it.coursePath || '') + '"';
                         const rmBtn = it.kind === 'featured' ? '' :
                           '<button class="' + (it.kind === 'concurso' ? 'concurso-remove-btn' : 'course-remove-btn') + '" data-' + (it.kind === 'concurso' ? 'concurso-id="' + Shell._esc(it.concursoId) + '" data-concurso-name="' + Shell._esc(name) + '"' : 'course-path="' + Shell._esc(it.coursePath || '') + '" data-course-name="' + Shell._esc(name) + '"') + ' title="Remover" style="position:absolute;top:8px;right:8px;background:transparent;border:0;color:#8b949e;cursor:pointer;font-size:14px;padding:2px 6px;border-radius:6px;">✕</button>';
-                        // ★ v2.15.6 (capa 4a): mesma regra da home — coverUrl
-                        //   16:9 quando há capa; emoji quando não há.
-                        const __cover = it.coverUrl
-                          ? '<img src="' + Shell._esc(it.coverUrl) + '" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px 10px 0 0;display:block;" onerror="this.style.display=\'none\'">'
-                          : '<div class="meggy-card-icon">' + Shell._esc(it.icon || '📚') + '</div>';
-                        return '<div class="meggy-card"' + idAttr + ' style="cursor:pointer;position:relative;">' + rmBtn +
+                        // ★ v2.15.28 (A): capa pela hierarquia (coverUrl →
+                        //   biblioteca → arte padrão); sem coverUrl o cartão
+                        //   marca-se p/ o upgrade da biblioteca.
+                        const __cover = __v21528TileCoverHtml({ coverUrl: it.coverUrl }, it.icon || '📚');
+                        const __mark = (it.kind === 'concurso' || it.coverUrl) ? '' : ' data-v21528-cover="" data-v21528-cover-name="' + Shell._esc(name) + '" data-v21528-cover-path="' + Shell._esc(it.coursePath || '') + '"';
+                        return '<div class="meggy-card"' + idAttr + __mark + ' style="cursor:pointer;position:relative;">' + rmBtn +
                           __cover +
                           '<div class="meggy-card-title">' + Shell._esc(name) + '</div>' +
                           '<div class="meggy-card-meta">' + Shell._esc(meta) + '</div>' +
@@ -676,6 +814,8 @@
                       (__feat.length ? '<div class="meggy-continue-section"><h2>⭐ Cursos em destaque</h2><div class="meggy-cards-grid" style="' + __gridStyle + '">' + __feat.map(__cardHtml).join('') + '</div></div>' : '') +
                       (__own.length ? '<div class="meggy-continue-section"><h2>📚 Meus Cursos</h2><div class="meggy-cards-grid" style="' + __gridStyle + '">' + __own.map(__cardHtml).join('') + '</div></div>' : '') +
                       '<div style="color:#9aa4b8;font-size:12px;margin-top:10px;">📊 Snapshot do D1 às ' + ((data && data.snapshotAt) ? new Date(data.snapshotAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—') + ' — mudam enquanto o scanner insere aulas; recarregue a página para atualizar.</div>';
+                    // ★ v2.15.28 (A): upgrade das capas da biblioteca (assíncrono).
+                    __v21528UpgradeTileCovers(container).catch(() => {});
                     container.querySelectorAll('.meggy-card[data-concurso-id]').forEach(card => {
                       card.onclick = () => Shell.views.concursoDetail(el, card.dataset.concursoId);
                     });
@@ -845,7 +985,8 @@
               //   da busca global tinha o mesmo padrão sem drive — mesmo
               //   tratamento do fallback de /cursos; concursos sem drive.
               const __drv = it.kind === 'concurso' ? '' : __driveNameOf(it.coursePath);
-              const meta = badge + (__drv ? ' · ' + __drv : '') + (it.kind === 'concurso' ? '' : ' · ' + (it.total || 0) + ' aulas');
+              // ★ v2.15.28 (A): total 0 em destaque = "aulas em breve".
+              const meta = badge + (__drv ? ' · ' + __drv : '') + (it.kind === 'concurso' ? '' : ' · ' + __v21528CountText(it));
               return '<div class="meggy-card" data-search-course="' + esc(it.coursePath || '') + '" data-search-concurso="' + esc(it.concursoId || '') + '" style="cursor:pointer;"><div class="meggy-card-icon">' + esc(it.icon || '📚') + '</div><div class="meggy-card-title">' + esc(name) + '</div><div class="meggy-card-meta">' + esc(meta) + '</div></div>';
             }).join('') + '</div></div>';
           }
