@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- v2.1.8 — Anel de foco do disco de play: anel rosa 3dp ao redor
-     do disco escuro (60% preto). Antes: oval branco + oval rosa
+     do disco escuro (50% preto, Frente E). Antes: oval branco + oval rosa
      (anel claro + fundo rosa saturado). -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
@@ -10,7 +10,7 @@
     </item>
     <item android:left="3dp" android:top="3dp" android:right="3dp" android:bottom="3dp">
         <shape android:shape="oval">
-            <solid android:color="#99000000" />
+            <solid android:color="#80000000" />
         </shape>
     </item>
 </layer-list>
