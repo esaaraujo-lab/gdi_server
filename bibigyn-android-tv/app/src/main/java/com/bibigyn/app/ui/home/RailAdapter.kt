@@ -101,11 +101,11 @@ class RailAdapter(
                     cardDriveArt.visibility = View.VISIBLE
                 }
             }
-            // Camada 3 — biblioteca por tipo (aula → curso → caminho);
+            // Camada 3 ESTRITA (2.1.12) — biblioteca por tipo (aula → curso → caminho);
             // sem match, (4) capa gerada / arte do drive. O thumb
             // falhando e o sem-thumb caem aqui (showDriveArt).
             val showDriveArt = {
-                val libraryUrl = CoverLibrary.resolve(
+                val libraryUrl = CoverLibrary.resolveStrict(
                     ctx, item.title, item.subtitle, item.file?.folderPath
                 )
                 if (!libraryUrl.isNullOrBlank()) {
