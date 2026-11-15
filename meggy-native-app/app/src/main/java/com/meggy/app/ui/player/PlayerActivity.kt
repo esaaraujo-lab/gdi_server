@@ -528,11 +528,12 @@ class PlayerActivity : AppCompatActivity() {
         binding.audioCoverTitle.text = item.name
         binding.audioCoverSub.text = if ((item.folderLabel ?: "").contains("podcast", true) ||
             item.name.contains("podcast", true) || item.name.contains("cast", true)) "🎙 Podcast" else "Áudio"
-        // v2.7.11 onda 2 + camada (3) — capa de áudio: thumb do Drive,
-        // senão a imagem da biblioteca pelo nome do áudio/aula, senão
-        // a capa gerada do drive (nunca monograma).
+        // v2.7.11 onda 2 + camada (3) ESTRITA (2.7.13, sem 'geral') —
+        // capa de áudio: thumb do Drive, senão a imagem da biblioteca
+        // pelo nome do áudio/aula, senão a capa gerada do drive
+        // (nunca monograma).
         val coverRes = ThumbArt.coverResForPath(item.folderPath ?: "")
-        val thumb = LibraryCovers.remoteCover(
+        val thumb = LibraryCovers.remoteCoverStrict(
             item.thumbnailLink, item.name, item.folderLabel, item.folderPath
         )
         if (!thumb.isNullOrBlank()) {
