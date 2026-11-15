@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- v2.7.10 — Scrim da barra inferior do player: preto 60% na base (Frente E: era 72%)
-     (skill video-player-ux: scrim 60–72% sob texto/controles sobre o
-     video), transparente no topo. O top_gradient estava INVERTIDO
+<!-- v2.7.10 — Scrim da barra inferior do player: preto 75% na base (Frente R3A, gradiente Plyr; Frente E: era 60%)
+     (skill video-player-ux: scrim sob texto/controles sobre o video;
+     Plyr: transparente -> preto 75%), transparente no topo. O top_gradient estava INVERTIDO
      aqui (escuro no topo, transparente embaixo). -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <gradient
         android:angle="90"
-        android:startColor="#99000000"
+        android:startColor="#BF000000"
         android:endColor="@android:color/transparent"
         android:type="linear" />
 </shape>
