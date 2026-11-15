@@ -15,6 +15,7 @@ import com.meggy.app.util.FocusAnimator
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.TvUtils
 import com.meggy.app.util.LibraryCovers
+import com.meggy.app.util.ThumbArt
 
 /**
  * v2.7.6 — Rail "Explorar drives" (conceito home).
@@ -71,24 +72,26 @@ class DriveRailAdapter(
             // o card segue exatamente como antes (gone = sem mudança
             // visual); o else é obrigatório (view reciclada).
             val adminCover = featuredCovers[coursePath]?.takeIf { it.isNotBlank() }
-            // v2.7.11 camada (3): sem capa do admin, a imagem da
-            // biblioteca pelo nome do drive/curso; sem match, a imagem
-            // 'geral' (fallback da camada 3); sem manifesto, o card
-            // segue como antes (sem foto de fundo).
+            // v2.7.11 camada (3) ESTRITA (2.7.13, sem 'geral'): sem
+            // capa do admin, a imagem da biblioteca pelo nome do
+            // drive/curso; sem match, a capa gerada do drive (4) —
+            // foto real do curso, nunca o livro 'geral'.
             val driveCoverUrl = adminCover
-                ?: LibraryCovers.resolve(drive.name, drive.tagline)
+                ?: LibraryCovers.resolveStrict(drive.name, drive.tagline)
             if (driveCoverUrl != null) {
                 driveCover.visibility = View.VISIBLE
                 driveScrim.visibility = View.VISIBLE
                 driveCover.load(driveCoverUrl) {
                     listener(onError = { _, _ ->
-                        driveCover.visibility = View.GONE
-                        driveScrim.visibility = View.GONE
+                        driveCover.visibility = View.VISIBLE
+                        driveScrim.visibility = View.VISIBLE
+                        driveCover.setImageResource(ThumbArt.coverResForDrive(drive))
                     })
                 }
             } else {
-                driveCover.visibility = View.GONE
-                driveScrim.visibility = View.GONE
+                driveCover.visibility = View.VISIBLE
+                driveScrim.visibility = View.VISIBLE
+                driveCover.setImageResource(ThumbArt.coverResForDrive(drive))
             }
 
             val sm = SessionManager.get(holder.itemView.context)
