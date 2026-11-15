@@ -53,6 +53,7 @@ class HomeActivity : AppCompatActivity() {
     private var heroRotator: HeroRotator? = null
     /** v1.0.8 onda 2 — coverUrl do admin por indice de drive (hero). */
     private var featuredCovers: Map<Int, String> = emptyMap()
+    private var drivesAdapter: DriveRailAdapter? = null
     private var lastFocusContinue = 0
     private var lastFocusDrives = 0
 
@@ -173,6 +174,7 @@ class HomeActivity : AppCompatActivity() {
             }
             if (byDrive.isEmpty()) return@launch
             featuredCovers = byDrive
+            drivesAdapter?.setFeaturedCovers(byDrive)
             heroRotator?.updateCoverUrls(byDrive)
         }
     }
@@ -261,15 +263,16 @@ class HomeActivity : AppCompatActivity() {
             // escuro limpo (heroBg) fica por baixo.
             // v1.0.8 camada 3 — hierarquia da capa do hero: (a) coverUrl
             // do admin (featured) via Coil; senao (3) a imagem da
-            // biblioteca pelo titulo/nome do drive; senao (4) a capa
-            // local do drive (foto 16:9). Nunca monograma nem gradiente
-            // liso como capa. (O hero nao tem thumb do Drive — a (2)
-            // nao se aplica aqui.)
+            // biblioteca ESTRITA pelo titulo/nome do drive (sem 'geral',
+            // 1.0.11); senao (4) a capa local do drive (foto 16:9).
+            // Nunca monograma nem gradiente liso como capa. (O hero nao
+            // tem thumb do Drive — a (2) nao se aplica aqui.)
             binding.heroArt.loadCoverChain(
                 coverUrls[driveIndexFromPath(item.drivePath)],
                 item.coverRes,
                 item.title, item.driveName,
-                placeholderRes = item.coverRes
+                placeholderRes = item.coverRes,
+                strict = true
             )
             if (animate) {
                 val inn = AlphaAnimation(0f, 1f).apply { duration = 300 }
@@ -399,10 +402,11 @@ class HomeActivity : AppCompatActivity() {
         binding.featuredProgressText.text = "$progress% concluído"
         binding.featuredTimeText.text = Format.positionText(pos, dur)
         // v1.0.8 — thumb real; sem thumb, a imagem da biblioteca
-        // pelo nome da aula/pasta (camada 3); sem match, a capa do drive
-        // (arte local). Monograma nunca mais como thumb.
+        // ESTRITA pelo nome da aula/pasta (camada 3, sem 'geral' — 1.0.11);
+        // sem match, a capa do drive (arte local). Monograma nunca mais
+        // como thumb.
         val featuredCoverRes = driveCoverRes(driveIndexFromPath(best.folderPath) ?: 15)
-        val featuredLibUrl = CoverLibrary.resolve(this, best.videoName, best.folderPath)
+        val featuredLibUrl = CoverLibrary.resolveStrict(this, best.videoName, best.folderPath)
         fun showFeaturedArt() {
             binding.featuredThumb.visibility = View.GONE
             binding.featuredArt.visibility = View.VISIBLE
@@ -619,10 +623,11 @@ class HomeActivity : AppCompatActivity() {
         binding.railDrives.layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         binding.railDrives.addItemDecoration(RailGutterDecoration(8))
-        binding.railDrives.adapter = DriveRailAdapter(DriveItem.ALL) { drive ->
+        drivesAdapter = DriveRailAdapter(DriveItem.ALL, featuredCovers) { drive ->
             lastFocusDrives = DriveItem.ALL.indexOf(drive)
             openDrive(drive)
         }
+        binding.railDrives.adapter = drivesAdapter
     }
 
     private fun openDrive(drive: DriveItem) {
