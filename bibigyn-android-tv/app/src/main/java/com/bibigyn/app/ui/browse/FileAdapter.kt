@@ -10,9 +10,9 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.bibigyn.app.R
+import com.bibigyn.app.data.DriveItem
 import com.bibigyn.app.data.FileItem
 import com.bibigyn.app.data.colorFromString
-import com.bibigyn.app.data.monogramFor
 import com.bibigyn.app.databinding.ItemRailCardBinding
 import com.bibigyn.app.util.CardGradient
 import com.bibigyn.app.util.CoverLibrary
@@ -25,8 +25,8 @@ import com.bibigyn.app.util.TvUtils
  * v2.1.5 — Grade de arquivos (detalhe/navegação).
  *
  * Mesma estrutura do RailAdapter: thumb real via Coil quando houver
- * (vídeos/PDFs/áudios), monograma tipográfico quando não houver —
- * NUNCA emoji de câmera. Progresso real (% + "Xmin restantes") para
+ * (vídeos/PDFs/áudios), capa gerada do drive quando não houver —
+ * NUNCA emoji de câmera nem monograma. Progresso real (% + "Xmin restantes") para
  * vídeos com resume; badges ✓/▶ continuar; ⭐ (pasta = curso, resto =
  * arquivo). Foco via FocusAnimator.attachCard.
  */
@@ -92,36 +92,34 @@ class FileAdapter(
 
             // Thumb real quando houver; sem ela (ou se ela
             // falhar), camada 3 — biblioteca por tipo (nome do
-            // arquivo/pasta → caminho); sem match, o monograma.
-            val showLibraryOrMonogram = {
+            // arquivo/pasta → caminho); sem match, a capa gerada
+            // do drive (nunca monograma — o layout não tem monograma).
+            val coverRes = DriveItem.coverResForPath(currentFolderPath)
+            val showLibraryOrCover = {
                 val libraryUrl = CoverLibrary.resolve(ctx, item.name, currentFolderPath)
                 if (!libraryUrl.isNullOrBlank()) {
                     cardThumbnail.visibility = View.VISIBLE
-                    cardMonogram.visibility = View.GONE
                     cardThumbnail.load(libraryUrl) {
-                        error(R.drawable.card_gradient_pink)
+                        error(coverRes ?: R.drawable.card_gradient_pink)
                         listener(onError = { _, _ ->
-                            cardThumbnail.visibility = View.GONE
-                            cardMonogram.visibility = View.VISIBLE
-                            cardMonogram.text = monogramFor(item.name)
+                            cardThumbnail.visibility = View.VISIBLE
+                            cardThumbnail.setImageResource(coverRes ?: R.drawable.card_gradient_pink)
                         })
                     }
                 } else {
-                    cardThumbnail.visibility = View.GONE
-                    cardMonogram.visibility = View.VISIBLE
-                    cardMonogram.text = monogramFor(item.name)
+                    cardThumbnail.visibility = View.VISIBLE
+                    cardThumbnail.setImageResource(coverRes ?: R.drawable.card_gradient_pink)
                 }
             }
             val thumbUrl = item.thumbnailLink
             if (thumbUrl != null && (item.isVideo || item.isPdf || item.isAudio)) {
                 cardThumbnail.visibility = View.VISIBLE
-                cardMonogram.visibility = View.GONE
                 cardThumbnail.load(thumbUrl) {
-                    error(R.drawable.card_gradient_pink)
-                    listener(onError = { _, _ -> showLibraryOrMonogram() })
+                    error(coverRes ?: R.drawable.card_gradient_pink)
+                    listener(onError = { _, _ -> showLibraryOrCover() })
                 }
             } else {
-                showLibraryOrMonogram()
+                showLibraryOrCover()
             }
 
             // Progresso real para vídeos.
