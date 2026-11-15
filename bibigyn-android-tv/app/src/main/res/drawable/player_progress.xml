@@ -1,23 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Frente E — Barra de progresso do player (SO o player; os cards
+<!-- Frente E / R3A — Barra de progresso do player (SO o player; os cards
      continuam com progress_horizontal.xml, que NAO e tocado): trilho
-     fino de 4dp (insets de 14dp num SeekBar de 32dp) e mais
-     transparente — trilho branco 12% (era 20%), preenchimento na cor
+     fino de 5dp (insets de 15dp num SeekBar de 35dp, Plyr: track 5px)
+     — trilho branco 25% (era 12%; Plyr #ffffff40), preenchimento na cor
      da marca a 70% (player_progress_fill, por app). -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item
         android:id="@android:id/background"
-        android:top="14dp"
-        android:bottom="14dp">
+        android:top="15dp"
+        android:bottom="15dp">
         <shape>
             <corners android:radius="2dp" />
-            <solid android:color="#1FFFFFFF" />
+            <solid android:color="#40FFFFFF" />
         </shape>
     </item>
     <item
         android:id="@android:id/progress"
-        android:top="14dp"
-        android:bottom="14dp">
+        android:top="15dp"
+        android:bottom="15dp">
         <clip>
             <shape>
                 <corners android:radius="2dp" />
