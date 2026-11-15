@@ -1,9 +1,14 @@
 package com.vovofit.app.ui.reader
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.text.Editable
 import android.text.TextWatcher
@@ -22,6 +27,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import com.vovofit.app.R
 import com.vovofit.app.data.AiService
+import com.vovofit.app.data.ApiService
 import com.vovofit.app.databinding.ActivityPdfReaderBinding
 import com.vovofit.app.ui.home.HomeActivity
 import com.vovofit.app.ui.mylist.MyListActivity
@@ -45,7 +51,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import android.util.LruCache
+import android.view.GestureDetector
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.ViewGroup
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -94,6 +102,10 @@ class PdfReaderActivity : AppCompatActivity() {
         const val SUMMARY_MIN_READABLE_CHARS = 200
         /** Páginas máx. lidas por OCR quando o PDF não tem camada de texto. */
         const val SUMMARY_MAX_OCR_PAGES = 4
+        /** Frente R5B — atraso sem interação antes de esconder as barras. */
+        const val CHROME_HIDE_DELAY_MS = 3000L
+        /** Frente R5B — duração da animação das barras (ms). */
+        const val CHROME_ANIM_MS = 275L
     }
 
     private lateinit var binding: ActivityPdfReaderBinding
@@ -124,6 +136,16 @@ class PdfReaderActivity : AppCompatActivity() {
     private var pageAdapter: PdfPageAdapter? = null
     private var layoutManager: LinearLayoutManager? = null
 
+    // Frente R5B — PDF em tela cheia no celular (ver bloco R5B).
+    private var isTvReader = false
+    private var chromeVisible = true
+    private val chromeHandler = Handler(Looper.getMainLooper())
+    private val hideChromeRunnable = Runnable { hideChrome() }
+    private var goToPageDialog: AlertDialog? = null
+    private val chromeBarAnims = HashMap<View, ValueAnimator>()
+    private val chromeBarHeights = HashMap<View, Int>()
+    private val chromeBarMargins = HashMap<View, Int>()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityPdfReaderBinding.inflate(layoutInflater)
@@ -135,7 +157,9 @@ class PdfReaderActivity : AppCompatActivity() {
 
         binding.toolbar.title = docName
         binding.toolbar.setNavigationOnClickListener { finish() }
-        if (TvUtils.isTv(this)) {
+        // Frente R5B — guarda p/ o auto-hide (só no celular).
+        isTvReader = TvUtils.isTv(this)
+        if (isTvReader) {
             binding.bottomNav.visibility = View.GONE
             binding.pdfPages.isFocusable = true
         } else {
@@ -158,7 +182,14 @@ class PdfReaderActivity : AppCompatActivity() {
         binding.btnSearch.setOnClickListener {
             val show = binding.searchBar.visibility != View.VISIBLE
             binding.searchBar.visibility = if (show) View.VISIBLE else View.GONE
-            if (show) binding.searchInput.requestFocus()
+            if (show) {
+                binding.searchInput.requestFocus()
+                // Frente R5B — busca aberta: cancela o auto-hide.
+                chromeHandler.removeCallbacks(hideChromeRunnable)
+            } else {
+                // Frente R5B — busca fechada: rearma o temporizador.
+                scheduleChromeHide()
+            }
         }
         binding.btnSearchNext.setOnClickListener { nextOccurrence() }
         binding.btnSearchPrev.setOnClickListener { prevOccurrence() }
@@ -183,6 +214,8 @@ class PdfReaderActivity : AppCompatActivity() {
         binding.pdfPages.layoutManager = layoutManager
         binding.pdfPages.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) {
+                // Frente R5B — rolar é interação: rearma o temporizador.
+                scheduleChromeHide()
                 val first = layoutManager?.findFirstVisibleItemPosition() ?: return
                 if (first in 0 until pageCount && first != currentPage) {
                     currentPage = first
@@ -191,6 +224,18 @@ class PdfReaderActivity : AppCompatActivity() {
                 }
             }
         })
+        // Frente R5B — um toque no PDF mostra/esconde as barras
+        // (celular). onSingleTapUp (imediato no UP) em vez de
+        // onSingleTapConfirmed (espera o timeout do duplo toque):
+        // um toque que vira scroll nunca chega aqui (há MOVE antes
+        // do UP), por isso o scroll não dispara o toggle.
+        val tapDetector = GestureDetector(this,
+            object : GestureDetector.SimpleOnGestureListener() {
+                override fun onSingleTapUp(e: MotionEvent): Boolean {
+                    if (!isTvReader) toggleChrome()
+                    return true
+                }
+            })
         // Pinch-to-zoom discreto: um passo por gesto (Frente I).
         val pinch = ScaleGestureDetector(this,
             object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
@@ -212,10 +257,165 @@ class PdfReaderActivity : AppCompatActivity() {
             })
         binding.pdfPages.setOnTouchListener { _, event ->
             pinch.onTouchEvent(event)
-            false // não consome: o scroll vertical continua no RecyclerView
+            tapDetector.onTouchEvent(event)
+            false // não consome: o scroll vertical e o pinch continuam
         }
 
         loadPdf(url)
+        // Frente R5B — o temporizador de ~3 s arranca ao abrir o PDF.
+        scheduleChromeHide()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Frente R5B — regresso ao leitor: rearma o temporizador
+        // (o onPause remove os callbacks; com um diálogo aberto o
+        // hide fica suprimido na mesma — ver isChromeSuppressed).
+        scheduleChromeHide()
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        // Frente R5B — qualquer toque rearma o temporizador (os
+        // botões das barras incluídos). Os diálogos são outra janela
+        // e não passam por aqui. Só no celular.
+        if (!isTvReader && ev.action == MotionEvent.ACTION_DOWN) scheduleChromeHide()
+        return super.dispatchTouchEvent(ev)
+    }
+
+    // ───────── Frente R5B — PDF em tela cheia no celular ─────────
+    //
+    // Ao abrir um PDF, ~3 s sem interação escondem sozinhas a toolbar,
+    // a barra inferior de controlos (bottomControlsBar) e a bottom nav
+    // — SÓ NO CELULAR; na TV os controlos ficam sempre visíveis (o
+    // D-pad precisa deles e a bottom nav já nasce GONE lá). Um toque
+    // no PDF traz as barras de volta e rearma o temporizador; rolar
+    // também rearma (ver onScrolled) e qualquer toque em botão rearma
+    // (ver dispatchTouchEvent). NÃO esconde com a barra de busca
+    // aberta nem com o diálogo do resumo ou o diálogo "ir para
+    // página" aberto (ver isChromeSuppressed).
+    //
+    // Animação: cada barra colapsa a altura (ValueAnimator, 275 ms)
+    // + fade, e a margem inferior (a bottom nav tem marginBottom)
+    // colapsa junto — o RecyclerView (peso 1 no LinearLayout)
+    // estende-se aos poucos, sem saltos de layout. A altura/margem
+    // originais são repostas no fim da animação, para a próxima
+    // medição continuar certa.
+    //
+    // A barra de estado do sistema NÃO é escondida (decisão em
+    // NOTES.md): esta Activity nunca ativou edge-to-edge e escondê-la
+    // sem isso redimensionava a janela a cada hide/show.
+
+    /** Agenda o auto-hide (~3 s); sem efeito na TV ou de barras escondidas. */
+    private fun scheduleChromeHide() {
+        if (isTvReader) return
+        chromeHandler.removeCallbacks(hideChromeRunnable)
+        if (!chromeVisible) return
+        if (isChromeSuppressed()) return
+        chromeHandler.postDelayed(hideChromeRunnable, CHROME_HIDE_DELAY_MS)
+    }
+
+    /** Verdadeiro com a busca aberta ou um diálogo do leitor aberto. */
+    private fun isChromeSuppressed(): Boolean =
+        binding.searchBar.visibility == View.VISIBLE ||
+            summaryDialog?.isShowing == true ||
+            goToPageDialog?.isShowing == true
+
+    /** Esconde as 3 barras (celular; na TV nunca corre). */
+    private fun hideChrome() {
+        if (isTvReader || !chromeVisible || isChromeSuppressed()) return
+        chromeVisible = false
+        animateChromeBar(binding.toolbar, show = false)
+        animateChromeBar(binding.bottomControlsBar, show = false)
+        animateChromeBar(binding.bottomNav, show = false)
+    }
+
+    /** Mostra as 3 barras e rearma o temporizador. */
+    private fun showChrome() {
+        if (isTvReader || chromeVisible) return
+        chromeVisible = true
+        animateChromeBar(binding.toolbar, show = true)
+        animateChromeBar(binding.bottomControlsBar, show = true)
+        animateChromeBar(binding.bottomNav, show = true)
+        scheduleChromeHide()
+    }
+
+    /** Um toque no PDF: mostra se escondidas, esconde se visíveis. */
+    private fun toggleChrome() {
+        if (chromeVisible) hideChrome() else showChrome()
+    }
+
+    /**
+     * Colapsa/expande UMA barra animando a altura (0 ↔ altura medida)
+     * + a margem inferior + o alpha, em CHROME_ANIM_MS. Animações em
+     * curso na mesma vista são canceladas antes (toques rápidos não
+     * acumulam animações). A altura original (56dp em px na toolbar,
+     * WRAP_CONTENT nas outras) e a margem original são guardadas à
+     * 1ª chamada e repostas no fim, para a próxima medição ser certa.
+     */
+    private fun animateChromeBar(view: View, show: Boolean) {
+        chromeBarAnims[view]?.cancel()
+        val lp = view.layoutParams as? ViewGroup.MarginLayoutParams ?: return
+        if (!chromeBarHeights.containsKey(view)) {
+            chromeBarHeights[view] = lp.height
+            chromeBarMargins[view] = lp.bottomMargin
+        }
+        val origHeight = chromeBarHeights[view] ?: ViewGroup.LayoutParams.WRAP_CONTENT
+        val origMargin = chromeBarMargins[view] ?: 0
+        val fullHeight = if (origHeight > 0) origHeight else measureBarHeight(view)
+        val startHeight = if (show) lp.height.coerceIn(0, fullHeight) else view.height
+        val startMargin = if (show) lp.bottomMargin.coerceIn(0, origMargin) else lp.bottomMargin
+        val startAlpha = view.alpha
+        if (show) {
+            // Altura/margem/alpha iniciais ANTES de ficar visível:
+            // sem isto havia 1 frame à altura cheia.
+            lp.height = startHeight
+            lp.bottomMargin = startMargin
+            view.alpha = startAlpha
+            view.visibility = View.VISIBLE
+            view.requestLayout()
+        }
+        val anim = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = CHROME_ANIM_MS
+            addUpdateListener { a ->
+                val f = a.animatedValue as Float
+                lp.height = if (show) {
+                    (startHeight + (fullHeight - startHeight) * f).toInt()
+                } else {
+                    (startHeight * (1f - f)).toInt()
+                }
+                lp.bottomMargin = if (show) {
+                    (startMargin + (origMargin - startMargin) * f).toInt()
+                } else {
+                    (startMargin * (1f - f)).toInt()
+                }
+                view.alpha = if (show) startAlpha + (1f - startAlpha) * f
+                    else startAlpha * (1f - f)
+                view.requestLayout()
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    chromeBarAnims.remove(view)
+                    if (!show) view.visibility = View.GONE
+                    // Repõe altura/margem/alpha originais (a vista
+                    // GONE não ocupa espaço; a VISIBLE mede de novo).
+                    lp.height = origHeight
+                    lp.bottomMargin = origMargin
+                    view.alpha = 1f
+                    view.requestLayout()
+                }
+            })
+        }
+        chromeBarAnims[view] = anim
+        anim.start()
+    }
+
+    /** Altura natural da barra (p/ as de WRAP_CONTENT). */
+    private fun measureBarHeight(view: View): Int {
+        val widthSpec = View.MeasureSpec.makeMeasureSpec(
+            resources.displayMetrics.widthPixels, View.MeasureSpec.EXACTLY)
+        val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        view.measure(widthSpec, heightSpec)
+        return view.measuredHeight.coerceAtLeast(1)
     }
 
     private fun updateBookmarkButton() {
@@ -334,7 +534,10 @@ class PdfReaderActivity : AppCompatActivity() {
             setText((currentPage + 1).toString())
             setSelection(text.length)
         }
-        AlertDialog.Builder(this)
+        // Frente R5B — guarda a referência: enquanto estiver aberto o
+        // auto-hide fica suprimido (ver isChromeSuppressed); ao fechar
+        // rearma o temporizador.
+        goToPageDialog = AlertDialog.Builder(this)
             .setTitle("Ir para a página (1–$pageCount)")
             .setView(input)
             .setPositiveButton("Ir") { _, _ ->
@@ -342,6 +545,10 @@ class PdfReaderActivity : AppCompatActivity() {
                 if (page != null) goToPage(page)
             }
             .setNegativeButton("Cancelar", null)
+            .setOnDismissListener {
+                goToPageDialog = null
+                scheduleChromeHide()
+            }
             .show()
     }
 
@@ -552,11 +759,17 @@ class PdfReaderActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        // Frente R5B — sem hide enquanto a Activity não está visível.
+        chromeHandler.removeCallbacks(hideChromeRunnable)
         SessionManager.get(this).savePdfPage(docPath, currentPage)
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        // Frente R5B — sem callbacks nem animações pendentes.
+        chromeHandler.removeCallbacks(hideChromeRunnable)
+        chromeBarAnims.values.forEach { it.cancel() }
+        chromeBarAnims.clear()
         summaryJob?.cancel()
         summaryDialog?.dismiss()
         pageAdapter?.release()
@@ -610,6 +823,17 @@ class PdfReaderActivity : AppCompatActivity() {
         setSummaryLoading(getString(R.string.pdf_summary_searching_saved))
         summaryJob?.cancel()
         summaryJob = lifecycleScope.launch {
+            // Frente R5A — retry explícito do utilizador: este toque
+            // em "✨ Resumo" (ou "Gerar novamente") limpa o latch
+            // ANTES de procurar o resumo guardado, para a procura e
+            // a geração voltarem a tentar de facto. Sem isto, um 404
+            // de `load-from-folder` (ficheiro em falta) de uma
+            // tentativa anterior deixava a flag armada e o POST
+            // /api/ai nunca era tentado nesta sessão. A flag volta a
+            // armar-se se um 404 genuíno de rota de IA voltar — o
+            // cheque abaixo continua a mostrar "indisponível" nesse
+            // caso, sem loop (uma tentativa por toque).
+            AiService.clearBackendUnavailable()
             // 1) Resumo já guardado? (cache ISA + pasta de materiais)
             val cached = findSavedSummary()
             if (cached != null) {
@@ -621,42 +845,39 @@ class PdfReaderActivity : AppCompatActivity() {
                 showSummaryError(getString(R.string.pdf_summary_unavailable))
                 return@launch
             }
-            // 2) Texto do PDF (extraído; senão OCR, até 4 páginas).
+            // 2) Texto-fonte (Frente R5A2: MD primeiro, senão PDF; senão OCR).
             setSummaryLoading(getString(R.string.pdf_summary_extracting))
-            val text = resolvePdfTextForSummary()
-            if (text == null) {
+            val source = resolveSummarySource()
+            if (source == null) {
                 showSummaryError(getString(R.string.pdf_summary_no_text))
                 return@launch
             }
             // 3) Geração no servidor (POST /api/ai, kind "resumo").
             setSummaryLoading(getString(R.string.pdf_summary_generating))
-            when (val result = AiService.generatePdfSummary(this@PdfReaderActivity, summaryPrompt(text))) {
-                is AiService.PdfSummaryResult.Ok -> {
-                    pdfSummary = result.text
-                    // 4) Guarda best-effort (ISA + pasta de materiais).
-                    val key = summaryCacheKey()
-                    val savedIsa = AiService.saveSummary(
-                        this@PdfReaderActivity, key, result.text, lessonFolderName()
-                    )
-                    // Frente K — a gravação na pasta de materiais passa
-                    // pelo caminho único (saveGeneratedMaterials ->
-                    // MaterialSaver): resumo + pílulas + questões que
-                    // já existam no ISA p/ esta chave (a J gera só o
-                    // resumo; o resto vem do cache quando existir).
-                    val bundle = AiService.getGeneratedBundle(this@PdfReaderActivity, key)
-                    val report = saveGeneratedMaterials(
-                        result.text, bundle?.mindmap, bundle?.questionsJson
-                    )
-                    val note = if (savedIsa || report.anySaved) getString(R.string.pdf_summary_saved)
-                        else getString(R.string.pdf_summary_save_failed)
-                    showSummaryReady(result.text, note)
-                }
+            when (val result = AiService.generatePdfSummary(this@PdfReaderActivity, summaryPrompt(source.text))) {
+                is AiService.PdfSummaryResult.Ok -> showGeneratedSummary(result.text)
                 AiService.PdfSummaryResult.Unavailable ->
                     showSummaryError(getString(R.string.pdf_summary_unavailable))
                 AiService.PdfSummaryResult.RateLimited ->
                     showSummaryError(getString(R.string.pdf_summary_rate_limited))
-                AiService.PdfSummaryResult.Failed ->
-                    showSummaryError(getString(R.string.pdf_summary_failed))
+                AiService.PdfSummaryResult.Failed -> {
+                    // Frente R5A2 — fallback entre endpoints (regra do
+                    // Elton 17:43): o POST /api/ai falhou — tenta o
+                    // batalhão com o MESMO texto-fonte antes de
+                    // declarar erro. Só se o batalhão também falhar é
+                    // que se mostra a falha (nunca "indisponível"
+                    // enquanto houver outro endpoint por tentar).
+                    setSummaryLoading(getString(R.string.pdf_summary_generating_fallback))
+                    when (val fb = generateViaBattalion(source)) {
+                        is AiService.PdfSummaryResult.Ok -> showGeneratedSummary(fb.text)
+                        AiService.PdfSummaryResult.Unavailable ->
+                            showSummaryError(getString(R.string.pdf_summary_unavailable))
+                        AiService.PdfSummaryResult.RateLimited ->
+                            showSummaryError(getString(R.string.pdf_summary_rate_limited))
+                        AiService.PdfSummaryResult.Failed ->
+                            showSummaryError(getString(R.string.pdf_summary_failed))
+                    }
+                }
             }
         }
     }
@@ -675,9 +896,44 @@ class PdfReaderActivity : AppCompatActivity() {
         return AiService.loadFromFolder(this, docPath, "resumo")
     }
 
-    /** Texto do PDF para a IA: extraído (pdfbox) ou, sem texto, OCR. */
-    private suspend fun resolvePdfTextForSummary(): String? {
-        // Espera a extração em segundo plano (até 10 s).
+    /** Fonte do resumo: nome do material + texto. Nunca o vídeo. */
+    private data class PdfSummarySource(val name: String, val text: String)
+
+    /**
+     * Texto-fonte do resumo, na prioridade do Elton (17:43):
+     *   1. transcrição em MD da pasta da aula (via
+     *      LessonDescription.resolveSourceText — MD primeiro, senão
+     *      PDF; nunca o vídeo);
+     *   2. texto do próprio PDF, já extraído pelo leitor (mesmo
+     *      conteúdo que a fonte PDF do resolveSourceText, sem novo
+     *      download);
+     *   3. OCR das primeiras páginas (PDF escaneado).
+     * Sem fonte legível → null.
+     */
+    private suspend fun resolveSummarySource(): PdfSummarySource? {
+        // 1) MD da pasta da aula primeiro (falha de rede ao listar →
+        //    segue como antes, sem bloquear a geração).
+        val files = runCatching {
+            ApiService(this).listFolder(lessonFolderPath())
+        }.getOrNull()
+        if (files != null) {
+            val (source, _) = LessonDescription.resolveSourceText(this, files)
+            if (source != null) {
+                if (source.name.endsWith(".pdf", ignoreCase = true)) {
+                    // Fonte é o PDF: prefere o texto já extraído pelo
+                    // leitor (mesmo conteúdo); se a extração ainda não
+                    // acabou, usa o texto do resolveSourceText.
+                    val extracted = pageTexts?.joinToString("\n").orEmpty()
+                    if (extracted.count { !it.isWhitespace() } >= SUMMARY_MIN_READABLE_CHARS) {
+                        return PdfSummarySource(docName, extracted.take(SUMMARY_MAX_TEXT_CHARS))
+                    }
+                    return PdfSummarySource(source.name, source.text)
+                }
+                return PdfSummarySource(source.name, source.text)
+            }
+            // Sem fonte (PDF escaneado / sem ficheiros) → OCR abaixo.
+        }
+        // 2) Texto do próprio PDF (extraído em 2º plano; espera até 10 s).
         var waited = 0
         while (pageTexts == null && waited < 10_000) {
             delay(250)
@@ -685,10 +941,72 @@ class PdfReaderActivity : AppCompatActivity() {
         }
         val extracted = pageTexts?.joinToString("\n").orEmpty()
         if (extracted.count { !it.isWhitespace() } >= SUMMARY_MIN_READABLE_CHARS) {
-            return extracted.take(SUMMARY_MAX_TEXT_CHARS)
+            return PdfSummarySource(docName, extracted.take(SUMMARY_MAX_TEXT_CHARS))
         }
-        // Sem camada de texto → OCR das primeiras páginas.
-        return ocrPdfText()
+        // 3) Sem camada de texto → OCR das primeiras páginas.
+        val ocr = ocrPdfText() ?: return null
+        return PdfSummarySource(docName, ocr)
+    }
+
+    /** Mostra o resumo gerado e guarda-o (ISA + pasta de materiais). */
+    private suspend fun showGeneratedSummary(text: String) {
+        pdfSummary = text
+        // Guarda best-effort (ISA + pasta de materiais).
+        val key = summaryCacheKey()
+        val savedIsa = AiService.saveSummary(
+            this@PdfReaderActivity, key, text, lessonFolderName()
+        )
+        // Frente K — a gravação na pasta de materiais passa pelo
+        // caminho único (saveGeneratedMaterials -> MaterialSaver):
+        // resumo + pílulas + questões que já existam no ISA p/ esta
+        // chave (a J gera só o resumo; o resto vem do cache quando
+        // existir).
+        val bundle = AiService.getGeneratedBundle(this@PdfReaderActivity, key)
+        val report = saveGeneratedMaterials(
+            text, bundle?.mindmap, bundle?.questionsJson
+        )
+        val note = if (savedIsa || report.anySaved) getString(R.string.pdf_summary_saved)
+            else getString(R.string.pdf_summary_save_failed)
+        showSummaryReady(text, note)
+    }
+
+    /**
+     * Geração de recurso via batalhão (POST /api/ai/battalion) com o
+     * mesmo texto-fonte do primário + poll limitado do cache ISA
+     * (mesmos limites do detalhe da aula). O job continua no servidor
+     * mesmo que o utilizador feche o diálogo — o próximo toque lê o
+     * resumo guardado (findSavedSummary).
+     */
+    private suspend fun generateViaBattalion(source: PdfSummarySource): AiService.PdfSummaryResult {
+        val key = summaryCacheKey()
+        val folder = lessonFolderPath()
+        when (AiService.startBattalion(
+            this, folder, folder, lessonFolderName(),
+            listOf(AiService.BattalionPdf(source.name, "", source.text))
+        )) {
+            AiService.TriggerResult.UNAVAILABLE -> return AiService.PdfSummaryResult.Unavailable
+            AiService.TriggerResult.FAILED -> return AiService.PdfSummaryResult.Failed
+            AiService.TriggerResult.ALREADY_DONE -> {
+                val again = AiService.getSummary(this, key)
+                return if (!again.isNullOrBlank()) AiService.PdfSummaryResult.Ok(again)
+                    else AiService.PdfSummaryResult.Failed
+            }
+            AiService.TriggerResult.RUNNING, AiService.TriggerResult.STARTED -> {
+                repeat(LessonDescription.DETAIL_POLL_ATTEMPTS) {
+                    delay(LessonDescription.POLL_DELAY_MS)
+                    val found = AiService.getSummary(this, key)
+                    if (!found.isNullOrBlank()) return AiService.PdfSummaryResult.Ok(found)
+                    val status = AiService.getBattalionStatus(this, folder)
+                    if (status?.job?.done == true) {
+                        val last = AiService.getSummary(this, key)
+                        return if (!last.isNullOrBlank()) AiService.PdfSummaryResult.Ok(last)
+                            else AiService.PdfSummaryResult.Failed
+                    }
+                    if (AiService.backendUnavailable) return AiService.PdfSummaryResult.Unavailable
+                }
+                return AiService.PdfSummaryResult.Failed
+            }
+        }
     }
 
     /** Lê até SUMMARY_MAX_OCR_PAGES páginas por OCR (POST /api/ai/ocr). */
@@ -783,6 +1101,8 @@ class PdfReaderActivity : AppCompatActivity() {
             .setTitle(getString(R.string.pdf_summary_title))
             .setView(layout)
             .setPositiveButton(R.string.pdf_summary_close, null)
+            // Frente R5B — fechar o diálogo rearma o temporizador.
+            .setOnDismissListener { scheduleChromeHide() }
             .setNeutralButton(R.string.pdf_summary_regenerate) { _, _ ->
                 pdfSummary = null
                 // Fecha o diálogo atual ANTES de gerar de novo: sem
