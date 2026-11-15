@@ -8,6 +8,7 @@ import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
 import android.view.View
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
@@ -18,9 +19,9 @@ import com.bibigyn.app.data.FileItem
 import com.bibigyn.app.databinding.ActivityBrowseBinding
 import com.bibigyn.app.ui.player.PlayerActivity
 import com.bibigyn.app.util.AuthHelper
-import com.bibigyn.app.util.CrossFolderPlaylist
 import com.bibigyn.app.util.PlaylistManager
 import com.bibigyn.app.util.SessionManager
+import com.bibigyn.app.util.TapFeedback
 import com.bibigyn.app.util.TvUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -186,43 +187,57 @@ class BrowseActivity : AppCompatActivity() {
                 PlaylistManager.setPlaylist(playableItems, playIndex, this)
                 launchPlayer(fullUrl, file.name, currentPath)
             } else {
-                lifecycleScope.launch {
-                    binding.loadingView.visibility = View.VISIBLE
-                    val result = withContext(Dispatchers.IO) {
-                        CrossFolderPlaylist.build(currentPath, file, api)
-                    }
-                    binding.loadingView.visibility = View.GONE
-
-                    if (result.items.size > 1) {
-                        PlaylistManager.setPlaylist(result.items, result.startIndex, this@BrowseActivity)
-                    } else if (playableItems.isNotEmpty() && playIndex >= 0) {
-                        PlaylistManager.setPlaylist(playableItems, playIndex, this@BrowseActivity)
-                    }
-
-                    launchPlayer(fullUrl, file.name, currentPath)
+                // Frente H — ver DetailActivity.openFileInFolder: navega
+                // já; a playlist interfolder é enriquecida pelo player.
+                if (playableItems.isNotEmpty() && playIndex >= 0) {
+                    PlaylistManager.setPlaylist(playableItems, playIndex, this)
+                } else {
+                    PlaylistManager.setPlaylist(
+                        listOf(file.copy(folderPath = currentPath)), 0, this
+                    )
                 }
+                launchPlayer(fullUrl, file.name, currentPath)
             }
         } else if (file.isPdf) {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(fullUrl))
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            try { startActivity(intent) } catch (e: Exception) {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(fullUrl)))
+            try {
+                startActivity(intent)
+            } catch (_: Exception) {
+                // Frente G: sem visualizador de PDF instalado
+                // (comum na TV), o retry sem try relançava a
+                // exceção e o app fechava. Avisa em vez disso.
+                Toast.makeText(this, "Nenhum app para abrir PDFs", Toast.LENGTH_SHORT).show()
             }
         } else {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(fullUrl))
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            try { startActivity(intent) } catch (_: Exception) {}
+            try {
+                startActivity(intent)
+            } catch (_: Exception) {
+                // Frente G: antes o toque num ficheiro sem app
+                // associada não fazia nada nem avisava.
+                Toast.makeText(this, "Não foi possível abrir este arquivo", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
     private fun launchPlayer(url: String, title: String, folderPath: String) {
-        SessionManager.get(this).saveLastWatched(folderPath, title)
+        // Frente H — guarda contra duplo toque (ver DetailActivity).
+        if (!TapFeedback.tryNavigate(url)) return
+        val sm = SessionManager.get(this)
+        sm.saveLastWatched(folderPath, title)
+        // Frente H — guarda o link no recent: o "Continuar assistindo"
+        // passa a navegar sem listFolder prévio (o saveJob do player já
+        // criava o recent, mas sem o link).
+        sm.addRecent(folderPath, title, null, url.removePrefix(BiBiGynApp.BASE_URL).takeIf { it != url })
         val intent = Intent(this, PlayerActivity::class.java)
         intent.putExtra(PlayerActivity.EXTRA_URL, url)
         intent.putExtra(PlayerActivity.EXTRA_TITLE, title)
         intent.putExtra(PlayerActivity.EXTRA_FOLDER_PATH, folderPath)
         startActivity(intent)
     }
+
 
     private class GridGutterDecoration(private val gutterDp: Int) : RecyclerView.ItemDecoration() {
         override fun getItemOffsets(
