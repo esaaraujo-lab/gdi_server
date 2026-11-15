@@ -47,6 +47,8 @@
     <!-- v2.1.8 — disco de play da TV: 120dp era o circulo rosa gigante
          da foto (11:48); 96dp e o disco modesto sobre o video. -->
     <dimen name="play_fab_size">96dp</dimen>
+    <!-- Frente E — disco de play/pausa do PLAYER na TV (72dp). -->
+    <dimen name="player_fab_size">72dp</dimen>
     <dimen name="tv_rail_gap">8dp</dimen>
     <dimen name="tv_drive_tile_height">112dp</dimen>
     <dimen name="tv_hero_text_padding_side">32dp</dimen>
