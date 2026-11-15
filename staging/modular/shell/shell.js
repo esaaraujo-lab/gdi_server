@@ -276,8 +276,20 @@
       //   de pastas abaixo e não abria o player — agora vai p/
       //   _openLessonPath, que resolve a pasta p/ o seu ficheiro de
       //   mídia (ou abre a própria pasta, se não houver mídia).
-      if (_aView.get('a') === 'view' && /^\/\d+:\//.test(path)) {
-        Shell.views._openLessonPath(path);
+      // ★ v2.15.12-C3 (P6b regressão, Passo 16): o mesmo caminho normalizado
+      //   do portão do worker (C2) — '/drives' inicial + '%3A'→':' no prefixo
+      //   — MAIS uma descodificação única SÓ quando há dupla codificação
+      //   ('%25' no caminho: os hrefs antigos do breadcrumb codificavam
+      //   '%20'→'%2520'). Sem o teste, mesmo com o shell servido, o teste
+      //   cru /^\/\d+:\// falhava em %3A e a aula caía na Home. Sem '%25'
+      //   o caminho passa INTACTO (a forma do Passo 15, codificação simples
+      //   — é a que _openLessonPath/gdiListAllFiles resolvem ao vivo); com
+      //   '%25', uma descodificação repõe a forma do Passo 15.
+      const _normPath = path.replace(/^\/drives(?=\/\d+(?::|%3A)\/)/i, '').replace(/^\/(\d+)%3A\//i, '/$1:/');
+      let _normDec = _normPath;
+      if (/%25/i.test(_normPath)) { try { _normDec = decodeURIComponent(_normPath); } catch (_) {} }
+      if (_aView.get('a') === 'view' && /^\/\d+:\//.test(_normDec)) {
+        Shell.views._openLessonPath(_normDec);
         return;
       }
 
@@ -1166,7 +1178,19 @@
           cumPath += '/' + parts[i];
           const label = parts[i].match(/^\d+:$/) ? (window.drive_names?.[+parts[i].slice(0,-1)] || parts[i]) : decodeURIComponent(parts[i]);
           const short = label.length > 20 ? label.slice(0,17) + '…' : label;
-          const encoded = cumPath.split('/').map((s,si) => si === 0 ? '' : encodeURIComponent(s)).join('/');
+          // ★ v2.15.12-C1 (P6b regressão, Passo 16): o href do breadcrumb
+          //   codificava o ':' do prefixo do drive ('9:' → '9%3A') e DUPLICAVA
+          //   a codificação de segmentos já codificados num load fresco
+          //   ('CURSOS%202026' → 'CURSOS%25202026') — nenhuma rota do worker
+          //   casa %3A, por isso o link copiado caía na Home. Agora o href é
+          //   construído a partir de segmentos DESCODIFICADOS, com o prefixo
+          //   'N:' literal e o resto codificado 1×: a forma canónica do Passo
+          //   15. O data-nav (clique interno) não muda.
+          const encoded = cumPath.split('/').map((s, si) => {
+            if (si === 0) return '';
+            let _d = s; try { _d = decodeURIComponent(s); } catch (_) {}
+            return /^\d+:$/.test(_d) ? _d : encodeURIComponent(_d);
+          }).join('/');
           bcHTML += `<li><a href="${encoded}/" data-nav="${cumPath}/" data-bc-type="folder">${short}</a></li><li class="gdi-bc-sep">/</li>`;
         }
         bcHTML += `<li class="gdi-bc-cur">${name.length > 20 ? name.slice(0,17)+'…' : name}</li>`;
@@ -1828,6 +1852,22 @@
                   Shell._renderISAResult(type, _cachedVal, bodyEl, lessonName, true, cached);
                   return;
                 }
+                // ★ v2.15.12-B2b-pilulas-ambar-ramo: a aba Pílulas com a
+                //   recusa em cache (Passo 16: a aba exibiu a recusa
+                //   selada '✓ Pílulas', sem aviso âmbar). Com o detetor
+                //   B1, _isaCachedField já a trata como ausente — mas a
+                //   aba NÃO cai na regeneração silenciosa: mostra o
+                //   estado âmbar (o selo em cadeia traz só os valores
+                //   válidos + 'Sem pílulas válidas — Regerar', via B2) e
+                //   o botão Regerar (na toolbar) limpa o cache e gera de
+                //   novo. A recusa nunca é exibida nem selada. Só p/
+                //   'mindmap': o resumo MANTÉM a regeneração automática
+                //   de B9 (comportamento provado no Passo 16 — o resumo
+                //   real foi gerado ao vivo em ~45 s).
+                if (isaField === 'mindmap' && Shell._isaCachedRefusal(cached, 'mindmap')) {
+                  Shell._renderISAResult(type, 'Não foi possível mostrar as pílulas desta aula: o conteúdo guardado no cache é uma recusa da IA — a aula não tinha material quando as pílulas foram geradas. Toque em Regerar para tentar de novo.', bodyEl, lessonName, true, cached);
+                  return;
+                }
                 // ★ v2.15.10-E11-flashcards-cache: Flashcards são DERIVADOS
                 //   das questões — o cache nunca guarda 'flashcards', por
                 //   isso `cached['flashcards']` é sempre undefined e o clique
@@ -1952,6 +1992,16 @@
                 ];
                 const PILULAS_PROMPT = 'Crie "Pílulas" deste material — pontos-chave para revisão rápida ANTES da prova. Formato Markdown:\n# Pílulas de Revisão\n\n## Conceitos Essenciais\n- **Conceito 1**: explicação curta com exemplo\n- **Conceito 2**: explicação curta\n\n## Pegadinhas Rápidas\n- ⚠️ Pegadinha 1\n- ⚠️ Pegadinha 2\n\n## Mnemônicos\n- Dica para memorizar\n\nMáximo 20 bullets no total. Seja OBJETIVO mas COMPLETO.\n\nConteúdo:\n' + textSlice.slice(0, 15000);
                 const QUESTOES_PROMPT = 'Você é um examinador de concurso público brasileiro experiente. Baseado neste material, gere 10 questões de concurso em JSON array. Misture:\n- 6 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"legalText":"...","explanation":"...","fundamentacao":"..."}\n- 4 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"legalText":"...","explanation":"...","fundamentacao":"..."}\n\nCAMPOS:\n- statement: enunciado claro, contexto completo\n- legalText: o dispositivo legal aplicável (ex: "art. 5º, CF")\n- explanation: explicação técnica do acerto/erro\n- fundamentacao: fundamentação didática completa\n\nSem comentários, só JSON.\n\n' + textSlice.slice(0, 60000);
+                // ★ v2.15.12-D2a-prompt-escalado: o retry E13 repetia o MESMO
+                //   prompt byte-idêntico — uma falha SISTEMÁTICA de formato
+                //   (ex.: o modelo de raciocínio devolve <think> + prosa)
+                //   falhava as 3 vezes igual. Cada tentativa muda o pedido:
+                //   2ª impõe a regra de formato estrita, 3ª junta um
+                //   esqueleto de 1 questão no formato exato.
+                const QUESTOES_PROMPT_STRICT = '\n\nREGRA DE FORMATO (obrigatória): responda SOMENTE com o JSON array. Sem <think>, sem raciocínio, sem explicações, sem markdown, sem texto antes ou depois. Comece a resposta com [ e termine com ].';
+                const QUESTOES_PROMPTS = [QUESTOES_PROMPT,
+                  QUESTOES_PROMPT + QUESTOES_PROMPT_STRICT,
+                  QUESTOES_PROMPT + QUESTOES_PROMPT_STRICT + '\nExemplo de 1 questão (siga este formato exato): [{"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"legalText":"...","explanation":"...","fundamentacao":"..."}]'];
 
                 // ★ Helper: chama /api/ai com fallback de prompt (3 níveis para resumo)
                 async function callIsa(prompt, kind) {
@@ -1966,36 +2016,155 @@
                 }
 
                 // ★ Helper: parse robusto de JSON array de questões (replica meggy-utils.parseJsonArray)
+                // ★ v2.15.12-D1-parse-robusto: o parse antigo era tudo-ou-nada
+                //   sobre o array inteiro — 1 vírgula final, 1 quebra de linha
+                //   literal num enunciado, 1 elemento null, um objeto
+                //   {"questions": [...]} ou um bloco <think> do modelo de
+                //   raciocínio (qwq-32b, 1º da lista 'questoes' no worker; o
+                //   worker NÃO remove <think> — grep "think": 0 ocorrências)
+                //   com '[' lá dentro bastavam p/ devolver [] — e o retry E13
+                //   repetia o MESMO prompt no MESMO modelo, por isso as 3
+                //   tentativas falhavam igual (Passo 16). Agora: remove
+                //   <think>, desembrulha {"questions"|"questoes"|"items"|
+                //   "data": [...]}, extrai o MAIOR segmento [...] balanceado
+                //   (não o 1º '[' ao último ']' — o guloso apanhava o '[' do
+                //   <think>/prosa), repara vírgulas finais e controlos
+                //   literais dentro de strings, e em último caso recupera
+                //   questão a questão (≥1 válida conta). Nunca lança:
+                //   elemento null/não-objeto é descartado, não TypeError.
                 function parseQuestions(resp) {
-                  if (!resp) return [];
-                  let arr = null;
-                  try { arr = JSON.parse(resp); } catch (_) {
-                    // regex extraction of first [...]
-                    const m = resp.match(/\[[\s\S]*\]/);
-                    if (m) { try { arr = JSON.parse(m[0]); } catch (__) { arr = null; } }
+                  if (!resp || typeof resp !== 'string') return [];
+                  function _stripThink(s) {
+                    let out = String(s);
+                    out = out.replace(/<think>[\s\S]*?<\/think>/gi, ' ');
+                    out = out.replace(/<\/?think>/gi, ' ');
+                    return out;
                   }
-                  if (!Array.isArray(arr)) return [];
-                  return arr.map(q => {
-                    if (q.type === 'tf' || (!q.options && q.correct !== undefined)) {
-                      return {
-                        type: 'tf', statement: String(q.statement || ''), options: ['Certo', 'Errado'],
-                        correct: Math.max(0, Math.min(1, Number(q.correct) || 0)),
-                        explanation: String(q.explanation || ''),
-                        legalText: String(q.legalText || q.fundamentacao || ''),
-                        fundamentacao: String(q.fundamentacao || '')
-                      };
+                  function _stripFences(s) {
+                    return String(s).replace(/```(?:json)?\s*/gi, ' ').replace(/```/g, ' ');
+                  }
+                  function _balancedArray(s) {
+                    // maior segmento [...] balanceado (respeita strings com escapes)
+                    let best = null;
+                    for (let i = 0; i < s.length; i++) {
+                      if (s[i] !== '[') continue;
+                      let depth = 0, inStr = false, esc = false, j = i;
+                      for (; j < s.length; j++) {
+                        const c = s[j];
+                        if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; }
+                        else if (c === '"') inStr = true;
+                        else if (c === '[') depth++;
+                        else if (c === ']') { depth--; if (depth === 0) break; }
+                      }
+                      if (depth === 0 && j > i) { const seg = s.slice(i, j + 1); if (!best || seg.length > best.length) best = seg; }
                     }
-                    if (Array.isArray(q.options)) {
-                      return {
-                        type: 'mc', statement: String(q.statement || ''), options: q.options.map(String),
-                        correct: Math.max(0, Math.min((q.options.length || 4) - 1, Number(q.correct) || 0)),
-                        explanation: String(q.explanation || ''),
-                        legalText: String(q.legalText || q.fundamentacao || ''),
-                        fundamentacao: String(q.fundamentacao || '')
-                      };
+                    return best;
+                  }
+                  function _tryParse(s) { try { return JSON.parse(s); } catch (_) { return null; } }
+                  function _repair(s) {
+                    // (a) vírgulas finais antes de ] ou }
+                    let r = String(s).replace(/,\s*([}\]])/g, '$1');
+                    // (b) controlos literais (quebra de linha / tab) dentro de strings
+                    let out = '', inStr = false, esc = false;
+                    for (let i = 0; i < r.length; i++) {
+                      const c = r[i];
+                      if (inStr) {
+                        if (esc) { out += c; esc = false; }
+                        else if (c === '\\') { out += c; esc = true; }
+                        else if (c === '"') { out += c; inStr = false; }
+                        else if (c === '\n') out += '\\n';
+                        else if (c === '\r') out += '\\r';
+                        else if (c === '\t') out += '\\t';
+                        else out += c;
+                      } else {
+                        out += c;
+                        if (c === '"') inStr = true;
+                      }
+                    }
+                    return out;
+                  }
+                  function _unwrap(obj) {
+                    if (Array.isArray(obj)) return obj;
+                    if (obj && typeof obj === 'object') {
+                      for (const k of ['questions', 'questoes', 'items', 'data']) {
+                        if (Array.isArray(obj[k])) return obj[k];
+                      }
                     }
                     return null;
-                  }).filter(Boolean);
+                  }
+                  function _normalize(arr) {
+                    if (!Array.isArray(arr)) return [];
+                    return arr.map(q => {
+                      try {
+                        if (!q || typeof q !== 'object') return null;
+                        const statement = String(q.statement || q.question || q.pergunta || q.enunciado || '');
+                        const options = Array.isArray(q.options) ? q.options.map(String)
+                          : (Array.isArray(q.alternatives) ? q.alternatives.map(String)
+                          : (Array.isArray(q.alternativas) ? q.alternativas.map(String) : null));
+                        let correct = q.correct;
+                        if (typeof correct === 'string') {
+                          const t = correct.trim().toUpperCase();
+                          if (/^[A-F]$/.test(t)) correct = t.charCodeAt(0) - 65;
+                          else if (t === 'CERTO' || t === 'VERDADEIRO' || t === 'TRUE') correct = 1;
+                          else if (t === 'ERRADO' || t === 'FALSO' || t === 'FALSE') correct = 0;
+                          else correct = Number(correct) || 0;
+                        }
+                        if (correct === undefined || correct === null) correct = (q.correctAnswer !== undefined) ? q.correctAnswer : 0;
+                        correct = Number(correct) || 0;
+                        const explanation = String(q.explanation || '');
+                        const legalText = String(q.legalText || q.fundamentacao || '');
+                        const fundamentacao = String(q.fundamentacao || '');
+                        if (q.type === 'tf' || (!options && q.correct !== undefined)) {
+                          return {
+                            type: 'tf', statement: statement, options: ['Certo', 'Errado'],
+                            correct: Math.max(0, Math.min(1, correct)),
+                            explanation: explanation,
+                            legalText: legalText,
+                            fundamentacao: fundamentacao
+                          };
+                        }
+                        if (options) {
+                          return {
+                            type: 'mc', statement: statement, options: options,
+                            correct: Math.max(0, Math.min(options.length - 1, correct)),
+                            explanation: explanation,
+                            legalText: legalText,
+                            fundamentacao: fundamentacao
+                          };
+                        }
+                        return null;
+                      } catch (_) { return null; }
+                    }).filter(Boolean);
+                  }
+                  try {
+                    const text = _stripFences(_stripThink(resp));
+                    let arr = _unwrap(_tryParse(text));
+                    if (arr) return _normalize(arr);
+                    const seg = _balancedArray(text);
+                    if (seg) {
+                      arr = _unwrap(_tryParse(seg));
+                      if (arr) return _normalize(arr);
+                      arr = _unwrap(_tryParse(_repair(seg)));
+                      if (arr) return _normalize(arr);
+                      // último recurso: recupera objeto a objeto dentro do segmento
+                      const objs = [];
+                      let depth = 0, start = -1, inStr = false, esc = false;
+                      for (let i = 0; i < seg.length; i++) {
+                        const c = seg[i];
+                        if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue; }
+                        if (c === '"') { inStr = true; continue; }
+                        if (c === '{') { if (depth === 0) start = i; depth++; }
+                        else if (c === '}') { depth--; if (depth === 0 && start >= 0) { objs.push(seg.slice(start, i + 1)); start = -1; } }
+                      }
+                      const recovered = [];
+                      for (const o of objs) {
+                        const one = _tryParse(_repair(o));
+                        if (one) recovered.push(one);
+                      }
+                      if (recovered.length) return _normalize(recovered);
+                    }
+                    return [];
+                  } catch (_) { return []; }
                 }
 
                 // ★ Helper: autoCreateFlashcards (replica meggy-cache.js:187)
@@ -2046,12 +2215,23 @@
                   if (m) return ' Motivo: ' + m.slice(0, 120);
                   return '';
                 };
+                // ★ v2.15.12-D4a-loading-por-aba: as 3 tarefas correm em
+                //   paralelo e TODAS escreviam no mesmo bodyEl — o texto de
+                //   loading da aba clicada ("tentativa N de 3" das questões)
+                //   era rotineiramente apagado pelo setLoading do resumo ou
+                //   das pílulas (o Passo 16 nunca viu "tentativa 2 de 3").
+                //   Só a tarefa da aba pedida (isaField) escreve o loading;
+                //   as outras geram em silêncio. Os setLoading fora das
+                //   tarefas (extração, "a gerar em cadeia") mantêm-se.
+                function _setTaskLoading(field, msg) {
+                  if (field === isaField) setLoading(msg);
+                }
                 const tasks = [];
                 // Task 1: resumo (3-level auto-retry)
                 tasks.push((async () => {
                   for (let i = 0; i < RESUMO_PROMPTS.length; i++) {
                     try {
-                      setLoading(i === 0 ? '✨ Gerando resumo profundo…' : i === 1 ? '✨ Tentando resumo médio…' : '✨ Tentando resumo simples…');
+                      _setTaskLoading('summary', i === 0 ? '✨ Gerando resumo profundo…' : i === 1 ? '✨ Tentando resumo médio…' : '✨ Tentando resumo simples…'); // ★ v2.15.12-D4b
                       const r = await callIsa(RESUMO_PROMPTS[i], 'resumo');
                       // ★ v2.15.11-B5-resumo-retry: uma RECUSA não é resumo — não
                       //   conta como gerado; tenta o próximo nível de prompt (o
@@ -2072,7 +2252,7 @@
                 tasks.push((async () => {
                   for (let _a = 0; _a < 3; _a++) {
                     try {
-                      setLoading(_a === 0 ? '💊 Gerando pílulas de revisão…' : '💊 Gerando pílulas de revisão… (tentativa ' + (_a + 1) + ' de 3)');
+                      _setTaskLoading('mindmap', _a === 0 ? '💊 Gerando pílulas de revisão…' : '💊 Gerando pílulas de revisão… (tentativa ' + (_a + 1) + ' de 3)'); // ★ v2.15.12-D4c
                       const _r = await callIsa(PILULAS_PROMPT, 'mindmap');
                       // ★ v2.15.11-B6-pilulas-retry: idem resumo — recusa não conta
                       //   como pílulas; o retry (3 tentativas) continua. Sem isto
@@ -2100,12 +2280,18 @@
                   let _lastRaw = '';
                   for (let _a = 0; _a < 3; _a++) {
                     try {
-                      setLoading(_a === 0 ? '❓ Gerando questões…' : '❓ Gerando questões… (tentativa ' + (_a + 1) + ' de 3)');
-                      const r = await callIsa(QUESTOES_PROMPT, 'questoes');
+                      _setTaskLoading('questions', _a === 0 ? '❓ Gerando questões…' : '❓ Gerando questões… (tentativa ' + (_a + 1) + ' de 3)'); // ★ v2.15.12-D4d
+                      const r = await callIsa(QUESTOES_PROMPTS[_a] || QUESTOES_PROMPT, 'questoes'); // ★ v2.15.12-D2b
                       _lastRaw = r || '';
                       const _parsed = parseQuestions(r);
                       if (_parsed.length) return { field: 'questions', value: _parsed, raw: r };
-                      _isaLastErr = new Error('a IA devolveu questões fora do formato JSON esperado');
+                      // ★ v2.15.12-D3-erro-recusa: uma recusa em prosa não é
+                      //   "JSON inválido" — dizê-lo como tal esconde a causa
+                      //   (sem conteúdo da aula), como o resumo (B5) e as
+                      //   pílulas (B6) já distinguem.
+                      _isaLastErr = (Shell._isIsaRefusal && Shell._isIsaRefusal(_lastRaw))
+                        ? new Error('a IA recusou gerar as questões (sem conteúdo da aula)')
+                        : new Error('a IA devolveu questões fora do formato JSON esperado');
                     } catch (e) {
                       _isaLastErr = e;
                       if (/429|401/.test(String((e && e.message) || ''))) break;
@@ -2162,6 +2348,30 @@
                 if (gen.summary && !Shell._isIsaRefusal(gen.summary)) saveToFolder('resumo', user + '_' + safeLesson + '.md', gen.summary);
                 if (gen.mindmap && !Shell._isIsaRefusal(gen.mindmap)) saveToFolder('resumo', user + '_pilulas_' + safeLesson + '.md', gen.mindmap);
                 if (gen.questions && gen.questions.length) saveToFolder('questoes', user + '_' + safeName(courseName || lessonName) + '.json', JSON.stringify(gen.questions, null, 2));
+                // ★ v2.15.12-D5-partilhar-pool: o showISA é o ÚNICO caminho
+                //   de geração das abas do player (a Aula 09 não tem PDF —
+                //   a cadeia meggy-cache.js nem arranca) e NUNCA escrevia
+                //   no pool partilhado — por isso as secções
+                //   "Compartilhados" de /questoes, /flashcards e /resumos
+                //   estavam vazias embora o cache da aula tivesse itens
+                //   (Passo 16). Partilha best-effort, sem bloquear o
+                //   render: resumo (+questões) no pool de resumos e cada
+                //   questão como card partilhado (o servidor dedupa por
+                //   (autor, aula) / (autor, assunto, enunciado), por isso
+                //   re-gerar não duplica). Só o conteúdo gerado AGORA —
+                //   o cache-hit retorna antes e não volta a partilhar.
+                try {
+                  if (gen.summary && !Shell._isIsaRefusal(gen.summary)) {
+                    fetch('/api/ai/shared-summaries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lessonName: lessonName, summary: gen.summary, questions: gen.questions.length ? gen.questions : null }) }).catch(() => {});
+                  }
+                  if (gen.questions && gen.questions.length) {
+                    for (let _qi = 0; _qi < gen.questions.length; _qi++) {
+                      const _q = gen.questions[_qi];
+                      const _back = (gen.flashcards && gen.flashcards[_qi]) ? gen.flashcards[_qi].b : '';
+                      fetch('/api/ai/shared-flashcards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subject: lessonName, front: _q.statement || '', back: _back || '', statement: _q.statement || '', options: Array.isArray(_q.options) ? _q.options : null, correct: (typeof _q.correct === 'number' ? _q.correct : 0), explanation: _q.explanation || '', legalText: _q.legalText || '', fundamentacao: _q.fundamentacao || '', type: _q.type || 'mc' }) }).catch(() => {});
+                    }
+                  }
+                } catch (_) {}
 
                 // ─── 6. Render requested type ───
                 const cached2 = { summary: gen.summary, questions: gen.questions.length ? gen.questions : null, mindmap: gen.mindmap, lessonName: lessonName };
@@ -2783,12 +2993,12 @@
         const fmtDate = (d) => { try { return d ? new Date(d).toLocaleDateString('pt-BR') : ''; } catch (_) { return ''; } };
         const toast = (m) => { try { if (typeof window.showToast === 'function') window.showToast(m); } catch (_) {} };
         try {
-          if (!Shell.__sharedAuthors) {
+          if (!Shell.__sharedAuthors || !Shell.__sharedAuthors.length) { // ★ v2.15.12-D6a
             const r = await fetch('/api/ai/shared-authors', { cache: 'no-store' });
             const d = await r.json();
             Shell.__sharedAuthors = (d && d.ok && Array.isArray(d.authors)) ? d.authors : [];
           }
-          if (!Shell.__sharedSubjects) {
+          if (!Shell.__sharedSubjects || !Shell.__sharedSubjects.summaryLessons || !Shell.__sharedSubjects.summaryLessons.length) { // ★ v2.15.12-D6b — vazio ([]) é truthy: sem isto os filtros ficavam com o vazio da 1ª carga a sessão inteira, mesmo depois de aparecerem itens
             const r = await fetch('/api/ai/shared-subjects', { cache: 'no-store' });
             const d = await r.json();
             Shell.__sharedSubjects = (d && d.ok) ? d : { summaryLessons: [], flashcardSubjects: [] };
@@ -5923,6 +6133,26 @@ el.scrollTop = 0;
         /compartilhe (comigo )?(o |a )?(conteudo|material|transcricao|texto)/,
         /aguardando (o|a) (conteudo|material|transcricao)/,
         /nao consigo (gerar|criar|fazer|elaborar|produzir) (o resumo|um resumo|este resumo|as pilulas|o conteudo|o material)/,
+        // ★ v2.15.12-B1-detector-pilulas: recusa de PÍLULAS (Passo 16) —
+        //   "Desculpe, mas não posso criar "pílulas de revisão" para
+        //   você. Posso, no entanto, ajudar com a criação de material
+        //   de estudos... Qual é o assunto específico que você gostaria
+        //   de revisar?" — o detetor da v2.15.11 NÃO a apanhava:
+        //   "não posso" ≠ "não consigo" (nenhum padrão casava "posso"),
+        //   e a pergunta final é o redirecionamento da recusa (o modelo
+        //   devolve a pergunta ao usuário em vez do conteúdo). As duas
+        //   últimas linhas estendem os objetos de "não foi possível" /
+        //   "não é possível" (que só listavam conteúdo/material/
+        //   transcrição) p/ pílulas/resumo/questões/flashcards.
+        /nao (posso|consigo) (criar|gerar|fazer|elaborar|produzir|montar|fornecer|apresentar|resumir)/,
+        /nao tenho como (criar|gerar|elaborar|produzir|fazer|resumir|montar)/,
+        /nao (posso|consigo) (criar|gerar|elaborar|produzir|montar)[\\s\\S]{0,40}(pilulas|resumo|conteudo|material|flashcards|questoes)/,
+        /(desculpe|sinto muito|infelizmente)[\\s\\S]{0,60}nao (posso|consigo)/,
+        /posso,? (no entanto|entretanto|porem)?[\\s\\S]{0,80}ajudar com a criacao/,
+        /assunto especifico que voce (gostaria|quer|deseja)/,
+        /que voce (gostaria de|quer|deseja|precisa de) (revisar|estudar|aprender|ver)/,
+        /nao foi possivel (gerar|criar|elaborar|produzir|fazer|montar)[\\s\\S]{0,120}(pilulas|resumo|questoes|flashcards)/,
+        /nao e possivel (gerar|criar|resumir|elaborar)[\\s\\S]{0,120}(pilulas|resumo|questoes|flashcards)/,
         /nao foi possivel (resumir|fazer o resumo|fazer um resumo)/,
         /nao foi possivel (gerar|criar|elaborar|produzir|fazer|montar)[\s\S]{0,120}(conteudo|material|transcricao|texto da aula)/,
         /nao e possivel (gerar|criar|resumir|elaborar)[\s\S]{0,120}(conteudo|material|transcricao)/,
@@ -5957,6 +6187,17 @@ el.scrollTop = 0;
       if (Array.isArray(entry.questions) && entry.questions.length) out.questions = entry.questions;
       else if (typeof entry.questions === 'string' && entry.questions && !Shell._isIsaRefusal(entry.questions)) out.questions = entry.questions;
       return out;
+    },
+
+    // ★ v2.15.12-B2a-pilulas-ambar-helper: o campo em cache é uma RECUSA?
+    //   Ponto único da decisão do estado âmbar da aba Pílulas (B2b):
+    //   devolve true só quando o campo existe em cache como string e É
+    //   uma recusa (detetor B1) — um campo ausente/null ou um valor real
+    //   devolve false (a aba cai na geração, comportamento B9).
+    _isaCachedRefusal(entry, field) {
+      if (!entry) return false;
+      const v = entry[field];
+      return typeof v === 'string' && !!v && Shell._isIsaRefusal(v);
     },
 
     _renderMd(txt) {
