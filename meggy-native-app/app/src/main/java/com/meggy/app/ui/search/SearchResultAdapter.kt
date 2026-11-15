@@ -77,13 +77,13 @@ class SearchResultAdapter(
                     resultTitle.text = d.name
                     resultMeta.text = if (d.isConcurso) "Concurso · ${d.tagline}" else "Curso · ${d.tagline}"
                     resultBg.background = CardGradient.drawable(res, colorFromString(d.name))
-                    // v2.7.11 onda 2 + camada (3) — resultado de drive:
-                    // imagem da biblioteca pelo nome do drive; sem match,
-                    // a imagem 'geral' (fallback da camada 3); sem
-                    // manifesto, a capa gerada do drive (nunca monograma).
+                    // v2.7.11 onda 2 + camada (3) ESTRITA (2.7.13, sem
+                    // 'geral') — resultado de drive: imagem da biblioteca
+                    // pelo nome do drive; sem match, a capa gerada do
+                    // drive (nunca monograma).
                     resultThumb.visibility = View.VISIBLE
                     resultMonogram.visibility = View.GONE
-                    val libraryUrl = LibraryCovers.resolve(d.name)
+                    val libraryUrl = LibraryCovers.resolveStrict(d.name)
                     if (libraryUrl != null) {
                         resultThumb.load(libraryUrl) {
                             error(ThumbArt.coverResForDriveIndex(d.index))
@@ -111,12 +111,12 @@ class SearchResultAdapter(
                         else -> f.humanSize
                     }
                     resultBg.background = CardGradient.drawable(res, colorFromString(f.name))
-                    // v2.7.11 onda 2 + camada (3) — sem thumb, a imagem
-                    // da biblioteca pelo nome do arquivo/pasta; sem match,
-                    // a imagem 'geral' (fallback da camada 3); sem
-                    // manifesto, a capa gerada do drive (nunca monograma).
+                    // v2.7.11 onda 2 + camada (3) ESTRITA (2.7.13, sem
+                    // 'geral') — sem thumb, a imagem da biblioteca pelo
+                    // nome do arquivo/pasta; sem match, a capa gerada do
+                    // drive (nunca monograma).
                     val coverRes = ThumbArt.coverResForPath(f.folderPath ?: "")
-                    val thumb = LibraryCovers.remoteCover(f.thumbnailLink, f.name, f.folderPath)
+                    val thumb = LibraryCovers.remoteCoverStrict(f.thumbnailLink, f.name, f.folderPath)
                     if (!thumb.isNullOrBlank() && (f.isVideo || f.isAudio || f.isPdf)) {
                         resultThumb.visibility = View.VISIBLE
                         resultMonogram.visibility = View.GONE
