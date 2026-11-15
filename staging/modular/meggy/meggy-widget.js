@@ -651,12 +651,18 @@
     const lines = t.split('\n');
     let i = 0; while(i < lines.length && !lines[i].trim()) i++;
     if(i >= lines.length) return t;
+    // ★ v2.15.6-drawer-hook round 5: NÃO testar o formato da 1ª linha
+    //    (mesmo defeito do shell: o modelo abre com "**Resumo: ...**" em
+    //    negrito, que não casa com '#', '⚠️' nem /^resumo\b/i — o gancho
+    //    era pulado em silêncio no painel FAB também). O pedido já foi
+    //    classificado como resumo no call site (isSummaryRequest); aqui só
+    //    evitamos duplicar, vazio e "Sem resposta".
     const first = lines[i].trim();
-    if(first.startsWith('#') || first.startsWith('⚠️') || /^resumo\b/i.test(first)){
-      lines.splice(i, 0, drawerSummaryHook(lesson, pdfName), '');
-      return lines.join('\n');
-    }
-    return t;
+    if(/^(nessa aula vamos estudar|nesta aula, vamos mergulhar em|hoje vamos estudar|nesta aula, você vai entender|prepare-se: nesta aula vamos estudar)/i.test(first)) return t;
+    if(/o foco desta aula/i.test(first)) return t;
+    if(/^(sem resposta|erro:)/i.test(first)) return t;
+    lines.splice(i, 0, drawerSummaryHook(lesson, pdfName), '');
+    return lines.join('\n');
   }
   function isSummaryRequest(txt){
     return /resum/i.test(String(txt || ''));
