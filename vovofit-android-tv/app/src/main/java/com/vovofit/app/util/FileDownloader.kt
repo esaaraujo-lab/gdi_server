@@ -26,7 +26,13 @@ object FileDownloader {
             val dir = File(context.cacheDir, subdir).apply { mkdirs() }
             val safe = fileName.replace(Regex("[^A-Za-z0-9._-]"), "_")
             val out = File(dir, "${url.hashCode()}_$safe")
-            if (out.exists() && out.length() > 0) return@withContext out
+            // Frente G: o cache era ETERNO — um PDF/MD atualizado
+            // no Drive nunca mais aparecia no app. TTL de 24 h:
+            // dentro dele reutiliza, depois volta a baixar.
+            val cacheTtlMs = 24L * 60L * 60L * 1000L
+            if (out.exists() && out.length() > 0 &&
+                System.currentTimeMillis() - out.lastModified() < cacheTtlMs
+            ) return@withContext out
 
             val cookie = SessionManager.get(context).sessionCookie
             val request = Request.Builder()
