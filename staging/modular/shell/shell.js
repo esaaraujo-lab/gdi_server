@@ -4802,6 +4802,81 @@ el.scrollTop = 0;
       if (drawer) drawer.classList.remove('open');
       Shell.meggyAIDrawerOpen = false;
     },
+    // ── v2.15.6-drawer-hook (round 4) ──
+    // ROUND 4 — o drawer REAL é este (shell.js), NÃO o widget: a verificação
+    // ao vivo 22:52–23:02 -03 provou que a resposta do drawer vem por /api/ai
+    // (não-streaming): mostra só "🐾 Pensando..." e surge inteira de uma vez.
+    // O widget (meggy-widget.js) tem seu próprio send()/stream — o drawer
+    // NUNCA passa por ele, por isso D2/D4 nunca se aplicaram ao vivo. O
+    // gancho é aplicado aqui, na renderização da resposta em send().
+    // Porte das funções do worker/widget (mesmos 5 modelos, mesma rotação
+    // por hash, mesma limpeza do assunto, mesmo trigger alargado "Resumo:").
+    _drawerHookSubject(lesson, pdfName) {
+      function cleanName(s) {
+        let t = String(s || '').replace(/\.[a-z0-9]+$/i, '').trim();
+        t = t.replace(/^(aula\s*[-–.:]?\s*\d+|0*\d+)\s*[-–.:]?\s*/i, '').trim();
+        t = t.replace(/\s*[-–.:]?\s*aula\s+\d+\s*$/i, '').trim();
+        return t;
+      }
+      function fromLesson(l) {
+        let t = String(l || '').split('/').filter(Boolean).pop() || '';
+        t = t.replace(/\.[a-z0-9]+$/i, '').replace(/[-_]+/g, ' ').trim();
+        t = t.replace(/^isolada\s+/i, '');
+        t = t.replace(/^(aula\s*[-–.:]?\s*\d+|0*\d+)\s*[-–.:]?\s*/i, '').trim();
+        t = t.replace(/\s*[-–.:]?\s*aula\s+\d+\s*$/i, '').trim();
+        return t;
+      }
+      function isGeneric(t) {
+        if (!t) return true;
+        const b = t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        if (/^\d+$/.test(b)) return true;
+        if (/^(aula|video|lesson|capitulo|parte|material)(\s+\d+)?$/.test(b)) return true;
+        return false;
+      }
+      let subj = cleanName(pdfName);
+      if (isGeneric(subj)) subj = fromLesson(lesson);
+      if (isGeneric(subj)) return 'este tema';
+      return subj.toLowerCase();
+    },
+    _drawerHook(lesson, pdfName) {
+      const templates = ['Nessa aula vamos estudar ', 'Nesta aula, vamos mergulhar em ', 'Hoje vamos estudar ', 'Nesta aula, você vai entender ', 'Prepare-se: nesta aula vamos estudar '];
+      let h = 0; const s = String(lesson || '') + '/' + String(pdfName || '');
+      for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+      return templates[h % templates.length] + Shell._drawerHookSubject(lesson, pdfName) + '…';
+    },
+    _ensureDrawerHook(text, lesson, pdfName) {
+      const t = String(text || '');
+      if (!t.trim()) return t;
+      const lines = t.split('\n');
+      let i = 0; while (i < lines.length && !lines[i].trim()) i++;
+      if (i >= lines.length) return t;
+      const first = lines[i].trim();
+      if (first.startsWith('#') || first.startsWith('⚠️') || /^resumo\b/i.test(first)) {
+        lines.splice(i, 0, Shell._drawerHook(lesson, pdfName), '');
+        return lines.join('\n');
+      }
+      return t;
+    },
+    _isDrawerSummaryRequest(txt) {
+      return /resum/i.test(String(txt || ''));
+    },
+    // Nome da aula no contexto do shell: último segmento da pasta atual
+    // (ex.: "01 - PRINCIPIOS FUNDAMENTAIS"); fallback: item da playlist;
+    // último fallback: título da página.
+    _drawerLessonName() {
+      try {
+        const p = (Shell.state && Shell.state.currentFolderPath) || '';
+        const segs = String(p).split('/').filter(Boolean);
+        if (segs.length) { try { return decodeURIComponent(segs[segs.length - 1]); } catch (_) { return segs[segs.length - 1]; } }
+      } catch (_) {}
+      try {
+        const n = (Shell.state.playerPlaylist && Shell.state.playerPlaylist[Shell.state.playerIndex] && Shell.state.playerPlaylist[Shell.state.playerIndex].name) || '';
+        if (n) return n;
+      } catch (_) {}
+      const t = (typeof document !== 'undefined' && document.title) || '';
+      return t.split(' - ')[0].split(' | ')[0].trim();
+    },
+    // ── fim drawer-hook (round 4) ──
     renderMeggyAITab(tab) {
       const body = document.getElementById('meggy-ai-body');
       if (!body) return;
@@ -4812,10 +4887,24 @@ el.scrollTop = 0;
         const send = async () => {
         const msg = document.getElementById('meggy-ai-input').value.trim();
         if (!msg) return;
+        // ★ v2.15.6-drawer-hook round 4: guarda de envio — sem ela, um 2º
+        //    envio concorrente recriava o container (innerHTML +=) e
+        //    destacava o nó do "Pensando..." em voo.
+        if (send._busy) return;
+        send._busy = true;
+        const sendBtn = document.getElementById('meggy-ai-send');
+        if (sendBtn) sendBtn.disabled = true;
         const msgs = document.getElementById('meggy-ai-messages');
         msgs.innerHTML += '<div class="meggy-ai-msg user">' + Shell._esc(msg) + '</div>';
         document.getElementById('meggy-ai-input').value = '';
-        msgs.innerHTML += '<div class="meggy-ai-msg bot" id="meggy-ai-typing">🐾 Pensando...</div>';
+        // ★ v2.15.6-drawer-hook round 4: referência ao elemento (nunca
+        //    id) — o id "meggy-ai-typing" duplicava na 2ª pergunta:
+        //    getElementById devolvia o div da 1ª resposta e o 2º
+        //    "Pensando..." ficava preso para sempre.
+        const typingEl = document.createElement('div');
+        typingEl.className = 'meggy-ai-msg bot';
+        typingEl.textContent = '🐾 Pensando...';
+        msgs.appendChild(typingEl);
         msgs.scrollTop = msgs.scrollHeight;
         try {
           const r = await fetch('/api/ai', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: msg, messages: []}) });
@@ -4824,9 +4913,15 @@ el.scrollTop = 0;
           // ★ v2.15.5 item 10: renderer único — sem marked, o vendored
           //    formata; nunca insere a resposta crua (XSS).
           await Shell._ensureMdLibs();
-          const html = Shell._renderMd(resp);
-          document.getElementById('meggy-ai-typing').innerHTML = html;
-        } catch (e) { document.getElementById('meggy-ai-typing').textContent = 'Erro: ' + e.message; }
+          // ★ v2.15.6-drawer-hook round 4: o gancho de abertura do resumo
+          //    é aplicado AQUI — este é o drawer real (shell.js), não o widget
+          //    (meggy-widget.js): a resposta vem por /api/ai (não-streaming)
+          //    e é renderizada de uma só vez neste div.
+          const shownResp = Shell._isDrawerSummaryRequest(msg) ? Shell._ensureDrawerHook(resp, Shell._drawerLessonName(), '') : resp;
+          const html = Shell._renderMd(shownResp);
+          typingEl.innerHTML = html;
+        } catch (e) { typingEl.textContent = 'Erro: ' + e.message; }
+        finally { send._busy = false; if (sendBtn) sendBtn.disabled = false; }
         msgs.scrollTop = msgs.scrollHeight;
         };
         document.getElementById('meggy-ai-send').onclick = send;
