@@ -22,6 +22,13 @@
   const __LEGACY_COURSE_PATH_REBASE = [['/11:/CURSOS 2026', '/9:/CURSOS 2026']];
   const __canonCoursePath = function(p){ var x = String(p || ''); try { x = decodeURIComponent(x); } catch (_) {} for (var _ri = 0; _ri < __LEGACY_COURSE_PATH_REBASE.length; _ri++) { var _a = __LEGACY_COURSE_PATH_REBASE[_ri][0], _b = __LEGACY_COURSE_PATH_REBASE[_ri][1]; if (x === _a || x.indexOf(_a + '/') === 0) { x = _b + x.slice(_a.length); break; } } return x; };
 
+  // ★ v2.15.19 (S — item 6): nome canónico do drive de um caminho de curso
+  //   — a mesma regra do driveNameOf de study-courses.js (fix B1 v2.15.18):
+  //   canoniza o caminho legado e lê window.drive_names pelo índice.
+  //   '' quando não há drive (path sem índice, drive sem nome, ou
+  //   drive_names ainda por carregar) — o meta degrada p/ o formato antigo.
+  const __driveNameOf = function(p){ var m = /^\/(\d+):/.exec(__canonCoursePath(p || '')); return (window.drive_names && m && window.drive_names[+m[1]]) || ''; };
+
   const Shell = {
     state: {
       currentView: 'home',
@@ -487,6 +494,85 @@
         }).catch(() => {});
       },
 
+      // ★ v2.15.19 (L — determinismo /cursos): espera limitada pelo módulo
+      //   study-courses + upgrade 1× quando ele chega.
+      //   CAUSA (provada): Shell.views.cursos decidia módulo-vs-fallback
+      //   com UM teste síncrono a window.__gdiStudy.courses.renderCursos
+      //   no instante do render. O loader (gdi-extras-loader.js) só
+      //   disponibiliza o módulo depois de Bus + gdi-core.js + 6 módulos
+      //   da core-chain + theme/scanner/courses da study-chain (~10
+      //   fetches sequenciais); quem abria /cursos antes disso via o
+      //   FALLBACK (só /api/courses/unified — sem os cursos manuais do
+      //   localStorage, sem busca/paginação, outro formato) e nada o
+      //   atualizava depois: o loader dispara 'gdi-extras-ready' no fim
+      //   do bootstrap (gdi-extras-loader.js) e NADA no shell o escutava
+      //   (nem Bus.on — o shell só faz Bus.emit('courses:changed')).
+      //   Resultado: o conjunto de cartões dependia da corrida — os
+      //   manuais ("Cursos e Certificados - Faculdade Famart", "4.
+      //   Direito Civil...") apareciam nuns loads e sumiam noutros.
+      //   FIX em 2 camadas: (1) espera limitada (4 s) com o spinner
+      //   "Carregando módulo de cursos..." já no template — o load
+      //   típico resolve aqui e o fallback nem chega a aparecer;
+      //   (2) se a espera expirar e o fallback renderizar, arma-se UM
+      //   listener once de 'gdi-extras-ready' que re-renderiza /cursos
+      //   (só se o utilizador ainda lá estiver e o módulo existir) —
+      //   o estado final é SEMPRE a vista do módulo quando ele carrega;
+      //   o fallback só persiste quando o módulo FALHOU mesmo (o evento
+      //   dispara na mesma, mas o guarda do módulo bloqueia o re-render).
+      //   Precedente: o re-render 1× da ponte v2.15.9 (D) p/ as features
+      //   desviadas (shell-bridge.js) — aqui aplicado à vista nativa
+      //   /cursos, que a ponte não cobre.
+      _cursosModuleReady() {
+        return !!(window.__gdiStudy && window.__gdiStudy.courses && window.__gdiStudy.courses.renderCursos);
+      },
+
+      _waitCursosModule(timeoutMs) {
+        const has = () => Shell.views._cursosModuleReady();
+        if (has()) return Promise.resolve(true);
+        const limit = (typeof timeoutMs === 'number' && timeoutMs > 0) ? timeoutMs : 4000;
+        return new Promise((resolve) => {
+          let done = false;
+          const finish = (v) => {
+            if (done) return;
+            done = true;
+            try { window.removeEventListener('gdi-extras-ready', onReady); } catch (_) {}
+            resolve(v);
+          };
+          // O evento dispara no FIM do bootstrap do loader — nessa altura
+          // o estado do módulo é final: se existe, resolve true; se não,
+          // falhou mesmo e não vale esperar o resto do timeout.
+          const onReady = () => finish(has());
+          try { window.addEventListener('gdi-extras-ready', onReady); } catch (_) {}
+          const t0 = Date.now();
+          const tick = () => {
+            if (done) return;
+            if (has()) { finish(true); return; }
+            if (Date.now() - t0 >= limit) { finish(false); return; }
+            setTimeout(tick, 150);
+          };
+          setTimeout(tick, 150);
+        });
+      },
+
+      _armCursosModuleUpgrade() {
+        try {
+          if (typeof window === 'undefined' || !window.addEventListener) return;
+          window.addEventListener('gdi-extras-ready', function onReady() {
+            try {
+              if (!Shell.views._cursosModuleReady()) return;
+              // /concursos delega p/ a mesma vista (Shell.views.concursos → cursos).
+              if (Shell.router && typeof Shell.router.currentPath === 'function') { const _p = Shell.router.currentPath(); if (_p !== '/cursos' && _p !== '/concursos') return; }
+              const container = document.getElementById('meggy-cursos-container');
+              if (!container) return;
+              if (container.querySelector('.meggy-cursos-wrapper')) return; // já é a vista do módulo
+              const main = document.getElementById('meggy-main');
+              if (!main) return;
+              Shell.views.cursos(main);
+            } catch (_) {}
+          }, { once: true });
+        } catch (_) {}
+      },
+
       cursos(el) {
         el.innerHTML = `
           <div class="meggy-view-header">
@@ -517,7 +603,16 @@
         (async () => {
           // ★ Render direto via API — shell nativo não precisa do GDIndex
           try {
-            if (window.__gdiStudy && window.__gdiStudy.courses && window.__gdiStudy.courses.renderCursos) {
+            // ★ v2.15.19 (L): espera limitada pelo módulo antes de decidir
+            //   módulo-vs-fallback — a decisão era UM teste síncrono no
+            //   instante do render (corrida com o loader). O spinner
+            //   "Carregando módulo de cursos..." já está no template.
+            if (!Shell.views._cursosModuleReady()) {
+              await Shell.views._waitCursosModule(4000);
+              // O utilizador pode ter saído de /cursos durante a espera.
+              if (!document.getElementById('meggy-cursos-container')) return;
+            }
+            if (Shell.views._cursosModuleReady()) {
               const container = document.getElementById('meggy-cursos-container');
               container.innerHTML = '';
               const wrapper = document.createElement('div');
@@ -547,7 +642,13 @@
                     const __cardHtml = it => {
                         const name = it.name || 'Curso';
                         const badge = it.kind === 'concurso' ? '📌 Concurso' : it.kind === 'featured' ? '⭐ Em destaque' : '📚 Curso';
-                        const meta = badge + (it.kind === 'concurso' ? '' : ' · ' + (it.total || 0) + ' aulas') + (it.percent != null && it.total ? ' · ' + it.percent + '% concluído' : '') + (it.examDate ? ' · 📅 ' + it.examDate : '');
+                        // ★ v2.15.19 (S — item 6a): o meta não tinha slot p/ o
+                        //   drive — o cartão observado no Passo 23 (“📚 Curso ·
+                        //   90 aulas · 0% concluído”) é este fallback. O nome
+                        //   canónico do drive (mesma regra B1) entra a seguir
+                        //   ao badge; concursos mantêm-se sem drive.
+                        const __drv = it.kind === 'concurso' ? '' : __driveNameOf(it.coursePath);
+                        const meta = badge + (__drv ? ' · ' + __drv : '') + (it.kind === 'concurso' ? '' : ' · ' + (it.total || 0) + ' aulas') + (it.percent != null && it.total ? ' · ' + it.percent + '% concluído' : '') + (it.examDate ? ' · 📅 ' + it.examDate : '');
                         const idAttr = it.kind === 'concurso' ? ' data-concurso-id="' + Shell._esc(it.concursoId) + '"' : ' data-course="' + Shell._esc(it.coursePath || '') + '"';
                         const rmBtn = it.kind === 'featured' ? '' :
                           '<button class="' + (it.kind === 'concurso' ? 'concurso-remove-btn' : 'course-remove-btn') + '" data-' + (it.kind === 'concurso' ? 'concurso-id="' + Shell._esc(it.concursoId) + '" data-concurso-name="' + Shell._esc(name) + '"' : 'course-path="' + Shell._esc(it.coursePath || '') + '" data-course-name="' + Shell._esc(name) + '"') + ' title="Remover" style="position:absolute;top:8px;right:8px;background:transparent;border:0;color:#8b949e;cursor:pointer;font-size:14px;padding:2px 6px;border-radius:6px;">✕</button>';
@@ -652,6 +753,11 @@
               } catch (apiErr) {
                 container.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">⚠️</div><div class="meggy-placeholder-title">Erro de conexão</div><div class="meggy-placeholder-desc">' + (apiErr.message || 'Tente novamente em alguns segundos.') + '</div></div>';
               }
+              // ★ v2.15.19 (L): cauda longa — o módulo pode chegar DEPOIS
+              //   da espera (loader lento); quando chegar, re-renderiza 1×
+              //   p/ a vista do módulo (só se ainda em /cursos). Sem isto
+              //   o fallback ficava p/ sempre (nada escutava o evento).
+              Shell.views._armCursosModuleUpgrade();
             }
           } catch (e) {
             console.error('[Shell] cursos view:', e);
@@ -712,7 +818,12 @@
             if (dl && dl.ok) lessons = dl.lessons || [];
             if (dl && dl.lessonFolders != null) _lessonFolders = dl.lessonFolders; // ★ v2.15.7 (dedup): captura no escopo do try — 'dl' é const do try e não existe fora dele (F3b usava 'dl' fora do try → ReferenceError real).
             else if (dl && dl.error) err = dl.error;
-            if (du && du.ok) courses = (du.items || []).filter(it => norm(it.name || '').includes(nq) || norm(it.coursePath || '').includes(nq));
+            // ★ v2.15.19 (S — item 6d): a busca global só casava nome e
+            //   coursePath — “tudo de tribunais” não casava “CURSOS 2026”
+            //   nem “/9:/CURSOS 2026”. Casa também o nome canónico do
+            //   drive (mesma regra B1). O lado das aulas não muda
+            //   (server-side no D1).
+            if (du && du.ok) courses = (du.items || []).filter(it => norm(it.name || '').includes(nq) || norm(it.coursePath || '').includes(nq) || norm(__driveNameOf(it.coursePath)).includes(nq));
           } catch (e) { err = e.message; }
           if (_gen !== Shell.views._searchGen || !box.isConnected) return;
           if (err && !lessons.length && !courses.length) {
@@ -730,7 +841,11 @@
             html += '<div class="meggy-continue-section"><h2>📚 Cursos</h2><div class="meggy-cards-grid">' + courses.map(it => {
               const name = it.name || 'Curso';
               const badge = it.kind === 'concurso' ? '📌 Concurso' : it.kind === 'featured' ? '⭐ Em destaque' : '📚 Curso';
-              const meta = badge + (it.kind === 'concurso' ? '' : ' · ' + (it.total || 0) + ' aulas');
+              // ★ v2.15.19 (S — item 6a, consistência): o cartão de resultado
+              //   da busca global tinha o mesmo padrão sem drive — mesmo
+              //   tratamento do fallback de /cursos; concursos sem drive.
+              const __drv = it.kind === 'concurso' ? '' : __driveNameOf(it.coursePath);
+              const meta = badge + (__drv ? ' · ' + __drv : '') + (it.kind === 'concurso' ? '' : ' · ' + (it.total || 0) + ' aulas');
               return '<div class="meggy-card" data-search-course="' + esc(it.coursePath || '') + '" data-search-concurso="' + esc(it.concursoId || '') + '" style="cursor:pointer;"><div class="meggy-card-icon">' + esc(it.icon || '📚') + '</div><div class="meggy-card-title">' + esc(name) + '</div><div class="meggy-card-meta">' + esc(meta) + '</div></div>';
             }).join('') + '</div></div>';
           }
