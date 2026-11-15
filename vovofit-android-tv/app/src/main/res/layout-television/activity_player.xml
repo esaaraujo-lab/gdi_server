@@ -8,6 +8,8 @@
   mantidos) + barra cinematografica: disco escuro modesto, chips como
   icones discretos (state layer), scrim 72% na base, emoji ⏸ -> ❚❚.
   Sem botão de tela cheia aqui (a TV já É tela cheia). Sem playlist
+  Frente E — controlos discretos: play/pausa 72dp (era 96dp),
+  barra de progresso fina de 4dp e mais transparente, scrim 60%.
   embutida (gaveta + "A seguir" removidas — a playlist vive na página),
   sem botões −10s/+10s no rodapé (o pulo continua pelas setas do
   D-pad — ver PlayerActivity.dispatchKeyEvent), velocidade só na
@@ -112,11 +114,42 @@
         </LinearLayout>
 
 
+
+        <!-- Frente H — "A carregar" imediato: véu + spinner sobre o vídeo
+             até ao 1º frame (o PlayerActivity esconde-o no 1º STATE_READY
+             e no erro de playback). Fica ABAIXO da top_bar / barra de
+             controlos (filhos posteriores) e do overlay de descanso
+             (Frente D, último filho da raiz). Não é clicável: o toque
+             continua a chegar ao playerView (mostrar controlos). -->
+        <LinearLayout
+            android:id="@+id/player_loading"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:background="#CC000000"
+            android:clickable="false"
+            android:visibility="visible">
+
+            <ProgressBar
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:indeterminate="true" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="A carregar…"
+                android:textColor="@android:color/white"
+                android:textSize="14sp" />
+        </LinearLayout>
+
         <!-- Play/pause central (quando pausado) -->
         <TextView
             android:id="@+id/center_play_pause"
-            android:layout_width="@dimen/play_fab_size"
-            android:layout_height="@dimen/play_fab_size"
+            android:layout_width="@dimen/player_fab_size"
+            android:layout_height="@dimen/player_fab_size"
             android:layout_gravity="center"
             android:background="@drawable/player_play_bg"
             android:clickable="true"
@@ -124,7 +157,7 @@
             android:gravity="center"
             android:text="▶"
             android:textColor="@android:color/white"
-            android:textSize="36sp"
+            android:textSize="28sp"
             android:visibility="gone" />
 
         <!-- Barra superior: título + ações -->
@@ -234,15 +267,15 @@
 
                 <TextView
                     android:id="@+id/btn_play_pause_bar"
-                    android:layout_width="96dp"
-                    android:layout_height="96dp"
+                    android:layout_width="@dimen/player_fab_size"
+                    android:layout_height="@dimen/player_fab_size"
                     android:background="@drawable/player_play_bg"
                     android:clickable="true"
                     android:focusable="true"
                     android:gravity="center"
                     android:text="❚❚"
                     android:textColor="@android:color/white"
-                    android:textSize="36sp" />
+                    android:textSize="28sp" />
 
                 <View
                     android:layout_width="0dp"
@@ -252,7 +285,7 @@
                 <TextView
                     android:id="@+id/btn_rest_bar"
                     android:layout_width="wrap_content"
-                    android:layout_height="48dp"
+                    android:layout_height="40dp"
                     android:layout_marginEnd="@dimen/spacing_sm"
                     android:background="@drawable/player_chip_bg"
                     android:clickable="true"
@@ -267,7 +300,7 @@
                 <TextView
                     android:id="@+id/btn_speed_bar"
                     android:layout_width="wrap_content"
-                    android:layout_height="48dp"
+                    android:layout_height="40dp"
                     android:layout_marginEnd="@dimen/spacing_sm"
                     android:background="@drawable/player_chip_bg"
                     android:clickable="true"
@@ -282,8 +315,8 @@
                 <TextView
                     android:id="@+id/btn_exit_fullscreen"
                     android:visibility="gone"
-                    android:layout_width="72dp"
-                    android:layout_height="72dp"
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
                     android:background="@drawable/player_chip_bg"
                     android:clickable="true"
                     android:focusable="true"
@@ -306,19 +339,19 @@
                     android:layout_height="wrap_content"
                     android:text="00:00 / 00:00"
                     android:textColor="@android:color/white"
-                    android:textSize="24sp"
+                    android:textSize="20sp"
                     android:textStyle="bold" />
 
                 <SeekBar
                     android:id="@+id/bar_seek_bar"
                     android:layout_width="0dp"
-                    android:layout_height="wrap_content"
+                    android:layout_height="32dp"
                     android:layout_marginStart="@dimen/spacing_lg"
                     android:layout_weight="1"
                     android:focusable="true"
                     android:max="1000"
-                    android:progressDrawable="@drawable/progress_horizontal"
-                    android:thumb="@drawable/seek_thumb" />
+                    android:progressDrawable="@drawable/player_progress"
+                    android:thumb="@drawable/player_seek_thumb" />
             </LinearLayout>
         </LinearLayout>
 
@@ -406,7 +439,7 @@
                     <TextView
                         android:id="@+id/btn_speed_info"
                         android:layout_width="wrap_content"
-                        android:layout_height="48dp"
+                        android:layout_height="40dp"
                         android:background="@drawable/player_chip_bg"
                         android:clickable="true"
                         android:focusable="true"
@@ -421,7 +454,7 @@
                     <TextView
                         android:id="@+id/btn_rest_info"
                         android:layout_width="wrap_content"
-                        android:layout_height="48dp"
+                        android:layout_height="40dp"
                         android:layout_marginStart="@dimen/spacing_sm"
                         android:background="@drawable/player_chip_bg"
                         android:clickable="true"
@@ -437,7 +470,7 @@
                         android:id="@+id/btn_fullscreen"
                         android:visibility="gone"
                         android:layout_width="48dp"
-                        android:layout_height="48dp"
+                        android:layout_height="40dp"
                         android:layout_marginStart="@dimen/spacing_sm"
                         android:background="@drawable/player_chip_bg"
                         android:clickable="true"
