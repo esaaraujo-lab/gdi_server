@@ -7,46 +7,79 @@ import android.os.Bundle
 import android.os.ParcelFileDescriptor
 import android.text.Editable
 import android.text.TextWatcher
+import android.util.Base64
 import android.view.View
 import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.ProgressBar
+import android.widget.ScrollView
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import com.meggy.app.R
+import com.meggy.app.data.AiService
 import com.meggy.app.databinding.ActivityPdfReaderBinding
 import com.meggy.app.ui.home.HomeActivity
 import com.meggy.app.ui.mylist.MyListActivity
 import com.meggy.app.ui.search.SearchActivity
 import com.meggy.app.ui.settings.SettingsActivity
 import com.meggy.app.util.FileDownloader
+import com.meggy.app.util.MaterialSaver
+import com.meggy.app.util.LessonDescription
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.TvUtils
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.text.PDFTextStripper
+import java.io.ByteArrayOutputStream
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import android.util.LruCache
+import android.view.LayoutInflater
+import android.view.ScaleGestureDetector
+import android.view.ViewGroup
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.meggy.app.databinding.ItemPdfPageBinding
 
 /**
- * v2.7.6 — Leitor de PDF embutido (conceito leitor-pdf).
- *
- * Renderização nativa com PdfRenderer (página como card branco);
- * navegação anterior/próxima + ir para página (toque no rótulo);
- * zoom por botões (75/100/150/200/300% — sem pinch, documentado);
- * busca no texto via pdfbox-android (PDFTextStripper por página,
- * ocorrências navegáveis); compartilhar via FileProvider; bookmark
- * (salva o documento; aparece em Minha lista → Documentos marcados);
- * retoma a última página lida (savePdfPage).
+ * v2.7.15 — Leitor de PDF embutido (conceito leitor-pdf). Frente I:
+ * scroll contínuo em tela cheia (RecyclerView vertical; cada página
+ * é um item renderizado sob demanda pelo PdfRenderer nativo, com
+ * cache LRU de 48 MB e pré-render da próxima página). No celular não
+ * há troca de página por botões gigantes: desliza-se para baixo e as
+ * páginas seguem em sequência; "<" (voltar) mantém-se na toolbar.
+ * Zoom discreto: botões −/+ pequenos (36dp) + pinch (um passo por
+ * gesto); ao ampliar, a página rola na horizontal dentro do item.
+ * Mantidos: busca no texto (pdfbox-android), compartilhar via
+ * FileProvider, bookmark, ir para página (toque no rótulo),
+ * retoma da última página lida, botões ‹ › pequenos (TV/D-pad e
+ * toque) e bottom nav. TV: RecyclerView focável; setas rolam.
  *
  * Limitações (documentadas): PDFs escaneados sem camada de texto não
- * têm o que buscar — a busca informa "o PDF pode ser escaneado (sem
- * texto)". Pinch-to-zoom não implementado (botões cobrem o zoom).
- * TV: botões focáveis pelo D-pad; o ScrollView da página recebe o
- * foco para rolar com as setas.
+ * têm o que buscar; o zoom é em passos (75/100/150/200/300%), sem
+ * zoom livre contínuo; o PdfRenderer não é thread-safe — as
+ * renderizações são serializadas por Mutex; bitmaps do cache não
+ * são reciclados à mão (o GC liberta-os) para nunca desenhar um
+ * bitmap reciclado ainda visível num holder.
+ *
+ * Frente J — botão "✨ Resumo" na toolbar: gera o resumo do PDF
+ * pela Meggy no servidor (POST /api/ai, kind "resumo") a partir
+ * do texto que o leitor já extrai (pdfbox); sem camada de texto,
+ * lê até 4 páginas por OCR (POST /api/ai/ocr). O resumo aparece
+ * num diálogo e é guardado no cache ISA + na pasta de materiais
+ * (reutiliza AiService.saveSummary/saveToFolder; a Frente K é
+ * dona da UX da pasta de materiais).
  */
 class PdfReaderActivity : AppCompatActivity() {
 
@@ -54,6 +87,13 @@ class PdfReaderActivity : AppCompatActivity() {
         const val EXTRA_URL = "pdf_url"
         const val EXTRA_NAME = "pdf_name"
         const val EXTRA_PATH = "pdf_path"
+        // Frente J — resumo do PDF pela Meggy.
+        /** Texto máximo enviado à IA (o mesmo teto da web, PROMPTS_RESUMO). */
+        const val SUMMARY_MAX_TEXT_CHARS = 20_000
+        /** Mínimo de caracteres não-brancos para o PDF contar como legível. */
+        const val SUMMARY_MIN_READABLE_CHARS = 200
+        /** Páginas máx. lidas por OCR quando o PDF não tem camada de texto. */
+        const val SUMMARY_MAX_OCR_PAGES = 4
     }
 
     private lateinit var binding: ActivityPdfReaderBinding
@@ -66,10 +106,23 @@ class PdfReaderActivity : AppCompatActivity() {
     private var docPath: String = ""
     private var docName: String = "Documento"
 
+    // Frente J — resumo do PDF pela Meggy (ver KDoc da classe).
+    private var pdfSummary: String? = null
+    private var summaryJob: Job? = null
+    private var summaryDialog: AlertDialog? = null
+    private var summaryStatusView: TextView? = null
+    private var summaryProgressView: ProgressBar? = null
+    private var summaryTextView: TextView? = null
+    private var summaryScrollView: ScrollView? = null
+
     // Busca no texto (pdfbox-android, por página).
     private var pageTexts: List<String>? = null
     private var occurrences: List<Int> = emptyList()
     private var occurrenceIdx = -1
+
+    // Scroll contínuo (Frente I): adapter + layout manager.
+    private var pageAdapter: PdfPageAdapter? = null
+    private var layoutManager: LinearLayoutManager? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -84,7 +137,7 @@ class PdfReaderActivity : AppCompatActivity() {
         binding.toolbar.setNavigationOnClickListener { finish() }
         if (TvUtils.isTv(this)) {
             binding.bottomNav.visibility = View.GONE
-            binding.pageScrollV.isFocusable = true
+            binding.pdfPages.isFocusable = true
         } else {
             binding.bottomNav.setOnItemSelectedListener { item ->
                 when (item.itemId) {
@@ -115,6 +168,7 @@ class PdfReaderActivity : AppCompatActivity() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
         })
         binding.btnShare.setOnClickListener { sharePdf() }
+        binding.btnSummary.setOnClickListener { onSummaryClicked() }
         updateBookmarkButton()
         binding.btnBookmark.setOnClickListener {
             val added = SessionManager.get(this).toggleBookmark(docPath, docName, "pdf")
@@ -122,6 +176,43 @@ class PdfReaderActivity : AppCompatActivity() {
             Toast.makeText(this,
                 if (added) "🔖 Documento marcado" else "Marcador removido",
                 Toast.LENGTH_SHORT).show()
+        }
+
+        // Scroll contínuo (Frente I): lista vertical de páginas.
+        layoutManager = LinearLayoutManager(this)
+        binding.pdfPages.layoutManager = layoutManager
+        binding.pdfPages.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) {
+                val first = layoutManager?.findFirstVisibleItemPosition() ?: return
+                if (first in 0 until pageCount && first != currentPage) {
+                    currentPage = first
+                    updatePageUi()
+                    SessionManager.get(this@PdfReaderActivity).savePdfPage(docPath, currentPage)
+                }
+            }
+        })
+        // Pinch-to-zoom discreto: um passo por gesto (Frente I).
+        val pinch = ScaleGestureDetector(this,
+            object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                private var factor = 1f
+                override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+                    factor = 1f
+                    return true
+                }
+                override fun onScale(detector: ScaleGestureDetector): Boolean {
+                    factor *= detector.scaleFactor
+                    return true
+                }
+                override fun onScaleEnd(detector: ScaleGestureDetector) {
+                    when {
+                        factor > 1.25f -> setZoom(zoomIdx + 1)
+                        factor < 0.8f -> setZoom(zoomIdx - 1)
+                    }
+                }
+            })
+        binding.pdfPages.setOnTouchListener { _, event ->
+            pinch.onTouchEvent(event)
+            false // não consome: o scroll vertical continua no RecyclerView
         }
 
         loadPdf(url)
@@ -158,7 +249,20 @@ class PdfReaderActivity : AppCompatActivity() {
                 // Retomar a última página lida.
                 currentPage = SessionManager.get(this@PdfReaderActivity)
                     .getPdfPage(docPath).coerceIn(0, pageCount - 1)
-                renderPage()
+                // Tamanhos das páginas (p/ o adapter dimensionar cada item).
+                val sizes = withContext(Dispatchers.IO) {
+                    val r = renderer ?: return@withContext emptyList<Pair<Int, Int>>()
+                    (0 until pageCount).map { i ->
+                        val p = r.openPage(i)
+                        val s = p.width to p.height
+                        p.close()
+                        s
+                    }
+                }
+                pageAdapter = PdfPageAdapter(sizes)
+                binding.pdfPages.adapter = pageAdapter
+                binding.pdfPages.scrollToPosition(currentPage)
+                updatePageUi()
                 extractTextsInBackground(file)
             } catch (e: Exception) {
                 binding.errorView.visibility = View.VISIBLE
@@ -187,36 +291,41 @@ class PdfReaderActivity : AppCompatActivity() {
         }
     }
 
-    private fun renderPage() {
-        val r = renderer ?: return
-        if (currentPage !in 0 until pageCount) return
-        val page = r.openPage(currentPage)
-        val zoom = zooms[zoomIdx]
-        val width = (page.width * zoom * 2).toInt().coerceAtLeast(1)
-        val height = (page.height * zoom * 2).toInt().coerceAtLeast(1)
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        bitmap.eraseColor(android.graphics.Color.WHITE)
-        page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-        page.close()
-        binding.pageImage.setImageBitmap(bitmap)
+    /** Atualiza rótulo/botões/zoom para a página atual (sem re-renderizar). */
+    private fun updatePageUi() {
         binding.pageLabel.text = "Página ${currentPage + 1} de $pageCount"
-        binding.zoomLabel.text = "${(zoom * 100).toInt()}%"
+        binding.zoomLabel.text = "${(zooms[zoomIdx] * 100).toInt()}%"
         binding.btnPrevPage.isEnabled = currentPage > 0
         binding.btnNextPage.isEnabled = currentPage < pageCount - 1
-        SessionManager.get(this).savePdfPage(docPath, currentPage)
-        binding.pageScrollV.scrollTo(0, 0)
     }
 
     private fun goToPage(page: Int) {
         if (page in 0 until pageCount) {
             currentPage = page
-            renderPage()
+            // Salto curto: suave; salto longo: direto (evita atravessar o doc).
+            val first = layoutManager?.findFirstVisibleItemPosition() ?: page
+            if (kotlin.math.abs(page - first) <= 2) {
+                binding.pdfPages.smoothScrollToPosition(page)
+            } else {
+                binding.pdfPages.scrollToPosition(page)
+            }
+            updatePageUi()
+            SessionManager.get(this).savePdfPage(docPath, currentPage)
         }
     }
 
     private fun setZoom(idx: Int) {
-        zoomIdx = idx.coerceIn(0, zooms.lastIndex)
-        renderPage()
+        val next = idx.coerceIn(0, zooms.lastIndex)
+        if (next == zoomIdx) return
+        zoomIdx = next
+        // Desanexar antes de limpar o cache: nenhum holder desenha
+        // enquanto os bitmaps antigos saem (nunca reciclar à mão).
+        binding.pdfPages.adapter = null
+        pageAdapter?.clearCache()
+        binding.pdfPages.adapter = pageAdapter
+        pageAdapter?.notifyDataSetChanged()
+        binding.pdfPages.scrollToPosition(currentPage)
+        updatePageUi()
     }
 
     private fun showGoToPageDialog() {
@@ -272,6 +381,39 @@ class PdfReaderActivity : AppCompatActivity() {
         goToPage(occurrences[occurrenceIdx])
     }
 
+
+    // ── FRENTE K — PONTO DE ENTREGA PARA A FRENTE J ─────────────
+    //
+    // A Frente J (botao "Gerar resumo" no leitor) GERA o resumo, as
+    // pilulas e as questoes deste PDF; a Frente K GUARDA-os. A J chama
+    // [saveGeneratedMaterials] com o que gerou (tudo o que existir;
+    // null/blank = nao gerado) e esta frente grava os tres na pasta
+    // de materiais da aula a que o PDF pertence — o MESMO caminho
+    // partilhado dos videos (POST /api/materials/save-in-folder,
+    // `.gdi-resumos/` / `.gdi-flashcards/` / `.gdi-questoess/`),
+    // via [MaterialSaver]. Nada fica so no aparelho: o servidor/
+    // Drive e a fonte partilhada entre aparelhos/alunos.
+    //
+    // `docPath` e o path COMPLETO do PDF (ex. "/11:/Curso/Aula 01/
+    // Aula 01.pdf"): o worker resolve a pasta PAI como a pasta da
+    // aula. `questionsJson` e o JSON das questoes (array, como o
+    // cache ISA as devolve); se a J tiver so texto, passa o texto.
+    // Best-effort e silencioso: devolve o que foi gravado; a UI da
+    // J decide o que mostrar. NAO chamar antes de a J gerar — sem
+    // conteudo nao ha nada a guardar.
+    suspend fun saveGeneratedMaterials(
+        summary: String?,
+        pills: String?,
+        questionsJson: String?
+    ): MaterialSaver.SaveReport {
+        val lessonName = docName
+            .removeSuffix(".pdf").removeSuffix(".PDF")
+            .ifBlank { "Aula" }
+        return MaterialSaver.saveGenerated(
+            this, docPath, lessonName, summary, pills, questionsJson
+        )
+    }
+
     private fun sharePdf() {
         val file = pdfFile ?: return
         try {
@@ -290,6 +432,124 @@ class PdfReaderActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Adapter do scroll contínuo (Frente I). Cada página é renderizada
+     * sob demanda com PdfRenderer, numa thread de IO, serializada por
+     * Mutex (o PdfRenderer não é thread-safe). Cache LRU de 48 MB;
+     * pré-render da página seguinte para o scroll não tropeçar.
+     */
+    private inner class PdfPageAdapter(
+        private val pageSizes: List<Pair<Int, Int>>,
+    ) : RecyclerView.Adapter<PdfPageAdapter.PageViewHolder>() {
+
+        private val renderMutex = Mutex()
+        private val pageCache = object : LruCache<Int, Bitmap>(48 * 1024) {
+            override fun sizeOf(key: Int, bitmap: Bitmap): Int = bitmap.byteCount / 1024
+        }
+
+        inner class PageViewHolder(val itemBinding: ItemPdfPageBinding) :
+            RecyclerView.ViewHolder(itemBinding.root)
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PageViewHolder {
+            val itemBinding = ItemPdfPageBinding.inflate(
+                LayoutInflater.from(parent.context), parent, false
+            )
+            return PageViewHolder(itemBinding)
+        }
+
+        override fun getItemCount(): Int = pageCount
+
+        override fun onBindViewHolder(holder: PageViewHolder, position: Int) {
+            val (pw, ph) = pageSizes.getOrNull(position) ?: (1 to 1)
+            val viewW = targetViewWidthPx()
+            val viewH = (viewW * ph / pw.toFloat()).toInt().coerceAtLeast(1)
+            holder.itemBinding.pageImage.layoutParams =
+                holder.itemBinding.pageImage.layoutParams.apply {
+                    width = viewW
+                    height = viewH
+                }
+            holder.itemBinding.pageImage.setImageBitmap(null)
+            val cached = pageCache.get(position)
+            if (cached != null) {
+                holder.itemBinding.pageImage.setImageBitmap(cached)
+            } else {
+                renderPageInto(holder, position)
+            }
+            // Pré-render da próxima página para o scroll não tropeçar.
+            if (position + 1 < pageCount && pageCache.get(position + 1) == null) {
+                lifecycleScope.launch(Dispatchers.IO) { renderBitmap(position + 1) }
+            }
+        }
+
+        override fun onViewRecycled(holder: PageViewHolder) {
+            holder.itemBinding.pageImage.setImageBitmap(null)
+        }
+
+        private fun renderPageInto(holder: PageViewHolder, position: Int) {
+            lifecycleScope.launch(Dispatchers.IO) {
+                val bitmap = renderBitmap(position) ?: return@launch
+                withContext(Dispatchers.Main) {
+                    // Só aplica se o holder ainda mostra esta página.
+                    if (holder.bindingAdapterPosition == position) {
+                        holder.itemBinding.pageImage.setImageBitmap(bitmap)
+                    }
+                }
+            }
+        }
+
+        /** Largura do item em px: largura útil do ecrã × zoom. */
+        private fun targetViewWidthPx(): Int {
+            val marginPx = (16 * resources.displayMetrics.density).toInt()
+            val avail = (resources.displayMetrics.widthPixels - marginPx).coerceAtLeast(1)
+            return (avail * zooms[zoomIdx]).toInt().coerceAtLeast(1)
+        }
+
+        /** Renderiza (e guarda em cache) a página; null se falhar. */
+        private suspend fun renderBitmap(position: Int): Bitmap? {
+            pageCache.get(position)?.let { return it }
+            val r = renderer ?: return null
+            if (position !in 0 until pageCount) return null
+            return renderMutex.withLock {
+                pageCache.get(position)?.let { return@withLock it }
+                try {
+                    val page = r.openPage(position)
+                    // Supersampling 1.5x para nitidez, com teto p/ memória.
+                    var scale = targetViewWidthPx() * 1.5f / page.width
+                    if (page.width * scale > 1600) scale = 1600 / page.width.toFloat()
+                    if (page.height * scale > 2400) scale = 2400 / page.height.toFloat()
+                    val width = (page.width * scale).toInt().coerceAtLeast(1)
+                    val height = (page.height * scale).toInt().coerceAtLeast(1)
+                    // Frente G (port p/ o leitor novo da Frente I): o teto
+                    // de pixels ja existe (1600x2400), mas sem este catch
+                    // um OOM rebentava a coroutine — catch (Exception)
+                    // nao apanha Error. Fecha a pagina e limpa o cache.
+                    val bitmap = try {
+                        Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                    } catch (_: OutOfMemoryError) {
+                        page.close()
+                        pageCache.evictAll()
+                        return@withLock null
+                    }
+                    bitmap.eraseColor(android.graphics.Color.WHITE)
+                    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                    page.close()
+                    pageCache.put(position, bitmap)
+                    bitmap
+                } catch (_: Exception) {
+                    null
+                }
+            }
+        }
+
+        fun clearCache() {
+            pageCache.evictAll()
+        }
+
+        fun release() {
+            pageCache.evictAll()
+        }
+    }
+
     override fun onPause() {
         super.onPause()
         SessionManager.get(this).savePdfPage(docPath, currentPage)
@@ -297,6 +557,265 @@ class PdfReaderActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        summaryJob?.cancel()
+        summaryDialog?.dismiss()
+        pageAdapter?.release()
         try { renderer?.close() } catch (_: Exception) {}
+    }
+
+    // ───────── Frente J — resumo do PDF pela Meggy ─────────
+    //
+    // Fluxo (tudo em endpoints que JÁ existem no worker — nada
+    // inventado; ver AiService, secção "Frente J"):
+    //   1. resumo guardado? cache ISA (GET /api/ai/summaries, chave
+    //      "<pastaDaAula>/<nomeDoPdf>") e pasta de materiais
+    //      (GET /api/materials/load-from-folder) — se há, mostra sem
+    //      gerar de novo;
+    //   2. senão, texto do PDF: o que o leitor já extraiu (pdfbox,
+    //      pageTexts); sem camada de texto, OCR de até 4 páginas
+    //      (POST /api/ai/ocr) a partir das páginas renderizadas;
+    //   3. POST /api/ai {kind:"resumo"} com o prompt rico da web
+    //      (PROMPTS_RESUMO nível 7, gdi-meggy.js:1218) + até 20.000
+    //      chars do texto — resposta síncrona com o resumo;
+    //   4. guarda best-effort: cache ISA (POST /api/ai/summaries,
+    //      mesma chave do passo 1) + pasta `.gdi-resumos/` da aula
+    //      (POST /api/materials/save-in-folder, via
+    //      AiService.saveToFolder). PONTO DE ENTREGA p/ a Frente K:
+    //      a gravação na pasta de materiais JÁ existe aqui; a K é
+    //      dona de a listar/mostrar — NÃO duplicar a gravação.
+    // A navegação do leitor (Frente I) NÃO é tocada: o único toque
+    // no layout é o botão btnSummary na toolbar; o diálogo do resumo
+    // é construído em código (sem novo layout). Se o utilizador
+    // fechar o diálogo a meio da geração, o job continua em segundo
+    // plano e o resultado fica em pdfSummary (mostrado no próximo
+    // toque no botão) — o cancelamento só acontece no onDestroy.
+
+    /** Pasta da aula = pasta-mãe do PDF (o docPath é ".../Aula/ficheiro.pdf"). */
+    private fun lessonFolderPath(): String = LessonDescription.parentPath(docPath)
+
+    /** Nome da pasta da aula (último segmento da pasta-mãe). */
+    private fun lessonFolderName(): String =
+        lessonFolderPath().trimEnd('/').substringAfterLast('/').ifBlank { docName }
+
+    /** Chave do cache ISA para este PDF ("<pastaDaAula>/<nomeDoPdf>"). */
+    private fun summaryCacheKey(): String = "${lessonFolderPath().trimEnd('/')}/$docName"
+
+    private fun onSummaryClicked() {
+        if (pdfSummary != null) {
+            openSummaryDialog()
+            showSummaryReady(pdfSummary!!, getString(R.string.pdf_summary_cached))
+            return
+        }
+        openSummaryDialog()
+        setSummaryLoading(getString(R.string.pdf_summary_searching_saved))
+        summaryJob?.cancel()
+        summaryJob = lifecycleScope.launch {
+            // 1) Resumo já guardado? (cache ISA + pasta de materiais)
+            val cached = findSavedSummary()
+            if (cached != null) {
+                pdfSummary = cached
+                showSummaryReady(cached, getString(R.string.pdf_summary_cached))
+                return@launch
+            }
+            if (AiService.backendUnavailable) {
+                showSummaryError(getString(R.string.pdf_summary_unavailable))
+                return@launch
+            }
+            // 2) Texto do PDF (extraído; senão OCR, até 4 páginas).
+            setSummaryLoading(getString(R.string.pdf_summary_extracting))
+            val text = resolvePdfTextForSummary()
+            if (text == null) {
+                showSummaryError(getString(R.string.pdf_summary_no_text))
+                return@launch
+            }
+            // 3) Geração no servidor (POST /api/ai, kind "resumo").
+            setSummaryLoading(getString(R.string.pdf_summary_generating))
+            when (val result = AiService.generatePdfSummary(this@PdfReaderActivity, summaryPrompt(text))) {
+                is AiService.PdfSummaryResult.Ok -> {
+                    pdfSummary = result.text
+                    // 4) Guarda best-effort (ISA + pasta de materiais).
+                    val key = summaryCacheKey()
+                    val savedIsa = AiService.saveSummary(
+                        this@PdfReaderActivity, key, result.text, lessonFolderName()
+                    )
+                    // Frente K — a gravação na pasta de materiais passa
+                    // pelo caminho único (saveGeneratedMaterials ->
+                    // MaterialSaver): resumo + pílulas + questões que
+                    // já existam no ISA p/ esta chave (a J gera só o
+                    // resumo; o resto vem do cache quando existir).
+                    val bundle = AiService.getGeneratedBundle(this@PdfReaderActivity, key)
+                    val report = saveGeneratedMaterials(
+                        result.text, bundle?.mindmap, bundle?.questionsJson
+                    )
+                    val note = if (savedIsa || report.anySaved) getString(R.string.pdf_summary_saved)
+                        else getString(R.string.pdf_summary_save_failed)
+                    showSummaryReady(result.text, note)
+                }
+                AiService.PdfSummaryResult.Unavailable ->
+                    showSummaryError(getString(R.string.pdf_summary_unavailable))
+                AiService.PdfSummaryResult.RateLimited ->
+                    showSummaryError(getString(R.string.pdf_summary_rate_limited))
+                AiService.PdfSummaryResult.Failed ->
+                    showSummaryError(getString(R.string.pdf_summary_failed))
+            }
+        }
+    }
+
+    /** Procura um resumo já guardado (ISA + pasta de materiais). */
+    private suspend fun findSavedSummary(): String? {
+        val folder = lessonFolderPath().trimEnd('/')
+        val keys = listOf(
+            summaryCacheKey(),
+            "${LessonDescription.parentPath(folder)}/$docName"
+        ).distinct()
+        for (key in keys) {
+            val s = AiService.getSummary(this, key)
+            if (!s.isNullOrBlank()) return s
+        }
+        return AiService.loadFromFolder(this, docPath, "resumo")
+    }
+
+    /** Texto do PDF para a IA: extraído (pdfbox) ou, sem texto, OCR. */
+    private suspend fun resolvePdfTextForSummary(): String? {
+        // Espera a extração em segundo plano (até 10 s).
+        var waited = 0
+        while (pageTexts == null && waited < 10_000) {
+            delay(250)
+            waited += 250
+        }
+        val extracted = pageTexts?.joinToString("\n").orEmpty()
+        if (extracted.count { !it.isWhitespace() } >= SUMMARY_MIN_READABLE_CHARS) {
+            return extracted.take(SUMMARY_MAX_TEXT_CHARS)
+        }
+        // Sem camada de texto → OCR das primeiras páginas.
+        return ocrPdfText()
+    }
+
+    /** Lê até SUMMARY_MAX_OCR_PAGES páginas por OCR (POST /api/ai/ocr). */
+    private suspend fun ocrPdfText(): String? {
+        val r = renderer ?: return null
+        if (pageCount <= 0) return null
+        val pages = minOf(pageCount, SUMMARY_MAX_OCR_PAGES)
+        val sb = StringBuilder()
+        for (i in 0 until pages) {
+            setSummaryLoading(getString(R.string.pdf_summary_ocr, i + 1, pages))
+            val b64 = renderPageForOcr(r, i) ?: continue
+            val text = AiService.ocrPageImage(this, b64, i + 1, pageCount)
+            if (!text.isNullOrBlank()) sb.append(text).append('\n')
+            if (sb.length >= SUMMARY_MAX_TEXT_CHARS) break
+        }
+        val out = sb.toString()
+        return out.take(SUMMARY_MAX_TEXT_CHARS)
+            .takeIf { it.count { c -> !c.isWhitespace() } >= SUMMARY_MIN_READABLE_CHARS }
+    }
+
+    /** Renderiza a página para JPEG base64 (OCR) — ~1000 px de largura. */
+    private fun renderPageForOcr(r: PdfRenderer, pageIndex: Int): String? {
+        return try {
+            val page = r.openPage(pageIndex)
+            val scale = 1000f / page.width.toFloat()
+            val width = (page.width * scale).toInt().coerceAtLeast(1)
+            val height = (page.height * scale).toInt().coerceAtLeast(1)
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            bitmap.eraseColor(android.graphics.Color.WHITE)
+            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+            page.close()
+            val out = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 70, out)
+            bitmap.recycle()
+            Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Prompt rico da web (PROMPTS_RESUMO nível 7, gdi-meggy.js:1218)
+     * + até 20.000 chars do texto do PDF.
+     */
+    private fun summaryPrompt(text: String): String {
+        return "Você é um professor especialista em concursos públicos. Leia TODO o material abaixo e crie um RESUMO PROFUNDO E DETALHADO em Markdown.\n\n" +
+            "REQUISITOS:\n" +
+            "- Estruture com ## títulos e ### subtítulos\n" +
+            "- Para CADA tópico: explique o conceito, dê EXEMPLOS práticos\n" +
+            "- Use **negrito** para palavras-chave e dispositivos legais\n" +
+            "- Inclua uma seção ## Pegadinhas de Prova no final\n" +
+            "- Inclua uma seção ## Resumo Rápido com 5-10 bullets\n\n" +
+            "Material:\n" + text.take(SUMMARY_MAX_TEXT_CHARS)
+    }
+
+    /** Abre (ou reabre) o diálogo do resumo. Construído em código. */
+    private fun openSummaryDialog() {
+        if (summaryDialog?.isShowing == true) return
+        val ctx = this
+        val status = TextView(ctx).apply {
+            textSize = 15f
+            setTextColor(ContextCompat.getColor(ctx, R.color.md_on_surface))
+            setPadding(8, 8, 8, 8)
+        }
+        val progress = ProgressBar(ctx).apply {
+            isIndeterminate = true
+            setPadding(8, 8, 8, 8)
+        }
+        val text = TextView(ctx).apply {
+            textSize = 15f
+            setTextColor(ContextCompat.getColor(ctx, R.color.md_on_surface))
+            setTextIsSelectable(true)
+            setPadding(8, 8, 8, 8)
+            visibility = View.GONE
+        }
+        val scroll = ScrollView(ctx).apply {
+            addView(text)
+            visibility = View.GONE
+        }
+        val layout = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 16, 48, 16)
+            addView(status)
+            addView(progress)
+            addView(scroll)
+        }
+        summaryStatusView = status
+        summaryProgressView = progress
+        summaryTextView = text
+        summaryScrollView = scroll
+        summaryDialog = AlertDialog.Builder(ctx)
+            .setTitle(getString(R.string.pdf_summary_title))
+            .setView(layout)
+            .setPositiveButton(R.string.pdf_summary_close, null)
+            .setNeutralButton(R.string.pdf_summary_regenerate) { _, _ ->
+                pdfSummary = null
+                // Fecha o diálogo atual ANTES de gerar de novo: sem
+                // isto o openSummaryDialog() veria o diálogo antigo
+                // ainda visível e o novo progresso nunca aparecia.
+                summaryDialog?.dismiss()
+                onSummaryClicked()
+            }
+            .show()
+    }
+
+    private fun setSummaryLoading(status: String) {
+        if (summaryDialog?.isShowing != true) return
+        summaryStatusView?.text = status
+        summaryStatusView?.visibility = View.VISIBLE
+        summaryProgressView?.visibility = View.VISIBLE
+        summaryScrollView?.visibility = View.GONE
+    }
+
+    private fun showSummaryReady(summary: String, note: String) {
+        if (summaryDialog?.isShowing != true) return
+        summaryStatusView?.text = note
+        summaryStatusView?.visibility = if (note.isBlank()) View.GONE else View.VISIBLE
+        summaryProgressView?.visibility = View.GONE
+        summaryTextView?.text = summary
+        summaryScrollView?.visibility = View.VISIBLE
+    }
+
+    private fun showSummaryError(message: String) {
+        if (summaryDialog?.isShowing != true) return
+        summaryStatusView?.text = message
+        summaryStatusView?.visibility = View.VISIBLE
+        summaryProgressView?.visibility = View.GONE
+        summaryScrollView?.visibility = View.GONE
     }
 }
