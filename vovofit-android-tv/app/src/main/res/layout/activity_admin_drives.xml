@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Ronda 10 Frente B — "Gerir drives" (só admin).
+  Formulário (ID da pasta, nome, APKs de destino, links opcionais de
+  capa/sub-capa, capas por sub-pasta) + lista dos drives do admin com
+  Remover. Mesmo estilo de activity_settings.xml (cores md_*, dimens
+  do design system, card tile_focus_border, botão btn_primary_pill).
+  Sem endpoint no servidor, o estado (adminStatus) diz "função
+  indisponível" e o botão Guardar fica desligado — nunca lista vazia
+  enganadora. O botão Guardar volta a ligar quando o servidor responde.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/md_background"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:background="@color/md_background"
+        android:elevation="0dp"
+        app:navigationIconTint="@color/md_primary"
+        app:title="@string/admin_drives_title"
+        app:titleTextAppearance="@style/TextAppearance.Material3.TitleLarge"
+        app:titleTextColor="@color/md_on_surface" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="@dimen/content_margin"
+            android:paddingBottom="@dimen/spacing_lg">
+
+            <TextView
+                android:id="@+id/adminStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:textColor="@color/md_on_surface_variant"
+                android:textSize="@dimen/text_card_subtitle"
+                android:visibility="gone" />
+
+            <!-- ADICIONAR DRIVE -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:text="@string/admin_drives_form_title"
+                android:textColor="@color/md_primary"
+                android:textSize="@dimen/text_chip"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:background="@drawable/tile_focus_border"
+                android:orientation="vertical"
+                android:padding="@dimen/spacing_lg">
+
+                <EditText
+                    android:id="@+id/inputDriveId"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/chip_outline"
+                    android:focusable="true"
+                    android:hint="@string/admin_drives_drive_id_hint"
+                    android:inputType="text"
+                    android:padding="@dimen/spacing_md"
+                    android:textColor="@color/md_on_surface"
+                    android:textColorHint="@color/md_on_surface_variant" />
+
+                <EditText
+                    android:id="@+id/inputDriveName"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_md"
+                    android:background="@drawable/chip_outline"
+                    android:focusable="true"
+                    android:hint="@string/admin_drives_name_hint"
+                    android:inputType="text"
+                    android:padding="@dimen/spacing_md"
+                    android:textColor="@color/md_on_surface"
+                    android:textColorHint="@color/md_on_surface_variant" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_lg"
+                    android:text="@string/admin_drives_targets"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_card_title" />
+
+                <CheckBox
+                    android:id="@+id/checkMeggy"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:focusable="true"
+                    android:text="Meggy"
+                    android:textColor="@color/md_on_surface" />
+
+                <CheckBox
+                    android:id="@+id/checkBibi"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:focusable="true"
+                    android:text="BiBi Fit"
+                    android:textColor="@color/md_on_surface" />
+
+                <CheckBox
+                    android:id="@+id/checkVovo"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:focusable="true"
+                    android:text="Vovó Fit"
+                    android:textColor="@color/md_on_surface" />
+
+                <EditText
+                    android:id="@+id/inputCoverUrl"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_md"
+                    android:background="@drawable/chip_outline"
+                    android:focusable="true"
+                    android:hint="@string/admin_drives_cover_hint"
+                    android:inputType="textUri"
+                    android:padding="@dimen/spacing_md"
+                    android:textColor="@color/md_on_surface"
+                    android:textColorHint="@color/md_on_surface_variant" />
+
+                <EditText
+                    android:id="@+id/inputSubCoverUrl"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_md"
+                    android:background="@drawable/chip_outline"
+                    android:focusable="true"
+                    android:hint="@string/admin_drives_subcover_hint"
+                    android:inputType="textUri"
+                    android:padding="@dimen/spacing_md"
+                    android:textColor="@color/md_on_surface"
+                    android:textColorHint="@color/md_on_surface_variant" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_lg"
+                    android:text="@string/admin_drives_subfolder_title"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_card_title" />
+
+                <LinearLayout
+                    android:id="@+id/subfolderCoversContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/btnAddSubfolderCover"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_sm"
+                    android:background="@drawable/chip_outline"
+                    android:focusable="true"
+                    android:text="@string/admin_drives_add_subfolder"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_card_subtitle" />
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/btnSaveDrive"
+                    android:layout_width="match_parent"
+                    android:layout_height="@dimen/cta_height"
+                    android:layout_marginTop="@dimen/spacing_lg"
+                    android:background="@drawable/btn_primary_pill"
+                    android:focusable="true"
+                    android:text="@string/admin_drives_save"
+                    android:textColor="@color/md_on_primary"
+                    android:textSize="@dimen/text_button"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- DRIVES DO ADMIN -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:text="@string/admin_drives_list_title"
+                android:textColor="@color/md_primary"
+                android:textSize="@dimen/text_chip"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/drivesEmpty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:text="@string/admin_drives_empty"
+                android:textColor="@color/md_on_surface_variant"
+                android:textSize="@dimen/text_card_subtitle"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/drivesList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:orientation="vertical" />
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>
