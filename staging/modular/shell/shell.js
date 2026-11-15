@@ -13,6 +13,15 @@
 (function () {
   'use strict';
 
+  // ★ v2.15.17 (B): canónico ÚNICO do rebase legado de caminhos de curso
+  //   (o mesmo mapa LEGACY_COURSE_PATH_REBASE do worker e do módulo
+  //   study-courses.js, 1 entrada: /11:/CURSOS 2026 → /9:/CURSOS 2026).
+  //   Os 3 clicks de cartão de curso (Home destaque, fallback /cursos,
+  //   busca) liam o path CRU do D1 e abriam /11:/ (drive errado → ⛔);
+  //   canonica-se SÓ no momento da navegação — o DOM/data-course fica intacto.
+  const __LEGACY_COURSE_PATH_REBASE = [['/11:/CURSOS 2026', '/9:/CURSOS 2026']];
+  const __canonCoursePath = function(p){ var x = String(p || ''); try { x = decodeURIComponent(x); } catch (_) {} for (var _ri = 0; _ri < __LEGACY_COURSE_PATH_REBASE.length; _ri++) { var _a = __LEGACY_COURSE_PATH_REBASE[_ri][0], _b = __LEGACY_COURSE_PATH_REBASE[_ri][1]; if (x === _a || x.indexOf(_a + '/') === 0) { x = _b + x.slice(_a.length); break; } } return x; };
+
   const Shell = {
     state: {
       currentView: 'home',
@@ -463,7 +472,7 @@
               const cp = card.dataset.course;
               if (cp) {
                 Shell.router.navigate('/drives');
-                setTimeout(() => Shell.views._renderDrives(cp), 50);
+                setTimeout(() => Shell.views._renderDrives(__canonCoursePath(cp)), 50);
               }
             };
           });
@@ -564,7 +573,7 @@
                     container.querySelectorAll('.meggy-card[data-course]').forEach(card => {
                       card.onclick = () => {
                         const cp = card.dataset.course;
-                        if (cp) { Shell.router.navigate('/drives'); setTimeout(() => Shell.views._renderDrives(cp), 50); }
+                        if (cp) { Shell.router.navigate('/drives'); setTimeout(() => Shell.views._renderDrives(__canonCoursePath(cp)), 50); }
                       };
                     });
                     // ★ v2.10.4 + v2.15.4 Q2: confirmação via _v215Confirm
@@ -753,7 +762,7 @@
             card.onclick = () => {
               if (card.dataset.searchConcurso) { Shell.router.navigate('/cursos'); setTimeout(() => { if (Shell.views.concursoDetail) Shell.views.concursoDetail(document.getElementById('meggy-main'), card.dataset.searchConcurso); }, 50); return; }
               const cp = card.dataset.searchCourse;
-              if (cp) { Shell.router.navigate('/drives'); setTimeout(() => Shell.views._renderDrives(cp), 50); }
+              if (cp) { Shell.router.navigate('/drives'); setTimeout(() => Shell.views._renderDrives(__canonCoursePath(cp)), 50); }
             };
           });
         })();
@@ -800,6 +809,11 @@
       async _renderDrives(path) {
         const container = document.getElementById('meggy-drives-container');
         const bc = document.getElementById('meggy-drives-breadcrumb');
+        // ★ v2.15.17 (A): normaliza caminho de pasta de drive — o worker
+        //   (apiRequest) só lista pastas cujo caminho termina em '/'; sem
+        //   a barra final cai no ramo get_single_file e a listagem volta
+        //   []. Deep links (destaque, gémeo) chegam sem a barra.
+        if (typeof path === 'string' && /^\/\d+:\//.test(path) && !path.endsWith('/')) path += '/';
         // ★ Guardar pasta atual para o player usar (interfolder + material)
         Shell.state.currentFolderPath = path;
 
