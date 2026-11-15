@@ -348,6 +348,20 @@
     });
 
     injectSidebarItems();
+    // ★ v2.15.9 (D): load direto (/plano colado ou refresh) — o boot do
+    //   shell renderiza a view ANTES desta ponte carregar; sem re-render
+    //   a view ficava no placeholder "Em breve." do _estudosView nativo.
+    //   A navegação SPA funcionava porque o clique acontecia depois da
+    //   ponte ligar. Re-renderiza 1× a rota atual quando ela é uma das
+    //   features desviadas E o placeholder ainda está na tela (se o shell
+    //   ainda não renderizou, o boot usa a ponte já ligada; se o módulo
+    //   já renderizou, não há o que refazer).
+    try {
+      var _cur = Shell.router.currentPath();
+      var _bridged = ['/simulado', '/provas', '/redacao', '/cronograma', '/estatisticas', '/mapa-fracos', '/plano', '/notificacoes'];
+      var _mainEl = document.getElementById('meggy-main');
+      if (_bridged.indexOf(_cur) >= 0 && _mainEl && _mainEl.innerHTML.indexOf('Em breve.') >= 0) Shell.renderView();
+    } catch (_) {}
     window.MeggyShellExtras = {
       version: BRIDGE_VERSION,
       wired: wired,
