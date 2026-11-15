@@ -1,5 +1,6 @@
 package com.vovofit.app.ui.home
 
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -21,6 +22,7 @@ import com.vovofit.app.util.loadCoverChain
 import com.vovofit.app.util.Format
 import com.vovofit.app.util.SessionManager
 import com.vovofit.app.util.TvUtils
+import com.vovofit.app.util.TvAutoFit
 import com.vovofit.app.util.setWordEllipsized
 
 /**
@@ -28,8 +30,9 @@ import com.vovofit.app.util.setWordEllipsized
  *
  * Card 16:9: foto real via Coil quando há thumbnail (RailItem.thumbnailUrl
  * ou FileItem.thumbnailLink), capa do drive quando não há (v1.0.8 —
- * monograma nunca mais como thumb). NUNCA emoji de câmera. Título 16sp
- * (máx. 2 linhas), subtítulo 14sp,
+ * monograma nunca mais como thumb). NUNCA emoji de câmera. Título 13sp
+ * (máx. 2 linhas), subtítulo 10.5sp — valores reais da TV (o KDoc
+ * dizia 16sp/14sp, que sao os do celular). Ronda 7 Frente B.
  * barra de progresso rosa + "% concluído · Xmin restantes".
  * Foco: FocusAnimator.attachCard (anel 3dp da marca + escala + elevação).
  */
@@ -72,6 +75,39 @@ class RailAdapter(
             }
             FocusAnimator.attachCard(binding.cardRoot, TvUtils.isTv(binding.root.context))
             TapFeedback.attachPress(binding.cardRoot, TvUtils.isTv(binding.root.context))
+            // Ronda 7 Frente B — auto-ajuste TV (TvAutoFit): o card e a imagem
+            // passam a derivar do viewport medido; no celular e na 32" de
+            // referencia (escala 1.0) nada muda. O rail do detalhe usa o
+            // mesmo adapter e herda o mesmo tamanho de card (geometria da
+            // TV, nao da home) — comportamento intencional e consistente.
+            if (TvUtils.isTv(binding.root.context)) {
+                val fit = TvAutoFit.forContext(binding.root.context)
+                val cardWidthPx = fit.layoutPx(200f)
+                val rootLp = binding.cardRoot.layoutParams as ViewGroup.MarginLayoutParams
+                rootLp.width = cardWidthPx
+                rootLp.marginEnd = fit.gapHalfPx(200f)
+                binding.cardRoot.layoutParams = rootLp
+                // Imagem 16:9 — a altura deriva da largura (nao de 112dp x escala).
+                val imageArea = binding.cardThumbnail.parent as View
+                imageArea.layoutParams = imageArea.layoutParams.apply {
+                    height = cardWidthPx * 9 / 16
+                }
+                binding.cardTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
+                binding.cardSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(10.5f))
+                binding.cardProgressText.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(12f))
+                binding.watchedBadge.layoutParams = binding.watchedBadge.layoutParams.apply {
+                    width = fit.layoutPx(24f)
+                    height = fit.layoutPx(24f)
+                }
+                binding.watchedBadge.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(12f))
+                binding.favStar.layoutParams = binding.favStar.layoutParams.apply {
+                    width = fit.layoutPx(32f)
+                    height = fit.layoutPx(32f)
+                    (this as ViewGroup.MarginLayoutParams).topMargin = fit.layoutPx(42f)
+                }
+                binding.favStar.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(16f))
+                binding.continueBadge.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(10f))
+            }
             // Frente A (TV): nextFocus explícito (ver params).
             if (nextFocusUpId != View.NO_ID) itemView.nextFocusUpId = nextFocusUpId
             if (nextFocusDownId != View.NO_ID) itemView.nextFocusDownId = nextFocusDownId
