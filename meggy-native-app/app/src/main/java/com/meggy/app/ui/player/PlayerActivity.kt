@@ -1039,6 +1039,7 @@ class PlayerActivity : AppCompatActivity() {
                     val sm = SessionManager.get(this@PlayerActivity)
                     if (sm.getLessonDescription(currentFolder) != null) return@launch
                     if (AiService.backendUnavailable) return@launch
+                    val api = ApiService(this@PlayerActivity)
                     val files = withContext(kotlinx.coroutines.Dispatchers.IO) {
                         runCatching { api.listFolder(currentFolder) }.getOrNull()
                     } ?: return@launch
