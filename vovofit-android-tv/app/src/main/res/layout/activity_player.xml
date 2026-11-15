@@ -24,9 +24,11 @@
   do episódio (thumb/monograma); sem CC; mesmos controles, mesmo
   progresso/retomada e Descanso. SEM logo sobre o vídeo (verificado:
   o player antigo não desenhava logo nenhum — e nenhum foi adicionado).
-  Descanso (🌙, modo existente v1.3.0): overlay preto SÓ sobre a
-  superfície de vídeo (a barra fica acessível); áudio e progresso
-  continuam; qualquer interação com os controles restaura o vídeo.
+  Descanso (🌙, modo existente v1.3.0; Frente D: TELA CHEIA + persiste
+  na troca de aula): overlay preto sobre a tela toda (último filho da
+  raiz, elevation 16dp); áudio e progresso continuam; a troca de aula
+  (auto-advance ou Anterior/Próxima) NÃO sai do descanso; a saída é o
+  toque no overlay, BACK, D-pad ou um botão de controle.
   SIMPLIFICAÇÃO 1.0.5 (o que SAIU daqui):
   • Playlist embutida REMOVIDA (gaveta lateral + botão ☰ no topo +
     seção "A seguir"): a playlist vive na PÁGINA (DetailActivity);
@@ -123,15 +125,6 @@
                 android:textSize="@dimen/text_card_subtitle" />
         </LinearLayout>
 
-        <!-- Overlay preto do modo Descanso (só sobre o vídeo) -->
-        <View
-            android:id="@+id/sleep_overlay"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="@android:color/black"
-            android:clickable="true"
-            android:focusable="true"
-            android:visibility="gone" />
 
         <!-- Play/pause central (quando pausado) -->
         <TextView
@@ -571,4 +564,34 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:menu="@menu/bottom_nav_menu" />
+    <!-- Overlay do modo Descanso (Frente D): TELA CHEIA — último filho
+         da raiz, acima de player_container, info_scroll e bottom_nav
+         (elevation 16dp > elevation_3 da bottom nav). Toque no overlay
+         sai do descanso; o áudio e o progresso continuam. A dica central
+         é bem fraca de propósito (só para descobrir a saída); se o Elton
+         quiser breu total, apagar o TextView sleep_overlay_hint. -->
+    <FrameLayout
+        android:id="@+id/sleep_overlay"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@android:color/black"
+        android:clickable="true"
+        android:elevation="16dp"
+        android:focusable="true"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:id="@+id/sleep_overlay_hint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:text="🌙 Modo descanso — toque na tela para sair"
+            android:textColor="#80FFFFFF"
+            android:textSize="14sp" />
+    </FrameLayout>
+
 </androidx.constraintlayout.widget.ConstraintLayout>
