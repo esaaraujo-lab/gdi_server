@@ -781,7 +781,13 @@
                 // Só renderiza Markdown no final quando o stream completa.
                 cursor.remove();
                 // Escapa HTML e preserva quebras de linha
-                const safe=fullText.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+                // ★ v2.15.6-drawer-hook round 3: o gancho aparece DURANTE o
+                // stream — sem isto, o usuário vê a abertura crua ("Resumo: ...")
+                // por ~1 min até o stream completar (é o que a verificação ao vivo
+                // 22:41–22:43 viu). Idempotente por chunk: depois de inserido, a
+                // 1ª linha é o próprio gancho e ensureDrawerSummaryHook não toca mais.
+                const shownStream = isSummaryRequest(txt) ? ensureDrawerSummaryHook(fullText, currentLessonName(), '') : fullText;
+                const safe=shownStream.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
                 bubble.innerHTML=safe;
                 bubble.appendChild(cursor);
                 body.scrollTop=body.scrollHeight;
