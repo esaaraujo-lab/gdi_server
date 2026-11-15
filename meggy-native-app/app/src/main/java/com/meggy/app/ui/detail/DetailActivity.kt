@@ -144,7 +144,15 @@ class DetailActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         api = ApiService(this)
-        currentPath = intent.getStringExtra("drivePath") ?: "/"
+        // Ronda 12 — migração de caminhos guardados: um drivePath
+        // guardado na organização antiga ("/11:/CURSOS 2026/…") já
+        // não existe no drive 11; normalizar aqui cobre TODAS as
+        // entradas (Minha Lista, favoritos, recents, bookmarks,
+        // busca, fallback do "Continuar") sem reescrever o que
+        // está guardado. Ver SessionManager.migrateLegacyCoursePath.
+        currentPath = SessionManager.migrateLegacyCoursePath(
+            intent.getStringExtra("drivePath") ?: "/"
+        )
         folderName = intent.getStringExtra("folderName") ?: "Detalhe"
         // Ronda 10 Frente C — lê o drive do admin dos extras
         // (null nos drives fixos) e activa as capas de sub-pasta.
@@ -1422,12 +1430,41 @@ class DetailActivity : AppCompatActivity() {
         if (video != null) {
             openFileInFolder(video, group.folderPath)
         } else {
-            openFolderInLesson(group.folder, group.folderPath)
+            openLessonGroupDetail(group)
         }
     }
 
     private fun openLessonGroup(group: LessonGroup) {
-        openFolderInLesson(group.folder, group.folderPath)
+        openLessonGroupDetail(group)
+    }
+
+    /**
+     * Ronda 12 — abre o detalhe de um grupo de aulas pelo caminho
+     * PRÓPRIO do grupo (group.folderPath). Antes, os dois call sites
+     * acima passavam por openFolderInLesson(group.folder,
+     * group.folderPath), que anexa group.folder.name ao caminho
+     * recebido — e folderPath JÁ é o caminho completo do grupo
+     * (buildLessonGroups) — por isso o nome era anexado duas vezes
+     * ("/11:/jornada-mpu/jornada-mpu/") e a pasta vinha vazia.
+     * openFolderInLesson continua a existir, intacta, para os filhos
+     * reais (lista expansível e ramo isFolder de openFileInFolder),
+     * onde o ficheiro é de facto um filho do caminho passado.
+     * Grupo sintético "Arquivos avulsos" (id "__loose__"): não é
+     * uma pasta real no Drive — folderPath é o currentPath da tela
+     * e os filhos já estão pré-carregados; navegar daria
+     * "<currentPath>Arquivos avulsos/", que não existe. Sem vídeo
+     * direto, o toque não navega (na lista do celular este grupo
+     * também nunca navega: o cabeçalho só expande/colapsa).
+     */
+    private fun openLessonGroupDetail(group: LessonGroup) {
+        if (group.folder.id == "__loose__") return
+        val intent = Intent(this, DetailActivity::class.java)
+        intent.putExtra("drivePath", group.folderPath)
+        intent.putExtra("folderName", group.folder.name)
+        // Ronda 10 Frente C — o detalhe-filho herda o drive do
+        // admin (sub-capa + capas de sub-pasta continuam a valer).
+        AdminDriveUi.forwardAdminDrive(this.intent, intent)
+        startActivity(intent)
     }
 
     private fun openFolderInLesson(file: FileItem, folderPath: String) {
