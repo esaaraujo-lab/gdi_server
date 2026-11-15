@@ -104,4 +104,38 @@
     <string name="materials_files_title">📁 Ficheiros da pasta</string>
     <string name="materials_answer">✓ Resposta: %1$s</string>
     <string name="materials_close">Fechar</string>
+    <!-- Ronda 10 Frente B — gerir drives (só admin) -->
+    <string name="admin_drives_title">Gerir drives</string>
+    <string name="admin_drives_row">Gerir drives (admin)</string>
+    <string name="admin_drives_row_sub">Adicionar ou remover drives por ID</string>
+    <string name="admin_drives_loading">A carregar os drives do admin…</string>
+    <string name="admin_drives_unavailable">Função indisponível: o servidor ainda não ativou a gestão de drives (ou não há conexão). Tente novamente mais tarde.</string>
+    <string name="admin_drives_empty">Ainda não há drives do admin.</string>
+    <string name="admin_drives_form_title">ADICIONAR DRIVE</string>
+    <string name="admin_drives_drive_id_hint">ID da pasta no Drive</string>
+    <string name="admin_drives_name_hint">Nome do drive</string>
+    <string name="admin_drives_targets">Mostrar em:</string>
+    <string name="admin_drives_cover_hint">Link da capa (opcional)</string>
+    <string name="admin_drives_subcover_hint">Link da sub-capa (opcional)</string>
+    <string name="admin_drives_subfolder_title">Capas das sub-pastas (opcional)</string>
+    <string name="admin_drives_add_subfolder">＋ Adicionar capa de sub-pasta</string>
+    <string name="admin_drives_subpath_hint">Caminho da sub-pasta</string>
+    <string name="admin_drives_suburl_hint">Link da capa</string>
+    <string name="admin_drives_save">Guardar drive</string>
+    <string name="admin_drives_list_title">DRIVES DO ADMIN</string>
+    <string name="admin_drives_remove">Remover</string>
+    <string name="admin_drives_remove_title">Remover drive?</string>
+    <string name="admin_drives_remove_confirm">Remover \"%1$s\" dos APKs? A pasta no Drive não é apagada — só o registo do drive.</string>
+    <string name="admin_drives_saved">Drive adicionado.</string>
+    <string name="admin_drives_removed">Drive removido.</string>
+    <string name="admin_drives_not_admin">Só o administrador pode gerir drives.</string>
+    <string name="admin_drives_error_drive_id">Indique o ID da pasta no Drive.</string>
+    <string name="admin_drives_error_name">Indique o nome do drive.</string>
+    <string name="admin_drives_error_targets">Escolha pelo menos um APK (Meggy, BiBi ou Vovó).</string>
+    <string name="admin_drives_error_url">O link tem de começar por http:// ou https://</string>
+    <string name="admin_drives_error_subfolder_pair">Cada capa de sub-pasta precisa do caminho e do link.</string>
+    <string name="admin_drives_error_generic">Não foi possível concluir. Verifique a conexão e tente novamente.</string>
+    <!-- Ronda 10 Frente C — drives do admin na Home -->
+    <string name="admin_drive_tile_tag">Drive do admin</string>
+    <string name="admin_drive_not_openable_yet">Este drive ainda não pode ser aberto: o servidor ainda não tem a listagem por ID.</string>
 </resources>
