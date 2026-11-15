@@ -78,6 +78,10 @@
     <dimen name="cta_height">56dp</dimen>
     <dimen name="chip_height">36dp</dimen>
     <dimen name="play_fab_size">64dp</dimen>
+    <!-- Frente E — disco de play/pausa do PLAYER (48dp celular /
+         72dp TV). play_fab_size fica intocado: e usado tambem
+         pelo botao play da pagina de detalhe. -->
+    <dimen name="player_fab_size">48dp</dimen>
 
     <!-- ── Foco TV ── -->
     <dimen name="focus_ring_width">3dp</dimen>
