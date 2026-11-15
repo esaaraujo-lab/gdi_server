@@ -1159,51 +1159,82 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       return false;
     };
     try{
+      // ★ v2.15.14-M (Passo 18 — 1ª carga): a cadeia de listagem roda
+      //   2× com 600ms entre as tentativas, SÓ quando houve falha real
+      //   e nada foi achado. Ao vivo (t1 08:46, t5 08:59 UTC) a 1ª carga
+      //   falhou e um reload simples resolveu — a 2ª tentativa passa.
+      //   Antes, UMA falha transitória já era o erro terminal ("Não foi
+      //   possível carregar os materiais."). Pasta vazia de verdade não
+      //   retenta nem atrasa; falha persistente mostra o mesmo erro
+      //   (~600ms mais tarde). Entre as tentativas re-checa gen e a
+      //   posse do shell (E3/E5/E6): se o shell renderizou entretanto,
+      //   volta sem tocar no painel.
+      async function listAttempt(){
+        let found=[];
+        // ★C.2: se window.playlistVideos já tem itens de fPath, a chamada
+        // gdiListAllFiles abaixo bate no cache do worker-bridge (sem network).
+        // A verificação é defensiva — em caso de falha na rede, recupera de
+        // playlistVideos (só vídeos, sem PDFs, mas evita travar o M9).
+        const _plFromThisFolder=!!(window.playlistVideos&&Array.isArray(window.playlistVideos)&&
+          window.playlistVideos.length&&
+          window.playlistVideos.some(v=>v&&typeof v.pageUrl==='string'&&v.pageUrl.indexOf(fPath)===0));
+        let here;
+        try{
+          here=await gdiListAllFiles(fPath,gdiGetPw(fPath));
+        }catch(_){
+          here=[];
+          if(_plFromThisFolder){
+            // ★C.2: fallback — reusa playlistVideos (vídeos só, sem PDFs)
+            here=window.playlistVideos
+              .filter(v=>v&&typeof v.pageUrl==='string'&&v.pageUrl.indexOf(fPath)===0)
+              .map(v=>{
+                const nm=v.origName||v.name||'';
+                return{
+                  name:nm,
+                  fileExtension:((nm.split('.').pop()||'').toLowerCase()),
+                  mimeType:v.mimeType||'',
+                  size:v.sizeBytes||0,
+                  link:v.rawLink||''
+                };
+              });
+          }
+        }
+        // ★ v2.15.14-M: listagem que devolve não-array (ex. worker a
+        //   devolver null) NÃO pode rebentar o `.filter` fora do try
+        //   interno — cai p/ [] e a cadeia segue p/ a pasta pai.
+        if(!Array.isArray(here))here=[];
+        found=here.filter(isMaterial);
+        let _failed=false;
+        if(!found.length){
+          const subs=here.filter(x=>x.mimeType==='application/vnd.google-apps.folder').slice(0,20);
+          for(const sf of subs){
+            const fp=fPath+encodeURIComponent(sf.name)+'/';
+            // ★ v2.15.8-E: uma subpasta com listagem falhando NÃO pode
+            //   derrubar o painel inteiro (era o throw que caía no catch
+            //   "Não foi possível carregar os materiais." e apagava as
+            //   abas ISA do shell) — pula a subpasta e segue.
+            try{ found=found.concat((await gdiListAllFiles(fp,gdiGetPw(fp))).filter(isMaterial)); }catch(_){ console.warn('[GDI Materiais] subpasta sem listar:',fp); _failed=true; }
+            if(found.length)break;
+          }
+        }
+        // ★ v2.15.8-E: idem p/ a pasta pai — falha aqui também não derruba o painel. // E4-subpasta-sem-listar
+        if(!found.length){ try{ found=(await gdiListAllFiles(pPath,gdiGetPw(pPath))).filter(isMaterial); }catch(_){ console.warn('[GDI Materiais] pasta pai sem listar:',pPath); _failed=true; found=[]; } }
+        return{found,failed:_failed};
+      }
       let found=[];
-      // ★C.2: se window.playlistVideos já tem itens de fPath, a chamada
-      // gdiListAllFiles abaixo bate no cache do worker-bridge (sem network).
-      // A verificação é defensiva — em caso de falha na rede, recupera de
-      // playlistVideos (só vídeos, sem PDFs, mas evita travar o M9).
-      const _plFromThisFolder=!!(window.playlistVideos&&Array.isArray(window.playlistVideos)&&
-        window.playlistVideos.length&&
-        window.playlistVideos.some(v=>v&&typeof v.pageUrl==='string'&&v.pageUrl.indexOf(fPath)===0));
-      let here;
-      try{
-        here=await gdiListAllFiles(fPath,gdiGetPw(fPath));
-      }catch(_){
-        here=[];
-        if(_plFromThisFolder){
-          // ★C.2: fallback — reusa playlistVideos (vídeos só, sem PDFs)
-          here=window.playlistVideos
-            .filter(v=>v&&typeof v.pageUrl==='string'&&v.pageUrl.indexOf(fPath)===0)
-            .map(v=>{
-              const nm=v.origName||v.name||'';
-              return{
-                name:nm,
-                fileExtension:((nm.split('.').pop()||'').toLowerCase()),
-                mimeType:v.mimeType||'',
-                size:v.sizeBytes||0,
-                link:v.rawLink||''
-              };
-            });
-        }
-      }
-      found=here.filter(isMaterial);
       let _listFailed=false;
-      if(!found.length){
-        const subs=here.filter(x=>x.mimeType==='application/vnd.google-apps.folder').slice(0,20);
-        for(const sf of subs){
-          const fp=fPath+encodeURIComponent(sf.name)+'/';
-          // ★ v2.15.8-E: uma subpasta com listagem falhando NÃO pode
-          //   derrubar o painel inteiro (era o throw que caía no catch
-          //   "Não foi possível carregar os materiais." e apagava as
-          //   abas ISA do shell) — pula a subpasta e segue.
-          try{ found=found.concat((await gdiListAllFiles(fp,gdiGetPw(fp))).filter(isMaterial)); }catch(_){ console.warn('[GDI Materiais] subpasta sem listar:',fp); _listFailed=true; }
-          if(found.length)break;
+      for(let _att=0;_att<2;_att++){
+        if(_att>0){
+          if(myGen!==gen)return;
+          if(shellOwnsMaterialsPanel())return;
+          await sleep(600);
+          if(myGen!==gen)return;
+          if(shellOwnsMaterialsPanel())return;
         }
+        const _r=await listAttempt();
+        found=_r.found;_listFailed=_r.failed;
+        if(found.length||!_listFailed)break;
       }
-      // ★ v2.15.8-E: idem p/ a pasta pai — falha aqui também não derruba o painel. // E4-subpasta-sem-listar
-      if(!found.length){ try{ found=(await gdiListAllFiles(pPath,gdiGetPw(pPath))).filter(isMaterial); }catch(_){ console.warn('[GDI Materiais] pasta pai sem listar:',pPath); _listFailed=true; found=[]; } }
       // ★ v2.15.8-E: se TODAS as listagens falharam (nada achado E houve
       //   falha), o erro é real — deixa subir p/ o catch, que mostra
       //   "Não foi possível carregar os materiais." no player legado e
