@@ -8,9 +8,9 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.bibigyn.app.R
+import com.bibigyn.app.data.DriveItem
 import com.bibigyn.app.data.FileItem
 import com.bibigyn.app.data.colorFromString
-import com.bibigyn.app.data.monogramFor
 import com.bibigyn.app.databinding.ItemFlatLessonBinding
 import com.bibigyn.app.util.CardGradient
 import com.bibigyn.app.util.CoverLibrary
@@ -82,25 +82,27 @@ class FlatLessonAdapter(
             flatThumbBg.background = CardGradient.drawable(res, colorFromString(item.name))
 
             // Camada 3 — biblioteca por tipo (nome do arquivo →
-            // pasta); sem thumb (ou se ela falhar), a imagem da
-            // biblioteca; sem match, o monograma.
-            val showLibraryOrMonogram = {
-                val libraryUrl = CoverLibrary.resolve(ctx, item.name, folderPath)
+            // pasta), ESTRITA (2.1.12, sem 'geral'); sem thumb (ou se
+            // ela falhar), a imagem da biblioteca; sem match, a capa
+            // gerada do drive (nunca monograma).
+            val coverRes = DriveItem.coverResForPath(folderPath)
+            val showLibraryOrCover = {
+                val libraryUrl = CoverLibrary.resolveStrict(ctx, item.name, folderPath)
                 if (!libraryUrl.isNullOrBlank()) {
                     flatThumb.visibility = View.VISIBLE
                     flatMonogram.visibility = View.GONE
                     flatThumb.load(libraryUrl) {
-                        error(R.drawable.card_gradient_pink)
+                        error(coverRes ?: R.drawable.card_gradient_pink)
                         listener(onError = { _, _ ->
-                            flatThumb.visibility = View.GONE
-                            flatMonogram.visibility = View.VISIBLE
-                            flatMonogram.text = monogramFor(item.name)
+                            flatThumb.visibility = View.VISIBLE
+                            flatMonogram.visibility = View.GONE
+                            flatThumb.setImageResource(coverRes ?: R.drawable.card_gradient_pink)
                         })
                     }
                 } else {
-                    flatThumb.visibility = View.GONE
-                    flatMonogram.visibility = View.VISIBLE
-                    flatMonogram.text = monogramFor(item.name)
+                    flatThumb.visibility = View.VISIBLE
+                    flatMonogram.visibility = View.GONE
+                    flatThumb.setImageResource(coverRes ?: R.drawable.card_gradient_pink)
                 }
             }
             val thumb = item.thumbnailLink
@@ -109,7 +111,7 @@ class FlatLessonAdapter(
                 flatMonogram.visibility = View.GONE
                 flatThumb.load(thumb) {
                     error(R.drawable.card_gradient_pink)
-                    listener(onError = { _, _ -> showLibraryOrMonogram() })
+                    listener(onError = { _, _ -> showLibraryOrCover() })
                 }
             } else {
                 showLibraryOrMonogram()
