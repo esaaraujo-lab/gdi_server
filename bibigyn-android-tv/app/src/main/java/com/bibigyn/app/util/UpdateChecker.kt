@@ -4,6 +4,8 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.app.DownloadManager
 import android.content.BroadcastReceiver
+import android.content.ContentUris
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -13,6 +15,7 @@ import android.os.Build
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import android.provider.Settings
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -74,6 +77,14 @@ import java.util.concurrent.atomic.AtomicBoolean
  *  - A consulta de versão SEMPRE vai à API de releases do GitHub e pega a
  *    primeira release com prefixo bibigyn-v* (per_page=100 para a release
  *    nunca cair da primeira página). Nenhum cache de versão.
+ *
+ * ★ §9 (GOLDEN_RULES.md, 2026-11-15) — pasta pública Download:
+ *  - O APK descarrega SEMPRE para Environment.DIRECTORY_DOWNLOADS
+ *    (pasta pública Download) — nunca para o diretório privado do app.
+ *  - file_paths.xml ganhou <external-path path="Download/">: sem ele
+ *    o FileProvider não serve o APK e o instalador nunca abre.
+ *  - Depois de a instalação ser confirmada, o APK é apagado
+ *    (deleteDownloadedApkIfInstalled + UpdateCleanupReceiver).
  */
 object UpdateChecker {
 
@@ -96,6 +107,11 @@ object UpdateChecker {
      * dentro da janela de 24h.
      */
     fun checkForUpdateThrottled(context: Context, currentVersion: String) {
+        // §9 — lixo da atualização anterior: se o APK descarregado já
+        // foi instalado, apaga-o da pasta Download (só depois de a
+        // instalação ser confirmada). Corre sempre, mesmo dentro da
+        // janela de 24h do throttle — não é uma checagem de rede.
+        deleteDownloadedApkIfInstalled(context)
         // 1) APK pendente primeiro — nunca atrasado pelo throttle. Se
         // instalou, retorna (o checkForUpdate faria a mesma instalação).
         if (resumePendingApk(context)) return
@@ -185,6 +201,170 @@ object UpdateChecker {
     private const val KEY_OFFERED_VERSION = "offered_version"
     private const val KEY_PENDING_INSTALL = "pending_install_apk"
     private const val KEY_PENDING_INSTALL_VERSION = "pending_install_version"
+    // §9 (GOLDEN_RULES.md, 2026-11-15) — atualização SEMPRE pela pasta
+    // pública Download. Até aqui o APK ia para
+    // getExternalFilesDir(DIRECTORY_DOWNLOADS)
+    // (Android/data/<pacote>/files/Download) e o file_paths.xml só
+    // declarava <cache-path> — ou seja, o FileProvider NÃO conseguia
+    // servir o APK (IllegalArgumentException) e o instalador nunca
+    // abria; confirmado nos APKs publicados 2.7.14/2.1.13/1.0.12.
+    private const val APK_MIME_TYPE = "application/vnd.android.package-archive"
+    private const val APK_FILE_PREFIX = "bibigyn-"
+
+    /**
+     * §9 — ficheiro do APK de atualização na pasta pública Download.
+     * getExternalStoragePublicDirectory está deprecado desde a API 29
+     * mas continua a devolver o caminho real; a escrita em si, na
+     * API 29+, passa pelo MediaStore (ver openPublicDownloadOutput).
+     */
+    @Suppress("DEPRECATION")
+    private fun publicDownloadFile(fileName: String): File =
+        File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), fileName)
+
+    /** §9 — mesmo ficheiro no destino privado antigo (pré-§9), só para limpar lixo. */
+    private fun legacyDownloadFile(context: Context, fileName: String): File =
+        File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
+
+    /**
+     * §9 — abre a escrita do APK na pasta pública Download.
+     * API 29+ (scoped storage): MediaStore.Downloads — sem permissões, o
+     * ficheiro fica em /storage/emulated/0/Download e pertence ao app
+     * (o instalador lê-o depois via FileProvider <external-path>).
+     * API <=28: ficheiro direto (WRITE_EXTERNAL_STORAGE já declarada no
+     * manifesto com maxSdkVersion 28). Remove primeiro um resto com o
+     * mesmo nome para o MediaStore não criar "nome (1).apk".
+     * Lança exceção se não conseguir abrir o destino (o chamador cai no
+     * fallback do DownloadManager / no silêncio do automático).
+     */
+    private fun openPublicDownloadOutput(context: Context, fileName: String): Pair<File, java.io.OutputStream> {
+        val target = publicDownloadFile(fileName)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            deletePublicDownload(context, fileName)
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                put(MediaStore.Downloads.MIME_TYPE, APK_MIME_TYPE)
+                put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            }
+            val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                ?: throw IllegalStateException("MediaStore insert falhou (Download)")
+            val out = context.contentResolver.openOutputStream(uri)
+                ?: throw IllegalStateException("MediaStore openOutputStream falhou (Download)")
+            return target to out
+        }
+        target.parentFile?.mkdirs()
+        return target to FileOutputStream(target)
+    }
+
+    /** §9 — apaga um APK da pasta pública Download (ficheiro + linha no MediaStore). Nunca lança. */
+    private fun deletePublicDownload(context: Context, fileName: String) {
+        try { publicDownloadFile(fileName).delete() } catch (_: Exception) {}
+        deletePublicDownloadRow(context, fileName)
+    }
+
+    /** §9 — apaga as linhas do MediaStore.Downloads com este DISPLAY_NAME. Nunca lança. */
+    private fun deletePublicDownloadRow(context: Context, fileName: String) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        try {
+            val uri = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+            context.contentResolver.query(
+                uri, arrayOf(MediaStore.Downloads._ID),
+                "${MediaStore.Downloads.DISPLAY_NAME} = ?",
+                arrayOf(fileName), null
+            )?.use { cursor ->
+                val idIdx = cursor.getColumnIndexOrThrow(MediaStore.Downloads._ID)
+                while (cursor.moveToNext()) {
+                    val rowUri = ContentUris.withAppendedId(uri, cursor.getLong(idIdx))
+                    try { context.contentResolver.delete(rowUri, null, null) } catch (_: Exception) {}
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    /** §9 — apaga o ficheiro do APK (pública ou legada). Nunca lança. */
+    private fun deleteUpdateApk(context: Context, file: File) {
+        try { file.delete() } catch (_: Exception) {}
+        if (file.exists()) deletePublicDownloadRow(context, file.name)
+    }
+
+    /**
+     * §9 — a versão instalada já é >= à versão do APK descarregado?
+     * Primeiro pelo nome da versão (barato, sem ler o APK); se o nome
+     * disser que ainda não instalou, confirma pelo versionCode do APK
+     * (getPackageArchiveInfo). Se nem o APK se consegue ler, assume que
+     * NÃO instalou (conservador: nunca apaga um APK por instalar).
+     */
+    @Suppress("DEPRECATION")
+    private fun installedVersionAtLeast(context: Context, downloadedVersion: String, apkFile: File): Boolean {
+        val pkgInfo = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(context.packageName, PackageManager.PackageInfoFlags.of(0))
+            } else {
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            }
+        } catch (_: Exception) { return false }
+        val installedName = pkgInfo.versionName ?: ""
+        if (!isNewer(downloadedVersion, installedName)) return true
+        val apkInfo = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageArchiveInfo(apkFile.absolutePath, PackageManager.PackageInfoFlags.of(0))
+            } else {
+                context.packageManager.getPackageArchiveInfo(apkFile.absolutePath, 0)
+            }
+        } catch (_: Exception) { null }
+        val apkCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            apkInfo?.longVersionCode ?: -1L
+        } else {
+            apkInfo?.versionCode?.toLong() ?: -1L
+        }
+        val installedCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            pkgInfo.longVersionCode
+        } else {
+            pkgInfo.versionCode.toLong()
+        }
+        return apkCode > 0 && installedCode >= apkCode
+    }
+
+    /**
+     * §9 — apaga o APK descarregado SÓ depois de a instalação ser
+     * confirmada (versão instalada >= versão do APK). Chamado no arranque
+     * (checkForUpdateThrottled/checkForUpdate, antes de qualquer retoma
+     * de pendente e fora do throttle) e pelo UpdateCleanupReceiver
+     * (MY_PACKAGE_REPLACED). Nunca apaga antes/durante a instalação:
+     * se o usuário dispensou o instalador, a versão instalada continua
+     * inferior e o ficheiro fica (o automático não re-oferece graças ao
+     * guarda offered_version; o manual re-oferece). Limpa também um
+     * resto do destino privado pré-§9 com a mesma versão. Devolve true
+     * quando apagou pelo menos um ficheiro.
+     */
+    fun deleteDownloadedApkIfInstalled(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val downloaded = prefs.getString(KEY_DOWNLOADED_VERSION, null) ?: return false
+        val fileName = APK_FILE_PREFIX + downloaded + ".apk"
+        val candidates = mutableListOf<Pair<File, String?>>()
+        candidates += publicDownloadFile(fileName) to null
+        candidates += legacyDownloadFile(context, fileName) to null
+        prefs.getString(KEY_PENDING_APK, null)?.takeIf { it.isNotBlank() }?.let {
+            candidates += File(it) to KEY_PENDING_APK
+        }
+        prefs.getString(KEY_PENDING_INSTALL, null)?.takeIf { it.isNotBlank() }?.let {
+            candidates += File(it) to KEY_PENDING_INSTALL
+        }
+        var deletedAny = false
+        for ((file, prefKey) in candidates) {
+            if (!file.exists()) continue
+            if (!installedVersionAtLeast(context, downloaded, file)) continue
+            deleteUpdateApk(context, file)
+            if (prefKey != null) prefs.edit().remove(prefKey).apply()
+            deletedAny = true
+        }
+        // Sem ficheiro restante, o marcador fica obsoleto — limpa-o para
+        // esta verificação não correr em cada arranque.
+        if (candidates.none { (file, _) -> file.exists() }) {
+            prefs.edit().remove(KEY_DOWNLOADED_VERSION).apply()
+        }
+        return deletedAny
+    }
+
 
     // v2.1.9: guarda em memória contra a dupla checagem Splash+Home
     // (a Splash dispara ao abrir e a Home 1,5 s depois, antes de a
@@ -197,6 +377,9 @@ object UpdateChecker {
     fun setPlayerForeground(inForeground: Boolean) { playerForeground = inForeground }
 
     fun checkForUpdate(context: Context, currentVersion: String, showFeedback: Boolean = false) {
+        // §9 — apaga o APK já instalado da pasta Download (ver
+        // checkForUpdateThrottled); corre também na checagem manual.
+        deleteDownloadedApkIfInstalled(context)
         // ★ v2.7.4: APK pendente (usuário acabou de conceder a permissão de
         // instalar) — dispara a instalação agora, sem baixar de novo.
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -294,7 +477,7 @@ object UpdateChecker {
                     val fileName = "bibigyn-$remoteVersion.apk"
 
                     val lastDownloaded = prefs.getString(KEY_DOWNLOADED_VERSION, "") ?: ""
-                    val downloadedFile = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
+                    val downloadedFile = publicDownloadFile(fileName)
 
                     if (downloadedFile.exists() && lastDownloaded == remoteVersion) {
                         if (!auto) showToast(context, "Instalando v$remoteVersion...")
@@ -399,8 +582,12 @@ object UpdateChecker {
         }
 
         Thread {
-            val target = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
             try {
+                // §9 — destino: pasta pública Download (ver
+                // openPublicDownloadOutput). A abertura do stream está
+                // dentro do try para uma falha aqui cair no fallback do
+                // DownloadManager (ou no silêncio, no automático).
+                val (target, downloadOut) = openPublicDownloadOutput(context, fileName)
                 val client = OkHttpClient.Builder()
                     .connectTimeout(15, TimeUnit.SECONDS)
                     .readTimeout(60, TimeUnit.SECONDS)
@@ -416,7 +603,7 @@ object UpdateChecker {
                 var downloaded = 0L
                 val buffer = ByteArray(8192)
                 body.byteStream().use { input ->
-                    FileOutputStream(target).use { output ->
+                    downloadOut.use { output ->
                         var read: Int
                         while (input.read(buffer).also { read = it } != -1) {
                             if (cancelled.get()) throw InterruptedException("cancelado")
@@ -438,7 +625,7 @@ object UpdateChecker {
                 installApk(context, target, remoteVersion, auto)
             } catch (e: InterruptedException) {
                 mainHandler.post { dialog?.dismiss() }
-                target.delete()
+                deletePublicDownload(context, fileName)
                 if (!auto) showToast(context, "Download cancelado")
             } catch (e: Exception) {
                 mainHandler.post { dialog?.dismiss() }
@@ -466,7 +653,12 @@ object UpdateChecker {
                 setTitle("BiBi Fit — Atualizacao v$remoteVersion")
                 setDescription("Baixando nova versao do app...")
                 setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
-                setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, fileName)
+                // §9 — pasta pública Download (o DownloadManager é um
+                // serviço do sistema e escreve lá em qualquer API level).
+                // setDestinationInExternalPublicDir está deprecado desde
+                // a API 29 mas continua funcional; é o único destino
+                // público que o DownloadManager oferece.
+                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
             }
 
             val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
@@ -476,7 +668,7 @@ object UpdateChecker {
                 override fun onReceive(ctx: Context?, intent: Intent?) {
                     val id = intent?.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1) ?: -1
                     if (id == downloadId) {
-                        val file = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
+                        val file = publicDownloadFile(fileName)
                         if (file.exists()) {
                             prefs.edit().putString(KEY_DOWNLOADED_VERSION, remoteVersion).apply()
                             installApk(context, file, remoteVersion, auto = false)
