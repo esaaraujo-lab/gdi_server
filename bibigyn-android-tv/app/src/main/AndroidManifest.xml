@@ -75,6 +75,14 @@
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
             android:supportsPictureInPicture="true" android:resizeableActivity="true" />
 
+        <!-- Frente R4C — áudio em 2º plano: foreground service
+             (mediaPlayback) com a notificação de media; o player
+             continua a pertencer à PlayerActivity. -->
+        <service
+            android:name=".ui.player.BackgroundAudioService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
         <activity android:name=".ui.search.SearchActivity" android:exported="false"
             android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
