@@ -12,6 +12,7 @@
     android:layout_marginBottom="@dimen/spacing_md"
     android:focusable="true"
     android:focusableInTouchMode="true"
+    android:foreground="?attr/selectableItemBackground"
     app:cardBackgroundColor="@color/tile_bg"
     app:cardCornerRadius="@dimen/radius_md"
     app:cardElevation="0dp">
