@@ -49,6 +49,9 @@
 
     <!-- Primario = lima (acento). Container = verde bem escuro e dessaturado. -->
     <color name="md_primary">#FFA3E635</color>
+    <!-- Frente E — preenchimento da barra de progresso do
+         player: cor da marca a 70% (mais transparente). -->
+    <color name="player_progress_fill">#B3A3E635</color>
     <color name="md_on_primary">#FF1A0A0F</color>
     <color name="md_primary_container">#FF223526</color>
     <color name="md_on_primary_container">#FFD7F5A0</color>
