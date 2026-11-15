@@ -16,6 +16,7 @@ import com.bibigyn.app.databinding.ItemLessonHeaderBinding
 import com.bibigyn.app.util.CardGradient
 import com.bibigyn.app.util.CoverLibrary
 import com.bibigyn.app.util.FocusAnimator
+import com.bibigyn.app.util.TapFeedback
 import com.bibigyn.app.util.Format
 import com.bibigyn.app.util.SessionManager
 import com.bibigyn.app.util.TvUtils
@@ -82,6 +83,7 @@ class LessonListAdapter(
                 onToggleExpand(group, pos)
             }
             FocusAnimator.attach(binding.root, TvUtils.isTv(binding.root.context))
+            TapFeedback.attachPress(binding.root, TvUtils.isTv(binding.root.context))
         }
     }
 
@@ -99,6 +101,7 @@ class LessonListAdapter(
                 }
             }
             FocusAnimator.attach(binding.root, TvUtils.isTv(binding.root.context))
+            TapFeedback.attachPress(binding.root, TvUtils.isTv(binding.root.context))
         }
     }
 
@@ -210,6 +213,7 @@ class LessonGridAdapter(
                 onPlayLesson(groups[pos])
             }
             FocusAnimator.attachCard(binding.lessonCardRoot, TvUtils.isTv(binding.root.context))
+            TapFeedback.attachPress(binding.lessonCardRoot, TvUtils.isTv(binding.root.context))
         }
     }
 
