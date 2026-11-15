@@ -5,6 +5,9 @@
   chips como icones discretos (state layer), scrim 72% na base.
   Frente E — controlos discretos: play/pausa 48dp (era 64dp),
   barra de progresso fina de 4dp e mais transparente, scrim 60%.
+  Frente R3A (Plyr) — botao play/pausa da barra SO-ICONE (sem disco,
+  40dp, glifo 18sp); disco central 44dp; progresso 5dp, thumb 13dp,
+  trilho branco 25%; scrim da base 75% (gradiente Plyr).
   do player (Elton 10:31, patch 2.1.6).
   Dois modos, mesma activity:
   • Retrato (celular): vídeo 16:9 no topo + controles abaixo (tempo,
@@ -162,8 +165,8 @@
         <!-- Play/pause central (quando pausado) -->
         <TextView
             android:id="@+id/center_play_pause"
-            android:layout_width="@dimen/player_fab_size"
-            android:layout_height="@dimen/player_fab_size"
+            android:layout_width="@dimen/player_center_size"
+            android:layout_height="@dimen/player_center_size"
             android:layout_gravity="center"
             android:background="@drawable/player_play_bg"
             android:clickable="true"
@@ -171,7 +174,7 @@
             android:gravity="center"
             android:text="▶"
             android:textColor="@android:color/white"
-            android:textSize="22sp"
+            android:textSize="20sp"
             android:visibility="gone" />
 
         <!-- Barra superior: título + ações -->
@@ -281,15 +284,15 @@
 
                 <TextView
                     android:id="@+id/btn_play_pause_bar"
-                    android:layout_width="@dimen/player_fab_size"
-                    android:layout_height="@dimen/player_fab_size"
-                    android:background="@drawable/player_play_bg"
+                    android:layout_width="@dimen/player_bar_btn_size"
+                    android:layout_height="@dimen/player_bar_btn_size"
+                    android:background="@drawable/player_bar_btn_bg"
                     android:clickable="true"
                     android:focusable="true"
                     android:gravity="center"
                     android:text="❚❚"
                     android:textColor="@android:color/white"
-                    android:textSize="20sp" />
+                    android:textSize="18sp" />
 
                 <View
                     android:layout_width="0dp"
@@ -358,7 +361,7 @@
                 <SeekBar
                     android:id="@+id/bar_seek_bar"
                     android:layout_width="0dp"
-                    android:layout_height="32dp"
+                    android:layout_height="35dp"
                     android:layout_marginStart="@dimen/spacing_lg"
                     android:layout_weight="1"
                     android:focusable="true"
