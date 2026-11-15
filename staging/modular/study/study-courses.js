@@ -931,7 +931,7 @@
           if(it.coverUrl){ __unifiedCourseCovers[k]=it.coverUrl; try{ const kd=low(decodeURIComponent(String(it.coursePath))); if(kd!==k) __unifiedCourseCovers[kd]=it.coverUrl; }catch(_){} }
         }catch(_){}
       }
-      if(it.kind==='concurso') out.push({kind:'concurso', key:'concurso:'+it.concursoId, concursoId:it.concursoId, name:it.name, examDate:it.examDate||'', total:it.total||0, lessons:new Set(), watched:0});
+      if(it.kind==='concurso') out.push({kind:'concurso', key:'concurso:'+it.concursoId, concursoId:it.concursoId, name:it.name, examDate:it.examDate||'', total:it.total||0, coverUrl:it.coverUrl||null, lessons:new Set(), watched:0});  // ★ v2.15.30 (B): coverUrl passa p/ a hierarquia de capa (a); null se o unificado não a enviar
       // ★ v2.15.16 (R): o registo em destaque guarda o caminho antigo
       //   (/11:/CURSOS 2026) mas a pasta vive no drive 9 — o cartão usava
       //   o caminho tal qual e abria o drive errado. Canónico aqui, no
@@ -962,6 +962,14 @@
     //   detalhe passam a mostrar o mesmo total da prévia.
     for (const c of cs) { const t = __unifiedCourseTotalFor(c.key); if (t != null) c.total = t; const cv = __unifiedCourseCoverFor(c.key); if (cv) c.coverUrl = cv; }
     const all=cs.concat(__extras);
+    // ★ v2.15.30 (C — contagem do cabeçalho): o cabeçalho contava all
+    //   (próprios + em destaque) mas a grade "Meus Cursos" mostra só os
+    //   próprios — "8 cursos em andamento" com 4 tiles. O número principal
+    //   passa a ser o da secção (own = kind!=='featured'; inclui os
+    //   concursos, que rendem na mesma grade) e os destaques passam a ser
+    //   nomeados à parte, para o total continuar visível sem ambiguidade.
+    const __ownCount=all.filter(c=>c.kind!=='featured').length;
+    const __featCount=all.length-__ownCount;
     const hidden=listHiddenCourses();
     if(!all.length){
       box.innerHTML=`<div class="gdi-empty-state">
@@ -1001,7 +1009,7 @@
       return;
     }
     box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
-      <b style="color:var(--ferreto-text,#f0f6fc);font-size:14px;">${all.length} ${all.length===1?'curso':'cursos'} em andamento</b>
+      <b style="color:var(--ferreto-text,#f0f6fc);font-size:14px;">${__ownCount} ${__ownCount===1?'curso':'cursos'} em andamento${__featCount?` · ${__featCount} em destaque`:''}</b>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
         <button id="gdi-add-manual-course" class="gdi-mode-btn" style="font-size:11px;"><i class="bi bi-plus-lg"></i> Adicionar curso</button>
         ${hidden.length?`<button id="gdi-show-hidden" class="gdi-mode-btn" style="font-size:11px;"><i class="bi bi-eye-slash"></i> ${hidden.length} oculto${hidden.length>1?'s':''}</button>`:''}
@@ -1089,9 +1097,15 @@
         // ★ v2.15.28 (A): capa pela hierarquia (coverUrl → biblioteca →
         //   arte padrão); sem coverUrl o cartão marca-se p/ o upgrade
         //   assíncrono da biblioteca (nunca fica com a faixa vazia).
-        if(!isConcurso&&!c.coverUrl){ try{ el.setAttribute('data-v21528-cover',''); el.setAttribute('data-v21528-cover-name',c.name||''); el.setAttribute('data-v21528-cover-path',c.coursePath||''); }catch(_){} }
+        // ★ v2.15.30 (B — item a): o concurso ERA excluído da marca
+        //   (!isConcurso) e da capa (l.1094) — o cartão ficava sem o div
+        //   .gdi-course-cover: só o fundo escuro do cartão, a "área escura
+        //   vazia" do Passo 28. Concursos usam a MESMA hierarquia do
+        //   destaque; o nome alimenta o matcher da biblioteca (o path é
+        //   '' — concurso não tem coursePath; __coverLibraryUrl ignora-o).
+        if(!c.coverUrl){ try{ el.setAttribute('data-v21528-cover',''); el.setAttribute('data-v21528-cover-name',c.name||''); el.setAttribute('data-v21528-cover-path',c.coursePath||''); }catch(_){} }
         el.innerHTML=`
-        ${!isConcurso?`<div class="gdi-course-cover">${__tileCoverHtml(c,c.icon||'⭐')}</div>`:''}
+        <div class="gdi-course-cover">${__tileCoverHtml(c,isConcurso?'📌':(c.icon||'⭐'))}</div>
         <div class="gdi-course-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
           <b class="gdi-course-title" title="${esc(c.name||'')}" style="flex:1;min-width:0;display:flex;align-items:flex-start;gap:6px;">
             <span style="font-size:18px;flex:none;">${isConcurso?'📌':(c.icon||'⭐')}</span>
@@ -1162,7 +1176,7 @@
         <div class="gdi-course-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
           <b class="gdi-course-title" title="${escHtml(_mcName||courseName(c.key))}" style="flex:1;min-width:0;display:flex;align-items:flex-start;gap:6px;">
             ${isManual?`<span style="font-size:18px;flex:none;">${icon}</span>`:''}
-            <span style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;white-space:normal;overflow-wrap:break-word;">${escHtml(name)}</span>
+            <span style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;white-space:normal;overflow-wrap:break-word;">${escHtml(name)}</span>
           </b>
           <button class="gdi-course-remove" title="${isManual?'Remover curso manual':'Remover curso'}" style="background:transparent;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:14px;padding:2px 6px;flex:none;border-radius:6px;transition:all .15s;"><i class="bi bi-x-lg"></i></button>
         </div>
@@ -1176,10 +1190,21 @@
             //   mostra o nº de aulas — antes mostrava sempre "… Batalhão"
             //   mesmo com 78 pastas no D1, divergindo do cartão em destaque
             //   do mesmo curso. Sem total conhecido, mantém o "…".
+            // ★ v2.15.30 (B — item c): o "…" NÃO é estado de carregamento —
+            //   c.total só nasce do mapa __unifiedCourseTotals (kind
+            //   'course' do unificado, renderCursos l.963); nenhum caminho
+            //   assíncrono o preenche depois (bestIn só alimenta o botão
+            //   Continuar; o scanner só mexe em totalLessons; o batalhão
+            //   dispara no add, não no render). Órfão sem entrada no D1
+            //   ("A Primeira Ciência" not_found; Escrevente c/ path /7:…
+            //   inexistente) fica c/ "…" PARA SEMPRE. Estado terminal
+            //   honesto: "Em breve / Aulas em indexação" — o MESMO
+            //   vocabulário de total 0 do __tileStatsHtml (v2.15.28). Se o
+            //   total D1 chegar, o ramo (c.total||0)>0 volta a mostrar o nº.
             ? ((c.total || 0) > 0
               ? `<div class="gdi-course-stat"><span class="gdi-course-stat-num">${c.total}</span><span class="gdi-course-stat-label">Aulas</span></div>
                <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:#3fb950;">${c.watched || 0}</span><span class="gdi-course-stat-label">Assistidas</span></div>`
-              : `<div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:#ffd43b;">…</span><span class="gdi-course-stat-label">Batalhão</span></div>
+              : `<div class="gdi-course-stat"><span class="gdi-course-stat-num" style="font-size:15px;color:#ffd43b;">Em breve</span><span class="gdi-course-stat-label">Aulas em indexação</span></div>
                <div class="gdi-course-stat"><span class="gdi-course-stat-num">0</span><span class="gdi-course-stat-label">Assistidas</span></div>`)
             : `<div class="gdi-course-stat"><span class="gdi-course-stat-num">${_cardTotal}</span><span class="gdi-course-stat-label">Aulas</span></div>
                <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:#3fb950;">${c.watched}</span><span class="gdi-course-stat-label">Feitas</span></div>
