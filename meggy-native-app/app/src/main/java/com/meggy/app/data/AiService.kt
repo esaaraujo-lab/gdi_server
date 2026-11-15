@@ -103,9 +103,27 @@ object AiService {
      * rota de IA (= backend sem os endpoints, ex. produção pré-v2).
      * Em memória (não persistido): zerado a cada abertura do app e em
      * qualquer 2xx de IA. Evita retentar em loop o que não existe.
+     *
+     * Frente R5A: um 404 de `load-from-folder` NÃO arma esta flag —
+     * "ficheiro guardado em falta" é o caso normal de um material
+     * nunca gerado, não "backend sem rotas" (ver [loadFromFolder]).
+     * Um retry explícito do utilizador limpa a flag antes de tentar
+     * de novo (ver [clearBackendUnavailable]).
      */
     @Volatile var backendUnavailable: Boolean = false
         private set
+
+    /**
+     * Frente R5A — saída do latch: um retry EXPLÍCITO do utilizador
+     * (novo toque em "✨ Resumo" / "Gerar novamente") limpa a flag
+     * antes de tentar de facto. A flag volta a armar-se sozinha se
+     * um 404 genuíno de rota de IA voltar (ver [runCall]). Não há
+     * limpeza em 2º plano (sem polling): fora de um gesto do
+     * utilizador, o latch continua a evitar loops.
+     */
+    fun clearBackendUnavailable() {
+        backendUnavailable = false
+    }
 
     /** Guarda em memória contra POST duplo simultâneo do mesmo curso. */
     private val runningTriggers = mutableSetOf<String>()
@@ -170,9 +188,13 @@ object AiService {
         }
     }
 
-    private suspend fun execute(context: Context, request: Request): HttpResult =
+    private suspend fun execute(
+        context: Context,
+        request: Request,
+        latchOn404: Boolean = true
+    ): HttpResult =
         withContext(Dispatchers.IO) {
-            val first = runCall(request)
+            val first = runCall(request, latchOn404)
             if (first.code != 401) return@withContext first
             // 401 → tenta login no host de IA (uma vez) e repete.
             if (!aiLogin(context)) return@withContext first
@@ -180,14 +202,18 @@ object AiService {
             val retry = request.newBuilder().apply {
                 if (!cookie.isNullOrBlank()) header("Cookie", "session=$cookie")
             }.build()
-            runCall(retry)
+            runCall(retry, latchOn404)
         }
 
-    private fun runCall(request: Request): HttpResult {
+    private fun runCall(request: Request, latchOn404: Boolean = true): HttpResult {
         return try {
             MeggyApp.okHttpClient.newCall(request).execute().use { response ->
                 val code = response.code
-                if (code == 404) backendUnavailable = true
+                // Frente R5A: só um 404 de rota de IA genuína arma o
+                // latch. Um 404 de `load-from-folder` (ficheiro em
+                // falta — o caso normal) passa latchOn404=false e
+                // nunca arma a flag.
+                if (code == 404 && latchOn404) backendUnavailable = true
                 if (code in 200..299) backendUnavailable = false
                 HttpResult(code, response.body?.string())
             }
@@ -196,7 +222,11 @@ object AiService {
         }
     }
 
-    private suspend fun get(context: Context, path: String): HttpResult {
+    private suspend fun get(
+        context: Context,
+        path: String,
+        latchOn404: Boolean = true
+    ): HttpResult {
         val cookie = cookieFor(context)
         val request = Request.Builder()
             .url("${MeggyApp.AI_BASE_URL}$path")
@@ -205,10 +235,15 @@ object AiService {
                 if (!cookie.isNullOrBlank()) header("Cookie", "session=$cookie")
             }
             .build()
-        return execute(context, request)
+        return execute(context, request, latchOn404)
     }
 
-    private suspend fun postJson(context: Context, path: String, json: String): HttpResult {
+    private suspend fun postJson(
+        context: Context,
+        path: String,
+        json: String,
+        latchOn404: Boolean = true
+    ): HttpResult {
         val cookie = cookieFor(context)
         val request = Request.Builder()
             .url("${MeggyApp.AI_BASE_URL}$path")
@@ -218,7 +253,7 @@ object AiService {
                 if (!cookie.isNullOrBlank()) header("Cookie", "session=$cookie")
             }
             .build()
-        return execute(context, request)
+        return execute(context, request, latchOn404)
     }
 
     // ───────── rotas ─────────
@@ -386,6 +421,12 @@ object AiService {
     /**
      * Lê o resumo da pasta da aula (`.gdi-resumos/`, discovery: o
      * arquivo mais recente do tipo). Retorna o conteúdo ou null.
+     *
+     * Frente R5A: um 404 aqui (ficheiro em falta — o caso normal de
+     * um material nunca gerado) NÃO arma [backendUnavailable]: a
+     * chamada passa latchOn404=false. Só as rotas de IA genuínas
+     * (POST /api/ai, /api/ai/ocr, /api/ai/summaries POST,
+     * /api/ai/battalion, save-in-folder) podem armar a flag.
      */
     suspend fun loadFromFolder(
         context: Context,
@@ -396,7 +437,9 @@ object AiService {
         val path = "/api/materials/load-from-folder" +
             "?lessonPath=${URLEncoder.encode(lessonPath, "UTF-8")}" +
             "&materialType=${URLEncoder.encode(materialType, "UTF-8")}"
-        val res = get(context, path)
+        // Frente R5A: 404 = "ficheiro em falta", não "backend sem
+        // rotas" — nunca arma backendUnavailable (ver runCall).
+        val res = get(context, path, latchOn404 = false)
         if (res.code != 200) return null
         return try {
             val json = JSONObject(res.body ?: return null)
