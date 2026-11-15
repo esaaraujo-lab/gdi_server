@@ -218,6 +218,20 @@ class LessonGridAdapter(
         return VH(ItemLessonCardBinding.inflate(inflater, parent, false))
     }
 
+    /**
+     * Frente A (TV) — UP da 1ª linha da grade (span 2 fixo no
+     * DetailActivity) volta à aba Aulas. Sem isto, UP da 1ª linha
+     * cai no FocusFinder, que ignora as abas quando a grade rolou.
+     * Em onViewAttachedToWindow (ver FileAdapter): o prefetch pode
+     * ligar o VH sem pai e a posição só é fiável quando anexado.
+     */
+    override fun onViewAttachedToWindow(holder: VH) {
+        super.onViewAttachedToWindow(holder)
+        val pos = holder.bindingAdapterPosition
+        if (pos == RecyclerView.NO_POSITION) return
+        holder.itemView.nextFocusUpId = if (pos < 2) R.id.tabAulas else View.NO_ID
+    }
+
     override fun onBindViewHolder(holder: VH, position: Int) {
         val group = groups[position]
         val res = holder.itemView.resources
