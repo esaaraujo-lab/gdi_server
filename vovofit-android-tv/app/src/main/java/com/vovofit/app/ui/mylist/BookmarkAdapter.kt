@@ -8,6 +8,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.vovofit.app.data.coverResForPath
 import com.vovofit.app.databinding.ItemMylistCardBinding
 import com.vovofit.app.util.FocusAnimator
+import com.vovofit.app.util.TapFeedback
 import com.vovofit.app.util.CoverLibrary
 import com.vovofit.app.util.loadCoverChain
 import com.vovofit.app.util.SessionManager
@@ -29,6 +30,7 @@ class BookmarkAdapter(
                 onOpen(getItem(pos))
             }
             FocusAnimator.attach(binding.root, TvUtils.isTv(binding.root.context))
+            TapFeedback.attachPress(binding.root, TvUtils.isTv(binding.root.context))
         }
     }
 
