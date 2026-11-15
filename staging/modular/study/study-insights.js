@@ -18,6 +18,14 @@
   const ANALYTICS_TTL=60000;  // 1 min
   const COACH_TTL=300000;     // 5 min (IA é cara — cache maior)
 
+  // ★ v2.15.27-B: o fetch de analytics não tinha timeout — um endpoint
+  //   pendurado deixava a página presa em "Carregando analytics…" p/ sempre
+  //   (Passo 25: >15s). 8s dá folga p/ o custo normal do servidor
+  //   (2 chamadas sequenciais à API do Drive, típ. 0,5–4s) e limita o pior
+  //   caso a ~10s (8s + espera GDIUser abaixo) com erro + retry.
+  const ANALYTICS_TIMEOUT_MS=8000;
+  const GDIUSER_READY_WAIT_MS=2000;
+
   // Helpers de UI
   function escHtml(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
   function escAttr(s){return escHtml(s);}
@@ -52,7 +60,16 @@
       return _analyticsCache;
     }
     try{
-      const r=await fetch('/api/analytics/summary',{credentials:'same-origin'});
+      // ★ v2.15.27-B: timeout — sem ele, um /api/analytics/summary pendurado
+      //   (Drive lento) deixava o await p/ sempre e a página presa no loading.
+      const ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
+      const timer=ctrl?setTimeout(()=>{try{ctrl.abort();}catch(_){}},ANALYTICS_TIMEOUT_MS):null;
+      let r;
+      try{
+        r=await fetch('/api/analytics/summary',{credentials:'same-origin',signal:ctrl?ctrl.signal:undefined});
+      }finally{
+        if(timer)clearTimeout(timer);
+      }
       if(r.ok){
         const d=await r.json();
         if(d&&d.ok&&d.data){
@@ -87,7 +104,24 @@
     // ★ v1.0.184 PLANO C: client-side fallback — computar de GDIUser se servidor falhar
     try{
       if(window.GDIUser&&typeof window.GDIUser.dump==='function'){
-        const dump=GDIUser.dump();
+        let dump=null;
+        try{dump=GDIUser.dump();}catch(_){dump=null;}
+        // ★ v2.15.27-B: dump() devolve null enquanto o GDIUser ainda não
+        //   carregou (/userstate em voo — lê o mesmo ficheiro do Drive, por
+        //   isso quando o Drive está lento AMBOS os caminhos bloqueiam).
+        //   Esperar bounded pelo ready() em vez de falhar de imediato
+        //   (antes: dump null → `dump.watched` rebentava em TypeError →
+        //   catch → return null → página presa no texto de loading).
+        if(!dump&&typeof window.GDIUser.ready==='function'){
+          try{
+            await Promise.race([
+              window.GDIUser.ready().catch(()=>{}),
+              new Promise(res=>setTimeout(res,GDIUSER_READY_WAIT_MS))
+            ]);
+          }catch(_){}
+          try{dump=GDIUser.dump();}catch(_){dump=null;}
+        }
+        if(!dump)return null;
         const watched=dump.watched||{};
         const history=dump.history||[];
         const srs=dump.srs||{};
@@ -299,6 +333,24 @@
       '</div>';
   }
 
+  // ★ v2.15.27-B: estado de erro do dashboard. Antes, renderDashboard
+  //   tratava data==null como "a carregar" — o MESMO texto do loading —
+  //   por isso qualquer falha (fetch pendurado, 401/502/500, GDIUser por
+  //   carregar) deixava a página presa em "Carregando analytics…" sem
+  //   saída. O erro tem texto próprio + botão de retry.
+  function renderDashboardError(container, retryFn){
+    if(!container)return;
+    container.innerHTML=
+      '<div style="background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#30363d);border-radius:10px;padding:16px;text-align:center;">'+
+      '<div style="font-size:20px;">⚠️</div>'+
+      '<div style="font-size:13px;font-weight:600;color:var(--ferreto-text,#f0f6fc);margin:6px 0 4px;">Não foi possível carregar as estatísticas.</div>'+
+      '<div style="font-size:12px;color:var(--ferreto-text-muted,#8b949e);margin-bottom:12px;">O servidor demorou demais ou respondeu com erro. Os seus dados não foram perdidos — tente novamente.</div>'+
+      '<button id="gdi-analytics-retry" class="gdi-btn gdi-btn-primary" style="font-size:12px;">↻ Tentar novamente</button>'+
+      '</div>';
+    const btn=container.querySelector('#gdi-analytics-retry');
+    if(btn&&typeof retryFn==='function')btn.onclick=()=>{try{retryFn();}catch(_){}};
+  }
+
   // ═══ Render: Meggy Coach ═══
   function renderCoach(container, data, loading){
     if(loading){
@@ -416,8 +468,12 @@
 
     // Dashboard (rápido — sem IA)
     renderDashboard(dashEl,null);
-    const analytics=await fetchAnalytics();
-    renderDashboard(dashEl,analytics);
+    let analytics=null;
+    try{analytics=await fetchAnalytics();}catch(_){analytics=null;}
+    // ★ v2.15.27-B: null = falhou (timeout/erro/GDIUser por carregar).
+    //   Antes re-renderizava o texto de loading — página presa p/ sempre.
+    if(analytics)renderDashboard(dashEl,analytics);
+    else renderDashboardError(dashEl,()=>{invalidateCache();renderAll(container);});
 
     // Coach (usa cache se tiver; se não, mostra botão "Analisar")
     if(_coachCache && _coachCache.ok){
@@ -432,6 +488,7 @@
   window.__gdiStudy.insights = {
     renderAll: renderAll,
     renderDashboard: renderDashboard,
+    renderDashboardError: renderDashboardError,
     renderCoach: renderCoach,
     fetchAnalytics: fetchAnalytics,
     fetchCoach: fetchCoach,
