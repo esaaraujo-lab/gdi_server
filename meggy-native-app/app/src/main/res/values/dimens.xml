@@ -78,10 +78,13 @@
     <dimen name="cta_height">56dp</dimen>
     <dimen name="chip_height">36dp</dimen>
     <dimen name="play_fab_size">64dp</dimen>
-    <!-- Frente E — disco de play/pausa do PLAYER (48dp celular /
-         72dp TV). play_fab_size fica intocado: e usado tambem
-         pelo botao play da pagina de detalhe. -->
-    <dimen name="player_fab_size">48dp</dimen>
+    <!-- Frente R3A (Plyr) — botao play/pausa da barra SO-ICONE (sem disco):
+         40dp, glifo 18sp; disco central (overlay de pausa) 44dp, glifo 20sp.
+         player_fab_size (Frente E, 48dp p/ os dois) sai: era o disco grande
+         que o Elton achou feio na TV. play_fab_size fica intocado: e usado
+         tambem pelo botao play da pagina de detalhe. -->
+    <dimen name="player_bar_btn_size">40dp</dimen>
+    <dimen name="player_center_size">44dp</dimen>
 
     <!-- ── Foco TV ── -->
     <dimen name="focus_ring_width">3dp</dimen>
