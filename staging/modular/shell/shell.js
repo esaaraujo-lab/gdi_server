@@ -2097,7 +2097,7 @@
                     let _det = '';
                     try { const _dj = await r.json(); _det = String((_dj && _dj.errorDetail) || ''); } catch (_) { _det = ''; }
                     const _e = new Error('AI HTTP ' + r.status);
-                    if (_det) _e.detail = _det.slice(0, 400);
+                    if (_det) _e.detail = _det; // ★ v2.15.15-A5-detalhe-completo (ver A6)
                     throw _e;
                   }
 
@@ -2350,8 +2350,12 @@
                   if (/401/.test(m)) return ' Motivo: sua sessão expirou — saia e entre de novo, depois tente novamente.';
                   const hm = m.match(/AI HTTP (\d+)/);
                   if (hm) { // ★ v2.15.14-Q2b-detalhe-502: mostra o resumo do erro agregado (ver Q2a)
-                    const _dt = String((err && err.detail) || '').slice(0, 240);
-                    return ' Motivo: a IA devolveu HTTP ' + hm[1] + '.' + (_dt ? ' Detalhe: ' + _dt : '');
+                    const _dt = String((err && err.detail) || '');
+                    // ★ v2.15.15-A6-detalhe-completo: sem slice(0,240) — o corte
+                    //   a 240 chars é EXATAMENTE o fim do texto do Passo 19
+                    //   ("OpenRouter nvidia/nem", 219 + 21). O detalhe
+                    //   inteiro é devolvido, um provedor por parágrafo.
+                    return ' Motivo: a IA devolveu HTTP ' + hm[1] + '.' + (_dt ? ' Detalhe:\n\n• ' + _dt.split(' | ').join('\n\n• ') : '');
                   }
                   if (m) return ' Motivo: ' + m.slice(0, 120);
                   return '';
