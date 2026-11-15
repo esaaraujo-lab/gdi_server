@@ -296,6 +296,23 @@
         return;
       }
 
+      // ★ v2.15.10-C3: o contexto da aula MORRE ao sair da aula. Causa
+      //    provada (Passo 14, sintoma c): currentFolderPath só é
+      //    atribuído em _renderDrives/_openLessonPath e NUNCA limpo —
+      //    ao navegar p/ a Home, _hasDrawerLesson() continuava true e
+      //    o prefixo C2 seguia sendo enviado, por isso o modelo disse
+      //    "Vejo que você está na aula '01 - PRINCIPIOS FUNDAMENTAIS'"
+      //    no chat da Home. Os dois retornos acima já trataram os
+      //    caminhos de aula (?a=view e pasta /N:/ — re-setam o contexto
+      //    a seguir); aqui só chegam as vistas fixas. 'drives'
+      //    (navegação de pastas) e 'meggy-ai' (só abre o drawer sobre a
+      //    vista atual, sem trocar de conteúdo) preservam o contexto.
+      if (view !== 'drives' && view !== 'meggy-ai') {
+        Shell.state.currentFolderPath = '';
+        Shell.state.playerPlaylist = null;
+        Shell.state.playerIndex = 0;
+      }
+
       switch (view) {
         case 'home':      Shell.views.home(main); break;
         case 'cursos':    Shell.views.cursos(main); break;
@@ -520,9 +537,14 @@
                     //   shell.css externo p/ o grid; antes do CSS carregar, a
                     //   lista aparecia em 1 coluna com rótulos truncados.
                     const __gridStyle = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;';
+                    // ★ v2.15.10 (B — P2/P8): carimbo da leitura — a prévia é
+                    //   fresca (no-store), mas o D1 muda enquanto o scanner
+                    //   corre; sem a hora, 88 aqui vs 86 no admin parecia
+                    //   erro de contagem. snapshotAt vem do unificado (B2).
                     container.innerHTML =
                       (__feat.length ? '<div class="meggy-continue-section"><h2>⭐ Cursos em destaque</h2><div class="meggy-cards-grid" style="' + __gridStyle + '">' + __feat.map(__cardHtml).join('') + '</div></div>' : '') +
-                      (__own.length ? '<div class="meggy-continue-section"><h2>📚 Meus Cursos</h2><div class="meggy-cards-grid" style="' + __gridStyle + '">' + __own.map(__cardHtml).join('') + '</div></div>' : '');
+                      (__own.length ? '<div class="meggy-continue-section"><h2>📚 Meus Cursos</h2><div class="meggy-cards-grid" style="' + __gridStyle + '">' + __own.map(__cardHtml).join('') + '</div></div>' : '') +
+                      '<div style="color:#9aa4b8;font-size:12px;margin-top:10px;">📊 Contagens do D1 às ' + ((data && data.snapshotAt) ? new Date(data.snapshotAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—') + ' — mudam enquanto o scanner insere aulas; recarregue a página para atualizar.</div>';
                     container.querySelectorAll('.meggy-card[data-concurso-id]').forEach(card => {
                       card.onclick = () => Shell.views.concursoDetail(el, card.dataset.concursoId);
                     });
@@ -1123,6 +1145,11 @@
 
         if (main._cleanupKeyboard) { main._cleanupKeyboard(); main._cleanupKeyboard = null; }
         Shell.state.currentView = 'player';
+        // ★ v2.15.10-E6-render-seq: cada render do player tem o seu número
+        //   — o auto-clique do Interfolder (E7) só dispara se ESTE render
+        //   ainda for o atual (ver E7).
+        Shell._playerRenderSeq = (Shell._playerRenderSeq || 0) + 1;
+        const _thisRenderSeq = Shell._playerRenderSeq;
         Shell.state.playerPlaylist = pl;
         Shell.state.playerIndex = idx;
 
@@ -1191,7 +1218,7 @@
                   <a class="gdi-mode-btn" href="${videoUrl}" download="${name}" target="_blank" aria-label="Baixar vídeo" title="Baixar vídeo"><i class="bi bi-download"></i></a>
                   <select class="gdi-speed-select" id="gdi-speed-select" title="Velocidade de reprodução" aria-label="Velocidade de reprodução" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#e6edf3;border-radius:999px;padding:6px 10px;font-size:13px;font-family:inherit;cursor:pointer;"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="1.75">1.75×</option><option value="2">2×</option></select>
                   <button class="gdi-mode-btn" id="gdi-fullscreen-btn" title="Tela cheia (F)"><i class="bi bi-arrows-fullscreen"></i> Tela cheia</button>
-                  <button class="gdi-mode-btn" id="gdi-interfolder-btn"><i class="bi bi-collection"></i> Interfolder</button>
+                  <button class="gdi-mode-btn" id="gdi-interfolder-btn"><i class="bi bi-collection"></i> Interfolder</button><!-- ★ v2.15.10-E1-interfolder-status: o progresso da coleta vive NESTE span, nunca no rótulo do botão — o nome acessível "Interfolder" tem de ficar estável (ver E2/E3/E4) --><span id="gdi-interfolder-status" role="status" aria-live="polite" style="align-self:center;font-size:12px;color:#9aa4b8;white-space:nowrap;"></span>
                   <button class="gdi-mode-btn" id="gdi-meggy-ai-btn" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-robot"></i> Meggy</button>
                 </div>
                 <div class="gdi-notes" style="background:rgba(255,255,255,0.043);border:1px solid rgba(255,255,255,0.09);border-radius:10px;padding:12px;">
@@ -1484,7 +1511,22 @@
         // ★ Interfolder — com finalizeNames
         document.getElementById('gdi-interfolder-btn').onclick = async () => {
           const btn = document.getElementById('gdi-interfolder-btn');
-          btn.innerHTML = '<div class="spinner-border spinner-border-sm"></div>';
+          const _ifStatus = document.getElementById('gdi-interfolder-status');
+          // ★ v2.15.10-E2-interfolder-estavel: o botão é ESTÁVEL — o rótulo
+          //   "Interfolder" nunca muda. Antes o handler reescrevia
+          //   btn.innerHTML (spinner -> spinner+N por lote -> "✓ 57"): o
+          //   nome acessível virava "57" ~1,5 s após o render (o auto-clique
+          //   dispara a coleta mal o vídeo começa) e qualquer referência por
+          //   nome ficava obsoleta; a largura mudava junto (layout shift) e
+          //   o clique por coordenadas caía na borda do botão Meggy. O
+          //   progresso vive no #gdi-interfolder-status (E1). Guarda de
+          //   reentrância: um 2º clique durante a coleta retorna sem
+          //   disparar outra coleta concorrente (antes as duas disputavam
+          //   o fecho pl/idx, a playlist e o rótulo). // v2.15.10-E2
+          if (Shell._interfolderRunning) return;
+          Shell._interfolderRunning = true;
+          if (btn) btn.disabled = true;
+          if (_ifStatus) _ifStatus.textContent = 'A reunir aulas…';
           try {
             const currentPath = Shell.state.currentFolderPath || '';
             if (!currentPath || !window.gdiListAllFiles) return;
@@ -1503,7 +1545,7 @@
                   .map(f => ({name:f.name, origName:f.name, link:f.link?(f.link.startsWith('http')?f.link:window.location.origin+f.link):'', size:f.size?(f.size/1024/1024).toFixed(1)+' MB':'', folder:folder.name, folderLabel:folder.name}))).catch(() => []);
               }));
               results.forEach(v => collected.push(...v));
-              btn.innerHTML = `<div class="spinner-border spinner-border-sm"></div> ${collected.length}`;
+              if (_ifStatus) _ifStatus.textContent = 'A reunir aulas… ' + collected.length; // ★ v2.15.10-E3-interfolder-progresso-span (era btn.innerHTML — ver E2)
             }
             // ★ v2.15.9-E: identidade do vídeo A TOCAR, capturada ANTES de
             //   reconstruir a playlist — 'name' e 'videoUrl' são da abertura
@@ -1550,8 +1592,17 @@
             document.getElementById('gdi-playlist-list').innerHTML = pl.map((v, i) => `<div class="gdi-playlist-item ${i === idx ? 'cur' : ''}" data-idx="${i}" title="${v.name}" role="button" tabindex="0" aria-label="Reproduzir ${v.name}" style="display:flex;justify-content:space-between;align-items:center;padding:12px 10px;border-radius:6px;cursor:pointer;font-size:12px;color:${i === idx ? '#ff8b9f' : '#9aa4b8'};${i === idx ? 'background:rgba(255,139,159,0.12);' : ''}"><div style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><i class="bi ${i === idx ? 'bi-play-fill' : 'bi-film'} me-2"></i><span style="font-weight:${i === idx ? '600' : '400'};">${v.name}</span></div><span class="gdi-pl-size" style="font-size:10px;color:#6b7488;margin-left:8px;">${v.size || ''}</span></div>`).join('');
             plCountEl.textContent = `${idx + 1} / ${pl.length}`;
             document.querySelectorAll('.gdi-playlist-item').forEach(item => { item.onclick = () => { const i = parseInt(item.dataset.idx); if (i !== idx) switchTo(i); }; item.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); item.click(); } }; });
-            btn.innerHTML = `<i class="bi bi-check"></i> ${pl.length}`;
-          } catch (e) { console.error(e); btn.innerHTML = '⚠️'; }
+            if (_ifStatus) _ifStatus.textContent = '✓ ' + pl.length + ' aulas'; // ★ v2.15.10-E4-interfolder-fim-span (era btn.innerHTML — o botão continua "Interfolder", ver E2)
+          } catch (e) {
+            console.error(e);
+            if (_ifStatus) _ifStatus.textContent = '⚠️ Não foi possível reunir as aulas';
+          } finally {
+            // ★ v2.15.10-E5-interfolder-finally: liberta a guarda e reativa
+            //   o botão em TODOS os caminhos (sucesso, erro e o return
+            //   antecipado sem currentFolderPath — o finally corre nele).
+            Shell._interfolderRunning = false;
+            if (btn) btn.disabled = false;
+          }
         };
 
         // ★ Materiais — busca em pasta + subpastas + pasta pai (réplica GDI)
@@ -1612,8 +1663,21 @@
             //   para a guarda de voo abaixo (o IIFE é assíncrono — calcular
             //   a chave só lá dentro deixaria dois cliques criarem duas
             //   gerações antes de qualquer um registrar a sua).
+            // ★ v2.15.10-E8-chave-canonica: a chave do cache E da guarda de
+            //   voo usa o nome CANÓNICO (bare, "001 - aula.mp4") em vez do
+            //   nome de exibição. O nome de exibição MUDA com o Interfolder
+            //   ("001 - aula.mp4" -> "Aula 09 - ... - 001 - aula.mp4"), por
+            //   isso a geração automática da descrição (chave nua) e o clique
+            //   do aluno em Questões (chave prefixada) NÃO se juntavam na
+            //   guarda e corriam DOIS generateAll em paralelo (6 chamadas
+            //   /api/ai) — e cada abertura via Interfolder gravava uma chave
+            //   prefixada nova em vez de atualizar a chave boa ao vivo (a
+            //   nua). Em aberturas normais bare == display: chave IDÊNTICA
+            //   à de antes. lessonName continua a ser o de exibição p/ o
+            //   ctx, o cabeçalho e o campo lessonName do save.
             let _isaRawKey;
-            try { _isaRawKey = decodeURIComponent(lessonPath + lessonName); } catch (_) { _isaRawKey = lessonPath + lessonName; }
+            const _isaKeyName = _bareLessonName || lessonName;
+            try { _isaRawKey = decodeURIComponent(lessonPath + _isaKeyName); } catch (_) { _isaRawKey = lessonPath + _isaKeyName; }
             const _isaCacheKey = encodeURI(_isaRawKey); // encodeURI: %20 p/ espaços, %C3%A7 p/ ç, mantém / :
             const _isaCacheKeyRaw = lessonPath + lessonName; // fallback p/ cache antigo com encoding parcial
             // ★ v2.15.6-resumo (Elton 22:04): no celular o painel de
@@ -1673,6 +1737,14 @@
                     try { _keys.push(encodeURI(decodeURIComponent(lessonPath + _bareLessonName))); } catch (_) { _keys.push(lessonPath + _bareLessonName); }
                     _keys.push(lessonPath + _bareLessonName);
                   }
+                  // ★ v2.15.10-E9-probe-exibicao: a chave primária agora é a
+                  //   canónica (E8), mas o conteúdo bom salvo sob a chave
+                  //   do nome de exibição (ex. as 10 questões geradas no
+                  //   Passo 14 via Interfolder) continua a ser sondado.
+                  if (lessonName && _bareLessonName && lessonName !== _bareLessonName) {
+                    try { _keys.push(encodeURI(decodeURIComponent(lessonPath + lessonName))); } catch (_) { _keys.push(lessonPath + lessonName); }
+                    _keys.push(lessonPath + lessonName);
+                  }
                   if (_pdfName && /\.(mp4|webm|mov|m4v|avi|mkv|m3u8|mp3|m4a|ogg|wav|aac)$/i.test(lessonName)) {
                     try { _keys.push(encodeURI(decodeURIComponent(lessonPath + _pdfName))); } catch (_) { _keys.push(lessonPath + _pdfName); }
                     _keys.push(lessonPath + _pdfName);
@@ -1708,6 +1780,15 @@
                     Shell._renderISAResult(type, _jc[isaField], bodyEl, lessonName, true, _jc);
                     return;
                   }
+                  // ★ v2.15.10-E10-flashcards-joiner: Flashcards são DERIVADOS
+                  //   das questões (autoCreateFlashcards) e o cache nunca
+                  //   guarda o campo 'flashcards' — sem isto o joiner caía
+                  //   sempre na geração completa mesmo com as questões já
+                  //   em cache (ver E11).
+                  if (type === 'isa-flashcards' && _jc && Array.isArray(_jc.questions) && _jc.questions.length) {
+                    const _fc = autoCreateFlashcards(_jc.questions);
+                    if (_fc.length) { Shell._renderFlashcardDeck(bodyEl, { flashcards: _fc, lessonName: lessonName, questions: _jc.questions }); return; }
+                  }
                   // A geração anterior falhou sem salvar — gera de novo abaixo.
                 }
                 let cached = await probeCache();
@@ -1716,6 +1797,19 @@
                 if (cached && cached[isaField]) {
                   Shell._renderISAResult(type, cached[isaField], bodyEl, lessonName, true, cached);
                   return;
+                }
+                // ★ v2.15.10-E11-flashcards-cache: Flashcards são DERIVADOS
+                //   das questões — o cache nunca guarda 'flashcards', por
+                //   isso `cached['flashcards']` é sempre undefined e o clique
+                //   em Flashcards caía SEMPRE no generateAll inteiro
+                //   (30-60 s+) mesmo com as 10 questões já em cache. Com
+                //   questões em cache, deriva e renderiza direto, sem /api/ai.
+                if (type === 'isa-flashcards' && cached && Array.isArray(cached.questions) && cached.questions.length) {
+                  const _fcFromCache = autoCreateFlashcards(cached.questions);
+                  if (_fcFromCache.length) {
+                    Shell._renderFlashcardDeck(bodyEl, { flashcards: _fcFromCache, lessonName: lessonName, questions: cached.questions });
+                    return;
+                  }
                 }
 
                 // ─── 2. Extrair materiais (MD/TXT/PDF com pdf.js) ───
@@ -1934,15 +2028,51 @@
                   }
                   return { field: 'summary', value: null };
                 })());
-                // Task 2: pílulas
+                // Task 2: pílulas — ★ v2.15.10-E12-pilulas-retry: era UMA só
+                //   tentativa (o resumo já tinha retry de 3 níveis; as
+                //   pílulas não). Até 3 tentativas com validação (resposta
+                //   >50 chars) e "tentativa N de 3" visível; sem retry em
+                //   429/401 (cada tentativa conta no limite de 30 msgs/h).
                 tasks.push((async () => {
-                  try { setLoading('💊 Gerando pílulas de revisão…'); return { field: 'mindmap', value: await callIsa(PILULAS_PROMPT, 'mindmap') }; }
-                  catch (e) { _isaLastErr = e; return { field: 'mindmap', value: null }; }
+                  for (let _a = 0; _a < 3; _a++) {
+                    try {
+                      setLoading(_a === 0 ? '💊 Gerando pílulas de revisão…' : '💊 Gerando pílulas de revisão… (tentativa ' + (_a + 1) + ' de 3)');
+                      const _r = await callIsa(PILULAS_PROMPT, 'mindmap');
+                      if (_r && _r.length > 50) return { field: 'mindmap', value: _r };
+                      _isaLastErr = new Error('resposta vazia da IA');
+                    } catch (e) {
+                      _isaLastErr = e;
+                      if (/429|401/.test(String((e && e.message) || ''))) break;
+                    }
+                    if (_a < 2) await new Promise((res) => setTimeout(res, 600 * (_a + 1)));
+                  }
+                  return { field: 'mindmap', value: null };
                 })());
-                // Task 3: questões (JSON)
+                // Task 3: questões (JSON) — ★ v2.15.10-E13-questoes-retry:
+                //   era UMA só tentativa: 1 JSON inválido/prosa da IA ou 1
+                //   HTTP transitório bastava p/ a 1ª geração falhar ("Não foi
+                //   possível gerar este conteúdo.") e a 2ª passar — o sintoma
+                //   do Passo 14 na Aula 09. Até 3 tentativas com validação
+                //   do parse (≥1 questão) e "tentativa N de 3" visível; sem
+                //   retry em 429/401 (cada tentativa conta no limite de
+                //   30 msgs/h — ver _isaFailReason).
                 tasks.push((async () => {
-                  try { setLoading('❓ Gerando questões…'); const r = await callIsa(QUESTOES_PROMPT, 'questoes'); return { field: 'questions', value: parseQuestions(r), raw: r }; }
-                  catch (e) { _isaLastErr = e; return { field: 'questions', value: [] }; }
+                  let _lastRaw = '';
+                  for (let _a = 0; _a < 3; _a++) {
+                    try {
+                      setLoading(_a === 0 ? '❓ Gerando questões…' : '❓ Gerando questões… (tentativa ' + (_a + 1) + ' de 3)');
+                      const r = await callIsa(QUESTOES_PROMPT, 'questoes');
+                      _lastRaw = r || '';
+                      const _parsed = parseQuestions(r);
+                      if (_parsed.length) return { field: 'questions', value: _parsed, raw: r };
+                      _isaLastErr = new Error('a IA devolveu questões fora do formato JSON esperado');
+                    } catch (e) {
+                      _isaLastErr = e;
+                      if (/429|401/.test(String((e && e.message) || ''))) break;
+                    }
+                    if (_a < 2) await new Promise((res) => setTimeout(res, 600 * (_a + 1)));
+                  }
+                  return { field: 'questions', value: [], raw: _lastRaw };
                 })());
 
                 const results = await Promise.allSettled(tasks);
@@ -2375,7 +2505,16 @@
 
         main.scrollTop = 0;
         if (pl.length <= 1 && Shell.state.currentFolderPath) {
-          setTimeout(() => document.getElementById('gdi-interfolder-btn')?.click(), 1500);
+          // ★ v2.15.10-E7-autoclick-render: o timer de 1500 ms NÃO está
+          //   preso a este render — antes, se outro player abrisse antes
+          //   do timer, o clique caía no botão do NOVO player
+          //   (cross-player). Só dispara se este render ainda for o
+          //   player atual e nenhuma coleta estiver a correr.
+          setTimeout(() => {
+            if (Shell._playerRenderSeq !== _thisRenderSeq || Shell.state.currentView !== 'player') return;
+            if (Shell._interfolderRunning) return;
+            document.getElementById('gdi-interfolder-btn')?.click();
+          }, 1500);
         }
       },
 
@@ -5291,6 +5430,97 @@ el.scrollTop = 0;
       const t = (typeof document !== 'undefined' && document.title) || '';
       return t.split(' - ')[0].split(' | ')[0].trim();
     },
+    // ★ v2.15.10-C1: material REAL da aula no prompt (grounding).
+    //    Causa provada (Passo 14, sintomas a+b): o modelo recebia SÓ o
+    //    nome da aula (prefixo C2) — handleAi (worker.js:13724) lê só
+    //    message/messages e NÃO faz nenhuma busca de material (nenhum
+    //    D1/KV de resumo; os únicos KV ali são modelhealth:* e os caches
+    //    de descoberta de modelos). Sem conteúdo, o modelo pequeno do
+    //    /api/ai inventou outra aula ("Lógica de Programação") ou recusou
+    //    ("não tenho o conteúdo exato desta aula") — mesmo a pasta TENDO
+    //    resumo_ia.pdf e o resumo acima do player estando correto. A
+    //    fonte é a MESMA do resumo acima do player: o cache ISA
+    //    (GET /api/ai/cache), com as chaves canônicas do showISA (pasta
+    //    + nome do ficheiro, variante .pdf e variante da pasta pai).
+    //    Sem cache, e só p/ pedidos de resumo/conteúdo, o texto é
+    //    extraído do PDF real da pasta (resumo/material/transcrição)
+    //    com os mesmos helpers do showISA (gdiListAllFiles +
+    //    _extractPdfText). Sem nada, devolve null — e o send() diz isso
+    //    ao modelo em vez de deixar inventar.
+    //    Chaves de sonda do cache ISA p/ a aula aberta — mesma derivação
+    //    do showISA (isaCacheProbeKeys, E3). Pura (só lê Shell.state).
+    _drawerLessonCacheKeys() {
+      const keys = [];
+      try {
+        let lessonPath = String((Shell.state && Shell.state.currentFolderPath) || '');
+        if (!lessonPath) return keys;
+        if (!lessonPath.endsWith('/')) lessonPath += '/';
+        const item = (Shell.state.playerPlaylist && Shell.state.playerPlaylist[Shell.state.playerIndex]) || null;
+        const bare = (item && (item.origName || item.name)) || '';
+        const display = (item && item.name) || '';
+        if (!bare && !display) return keys;
+        const push2 = (k) => { try { keys.push(encodeURI(decodeURIComponent(k))); } catch (_) { keys.push(k); } keys.push(k); };
+        if (display) push2(lessonPath + display);
+        if (bare && bare !== display) push2(lessonPath + bare);
+        const mediaName = display || bare;
+        if (mediaName && /\.(mp4|webm|mov|m4v|avi|mkv|m3u8|mp3|m4a|ogg|wav|aac)$/i.test(mediaName)) {
+          const pdfName = mediaName.replace(/\.[a-z0-9]+$/i, '') + '.pdf';
+          push2(lessonPath + pdfName);
+          const parentPath = lessonPath.replace(/[^/]+\/$/, '');
+          if (parentPath && parentPath !== lessonPath) push2(parentPath + pdfName);
+        }
+      } catch (_) {}
+      return keys;
+    },
+    //    Material da aula aberta: 1) cache ISA (resumo já gerado — a
+    //    fonte do resumo acima do player); 2) só p/ pedidos de resumo/
+    //    conteúdo, o PDF real da pasta (o batalhão salva o resumo sob o
+    //    nome real do PDF, por isso a sonda do cache é tentada primeiro
+    //    p/ cada PDF candidato). Devolve {source, text} ou null.
+    async _drawerLessonMaterial(msg) {
+      if (!Shell._hasDrawerLesson()) return null;
+      const probe = async (key) => {
+        try {
+          const r = await fetch('/api/ai/cache?key=' + encodeURIComponent(key), { headers: { 'Accept': 'application/json' }, credentials: 'include' });
+          if (r && r.ok) {
+            const d = await r.json().catch(() => null);
+            if (d && d.cached && typeof d.cached.summary === 'string' && d.cached.summary.length > 50) return d.cached.summary;
+          }
+        } catch (_) {}
+        return null;
+      };
+      const variants = (k) => { try { const e = encodeURI(decodeURIComponent(k)); return e === k ? [k] : [e, k]; } catch (_) { return [k]; } };
+      try {
+        for (const k of Shell._drawerLessonCacheKeys()) {
+          const s = await probe(k);
+          if (s) return { source: 'cache', key: k, text: s };
+        }
+      } catch (_) {}
+      // Tier 2 — só p/ pedidos de resumo/conteúdo (extração de PDF é
+      // lenta; uma dúvida pontual não precisa dela).
+      try {
+        if (!Shell._isDrawerSummaryRequest(msg)) return null;
+        if (!window.gdiListAllFiles) return null;
+        let lessonPath = String((Shell.state && Shell.state.currentFolderPath) || '');
+        if (!lessonPath) return null;
+        if (!lessonPath.endsWith('/')) lessonPath += '/';
+        const files = await window.gdiListAllFiles(lessonPath, '');
+        const rank = (n) => /resumo/i.test(n) ? 0 : /material|transcri/i.test(n) ? 1 : 2;
+        const pdfs = (files || []).filter(f => f && /\.pdf$/i.test(f.name || '')).sort((a, b) => rank(a.name || '') - rank(b.name || ''));
+        for (const pdf of pdfs.slice(0, 2)) {
+          for (const k of variants(lessonPath + pdf.name)) {
+            const s = await probe(k);
+            if (s) return { source: 'cache', key: k, text: s };
+          }
+          if (pdf.link) {
+            const link = String(pdf.link).startsWith('http') ? pdf.link : (window.location.origin + pdf.link);
+            const txt = await Shell._extractPdfText(link);
+            if (txt && txt.length > 50) return { source: 'pdf', name: pdf.name, text: String(txt).slice(0, 12000) };
+          }
+        }
+      } catch (_) {}
+      return null;
+    },
     // ── fim drawer-hook (round 4) ──
     renderMeggyAITab(tab) {
       const body = document.getElementById('meggy-ai-body');
@@ -5321,16 +5551,30 @@ el.scrollTop = 0;
         typingEl.textContent = '🐾 Pensando...';
         msgs.appendChild(typingEl);
         msgs.scrollTop = msgs.scrollHeight;
-        // ★ v2.15.9-C2: contexto da aula no prompt. Causa provada (Passo 13):
-        //    o send() mandava SÓ {message: msg, messages: []} — o modelo nunca
-        //    recebia o nome da aula (handleAi lê só message/messages) e
-        //    respondia genérico ("não tenho uma grade fixa..."). Com a aula
-        //    aberta, o NOME que o aluno vê (_drawerLessonName) vai prefixado
-        //    à mensagem ENVIADA; a bolha do usuário continua com o texto cru.
-        //    Só o NOME vai — nunca o caminho da pasta (a regra 3 do system
-        //    prompt proíbe revelar estrutura de pastas/caminhos do servidor).
+        // ★ v2.15.10-C2: material da aula no prompt (grounding). O C2
+        //    da v2.15.9 mandava SÓ o nome — o modelo, sem conteúdo,
+        //    inventou outra aula (programação) ou recusou o resumo
+        //    ("não tenho o conteúdo exato desta aula") mesmo havendo
+        //    resumo no cache ISA. Agora o resumo/material real
+        //    (_drawerLessonMaterial, C1) vai junto; sem material, o
+        //    prompt diz isso ao modelo e proíbe inventar outra aula.
+        //    A bolha do usuário continua com o texto cru; só o NOME vai
+        //    no contexto — nunca o caminho da pasta (regra 3 do system
+        //    prompt). _drawerLessonMaterial nunca dá throw, mas o
+        //    try/catch aqui garante que uma falha não impeça o envio
+        //    (o prompt cai p/ o modo sem-material).
         const _lessonCtx = Shell._hasDrawerLesson() ? Shell._drawerLessonName() : '';
-        const _sendMsg = _lessonCtx ? '[Contexto: o aluno está com a aula "' + _lessonCtx + '" aberta. Responda sobre ESTA aula e o seu conteúdo.]\n' + msg : msg;
+        let _mat = null;
+        try { _mat = _lessonCtx ? await Shell._drawerLessonMaterial(msg) : null; } catch (_) { _mat = null; }
+        let _sendMsg = msg;
+        if (_lessonCtx) {
+          const _head = '[Contexto: o aluno está com a aula "' + _lessonCtx + '" aberta. Responda sobre ESTA aula e o seu conteúdo.]';
+          if (_mat && _mat.text) {
+            _sendMsg = _head + '\n[Material/resumo desta aula — responda SOMENTE com base no conteúdo abaixo; se a pergunta for sobre algo que o material não cobre, diga isso com honestidade e não invente:]\n' + String(_mat.text).slice(0, 6000) + '\n\n' + msg;
+          } else {
+            _sendMsg = _head + '\n[NÃO há resumo/material desta aula disponível. Se a pergunta for sobre o conteúdo desta aula, diga honestamente que ainda não há material e sugira abrir a aba "Resumo Meggy" no player; NÃO invente o conteúdo de outra aula nem de outro tema.]\n' + msg;
+          }
+        }
         try {
           const r = await fetch('/api/ai', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: _sendMsg, messages: []}) });
           const d = await r.json();
@@ -5342,7 +5586,12 @@ el.scrollTop = 0;
           //    é aplicado AQUI — este é o drawer real (shell.js), não o widget
           //    (meggy-widget.js): a resposta vem por /api/ai (não-streaming)
           //    e é renderizada de uma só vez neste div.
-          const shownResp = Shell._isDrawerSummaryRequest(msg) ? Shell._ensureDrawerHook(resp, Shell._drawerLessonName(), '') : resp;
+          // ★ v2.15.10-C4: o gancho é DA AULA ABERTA — sem aula, _drawerLessonName()
+          //    cai no título da página ("Meggy AI") e o gancho inventava uma aula
+          //    órfã ("...estudar meggy ai…") no chat da Home. Só aplica com aula
+          //    aberta; sem aula a resposta passa sem gancho (o classificador
+          //    "resum" sem aula continua valendo — C8 — mas sem inventar assunto).
+          const shownResp = (Shell._isDrawerSummaryRequest(msg) && Shell._hasDrawerLesson()) ? Shell._ensureDrawerHook(resp, Shell._drawerLessonName(), '') : resp;
           const html = Shell._renderMd(shownResp);
           typingEl.innerHTML = html;
         } catch (e) { typingEl.textContent = 'Erro: ' + e.message; }
