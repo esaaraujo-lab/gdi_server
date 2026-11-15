@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Frente E — scrim do topo: 80% -> 60% (mais discreto). -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <gradient
         android:angle="270"
-        android:startColor="#CC000000"
+        android:startColor="#99000000"
         android:endColor="@android:color/transparent"
         android:type="linear" />
 </shape>
