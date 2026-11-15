@@ -2799,13 +2799,58 @@
               path: sl.path,
               name: sl.name || realName(sl.path),
               watched: isWatched,
-              resumed: false
+              resumed: false,
+              type: sl.type || ''
             });
           }
         }
       }catch(_){}
     }
     lessons.sort((a,b)=>a.name.localeCompare(b.name,'pt-BR',{numeric:true}));
+
+    // ★ v2.15.7 (dedup): 1 aula = 1 pasta de aula — a lista mesclada conta
+    //   ARQUIVOS (vídeo + transcrição + ebook da mesma Aula = 3 "aulas").
+    //   Dedupe por pasta ANTES do total: o vídeo é o representante da pasta
+    //   (ou áudio, ou o 1º arquivo); watched propaga (pasta assistida se
+    //   QUALQUER arquivo dela foi assistido); arquivo solto na raiz do
+    //   curso sem ser mídia não é aula. A linha total=Math.max(...) abaixo
+    //   NÃO muda — lessons.length já é o nº de pastas. Se o scan terminou,
+    //   scannedCount (arquivos) é travado no nº de pastas.
+    (function(){
+      var _best = new Map();
+      var _isMedia = function(l){ var t = String((l && l.type) || '').toLowerCase(); if (t === 'video' || t === 'audio') return true; var _re = /\.mp4$|\.mp3$|\.mkv$|\.webm$|\.m4a$|\.wav$|\.ogg$/; var _pn = String((l && l.path) || '').toLowerCase(); var _nn = String((l && l.name) || '').toLowerCase(); return _re.test(_pn) || _re.test(_nn); };
+      var _cp = '';
+      // coursePath é local de openCourseDetail (c.key); o typeof-guarda
+      // permite o bloco rodar também sem ele (ex.: harness v2.15.5, que
+      // sintetiza a função só com (c, lessons, ...)) — aí cai p/ c.key e,
+      // sem nem isso, p/ o menor dirname (a raiz do curso).
+      try { _cp = decodeURIComponent((typeof coursePath !== 'undefined' ? coursePath : ((c && c.key) || ''))); } catch (_e) { _cp = (typeof coursePath !== 'undefined' ? coursePath : ((c && c.key) || '')); }
+      if (!_cp) { try { var _short = null; for (var _i2 = 0; _i2 < lessons.length; _i2++) { var _p2 = String((lessons[_i2] && lessons[_i2].path) || ''); try { _p2 = decodeURIComponent(_p2); } catch (_e2) {} var _s2 = _p2.lastIndexOf('/'); var _d2 = _s2 > 0 ? _p2.slice(0, _s2) : _p2; if (_d2.length > 9 && _d2.slice(-9) === '/material') _d2 = _d2.slice(0, -9); if (_d2 && (!_short || _d2.length < _short.length)) _short = _d2; } _cp = _short || ''; } catch (_e3) {} }
+      var _key = function(l){
+        var p = String((l && l.path) || '');
+        try { p = decodeURIComponent(p); } catch (_e) {}
+        var s = p.lastIndexOf('/');
+        var d = s > 0 ? p.slice(0, s) : p;
+        if (d.length > 9 && d.slice(-9) === '/material') d = d.slice(0, -9);
+        if (_cp && d === _cp) { return _isMedia(l) ? ('\u0000' + p) : null; }
+        return d || null;
+      };
+      var _kept = [];
+      for (var i = 0; i < lessons.length; i++) {
+        var _l = lessons[i];
+        var _k = _key(_l);
+        if (_k === null) continue;
+        if (!_best.has(_k)) { _best.set(_k, _kept.length); _kept.push(_l); }
+        else {
+          var _old = _kept[_best.get(_k)];
+          if (_old) _old.watched = !!(_old.watched || _l.watched);
+          if (_isMedia(_l) && !_isMedia(_old)) { _l.watched = !!(_old.watched || _l.watched); _kept[_best.get(_k)] = _l; }
+        }
+      }
+      lessons.length = 0;
+      for (var j = 0; j < _kept.length; j++) lessons.push(_kept[j]);
+    })();
+    if (scanStatus === 'done' && lessons.length) scannedCount = lessons.length;
 
     // ★ v2.15.6 (P8): contagem REAL — o total provisório acima ignorava
     //   as aulas escaneadas (o cartão já as contava). Port do fix v2.15.5
