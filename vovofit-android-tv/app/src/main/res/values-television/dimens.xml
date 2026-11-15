@@ -2,14 +2,25 @@
 <!--
   v1.0.4 — Tipo e geometria para TV (android-tv-design skill).
   Qualificador values-television: aplicado em aparelhos TV (Leanback).
-  Pisos: metadados ≥24sp, título de seção 28sp, hero ≥48sp, piso 36sp.
-  Margens de overscan: 56dp laterais (mínimo 48dp), 40dp topo/fundo.
+  Valores reais da TV (baseline aprovada pelo Elton na 32"): titulo
+  30sp, secao 18sp, card 13sp, meta 10.5sp, corpo 13sp. Os "pisos"
+  da skill (metadados >=24sp, secao 28sp, hero >=48sp) NAO sao
+  cumpridos — NAO subir os tipos sem decisao do Elton (na 32"
+  renderizariam ~60% maiores que o aspeto aprovado).
+  Ronda 7 Frente B: estes valores sao a baseline de escala 1.0 do
+  TvAutoFit — o runtime deriva tudo do viewport medido.
+  Margens de overscan: 56dp laterais (mínimo 48dp), 40dp topo/fundo
+  neste ficheiro (o detalhe TV partilha estes dimens — a home aplica
+  >=48dp em runtime, ver TvAutoFit.topMarginPx()).
   Patch TV 2.7.7/2.1.6/1.0.5 (bug layout gigante na TV): cards do rail
   360dp -> 200dp (baseline 2.7.5), drive 280dp -> 156dp, thumb do
   destaque 520x260 -> 320x180 (16:9), hero 360dp -> 340dp (o bloco de
   texto tem ~320dp de altura com os tipos TV; 320dp não deixa folga).
   Gap total entre cartões na TV: 16dp (marginEnd 8dp + decoração 8dp
   do RailGutterDecoration) — ver TV_LAYOUT_FIX_2.7.7.md.
+  Ronda 7 Frente B: a 1.0 o gap mantem-se 16dp; acima disso cresce
+  para 10% da largura do card (TvAutoFit), para o foco 1.10x caber
+  no passo sem sobrepor os vizinhos (hoje 220dp > 216dp).
   v1.0.6 — tamanhos 2.7.5 com o visual novo (Elton 11:13/11:15):
   título/seção/card/meta/hero/drive de volta às medidas da 2.7.5;
   margens de overscan (56/40dp) mantidas — sem elas o texto é
@@ -64,6 +75,10 @@
     <dimen name="tv_featured_thumb_width">320dp</dimen>
 
     <!-- ── Foco (TV) ── -->
+    <!-- Ronda 7 Frente B: focus_scale_tv documenta a constante SCALE_TV
+         = 1.10f do FocusAnimator (o codigo usa a constante); o anel e
+         3dp fixos no codigo, nao os 4dp deste dimen (tv_focus_ring_width
+         nao e usado) — nao mudar sem decisao visual. -->
     <dimen name="focus_ring_width_tv">4dp</dimen>
     <dimen name="focus_scale_tv">1.10</dimen>
 </resources>
