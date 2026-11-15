@@ -333,10 +333,12 @@ object CoverLibrary {
 
     /**
      * Resolve a imagem da biblioteca p/ os nomes dados (aula, pasta,
-     * curso/drive — contrato COVER_LIBRARY_NOTES.md §3): vence a
-     * keyword MAIS LONGA entre TODOS os nomes juntos; empate -> a
-     * PRIMEIRA entrada do manifesto (o laço externo é o manifesto, por
-     * isso o empate resolve pela ordem do arquivo). Sem match com o
+     * curso/drive — contrato COVER_LIBRARY_NOTES.md §3, regra 1.0.12):
+     * candidatos do MAIS ESPECIFICO ao mais generico — primeiro o nome
+     * do item; depois cada caminho, segmento a segmento, do mais
+     * profundo ao mais raso. Dentro de UM candidato vence a keyword
+     * MAIS LONGA; o PRIMEIRO candidato com match decide; empate dentro
+     * do candidato -> a PRIMEIRA entrada do manifesto. Sem match com o
      * manifesto carregado -> a imagem 'geral' (fallback explícito da
      * camada 3). Sem manifesto carregado ou sem nomes -> null (o
      * chamador cai na camada 4).
@@ -363,23 +365,33 @@ object CoverLibrary {
         ensureLoaded(context)
         val entries = cached ?: return null
         if (entries.isEmpty()) return null
-        val normalized = names.mapNotNull { raw ->
-            raw?.let { normalize(it) }?.takeIf { it.isNotBlank() }
-        }
-        if (normalized.isEmpty()) return null
-        var bestUrl: String? = null
-        var bestLen = -1
-        for (entry in entries) {
-            for (kw in entry.keywords) {
-                if (kw.length < 3) continue
-                if (kw.length <= bestLen) continue
-                if (normalized.any { name -> name.contains(kw) }) {
-                    bestLen = kw.length
-                    bestUrl = entry.url
-                }
+        // 1.0.12 — candidatos do mais específico ao mais genérico: o
+        // nome primeiro; cada caminho vira os seus segmentos do mais
+        // profundo ao mais raso (ver o KDoc de [resolve]).
+        val candidates = ArrayList<String>()
+        for (raw in names) {
+            if (raw.isNullOrBlank()) continue
+            for (seg in raw.split('/').asReversed()) {
+                val n = normalize(seg)
+                if (n.isNotBlank()) candidates.add(n)
             }
         }
-        if (bestUrl != null) return bestUrl
+        if (candidates.isEmpty()) return null
+        for (candidate in candidates) {
+            var bestUrl: String? = null
+            var bestLen = -1
+            for (entry in entries) {
+                for (kw in entry.keywords) {
+                    if (kw.length < 3) continue
+                    if (kw.length <= bestLen) continue
+                    if (candidate.contains(kw)) {
+                        bestLen = kw.length
+                        bestUrl = entry.url
+                    }
+                }
+            }
+            if (bestUrl != null) return bestUrl
+        }
         // Fallback explícito da camada 3: manifesto carregado e nenhum
         // match -> imagem 'geral' (última do manifesto, keyword 'meggy').
         // Estrito (resolveStrict): sem 'geral' — cai na camada 4.
@@ -400,20 +412,21 @@ object CoverLibrary {
  * Nunca lança e nunca mostra erro: sem match ou sem manifesto, cai na (4).
  *
  * `names` na ordem aula -> pasta -> curso/drive (ver [CoverLibrary.resolve]:
- * a keyword mais longa entre TODOS os nomes vence; sem match, 'geral').
+ * o primeiro candidato com match decide (regra 1.0.12); sem match, 'geral'
+ * (só quando strict=false — o default agora é strict=true).
  * `placeholderRes` é opcional (só o hero o usa, como antes).
- * `strict` (1.0.11): camada (3) sem o fallback 'geral' — usar em
- * superfícies por drive/curso (hero, detalhe do curso).
+ * `strict` (1.0.12): camada (3) sem o fallback 'geral' — AGORA O DEFAULT
+ * em todas as superfícies (o livro não é a imagem de nenhum curso/pasta).
  */
 fun ImageView.loadCoverChain(
     remoteUrl: String?,
     fallbackRes: Int,
     vararg names: String?,
     placeholderRes: Int? = null,
-    strict: Boolean = false
+    strict: Boolean = true
 ) {
-    // 1.0.11 — strict=true: camada (3) sem o fallback 'geral' (o livro
-    // não é banner de curso); sem match, cai na (4) capa local.
+    // 1.0.12 — strict=true por default: camada (3) sem o fallback 'geral'
+    // (o livro não é imagem de nenhum curso/pasta); sem match, cai na (4).
     val libUrl = if (strict) CoverLibrary.resolveStrict(context, *names)
         else CoverLibrary.resolve(context, *names)
     if (!remoteUrl.isNullOrBlank()) {
