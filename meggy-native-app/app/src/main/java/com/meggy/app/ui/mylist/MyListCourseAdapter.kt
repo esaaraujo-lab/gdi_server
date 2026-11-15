@@ -62,7 +62,7 @@ class MyListCourseAdapter(
             // nome/caminho do curso; sem match, a capa gerada do
             // drive (ThumbArt) — nunca o livro 'geral' nem monograma.
             val coverRes = ThumbArt.coverResForPath(course.drivePath)
-            val libraryUrl = LibraryCovers.resolveStrict(ctx, course.name, course.drivePath)
+            val libraryUrl = LibraryCovers.resolveStrict(course.name, course.drivePath)
             if (libraryUrl != null) {
                 mylistThumb.visibility = View.VISIBLE
                 mylistMonogram.visibility = View.GONE
