@@ -91,7 +91,7 @@ class RailAdapter(
             val thumb = item.thumbnailUrl ?: item.file?.thumbnailLink
             val coverRes = item.file?.folderPath
                 ?.let { driveIndexFromPath(it) }?.let { driveCoverRes(it) }
-            val libUrl = CoverLibrary.resolve(
+            val libUrl = CoverLibrary.resolveStrict(
                 ctx, item.title, item.file?.name, item.file?.folderPath
             )
             if (!thumb.isNullOrBlank()) {
