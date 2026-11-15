@@ -12,6 +12,7 @@ import com.bibigyn.app.data.DriveItem
 import com.bibigyn.app.data.FileItem
 import com.bibigyn.app.data.colorFromString
 import com.bibigyn.app.databinding.ItemFlatLessonBinding
+import com.bibigyn.app.databinding.ItemSectionHeaderBinding
 import com.bibigyn.app.util.CardGradient
 import com.bibigyn.app.util.CoverLibrary
 import com.bibigyn.app.util.FocusAnimator
@@ -19,6 +20,19 @@ import com.bibigyn.app.util.TapFeedback
 import com.bibigyn.app.util.Format
 import com.bibigyn.app.util.SessionManager
 import com.bibigyn.app.util.TvUtils
+
+/**
+ * Frente R4B — linhas da lista plana: cabeçalho de secção ou item.
+ * O cabeçalho guarda o recurso do título ("Vídeos"/"Materiais") e a
+ * contagem da secção; o item guarda o ficheiro.
+ */
+sealed interface FlatRow {
+    data class Header(val titleRes: Int, val count: Int) : FlatRow
+    data class Item(val file: FileItem) : FlatRow
+}
+
+/** Frente R4B — filtro dos chips: Todos / Vídeos / Materiais. */
+enum class FlatFilter { ALL, VIDEOS, MATERIALS }
 
 /**
  * v2.1.5 — Lista PLANA (conceito escolher-aulas-pasta-unica, Elton 00:04).
@@ -33,6 +47,12 @@ import com.bibigyn.app.util.TvUtils
  * A ordem da listagem é a da API (não reordenada). PDFs/MD da mesma
  * pasta aparecem como linhas (sem progresso) e abrem os leitores
  * embutidos — nada fica inalcançável.
+ *
+ * Frente R4B — lista partida em secções: Vídeos (só .mp4, por ordem,
+ * com progresso) primeiro e Materiais (PDFs, .md, áudios e outros) a
+ * seguir; cada secção tem cabeçalho com a contagem. Legendas .srt/.vtt
+ * (FileItem.isSubtitle) nunca entram na lista — continuam a carregar
+ * no player via SubtitleFetcher, que lê o listFolder completo.
  */
 class FlatLessonAdapter(
     private val folderPath: String,
@@ -40,19 +60,60 @@ class FlatLessonAdapter(
     private val onOpenPdf: (FileItem) -> Unit,
     private val onOpenMd: (FileItem) -> Unit,
     private val onOpenOther: (FileItem) -> Unit
-) : ListAdapter<FileItem, FlatLessonAdapter.VH>(DIFF) {
+) : ListAdapter<FlatRow, RecyclerView.ViewHolder>(DIFF) {
+
+    // Frente R4B — secções da lista plana + filtro dos chips.
+    private var videos: List<FileItem> = emptyList()
+    private var materials: List<FileItem> = emptyList()
+    private var filter: FlatFilter = FlatFilter.ALL
+
+    /**
+     * Recebe as duas secções já partidas (Vídeos .mp4 / Materiais, sem
+     * legendas — ver DetailActivity.refreshFlatList) e o filtro ativo,
+     * e reconstrói as linhas: cabeçalho + itens por secção não vazia.
+     * Secção vazia não aparece (nem o cabeçalho).
+     */
+    fun submitSections(videos: List<FileItem>, materials: List<FileItem>, filter: FlatFilter) {
+        this.videos = videos
+        this.materials = materials
+        this.filter = filter
+        val rows = ArrayList<FlatRow>()
+        if (filter != FlatFilter.MATERIALS && videos.isNotEmpty()) {
+            rows.add(FlatRow.Header(R.string.flat_section_videos, videos.size))
+            videos.forEach { rows.add(FlatRow.Item(it)) }
+        }
+        if (filter != FlatFilter.VIDEOS && materials.isNotEmpty()) {
+            rows.add(FlatRow.Header(R.string.flat_section_materials, materials.size))
+            materials.forEach { rows.add(FlatRow.Item(it)) }
+        }
+        submitList(rows)
+    }
+
+    private fun fileAt(pos: Int): FileItem = (getItem(pos) as FlatRow.Item).file
+
+    override fun getItemViewType(position: Int): Int =
+        if (getItem(position) is FlatRow.Header) TYPE_HEADER else TYPE_ITEM
+
+    /** Frente R4B — cabeçalho de secção ("Vídeos · 13" / "Materiais · 5"). */
+    inner class HeaderVH(val binding: ItemSectionHeaderBinding) :
+        RecyclerView.ViewHolder(binding.root) {
+        fun bind(row: FlatRow.Header) {
+            binding.sectionHeaderTitle.text =
+                "${binding.root.context.getString(row.titleRes)} · ${row.count}"
+        }
+    }
 
     inner class VH(val binding: ItemFlatLessonBinding) : RecyclerView.ViewHolder(binding.root) {
         init {
             binding.root.setOnClickListener {
                 val pos = bindingAdapterPosition
                 if (pos == RecyclerView.NO_POSITION) return@setOnClickListener
-                dispatch(getItem(pos))
+                dispatch(fileAt(pos))
             }
             binding.flatContinue.setOnClickListener {
                 val pos = bindingAdapterPosition
                 if (pos == RecyclerView.NO_POSITION) return@setOnClickListener
-                dispatch(getItem(pos))
+                dispatch(fileAt(pos))
             }
             FocusAnimator.attachCard(binding.flatCardRoot, TvUtils.isTv(binding.root.context))
             TapFeedback.attachPress(binding.flatCardRoot, TvUtils.isTv(binding.root.context))
@@ -68,18 +129,28 @@ class FlatLessonAdapter(
         }
     }
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         val inflater = LayoutInflater.from(parent.context)
-        return VH(ItemFlatLessonBinding.inflate(inflater, parent, false))
+        return if (viewType == TYPE_HEADER) {
+            HeaderVH(ItemSectionHeaderBinding.inflate(inflater, parent, false))
+        } else {
+            VH(ItemFlatLessonBinding.inflate(inflater, parent, false))
+        }
     }
 
-    override fun onBindViewHolder(holder: VH, position: Int) {
-        val item = getItem(position)
-        val res = holder.itemView.resources
-        val ctx = holder.itemView.context
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+        val row = getItem(position)
+        if (row is FlatRow.Header) {
+            (holder as HeaderVH).bind(row)
+            return
+        }
+        val vh = holder as VH
+        val item = (row as FlatRow.Item).file
+        val res = vh.itemView.resources
+        val ctx = vh.itemView.context
         val sm = SessionManager.get(ctx)
 
-        with(holder.binding) {
+        with(vh.binding) {
             flatTitle.text = item.name
             flatThumbBg.background = CardGradient.drawable(res, colorFromString(item.name))
 
@@ -154,10 +225,20 @@ class FlatLessonAdapter(
     }
 
     companion object {
-        val DIFF = object : DiffUtil.ItemCallback<FileItem>() {
-            override fun areItemsTheSame(oldItem: FileItem, newItem: FileItem): Boolean =
-                oldItem.id == newItem.id && oldItem.name == newItem.name
-            override fun areContentsTheSame(oldItem: FileItem, newItem: FileItem): Boolean =
+        private const val TYPE_HEADER = 0
+        private const val TYPE_ITEM = 1
+
+        val DIFF = object : DiffUtil.ItemCallback<FlatRow>() {
+            override fun areItemsTheSame(oldItem: FlatRow, newItem: FlatRow): Boolean =
+                when {
+                    oldItem is FlatRow.Header && newItem is FlatRow.Header ->
+                        oldItem.titleRes == newItem.titleRes
+                    oldItem is FlatRow.Item && newItem is FlatRow.Item ->
+                        oldItem.file.id == newItem.file.id &&
+                            oldItem.file.name == newItem.file.name
+                    else -> false
+                }
+            override fun areContentsTheSame(oldItem: FlatRow, newItem: FlatRow): Boolean =
                 oldItem == newItem
         }
     }
