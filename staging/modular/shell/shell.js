@@ -2703,7 +2703,7 @@
               }
             })();
             Shell._isaInflight[_isaCacheKey] = _myRun;
-            _myRun.catch(() => {}).finally(() => { if (Shell._isaInflight[_isaCacheKey] === _myRun) delete Shell._isaInflight[_isaCacheKey]; });
+            _myRun.catch(() => {}).finally(() => { if (Shell._isaInflight[_isaCacheKey] === _myRun) delete Shell._isaInflight[_isaCacheKey]; try { updateLessonDescription(); } catch (_) {} }); // ★ v2.15.26-B: a geração terminou (hit ou save) — a descrição sob o vídeo relê o cache e mostra o resumo sem esperar pelo tick do poller
           }
 
           tabsEl.innerHTML = '<span style="font-size:12px;color:#6b7488;padding:8px;">Buscando…</span>';
@@ -2901,9 +2901,42 @@
             tick();
           });
         }
+        // ★ v2.15.26-B: polling limitado em vez dos dois timeouts fixos
+        //   de 45s/90s. Os fixos falhavam quando a geração demorava >90s
+        //   (resumo 3 níveis de retry + questões 3 tentativas; o save só
+        //   acontece após Promise.allSettled das 3 tarefas) e NUNCA
+        //   corriam quando o resumo era gerado pela aba Resumo Meggy
+        //   direta (nenhum refresh era agendado nesse caminho — ver o
+        //   hook no finally do showISA). O poller pára quando: o resumo
+        //   renderiza; o bloco some (saiu da aula); a aula muda; há um
+        //   novo render do player; ou no teto de 16×30s (~8 min). Não
+        //   re-dispara a geração (o autoGen continua 1x por sessão).
+        let _descPoll = null; // { key, n, timer } — um por aula/render
         function lessonDescScheduleRefresh() {
-          setTimeout(() => { try { updateLessonDescription(); } catch (_) {} }, 45000);
-          setTimeout(() => { try { updateLessonDescription(); } catch (_) {} }, 90000);
+          const key = lessonDescCacheKey();
+          if (_descPoll) {
+            if (_descPoll.key === key) return; // mesma aula, já a correr
+            try { clearTimeout(_descPoll.timer); } catch (_) {}
+            _descPoll = null; // mudou de aula — recomeça p/ a nova
+          }
+          _descPoll = { key: key, n: 0, timer: null };
+          const _tick = async () => {
+            const _mine = _descPoll;
+            if (!_mine) return;
+            _mine.timer = null;
+            let done = false;
+            try {
+              if (!document.getElementById('gdi-lesson-desc')) { if (_descPoll === _mine) _descPoll = null; return; }
+              if (Shell._playerRenderSeq !== _thisRenderSeq) { if (_descPoll === _mine) _descPoll = null; return; }
+              if (lessonDescCacheKey() !== _mine.key) { if (_descPoll === _mine) _descPoll = null; return; }
+              done = await updateLessonDescription();
+            } catch (_) {}
+            if (_descPoll !== _mine) return; // outra aula/render tomou conta
+            if (done) { _descPoll = null; return; } // resumo renderizou
+            if (++_mine.n >= 16) { _descPoll = null; return; } // teto ~8 min
+            _mine.timer = setTimeout(_tick, 30000);
+          };
+          _descPoll.timer = setTimeout(_tick, 30000);
         }
         async function autoGenLessonDescription() {
           // 1x por sessão por aula — a geração em si leva 30-60s e o
@@ -2919,7 +2952,7 @@
         }
         async function updateLessonDescription() {
           const descEl = document.getElementById('gdi-lesson-desc');
-          if (!descEl) return;
+          if (!descEl) return false; // ★ v2.15.26-B: boolean p/ o poller
           const cur = (pl && pl[idx]) || {};
           const rawName = cur.origName || cur.name || '';
           let folderLabel = cur.folderLabel || cur.folder || '';
@@ -2947,7 +2980,7 @@
             const more = document.getElementById('gdi-desc-more');
             // ★ v2.15.8-E: a aba pode ter sumido (o M9 apagava o painel) — o clique era no-op silencioso. Recria as abas do shell e clica quando aparecerem (até 10s). // S2-ver-resumo-recria-abas
             if (more) more.onclick = (e) => { e.preventDefault(); const t0 = document.querySelector('.gdi-mat-tab[data-mat="isa-summary"]'); if (t0) { t0.click(); return; } try { loadMaterials(); } catch (_) {} let _n = 0; const _tick = () => { const t = document.querySelector('.gdi-mat-tab[data-mat="isa-summary"]'); if (t) { try { t.click(); } catch (_) {} return; } if (++_n >= 20) return; setTimeout(_tick, 500); }; _tick(); };
-            return;
+            return true; // ★ v2.15.26-B: resumo renderizou — o poller pára
           }
           // (2) Nome real da pasta como descrição provisória.
           if (provIsReal) {
@@ -2958,7 +2991,8 @@
               descEl.innerHTML = '<div style="color:#9aa4b8;">🐩 A Meggy está criando a descrição desta aula… acompanhe no painel de materiais.</div>';
               if (await triggerIsaSummaryTab()) lessonDescScheduleRefresh();
             };
-            return;
+            lessonDescScheduleRefresh(); // ★ v2.15.26-B: arma o poller na provisória
+            return false;
           }
           // (3) Nome genérico: EM BRANCO até a Meggy processar — dispara
           // a geração 1x por sessão; se já tentou, mostra só o botão.
@@ -2976,6 +3010,8 @@
               if (await triggerIsaSummaryTab()) lessonDescScheduleRefresh();
             };
           }
+          lessonDescScheduleRefresh(); // ★ v2.15.26-B: arma o poller na provisória/a gerar
+          return false;
         }
         setTimeout(loadMaterials, 500);
         updateLessonDescription();
