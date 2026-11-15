@@ -11,6 +11,8 @@
   focáveis por D-pad; o RecyclerView recebe o foco e rola
   com as setas. Busca/bookmark/compartilhar: inalterados.
   Frente J: botão "✨ Resumo" na toolbar (btnSummary) — gera o resumo do PDF pela Meggy.
+  Frente R5B: no celular as barras escondem-se sozinhas ~3 s sem interação
+  (ver PdfReaderActivity); a barra inferior tem id bottomControlsBar.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -172,7 +174,9 @@
     </FrameLayout>
 
     <!-- Barra inferior: página + zoom + bookmark -->
+    <!-- Frente R5B — id p/ o auto-hide das barras no celular. -->
     <LinearLayout
+        android:id="@+id/bottomControlsBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@color/md_surface_container"
