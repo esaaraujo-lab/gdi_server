@@ -313,7 +313,12 @@
       if (view === 'home' && /^\/\d+:\//.test(path) && !/\.(mp4|webm|mov|mkv|m4v|mp3|m4a|ogg|wav|aac|pdf)$/i.test(_decPath)) {
         Shell.state.currentView = 'drives';
         Shell.sidebar.updateActive('/drives');
-        Shell.views.drives(main, path);
+        // ★ v2.15.18 (A): canonicar o deep link de pasta — URLs coladas /
+        //   favoritos antigos chegam com o prefixo legado (/11:/CURSOS 2026)
+        //   e sem ele o _renderDrives abria a página ⛔ (o gémeo recuperava
+        //   num clique, mas ⛔ na mesma). Mesmo padrão dos cartões (B2–B4):
+        //   canonica-se SÓ no momento da navegação.
+        Shell.views.drives(main, __canonCoursePath(path));
         return;
       }
 
@@ -387,7 +392,10 @@
               for (const [k, v] of Object.entries(resume)) {
                 if (k.includes(h.path) || h.path?.includes(k)) { pos = typeof v === 'number' ? v : (v?.pos || 0); break; }
               }
-              const driveIdx = h.path?.match(/^\/(\d+):/)?.[1];
+              // ★ v2.15.18 (B — item 7): o nome do drive sai do caminho
+              //   CANÓNICO — o histórico guarda o path cru (/11:/CURSOS
+              //   2026/...) e o cartão mostrava "PREPARATÓRIO OAB".
+              const driveIdx = __canonCoursePath(h.path || '').match(/^\/(\d+):/)?.[1];
               const driveName = driveIdx ? (window.drive_names?.[+driveIdx] || '') : '';
               const progressColor = pos >= 80 ? '#3fb950' : pos >= 40 ? '#ffd43b' : '#ff8b9f';
               continueHTML += `
