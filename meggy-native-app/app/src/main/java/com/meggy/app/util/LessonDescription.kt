@@ -268,6 +268,12 @@ object LessonDescription {
      *   2. pasta de materiais (GET /api/materials/load-from-folder,
      *      discovery — o arquivo mais recente de `.gdi-resumos/`).
      * `materialNames` = nomes dos PDFs/MDs da pasta (PDFs primeiro).
+     * Frente K — devolve o PACOTE gerado (resumo + pilulas +
+     * questoes), nao so o texto: o resumo continua a decidir
+     * "pronto", mas as pilulas/questoes viajam junto para serem
+     * guardadas na pasta de materiais ([MaterialSaver]). O passo 2
+     * (pasta de materiais) so tem o resumo — pilulas/questoes de
+     * la vem null e sao repostas pela gravacao desta frente.
      * `lessonFilePath` = path COMPLETO de um arquivo dentro da pasta
      * da aula (ex. ".../Aula 01/Aula 01.mp4"): o worker resolve a
      * pasta PAI desse arquivo como a pasta da aula — passar só a
@@ -279,17 +285,20 @@ object LessonDescription {
         folderPath: String,
         materialNames: List<String>,
         lessonFilePath: String?
-    ): String? {
+    ): AiService.GeneratedBundle? {
         val courseKeys = listOf(folderPath, parentPath(folderPath)).distinct()
         for (courseKey in courseKeys) {
             for (name in materialNames) {
                 val key = "$courseKey/$name"
-                val summary = AiService.getSummary(context, key)
-                if (!summary.isNullOrBlank()) return summary
+                val bundle = AiService.getGeneratedBundle(context, key)
+                if (!bundle?.summary.isNullOrBlank()) return bundle
             }
         }
         if (lessonFilePath != null) {
-            return AiService.loadFromFolder(context, lessonFilePath, "resumo")
+            val summary = AiService.loadFromFolder(context, lessonFilePath, "resumo")
+            if (!summary.isNullOrBlank()) {
+                return AiService.GeneratedBundle(summary, null, null)
+            }
         }
         return null
     }
@@ -303,18 +312,31 @@ object LessonDescription {
         return "$base/${file.name}"
     }
 
-    /** Nome do arquivo para gravar o resumo na pasta da aula. */
-    fun folderFileName(context: Context, folderName: String): String {
+    /**
+     * Nome do arquivo para gravar um material na pasta da aula
+     * (`<usuario>_<Aula>.<ext>` — o padrao da web). Frente K: a
+     * extensao varia por tipo (resumo e pilulas: `md`; questoes:
+     * `json`); o padrao continua `md`, por isso os chamadores
+     * antigos nao mudam.
+     */
+    fun folderFileName(context: Context, folderName: String, extension: String = "md"): String {
         val user = SessionManager.get(context).username?.takeIf { it.isNotBlank() } ?: "meggy"
         val safe = folderName.replace(Regex("[^A-Za-z0-9._-]"), "_").take(60)
-        return "${user}_${safe}.md"
+        return "${user}_${safe}.$extension"
     }
 
     // ───────── gatilho + poll ─────────
 
     sealed class Outcome {
-        /** Descrição gerada encontrada (servidor ou após o poll). */
-        data class Ready(val text: String) : Outcome()
+        /**
+         * Descricao gerada encontrada (servidor ou apos o poll).
+         * Frente K — carrega o PACOTE gerado (resumo + pilulas +
+         * questoes); `text` e so o resumo, para os chamadores que
+         * so precisam dele (o resumo continua a decidir "pronto").
+         */
+        data class Ready(val bundle: AiService.GeneratedBundle) : Outcome() {
+            val text: String get() = bundle.summary.orEmpty()
+        }
 
         /** Ainda gerando após o poll limitado — tentar na próxima abertura. */
         object Generating : Outcome()
@@ -349,7 +371,7 @@ object LessonDescription {
             val filePath = lessonFilePath(folderPath, files)
             // 1) Já gerado?
             val existing = fetchGenerated(context, folderPath, materialNames, filePath)
-            if (!existing.isNullOrBlank()) return Outcome.Ready(existing)
+            if (existing != null && !existing.summary.isNullOrBlank()) return Outcome.Ready(existing)
             if (AiService.backendUnavailable) return Outcome.Unavailable
 
             // 2) Texto-fonte (MD primeiro, senão PDF).
@@ -371,7 +393,7 @@ object LessonDescription {
                 AiService.TriggerResult.ALREADY_DONE -> {
                     // Job já concluído: o resumo deve estar no cache.
                     val again = fetchGenerated(context, folderPath, materialNames, filePath)
-                    return if (!again.isNullOrBlank()) Outcome.Ready(again) else Outcome.Failed
+                    return if (again != null && !again.summary.isNullOrBlank()) Outcome.Ready(again) else Outcome.Failed
                 }
                 AiService.TriggerResult.RUNNING,
                 AiService.TriggerResult.STARTED -> {
@@ -379,7 +401,7 @@ object LessonDescription {
                     repeat(maxPollAttempts) {
                         delay(pollDelayMs)
                         val found = fetchGenerated(context, folderPath, materialNames, filePath)
-                        if (!found.isNullOrBlank()) return Outcome.Ready(found)
+                        if (found != null && !found.summary.isNullOrBlank()) return Outcome.Ready(found)
                         val status = AiService.getBattalionStatus(context, courseKey)
                         val skippedNoText = status?.job?.skipped
                             ?.any { it.reason == "no_text" } == true
@@ -388,7 +410,7 @@ object LessonDescription {
                         }
                         if (status?.job?.done == true) {
                             val last = fetchGenerated(context, folderPath, materialNames, filePath)
-                            return if (!last.isNullOrBlank()) Outcome.Ready(last) else Outcome.Failed
+                            return if (last != null && !last.summary.isNullOrBlank()) Outcome.Ready(last) else Outcome.Failed
                         }
                         if (AiService.backendUnavailable) return Outcome.Unavailable
                     }
@@ -415,7 +437,7 @@ object LessonDescription {
             val materialNames = files.filter { it.isPdf || it.isMarkdown }.map { it.name }
             val filePath = lessonFilePath(folderPath, files)
             val existing = fetchGenerated(context, folderPath, materialNames, filePath)
-            if (!existing.isNullOrBlank()) return Outcome.Ready(existing)
+            if (existing != null && !existing.summary.isNullOrBlank()) return Outcome.Ready(existing)
             if (AiService.backendUnavailable) return Outcome.Unavailable
             val (source, noMaterialReason) = resolveSourceText(context, files)
             if (source == null) {
@@ -431,7 +453,7 @@ object LessonDescription {
                 AiService.TriggerResult.FAILED -> Outcome.Failed
                 AiService.TriggerResult.ALREADY_DONE -> {
                     val again = fetchGenerated(context, folderPath, materialNames, filePath)
-                    if (!again.isNullOrBlank()) Outcome.Ready(again) else Outcome.Failed
+                    if (again != null && !again.summary.isNullOrBlank()) Outcome.Ready(again) else Outcome.Failed
                 }
                 AiService.TriggerResult.RUNNING,
                 AiService.TriggerResult.STARTED -> Outcome.Generating
