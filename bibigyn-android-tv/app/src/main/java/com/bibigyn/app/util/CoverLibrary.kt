@@ -240,7 +240,26 @@ object CoverLibrary {
      * carregado, sem URL configurada, ou manifesto sem 'geral' — o
      * chamador cai para a camada 4 em silêncio.
      */
-    fun resolve(context: Context, vararg names: String?): String? {
+    fun resolve(context: Context, vararg names: String?): String? =
+        resolveInternal(context, names, allowGeneral = true)
+
+    /**
+     * Resolve ESTRITO (2.1.11, banners dos drives): igual a [resolve],
+     * mas SEM o fallback 'geral'. Sem match, devolve null e o chamador
+     * cai na camada (4) — a capa local do drive. Usar em superfícies
+     * por drive/curso (tile de drive, hero, detalhe do curso): o livro
+     * 'geral' não é banner de nenhum curso — o Clube Fit mostrava o
+     * livro porque nenhuma keyword casava com "clube fit" /
+     * "treinos saude" / "/6:/" (Elton 2026-11-14 22:21).
+     */
+    fun resolveStrict(context: Context, vararg names: String?): String? =
+        resolveInternal(context, names, allowGeneral = false)
+
+    private fun resolveInternal(
+        context: Context,
+        names: Array<out String?>,
+        allowGeneral: Boolean
+    ): String? {
         ensureLoadedFromDisk(context)
         val images = cachedImages ?: return null
         if (images.isEmpty()) return null
@@ -268,6 +287,8 @@ object CoverLibrary {
         // Fallback explícito da camada 3 (regra oficial §3): manifesto
         // carregado e nenhum match → imagem 'geral' (última do
         // manifesto, id "geral"). Sem entrada 'geral', null (camada 4).
+        // Estrito (resolveStrict): sem 'geral' — cai na camada 4.
+        if (!allowGeneral) return null
         return images.firstOrNull { it.id == "geral" }?.url
     }
 
