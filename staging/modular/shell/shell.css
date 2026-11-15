@@ -267,6 +267,93 @@
   gap: 14px;
 }
 
+/* ★ v2.15.28-B: regras do cartão de curso (.gdi-course*) SEMPRE
+   carregadas — viviam SÓ no #gdi-central-style injectado por renderStats()
+   (study-panel.js:1317), e o study-panel.js NEM CARREGA (comentado no
+   loader: gdi-extras-loader.js "STAGING: removido"). Sem isto, em /cursos
+   e na Home os cartões não tinham padding/borda/fundo, os stats não eram
+   grid (4 linhas empilhadas) e .gdi-course-stat-num/-label eram <span>
+   inline — "0"+"Aulas" colavam numa só linha ("0Aulas", "61Aulas",
+   "0Assistidas"). Valores = os do bloco morto (desktop inalterado). */
+.gdi-course{background:linear-gradient(135deg,var(--ferreto-surface-2,rgba(255,255,255,.04)),rgba(255,255,255,.02));border:1px solid var(--ferreto-border,#21262d);border-radius:16px;padding:18px;transition:all .2s cubic-bezier(.4,0,.2,1);position:relative;overflow:hidden;display:flex;flex-direction:column;}
+.gdi-course::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--ferreto-grad);
+  opacity: 0;
+  transition: opacity .2s;
+}
+.gdi-course:hover { border-color: rgba(255, 139, 159, .3); transform: translateY(-3px); box-shadow: 0 12px 32px -8px rgba(0, 0, 0, .4); }
+.gdi-course:hover::before { opacity: 1; }
+.gdi-course b{color:var(--ferreto-text,#f0f6fc);font-size:14px;display:block;font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-weight:600;}
+/* ★ v2.15.28-B: título do tile com clamp de 2 linhas (era 1 linha com
+   nowrap+ellipsis no inline e no .gdi-course b — num tile de ~166px em
+   2 colunas no celular, "TUDO DE TRIBUNAIS" cortava a meio da palavra).
+   overflow-wrap:anywhere parte o slug longo ("reta-final-trt-1-…"). */
+.gdi-course-title {
+  flex: 1;
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+.gdi-course small { color: var(--ferreto-text-muted, #8b949e); font-size: 11px; display: block; margin: 6px 0 12px; }
+.gdi-course-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: auto 0 12px; }
+.gdi-course-stat { background: var(--ferreto-surface-3, rgba(255, 255, 255, .04)); border-radius: 8px; padding: 8px 6px; text-align: center; }
+.gdi-course-stat-num{font-size:18px;font-weight:700;color:var(--ferreto-text,#f0f6fc);display:block;font-family:var(--ferreto-font-display,'Poppins',sans-serif);}
+.gdi-course-stat-label{font-size:9px;color:var(--ferreto-text-muted,#8b949e);text-transform:uppercase;letter-spacing:.05em;margin-top:2px;display:block;}
+.gdi-progress-bar{height:6px;background:var(--ferreto-surface-3,rgba(255,255,255,.08));border-radius:3px;overflow:hidden;margin:10px 0;}
+.gdi-progress-fill { height: 100%; background: var(--ferreto-grad); border-radius: 3px; transition: width .5s cubic-bezier(.4, 0, .2, 1); }
+.gdi-btn-continue{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:10px;background:var(--ferreto-grad);color:#fff;border:0;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;font-family:var(--ferreto-font-body,'Rubik',sans-serif);transition:all .15s;}
+.gdi-btn-continue:hover { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 6px 18px -4px var(--ferreto-glow); }
+.gdi-btn-continue:disabled { opacity: .5; cursor: default; filter: none; transform: none; box-shadow: none; }
+.gdi-btn-continue.gdi-btn-done { background: rgba(63, 185, 80, .15); color: #3fb950; border: 1px solid rgba(63, 185, 80, .3); }
+.gdi-scan-bar-wrap { margin-top: 6px; height: 3px; background: var(--ferreto-surface-2, rgba(255, 255, 255, .08)); border-radius: 2px; overflow: hidden; }
+.gdi-scan-progress { height: 100%; background: var(--ferreto-secondary, #5ddeda); transition: width .3s; }
+.gdi-scan-status { color: var(--ferreto-text-muted, #8b949e); font-size: 10px; display: block; margin-top: 2px; }
+/* ★ v2.15.28-B: contentor da capa do tile — SEMPRE com altura (16:9) e
+   fallback visual (gradiente + ícone). Antes o <img> era o único elemento:
+   sem coverUrl não havia nada; com URL falhada o onerror escondia o <img>
+   e o topo do tile ficava uma faixa vazia (o "só faixa azul" do relato).
+   O <img> fica absoluto por cima do gradiente/ícone; se falhar, some e o
+   fallback continua visível. */
+.gdi-course-cover {
+  position: relative;
+  aspect-ratio: 16/9;
+  border-radius: 10px;
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(255, 139, 159, .28), rgba(93, 222, 218, .20));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+  flex: none;
+}
+.gdi-course-cover-icon { font-size: 32px; line-height: 1; }
+.gdi-course-cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+/* ★ v2.15.28-B: mesma ideia p/ os .meggy-card da Home e do fallback de
+   /cursos (shell.js) — contentor 16:9 com gradiente + ícone, nunca vazio. */
+.meggy-card-cover {
+  position: relative;
+  aspect-ratio: 16/9;
+  border-radius: 10px;
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(255, 139, 159, .28), rgba(93, 222, 218, .20));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+  flex: none;
+}
+.meggy-card-cover-icon { font-size: 32px; line-height: 1; }
+.meggy-card-cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+
 .meggy-card {
   background: rgba(22, 27, 38, 0.72);
   border: 1px solid rgba(255, 255, 255, 0.09);
@@ -295,6 +382,14 @@
   font-weight: 600;
   color: #e6edf3;
   margin-bottom: 6px;
+  /* ★ v2.15.28-B: 2 linhas no máximo (antes enrolava sem limite — num
+     tile de 2 colunas no celular um título longo esticava o cartão) */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
 }
 
 .meggy-card-meta {
@@ -3115,6 +3210,14 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
      mobile — o !important vence o inline auto-fill minmax(200px,1fr),
      que só cabia 1 coluna em 360px */
   .gdi-courses { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+  /* ★ v2.15.28-B: tile no celular — padding menor (18px comia 22% do tile
+     de ~166px), stats 2x2 (4 lado-a-lado não cabem), título 13px.
+     Estas regras viviam SÓ no bloco morto do study-panel.js. */
+  .gdi-course { padding: 12px !important; }
+  .gdi-course-stats { grid-template-columns: repeat(2, 1fr) !important; }
+  .gdi-course-title { font-size: 13px !important; }
+  .gdi-course-cover { margin-bottom: 10px !important; }
+  .meggy-card-cover { margin-bottom: 10px !important; }
   .meggy-card { padding: 14px !important; }
   .meggy-card-icon { font-size: 28px !important; }
   .meggy-card-title { font-size: 14px !important; }
@@ -3375,6 +3478,22 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   .meggy-card-icon { font-size: 24px !important; }
   .meggy-view-title { font-size: 16px !important; }
   .meggy-flashcard { min-height: 220px !important; }
+  /* ★ v2.15.28-B: regras "FIX 3 (Task 23)" portadas do bloco morto do
+     study-panel.js — sem elas os tiles deformavam-se no Android
+     (stats 4 lado-a-lado + padding 18px num tile de ~166px). */
+  .gdi-course { padding: 8px !important; }
+  .gdi-courses { gap: 8px !important; }
+  .gdi-course-title { font-size: 12px !important; }
+  .gdi-course b { font-size: 12px !important; }
+  .gdi-course small { font-size: 10px !important; margin: 4px 0 8px !important; }
+  .gdi-course-stats { grid-template-columns: repeat(2, 1fr) !important; gap: 4px !important; margin: auto 0 8px !important; }
+  .gdi-course-stat { padding: 6px 4px !important; }
+  .gdi-course-stat-num { font-size: 16px !important; }
+  .gdi-course-stat-label { font-size: 8px !important; }
+  .gdi-progress-bar { height: 4px !important; margin: 6px 0 !important; }
+  .gdi-btn-continue { font-size: 11px !important; padding: 6px 8px !important; border-radius: 8px !important; }
+  .gdi-course-cover-icon { font-size: 24px !important; }
+  .meggy-card-cover-icon { font-size: 24px !important; }
 }
 
 /* ═══ Tablet (769px–1024px) ═══ */
