@@ -32,9 +32,9 @@ import com.vovofit.app.ui.settings.SettingsActivity
 import com.vovofit.app.data.driveCoverRes
 import com.vovofit.app.data.driveIndexFromPath
 import com.vovofit.app.util.AuthHelper
-import com.vovofit.app.util.CrossFolderPlaylist
 import com.vovofit.app.util.PlaylistManager
 import com.vovofit.app.util.SessionManager
+import com.vovofit.app.util.TapFeedback
 import com.vovofit.app.util.Format
 import com.vovofit.app.util.TvUtils
 import com.vovofit.app.util.FocusAnimator
@@ -132,6 +132,15 @@ class HomeActivity : AppCompatActivity() {
         // listener retorna true) e, ao voltar com Back, o onResume não
         // restaurava a seleção — a home abria com "Ajustes" destacado.
         binding.bottomNav.selectedItemId = R.id.nav_home
+
+        // Frente G: reconstruir o rail "Continue assistindo" ao
+        // voltar (o player grava recents/resume; sem isto a home
+        // só mostrava o vídeo visto depois de reiniciar o app).
+        // Local, sem rede (só o backfill de thumbs, já guardado).
+        // As cadeias de foco da TV são refeitas porque a secção
+        // em destaque pode ter aparecido entretanto.
+        setupContinueRail()
+        setupTvFocusChains()
         // v1.0.4: re-checa atualização ao voltar (throttle 1×/24h) e
         // restaura o foco nos rails (TV).
         UpdateChecker.checkForUpdateThrottled(this, BuildConfig.VERSION_NAME)
@@ -567,6 +576,26 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun continueWatching(folderPath: String, videoName: String, shortFolder: String) {
+        // Frente H — caminho rápido: o recent já guarda o link de
+        // playback (SessionManager.addRecent, parâmetro link), por isso
+        // o "Continuar assistindo" navega IMEDIATAMENTE para o player,
+        // sem o listFolder prévio. A playlist interfolder é enriquecida
+        // em 2º plano pelo PlayerActivity (enrichPlaylistInBackground).
+        val sm = SessionManager.get(this)
+        val recent = sm.getRecents().firstOrNull {
+            it.folderPath == folderPath && it.videoName == videoName
+        }
+        val fastLink = recent?.link?.takeIf { it.isNotBlank() }
+        if (fastLink != null) {
+            val item = FileItem(
+                name = videoName, mimeType = "video/mp4", id = "",
+                driveId = null, link = fastLink, size = 0L, modifiedTime = null,
+                folderPath = folderPath
+            )
+            PlaylistManager.setPlaylist(listOf(item), 0, this)
+            launchPlayer(VovoFitApp.BASE_URL + fastLink, videoName, folderPath, recent.thumbnailLink)
+            return
+        }
         // ★ v2.3.1: Show visual feedback immediately so the user knows the tap registered.
         com.google.android.material.snackbar.Snackbar.make(
             binding.root, "Carregando \"$videoName\"...", com.google.android.material.snackbar.Snackbar.LENGTH_SHORT
@@ -593,12 +622,12 @@ class HomeActivity : AppCompatActivity() {
                         launchPlayer(VovoFitApp.BASE_URL + clickedVideo.link, videoName, folderPath, clickedVideo.thumbnailLink)
                         return@launch
                     } else {
-                        val result = withContext(Dispatchers.IO) {
-                            CrossFolderPlaylist.build(folderPath, clickedVideo, api)
-                        }
-                        if (result.items.isNotEmpty()) {
-                            PlaylistManager.setPlaylist(result.items, result.startIndex, this@HomeActivity)
-                        }
+                        // Frente H — sem esperar pela montagem interfolder:
+                        // navega já com só este vídeo; o player enriquece
+                        // a fila em 2º plano (enrichPlaylistInBackground).
+                        PlaylistManager.setPlaylist(
+                            listOf(clickedVideo.copy(folderPath = folderPath)), 0, this@HomeActivity
+                        )
                         launchPlayer(VovoFitApp.BASE_URL + clickedVideo.link, videoName, folderPath, clickedVideo.thumbnailLink)
                         return@launch
                     }
@@ -618,17 +647,23 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 
+
     private fun launchPlayer(url: String, title: String, folderPath: String, thumbnailLink: String? = null) {
-        SessionManager.get(this).saveLastWatched(folderPath, title)
-        // Patch: passa a thumb do vídeo (quando conhecida) para o recent,
-        // para o card "Continue assistindo" mostrar a foto em vez do monograma.
-        SessionManager.get(this).addRecent(folderPath, title, thumbnailLink)
+        // Frente H — guarda contra duplo toque: um toque = uma navegação;
+        // toques repetidos no mesmo vídeo dentro de 1,5 s são ignorados.
+        if (!TapFeedback.tryNavigate(url)) return
+        val sm = SessionManager.get(this)
+        sm.saveLastWatched(folderPath, title)
+        // Frente H — guarda o link de playback no recent (além da thumb):
+        // o "Continuar assistindo" passa a navegar sem listFolder prévio.
+        sm.addRecent(folderPath, title, thumbnailLink, url.removePrefix(VovoFitApp.BASE_URL).takeIf { it != url })
         val intent = Intent(this, PlayerActivity::class.java)
         intent.putExtra(PlayerActivity.EXTRA_URL, url)
         intent.putExtra(PlayerActivity.EXTRA_TITLE, title)
         intent.putExtra(PlayerActivity.EXTRA_FOLDER_PATH, folderPath)
         startActivity(intent)
     }
+
 
     /**
      * Frente A (TV) — cadeias D-pad explícitas da home (só TV).
