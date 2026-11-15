@@ -9,9 +9,11 @@ import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.bibigyn.app.R
+import com.bibigyn.app.data.AdminDrive
 import com.bibigyn.app.data.DriveItem
 import com.bibigyn.app.util.setWordEllipsized
 import com.bibigyn.app.databinding.ItemDriveCardBinding
+import com.bibigyn.app.util.DriveRailItem
 import com.bibigyn.app.util.FocusAnimator
 import com.bibigyn.app.util.TapFeedback
 import com.bibigyn.app.util.CoverLibrary
@@ -30,7 +32,10 @@ import com.bibigyn.app.util.TvAutoFit
  * biblioteca estrita → gerada), nunca o livro 'geral'.
  */
 class DriveRailAdapter(
-    private val drives: List<DriveItem>,
+    // Ronda 10 Frente C — itens fundidos (fixos + admin);
+    // a Home substitui-os com updateItems() quando os drives
+    // do admin chegam (ou somem, após o remover da Frente B).
+    private var items: List<DriveRailItem>,
     /**
      * Onda 2 (a) — capa do admin por coursePath ("/6:/" → URL).
      * Vazio na construção (o GET roda em 2º plano); atualizado por
@@ -45,7 +50,7 @@ class DriveRailAdapter(
     private val nextFocusUpId: Int = View.NO_ID,
     private val nextFocusDownId: Int = View.NO_ID,
     // Build-fix 2.7.16: onClick em ULTIMO (mesmo motivo do RailAdapter).
-    private val onClick: (DriveItem) -> Unit
+    private val onClick: (DriveRailItem) -> Unit
 ) : RecyclerView.Adapter<DriveRailAdapter.VH>() {
 
     /** Atualiza as capas do admin e redesenha os cards. */
@@ -54,11 +59,18 @@ class DriveRailAdapter(
         notifyDataSetChanged()
     }
 
+    /** Ronda 10 Frente C — substitui os itens do rail (fixos +
+     *  admin) e redesenha. */
+    fun updateItems(newItems: List<DriveRailItem>) {
+        items = newItems
+        notifyDataSetChanged()
+    }
+
     inner class VH(val binding: ItemDriveCardBinding) : RecyclerView.ViewHolder(binding.root) {
         init {
             binding.root.setOnClickListener {
                 val pos = bindingAdapterPosition
-                if (pos != RecyclerView.NO_POSITION) onClick(drives[pos])
+                if (pos != RecyclerView.NO_POSITION) onClick(items[pos])
             }
             FocusAnimator.attachCard(binding.driveCardRoot, TvUtils.isTv(binding.root.context))
             TapFeedback.attachPress(binding.driveCardRoot, TvUtils.isTv(binding.root.context))
@@ -97,7 +109,25 @@ class DriveRailAdapter(
     }
 
     override fun onBindViewHolder(holder: VH, position: Int) {
-        val drive = drives[position]
+        // Ronda 10 Frente C — o tile fixo e o tile do admin
+        // partilham o layout, mas a capa e o favorito diferem
+        // (ver bindFixed / bindAdmin).
+        when (val item = items[position]) {
+            is DriveRailItem.Fixed -> bindFixed(holder, item.drive)
+            is DriveRailItem.Admin -> bindAdmin(holder, item.drive)
+        }
+        val anim = AnimationUtils.loadAnimation(holder.itemView.context, R.anim.tile_appear)
+        anim.startOffset = (position % 12) * 40L
+        holder.binding.root.startAnimation(anim)
+    }
+
+    /**
+     * Ronda 10 Frente C — tile de drive FIXO: corpo original do
+     * onBind, movido para aqui sem mudanças (a hierarquia da
+     * capa continua (1) featured → (3) biblioteca estrita →
+     * (4) gerada).
+     */
+    private fun bindFixed(holder: VH, drive: DriveItem) {
         with(holder.binding) {
             driveIcon.text = drive.icon  // 2.1.11: fora da tela — imagem + nome bastam (Elton 2026-11-14 22:21)
             driveIcon.visibility = View.GONE
@@ -162,10 +192,62 @@ class DriveRailAdapter(
                     Toast.LENGTH_SHORT).show()
             }
         }
-        val anim = AnimationUtils.loadAnimation(holder.itemView.context, R.anim.tile_appear)
-        anim.startOffset = (position % 12) * 40L
-        holder.binding.root.startAnimation(anim)
     }
 
-    override fun getItemCount(): Int = drives.size
+    /**
+     * Ronda 10 Frente C — tile de drive do ADMIN.
+     * Hierarquia da capa: (1) coverUrl do admin; sem ela, (3) imagem
+     * da biblioteca por nome do drive; sem match, o gradiente rosa
+     * genérico (o admin não tem índice de drive — coverResForDrive
+     * não se aplica; o gradiente é o fallback que o adapter já usa
+     * como erro do Coil). A estrela de favorito NÃO existe aqui: não
+     * há path "/N:/" p/ favoritar um drive do admin (nem ele abre,
+     * ver onAdminDriveClick).
+     */
+    private fun bindAdmin(holder: VH, adminDrive: AdminDrive) {
+        with(holder.binding) {
+            driveIcon.text = "\uD83D\uDCC1"
+            driveIcon.visibility = View.GONE
+            driveName.setWordEllipsized(adminDrive.name)
+            driveMeta.setWordEllipsized(
+                holder.itemView.context.getString(R.string.admin_drive_tile_tag))
+
+            val adminCover = adminDrive.coverUrl?.takeIf { it.isNotBlank() }
+            val libraryUrl = CoverLibrary.resolveStrict(
+                holder.itemView.context, adminDrive.name)
+            val showLibraryOrGenerated: () -> Unit = {
+                if (!libraryUrl.isNullOrBlank()) {
+                    driveCover.visibility = View.VISIBLE
+                    driveCover.load(libraryUrl) {
+                        error(R.drawable.card_gradient_pink)
+                        listener(onError = { _, _ ->
+                            driveCover.setImageResource(R.drawable.card_gradient_pink)
+                        })
+                    }
+                } else {
+                    driveCover.visibility = View.VISIBLE
+                    driveCover.setImageResource(R.drawable.card_gradient_pink)
+                }
+            }
+            when {
+                adminCover != null -> {
+                    driveCover.visibility = View.VISIBLE
+                    driveCover.load(adminCover) {
+                        error(R.drawable.card_gradient_pink)
+                        listener(onError = { _, _ -> showLibraryOrGenerated() })
+                    }
+                }
+                libraryUrl != null -> showLibraryOrGenerated()
+                else -> {
+                    driveCover.visibility = View.VISIBLE
+                    driveCover.setImageResource(R.drawable.card_gradient_pink)
+                }
+            }
+
+            driveFavStar.visibility = View.GONE
+            driveFavStar.setOnClickListener(null)
+        }
+    }
+
+    override fun getItemCount(): Int = items.size
 }
