@@ -92,11 +92,11 @@ class FileAdapter(
 
             // Thumb real quando houver; sem ela (ou se ela
             // falhar), camada 3 — biblioteca por tipo (nome do
-            // arquivo/pasta → caminho); sem match, a capa gerada
+            // arquivo/pasta → caminho), ESTRITA (2.1.12, sem 'geral'); sem match, a capa gerada
             // do drive (nunca monograma — o layout não tem monograma).
             val coverRes = DriveItem.coverResForPath(currentFolderPath)
             val showLibraryOrCover = {
-                val libraryUrl = CoverLibrary.resolve(ctx, item.name, currentFolderPath)
+                val libraryUrl = CoverLibrary.resolveStrict(ctx, item.name, currentFolderPath)
                 if (!libraryUrl.isNullOrBlank()) {
                     cardThumbnail.visibility = View.VISIBLE
                     cardThumbnail.load(libraryUrl) {
