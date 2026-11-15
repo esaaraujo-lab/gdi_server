@@ -60,16 +60,16 @@ import org.json.JSONObject
  *   NÃO prova que a rota existe (até rota inexistente dá 401 sem
  *   sessão). Só um 404 COM sessão válida prova ausência da rota.
  *
- * DEPENDÊNCIA DE BACKEND (verificado 2026-11-14):
- *   A produção (educa.eu.org, worker pré-v2) NÃO tem nenhuma destas
- *   rotas (grep no worker de produção auditado: nenhum registro).
- *   Contra ela, as chamadas dão 404 com sessão válida → o app marca
- *   [backendUnavailable] e NÃO tenta de novo em loop; a aba Resumo
- *   mostra o fallback (nome provisório / em branco com motivo) e a
- *   geração fica pendente até o deploy da v2 na produção (ordem do
- *   Elton pendente). Ver REDESIGN_NOTES.md ("Descrição da aula").
- *   Para testar ao vivo contra staging-c/meuc, trocar
- *   MeggyApp.AI_BASE_URL (1 linha).
+ * DEPENDÊNCIA DE BACKEND (audit de conexão 2026-11-15, corrigido):
+ *   Contrato v2 no STAGING (decisão do Elton 2026-11-14 22:42):
+ *   a IA aponta para https://staging-c.urso.workers.dev (a produção
+ *   TEM as rotas antigas, mas o status do batalhão NÃO traz o objeto
+ *   `job` — contra ela o app nunca completava a geração). O estado da
+ *   IA (resumos, jobs, materials_meta) é o do SANDBOX (D1
+ *   meggy-staging). /api/ai/subtitles NÃO existe em nenhum worker —
+ *   a legenda continua só via .vtt/.srt que já exista na pasta. Se o
+ *   staging responder 404 com sessão válida, o app marca
+ *   [backendUnavailable] e NÃO tenta de novo em loop.
  */
 object AiService {
 
