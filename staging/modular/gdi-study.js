@@ -2850,7 +2850,13 @@
       lessons.length = 0;
       for (var j = 0; j < _kept.length; j++) lessons.push(_kept[j]);
     })();
-    if (scanStatus === 'done' && lessons.length) scannedCount = lessons.length;
+    // ★ v2.15.8 (B): idem study-courses.js — scannedCount conta ARQUIVOS;
+    //   trava-o no nº de PASTAS da lista mesclada (a linha do max() abaixo
+    //   fica byte-idêntica — check S10.1 do v2.15.6-test-scan.js). E o
+    //   mesmo p/ c.totalLessons, que vem do cache do scanner (v. F2).
+    if (lessons.length) scannedCount = Math.min(scannedCount || 0, lessons.length);
+    var _knownFolders = lessons.length || (c.total || 0);
+    if (_knownFolders > 0 && (c.totalLessons || 0) > _knownFolders) c.totalLessons = _knownFolders;
 
     // ★ v2.15.6 (P8): contagem REAL — o total provisório acima ignorava
     //   as aulas escaneadas (o cartão já as contava). Port do fix v2.15.5
@@ -4874,7 +4880,7 @@
         state.status = 'scanning';
         state.scannedFolders = (typeof d.scannedCount === 'number') ? d.scannedCount : (state.scannedFolders || 0);
         state.totalFolders = state.scannedFolders + (d.pendingFolders || 0);
-        state.lessonsFound = allLessons.length;
+        state.lessonsFound = __scanLessonFolderCount(allLessons, courseKey);
         state.pendingFolders = d.pendingFolders || 0;
         state.batchNum = batchNum;
         setScanState(courseKey, state);
@@ -4929,7 +4935,7 @@
       state.status = 'done';
       state.completedAt = Date.now();
       state.scannedFolders = state.totalFolders;
-      state.lessonsFound = allLessons.length;
+      state.lessonsFound = __scanLessonFolderCount(allLessons, courseKey);
       setScanState(courseKey, state);
       
       // Salva no Drive (não-bloqueante)
@@ -4952,6 +4958,49 @@
     }
   }
 
+  // ★ v2.15.8 (B): 1 aula = 1 pasta — lessonsFound conta PASTAS, não
+  //   ARQUIVOS (mesma regra do lessonFolderKey do worker: dirname do
+  //   lesson_path, /material final colapsado; arquivo solto na raiz do
+  //   curso só é aula se for mídia). Antes o scanner somava linhas
+  //   (233 arquivos p/ 78 pastas em CURSOS 2026) e o totalLessons /
+  //   scannedCount que alimentam cartão e detalhe inflava junto.
+  //   A chave é normalizada como no worker: decodifica (%20 → espaço)
+  //   p/ grafias cru/codificada colapsarem + rebase legado
+  //   /11:/CURSOS 2026 → /9:/CURSOS 2026 (o mesmo mapa
+  //   LEGACY_COURSE_PATH_REBASE do worker, 1 entrada). Sem isto a mesma
+  //   pasta sob duas grafias contaria 2× (131 em vez de 78).
+  function __scanLessonFolderCount(lessons, coursePath){
+    try{
+      var __LEGACY_REBASE = [['/11:/CURSOS 2026', '/9:/CURSOS 2026']];
+      var __norm = function(p){
+        var x = String(p || '');
+        try { x = decodeURIComponent(x); } catch (_) {}
+        for (var ri = 0; ri < __LEGACY_REBASE.length; ri++) {
+          if (x === __LEGACY_REBASE[ri][0] || x.indexOf(__LEGACY_REBASE[ri][0] + '/') === 0) { x = __LEGACY_REBASE[ri][1] + x.slice(__LEGACY_REBASE[ri][0].length); break; }
+        }
+        return x;
+      };
+      var cpd = __norm(coursePath);
+      var isMedia = function(l){
+        var t = String((l && l.type) || '').toLowerCase();
+        if (t === 'video' || t === 'audio') return true;
+        var p = String((l && (l.path || l.name)) || '').toLowerCase();
+        return /\.(mp4|mp3|mkv|webm|m4a|wav|ogg)$/.test(p);
+      };
+      var key = function(l){
+        var p = __norm((l && l.path) || '');
+        var s = p.lastIndexOf('/');
+        var d = s > 0 ? p.slice(0, s) : p;
+        if (d.length > 9 && d.slice(-9) === '/material') d = d.slice(0, -9);
+        if (cpd && d === cpd) return isMedia(l) ? ('#root#:' + p) : null;
+        return d || null;
+      };
+      var s = new Set();
+      for (var _i = 0; _i < (lessons || []).length; _i++) { var k = key(lessons[_i]); if (k) s.add(k); }
+      return s.size;
+    }catch(_){ return (lessons || []).length; }
+  }
+
   // Get scan progress for a course (for tile display)
   function getScanProgress(courseKey){
     const state = getScanState(courseKey);
@@ -4962,7 +5011,7 @@
       status: state.status,            // 'scanning' | 'done' | 'error' | 'paused'
       scannedFolders: state.scannedFolders || 0,
       totalFolders: total,
-      lessonsFound: (lessons.lessons||[]).length,
+      lessonsFound: __scanLessonFolderCount(lessons.lessons || [], courseKey),
       percent: total > 0 ? Math.round((state.scannedFolders||0) / total * 100) : 0,
       error: state.error || null,
       errorAt: state.errorAt || null, // ★ v2.15.6 (P8): o port do detalhe precisa do timestamp do erro
