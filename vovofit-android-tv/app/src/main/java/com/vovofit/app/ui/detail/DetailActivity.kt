@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -99,6 +100,8 @@ class DetailActivity : AppCompatActivity() {
     private var lessonListAdapter: LessonListAdapter? = null
     private var lessonGridAdapter: LessonGridAdapter? = null
     private var flatAdapter: FlatLessonAdapter? = null
+    // Frente R4B — filtro da lista plana (Todos / Vídeos / Materiais).
+    private var flatFilter: FlatFilter = FlatFilter.ALL
     private var isFlatMode: Boolean = false
     private var lessonGroups: List<LessonGroup> = emptyList()
     private var allFiles: List<FileItem> = emptyList()
@@ -196,6 +199,11 @@ class DetailActivity : AppCompatActivity() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
         })
+
+        // Frente R4B — chips Todos / Vídeos / Materiais da lista plana
+        // (só o layout do celular os tem; na TV o findViewById devolve
+        // null e nada acontece — ver setupFlatFilterChips).
+        setupFlatFilterChips()
 
         // Bottom nav (celular; TV não tem).
         binding.bottomNav.setOnItemSelectedListener { item ->
@@ -441,8 +449,15 @@ class DetailActivity : AppCompatActivity() {
                 // grade de cards (FileAdapter, mesmo padrão da grade de
                 // escolher aulas). PDFs/MD da pasta abrem os leitores.
                 isFlatMode = true
-                binding.sectionLabel.text = if (videoCount > 0) {
-                    "$videoCount vídeos em uma só pasta · $watchedCount concluídos"
+                // Frente R4B — a contagem "N vídeos" conta SÓ .mp4 (a
+                // secção Vídeos); o resto fica em Materiais e as
+                // legendas .srt/.vtt nem aparecem na lista.
+                val mp4Count = files.count { it.name.endsWith(".mp4", true) }
+                val watchedMp4Count = files.count {
+                    it.name.endsWith(".mp4", true) && sm.isWatched(currentPath, it.name)
+                }
+                binding.sectionLabel.text = if (mp4Count > 0) {
+                    "$mp4Count vídeos em uma só pasta · $watchedMp4Count concluídos"
                 } else {
                     "Arquivos"
                 }
@@ -475,7 +490,9 @@ class DetailActivity : AppCompatActivity() {
                     flatAdapter = adapter
                     binding.recycler.layoutManager = LinearLayoutManager(this@DetailActivity)
                     binding.recycler.adapter = adapter
-                    adapter.submitList(files)
+                    // Frente R4B — a lista chega já partida em secções
+                    // (Vídeos .mp4 / Materiais), sem as legendas.
+                    refreshFlatList()
                 }
             }
         }
@@ -701,12 +718,93 @@ class DetailActivity : AppCompatActivity() {
         lessonGridAdapter?.submit(filtered)
     }
 
+    // Frente R4B — chips Todos / Vídeos / Materiais (lista plana,
+    // celular). Os ids só existem no layout do celular: na TV (e no
+    // layout-television) o findViewById devolve null e a função sai
+    // sem fazer nada. Os ids NUNCA são lidos pelo binding: o binding
+    // gerado exige-os em todas as variantes do layout e a TV não os
+    // tem (mesma decisão da frente R4, §4). O toque muda o filtro e
+    // re-aplica a lista; sem filtro ativo, "Todos" é o padrão.
+    private fun setupFlatFilterChips() {
+        val all = findViewById<TextView>(R.id.chipFilterAll) ?: return
+        val videos = findViewById<TextView>(R.id.chipFilterVideos) ?: return
+        val materials = findViewById<TextView>(R.id.chipFilterMaterials) ?: return
+        all.setOnClickListener { setFlatFilter(FlatFilter.ALL) }
+        videos.setOnClickListener { setFlatFilter(FlatFilter.VIDEOS) }
+        materials.setOnClickListener { setFlatFilter(FlatFilter.MATERIALS) }
+        updateFlatChipStyles()
+    }
+
+    private fun setFlatFilter(filter: FlatFilter) {
+        if (flatFilter == filter) return
+        flatFilter = filter
+        updateFlatChipStyles()
+        refreshFlatList()
+    }
+
+    private fun updateFlatChipStyles() {
+        val pink = ContextCompat.getColor(this, R.color.md_primary)
+        val onPink = ContextCompat.getColor(this, R.color.md_on_primary)
+        val muted = ContextCompat.getColor(this, R.color.md_on_surface_variant)
+        fun paint(chipId: Int, active: Boolean) {
+            val chip = findViewById<TextView>(chipId) ?: return
+            chip.background = ContextCompat.getDrawable(
+                this,
+                if (active) R.drawable.chip_filter_selected else R.drawable.chip_outline
+            )
+            chip.setTextColor(if (active) onPink else muted)
+        }
+        paint(R.id.chipFilterAll, flatFilter == FlatFilter.ALL)
+        paint(R.id.chipFilterVideos, flatFilter == FlatFilter.VIDEOS)
+        paint(R.id.chipFilterMaterials, flatFilter == FlatFilter.MATERIALS)
+    }
+
+    // Frente R4B — (re)monta a lista plana em secções a partir de
+    // [allFiles], com a busca e o filtro dos chips aplicados:
+    //   Vídeos — só .mp4, por ordem, com progresso como hoje;
+    //   Materiais — PDFs, .md, áudios e outros ficheiros da pasta.
+    // Legendas .srt/.vtt (FileItem.isSubtitle) NUNCA entram na lista:
+    // continuam a carregar no player — o SubtitleFetcher lê o
+    // listFolder completo (PlayerActivity.ensureSubtitles), não a
+    // lista do adapter. Pastas não existem aqui (modo plano =
+    // folderCount == 0), mas são excluídas na mesma, por defesa.
+    private fun refreshFlatList() {
+        val adapter = flatAdapter ?: return
+        val query = binding.lessonSearch.text?.toString().orEmpty()
+        val base = if (query.isBlank()) allFiles
+            else allFiles.filter { it.name.contains(query, ignoreCase = true) }
+        val videos = base.filter { it.name.endsWith(".mp4", true) }
+        val materials = base.filter { f ->
+            !f.isFolder && !f.isSubtitle && !f.name.endsWith(".mp4", true)
+        }
+        adapter.submitSections(videos, materials, flatFilter)
+        findViewById<View>(R.id.filterChipsRow)?.visibility = View.VISIBLE
+        updateFlatChipStyles()
+        val visible = when (flatFilter) {
+            FlatFilter.ALL -> videos.size + materials.size
+            FlatFilter.VIDEOS -> videos.size
+            FlatFilter.MATERIALS -> materials.size
+        }
+        if (visible == 0) {
+            binding.emptyState.text = getString(R.string.flat_empty_filter)
+            binding.emptyState.visibility = View.VISIBLE
+        } else {
+            binding.emptyState.text = getString(R.string.browse_empty)
+            binding.emptyState.visibility = View.GONE
+        }
+    }
+
     private fun filterLessons(query: String) {
         if (isFlatMode) {
-            val filtered = if (query.isBlank()) allFiles
-                else allFiles.filter { it.name.contains(query, ignoreCase = true) }
-            flatAdapter?.submitList(filtered)
-            fileAdapter?.submitList(filtered)
+            if (isWide()) {
+                // TV/tablet largo: grade sem secções (comportamento atual).
+                val filtered = if (query.isBlank()) allFiles
+                    else allFiles.filter { it.name.contains(query, ignoreCase = true) }
+                fileAdapter?.submitList(filtered)
+            } else {
+                // Celular: a busca re-aplica-se dentro das secções.
+                refreshFlatList()
+            }
         } else {
             refreshLessonList()
         }
