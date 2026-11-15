@@ -46,6 +46,13 @@ import java.util.concurrent.TimeUnit
  * ver [resolve]); só SEM manifesto carregado o chamador cai na (4).
  * As telas re-aplicam as capas quando o manifesto chega
  * ([addOnReadyListener]).
+ *
+ * (2.7.13) TODAS as superfícies usam a variante ESTRITA ([resolveStrict] /
+ * [remoteCoverStrict]): sem match, a camada (3) devolve null e o chamador
+ * cai na (4) — a capa gerada do drive (ThumbArt). O livro `geral` não é
+ * a imagem de nenhum curso/pasta (Elton 2026-11-14 22:39 — imagem correta
+ * em cada curso, nos 3 APKs). O [resolve] não-estrito fica só como
+ * compatibilidade — nenhum chamador o usa mais.
  */
 object LibraryCovers {
 
@@ -250,14 +257,16 @@ object LibraryCovers {
      * Resolução por nome (síncrona, só o manifesto em memória — nunca
      * rede, nunca bloqueia a UI).
      *
-     * REGRA OFICIAL (COVER_LIBRARY_NOTES.md §3):
-     *   1. os nomes candidatos são normalizados ([normalize]) e
-     *      tentados JUNTOS (o chamador passa do mais específico ao
-     *      mais genérico: nome da aula, depois pasta, depois
-     *      curso/drive);
-     *   2. vence a keyword MAIS LONGA considerando TODOS os nomes
-     *      juntos — NÃO o primeiro nome com match (a ordem dos nomes
-     *      NÃO decide; só o comprimento da keyword);
+     * REGRA OFICIAL (COVER_LIBRARY_NOTES.md §3 — regra 2.7.13):
+     *   1. os candidatos são tentados do MAIS ESPECÍFICO ao mais
+     *      genérico ([normalize] em cada um): primeiro o nome do item;
+     *      depois cada caminho, segmento a segmento, do mais profundo
+     *      ao mais raso (a pasta imediata é o contexto mais específico
+     *      depois do nome);
+     *   2. dentro de UM candidato vence a keyword MAIS LONGA; o
+     *      PRIMEIRO candidato com match decide (antes, a keyword mais
+     *      longa entre TODOS os nomes vencia — o caminho-pai
+     *      "treino em casa" (14) roubava o match da pasta "tabata" (6));
      *   3. empate resolve pela ORDEM DO MANIFESTO (entradas
      *      específicas primeiro) — a iteração é na ordem do manifesto
      *      e só uma keyword ESTRITAMENTE mais longa destrona a atual;
@@ -268,30 +277,52 @@ object LibraryCovers {
      *
      * Devolve null SÓ sem manifesto carregado (ou sem nenhum nome
      * válido e sem `geral` no manifesto): nesse caso o chamador cai
-     * na capa gerada (4).
+     * na capa gerada (4). A variante ESTRITA ([resolveStrict]) devolve
+     * null sem match — é a que TODAS as superfícies usam (2.7.13).
      */
-    fun resolve(vararg names: String?): String? {
+    fun resolve(vararg names: String?): String? = resolveInternal(names, allowGeneral = true)
+
+    /**
+     * Resolve ESTRITO (2.7.13): igual a [resolve], mas SEM o fallback
+     * 'geral'. Sem match, devolve null e o chamador cai na camada (4)
+     * — a capa gerada do drive (ThumbArt). Usar em TODAS as
+     * superfícies: o livro 'geral' não é a imagem de nenhum
+     * curso/pasta (Elton 2026-11-14 22:39).
+     */
+    fun resolveStrict(vararg names: String?): String? = resolveInternal(names, allowGeneral = false)
+
+    private fun resolveInternal(names: Array<out String?>, allowGeneral: Boolean): String? {
         val images = manifest
         if (images.isEmpty()) return null
-        val normalized = names.map { normalize(it) }.filter { it.isNotEmpty() }
-        if (normalized.isEmpty()) return fallbackUrl(images)
-        var best: LibraryImage? = null
-        var bestLen = 0
-        // Iteração na ordem do manifesto: o `>` estrito faz o empate
-        // ficar com a PRIMEIRA entrada do manifesto, e a keyword mais
-        // longa entre TODOS os nomes vence (a ordem dos nomes não
-        // decide — ver KDoc acima).
-        for (image in images) {
-            for (keyword in image.normalizedKeywords) {
-                if (keyword.length < MIN_KEYWORD_LENGTH) continue
-                if (keyword.length <= bestLen) continue
-                if (normalized.any { it.contains(keyword) }) {
-                    best = image
-                    bestLen = keyword.length
-                }
+        // 2.7.13 — candidatos do mais específico ao mais genérico (ver o
+        // KDoc de [resolve]).
+        val candidates = ArrayList<String>()
+        for (raw in names) {
+            if (raw.isNullOrBlank()) continue
+            for (seg in raw.split('/').asReversed()) {
+                val n = normalize(seg)
+                if (n.isNotEmpty()) candidates.add(n)
             }
         }
-        return best?.url ?: fallbackUrl(images)
+        if (candidates.isEmpty()) return if (allowGeneral) fallbackUrl(images) else null
+        for (candidate in candidates) {
+            var best: LibraryImage? = null
+            var bestLen = 0
+            // Iteração na ordem do manifesto: o `>` estrito faz o empate
+            // ficar com a PRIMEIRA entrada do manifesto.
+            for (image in images) {
+                for (keyword in image.normalizedKeywords) {
+                    if (keyword.length < MIN_KEYWORD_LENGTH) continue
+                    if (keyword.length <= bestLen) continue
+                    if (candidate.contains(keyword)) {
+                        best = image
+                        bestLen = keyword.length
+                    }
+                }
+            }
+            if (best != null) return best.url
+        }
+        return if (allowGeneral) fallbackUrl(images) else null
     }
 
     /**
@@ -310,6 +341,17 @@ object LibraryCovers {
     fun remoteCover(thumbUrl: String?, vararg names: String?): String? {
         if (!thumbUrl.isNullOrBlank()) return thumbUrl
         return resolve(*names)
+    }
+
+    /**
+     * Atalho da cadeia (2)+(3) ESTRITO (2.7.13): thumb do Drive quando
+     * houver, senão a imagem da biblioteca ESTRITA ([resolveStrict])
+     * pelos nomes. Null = sem (2) nem (3): o chamador mostra a capa
+     * gerada (4). É a variante que TODAS as superfícies usam.
+     */
+    fun remoteCoverStrict(thumbUrl: String?, vararg names: String?): String? {
+        if (!thumbUrl.isNullOrBlank()) return thumbUrl
+        return resolveStrict(*names)
     }
 
     /**
