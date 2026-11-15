@@ -58,8 +58,16 @@
     <string name="summary_state_no_files">Esta aula não tem transcrição nem PDF para a Meggy ler.</string>
     <string name="summary_state_scanned">Sem material legível para gerar a descrição — o PDF parece escaneado e não há transcrição.</string>
     <string name="summary_state_no_text">O material desta aula não tem texto legível para a Meggy ler.</string>
-    <string name="no_questions">Ainda não há questões geradas para este curso.</string>
-    <string name="no_flashcards">Ainda não há flashcards gerados para este curso.</string>
+    <string name="no_questions">Ainda não há questões geradas para esta aula.</string>
+    <string name="no_flashcards">Ainda não há flashcards gerados para esta aula.</string>
+    <!-- Ronda 9 Frente B — questões/flashcards da aula. -->
+    <string name="qf_loading">A carregar…</string>
+    <string name="qf_questions_hint">Toque numa questão para ver a resposta.</string>
+    <string name="qf_flashcards_hint">Toque num card para virar.</string>
+    <string name="qf_show_answer">Ver resposta ▸</string>
+    <string name="qf_hide_answer">Ocultar resposta ▾</string>
+    <string name="qf_card_reveal">Toque para revelar</string>
+    <string name="qf_card_back">Toque para voltar</string>
     <string name="about_meggy">Vovó Fit — Android TV</string>
     <string name="active_account">Conta ativa</string>
     <string name="logout">Sair da conta</string>
