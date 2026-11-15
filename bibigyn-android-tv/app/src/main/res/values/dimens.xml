@@ -94,6 +94,10 @@
     <!-- Estes valores SÓ são usados pelos layouts de TV
          (layout-television); a base existe apenas como fallback
          exigido pelo lint — numa TV, values-television vence.
+         Ronda 7 Frente B: os tipos aqui (48/28/24sp) sao so fallback
+         de lint — NUNCA renderizam na TV; os reais (30/18/13sp) estao
+         em values-television/dimens.xml. Nao subir os tipos sem
+         decisao do Elton.
          Frente C: fallback alinhado aos valores reais da TV (150x210dp);
          antes 156x224dp, valores que nunca chegavam a renderizar. -->
     <dimen name="tv_title_lg">48sp</dimen>
