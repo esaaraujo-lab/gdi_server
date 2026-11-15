@@ -164,7 +164,7 @@ object AdminDriveUi {
     private var subfolderCovers: Map<String, String> = emptyMap()
 
     /** Prefixo "N:/" do caminho de um drive ("0:/drive/sub"). */
-    private val DRIVE_PREFIX_REGEX = Regex("^\d+:/")
+    private val DRIVE_PREFIX_REGEX = Regex("^\\d+:/")
 
     /**
      * Activa as capas de sub-pasta de um drive do admin: [rootPath] é
