@@ -26,7 +26,9 @@
       "keywords": [
         "direito processual civil",
         "processual civil",
-        "processo civil"
+        "processo civil",
+        "recurso especial",
+        "juizado"
       ],
       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-processual-civil.jpg"
     },
@@ -45,7 +47,11 @@
         "lingua portuguesa",
         "portugues",
         "gramatica",
-        "interpretacao de texto"
+        "interpretacao de texto",
+        "literatura",
+        "linguagens",
+        "leitura dinamica",
+        "metaleitura"
       ],
       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/lingua-portuguesa.jpg"
     },
@@ -54,7 +60,8 @@
       "keywords": [
         "direito penal",
         "penal",
-        "codigo penal"
+        "codigo penal",
+        "criminal"
       ],
       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-penal.jpg"
     },
@@ -133,7 +140,10 @@
       "keywords": [
         "policia federal",
         "agente da policia federal",
-        "agente pf"
+        "agente pf",
+        "delegado",
+        "caveira",
+        "agente"
       ],
       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/pf.jpg"
     },
@@ -172,7 +182,12 @@
         "saiba como executar",
         "sangue suor e lagrimas",
         "semana corpo dos sonhos",
-        "corpo dos sonhos"
+        "corpo dos sonhos",
+        "treinos",
+        "laboratorio de exercicios",
+        "clube fit",
+        "fitness",
+        "calistenia"
       ],
       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/treino-funcional.jpg"
     },
@@ -231,7 +246,8 @@
         "treino de forca",
         "treino em academia",
         "treinos de superiores",
-        "pam"
+        "pam",
+        "substituicao de exercicios"
       ],
       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/musculacao.jpg"
     },
@@ -246,7 +262,13 @@
     {
       "id": "hipopressivos",
       "keywords": [
-        "hipopressivos"
+        "hipopressivos",
+        "hipopressivo",
+        "barriga chapada",
+        "barriga negativa",
+        "diastase",
+        "respiratoria",
+        "avaliacao fisica"
       ],
       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/hipopressivos.jpg"
     },
@@ -310,14 +332,24 @@
         "insana",
         "esquenta",
         "fritar",
-        "the flash"
+        "the flash",
+        "treinos de cardio"
       ],
       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/cardio.jpg"
     },
     {
       "id": "direito",
       "keywords": [
-        "direito"
+        "direito",
+        "advogado",
+        "advocacia",
+        "advogue",
+        "damasio",
+        "g7 juridico",
+        "magistratura",
+        "procuradoria",
+        "pro leges",
+        "especial jus"
       ],
       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito.jpg"
     },
@@ -328,7 +360,11 @@
         "gluteo",
         "bumbum",
         "bumbum de aco",
-        "gap"
+        "gap",
+        "exercicios 1 ao 4",
+        "exercicios 5 ao 8",
+        "exercicios 9 ao 13",
+        "como executar os exercicios"
       ],
       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/gluteos.jpg"
     },
@@ -376,7 +412,10 @@
         "direito administrativo",
         "administrativo",
         "licitacoes",
-        "agentes publicos"
+        "agentes publicos",
+        "administracao publica",
+        "igepp",
+        "politicas publicas"
       ],
       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-administrativo.jpg"
     },
@@ -411,7 +450,8 @@
       "keywords": [
         "direito do trabalho",
         "direito trabalhista",
-        "clt"
+        "clt",
+        "trabalhista"
       ],
       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-trabalho.jpg"
     },
@@ -447,7 +487,16 @@
       "keywords": [
         "musica e canto",
         "musica",
-        "canto"
+        "canto",
+        "vocal",
+        "vocais",
+        "voz",
+        "cante",
+        "cantando",
+        "atividade fisica",
+        "exercicios vocais",
+        "exercicios isometricos",
+        "exercicios isotonicos"
       ],
       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/musica-canto.jpg"
     },
@@ -475,7 +524,9 @@
         "informatica",
         "tecnologia da informacao",
         "programacao",
-        "coding"
+        "coding",
+        "shell script",
+        "landing pages"
       ],
       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/informatica.jpg"
     },
@@ -534,7 +585,8 @@
       "id": "yoga",
       "keywords": [
         "yoga",
-        "se cuida"
+        "se cuida",
+        "ioga"
       ],
       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/yoga.jpg"
     },
@@ -544,6 +596,228 @@
         "cursos 2026"
       ],
       "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/cursos-2026.jpg"
+    },
+    {
+      "id": "medicina",
+      "keywords": [
+        "medicina",
+        "medcurso",
+        "enfermagem",
+        "sanar",
+        "medplus",
+        "lair ribeiro",
+        "casalmedresumos"
+      ],
+      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/medicina.jpg"
+    },
+    {
+      "id": "psicologia",
+      "keywords": [
+        "psicologia",
+        "psicologo",
+        "tdah",
+        "autismo",
+        "psiquiatria",
+        "freud",
+        "inteligencia emocional"
+      ],
+      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/psicologia.jpg"
+    },
+    {
+      "id": "nutricao",
+      "keywords": [
+        "nutricao",
+        "dietetica",
+        "receitas",
+        "alimentacao",
+        "culinaria",
+        "dieta"
+      ],
+      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/nutricao.jpg"
+    },
+    {
+      "id": "estetica",
+      "keywords": [
+        "plastica",
+        "estetica",
+        "face academy",
+        "faceacademy",
+        "hof",
+        "odontopediatria",
+        "lobuloplastia"
+      ],
+      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/estetica.jpg"
+    },
+    {
+      "id": "violao",
+      "keywords": [
+        "violao",
+        "viola",
+        "guitarra",
+        "improvisacao",
+        "harmoniadegigante",
+        "harmoniaavancadavol",
+        "exercicios desafios"
+      ],
+      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/violao.jpg"
+    },
+    {
+      "id": "teclado",
+      "keywords": [
+        "teclado",
+        "tecladista",
+        "piano"
+      ],
+      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/teclado.jpg"
+    },
+    {
+      "id": "audio-producao",
+      "keywords": [
+        "audio production",
+        "producao musical"
+      ],
+      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/audio-producao.jpg"
+    },
+    {
+      "id": "biologia",
+      "keywords": [
+        "biologia",
+        "natureza"
+      ],
+      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/biologia.jpg"
+    },
+    {
+      "id": "fisica",
+      "keywords": [
+        "fisica"
+      ],
+      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/fisica.jpg"
+    },
+    {
+      "id": "quimica",
+      "keywords": [
+        "quimica"
+      ],
+      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/quimica.jpg"
+    },
+    {
+      "id": "historia",
+      "keywords": [
+        "historia",
+        "humanas"
+      ],
+      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/historia.jpg"
+    },
+    {
+      "id": "geografia",
+      "keywords": [
+        "geografia"
+      ],
+      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/geografia.jpg"
+    },
+    {
+      "id": "filosofia",
+      "keywords": [
+        "filosofia",
+        "sociologia",
+        "conservadorismo",
+        "marx"
+      ],
+      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/filosofia.jpg"
+    },
+    {
+      "id": "redacao",
+      "keywords": [
+        "redacao",
+        "discursivas"
+      ],
+      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/redacao.jpg"
+    },
+    {
+      "id": "russo",
+      "keywords": [
+        "russo"
+      ],
+      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/russo.jpg"
+    },
+    {
+      "id": "pedagogia",
+      "keywords": [
+        "pedagogicos",
+        "magisterio",
+        "sme sp",
+        "see paraiba",
+        "see pe",
+        "peif",
+        "grancursos",
+        "ta na lousa",
+        "cursinho da gloria",
+        "getusp",
+        "gestusp",
+        "concursos sme",
+        "ta nalousa",
+        "tanalousa"
+      ],
+      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/pedagogia.jpg"
+    },
+    {
+      "id": "estatistica",
+      "keywords": [
+        "estatistica"
+      ],
+      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/estatistica.jpg"
+    },
+    {
+      "id": "beleza",
+      "keywords": [
+        "maquiagem",
+        "beleza",
+        "makeup",
+        "make up",
+        "unhas",
+        "cabelos",
+        "sobrancelhas"
+      ],
+      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/beleza.jpg"
+    },
+    {
+      "id": "inteligencia-artificial",
+      "keywords": [
+        "inteligencia artificial",
+        "chatgpt",
+        "agentes de ia",
+        "ferramentas de ia",
+        "nocodeia",
+        "imersao ia",
+        "aplicativo com ia"
+      ],
+      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/inteligencia-artificial.jpg"
+    },
+    {
+      "id": "militares",
+      "keywords": [
+        "militar",
+        "carreiras militares",
+        "espcex"
+      ],
+      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/militares.jpg"
+    },
+    {
+      "id": "oratoria",
+      "keywords": [
+        "oratoria"
+      ],
+      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/oratoria.jpg"
+    },
+    {
+      "id": "tcc",
+      "keywords": [
+        "tcc sem drama",
+        "tcc em sete dias",
+        "modelos tcc",
+        "tcc de respeito"
+      ],
+      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/tcc.jpg"
     },
     {
       "id": "geral",
