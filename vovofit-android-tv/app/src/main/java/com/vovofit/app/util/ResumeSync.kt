@@ -37,7 +37,7 @@ package com.vovofit.app.util
  *     de leitura no backend + a ligação na UI. Nada inventado no local.
  *   Flashcards ............... PENDENTE — idem questões.
  *   Planos de estudo ......... PENDENTE — o app NÃO tem tela nem
- *     chamada de plano (nenhum /api/plans/* no código). O backend
+ *     chamada de plano (nenhum /api/plans/... no código). O backend
  *     v2.15.6-plan tem POST /api/plans/generate (Meggy + edital +
  *     histórico da banca, D1 study_plans), implementado localmente e
  *     NÃO deployado. Quando deployar, o app ganha a tela/chamada.
