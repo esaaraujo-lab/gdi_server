@@ -261,6 +261,117 @@ data class HeroItem(
     }
 }
 
+// ──────────────────────────── Ronda 10 Frente B: drives do admin ────────────────────────────
+
+/**
+ * Um drive adicionado pelo admin (D1 admin_drives — dependência do
+ * servidor v2.15.x, AINDA NÃO EXISTE; ver ApiService.getAdminDrives).
+ * GET /api/admin-drives → {ok, drives:[{id, driveId, name,
+ * targetApps:["meggy"|"bibi"|"vovo"], coverUrl, subCoverUrl,
+ * subfolderCovers:{path: url}}]}.
+ *
+ * Parse defensivo (mesmo padrão de FeaturedCourse.fromJson): aceita
+ * snake_case e camelCase, campos ausentes → null/vazio, valores de
+ * targetApps fora do vocabulário são descartados. "Capa" = imagem do
+ * tile na Home; "sub-capa" = hero do detalhe (a Frente C usa estes
+ * campos; esta frente só os guarda e os mostra no formulário).
+ */
+data class AdminDrive(
+    val id: Long,
+    val driveId: String,
+    val name: String,
+    val targetApps: List<String>,
+    val coverUrl: String?,
+    val subCoverUrl: String?,
+    val subfolderCovers: Map<String, String>
+) {
+    companion object {
+        const val TARGET_MEGGY = "meggy"
+        const val TARGET_BIBI = "bibi"
+        const val TARGET_VOVO = "vovo"
+        val ALL_TARGETS = listOf(TARGET_MEGGY, TARGET_BIBI, TARGET_VOVO)
+
+        /** APK de destino correspondente ao package do app que está a correr. */
+        fun targetForPackage(packageName: String): String = when (packageName) {
+            "com.meggy.app" -> TARGET_MEGGY
+            "com.bibigyn.app" -> TARGET_BIBI
+            "com.vovofit.app" -> TARGET_VOVO
+            else -> TARGET_MEGGY
+        }
+
+        fun fromJson(o: JSONObject): AdminDrive {
+            val targets = ArrayList<String>()
+            val arr = if (o.has("targetApps")) o.optJSONArray("targetApps")
+                else o.optJSONArray("target_apps")
+            if (arr != null) {
+                for (i in 0 until arr.length()) {
+                    val t = arr.optString(i, "").trim().lowercase()
+                    if (t in ALL_TARGETS && t !in targets) targets.add(t)
+                }
+            }
+            val covers = LinkedHashMap<String, String>()
+            val coversObj = if (o.has("subfolderCovers")) o.optJSONObject("subfolderCovers")
+                else o.optJSONObject("subfolder_covers")
+            if (coversObj != null) {
+                val keys = coversObj.keys()
+                while (keys.hasNext()) {
+                    val path = keys.next()
+                    val url = coversObj.optString(path, "").trim()
+                    if (path.isNotBlank() && url.isNotBlank()) covers[path] = url
+                }
+            }
+            val cover = o.optString("coverUrl", "").takeIf { it.isNotBlank() }
+                ?: o.optString("cover_url", "").takeIf { it.isNotBlank() }
+            val subCover = o.optString("subCoverUrl", "").takeIf { it.isNotBlank() }
+                ?: o.optString("sub_cover_url", "").takeIf { it.isNotBlank() }
+            val driveId = o.optString("driveId", o.optString("drive_id", ""))
+            return AdminDrive(
+                id = o.optLong("id", 0L),
+                driveId = driveId,
+                name = o.optString("name", "").takeIf { it.isNotBlank() } ?: driveId,
+                targetApps = targets,
+                coverUrl = cover,
+                subCoverUrl = subCover,
+                subfolderCovers = covers
+            )
+        }
+
+        fun parseList(arr: JSONArray?): List<AdminDrive> {
+            if (arr == null) return emptyList()
+            val out = ArrayList<AdminDrive>(arr.length())
+            for (i in 0 until arr.length()) {
+                runCatching { out.add(fromJson(arr.getJSONObject(i))) }
+            }
+            return out
+        }
+    }
+
+    /** Este drive tem como destino o app que está a correr? */
+    fun targets(packageName: String): Boolean =
+        targetApps.contains(targetForPackage(packageName))
+
+    /** Rótulos pt-BR dos APKs de destino ("Meggy, BiBi"). */
+    fun targetLabels(): String = targetApps.joinToString(", ") {
+        when (it) {
+            TARGET_MEGGY -> "Meggy"
+            TARGET_BIBI -> "BiBi"
+            TARGET_VOVO -> "Vovó"
+            else -> it
+        }
+    }
+}
+
+/**
+ * Resultado de um POST de admin (add/delete). Unavailable = o servidor
+ * respondeu 404 — a rota ainda não existe (dependência v2.15.x); a UI
+ * mostra "função indisponível" em vez de um erro genérico.
+ */
+sealed class AdminDriveResult {
+    object Success : AdminDriveResult()
+    data class Error(val message: String) : AdminDriveResult()
+    object Unavailable : AdminDriveResult()
+}
+
 // ──────────────────────────── v1.5.0 colour helpers ────────────────────────────
 
 private val STRING_COLOR_PALETTE: IntArray = intArrayOf(
