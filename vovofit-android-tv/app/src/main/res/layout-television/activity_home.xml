@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   v1.0.4 — Home TV (layout-television, conceito home TV + TV continuar).
-  Margens de overscan 56dp laterais / 40dp topo. Tipos TV (título 48sp,
-  seção 28sp, card 24sp). Sem bottom nav na TV (gone no layout e no
+  Margens de overscan 56dp laterais / 40dp topo e fundo no XML (a home
+  aplica >=48dp em runtime — TvAutoFit). Tipos TV reais (título 30sp,
+  seção 18sp, card 13sp, meta 10.5sp). Sem bottom nav na TV (gone no layout e no
   código). Foco inicial: botão "Continuar" do destaque.
   Mesmos ids do layout de celular (ViewBinding único).
   v1.0.7 — destaque focavel (anel 3dp + 1.10x) + estrela sem armadilha de foco (Elton 11:47).
@@ -39,6 +40,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
+                    android:id="@+id/topTitle"
                     android:text="@string/app_name"
                     android:textColor="@color/md_on_surface"
                     android:textSize="@dimen/tv_title_md"
