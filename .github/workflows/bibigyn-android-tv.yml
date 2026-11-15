@@ -51,9 +51,20 @@ jobs:
           name: bibigyn-android-tv-apk
           path: bibigyn-android-tv/app/build/outputs/apk/**/*.apk
 
+      - name: Rename APK for release
+        if: startsWith(github.ref, 'refs/tags/bibigyn-v')
+        run: |
+          VERSION="${GITHUB_REF_NAME#bibigyn-v}"
+          APK="$(find bibigyn-android-tv/app/build/outputs/apk/release -name '*.apk' -type f 2>/dev/null | sort | head -n 1)"
+          if [ -z "$APK" ]; then
+            APK="$(find bibigyn-android-tv/app/build/outputs/apk -name '*.apk' -type f | sort | head -n 1)"
+          fi
+          test -n "$APK" || { echo "No APK found under app/build/outputs/apk"; exit 1; }
+          mv "$APK" "$(dirname "$APK")/BibiFit-${VERSION}.apk"
+
       - name: Release
         if: startsWith(github.ref, 'refs/tags/bibigyn-v')
         uses: softprops/action-gh-release@v2
         with:
-          files: bibigyn-android-tv/app/build/outputs/apk/**/*.apk
+          files: bibigyn-android-tv/app/build/outputs/apk/**/BibiFit-*.apk
           generate_release_notes: true

@@ -46,9 +46,15 @@ jobs:
           name: meggy-elegant-apk
           path: meggy-native-app/app/build/outputs/apk/release/*.apk
 
+      - name: Rename APK for release
+        if: startsWith(github.ref, 'refs/tags/native-v')
+        run: |
+          VERSION="${GITHUB_REF_NAME#native-v}"
+          mv meggy-native-app/app/build/outputs/apk/release/app-release.apk "meggy-native-app/app/build/outputs/apk/release/Meggy-${VERSION}.apk"
+
       - name: Release
         if: startsWith(github.ref, 'refs/tags/native-v')
         uses: softprops/action-gh-release@v2
         with:
-          files: meggy-native-app/app/build/outputs/apk/release/*.apk
+          files: meggy-native-app/app/build/outputs/apk/release/Meggy-*.apk
           generate_release_notes: true
