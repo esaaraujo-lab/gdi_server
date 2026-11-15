@@ -44,6 +44,9 @@
     <color name="md_on_surface_variant">#FFB9BEC9</color>
 
     <color name="md_primary">#FFFF8B9F</color>
+    <!-- Frente E — preenchimento da barra de progresso do
+         player: cor da marca a 70% (mais transparente). -->
+    <color name="player_progress_fill">#B3FF8B9F</color>
     <color name="md_on_primary">#FF2A0A13</color>
     <color name="md_primary_container">#FF3A2029</color>
     <color name="md_on_primary_container">#FFFFD9E0</color>
