@@ -458,6 +458,8 @@ class DetailActivity : AppCompatActivity() {
             // Ronda 10 Frente C — drive do admin: (0) sub-capa do
             // admin, senão a sub-capa GENÉRICA ('geral'); sem nenhuma,
             // a cadeia actual (thumb → biblioteca → gerada).
+            val firstThumb = files.firstOrNull { (it.isVideo || it.isAudio) && !it.thumbnailLink.isNullOrBlank() }
+                ?.thumbnailLink
             val adminSubCover = adminDrive?.let { admin ->
                 admin.subCoverUrl?.takeIf { it.isNotBlank() }
                     ?: AdminDriveUi.generalCoverUrl(this@DetailActivity)
