@@ -15,6 +15,7 @@ import com.meggy.app.util.CardGradient
 import com.meggy.app.util.ThumbArt
 import com.meggy.app.util.LibraryCovers
 import com.meggy.app.util.FocusAnimator
+import com.meggy.app.util.TapFeedback
 import com.meggy.app.util.Format
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.TvUtils
@@ -72,6 +73,7 @@ class RailAdapter(
                 if (pos != RecyclerView.NO_POSITION) onClick(items[pos])
             }
             FocusAnimator.attachCard(binding.cardRoot, TvUtils.isTv(binding.root.context))
+            TapFeedback.attachPress(binding.cardRoot, TvUtils.isTv(binding.root.context))
             // Frente A (TV): nextFocus explícito (ver params).
             if (nextFocusUpId != View.NO_ID) itemView.nextFocusUpId = nextFocusUpId
             if (nextFocusDownId != View.NO_ID) itemView.nextFocusDownId = nextFocusDownId
