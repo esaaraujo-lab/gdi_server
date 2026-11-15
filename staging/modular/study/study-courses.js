@@ -392,8 +392,16 @@
     try{name=decodeURIComponent(name);}catch(_){}
     return name;
   };
+  // ★ v2.15.18 (B — item 7): o nome do drive sai do caminho CANÓNICO.
+  //   O cartão CURSOS 2026 guardava a chave legada /11:/... e o subtítulo
+  //   mostrava "PREPARATÓRIO OAB" (drive_names[11]) embora a pasta viva
+  //   no drive 9 (a navegação já era canónica desde v2.15.17-B, só o
+  //   rótulo não). Canonica-se aqui — 1 ponto, todos os consumidores
+  //   (cartão, detalhe, ocultos, busca, fallback de nome) ficam certos.
+  //   Só rebaseia o prefixo /11:/CURSOS 2026; qualquer outro /11:/ segue
+  //   a dizer PREPARATÓRIO OAB. c.key NÃO muda.
   function driveNameOf(ck){
-    const m=/^\/(\d+):/.exec(ck||'');
+    const m=/^\/(\d+):/.exec(__canonCoursePath(ck)||'');
     return(window.drive_names&&m&&window.drive_names[+m[1]])||'';
   }
   // ★ v1.0.76: courseIdentity moved to gdi-core.js as window.gdiCourseIdentity (CDN cache fix)
