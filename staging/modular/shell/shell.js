@@ -1313,6 +1313,430 @@
               tabsEl.appendChild(tab);
             });
           }
+          // ★ v2.15.6-resumo2 (fix do bug ao vivo 22:16 — abas de IA mortas):
+          // showISA DECLARADA NO NÍVEL DO loadMaterials — NUNCA dentro do try.
+          // shell.js roda em 'use strict' (linha 14): declaração de função
+          // dentro de um bloco try é block-scoped e invisível para o
+          // renderIsaTabs (fora do try, p/ os early-returns e o catch) →
+          // o onclick das 4 abas de IA lançava ReferenceError: showISA is
+          // not defined e o clique morria em silêncio. showISA não usa
+          // nenhuma variável do try (materials/statusEl) — só o escopo do
+          // loadMaterials (tabsEl/bodyEl/Shell/window/fetch). showMaterial
+          // fica dentro do try (usa materials[i]; as abas dele são
+          // criadas dentro do try).
+          function showISA(type) {
+            document.querySelectorAll('.gdi-mat-tab').forEach(t => { t.classList.remove('active'); t.removeAttribute('aria-current'); t.style.background = 'rgba(124,77,255,0.08)'; t.style.borderColor = 'rgba(124,77,255,0.2)'; t.style.color = '#a78bfa'; });
+            const activeTab = document.querySelector('.gdi-mat-tab[data-mat="' + type + '"]');
+            if (activeTab) { activeTab.classList.add('active'); activeTab.setAttribute('aria-current', 'true'); activeTab.style.background = '#7c4dff'; activeTab.style.borderColor = '#7c4dff'; activeTab.style.color = '#fff'; }
+            const lessonName = Shell.state.playerPlaylist?.[Shell.state.playerIndex]?.name || '';
+            const lessonPath = Shell.state.currentFolderPath || '';
+            // ★ v2.15.6-resumo (Elton 22:04): chave do cache aqui, síncrona,
+            //   para a guarda de voo abaixo (o IIFE é assíncrono — calcular
+            //   a chave só lá dentro deixaria dois cliques criarem duas
+            //   gerações antes de qualquer um registrar a sua).
+            let _isaRawKey;
+            try { _isaRawKey = decodeURIComponent(lessonPath + lessonName); } catch (_) { _isaRawKey = lessonPath + lessonName; }
+            const _isaCacheKey = encodeURI(_isaRawKey); // encodeURI: %20 p/ espaços, %C3%A7 p/ ç, mantém / :
+            const _isaCacheKeyRaw = lessonPath + lessonName; // fallback p/ cache antigo com encoding parcial
+            // ★ v2.15.6-resumo (Elton 22:04): no celular o painel de
+            //   materiais fica ABAIXO da dobra — clicar na aba mostrava o
+            //   spinner/resultado fora da tela ("quando clico nada
+            //   acontece"). Rolar o painel para a vista ao clicar.
+            try { const _mb = document.getElementById('gdi-mat-body'); if (_mb && _mb.scrollIntoView) _mb.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) {}
+
+            // ★ Loading UI (replica de produção: pink spinner + "Não feche esta aba")
+            function setLoading(msg) {
+              bodyEl.innerHTML = '<div class="gdi-mat-isa-loading" style="max-width:560px;margin:0 auto;padding:30px 20px;">' +
+                '<div class="gdi-mat-isa-spin"></div>' +
+                '<div style="text-align:center;font-size:13px;line-height:1.6;color:#e6edf3;">' + msg + '</div>' +
+                '<div style="margin-top:14px;font-size:11px;color:#8b949e;font-style:italic;">' +
+                  '<i class="bi bi-info-circle"></i> Não feche esta aba — a geração continua em segundo plano.' +
+                '</div>' +
+              '</div>';
+            }
+
+            setLoading('🐩 Meggy está lendo o material e criando conteúdo…<br>⏱️ Tempo estimado: 30-60 segundos.');
+
+            // ★ v2.15.6-resumo: guarda de voo por aula — a descrição
+            //   auto-clica a aba "Resumo Meggy" ao abrir a aula E o aluno
+            //   clica de novo; sem guarda, duas gerações em paralelo
+            //   queimam o limite de 30 msgs/h da /api/ai e a segunda nem
+            //   vê o cache da primeira (ainda não salvo). Cliques
+            //   concorrentes da MESMA aula aguardam a geração em curso e
+            //   relêem o cache em vez de gerar tudo de novo.
+            Shell._isaInflight = Shell._isaInflight || {};
+            const _joinRun = Shell._isaInflight[_isaCacheKey] || null;
+            const _myRun = (async () => {
+              try {
+                const isaField = type.replace('isa-', ''); // summary | questions | mindmap | flashcards
+                const cacheKey = _isaCacheKey;
+                const cacheKeyRaw = _isaCacheKeyRaw;
+
+                // ★ v2.15.6-resumo: sonda de cache — vídeo, variante .pdf
+                //   na mesma pasta e na pasta pai. O batalhão salva sob
+                //   `courseKey/pdfName` (o PDF); a aba só procurava a
+                //   chave do VÍDEO, então o resumo do batalhão nunca
+                //   aparecia na aba ("resumos já gerados não carregam").
+                async function probeCache() {
+                  const _pdfBase = lessonName.replace(/\.[a-z0-9]+$/i, '');
+                  const _pdfName = _pdfBase ? _pdfBase + '.pdf' : '';
+                  const _parentPath = lessonPath.replace(/[^/]+\/$/, '');
+                  const _keys = [cacheKey, cacheKeyRaw];
+                  if (_pdfName && /\.(mp4|webm|mov|m4v|avi|mkv|m3u8|mp3|m4a|ogg|wav|aac)$/i.test(lessonName)) {
+                    try { _keys.push(encodeURI(decodeURIComponent(lessonPath + _pdfName))); } catch (_) { _keys.push(lessonPath + _pdfName); }
+                    _keys.push(lessonPath + _pdfName);
+                    if (_parentPath && _parentPath !== lessonPath) {
+                      try { _keys.push(encodeURI(decodeURIComponent(_parentPath + _pdfName))); } catch (_) { _keys.push(_parentPath + _pdfName); }
+                      _keys.push(_parentPath + _pdfName);
+                    }
+                  }
+                  for (const k of _keys) {
+                    try {
+                      const cacheResp = await fetch('/api/ai/cache?key=' + encodeURIComponent(k), { headers: { 'Accept': 'application/json' }, credentials: 'include' });
+                      if (cacheResp.ok) {
+                        const cacheData = await cacheResp.json();
+                        if (cacheData && cacheData.cached) return cacheData.cached;
+                      }
+                    } catch (e) { /* próxima chave */ }
+                  }
+                  return null;
+                }
+
+                // ─── 1. Cache check (GET /api/ai/cache?key=...) ───
+                // Se a geração desta aula já está rodando, espera ela e
+                // relê o cache (a geração anterior já salvou) em vez de
+                // gerar tudo de novo em paralelo.
+                if (_joinRun) {
+                  try { await _joinRun; } catch (_) {}
+                  const _jc = await probeCache();
+                  if (_jc && _jc[isaField]) {
+                    Shell._renderISAResult(type, _jc[isaField], bodyEl, lessonName, true, _jc);
+                    return;
+                  }
+                  // A geração anterior falhou sem salvar — gera de novo abaixo.
+                }
+                let cached = await probeCache();
+
+                // Se o tipo específico já está no cache, mostra direto
+                if (cached && cached[isaField]) {
+                  Shell._renderISAResult(type, cached[isaField], bodyEl, lessonName, true, cached);
+                  return;
+                }
+
+                // ─── 2. Extrair materiais (MD/TXT/PDF com pdf.js) ───
+                setLoading('📖 Extraindo material da aula…');
+                let materialContent = '';
+                let materialsList = [];
+                try {
+                  if (window.gdiListAllFiles && lessonPath) {
+                    const files = await window.gdiListAllFiles(lessonPath, '');
+                    materialsList = files.filter(f => {
+                      const ext = (f.name.split('.').pop() || '').toLowerCase();
+                      return ext === 'pdf' || ext === 'md' || ext === 'txt' || ext === 'html';
+                    });
+                    // ★ Transcription-priority: arquivos com "transcri" primeiro
+                    materialsList.sort((a, b) => {
+                      const at = /transcri/i.test(a.name) ? 0 : 1;
+                      const bt = /transcri/i.test(b.name) ? 0 : 1;
+                      return at - bt;
+                    });
+                    for (const m of materialsList.slice(0, 3)) {
+                      const ext = (m.name.split('.').pop() || '').toLowerCase();
+                      if (ext === 'pdf') {
+                        // ★ Extrair texto do PDF usando pdf.js (não apenas placeholder)
+                        setLoading('📄 Extraindo texto do PDF: ' + m.name + '…');
+                        if (m.link) {
+                          const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
+                          const pdfText = await Shell._extractPdfText(link);
+                          if (pdfText && pdfText.length > 50) {
+                            materialContent += '\n\n--- ' + m.name + ' ---\n' + pdfText.substring(0, 40000);
+                          } else {
+                            materialContent += '\n[Material PDF: ' + m.name + ' (não foi possível extrair texto — pode ser escaneado)]';
+                          }
+                        }
+                      } else if (m.link) {
+                        try {
+                          const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
+                          const resp = await fetch(link);
+                          if (resp.ok) {
+                            const text = await resp.text();
+                            materialContent += '\n\n--- ' + m.name + ' ---\n' + text.substring(0, 30000);
+                          }
+                        } catch (e) { /* skip */ }
+                      }
+                    }
+                  }
+                } catch (e) { console.warn('[Shell] material extract:', e); }
+
+                // ★ Subpastas (especialmente "material") se não encontrou conteúdo suficiente
+                if (materialContent.length < 200 && window.gdiListAllFiles && lessonPath) {
+                  try {
+                    const files = await window.gdiListAllFiles(lessonPath, '');
+                    const subs = files.filter(f => f.mimeType === 'application/vnd.google-apps.folder').slice(0, 5);
+                    for (const sf of subs) {
+                      const fp = lessonPath + encodeURIComponent(sf.name) + '/';
+                      const subFiles = await window.gdiListAllFiles(fp, '');
+                      const subMats = subFiles.filter(f => {
+                        const ext = (f.name.split('.').pop() || '').toLowerCase();
+                        return ext === 'pdf' || ext === 'md' || ext === 'txt';
+                      });
+                      for (const m of subMats.slice(0, 3)) {
+                        const ext = (m.name.split('.').pop() || '').toLowerCase();
+                        if (ext === 'pdf' && m.link) {
+                          setLoading('📄 Extraindo PDF da subpasta: ' + m.name + '…');
+                          const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
+                          const pdfText = await Shell._extractPdfText(link);
+                          if (pdfText && pdfText.length > 50) {
+                            materialContent += '\n\n--- ' + m.name + ' ---\n' + pdfText.substring(0, 30000);
+                          }
+                        } else if (m.link) {
+                          try {
+                            const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
+                            const resp = await fetch(link);
+                            if (resp.ok) {
+                              const text = await resp.text();
+                              materialContent += '\n\n--- ' + m.name + ' ---\n' + text.substring(0, 20000);
+                            }
+                          } catch (e) { /* skip */ }
+                        }
+                      }
+                      if (materialContent.length > 200) break;
+                    }
+                  } catch (e) { /* skip */ }
+                }
+
+                if (materialContent.length > 80000) {
+                  materialContent = materialContent.substring(0, 80000) + '\n[...truncado...]';
+                }
+
+                const courseName = lessonPath.split('/').filter(Boolean).slice(-1)[0] || '';
+                const driveName = window.drive_names && window.drive_names[+(lessonPath.split('/')[1] || '0').replace(':','')] || '';
+                const ctx = 'Aula: ' + lessonName + '\nCurso: ' + courseName + '\nDrive: ' + driveName;
+                const hasContent = materialContent.length > 100;
+
+                // ─── 3. generateAll: gerar resumo + pílulas + questões em paralelo ───
+                // Produção gera TUDO de uma vez (Promise.allSettled). Se o usuário pediu só um tipo,
+                // ainda assim geramos todos (mais eficiente — cache fica completo p/ próximas abas).
+                setLoading('✨ Gerando resumo + pílulas + questões em cadeia…<br>Isto pode levar 30-60s.');
+
+                const textSlice = hasContent ? materialContent : ctx;
+                const sliceCap = hasContent ? 80000 : 2000;
+
+                // ★ Prompts (replica de produção — meggy-cache.js:785-821)
+                const RESUMO_PROMPTS = [
+                  // Nível 7 (rico)
+                  'Você é um professor especialista em concursos públicos. Leia TODO o material abaixo e crie um RESUMO PROFUNDO E DETALHADO em Markdown.\n\nREQUISITOS:\n- Mínimo 2000 caracteres (NÃO seja breve)\n- ABERTURA (GANCHO): abra o resumo com uma prévia daquela aula, em texto corrido, no espírito de "Nessa aula vamos estudar [assunto específico da aula]..." — varie a cada geração ("Nessa aula vamos estudar...", "Nesta aula, vamos mergulhar em...", "Hoje vamos estudar..."). Nunca abra com título fixo nem frase genérica.\n- Estruture com ## títulos e ### subtítulos\n- Para CADA tópico: explique o conceito, dê EXEMPLOS práticos, e destaque pegadinhas de prova\n- Use **negrito** para palavras-chave e dispositivos legais\n- Use listas com marcadores para enumerações\n- Inclua uma seção ## Pegadinhas de Prova no final\n- Inclua uma seção ## Resumo Rápido com 5-10 bullets dos pontos mais importantes\n\nNÃO omita nenhum tema. Seja PROFUNDO, não conciso.\n\nMaterial:\n' + textSlice.slice(0, sliceCap),
+                  // Nível 5 (médio)
+                  'Crie um resumo DETALHADO em Markdown deste material. Use ## títulos, **negrito** e - bullets. Inclua ## Pegadinhas de Prova no final. Material:\n' + textSlice.slice(0, 20000),
+                  // Nível 3 (simples)
+                  'Crie um resumo em Markdown deste material. Use ## títulos e bullets. Material:\n' + textSlice.slice(0, 10000)
+                ];
+                const PILULAS_PROMPT = 'Crie "Pílulas" deste material — pontos-chave para revisão rápida ANTES da prova. Formato Markdown:\n# Pílulas de Revisão\n\n## Conceitos Essenciais\n- **Conceito 1**: explicação curta com exemplo\n- **Conceito 2**: explicação curta\n\n## Pegadinhas Rápidas\n- ⚠️ Pegadinha 1\n- ⚠️ Pegadinha 2\n\n## Mnemônicos\n- Dica para memorizar\n\nMáximo 20 bullets no total. Seja OBJETIVO mas COMPLETO.\n\nConteúdo:\n' + textSlice.slice(0, 15000);
+                const QUESTOES_PROMPT = 'Você é um examinador de concurso público brasileiro experiente. Baseado neste material, gere 10 questões de concurso em JSON array. Misture:\n- 6 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"legalText":"...","explanation":"...","fundamentacao":"..."}\n- 4 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"legalText":"...","explanation":"...","fundamentacao":"..."}\n\nCAMPOS:\n- statement: enunciado claro, contexto completo\n- legalText: o dispositivo legal aplicável (ex: "art. 5º, CF")\n- explanation: explicação técnica do acerto/erro\n- fundamentacao: fundamentação didática completa\n\nSem comentários, só JSON.\n\n' + textSlice.slice(0, 60000);
+
+                // ★ Helper: chama /api/ai com fallback de prompt (3 níveis para resumo)
+                async function callIsa(prompt, kind) {
+                  const r = await fetch('/api/ai', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: prompt, messages: [], kind: kind })
+                  });
+                  if (!r.ok) throw new Error('AI HTTP ' + r.status);
+                  const d = await r.json();
+                  return d.response || d.markdown || d.summary || '';
+                }
+
+                // ★ Helper: parse robusto de JSON array de questões (replica meggy-utils.parseJsonArray)
+                function parseQuestions(resp) {
+                  if (!resp) return [];
+                  let arr = null;
+                  try { arr = JSON.parse(resp); } catch (_) {
+                    // regex extraction of first [...]
+                    const m = resp.match(/\[[\s\S]*\]/);
+                    if (m) { try { arr = JSON.parse(m[0]); } catch (__) { arr = null; } }
+                  }
+                  if (!Array.isArray(arr)) return [];
+                  return arr.map(q => {
+                    if (q.type === 'tf' || (!q.options && q.correct !== undefined)) {
+                      return {
+                        type: 'tf', statement: String(q.statement || ''), options: ['Certo', 'Errado'],
+                        correct: Math.max(0, Math.min(1, Number(q.correct) || 0)),
+                        explanation: String(q.explanation || ''),
+                        legalText: String(q.legalText || q.fundamentacao || ''),
+                        fundamentacao: String(q.fundamentacao || '')
+                      };
+                    }
+                    if (Array.isArray(q.options)) {
+                      return {
+                        type: 'mc', statement: String(q.statement || ''), options: q.options.map(String),
+                        correct: Math.max(0, Math.min((q.options.length || 4) - 1, Number(q.correct) || 0)),
+                        explanation: String(q.explanation || ''),
+                        legalText: String(q.legalText || q.fundamentacao || ''),
+                        fundamentacao: String(q.fundamentacao || '')
+                      };
+                    }
+                    return null;
+                  }).filter(Boolean);
+                }
+
+                // ★ Helper: autoCreateFlashcards (replica meggy-cache.js:187)
+                function autoCreateFlashcards(questions) {
+                  return questions.map(q => {
+                    let back = '';
+                    if (q.type === 'mc' && q.options) {
+                      const letter = String.fromCharCode(65 + q.correct) + ') ';
+                      back = letter + (q.options[q.correct] || '');
+                    } else {
+                      back = (q.correct === 1 || q.correct === '1') ? 'Certo' : 'Errado';
+                    }
+                    if (q.explanation) back += '\n\n💡 ' + q.explanation;
+                    if (q.legalText) back += '\n\n⚖️ ' + q.legalText;
+                    if (q.fundamentacao) back += '\n\n📚 ' + q.fundamentacao;
+                    return { f: q.statement, b: back, subject: lessonName, type: q.type };
+                  });
+                }
+
+                // ★ Helper: save to material folder (replica meggy-summaries.js saveSummaryToLessonFolder)
+                async function saveToFolder(materialType, fileName, content) {
+                  try {
+                    await fetch('/api/materials/save-in-folder', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ lessonPath, materialType, fileName, content })
+                    });
+                  } catch (e) { console.warn('[Shell] saveToFolder:', e); }
+                }
+
+                // ★ Safe filename fragment
+                function safeName(s) {
+                  return String(s || '').replace(/[/\\?%*:|"<>]/g, '_').trim().slice(0, 120) || 'aula';
+                }
+
+                // ─── PARALLEL GENERATION (Promise.allSettled) ───
+                // ★ v2.15.6-resumo: guardar o ÚLTIMO erro da IA — antes ele
+                //   era engolido e o usuário só via o texto genérico ("não
+                //   foi possível gerar"), sem saber se era limite de
+                //   mensagens, sessão expirada ou erro do provedor.
+                let _isaLastErr = null;
+                const _isaFailReason = (err) => {
+                  const m = String((err && err.message) || '');
+                  if (/429/.test(m)) return ' Motivo: a Meggy atingiu o limite de 30 mensagens por hora — aguarde um pouco e tente de novo.';
+                  if (/401/.test(m)) return ' Motivo: sua sessão expirou — saia e entre de novo, depois tente novamente.';
+                  const hm = m.match(/AI HTTP (\d+)/);
+                  if (hm) return ' Motivo: a IA devolveu HTTP ' + hm[1] + '.';
+                  if (m) return ' Motivo: ' + m.slice(0, 120);
+                  return '';
+                };
+                const tasks = [];
+                // Task 1: resumo (3-level auto-retry)
+                tasks.push((async () => {
+                  for (let i = 0; i < RESUMO_PROMPTS.length; i++) {
+                    try {
+                      setLoading(i === 0 ? '✨ Gerando resumo profundo…' : i === 1 ? '✨ Tentando resumo médio…' : '✨ Tentando resumo simples…');
+                      const r = await callIsa(RESUMO_PROMPTS[i], 'resumo');
+                      if (r && r.length > 200) return { field: 'summary', value: r };
+                    } catch (e) { _isaLastErr = e; /* try next level */ }
+                  }
+                  return { field: 'summary', value: null };
+                })());
+                // Task 2: pílulas
+                tasks.push((async () => {
+                  try { setLoading('💊 Gerando pílulas de revisão…'); return { field: 'mindmap', value: await callIsa(PILULAS_PROMPT, 'mindmap') }; }
+                  catch (e) { _isaLastErr = e; return { field: 'mindmap', value: null }; }
+                })());
+                // Task 3: questões (JSON)
+                tasks.push((async () => {
+                  try { setLoading('❓ Gerando questões…'); const r = await callIsa(QUESTOES_PROMPT, 'questoes'); return { field: 'questions', value: parseQuestions(r), raw: r }; }
+                  catch (e) { _isaLastErr = e; return { field: 'questions', value: [] }; }
+                })());
+
+                const results = await Promise.allSettled(tasks);
+                const gen = { summary: null, mindmap: null, questions: [], flashcards: [] };
+                results.forEach(r => {
+                  if (r.status === 'fulfilled' && r.value) {
+                    gen[r.value.field] = r.value.value;
+                    if (r.value.field === 'questions' && r.value.value && r.value.value.length) {
+                      gen.flashcards = autoCreateFlashcards(r.value.value);
+                    }
+                  }
+                });
+
+                // ─── 4. Save no cache (aguardado) + pasta (background) ───
+                // ★ v2.15.6-resumo: o POST do cache é AGUARDADO — sem isso
+                //   um clique concorrente (joiner da guarda de voo) ou o
+                //   próximo clique não veria o resumo salvo e geraria tudo
+                //   de novo. O save na pasta continua em background (o
+                //   Drive é lento e não bloqueia o render). A falha do
+                //   save é mostrada (antes era silenciosa e o resumo
+                //   sumia na próxima visita sem explicação).
+                const user = (typeof GDIUser !== 'undefined' && GDIUser && GDIUser.state && GDIUser.state.user) || 'meggy';
+                const safeLesson = safeName(lessonName);
+                let _cacheSaveOk = true;
+                try {
+                  const _saveResp = await fetch('/api/ai/cache', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      key: cacheKey,
+                      summary: gen.summary,
+                      questions: gen.questions.length ? gen.questions : null,
+                      mindmap: gen.mindmap,
+                      lessonName: lessonName
+                    })
+                  });
+                  if (!_saveResp.ok) _cacheSaveOk = false;
+                } catch (e) { console.warn('[Shell] cache save:', e); _cacheSaveOk = false; }
+                // Save to material folder (fire-and-forget, como antes)
+                if (gen.summary) saveToFolder('resumo', user + '_' + safeLesson + '.md', gen.summary);
+                if (gen.mindmap) saveToFolder('resumo', user + '_pilulas_' + safeLesson + '.md', gen.mindmap);
+                if (gen.questions && gen.questions.length) saveToFolder('questoes', user + '_' + safeName(courseName || lessonName) + '.json', JSON.stringify(gen.questions, null, 2));
+
+                // ─── 6. Render requested type ───
+                const cached2 = { summary: gen.summary, questions: gen.questions.length ? gen.questions : null, mindmap: gen.mindmap, lessonName: lessonName };
+                let toShow = gen[isaField];
+                if (type === 'isa-flashcards') toShow = gen.flashcards.length ? gen.flashcards : null;
+                if (isaField === 'questions' && (!toShow || !toShow.length)) toShow = null;
+                if (!toShow) toShow = type === 'isa-flashcards'
+                  ? 'Não foi possível gerar flashcards. Tente novamente.' + _isaFailReason(_isaLastErr)
+                  : 'Não foi possível gerar este conteúdo. Tente novamente.' + _isaFailReason(_isaLastErr);
+
+                if (type === 'isa-flashcards' && gen.flashcards.length) {
+                  // Flashcards usa render especial (flip deck)
+                  Shell._renderFlashcardDeck(bodyEl, { flashcards: gen.flashcards, lessonName: lessonName, questions: gen.questions });
+                } else {
+                  Shell._renderISAResult(type, toShow, bodyEl, lessonName, false, cached2);
+                }
+                if (!_cacheSaveOk && (gen.summary || gen.mindmap || (gen.questions && gen.questions.length))) {
+                  const _w = document.createElement('div');
+                  _w.style.cssText = 'margin-top:12px;padding:10px 14px;background:rgba(255,193,7,.08);border:1px solid rgba(255,193,7,.3);border-radius:10px;color:#ffc107;font-size:12px;line-height:1.5;';
+                  _w.textContent = '⚠️ O conteúdo foi gerado, mas não foi possível salvar no cache — ao voltar nesta aula, a Meggy vai gerar de novo.';
+                  bodyEl.appendChild(_w);
+                }
+                // ★ v2.15.6-resumo: o resultado pode demorar 30-60s — o
+                //   usuário pode ter rolado para outro lugar; traz o
+                //   painel de volta para a vista ao renderizar.
+                try { if (bodyEl && bodyEl.scrollIntoView) bodyEl.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) {}
+              } catch (e) {
+                console.error('[Shell] showISA:', e);
+                // ★ v2.15.6-resumo: "Tentar novamente" re-clica a aba ISA
+                //   (antes recarregava o player INTEIRO — e a descrição
+                //   auto-gerada não re-disparava, porque a sessão já
+                //   estava marcada como tentada — então o retry não
+                //   fazia nada de útil). O motivo do erro é mostrado.
+                bodyEl.innerHTML = '<div style="padding:20px;color:#ff8b9f;text-align:center;">' +
+                  '<div style="font-size:36px;margin-bottom:12px;">⚠️</div>' +
+                  '<div style="font-weight:600;margin-bottom:8px;">Não foi possível gerar este conteúdo</div>' +
+                  '<div style="font-size:14px;line-height:1.5;color:#9aa4b8;margin-bottom:16px;">Verifique sua conexão e toque em "Tentar novamente".' + Shell._esc((e && e.message) ? (' Motivo: ' + String(e.message).slice(0, 120)) : '') + '</div>' +
+                  '<button id="gdi-isa-retry" class="meggy-header-btn" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-arrow-clockwise"></i> Tentar novamente</button>' +
+                '</div>';
+                const _retryBtn = bodyEl.querySelector('#gdi-isa-retry');
+                if (_retryBtn) _retryBtn.onclick = () => { const _t = document.querySelector('.gdi-mat-tab[data-mat="' + type + '"]'); if (_t) _t.click(); };
+              }
+            })();
+            Shell._isaInflight[_isaCacheKey] = _myRun;
+            _myRun.catch(() => {}).finally(() => { if (Shell._isaInflight[_isaCacheKey] === _myRun) delete Shell._isaInflight[_isaCacheKey]; });
+          }
+
           tabsEl.innerHTML = '<span style="font-size:12px;color:#6b7488;padding:8px;">Buscando…</span>';
           if (statusEl) statusEl.textContent = 'buscando…';
           bodyEl.innerHTML = '';
@@ -1465,418 +1889,6 @@
               else bodyEl.innerHTML = '<div style="text-align:center;padding:40px;color:#6b7488;">Sem preview</div>';
             }
 
-            function showISA(type) {
-              document.querySelectorAll('.gdi-mat-tab').forEach(t => { t.classList.remove('active'); t.removeAttribute('aria-current'); t.style.background = 'rgba(124,77,255,0.08)'; t.style.borderColor = 'rgba(124,77,255,0.2)'; t.style.color = '#a78bfa'; });
-              const activeTab = document.querySelector('.gdi-mat-tab[data-mat="' + type + '"]');
-              if (activeTab) { activeTab.classList.add('active'); activeTab.setAttribute('aria-current', 'true'); activeTab.style.background = '#7c4dff'; activeTab.style.borderColor = '#7c4dff'; activeTab.style.color = '#fff'; }
-              const lessonName = Shell.state.playerPlaylist?.[Shell.state.playerIndex]?.name || '';
-              const lessonPath = Shell.state.currentFolderPath || '';
-              // ★ v2.15.6-resumo (Elton 22:04): chave do cache aqui, síncrona,
-              //   para a guarda de voo abaixo (o IIFE é assíncrono — calcular
-              //   a chave só lá dentro deixaria dois cliques criarem duas
-              //   gerações antes de qualquer um registrar a sua).
-              let _isaRawKey;
-              try { _isaRawKey = decodeURIComponent(lessonPath + lessonName); } catch (_) { _isaRawKey = lessonPath + lessonName; }
-              const _isaCacheKey = encodeURI(_isaRawKey); // encodeURI: %20 p/ espaços, %C3%A7 p/ ç, mantém / :
-              const _isaCacheKeyRaw = lessonPath + lessonName; // fallback p/ cache antigo com encoding parcial
-              // ★ v2.15.6-resumo (Elton 22:04): no celular o painel de
-              //   materiais fica ABAIXO da dobra — clicar na aba mostrava o
-              //   spinner/resultado fora da tela ("quando clico nada
-              //   acontece"). Rolar o painel para a vista ao clicar.
-              try { const _mb = document.getElementById('gdi-mat-body'); if (_mb && _mb.scrollIntoView) _mb.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) {}
-
-              // ★ Loading UI (replica de produção: pink spinner + "Não feche esta aba")
-              function setLoading(msg) {
-                bodyEl.innerHTML = '<div class="gdi-mat-isa-loading" style="max-width:560px;margin:0 auto;padding:30px 20px;">' +
-                  '<div class="gdi-mat-isa-spin"></div>' +
-                  '<div style="text-align:center;font-size:13px;line-height:1.6;color:#e6edf3;">' + msg + '</div>' +
-                  '<div style="margin-top:14px;font-size:11px;color:#8b949e;font-style:italic;">' +
-                    '<i class="bi bi-info-circle"></i> Não feche esta aba — a geração continua em segundo plano.' +
-                  '</div>' +
-                '</div>';
-              }
-
-              setLoading('🐩 Meggy está lendo o material e criando conteúdo…<br>⏱️ Tempo estimado: 30-60 segundos.');
-
-              // ★ v2.15.6-resumo: guarda de voo por aula — a descrição
-              //   auto-clica a aba "Resumo Meggy" ao abrir a aula E o aluno
-              //   clica de novo; sem guarda, duas gerações em paralelo
-              //   queimam o limite de 30 msgs/h da /api/ai e a segunda nem
-              //   vê o cache da primeira (ainda não salvo). Cliques
-              //   concorrentes da MESMA aula aguardam a geração em curso e
-              //   relêem o cache em vez de gerar tudo de novo.
-              Shell._isaInflight = Shell._isaInflight || {};
-              const _joinRun = Shell._isaInflight[_isaCacheKey] || null;
-              const _myRun = (async () => {
-                try {
-                  const isaField = type.replace('isa-', ''); // summary | questions | mindmap | flashcards
-                  const cacheKey = _isaCacheKey;
-                  const cacheKeyRaw = _isaCacheKeyRaw;
-
-                  // ★ v2.15.6-resumo: sonda de cache — vídeo, variante .pdf
-                  //   na mesma pasta e na pasta pai. O batalhão salva sob
-                  //   `courseKey/pdfName` (o PDF); a aba só procurava a
-                  //   chave do VÍDEO, então o resumo do batalhão nunca
-                  //   aparecia na aba ("resumos já gerados não carregam").
-                  async function probeCache() {
-                    const _pdfBase = lessonName.replace(/\.[a-z0-9]+$/i, '');
-                    const _pdfName = _pdfBase ? _pdfBase + '.pdf' : '';
-                    const _parentPath = lessonPath.replace(/[^/]+\/$/, '');
-                    const _keys = [cacheKey, cacheKeyRaw];
-                    if (_pdfName && /\.(mp4|webm|mov|m4v|avi|mkv|m3u8|mp3|m4a|ogg|wav|aac)$/i.test(lessonName)) {
-                      try { _keys.push(encodeURI(decodeURIComponent(lessonPath + _pdfName))); } catch (_) { _keys.push(lessonPath + _pdfName); }
-                      _keys.push(lessonPath + _pdfName);
-                      if (_parentPath && _parentPath !== lessonPath) {
-                        try { _keys.push(encodeURI(decodeURIComponent(_parentPath + _pdfName))); } catch (_) { _keys.push(_parentPath + _pdfName); }
-                        _keys.push(_parentPath + _pdfName);
-                      }
-                    }
-                    for (const k of _keys) {
-                      try {
-                        const cacheResp = await fetch('/api/ai/cache?key=' + encodeURIComponent(k), { headers: { 'Accept': 'application/json' }, credentials: 'include' });
-                        if (cacheResp.ok) {
-                          const cacheData = await cacheResp.json();
-                          if (cacheData && cacheData.cached) return cacheData.cached;
-                        }
-                      } catch (e) { /* próxima chave */ }
-                    }
-                    return null;
-                  }
-
-                  // ─── 1. Cache check (GET /api/ai/cache?key=...) ───
-                  // Se a geração desta aula já está rodando, espera ela e
-                  // relê o cache (a geração anterior já salvou) em vez de
-                  // gerar tudo de novo em paralelo.
-                  if (_joinRun) {
-                    try { await _joinRun; } catch (_) {}
-                    const _jc = await probeCache();
-                    if (_jc && _jc[isaField]) {
-                      Shell._renderISAResult(type, _jc[isaField], bodyEl, lessonName, true, _jc);
-                      return;
-                    }
-                    // A geração anterior falhou sem salvar — gera de novo abaixo.
-                  }
-                  let cached = await probeCache();
-
-                  // Se o tipo específico já está no cache, mostra direto
-                  if (cached && cached[isaField]) {
-                    Shell._renderISAResult(type, cached[isaField], bodyEl, lessonName, true, cached);
-                    return;
-                  }
-
-                  // ─── 2. Extrair materiais (MD/TXT/PDF com pdf.js) ───
-                  setLoading('📖 Extraindo material da aula…');
-                  let materialContent = '';
-                  let materialsList = [];
-                  try {
-                    if (window.gdiListAllFiles && lessonPath) {
-                      const files = await window.gdiListAllFiles(lessonPath, '');
-                      materialsList = files.filter(f => {
-                        const ext = (f.name.split('.').pop() || '').toLowerCase();
-                        return ext === 'pdf' || ext === 'md' || ext === 'txt' || ext === 'html';
-                      });
-                      // ★ Transcription-priority: arquivos com "transcri" primeiro
-                      materialsList.sort((a, b) => {
-                        const at = /transcri/i.test(a.name) ? 0 : 1;
-                        const bt = /transcri/i.test(b.name) ? 0 : 1;
-                        return at - bt;
-                      });
-                      for (const m of materialsList.slice(0, 3)) {
-                        const ext = (m.name.split('.').pop() || '').toLowerCase();
-                        if (ext === 'pdf') {
-                          // ★ Extrair texto do PDF usando pdf.js (não apenas placeholder)
-                          setLoading('📄 Extraindo texto do PDF: ' + m.name + '…');
-                          if (m.link) {
-                            const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
-                            const pdfText = await Shell._extractPdfText(link);
-                            if (pdfText && pdfText.length > 50) {
-                              materialContent += '\n\n--- ' + m.name + ' ---\n' + pdfText.substring(0, 40000);
-                            } else {
-                              materialContent += '\n[Material PDF: ' + m.name + ' (não foi possível extrair texto — pode ser escaneado)]';
-                            }
-                          }
-                        } else if (m.link) {
-                          try {
-                            const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
-                            const resp = await fetch(link);
-                            if (resp.ok) {
-                              const text = await resp.text();
-                              materialContent += '\n\n--- ' + m.name + ' ---\n' + text.substring(0, 30000);
-                            }
-                          } catch (e) { /* skip */ }
-                        }
-                      }
-                    }
-                  } catch (e) { console.warn('[Shell] material extract:', e); }
-
-                  // ★ Subpastas (especialmente "material") se não encontrou conteúdo suficiente
-                  if (materialContent.length < 200 && window.gdiListAllFiles && lessonPath) {
-                    try {
-                      const files = await window.gdiListAllFiles(lessonPath, '');
-                      const subs = files.filter(f => f.mimeType === 'application/vnd.google-apps.folder').slice(0, 5);
-                      for (const sf of subs) {
-                        const fp = lessonPath + encodeURIComponent(sf.name) + '/';
-                        const subFiles = await window.gdiListAllFiles(fp, '');
-                        const subMats = subFiles.filter(f => {
-                          const ext = (f.name.split('.').pop() || '').toLowerCase();
-                          return ext === 'pdf' || ext === 'md' || ext === 'txt';
-                        });
-                        for (const m of subMats.slice(0, 3)) {
-                          const ext = (m.name.split('.').pop() || '').toLowerCase();
-                          if (ext === 'pdf' && m.link) {
-                            setLoading('📄 Extraindo PDF da subpasta: ' + m.name + '…');
-                            const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
-                            const pdfText = await Shell._extractPdfText(link);
-                            if (pdfText && pdfText.length > 50) {
-                              materialContent += '\n\n--- ' + m.name + ' ---\n' + pdfText.substring(0, 30000);
-                            }
-                          } else if (m.link) {
-                            try {
-                              const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
-                              const resp = await fetch(link);
-                              if (resp.ok) {
-                                const text = await resp.text();
-                                materialContent += '\n\n--- ' + m.name + ' ---\n' + text.substring(0, 20000);
-                              }
-                            } catch (e) { /* skip */ }
-                          }
-                        }
-                        if (materialContent.length > 200) break;
-                      }
-                    } catch (e) { /* skip */ }
-                  }
-
-                  if (materialContent.length > 80000) {
-                    materialContent = materialContent.substring(0, 80000) + '\n[...truncado...]';
-                  }
-
-                  const courseName = lessonPath.split('/').filter(Boolean).slice(-1)[0] || '';
-                  const driveName = window.drive_names && window.drive_names[+(lessonPath.split('/')[1] || '0').replace(':','')] || '';
-                  const ctx = 'Aula: ' + lessonName + '\nCurso: ' + courseName + '\nDrive: ' + driveName;
-                  const hasContent = materialContent.length > 100;
-
-                  // ─── 3. generateAll: gerar resumo + pílulas + questões em paralelo ───
-                  // Produção gera TUDO de uma vez (Promise.allSettled). Se o usuário pediu só um tipo,
-                  // ainda assim geramos todos (mais eficiente — cache fica completo p/ próximas abas).
-                  setLoading('✨ Gerando resumo + pílulas + questões em cadeia…<br>Isto pode levar 30-60s.');
-
-                  const textSlice = hasContent ? materialContent : ctx;
-                  const sliceCap = hasContent ? 80000 : 2000;
-
-                  // ★ Prompts (replica de produção — meggy-cache.js:785-821)
-                  const RESUMO_PROMPTS = [
-                    // Nível 7 (rico)
-                    'Você é um professor especialista em concursos públicos. Leia TODO o material abaixo e crie um RESUMO PROFUNDO E DETALHADO em Markdown.\n\nREQUISITOS:\n- Mínimo 2000 caracteres (NÃO seja breve)\n- ABERTURA (GANCHO): abra o resumo com uma prévia daquela aula, em texto corrido, no espírito de "Nessa aula vamos estudar [assunto específico da aula]..." — varie a cada geração ("Nessa aula vamos estudar...", "Nesta aula, vamos mergulhar em...", "Hoje vamos estudar..."). Nunca abra com título fixo nem frase genérica.\n- Estruture com ## títulos e ### subtítulos\n- Para CADA tópico: explique o conceito, dê EXEMPLOS práticos, e destaque pegadinhas de prova\n- Use **negrito** para palavras-chave e dispositivos legais\n- Use listas com marcadores para enumerações\n- Inclua uma seção ## Pegadinhas de Prova no final\n- Inclua uma seção ## Resumo Rápido com 5-10 bullets dos pontos mais importantes\n\nNÃO omita nenhum tema. Seja PROFUNDO, não conciso.\n\nMaterial:\n' + textSlice.slice(0, sliceCap),
-                    // Nível 5 (médio)
-                    'Crie um resumo DETALHADO em Markdown deste material. Use ## títulos, **negrito** e - bullets. Inclua ## Pegadinhas de Prova no final. Material:\n' + textSlice.slice(0, 20000),
-                    // Nível 3 (simples)
-                    'Crie um resumo em Markdown deste material. Use ## títulos e bullets. Material:\n' + textSlice.slice(0, 10000)
-                  ];
-                  const PILULAS_PROMPT = 'Crie "Pílulas" deste material — pontos-chave para revisão rápida ANTES da prova. Formato Markdown:\n# Pílulas de Revisão\n\n## Conceitos Essenciais\n- **Conceito 1**: explicação curta com exemplo\n- **Conceito 2**: explicação curta\n\n## Pegadinhas Rápidas\n- ⚠️ Pegadinha 1\n- ⚠️ Pegadinha 2\n\n## Mnemônicos\n- Dica para memorizar\n\nMáximo 20 bullets no total. Seja OBJETIVO mas COMPLETO.\n\nConteúdo:\n' + textSlice.slice(0, 15000);
-                  const QUESTOES_PROMPT = 'Você é um examinador de concurso público brasileiro experiente. Baseado neste material, gere 10 questões de concurso em JSON array. Misture:\n- 6 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"legalText":"...","explanation":"...","fundamentacao":"..."}\n- 4 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"legalText":"...","explanation":"...","fundamentacao":"..."}\n\nCAMPOS:\n- statement: enunciado claro, contexto completo\n- legalText: o dispositivo legal aplicável (ex: "art. 5º, CF")\n- explanation: explicação técnica do acerto/erro\n- fundamentacao: fundamentação didática completa\n\nSem comentários, só JSON.\n\n' + textSlice.slice(0, 60000);
-
-                  // ★ Helper: chama /api/ai com fallback de prompt (3 níveis para resumo)
-                  async function callIsa(prompt, kind) {
-                    const r = await fetch('/api/ai', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ message: prompt, messages: [], kind: kind })
-                    });
-                    if (!r.ok) throw new Error('AI HTTP ' + r.status);
-                    const d = await r.json();
-                    return d.response || d.markdown || d.summary || '';
-                  }
-
-                  // ★ Helper: parse robusto de JSON array de questões (replica meggy-utils.parseJsonArray)
-                  function parseQuestions(resp) {
-                    if (!resp) return [];
-                    let arr = null;
-                    try { arr = JSON.parse(resp); } catch (_) {
-                      // regex extraction of first [...]
-                      const m = resp.match(/\[[\s\S]*\]/);
-                      if (m) { try { arr = JSON.parse(m[0]); } catch (__) { arr = null; } }
-                    }
-                    if (!Array.isArray(arr)) return [];
-                    return arr.map(q => {
-                      if (q.type === 'tf' || (!q.options && q.correct !== undefined)) {
-                        return {
-                          type: 'tf', statement: String(q.statement || ''), options: ['Certo', 'Errado'],
-                          correct: Math.max(0, Math.min(1, Number(q.correct) || 0)),
-                          explanation: String(q.explanation || ''),
-                          legalText: String(q.legalText || q.fundamentacao || ''),
-                          fundamentacao: String(q.fundamentacao || '')
-                        };
-                      }
-                      if (Array.isArray(q.options)) {
-                        return {
-                          type: 'mc', statement: String(q.statement || ''), options: q.options.map(String),
-                          correct: Math.max(0, Math.min((q.options.length || 4) - 1, Number(q.correct) || 0)),
-                          explanation: String(q.explanation || ''),
-                          legalText: String(q.legalText || q.fundamentacao || ''),
-                          fundamentacao: String(q.fundamentacao || '')
-                        };
-                      }
-                      return null;
-                    }).filter(Boolean);
-                  }
-
-                  // ★ Helper: autoCreateFlashcards (replica meggy-cache.js:187)
-                  function autoCreateFlashcards(questions) {
-                    return questions.map(q => {
-                      let back = '';
-                      if (q.type === 'mc' && q.options) {
-                        const letter = String.fromCharCode(65 + q.correct) + ') ';
-                        back = letter + (q.options[q.correct] || '');
-                      } else {
-                        back = (q.correct === 1 || q.correct === '1') ? 'Certo' : 'Errado';
-                      }
-                      if (q.explanation) back += '\n\n💡 ' + q.explanation;
-                      if (q.legalText) back += '\n\n⚖️ ' + q.legalText;
-                      if (q.fundamentacao) back += '\n\n📚 ' + q.fundamentacao;
-                      return { f: q.statement, b: back, subject: lessonName, type: q.type };
-                    });
-                  }
-
-                  // ★ Helper: save to material folder (replica meggy-summaries.js saveSummaryToLessonFolder)
-                  async function saveToFolder(materialType, fileName, content) {
-                    try {
-                      await fetch('/api/materials/save-in-folder', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ lessonPath, materialType, fileName, content })
-                      });
-                    } catch (e) { console.warn('[Shell] saveToFolder:', e); }
-                  }
-
-                  // ★ Safe filename fragment
-                  function safeName(s) {
-                    return String(s || '').replace(/[/\\?%*:|"<>]/g, '_').trim().slice(0, 120) || 'aula';
-                  }
-
-                  // ─── PARALLEL GENERATION (Promise.allSettled) ───
-                  // ★ v2.15.6-resumo: guardar o ÚLTIMO erro da IA — antes ele
-                  //   era engolido e o usuário só via o texto genérico ("não
-                  //   foi possível gerar"), sem saber se era limite de
-                  //   mensagens, sessão expirada ou erro do provedor.
-                  let _isaLastErr = null;
-                  const _isaFailReason = (err) => {
-                    const m = String((err && err.message) || '');
-                    if (/429/.test(m)) return ' Motivo: a Meggy atingiu o limite de 30 mensagens por hora — aguarde um pouco e tente de novo.';
-                    if (/401/.test(m)) return ' Motivo: sua sessão expirou — saia e entre de novo, depois tente novamente.';
-                    const hm = m.match(/AI HTTP (\d+)/);
-                    if (hm) return ' Motivo: a IA devolveu HTTP ' + hm[1] + '.';
-                    if (m) return ' Motivo: ' + m.slice(0, 120);
-                    return '';
-                  };
-                  const tasks = [];
-                  // Task 1: resumo (3-level auto-retry)
-                  tasks.push((async () => {
-                    for (let i = 0; i < RESUMO_PROMPTS.length; i++) {
-                      try {
-                        setLoading(i === 0 ? '✨ Gerando resumo profundo…' : i === 1 ? '✨ Tentando resumo médio…' : '✨ Tentando resumo simples…');
-                        const r = await callIsa(RESUMO_PROMPTS[i], 'resumo');
-                        if (r && r.length > 200) return { field: 'summary', value: r };
-                      } catch (e) { _isaLastErr = e; /* try next level */ }
-                    }
-                    return { field: 'summary', value: null };
-                  })());
-                  // Task 2: pílulas
-                  tasks.push((async () => {
-                    try { setLoading('💊 Gerando pílulas de revisão…'); return { field: 'mindmap', value: await callIsa(PILULAS_PROMPT, 'mindmap') }; }
-                    catch (e) { _isaLastErr = e; return { field: 'mindmap', value: null }; }
-                  })());
-                  // Task 3: questões (JSON)
-                  tasks.push((async () => {
-                    try { setLoading('❓ Gerando questões…'); const r = await callIsa(QUESTOES_PROMPT, 'questoes'); return { field: 'questions', value: parseQuestions(r), raw: r }; }
-                    catch (e) { _isaLastErr = e; return { field: 'questions', value: [] }; }
-                  })());
-
-                  const results = await Promise.allSettled(tasks);
-                  const gen = { summary: null, mindmap: null, questions: [], flashcards: [] };
-                  results.forEach(r => {
-                    if (r.status === 'fulfilled' && r.value) {
-                      gen[r.value.field] = r.value.value;
-                      if (r.value.field === 'questions' && r.value.value && r.value.value.length) {
-                        gen.flashcards = autoCreateFlashcards(r.value.value);
-                      }
-                    }
-                  });
-
-                  // ─── 4. Save no cache (aguardado) + pasta (background) ───
-                  // ★ v2.15.6-resumo: o POST do cache é AGUARDADO — sem isso
-                  //   um clique concorrente (joiner da guarda de voo) ou o
-                  //   próximo clique não veria o resumo salvo e geraria tudo
-                  //   de novo. O save na pasta continua em background (o
-                  //   Drive é lento e não bloqueia o render). A falha do
-                  //   save é mostrada (antes era silenciosa e o resumo
-                  //   sumia na próxima visita sem explicação).
-                  const user = (typeof GDIUser !== 'undefined' && GDIUser && GDIUser.state && GDIUser.state.user) || 'meggy';
-                  const safeLesson = safeName(lessonName);
-                  let _cacheSaveOk = true;
-                  try {
-                    const _saveResp = await fetch('/api/ai/cache', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        key: cacheKey,
-                        summary: gen.summary,
-                        questions: gen.questions.length ? gen.questions : null,
-                        mindmap: gen.mindmap,
-                        lessonName: lessonName
-                      })
-                    });
-                    if (!_saveResp.ok) _cacheSaveOk = false;
-                  } catch (e) { console.warn('[Shell] cache save:', e); _cacheSaveOk = false; }
-                  // Save to material folder (fire-and-forget, como antes)
-                  if (gen.summary) saveToFolder('resumo', user + '_' + safeLesson + '.md', gen.summary);
-                  if (gen.mindmap) saveToFolder('resumo', user + '_pilulas_' + safeLesson + '.md', gen.mindmap);
-                  if (gen.questions && gen.questions.length) saveToFolder('questoes', user + '_' + safeName(courseName || lessonName) + '.json', JSON.stringify(gen.questions, null, 2));
-
-                  // ─── 6. Render requested type ───
-                  const cached2 = { summary: gen.summary, questions: gen.questions.length ? gen.questions : null, mindmap: gen.mindmap, lessonName: lessonName };
-                  let toShow = gen[isaField];
-                  if (type === 'isa-flashcards') toShow = gen.flashcards.length ? gen.flashcards : null;
-                  if (isaField === 'questions' && (!toShow || !toShow.length)) toShow = null;
-                  if (!toShow) toShow = type === 'isa-flashcards'
-                    ? 'Não foi possível gerar flashcards. Tente novamente.' + _isaFailReason(_isaLastErr)
-                    : 'Não foi possível gerar este conteúdo. Tente novamente.' + _isaFailReason(_isaLastErr);
-
-                  if (type === 'isa-flashcards' && gen.flashcards.length) {
-                    // Flashcards usa render especial (flip deck)
-                    Shell._renderFlashcardDeck(bodyEl, { flashcards: gen.flashcards, lessonName: lessonName, questions: gen.questions });
-                  } else {
-                    Shell._renderISAResult(type, toShow, bodyEl, lessonName, false, cached2);
-                  }
-                  if (!_cacheSaveOk && (gen.summary || gen.mindmap || (gen.questions && gen.questions.length))) {
-                    const _w = document.createElement('div');
-                    _w.style.cssText = 'margin-top:12px;padding:10px 14px;background:rgba(255,193,7,.08);border:1px solid rgba(255,193,7,.3);border-radius:10px;color:#ffc107;font-size:12px;line-height:1.5;';
-                    _w.textContent = '⚠️ O conteúdo foi gerado, mas não foi possível salvar no cache — ao voltar nesta aula, a Meggy vai gerar de novo.';
-                    bodyEl.appendChild(_w);
-                  }
-                  // ★ v2.15.6-resumo: o resultado pode demorar 30-60s — o
-                  //   usuário pode ter rolado para outro lugar; traz o
-                  //   painel de volta para a vista ao renderizar.
-                  try { if (bodyEl && bodyEl.scrollIntoView) bodyEl.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) {}
-                } catch (e) {
-                  console.error('[Shell] showISA:', e);
-                  // ★ v2.15.6-resumo: "Tentar novamente" re-clica a aba ISA
-                  //   (antes recarregava o player INTEIRO — e a descrição
-                  //   auto-gerada não re-disparava, porque a sessão já
-                  //   estava marcada como tentada — então o retry não
-                  //   fazia nada de útil). O motivo do erro é mostrado.
-                  bodyEl.innerHTML = '<div style="padding:20px;color:#ff8b9f;text-align:center;">' +
-                    '<div style="font-size:36px;margin-bottom:12px;">⚠️</div>' +
-                    '<div style="font-weight:600;margin-bottom:8px;">Não foi possível gerar este conteúdo</div>' +
-                    '<div style="font-size:14px;line-height:1.5;color:#9aa4b8;margin-bottom:16px;">Verifique sua conexão e toque em "Tentar novamente".' + Shell._esc((e && e.message) ? (' Motivo: ' + String(e.message).slice(0, 120)) : '') + '</div>' +
-                    '<button id="gdi-isa-retry" class="meggy-header-btn" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-arrow-clockwise"></i> Tentar novamente</button>' +
-                  '</div>';
-                  const _retryBtn = bodyEl.querySelector('#gdi-isa-retry');
-                  if (_retryBtn) _retryBtn.onclick = () => { const _t = document.querySelector('.gdi-mat-tab[data-mat="' + type + '"]'); if (_t) _t.click(); };
-                }
-              })();
-              Shell._isaInflight[_isaCacheKey] = _myRun;
-              _myRun.catch(() => {}).finally(() => { if (Shell._isaInflight[_isaCacheKey] === _myRun) delete Shell._isaInflight[_isaCacheKey]; });
-            }
 
             if (materials.length > 0) showMaterial(0);
           } catch (e) {
