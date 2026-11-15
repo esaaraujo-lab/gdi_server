@@ -43,6 +43,7 @@ import com.bibigyn.app.util.LessonDescription
 import com.bibigyn.app.util.PlaylistManager
 import com.bibigyn.app.util.SessionManager
 import com.bibigyn.app.util.TvUtils
+import com.bibigyn.app.util.FocusAnimator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -158,6 +159,21 @@ class DetailActivity : AppCompatActivity() {
         binding.tabAulas.setOnClickListener { selectTab(Tab.LESSONS) }
         binding.tabQuestoes.setOnClickListener { selectTab(Tab.QUESTIONS) }
         binding.tabFlashcards.setOnClickListener { selectTab(Tab.FLASHCARDS) }
+        // Frente A (TV) — as abas, o play do hero, o "Salvar" e a
+        // lupa não tinham NENHUM feedback de foco (fundos estáticos,
+        // sem FocusAnimator): o D-pad chegava lá sem se ver onde
+        // estava. Escala 1.10× + elevação (attach) e anel via
+        // seletores com estado focado (abas e lupa:
+        // focus_ring_transparent; play: btn_play_circle). Só TV.
+        if (isTv) {
+            FocusAnimator.attach(binding.tabResumo, true)
+            FocusAnimator.attach(binding.tabAulas, true)
+            FocusAnimator.attach(binding.tabQuestoes, true)
+            FocusAnimator.attach(binding.tabFlashcards, true)
+            FocusAnimator.attach(binding.heroPlayFab, true)
+            FocusAnimator.attach(binding.heroFav, true)
+            FocusAnimator.attach(binding.headerSearch, true)
+        }
 
         // Busca dentro da aba Aulas (filtra as aulas pelo nome, local).
         binding.lessonSearch.addTextChangedListener(object : TextWatcher {
@@ -190,6 +206,12 @@ class DetailActivity : AppCompatActivity() {
                 binding.railContinue.findViewHolderForAdapterPosition(lastFocusedContinuePos)
                     ?.itemView?.requestFocus()
             }
+        } else if (TvUtils.isTv(this)) {
+            // Frente A (TV) — sem recents não há rail: o foco inicial
+            // é o CTA "Continuar assistindo" (o layout TV anuncia-o
+            // como "EM FOCO"), em vez de a tela abrir sem foco nenhum
+            // e o 1º D-pad cair na lupa sem anel visível.
+            binding.ctaContinue.post { binding.ctaContinue.requestFocus() }
         }
     }
 
@@ -258,7 +280,11 @@ class DetailActivity : AppCompatActivity() {
                 )
             )
         }
-        binding.railContinue.adapter = RailAdapter(railItems) { item ->
+        binding.railContinue.adapter = RailAdapter(
+            railItems,
+            nextFocusUpId = R.id.tabAulas,
+            nextFocusDownId = R.id.recycler
+        ) { item ->
             lastFocusedContinuePos = railItems.indexOf(item)
             val match = driveRecents.find { it.videoName == item.title } ?: return@RailAdapter
             continueWatching(match.folderPath, match.videoName, item.subtitle)
@@ -388,7 +414,9 @@ class DetailActivity : AppCompatActivity() {
                 if (isWide()) {
                     val adapter = com.bibigyn.app.ui.browse.FileAdapter(
                         onFolder = { file -> openFolder(file) },
-                        onFile = { file -> openFile(file) }
+                        onFile = { file -> openFile(file) },
+                        // Frente A (TV): UP da 1ª linha -> aba Aulas.
+                        firstRowNextFocusUpId = R.id.tabAulas
                     )
                     fileAdapter = adapter
                     adapter.setFolderPath(currentPath)
