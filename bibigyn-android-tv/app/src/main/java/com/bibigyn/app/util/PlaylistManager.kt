@@ -107,19 +107,21 @@ object PlaylistManager {
 
     /** Advance to the next video and return it (or null if at the end). */
     fun getNext(): FileItem? {
-        if (currentIndex < items.size - 1) {
-            currentIndex++
-            persist()
-        }
+        // Frente G: antes devolvia o item ATUAL no fim da lista
+        // (nunca null, contra o KDoc) — quem chamasse sem
+        // verificar hasNext() repetia o vídeo atual em loop.
+        if (currentIndex >= items.size - 1) return null
+        currentIndex++
+        persist()
         return getCurrent()
     }
 
     /** Go back to the previous video and return it (or null if at the start). */
     fun getPrev(): FileItem? {
-        if (currentIndex > 0) {
-            currentIndex--
-            persist()
-        }
+        // Frente G: simétrico ao getNext — null no início.
+        if (currentIndex <= 0) return null
+        currentIndex--
+        persist()
         return getCurrent()
     }
 
