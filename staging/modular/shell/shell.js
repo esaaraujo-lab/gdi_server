@@ -2086,7 +2086,21 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ message: prompt, messages: [], kind: kind })
                   });
-                  if (!r.ok) throw new Error('AI HTTP ' + r.status);
+                  if (!r.ok) {
+                    // ★ v2.15.14-Q2a-detalhe-502: o worker JÁ devolve o erro
+                    //   agregado em errorDetail (v2.15.3), mas o callIsa
+                    //   descartava-o — o utilizador só via "HTTP 502" e a
+                    //   triagem ao vivo ficava sem saber QUE backends
+                    //   falharam (Passo 18, ciclo 2). Anexa um resumo ao
+                    //   erro (o cliente já recebe o errorDetail completo
+                    //   no corpo da resposta — isto não expõe nada novo).
+                    let _det = '';
+                    try { const _dj = await r.json(); _det = String((_dj && _dj.errorDetail) || ''); } catch (_) { _det = ''; }
+                    const _e = new Error('AI HTTP ' + r.status);
+                    if (_det) _e.detail = _det.slice(0, 400);
+                    throw _e;
+                  }
+
                   const d = await r.json();
                   return d.response || d.markdown || d.summary || '';
                 }
@@ -2215,32 +2229,80 @@
                   try {
                     const text = _stripFences(_stripThink(resp));
                     let arr = _unwrap(_tryParse(text));
-                    if (arr) return _normalize(arr);
+                    if (arr) { const _n0 = _normalize(arr); if (_n0.length) return _n0; } // ★ v2.15.14-Q1d1-normalize-vazio
+                  // ★ v2.15.14-Q1a-recupera-objetos: a recuperação objeto a
+                  //   objeto era inline e SÓ corria dentro de 'if (seg)' —
+                  //   quando a resposta vinha CORTADA sem o ']' de fecho,
+                  //   _balancedArray devolvia null e a recuperação nunca
+                  //   corria (Passo 18, ciclo 1). Extraída p/ reutilizar
+                  //   na recuperação da cauda truncada (Q1a-cauda).
+                  //   (BS via fromCharCode p/ não embutir escapes aqui.)
+                  function _recoverObjects(src) {
+                    const objs = [];
+                    let depth = 0, start = -1, inStr = false, esc = false;
+                    const BS = String.fromCharCode(92);
+                    for (let i = 0; i < src.length; i++) {
+                      const c = src[i];
+                      if (inStr) { if (esc) esc = false; else if (c === BS) esc = true; else if (c === '"') inStr = false; continue; }
+                      if (c === '"') { inStr = true; continue; }
+                      if (c === '{') { if (depth === 0) start = i; depth++; }
+                      else if (c === '}') { depth--; if (depth === 0 && start >= 0) { objs.push(src.slice(start, i + 1)); start = -1; } }
+                    }
+                    const recovered = [];
+                    for (const o of objs) {
+                      const one = _tryParse(_repair(o));
+                      if (one) recovered.push(one);
+                    }
+                    return recovered;
+                  }
                     const seg = _balancedArray(text);
                     if (seg) {
                       arr = _unwrap(_tryParse(seg));
-                      if (arr) return _normalize(arr);
+                      if (arr) { const _n1 = _normalize(arr); if (_n1.length) return _n1; } // ★ v2.15.14-Q1d2-normalize-vazio
                       arr = _unwrap(_tryParse(_repair(seg)));
-                      if (arr) return _normalize(arr);
+                      if (arr) { const _n2 = _normalize(arr); if (_n2.length) return _n2; }
                       // último recurso: recupera objeto a objeto dentro do segmento
-                      const objs = [];
-                      let depth = 0, start = -1, inStr = false, esc = false;
-                      for (let i = 0; i < seg.length; i++) {
-                        const c = seg[i];
-                        if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue; }
-                        if (c === '"') { inStr = true; continue; }
-                        if (c === '{') { if (depth === 0) start = i; depth++; }
-                        else if (c === '}') { depth--; if (depth === 0 && start >= 0) { objs.push(seg.slice(start, i + 1)); start = -1; } }
-                      }
-                      const recovered = [];
-                      for (const o of objs) {
-                        const one = _tryParse(_repair(o));
-                        if (one) recovered.push(one);
-                      }
-                      if (recovered.length) return _normalize(recovered);
+                      const recovered = _recoverObjects(seg); // ★ v2.15.14-Q1a2-call
+                      if (recovered.length) { const _n3 = _normalize(recovered); if (_n3.length) return _n3; } // ★ v2.15.14-Q1d3-normalize-vazio
+                    }
+                    // ★ v2.15.14-Q1a-cauda-truncada: se chegámos aqui, nem o
+                    //   segmento balanceado nem a sua recuperação deram
+                    //   questões — a resposta pode ter sido CORTADA a meio
+                    //   (max_tokens) sem o ']' de fecho, caso em que
+                    //   _balancedArray devolve null e a recuperação nunca
+                    //   corria (Passo 18, ciclo 1: "fora do formato JSON"
+                    //   3x igual). Recupera as questões COMPLETAS antes do
+                    //   corte a partir do 1o '[' (a última, incompleta, é
+                    //   descartada — espelha o reparo de extractAiJsonArray
+                    //   do worker, que fecha os abertos e descarta o último
+                    //   item incompleto). Sem '[' não há o que recuperar.
+                    if (text.indexOf('[') >= 0) {
+                      const _rec2 = _recoverObjects(text.slice(text.indexOf('[')));
+                      if (_rec2.length) { const _n4 = _normalize(_rec2); if (_n4.length) return _n4; } // ★ v2.15.14-Q1d4-normalize-vazio
                     }
                     return [];
                   } catch (_) { return []; }
+                }
+
+                // ★ v2.15.14-Q1b-erro-truncamento: distingue "resposta
+                //   cortada a meio do JSON" de "JSON inválido" — o parse
+                //   falhou mas os colchetes/chaves ficam por fechar (ou
+                //   uma string fica sem fechar) a partir do 1o '['.
+                //   Sem '[' não é truncamento (é prosa/recusa).
+                function _truncatedJson(raw) {
+                  if (!raw || typeof raw !== 'string') return false;
+                  const i = raw.indexOf('[');
+                  if (i < 0) return false;
+                  let depth = 0, inStr = false, esc = false;
+                  const BS = String.fromCharCode(92);
+                  for (let j = i; j < raw.length; j++) {
+                    const c = raw[j];
+                    if (inStr) { if (esc) esc = false; else if (c === BS) esc = true; else if (c === '"') inStr = false; }
+                    else if (c === '"') inStr = true;
+                    else if (c === '[' || c === '{') depth++;
+                    else if (c === ']' || c === '}') depth--;
+                  }
+                  return depth > 0 || inStr;
                 }
 
                 // ★ Helper: autoCreateFlashcards (replica meggy-cache.js:187)
@@ -2287,7 +2349,10 @@
                   if (/429/.test(m)) return ' Motivo: a Meggy atingiu o limite de 30 mensagens por hora — aguarde um pouco e tente de novo.';
                   if (/401/.test(m)) return ' Motivo: sua sessão expirou — saia e entre de novo, depois tente novamente.';
                   const hm = m.match(/AI HTTP (\d+)/);
-                  if (hm) return ' Motivo: a IA devolveu HTTP ' + hm[1] + '.';
+                  if (hm) { // ★ v2.15.14-Q2b-detalhe-502: mostra o resumo do erro agregado (ver Q2a)
+                    const _dt = String((err && err.detail) || '').slice(0, 240);
+                    return ' Motivo: a IA devolveu HTTP ' + hm[1] + '.' + (_dt ? ' Detalhe: ' + _dt : '');
+                  }
                   if (m) return ' Motivo: ' + m.slice(0, 120);
                   return '';
                 };
@@ -2370,7 +2435,9 @@
                       //   texto COM "[" que falha o parse é "JSON inválido".
                       _isaLastErr = ((Shell._isIsaRefusal && Shell._isIsaRefusal(_lastRaw)) || (typeof _lastRaw === 'string' && _lastRaw.trim() && _lastRaw.indexOf('[') === -1))
                         ? new Error('a IA recusou gerar as questões (sem conteúdo da aula)')
-                        : new Error('a IA devolveu questões fora do formato JSON esperado');
+                        : (_truncatedJson(_lastRaw) // ★ v2.15.14-Q1c-erro-truncamento
+                          ? new Error('a IA devolveu questões incompletas (resposta cortada a meio do JSON)')
+                          : new Error('a IA devolveu questões fora do formato JSON esperado'));
                     } catch (e) {
                       _isaLastErr = e;
                       if (/429|401/.test(String((e && e.message) || ''))) break;
