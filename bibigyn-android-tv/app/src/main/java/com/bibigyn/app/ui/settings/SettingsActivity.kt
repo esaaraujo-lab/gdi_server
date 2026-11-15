@@ -18,6 +18,7 @@ import com.bibigyn.app.ui.home.HomeActivity
 import com.bibigyn.app.ui.login.LoginActivity
 import com.bibigyn.app.ui.mylist.MyListActivity
 import com.bibigyn.app.ui.search.SearchActivity
+import com.bibigyn.app.util.FocusAnimator
 import com.bibigyn.app.util.PlaylistManager
 import com.bibigyn.app.util.SessionManager
 import com.bibigyn.app.util.StudyReminder
@@ -193,6 +194,20 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         binding.btnLogout.setOnClickListener { logout() }
+
+        // Frente G (TV) — interruptores, botões +/−, "Verificar
+        // atualizações" e "Sair" são focáveis mas sem feedback
+        // de foco (fundos estáticos): o D-pad chegava sem se ver
+        // onde estava (mesmo padrão da Frente A no detalhe).
+        if (TvUtils.isTv(this)) {
+            listOf(binding.switchNotifications, binding.switchAutoplay,
+                binding.switchWifiOnly, binding.switchSubtitles,
+                binding.btnSpeedDown, binding.btnSpeedUp,
+                binding.btnSleepDown, binding.btnSleepUp,
+                binding.btnQualityDown, binding.btnQualityUp,
+                binding.btnCheckUpdate, binding.btnLogout)
+                .forEach { FocusAnimator.attach(it, true) }
+        }
 
         binding.aboutText.text = buildString {
             append("BiBi Fit — Android TV\n")
