@@ -231,14 +231,20 @@ object CoverLibrary {
     // ─────────────────────────── resolução ───────────────────────────
 
     /**
-     * Resolve a URL da imagem da biblioteca para os nomes dados, do
-     * mais específico ao mais genérico (ex.: nome da aula, pasta,
-     * curso/drive). Ganha a keyword mais longa, considerando TODOS
-     * os candidatos juntos; empate → primeira entrada do manifesto.
-     * Com o manifesto carregado e sem match, devolve a imagem
-     * 'geral' (fallback explícito da camada 3). Null = sem manifesto
-     * carregado, sem URL configurada, ou manifesto sem 'geral' — o
-     * chamador cai para a camada 4 em silêncio.
+     * Resolve a URL da imagem da biblioteca para os nomes dados.
+     * Candidatos do MAIS ESPECÍFICO ao mais genérico (2.1.12): primeiro
+     * o nome do item; depois cada caminho, segmento a segmento, do mais
+     * profundo ao mais raso (a pasta imediata é o contexto mais
+     * específico depois do nome). Dentro de UM candidato vence a keyword
+     * mais longa; o PRIMEIRO candidato com match decide (antes, a
+     * keyword mais longa entre TODOS os nomes vencia — o caminho-pai
+     * "treino em casa" (14) roubava o match da pasta "tabata" (6), e a
+     * pasta "Cardio" mostrava a foto de treino funcional em vez da de
+     * cardio). Empate dentro do candidato → primeira entrada do
+     * manifesto. Com o manifesto carregado e sem match, devolve a
+     * imagem 'geral' (fallback explícito da camada 3). Null = sem
+     * manifesto carregado, sem URL configurada, ou manifesto sem
+     * 'geral' — o chamador cai para a camada 4 em silêncio.
      */
     fun resolve(context: Context, vararg names: String?): String? =
         resolveInternal(context, names, allowGeneral = true)
@@ -263,15 +269,28 @@ object CoverLibrary {
         ensureLoadedFromDisk(context)
         val images = cachedImages ?: return null
         if (images.isEmpty()) return null
-        var bestUrl: String? = null
-        var bestLen = -1
-        var bestEntry = Int.MAX_VALUE
-        names.forEach { rawName ->
-            val name = normalize(rawName ?: return@forEach)
-            if (name.isEmpty()) return@forEach
+        // 2.1.12 — candidatos do mais específico ao mais genérico: o
+        // nome primeiro; cada caminho vira os seus segmentos do mais
+        // profundo ao mais raso (ver o KDoc de [resolve]).
+        val candidates = ArrayList<String>()
+        for (rawName in names) {
+            val raw = rawName ?: continue
+            for (seg in raw.split('/').asReversed()) {
+                val n = normalize(seg)
+                if (n.isNotEmpty()) candidates.add(n)
+            }
+        }
+        if (candidates.isEmpty()) {
+            if (!allowGeneral) return null
+            return images.firstOrNull { it.id == "geral" }?.url
+        }
+        for (candidate in candidates) {
+            var bestUrl: String? = null
+            var bestLen = -1
+            var bestEntry = Int.MAX_VALUE
             images.forEachIndexed { entryIdx, image ->
                 for (keyword in image.keywords) {
-                    if (keyword.isEmpty() || !name.contains(keyword)) continue
+                    if (keyword.isEmpty() || !candidate.contains(keyword)) continue
                     val len = keyword.length
                     if (len > bestLen ||
                         (len == bestLen && entryIdx < bestEntry)
@@ -282,8 +301,8 @@ object CoverLibrary {
                     }
                 }
             }
+            if (bestUrl != null) return bestUrl
         }
-        if (bestUrl != null) return bestUrl
         // Fallback explícito da camada 3 (regra oficial §3): manifesto
         // carregado e nenhum match → imagem 'geral' (última do
         // manifesto, id "geral"). Sem entrada 'geral', null (camada 4).
