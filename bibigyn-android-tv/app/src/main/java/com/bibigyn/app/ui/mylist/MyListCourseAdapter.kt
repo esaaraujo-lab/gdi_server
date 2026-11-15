@@ -16,6 +16,7 @@ import com.bibigyn.app.databinding.ItemMylistCardBinding
 import com.bibigyn.app.util.CardGradient
 import com.bibigyn.app.util.CoverLibrary
 import com.bibigyn.app.util.FocusAnimator
+import com.bibigyn.app.util.TapFeedback
 import com.bibigyn.app.util.SessionManager
 import com.bibigyn.app.util.TvUtils
 
@@ -41,6 +42,7 @@ class MyListCourseAdapter(
                 onCourse(getItem(pos))
             }
             FocusAnimator.attach(binding.root, TvUtils.isTv(binding.root.context))
+            TapFeedback.attachPress(binding.root, TvUtils.isTv(binding.root.context))
         }
     }
 
