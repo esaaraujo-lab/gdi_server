@@ -12,6 +12,7 @@ import com.bibigyn.app.data.DriveItem
 import com.bibigyn.app.util.setWordEllipsized
 import com.bibigyn.app.databinding.ItemDriveCardBinding
 import com.bibigyn.app.util.FocusAnimator
+import com.bibigyn.app.util.TapFeedback
 import com.bibigyn.app.util.CoverLibrary
 import com.bibigyn.app.util.SessionManager
 import com.bibigyn.app.util.TvUtils
@@ -58,6 +59,7 @@ class DriveRailAdapter(
                 if (pos != RecyclerView.NO_POSITION) onClick(drives[pos])
             }
             FocusAnimator.attachCard(binding.driveCardRoot, TvUtils.isTv(binding.root.context))
+            TapFeedback.attachPress(binding.driveCardRoot, TvUtils.isTv(binding.root.context))
             // Frente A (TV): nextFocus explícito (ver params).
             if (nextFocusUpId != View.NO_ID) itemView.nextFocusUpId = nextFocusUpId
             if (nextFocusDownId != View.NO_ID) itemView.nextFocusDownId = nextFocusDownId
