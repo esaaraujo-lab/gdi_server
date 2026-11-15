@@ -34,7 +34,14 @@ class DriveRailAdapter(
      * [setFeaturedCovers] quando a resposta chega.
      */
     private var featuredCovers: Map<String, String> = emptyMap(),
-    private val onClick: (DriveItem) -> Unit
+    private val onClick: (DriveItem) -> Unit,
+    /**
+     * Frente A (TV) — roteamento D-pad explícito dos tiles de drive
+     * (mesmo motivo do RailAdapter: o rail de cima pode estar fora
+     * do viewport do ScrollView quando o foco está no de baixo).
+     */
+    private val nextFocusUpId: Int = View.NO_ID,
+    private val nextFocusDownId: Int = View.NO_ID
 ) : RecyclerView.Adapter<DriveRailAdapter.VH>() {
 
     /** Atualiza as capas do admin e redesenha os cards. */
@@ -50,6 +57,9 @@ class DriveRailAdapter(
                 if (pos != RecyclerView.NO_POSITION) onClick(drives[pos])
             }
             FocusAnimator.attachCard(binding.driveCardRoot, TvUtils.isTv(binding.root.context))
+            // Frente A (TV): nextFocus explícito (ver params).
+            if (nextFocusUpId != View.NO_ID) itemView.nextFocusUpId = nextFocusUpId
+            if (nextFocusDownId != View.NO_ID) itemView.nextFocusDownId = nextFocusDownId
         }
     }
 
