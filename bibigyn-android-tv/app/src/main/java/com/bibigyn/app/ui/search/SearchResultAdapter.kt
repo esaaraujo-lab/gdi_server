@@ -11,7 +11,6 @@ import com.bibigyn.app.R
 import com.bibigyn.app.data.DriveItem
 import com.bibigyn.app.data.FileItem
 import com.bibigyn.app.data.colorFromString
-import com.bibigyn.app.data.monogramFor
 import com.bibigyn.app.databinding.ItemSearchResultBinding
 import com.bibigyn.app.util.CardGradient
 import com.bibigyn.app.util.CoverLibrary
@@ -78,23 +77,25 @@ class SearchResultAdapter(
                     resultMeta.text = if (d.isConcurso) "Concurso · ${d.tagline}" else "Curso · ${d.tagline}"
                     resultBg.background = CardGradient.drawable(res, colorFromString(d.name))
                     // Camada 3 — biblioteca por tipo (nome do
-                    // drive → tagline); sem match, o monograma.
-                    val libraryUrl = CoverLibrary.resolve(ctx, d.name, d.tagline)
+                    // drive → tagline), ESTRITA (2.1.12, sem 'geral');
+                    // sem match, a capa gerada do drive (nunca monograma).
+                    val coverRes = DriveItem.coverResForDrive(d.index)
+                    val libraryUrl = CoverLibrary.resolveStrict(ctx, d.name, d.tagline)
                     if (!libraryUrl.isNullOrBlank()) {
                         resultThumb.visibility = View.VISIBLE
                         resultMonogram.visibility = View.GONE
                         resultThumb.load(libraryUrl) {
-                            error(R.drawable.card_gradient_pink)
+                            error(coverRes ?: R.drawable.card_gradient_pink)
                             listener(onError = { _, _ ->
-                                resultThumb.visibility = View.GONE
-                                resultMonogram.visibility = View.VISIBLE
-                                resultMonogram.text = monogramFor(d.name)
+                                resultThumb.visibility = View.VISIBLE
+                                resultMonogram.visibility = View.GONE
+                                resultThumb.setImageResource(coverRes ?: R.drawable.card_gradient_pink)
                             })
                         }
                     } else {
-                        resultThumb.visibility = View.GONE
-                        resultMonogram.visibility = View.VISIBLE
-                        resultMonogram.text = monogramFor(d.name)
+                        resultThumb.visibility = View.VISIBLE
+                        resultMonogram.visibility = View.GONE
+                        resultThumb.setImageResource(coverRes ?: R.drawable.card_gradient_pink)
                     }
                     resultProgressRow.visibility = View.GONE
                     resultPill.visibility = View.GONE
@@ -114,25 +115,28 @@ class SearchResultAdapter(
                     }
                     resultBg.background = CardGradient.drawable(res, colorFromString(f.name))
                     // Camada 3 — biblioteca por tipo (nome do
-                    // arquivo → pasta); sem thumb (ou se ela falhar),
-                    // a imagem da biblioteca; sem match, o monograma.
-                    val showLibraryOrMonogram = {
-                        val libraryUrl = CoverLibrary.resolve(ctx, f.name, f.folderPath)
+                    // arquivo → pasta), ESTRITA (2.1.12, sem 'geral');
+                    // sem thumb (ou se ela falhar), a imagem da
+                    // biblioteca; sem match, a capa gerada do drive
+                    // (nunca monograma).
+                    val coverRes = f.folderPath?.let { DriveItem.coverResForPath(it) }
+                    val showLibraryOrCover = {
+                        val libraryUrl = CoverLibrary.resolveStrict(ctx, f.name, f.folderPath)
                         if (!libraryUrl.isNullOrBlank()) {
                             resultThumb.visibility = View.VISIBLE
                             resultMonogram.visibility = View.GONE
                             resultThumb.load(libraryUrl) {
-                                error(R.drawable.card_gradient_pink)
+                                error(coverRes ?: R.drawable.card_gradient_pink)
                                 listener(onError = { _, _ ->
-                                    resultThumb.visibility = View.GONE
-                                    resultMonogram.visibility = View.VISIBLE
-                                    resultMonogram.text = monogramFor(f.name)
+                                    resultThumb.visibility = View.VISIBLE
+                                    resultMonogram.visibility = View.GONE
+                                    resultThumb.setImageResource(coverRes ?: R.drawable.card_gradient_pink)
                                 })
                             }
                         } else {
-                            resultThumb.visibility = View.GONE
-                            resultMonogram.visibility = View.VISIBLE
-                            resultMonogram.text = monogramFor(f.name)
+                            resultThumb.visibility = View.VISIBLE
+                            resultMonogram.visibility = View.GONE
+                            resultThumb.setImageResource(coverRes ?: R.drawable.card_gradient_pink)
                         }
                     }
                     val thumb = f.thumbnailLink
@@ -141,7 +145,7 @@ class SearchResultAdapter(
                         resultMonogram.visibility = View.GONE
                         resultThumb.load(thumb) {
                             error(R.drawable.card_gradient_pink)
-                            listener(onError = { _, _ -> showLibraryOrMonogram() })
+                            listener(onError = { _, _ -> showLibraryOrCover() })
                         }
                     } else {
                         showLibraryOrMonogram()
