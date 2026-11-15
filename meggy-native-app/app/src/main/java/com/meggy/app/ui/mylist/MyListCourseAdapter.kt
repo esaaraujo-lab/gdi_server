@@ -8,11 +8,13 @@ import android.widget.Toast
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import coil.load
 import com.meggy.app.data.colorFromString
-import com.meggy.app.data.monogramFor
 import com.meggy.app.databinding.ItemMylistCardBinding
 import com.meggy.app.util.CardGradient
 import com.meggy.app.util.FocusAnimator
+import com.meggy.app.util.LibraryCovers
+import com.meggy.app.util.ThumbArt
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.TvUtils
 
@@ -56,9 +58,27 @@ class MyListCourseAdapter(
             mylistMeta.text = "Curso salvo"
             mylistTitle.text = course.name
             mylistBg.background = CardGradient.drawable(res, colorFromString(course.name))
-            mylistThumb.visibility = View.GONE
-            mylistMonogram.visibility = View.VISIBLE
-            mylistMonogram.text = monogramFor(course.name)
+            // 2.7.13 camada (3) ESTRITA: imagem da biblioteca pelo
+            // nome/caminho do curso; sem match, a capa gerada do
+            // drive (ThumbArt) — nunca o livro 'geral' nem monograma.
+            val coverRes = ThumbArt.coverResForPath(course.drivePath)
+            val libraryUrl = LibraryCovers.resolveStrict(ctx, course.name, course.drivePath)
+            if (libraryUrl != null) {
+                mylistThumb.visibility = View.VISIBLE
+                mylistMonogram.visibility = View.GONE
+                mylistThumb.load(libraryUrl) {
+                    error(coverRes)
+                    listener(onError = { _, _ ->
+                        mylistThumb.visibility = View.VISIBLE
+                        mylistMonogram.visibility = View.GONE
+                        mylistThumb.setImageResource(coverRes)
+                    })
+                }
+            } else {
+                mylistThumb.visibility = View.VISIBLE
+                mylistMonogram.visibility = View.GONE
+                mylistThumb.setImageResource(coverRes)
+            }
             // Sem progresso por curso (não há agregado local); o
             // progresso vive por aula dentro do detalhe.
             mylistProgressRow.visibility = View.GONE
