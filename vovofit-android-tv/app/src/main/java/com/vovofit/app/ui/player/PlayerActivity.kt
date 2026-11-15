@@ -117,11 +117,14 @@ import kotlinx.coroutines.withContext
  * escondidos ou com o foco no vídeo; com os controles visíveis e o
  * foco num botão, as setas movem o foco — navegação padrão).
  *
- * DESCANSO (🌙, v1.3.0 + pill 23:50): overlay preto SÓ sobre a
- * superfície de vídeo (a barra com a pill ativa continua visível e
- * alcançável); o áudio e o progresso CONTINUAM, o player NÃO pausa.
- * Tocar de novo, qualquer interação com os controles ou tocar no
- * overlay restaura o vídeo. Na TV a pill é focável pelo D-pad.
+ * DESCANSO (🌙, v1.3.0 + pill 23:50; Frente D: TELA CHEIA + persiste
+ * na troca de aula): overlay preto sobre a TELA TODA (último filho da
+ * raiz, acima das barras, da info e da bottom nav); o áudio e o
+ * progresso CONTINUAM, o player NÃO pausa, e o modo SOBREVIVE à troca
+ * de aula (auto-advance no fim do vídeo e botões Anterior/Próxima não
+ * saem do descanso). Saídas: toque no overlay, BACK, D-pad ou qualquer
+ * botão de controle (play/pausa, velocidade, reiniciar, favorito).
+ * Na TV o foco vai para o overlay ao entrar no descanso.
  *
  * LEGENDA: sem botão CC na barra (removido v1.0.6, Elton 11:16)
  * — as legendas valem SÓ pelo toggle Legendas dos Ajustes.
@@ -325,8 +328,12 @@ class PlayerActivity : AppCompatActivity() {
         binding.btnRestInfo.setOnClickListener { toggleSleepMode() }
         binding.btnFullscreen.setOnClickListener { enterFullscreen() }
         binding.btnExitFullscreen.setOnClickListener { exitFullscreen() }
-        binding.btnPrev.setOnClickListener { exitRestIfActive(); playPrev() }
-        binding.btnNext.setOnClickListener { exitRestIfActive(); playNext() }
+        // Frente D — Anterior/Próxima NÃO saem do descanso: a troca de
+        // aula mantém o overlay de tela cheia (o áudio continua e a
+        // próxima aula começa escura). Os outros botões continuam a
+        // sair do descanso primeiro (exitRestIfActive).
+        binding.btnPrev.setOnClickListener { playPrev() }
+        binding.btnNext.setOnClickListener { playNext() }
         binding.centerPlayPause.setOnClickListener { exitRestIfActive(); togglePlayPause() }
         binding.restartButton.setOnClickListener { exitRestIfActive(); restartVideo() }
         binding.sleepTimerButton.setOnClickListener { showSleepTimerDialog() }
@@ -572,7 +579,11 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun updateCenterPlayPause() {
         val p = player
-        val paused = p != null && !p.isPlaying
+        // Frente D: com o descanso ativo o botão central fica escondido
+        // (está por baixo do overlay de tela cheia; sem isto ele
+        // aparecia sobre o preto quando o player pausava — ex.: fim do
+        // timer de sono ou fim da playlist com autoplay desligado).
+        val paused = p != null && !p.isPlaying && !sleepMode
         binding.centerPlayPause.visibility = if (paused && controlsVisible) View.VISIBLE else View.GONE
         // v1.0.7 — "❚❚" e glifo de TEXTO (branco, sobre o disco escuro);
         // o emoji "⏸" renderizava como quadrado LARANJA na TV (foto 11:48).
@@ -751,13 +762,15 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun enterSleepMode() {
         sleepMode = true
-        // v2.7.6: o overlay cobre SÓ a superfície de vídeo (está dentro
-        // de player_container, ABAIXO da barra na ordem z) — a barra com
-        // a pill Descanso ativa continua visível e alcançável.
+        // Frente D: o overlay é o ÚLTIMO filho da raiz (tela cheia,
+        // elevation 16dp) — cobre vídeo, barras, info e bottom nav.
+        // A pill fica por baixo dele (não é mais saída); a saída por
+        // toque é o próprio overlay. Na TV o foco vai para o overlay.
         binding.sleepOverlay.visibility = View.VISIBLE
+        binding.sleepOverlay.requestFocus()
         binding.btnRestBar.text = "🌙 Descanso ●"
         binding.btnRestInfo.text = "🌙 Descanso ●"
-        Snackbar.make(binding.root, "🌙 Modo descanso — o áudio continua; toque na tela ou na pill para sair", Snackbar.LENGTH_SHORT).show()
+        Snackbar.make(binding.root, "🌙 Modo descanso — o áudio continua; toque na tela para sair", Snackbar.LENGTH_SHORT).show()
     }
 
     private fun exitSleepMode() {
@@ -1158,6 +1171,12 @@ class PlayerActivity : AppCompatActivity() {
                         speedIndex = speeds.indexOfFirst { it == defSpeed }.coerceAtLeast(1)
                         exo.playbackParameters = PlaybackParameters(speeds[speedIndex])
                         updateSpeedLabels()
+                        // Frente D — persistência do descanso na troca de
+                        // aula: o overlay (filho da raiz) sobrevive à
+                        // transição por si só; reafirma-se aqui para o
+                        // invariante ficar explícito (o auto-advance e o
+                        // playNext/playPrev NÃO chamam exitSleepMode).
+                        if (sleepMode) binding.sleepOverlay.visibility = View.VISIBLE
                         ensureSubtitles()
                     }
                 }
