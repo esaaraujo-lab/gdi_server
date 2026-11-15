@@ -5,8 +5,11 @@ import android.graphics.Rect
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
+import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
+import android.widget.TextView
 import android.view.animation.AlphaAnimation
 import android.view.animation.AnimationSet
 import android.view.animation.DecelerateInterpolator
@@ -38,6 +41,7 @@ import com.meggy.app.util.Format
 import com.meggy.app.util.ThumbArt
 import com.meggy.app.util.LibraryCovers
 import com.meggy.app.util.TvUtils
+import com.meggy.app.util.TvAutoFit
 import com.meggy.app.util.FocusAnimator
 import com.meggy.app.util.setWordEllipsized
 import com.meggy.app.util.UpdateChecker
@@ -48,6 +52,9 @@ import kotlinx.coroutines.withContext
 class HomeActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityHomeBinding
+    // Ronda 7 Frente B — ajuste medido da home da TV (TvAutoFit).
+    // Nulo no celular (a home do celular nao usa nada disto).
+    private var tvAutoFit: TvAutoFit.Fit? = null
     private lateinit var api: ApiService
     private var heroRotator: HeroRotator? = null
     // Onda 2 (a) — capa do admin por drivePath (GET
@@ -127,10 +134,14 @@ class HomeActivity : AppCompatActivity() {
             }
         }
 
+        // Ronda 7 Frente B — medir o viewport ANTES de montar os
+        // rails (o gutter do rail depende da escala). So TV.
+        if (TvUtils.isTv(this)) tvAutoFit = TvAutoFit.forContext(this)
         setupHero()
         setupContinueRail()
         setupDrivesRail()
         setupTvFocusChains()
+        applyTvAutoFit()
         fetchFeaturedCovers()
         // v2.7.11 camada (3) — busca o manifesto da biblioteca em
         // 2º plano; quando chegar, o listener re-aplica as capas.
@@ -368,7 +379,7 @@ class HomeActivity : AppCompatActivity() {
         binding.railContinue.visibility = View.VISIBLE
         binding.railContinue.layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
-        binding.railContinue.addItemDecoration(RailGutterDecoration(8))
+        binding.railContinue.addItemDecoration(RailGutterDecoration(tvAutoFit?.gutterDp(200f) ?: 8))
 
         // ★ v2.5.0: Show the COURSE NAME (not the folder path) as subtitle.
         // extractCourseName() returns a human-friendly label like
@@ -746,10 +757,81 @@ class HomeActivity : AppCompatActivity() {
             if (continueVisible) R.id.railContinue else R.id.railDrives
     }
 
+    /**
+     * Ronda 7 Frente B — auto-ajuste da home da TV (TvAutoFit).
+     *
+     * Tudo o que aqui se toca e GEOMETRIA DA HOME NA TV: margens de overscan
+     * (laterais 56dp, topo/fundo >=48dp), altura do hero, textos do hero /
+     * destaque / seccoes e thumb do destaque (16:9). O XML continua a ser a
+     * baseline da 32" (escala 1.0): a escala 1.0 devolve exactamente os
+     * valores do XML, por isso na 32" nada muda — excepto o topo/fundo, que
+     * passam de 40dp para 48dp (piso da skill; ver TvAutoFit.topMarginPx).
+     * O celular nao passa por aqui (tvAutoFit e nulo fora da TV).
+     *
+     * Passo 0 (Frente A): a medicao vai para o logcat (tag TvAutoFit) —
+     * densityDpi/density/widthPixels/fontScale + fonte da escala. Sem ela
+     * nao se sabe qual dos dois mecanismos actua nesta TV.
+     */
+    private fun applyTvAutoFit() {
+        val fit = tvAutoFit ?: return
+        Log.i(TvAutoFit.TAG, fit.describe())
+        // Overscan: laterais 56dp (piso 48dp), topo/fundo >=48dp.
+        binding.root.setPadding(
+            fit.sideMarginPx(), fit.topMarginPx(),
+            fit.sideMarginPx(), fit.bottomMarginPx()
+        )
+        // Topo: nome da app + "Sair" (+ logo, so na Meggy).
+        binding.topTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(22f))
+        binding.topSair.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
+        binding.topLogo.layoutParams = binding.topLogo.layoutParams.apply {
+            width = fit.layoutPx(56f)
+            height = fit.layoutPx(56f)
+        }
+        // Hero: altura = fraccao da altura do viewport (heroScale);
+        // texto com textScale; padding do bloco de texto com marginScale.
+        binding.heroCard.layoutParams =
+            binding.heroCard.layoutParams.apply { height = fit.heroPx(320f) }
+        (binding.heroTitle.parent as View).setPadding(
+            fit.marginPx(32f), fit.marginPx(26f),
+            fit.marginPx(32f), fit.marginPx(26f)
+        )
+        binding.heroBadge.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(12f))
+        binding.heroTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(30f))
+        binding.heroSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(14f))
+        binding.heroPlay.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(15f))
+        // Destaque: titulo da seccao (1o filho, sem id) + thumb 16:9.
+        (binding.featuredSection.getChildAt(0) as? TextView)?.setTextSize(
+            TypedValue.COMPLEX_UNIT_SP, fit.textSp(18f))
+        val thumbWidthPx = fit.layoutPx(320f)
+        val thumbBox = binding.featuredThumb.parent as View
+        thumbBox.layoutParams = thumbBox.layoutParams.apply {
+            width = thumbWidthPx
+            height = thumbWidthPx * 9 / 16
+        }
+        binding.featuredTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(22f))
+        binding.featuredSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
+        binding.featuredProgressText.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
+        binding.featuredTimeText.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
+        binding.featuredContinue.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(15f))
+        binding.featuredFallbackIcon.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(56f))
+        // Seccoes + rodape.
+        binding.labelContinue.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(18f))
+        binding.labelDrives.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(18f))
+        binding.footerVersion.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
+        // Espacamentos verticais com marginScale.
+        fit.applyTopMargin(binding.heroCard, fit.marginPx(26f))
+        fit.applyTopMargin(binding.featuredSection, fit.marginPx(26f))
+        fit.applyTopMargin(binding.labelContinue, fit.marginPx(26f))
+        fit.applyTopMargin(binding.labelDrives, fit.marginPx(26f))
+        fit.applyTopMargin(binding.footerVersion, fit.marginPx(26f))
+        fit.applyTopMargin(binding.railContinue, fit.marginPx(12f))
+        fit.applyTopMargin(binding.railDrives, fit.marginPx(12f))
+    }
+
     private fun setupDrivesRail() {
         binding.railDrives.layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
-        binding.railDrives.addItemDecoration(RailGutterDecoration(8))
+        binding.railDrives.addItemDecoration(RailGutterDecoration(tvAutoFit?.gutterDp(150f) ?: 8))
         // Frente A (TV) — UP do tile de drive volta ao rail de cima
         // ("Continue assistindo", destaque ou hero — o que existir).
         val drivesUpId = when {
