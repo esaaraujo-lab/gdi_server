@@ -231,12 +231,11 @@ class LessonGridAdapter(
 
         with(holder.binding) {
             lessonCardBg.background = CardGradient.drawable(res, colorFromString(group.folder.name))
-            // v2.7.11 onda 2 + camada (3) — sem thumb do vídeo, a
-            // imagem da biblioteca pelo nome da aula/pasta; sem match,
-            // a imagem 'geral' (fallback da camada 3); sem manifesto,
-            // a capa gerada do drive (nunca monograma).
+            // v2.7.11 onda 2 + camada (3) ESTRITA (2.7.13, sem 'geral')
+            // — sem thumb do vídeo, a imagem da biblioteca pelo nome da
+            // aula/pasta; sem match, a capa gerada do drive (nunca monograma).
             val coverRes = ThumbArt.coverResForPath(group.folderPath)
-            val thumb = LibraryCovers.remoteCover(
+            val thumb = LibraryCovers.remoteCoverStrict(
                 video?.thumbnailLink, group.folder.name, group.folderPath
             )
             if (!thumb.isNullOrBlank()) {
