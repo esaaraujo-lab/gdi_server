@@ -270,7 +270,13 @@
       let _decPath = path;
       try { _decPath = decodeURIComponent(path); } catch (_) {}
       const _aView = new URLSearchParams(window.location.search || '');
-      if (_aView.get('a') === 'view' && /^\/\d+:\//.test(path) && /\.(mp4|webm|mov|mkv|m4v|mp3|m4a|ogg|wav|aac|pdf)$/i.test(_decPath)) {
+      // ★ v2.15.9 (B — P6b): ?a=view vale p/ QUALQUER caminho /N:/…,
+      //   não só ficheiros de mídia. Um deep link de PASTA
+      //   (/N:/…/Aula 09 - Crime Doloso e Culposo?a=view) caía no ramo
+      //   de pastas abaixo e não abria o player — agora vai p/
+      //   _openLessonPath, que resolve a pasta p/ o seu ficheiro de
+      //   mídia (ou abre a própria pasta, se não houver mídia).
+      if (_aView.get('a') === 'view' && /^\/\d+:\//.test(path)) {
         Shell.views._openLessonPath(path);
         return;
       }
@@ -699,7 +705,12 @@
             }).join('') + '</div></div>';
           }
           if (!courses.length && !lessons.length) {
-            html += '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">🔍</div><div class="meggy-placeholder-title">Nenhum resultado</div><div class="meggy-placeholder-desc">Nada encontrado para "' + esc(q) + '". Tente outro termo.</div></div>';
+            // ★ v2.15.9 (B — busca PF, Passo 13): a busca lê o D1 e o D1
+            //   só tem as aulas dos cursos já escaneados — uma pasta do
+            //   Drive ainda não indexada (ex.: ALFACON 2026 / PF) NÃO
+            //   aparece aqui mesmo existindo no Drive. Dizer isto no
+            //   vazio evita o "0 resultados" sem explicação.
+            html += '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">🔍</div><div class="meggy-placeholder-title">Nenhum resultado</div><div class="meggy-placeholder-desc">Nada encontrado para "' + esc(q) + '" nas aulas indexadas. A busca só cobre os cursos já escaneados — uma pasta do Drive ainda não indexada não aparece aqui. Tente outro termo ou procure a pasta em Explorar Drives.</div></div>';
           }
           box.innerHTML = html;
           box.querySelectorAll('[data-search-lesson]').forEach(card => { card.onclick = () => openLesson(card.dataset.searchLesson); });
@@ -1019,18 +1030,35 @@
           Shell.router.navigate('/drives');
           setTimeout(() => Shell.views._renderDrives(folderPath), 50);
         };
+        // ★ v2.15.9 (B — P6b): fallback do deep link de PASTA — abre a
+        //   PRÓPRIA pasta em /drives, nunca a mãe.
+        const openSelf = () => {
+          Shell.router.navigate('/drives');
+          setTimeout(() => Shell.views._renderDrives(_stripped + '/'), 50);
+        };
+        // ★ v2.15.9 (B — P6b): o caminho pode ser uma PASTA (deep link
+        //   /N:/…/Aula 09?a=view, sem ficheiro no fim): o último
+        //   segmento não tem extensão de ficheiro. Antes, esse nome era
+        //   procurado como ficheiro na listagem do PAI e falhava sempre
+        //   → openParent() abria a pasta-mãe (o sintoma do Passo 13).
+        //   Agora lista-se a PRÓPRIA pasta (_targetFolder) e resolve-se
+        //   p/ o seu ficheiro de mídia (v. o ramo _folderInput abaixo).
+        const _stripped = clean.replace(/\/+$/, '');
+        const _lastSeg = _stripped.slice(_stripped.lastIndexOf('/') + 1);
+        const _folderInput = !_lastSeg || !/\.[a-z0-9]{2,5}$/i.test(_lastSeg);
+        const _targetFolder = _folderInput ? _stripped + '/' : folderPath;
         try {
           let files = [];
           if (typeof window.gdiListAllFiles === 'function') {
-            files = (await window.gdiListAllFiles(folderPath)) || [];
+            files = (await window.gdiListAllFiles(_targetFolder)) || [];
           } else {
-            const r = await fetch(folderPath, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ page_token: null, page_index: 0 }) });
-            if (!r.ok) { openParent(); return; }
+            const r = await fetch(_targetFolder, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ page_token: null, page_index: 0 }) });
+            if (!r.ok) { _folderInput ? openSelf() : openParent(); return; }
             const d = await r.json();
             files = (d.data && d.data.files) || [];
           }
           const videos = files.filter(f => /\.(mp4|webm|mov|mkv|m4v|mp3|m4a|ogg|wav|aac)$/i.test(f.name || '') || String(f.mimeType || '').indexOf('video') === 0 || String(f.mimeType || '').indexOf('audio') === 0);
-          const playlist = videos.map(f => ({ link: f.link || (folderPath + encodeURIComponent(f.name)), name: f.name, size: f.size ? String(f.size) : '', folder: '' }));
+          const playlist = videos.map(f => ({ link: f.link || (_targetFolder + encodeURIComponent(f.name)), name: f.name, size: f.size ? String(f.size) : '', folder: '' }));
           // ★ v2.15.7 (P6): casa pelo NOME do ficheiro, não pela cauda do
           //   link. O link real é "/download.aspx?file=…&expiry=…&mac=…"
           //   (generateLink) — a cauda "download.aspx?file=…" nunca é o
@@ -1040,15 +1068,27 @@
           //   ("Unable to play media", 0:00). O caminho cru nunca tocou.
           const _decName = (s) => { let _n = String(s || ''); try { _n = decodeURIComponent(_n); } catch (_) {} return _n; };
           const _normName = (s) => _decName(s).toLowerCase().replace(/[^a-z0-9]/g, '');
-          let idx = playlist.findIndex(v => _decName(v.name) === fileName || (_normName(v.name) && _normName(v.name) === _normName(fileName)));
-          if (idx < 0) {
-            // A aula não está na listagem da pasta: abre a pasta-pai em
-            // /drives (nunca a Home, nunca um link cru que o worker 302ia).
-            openParent();
-            return;
+          let idx;
+          if (_folderInput) {
+            // ★ v2.15.9 (B — P6b): a pasta resolve p/ o seu ficheiro de
+            //   mídia principal — um só vídeo, ou o "001 - aula.mp4" /
+            //   "video.mp4", senão o 1º vídeo da listagem. Sem mídia:
+            //   abre-se a PRÓPRIA pasta em /drives (nunca a mãe).
+            if (!playlist.length) { openSelf(); return; }
+            const _isMain = (n) => /^(001[^/]*|video)\.(mp4|webm|mov|mkv|m4v|mp3|m4a|ogg|wav|aac)$/i.test(_decName(n).trim());
+            idx = playlist.findIndex(v => _isMain(v.name));
+            if (idx < 0) idx = 0;
+          } else {
+            idx = playlist.findIndex(v => _decName(v.name) === fileName || (_normName(v.name) && _normName(v.name) === _normName(fileName)));
+            if (idx < 0) {
+              // A aula não está na listagem da pasta: abre a pasta-pai em
+              // /drives (nunca a Home, nunca um link cru que o worker 302ia).
+              openParent();
+              return;
+            }
           }
           Shell.state.previousFolderPath = Shell.state.currentFolderPath;
-          Shell.state.currentFolderPath = folderPath;
+          Shell.state.currentFolderPath = _targetFolder;
           Shell.views._playVideoInline(playlist[idx].link, playlist[idx].name, playlist, idx);
         } catch (e) {
           if (main) main.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-icon">⚠️</div><div class="meggy-placeholder-title">Erro ao abrir a aula</div><div class="meggy-placeholder-desc">' + Shell._esc(e.message) + '</div></div>';
@@ -1386,6 +1426,61 @@
         const fsBtn = document.getElementById('gdi-fullscreen-btn');
         if (fsBtn) fsBtn.onclick = () => goFullscreen();
 
+        // ★ v2.15.9-E (FRENTE E — Aula 09 gerava conteúdo da Aula 01):
+        //   a aula ABERTA é o vídeo que está a tocar. Duas fontes de verdade
+        //   divergiam: o fecho (pl/idx — mantido por switchTo e pelo
+        //   Interfolder) e o espelho global (Shell.state.playerPlaylist /
+        //   playerIndex — o Interfolder trocava a playlist e NÃO sincronizava
+        //   playerIndex). showISA lia o espelho: após o Interfolder, o índice
+        //   0 apontava p/ o 1º item da lista nova ("Aula 01 - ... - 001 -
+        //   aula.mp4") e a geração + o cache usavam a aula errada. // E1c-helpers-aula-aberta
+        //   Compara dois links de stream: URLs assinadas mudam expiry/mac a
+        //   cada listagem, mas o parâmetro `file` é o mesmo ficheiro.
+        function sameVideoLink(a, b) {
+          if (!a || !b) return false;
+          if (a === b) return true;
+          try {
+            const ua = new URL(String(a), window.location.origin);
+            const ub = new URL(String(b), window.location.origin);
+            const fa = ua.searchParams.get('file');
+            const fb = ub.searchParams.get('file');
+            if (fa && fb) return fa === fb;
+          } catch (_) {}
+          return false;
+        }
+        //   Resolve a aula aberta a partir do fecho e valida-a contra o
+        //   <video> a tocar. Se o item na posição atual NÃO é o vídeo a
+        //   tocar (espelho dessincronizado), re-sincroniza o índice pelo
+        //   link; se o vídeo nem está na lista, usa a identidade da abertura
+        //   (pasta + ficheiro abertos) — NUNCA outra aula da lista.
+        function resolveOpenLesson() {
+          const items = (pl && Array.isArray(pl)) ? pl : [];
+          const curLink = (video && (video.currentSrc || video.src)) || videoUrl || '';
+          const heal = (j) => {
+            if (j < 0 || j >= items.length) return null;
+            const it = items[j];
+            const bare = (it && (it.origName || it.name)) || '';
+            const folderSeg = (it && (it.folder || it.folderLabel)) || '';
+            let path = folderPath || '';
+            if (folderSeg) {
+              const segs = String(folderPath || '').split('/').filter(Boolean);
+              let lastSeg = '';
+              try { lastSeg = decodeURIComponent(segs[segs.length - 1] || ''); } catch (_) { lastSeg = segs[segs.length - 1] || ''; }
+              if (lastSeg !== folderSeg) path = '/' + segs.slice(0, -1).join('/') + '/' + encodeURIComponent(folderSeg) + '/';
+            }
+            idx = j;
+            Shell.state.playerIndex = j;
+            return { item: it, bare, display: (it && it.name) || bare, folderSeg, path };
+          };
+          const cur = items[idx] || null;
+          const curLink2 = (cur && cur.link) || '';
+          if (cur && (!curLink2 || !curLink || sameVideoLink(curLink2, curLink))) return heal(idx);
+          if (curLink) {
+            const j = items.findIndex(v => v && sameVideoLink(v.link || '', curLink));
+            if (j >= 0) return heal(j);
+          }
+          return { item: null, bare: name || '', display: name || '', folderSeg: '', path: folderPath || '' };
+        }
         // ★ Interfolder — com finalizeNames
         document.getElementById('gdi-interfolder-btn').onclick = async () => {
           const btn = document.getElementById('gdi-interfolder-btn');
@@ -1410,6 +1505,19 @@
               results.forEach(v => collected.push(...v));
               btn.innerHTML = `<div class="spinner-border spinner-border-sm"></div> ${collected.length}`;
             }
+            // ★ v2.15.9-E: identidade do vídeo A TOCAR, capturada ANTES de
+            //   reconstruir a playlist — 'name' e 'videoUrl' são da abertura
+            //   e ficam obsoletos após switchTo; pl[idx] é o vídeo atual.
+            //   Sem isto o findIndex abaixo casava pelo nome cru ("001 -
+            //   aula.mp4", igual em todas as aulas) e devolvia sempre o
+            //   índice 0 — a Aula 01 — e a geração usava a aula errada. // E1a-captura-identidade
+            const _curItem = (pl && pl[idx]) || null;
+            const _curBare = (_curItem && (_curItem.origName || _curItem.name)) || name || '';
+            const _curFolder = (_curItem && (_curItem.folder || _curItem.folderLabel)) || '';
+            let _curFolderSeg = _curFolder;
+            if (!_curFolderSeg) { try { const _s = String(currentPath || '').split('/').filter(Boolean); _curFolderSeg = _s.length ? decodeURIComponent(_s[_s.length - 1]) : ''; } catch (_) { _curFolderSeg = ''; } }
+            const _curLink = (_curItem && _curItem.link) || videoUrl || '';
+            const _fileParam = (u) => { try { return new URL(String(u || ''), window.location.origin).searchParams.get('file') || ''; } catch (_) { return ''; } };
             const seen = new Set();
             pl = collected.filter(v => { const k = (v.folder||'')+'|'+v.origName; if (seen.has(k)) return false; seen.add(k); return true; });
             pl.sort((a,b) => (a.folder||'').localeCompare(b.folder||'') || a.name.localeCompare(b.name));
@@ -1418,8 +1526,27 @@
             pl.forEach(v => { const o = v.origName || v.name; cnts[o] = (cnts[o]||0)+1; });
             pl.forEach(v => { const o = v.origName || v.name; if (cnts[o] > 1 && v.folderLabel && v.name === o) v.name = v.folderLabel + ' - ' + o; });
             Shell.state.playerPlaylist = pl;
-            idx = pl.findIndex(v => v.origName === name || v.link === videoUrl);
-            if (idx === -1) idx = 0;
+            // ★ v2.15.9-E: resolve o vídeo atual na lista NOVA — (1) pasta +
+            //   nome cru (único: o filtro acima dedup por pasta|nome); (2) o
+            //   parâmetro file do link (as URLs assinadas mudam expiry/mac a
+            //   cada listagem, mas o file é o mesmo ficheiro); (3) nome cru
+            //   SÓ se for único na lista. O antigo (nome cru, findIndex)
+            //   casava sempre o 1º item — a Aula 01. // E1b-interfolder-indice
+            let _nfIdx = -1;
+            if (_curFolderSeg && _curBare) _nfIdx = pl.findIndex(v => (v.folder || v.folderLabel) === _curFolderSeg && (v.origName || v.name) === _curBare);
+            if (_nfIdx < 0 && _curLink) {
+              const _fp = _fileParam(_curLink);
+              _nfIdx = _fp ? pl.findIndex(v => _fileParam(v.link || '') === _fp) : pl.findIndex(v => (v.link || '') === _curLink);
+            }
+            if (_nfIdx < 0 && _curBare) {
+              const _hits = pl.map((v, i) => ((v.origName || v.name) === _curBare ? i : -1)).filter(i => i >= 0);
+              if (_hits.length === 1) _nfIdx = _hits[0];
+            }
+            idx = _nfIdx < 0 ? 0 : _nfIdx;
+            // ★ v2.15.9-E: sincronizar o espelho global — showISA e o resto
+            //   do player lêem Shell.state.playerPlaylist[playerIndex]; sem
+            //   isto o índice ficava 0 e as abas de IA geravam p/ a Aula 01.
+            Shell.state.playerIndex = idx;
             document.getElementById('gdi-playlist-list').innerHTML = pl.map((v, i) => `<div class="gdi-playlist-item ${i === idx ? 'cur' : ''}" data-idx="${i}" title="${v.name}" role="button" tabindex="0" aria-label="Reproduzir ${v.name}" style="display:flex;justify-content:space-between;align-items:center;padding:12px 10px;border-radius:6px;cursor:pointer;font-size:12px;color:${i === idx ? '#ff8b9f' : '#9aa4b8'};${i === idx ? 'background:rgba(255,139,159,0.12);' : ''}"><div style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><i class="bi ${i === idx ? 'bi-play-fill' : 'bi-film'} me-2"></i><span style="font-weight:${i === idx ? '600' : '400'};">${v.name}</span></div><span class="gdi-pl-size" style="font-size:10px;color:#6b7488;margin-left:8px;">${v.size || ''}</span></div>`).join('');
             plCountEl.textContent = `${idx + 1} / ${pl.length}`;
             document.querySelectorAll('.gdi-playlist-item').forEach(item => { item.onclick = () => { const i = parseInt(item.dataset.idx); if (i !== idx) switchTo(i); }; item.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); item.click(); } }; });
@@ -1469,8 +1596,18 @@
             document.querySelectorAll('.gdi-mat-tab').forEach(t => { t.classList.remove('active'); t.removeAttribute('aria-current'); t.style.background = 'rgba(124,77,255,0.08)'; t.style.borderColor = 'rgba(124,77,255,0.2)'; t.style.color = '#a78bfa'; });
             const activeTab = document.querySelector('.gdi-mat-tab[data-mat="' + type + '"]');
             if (activeTab) { activeTab.classList.add('active'); activeTab.setAttribute('aria-current', 'true'); activeTab.style.background = '#7c4dff'; activeTab.style.borderColor = '#7c4dff'; activeTab.style.color = '#fff'; }
-            const lessonName = Shell.state.playerPlaylist?.[Shell.state.playerIndex]?.name || '';
-            const lessonPath = Shell.state.currentFolderPath || '';
+            // ★ v2.15.9-E: a aula é a que está a tocar (resolveOpenLesson),
+            //   não playlist[playerIndex] — o espelho global dessincronizava
+            //   após o Interfolder e a geração usava a Aula 01 no lugar da
+            //   Aula 09 (ver chave KV '.../Aula 09 .../Aula 01 - ... - 001 -
+            //   aula.mp4'). _bareLessonName é o nome cru p/ a chave canônica
+            //   do probeCache (E3). Em aberturas normais o valor é IDÊNTICO
+            //   ao de antes ("001 - aula.mp4", mesma chave — o resumo bom
+            //   salvo continua válido). // E2-showisa-aula-aberta
+            const _openLesson = resolveOpenLesson();
+            const lessonName = _openLesson.display || '';
+            const lessonPath = _openLesson.path || '';
+            const _bareLessonName = _openLesson.bare || '';
             // ★ v2.15.6-resumo (Elton 22:04): chave do cache aqui, síncrona,
             //   para a guarda de voo abaixo (o IIFE é assíncrono — calcular
             //   a chave só lá dentro deixaria dois cliques criarem duas
@@ -1518,11 +1655,24 @@
                 //   `courseKey/pdfName` (o PDF); a aba só procurava a
                 //   chave do VÍDEO, então o resumo do batalhão nunca
                 //   aparecia na aba ("resumos já gerados não carregam").
-                async function probeCache() {
+                // ★ v2.15.9-E: lista de chaves sondadas, em ordem — função
+                //   própria (testável). A chave canônica (pasta + nome cru
+                //   do ficheiro) acha o resumo da MESMA aula salvo pela
+                //   abertura normal ("001 - aula.mp4") quando a abertura
+                //   atual usa o nome prefixado pelo Interfolder ("Aula 09 -
+                //   ... - 001 - aula.mp4"). NUNCA inclui chaves de outra
+                //   aula/pasta — a variante da pasta PAI (abaixo) é a única
+                //   que cruza pastas e hoje não tem nenhuma entrada ao vivo
+                //   (ver NOTES.md). // E3-probe-canonica
+                function isaCacheProbeKeys() {
                   const _pdfBase = lessonName.replace(/\.[a-z0-9]+$/i, '');
                   const _pdfName = _pdfBase ? _pdfBase + '.pdf' : '';
                   const _parentPath = lessonPath.replace(/[^/]+\/$/, '');
                   const _keys = [cacheKey, cacheKeyRaw];
+                  if (_bareLessonName && _bareLessonName !== lessonName) {
+                    try { _keys.push(encodeURI(decodeURIComponent(lessonPath + _bareLessonName))); } catch (_) { _keys.push(lessonPath + _bareLessonName); }
+                    _keys.push(lessonPath + _bareLessonName);
+                  }
                   if (_pdfName && /\.(mp4|webm|mov|m4v|avi|mkv|m3u8|mp3|m4a|ogg|wav|aac)$/i.test(lessonName)) {
                     try { _keys.push(encodeURI(decodeURIComponent(lessonPath + _pdfName))); } catch (_) { _keys.push(lessonPath + _pdfName); }
                     _keys.push(lessonPath + _pdfName);
@@ -1531,6 +1681,10 @@
                       _keys.push(_parentPath + _pdfName);
                     }
                   }
+                  return _keys;
+                }
+                async function probeCache() {
+                  const _keys = isaCacheProbeKeys(); // E3-probe-retorno
                   for (const k of _keys) {
                     try {
                       const cacheResp = await fetch('/api/ai/cache?key=' + encodeURIComponent(k), { headers: { 'Accept': 'application/json' }, credentials: 'include' });
@@ -3502,11 +3656,21 @@ el.scrollTop = 0;
                   } else {
                     // ★ v2.15.2 (C): multi-seleção no passo 3 — o checkbox só
                     //   existia no modal "Adicionar Pasta de Curso".
+                    // ★ v2.15.9 (D): ordem determinística por nome — o Drive
+                    //   devolve as pastas sem ordenação e a ordem pode mudar
+                    //   entre renders; sem isto, uma referência por índice
+                    //   passa a apontar p/ a pasta vizinha (+1 do Passo 13:
+                    //   penal+civil viraram constitucional+previdenciario).
+                    //   O id estável (hash do caminho) + o aria-label com o
+                    //   nome dão à pasta uma identidade que não depende da
+                    //   posição — a seleção continua por caminho (Set).
+                    folders.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'));
+                    const _cwCheckId = function(s){ let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return ('0000000' + (h >>> 0).toString(16)).slice(-8); };
                     const selBar = '<div style="display:flex;justify-content:flex-end;margin-bottom:6px;"><button class="meggy-header-btn" id="cw-add-selected" disabled style="font-size:12px;opacity:0.5;">＋ Adicionar selecionadas (0)</button></div>';
                     listEl.innerHTML = selBar + folders.map(f => {
                       const subPath = path.endsWith('/') ? path + encodeURIComponent(f.name) + '/' : path + '/' + encodeURIComponent(f.name) + '/';
                       return '<div class="cw-folder-item" data-path="' + Shell._esc(subPath) + '" style="display:flex;align-items:center;gap:8px;padding:10px;cursor:pointer;border-radius:6px;font-size:13px;color:#e6edf3;word-break:break-word;" onmouseover="this.style.background=\'rgba(255,255,255,0.04)\'" onmouseout="this.style.background=\'transparent\'">' +
-                        '<input type="checkbox" class="v215-folder-check cw-folder-check" data-path="' + Shell._esc(subPath) + '" title="Selecionar para adicionar ao concurso" style="flex:none;accent-color:#ff8b9f;cursor:pointer;" />' +
+                        '<input type="checkbox" id="cw-check-' + _cwCheckId(subPath) + '" class="v215-folder-check cw-folder-check" data-path="' + Shell._esc(subPath) + '" aria-label="Selecionar pasta ' + Shell._esc(f.name) + '" title="Selecionar para adicionar ao concurso" style="flex:none;width:18px;height:18px;accent-color:#ff8b9f;cursor:pointer;" />' +
                         '<span style="font-size:18px;">📁</span>' +
                         '<span style="flex:1;">' + Shell._esc(f.name) + '</span>' +
                       '</div>';
@@ -5070,8 +5234,46 @@ el.scrollTop = 0;
       lines.splice(i, 0, Shell._drawerHook(lesson, pdfName), '');
       return lines.join('\n');
     },
+    // ★ v2.15.9-C1: existe aula aberta? (pasta atual OU item da playlist).
+    //    O título da página NÃO conta — na home ele é genérico ("Meggy AI")
+    //    e um gancho com "este tema" seria órfão.
+    _hasDrawerLesson() {
+      try {
+        const p = (Shell.state && Shell.state.currentFolderPath) || '';
+        if (String(p).split('/').filter(Boolean).length) return true;
+      } catch (_) {}
+      try {
+        const n = (Shell.state.playerPlaylist && Shell.state.playerPlaylist[Shell.state.playerIndex] && Shell.state.playerPlaylist[Shell.state.playerIndex].name) || '';
+        if (String(n).trim()) return true;
+      } catch (_) {}
+      return false;
+    },
+    // ★ v2.15.9-C: pedido de resumo/contexto da aula.
+    //    Causa provada (Passo 13): "O que vamos estudar nesta aula?" NÃO
+    //    contém "resum" → o classificador devolvia false e o gancho do
+    //    round 5 nunca era aplicado, mesmo com a aula aberta. A pergunta do
+    //    round 5 ("Faça um resumo curto desta aula...") continha "resum" —
+    //    por isso o Passo 12 passou e o Passo 13 falhou sem nenhuma mudança
+    //    no bloco do drawer (byte-idêntico v2.15.7→v2.15.8). As variantes de
+    //    pergunta sobre o conteúdo da aula só contam COMO resumo quando há
+    //    aula aberta; sem aula, saudação/pergunta genérica continua sem
+    //    gancho (sem órfão). "resum" continua valendo sem aula (round 5).
     _isDrawerSummaryRequest(txt) {
-      return /resum/i.test(String(txt || ''));
+      const raw = String(txt || '');
+      if (/resum/i.test(raw)) return true;
+      if (!Shell._hasDrawerLesson()) return false;
+      const t = raw.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+      return /o que (vamos|vou) (estudar|aprender)/.test(t)
+        || /do que (trata|fala|se trata) (esta|essa|nesta|nessa) aula/.test(t)
+        || /sobre o que (e|fala|trata) (esta|essa|nesta|nessa) aula/.test(t)
+        || /o que (e|eh) (esta|essa) aula/.test(t)
+        || /do que (e|eh) (esta|essa) aula/.test(t)
+        || /(me )?explic[ae] (esta|essa|a) aula/.test(t)
+        || /o que (esta|essa) aula (aborda|ensina|apresenta|cobre)/.test(t)
+        || /qual (o )?conteudo (desta|dessa|da) aula/.test(t)
+        || /qual (o )?tema (desta|dessa|da) aula/.test(t)
+        || /o que tem (nesta|nessa|na) aula/.test(t)
+        || /o que vamos ver (nesta|nessa) aula/.test(t);
     },
     // Nome da aula no contexto do shell: último segmento da pasta atual
     // (ex.: "01 - PRINCIPIOS FUNDAMENTAIS"); fallback: item da playlist;
@@ -5119,8 +5321,18 @@ el.scrollTop = 0;
         typingEl.textContent = '🐾 Pensando...';
         msgs.appendChild(typingEl);
         msgs.scrollTop = msgs.scrollHeight;
+        // ★ v2.15.9-C2: contexto da aula no prompt. Causa provada (Passo 13):
+        //    o send() mandava SÓ {message: msg, messages: []} — o modelo nunca
+        //    recebia o nome da aula (handleAi lê só message/messages) e
+        //    respondia genérico ("não tenho uma grade fixa..."). Com a aula
+        //    aberta, o NOME que o aluno vê (_drawerLessonName) vai prefixado
+        //    à mensagem ENVIADA; a bolha do usuário continua com o texto cru.
+        //    Só o NOME vai — nunca o caminho da pasta (a regra 3 do system
+        //    prompt proíbe revelar estrutura de pastas/caminhos do servidor).
+        const _lessonCtx = Shell._hasDrawerLesson() ? Shell._drawerLessonName() : '';
+        const _sendMsg = _lessonCtx ? '[Contexto: o aluno está com a aula "' + _lessonCtx + '" aberta. Responda sobre ESTA aula e o seu conteúdo.]\n' + msg : msg;
         try {
-          const r = await fetch('/api/ai', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: msg, messages: []}) });
+          const r = await fetch('/api/ai', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: _sendMsg, messages: []}) });
           const d = await r.json();
           const resp = d.response || 'Sem resposta';
           // ★ v2.15.5 item 10: renderer único — sem marked, o vendored
