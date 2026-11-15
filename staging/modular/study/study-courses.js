@@ -823,8 +823,8 @@
     <div id="gdi-featured-wrap" style="display:none;margin-bottom:18px;"><b style="color:var(--ferreto-text,#f0f6fc);font-size:14px;">⭐ Cursos em destaque</b><div class="gdi-courses" id="gdi-featured-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-top:10px;"></div></div>
     <div id="gdi-own-wrap"><b style="color:var(--ferreto-text,#f0f6fc);font-size:14px;">📚 Meus Cursos</b><div class="gdi-courses" id="gdi-own-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-top:10px;"></div></div>
     <div id="gdi-courses-pager" style="margin-top:14px;text-align:center;"></div>
-    <!-- ★ v2.15.10 (B — P2/P8): Contagens do D1 atualizadas às — carimbo da leitura do unificado (__unifiedAt); sem ele a prévia não dizia de quando era o número. -->
-    <div style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;margin-top:10px;text-align:center;">📊 Contagens do D1 atualizadas às ${__unifiedAt ? new Date(__unifiedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'} — mudam enquanto o scanner insere aulas.</div>`;
+    <!-- ★ v2.15.11-A6: redação unificada ("Snapshot do D1 às", igual ao admin e ao shell) — o carimbo continua a ser a leitura do unificado (__unifiedAt); sem ele a prévia não dizia de quando era o número. -->
+    <div style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;margin-top:10px;text-align:center;">📊 Snapshot do D1 às ${__unifiedAt ? new Date(__unifiedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'} — mudam enquanto o scanner insere aulas.</div>`;
     const grid=box.querySelector('#gdi-own-grid');
     const featGrid=box.querySelector('#gdi-featured-grid');
     const featWrap=box.querySelector('#gdi-featured-wrap');
