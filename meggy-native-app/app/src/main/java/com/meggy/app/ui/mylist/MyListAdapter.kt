@@ -12,12 +12,12 @@ import coil.load
 import com.meggy.app.R
 import com.meggy.app.data.FileItem
 import com.meggy.app.data.colorFromString
-import com.meggy.app.data.monogramFor
 import com.meggy.app.databinding.ItemMylistCardBinding
 import com.meggy.app.util.CardGradient
 import com.meggy.app.util.FocusAnimator
 import com.meggy.app.util.Format
 import com.meggy.app.util.LibraryCovers
+import com.meggy.app.util.ThumbArt
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.TvUtils
 
@@ -74,28 +74,29 @@ class MyListAdapter(
             mylistTitle.text = item.name
             mylistBg.background = CardGradient.drawable(res, colorFromString(item.name))
 
-            // v2.7.11 camada (3): sem thumb, a imagem da biblioteca
-            // pelo nome da aula/pasta; sem match, a imagem 'geral'
-            // (fallback da camada 3); sem manifesto, o monograma de
-            // antes (a Minha lista ainda não usa a capa gerada).
-            val thumb = LibraryCovers.remoteCover(
+            // v2.7.13 camada (3) ESTRITA: sem thumb, a imagem da
+            // biblioteca pelo nome da aula/pasta; sem match, a capa
+            // gerada do drive (ThumbArt) — nunca o livro 'geral' nem
+            // o monograma (a Minha lista passa a usar a capa gerada).
+            val coverRes = ThumbArt.coverResForPath(item.folderPath ?: currentFolderPath)
+            val thumb = LibraryCovers.remoteCoverStrict(
                 item.thumbnailLink, item.name, item.folderPath ?: currentFolderPath
             )
             if (!thumb.isNullOrBlank()) {
                 mylistThumb.visibility = View.VISIBLE
                 mylistMonogram.visibility = View.GONE
                 mylistThumb.load(thumb) {
-                    error(R.drawable.card_gradient_pink)
+                    error(coverRes)
                     listener(onError = { _, _ ->
-                        mylistThumb.visibility = View.GONE
-                        mylistMonogram.visibility = View.VISIBLE
-                        mylistMonogram.text = monogramFor(item.name)
+                        mylistThumb.visibility = View.VISIBLE
+                        mylistMonogram.visibility = View.GONE
+                        mylistThumb.setImageResource(coverRes)
                     })
                 }
             } else {
-                mylistThumb.visibility = View.GONE
-                mylistMonogram.visibility = View.VISIBLE
-                mylistMonogram.text = monogramFor(item.name)
+                mylistThumb.visibility = View.VISIBLE
+                mylistMonogram.visibility = View.GONE
+                mylistThumb.setImageResource(coverRes)
             }
 
             val sm = SessionManager.get(ctx)
