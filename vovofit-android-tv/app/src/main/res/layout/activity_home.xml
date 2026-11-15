@@ -51,6 +51,8 @@
                     android:layout_height="wrap_content"
                     android:clickable="true"
                     android:focusable="true"
+                    android:background="@drawable/focus_ring_transparent"
+                    android:focusableInTouchMode="true"
                     android:padding="@dimen/spacing_sm"
                     android:text="@string/home_logout"
                     android:textColor="@color/md_on_surface_variant"
