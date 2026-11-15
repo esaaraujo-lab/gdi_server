@@ -10,8 +10,10 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.bibigyn.app.BuildConfig
 import com.bibigyn.app.R
+import com.bibigyn.app.data.ApiService
 import com.bibigyn.app.data.monogramFor
 import com.bibigyn.app.databinding.ActivitySettingsBinding
 import com.bibigyn.app.ui.home.HomeActivity
@@ -24,6 +26,7 @@ import com.bibigyn.app.util.SessionManager
 import com.bibigyn.app.util.StudyReminder
 import com.bibigyn.app.util.TvUtils
 import com.bibigyn.app.util.UpdateChecker
+import kotlinx.coroutines.launch
 
 /**
  * v2.1.5 — Ajustes (conceito Ajustes; Elton 23:45: funções REAIS).
@@ -195,6 +198,15 @@ class SettingsActivity : AppCompatActivity() {
 
         binding.btnLogout.setOnClickListener { logout() }
 
+        // Ronda 10 Frente B — entrada "Gerir drives", SÓ para admin.
+        // O valor em cache (SessionManager, do username actual) decide
+        // de imediato; checkAdmin() revalida em 2.º plano (GET /api/me
+        // ou fallback provisório) e corrige a visibilidade.
+        binding.rowAdminDrives.setOnClickListener {
+            startActivity(Intent(this, AdminDrivesActivity::class.java))
+        }
+        refreshAdminRow()
+
         // Frente G (TV) — interruptores, botões +/−, "Verificar
         // atualizações" e "Sair" são focáveis mas sem feedback
         // de foco (fundos estáticos): o D-pad chegava sem se ver
@@ -205,7 +217,8 @@ class SettingsActivity : AppCompatActivity() {
                 binding.btnSpeedDown, binding.btnSpeedUp,
                 binding.btnSleepDown, binding.btnSleepUp,
                 binding.btnQualityDown, binding.btnQualityUp,
-                binding.btnCheckUpdate, binding.btnLogout)
+                binding.btnCheckUpdate, binding.btnLogout,
+                binding.rowAdminDrives)
                 .forEach { FocusAnimator.attach(it, true) }
         }
 
@@ -235,6 +248,28 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun updateQualityLabel() {
         binding.qualityValue.text = qualityLabels[qualityIdx]
+    }
+
+    /**
+     * Ronda 10 Frente B — mostra a linha "Gerir drives (admin)" só
+     * quando o utilizador é admin. Aplica o cache de imediato (sem
+     * flicker) e revalida em 2.º plano; nunca mostra a linha a
+     * não-admins nem rebenta se a rede falhar.
+     */
+    private fun refreshAdminRow() {
+        val sm = SessionManager.get(this)
+        val cached = sm.cachedIsAdmin(sm.username)
+        binding.rowAdminDrives.visibility =
+            if (cached == true) View.VISIBLE else View.GONE
+        lifecycleScope.launch {
+            val admin = try {
+                ApiService(this@SettingsActivity).checkAdmin()
+            } catch (_: Exception) {
+                cached ?: false
+            }
+            binding.rowAdminDrives.visibility =
+                if (admin) View.VISIBLE else View.GONE
+        }
     }
 
     private fun logout() {
