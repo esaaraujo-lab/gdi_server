@@ -16,6 +16,7 @@ import com.meggy.app.data.colorFromString
 import com.meggy.app.databinding.ItemRailCardBinding
 import com.meggy.app.util.CardGradient
 import com.meggy.app.util.FocusAnimator
+import com.meggy.app.util.TapFeedback
 import com.meggy.app.util.Format
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.TvUtils
@@ -65,6 +66,7 @@ class FileAdapter(
                 if (item.isFolder) onFolder(item) else onFile(item)
             }
             FocusAnimator.attachCard(binding.cardRoot, TvUtils.isTv(binding.root.context))
+            TapFeedback.attachPress(binding.cardRoot, TvUtils.isTv(binding.root.context))
         }
     }
 
