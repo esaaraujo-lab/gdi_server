@@ -10,6 +10,9 @@
   Sem botão de tela cheia aqui (a TV já É tela cheia). Sem playlist
   Frente E — controlos discretos: play/pausa 72dp (era 96dp),
   barra de progresso fina de 4dp e mais transparente, scrim 60%.
+  Frente R3A (Plyr) — botao play/pausa da barra SO-ICONE (sem disco,
+  48dp, glifo 24sp); disco central 56dp; progresso 5dp, thumb 13dp,
+  trilho branco 25%; scrim da base 75% (gradiente Plyr).
   embutida (gaveta + "A seguir" removidas — a playlist vive na página),
   sem botões −10s/+10s no rodapé (o pulo continua pelas setas do
   D-pad — ver PlayerActivity.dispatchKeyEvent), velocidade só na
@@ -148,8 +151,8 @@
         <!-- Play/pause central (quando pausado) -->
         <TextView
             android:id="@+id/center_play_pause"
-            android:layout_width="@dimen/player_fab_size"
-            android:layout_height="@dimen/player_fab_size"
+            android:layout_width="@dimen/player_center_size"
+            android:layout_height="@dimen/player_center_size"
             android:layout_gravity="center"
             android:background="@drawable/player_play_bg"
             android:clickable="true"
@@ -157,7 +160,7 @@
             android:gravity="center"
             android:text="▶"
             android:textColor="@android:color/white"
-            android:textSize="28sp"
+            android:textSize="24sp"
             android:visibility="gone" />
 
         <!-- Barra superior: título + ações -->
@@ -267,15 +270,15 @@
 
                 <TextView
                     android:id="@+id/btn_play_pause_bar"
-                    android:layout_width="@dimen/player_fab_size"
-                    android:layout_height="@dimen/player_fab_size"
-                    android:background="@drawable/player_play_bg"
+                    android:layout_width="@dimen/player_bar_btn_size"
+                    android:layout_height="@dimen/player_bar_btn_size"
+                    android:background="@drawable/player_bar_btn_bg"
                     android:clickable="true"
                     android:focusable="true"
                     android:gravity="center"
                     android:text="❚❚"
                     android:textColor="@android:color/white"
-                    android:textSize="28sp" />
+                    android:textSize="24sp" />
 
                 <View
                     android:layout_width="0dp"
@@ -345,7 +348,7 @@
                 <SeekBar
                     android:id="@+id/bar_seek_bar"
                     android:layout_width="0dp"
-                    android:layout_height="32dp"
+                    android:layout_height="35dp"
                     android:layout_marginStart="@dimen/spacing_lg"
                     android:layout_weight="1"
                     android:focusable="true"
