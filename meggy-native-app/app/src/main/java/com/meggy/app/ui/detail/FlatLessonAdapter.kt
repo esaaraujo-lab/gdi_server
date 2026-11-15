@@ -13,6 +13,7 @@ import com.meggy.app.data.colorFromString
 import com.meggy.app.databinding.ItemFlatLessonBinding
 import com.meggy.app.util.CardGradient
 import com.meggy.app.util.FocusAnimator
+import com.meggy.app.util.TapFeedback
 import com.meggy.app.util.Format
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.ThumbArt
@@ -54,6 +55,7 @@ class FlatLessonAdapter(
                 dispatch(getItem(pos))
             }
             FocusAnimator.attachCard(binding.flatCardRoot, TvUtils.isTv(binding.root.context))
+            TapFeedback.attachPress(binding.flatCardRoot, TvUtils.isTv(binding.root.context))
         }
 
         private fun dispatch(item: FileItem) {
