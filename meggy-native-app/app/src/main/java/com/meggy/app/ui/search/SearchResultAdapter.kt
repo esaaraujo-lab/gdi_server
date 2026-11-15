@@ -14,6 +14,7 @@ import com.meggy.app.data.colorFromString
 import com.meggy.app.databinding.ItemSearchResultBinding
 import com.meggy.app.util.CardGradient
 import com.meggy.app.util.FocusAnimator
+import com.meggy.app.util.TapFeedback
 import com.meggy.app.util.Format
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.ThumbArt
@@ -58,6 +59,7 @@ class SearchResultAdapter(
                 }
             }
             FocusAnimator.attach(binding.root, TvUtils.isTv(binding.root.context))
+            TapFeedback.attachPress(binding.root, TvUtils.isTv(binding.root.context))
         }
     }
 
