@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Ronda 10 Frente B — uma linha da lista de drives do admin
+  (AdminDrivesActivity). Remover pede confirmação; a pasta no Drive
+  NÃO é apagada — só o registo do drive.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="@dimen/spacing_md"
+    android:background="@drawable/tile_focus_border"
+    android:orientation="vertical"
+    android:padding="@dimen/spacing_lg">
+
+    <TextView
+        android:id="@+id/driveName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="@color/md_on_surface"
+        android:textSize="@dimen/text_card_title"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/driveMeta"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textColor="@color/md_on_surface_variant"
+        android:textSize="@dimen/text_card_subtitle" />
+
+    <TextView
+        android:id="@+id/driveCovers"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textColor="@color/md_on_surface_variant"
+        android:textSize="@dimen/text_card_subtitle" />
+
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/btnRemoveDrive"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_sm"
+        android:background="@drawable/chip_outline"
+        android:focusable="true"
+        android:text="@string/admin_drives_remove"
+        android:textColor="@color/md_on_surface"
+        android:textSize="@dimen/text_card_subtitle" />
+</LinearLayout>
