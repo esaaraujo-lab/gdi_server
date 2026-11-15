@@ -1015,7 +1015,7 @@
             return `<div class="gdi-course" data-course-key="${escHtml(c.key)}" style="cursor:pointer;border-top:3px solid ${ident.color};">
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
                 <span style="font-size:24px;flex:none;">${ident.icon}</span>
-                <b title="${escHtml(courseName(c.key))}" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(name)}</b>
+                <b title="${escHtml(courseName(c.key))}" class="gdi-course-title" style="flex:1;min-width:0;">${escHtml(name)}</b>
               </div>
               ${drive?`<small><i class="bi bi-hdd"></i> ${escHtml(drive)}</small>`:'<small>&nbsp;</small>'}
               <div class="gdi-course-stats">
@@ -1356,7 +1356,14 @@
 .gdi-course::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--ferreto-grad);opacity:0;transition:opacity .2s;}
 .gdi-course:hover{border-color:rgba(255,139,159,.3);transform:translateY(-3px);box-shadow:0 12px 32px -8px rgba(0,0,0,.4);}
 .gdi-course:hover::before{opacity:1;}
-.gdi-course b{color:var(--ferreto-text,#f0f6fc);font-size:14px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-weight:600;}
+.gdi-course b{color:var(--ferreto-text,#f0f6fc);font-size:14px;font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-weight:600;}
+/* ★ v2.15.28-B: título do tile com clamp de 2 linhas (era 1 linha com
+   nowrap+ellipsis — cortava a meio da palavra no tile estreito do celular).
+   Igual ao shell.css (fonte canónica); este bloco fica p/ compatibilidade. */
+.gdi-course-title{flex:1;min-width:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal;overflow-wrap:anywhere;line-height:1.35;}
+.gdi-course-cover{position:relative;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:linear-gradient(135deg,rgba(255,139,159,.28),rgba(93,222,218,.20));display:flex;align-items:center;justify-content:center;margin-bottom:12px;flex:none;}
+.gdi-course-cover-icon{font-size:32px;line-height:1;}
+.gdi-course-cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
 .gdi-course small{color:var(--ferreto-text-muted,#8b949e);font-size:11px;display:block;margin:6px 0 12px;}
 .gdi-course-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:auto 0 12px;}
 .gdi-course-stat{background:var(--ferreto-surface-3,rgba(255,255,255,.04));border-radius:8px;padding:8px 6px;text-align:center;}
@@ -1429,7 +1436,7 @@
 @media(max-width:480px){
   .gdi-course{padding:8px!important;}
   .gdi-courses{gap:8px!important;}
-  .gdi-course b{font-size:12px!important;}
+  .gdi-course-title{font-size:12px!important;}
   .gdi-course small{font-size:10px!important;margin:4px 0 8px!important;}
   .gdi-course-stats{grid-template-columns:repeat(2,1fr)!important;gap:4px!important;margin:auto 0 8px!important;}
   .gdi-course-stat{padding:6px 4px!important;}
