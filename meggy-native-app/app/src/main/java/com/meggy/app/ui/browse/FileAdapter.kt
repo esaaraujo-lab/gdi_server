@@ -24,8 +24,8 @@ import com.meggy.app.util.LibraryCovers
  * v2.7.6 — Grade de arquivos (detalhe/navegação).
  *
  * Mesma estrutura do RailAdapter: thumb real via Coil quando houver
- * (vídeos/PDFs/áudios), monograma tipográfico quando não houver —
- * NUNCA emoji de câmera. Progresso real (% + "Xmin restantes") para
+ * (vídeos/PDFs/áudios), capa gerada quando não houver —
+ * NUNCA emoji de câmera nem monograma. Progresso real (% + "Xmin restantes") para
  * vídeos com resume; badges ✓/▶ continuar; ⭐ (pasta = curso, resto =
  * arquivo). Foco via FocusAnimator.attachCard.
  */
@@ -97,18 +97,15 @@ class FileAdapter(
             val thumbUrl = LibraryCovers.remoteCover(item.thumbnailLink, item.name, currentFolderPath)
             if (thumbUrl != null && (item.isVideo || item.isPdf || item.isAudio)) {
                 cardThumbnail.visibility = View.VISIBLE
-                cardMonogram.visibility = View.GONE
                 cardThumbnail.load(thumbUrl) {
                     error(coverRes)
                     listener(onError = { _, _ ->
                         cardThumbnail.visibility = View.VISIBLE
-                        cardMonogram.visibility = View.GONE
                         cardThumbnail.setImageResource(coverRes)
                     })
                 }
             } else {
                 cardThumbnail.visibility = View.VISIBLE
-                cardMonogram.visibility = View.GONE
                 cardThumbnail.setImageResource(coverRes)
             }
 
