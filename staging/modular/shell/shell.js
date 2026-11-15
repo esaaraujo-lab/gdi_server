@@ -2976,7 +2976,13 @@
           if (summary) {
             const plain = String(summary).replace(/[#>*`_|\[\]()]/g, ' ').replace(/\s+/g, ' ').trim();
             const excerpt = plain.slice(0, 280) + (plain.length > 280 ? '…' : '');
-            descEl.innerHTML = '<div><span style="color:#ff8b9f;font-weight:600;">🐩 ' + esc(Shell.views._v215LessonDescHook(rawName || folderLabel)) + '</span> ' + esc(excerpt) + ' <a href="#" id="gdi-desc-more" style="color:#5ddeda;white-space:nowrap;">Ver resumo completo</a></div>';
+            // ★ v2.15.27-A: SEM o gancho determinístico prefixado — o
+            //   _v215LessonDescHook(rawName) punha um texto fixo ("Nesta
+            //   aula exploramos…", hash de "001 - aula.mp4") ANTES do
+            //   excerto, e o bloco parecia abrir com a abertura bruta do
+            //   modelo (Passo 25). O excerto JÁ é o resumo guardado, que
+            //   abre com o gancho real — é ele que tem de abrir o bloco.
+            descEl.innerHTML = '<div><span style="color:#ff8b9f;font-weight:600;">🐩</span> ' + esc(excerpt) + ' <a href="#" id="gdi-desc-more" style="color:#5ddeda;white-space:nowrap;">Ver resumo completo</a></div>';
             const more = document.getElementById('gdi-desc-more');
             // ★ v2.15.8-E: a aba pode ter sumido (o M9 apagava o painel) — o clique era no-op silencioso. Recria as abas do shell e clica quando aparecerem (até 10s). // S2-ver-resumo-recria-abas
             if (more) more.onclick = (e) => { e.preventDefault(); const t0 = document.querySelector('.gdi-mat-tab[data-mat="isa-summary"]'); if (t0) { t0.click(); return; } try { loadMaterials(); } catch (_) {} let _n = 0; const _tick = () => { const t = document.querySelector('.gdi-mat-tab[data-mat="isa-summary"]'); if (t) { try { t.click(); } catch (_) {} return; } if (++_n >= 20) return; setTimeout(_tick, 500); }; _tick(); };
@@ -5551,6 +5557,10 @@ el.scrollTop = 0;
       // _v215LessonDescHook: gancho fixo por aula (determinístico pelo
       //   nome — estável entre renders; é frase-modelo, não conteúdo
       //   inventado: o conteúdo vem sempre do resumo da Meggy).
+      //   ★ v2.15.27-A: DEIXOU de ser usado na descrição sob o vídeo —
+      //   o texto fixo era exibido ANTES do excerto do resumo guardado
+      //   (Passo 25). Mantido p/ compatibilidade (harnesses antigos
+      //   extraem-no); não voltar a prefixá-lo ao excerto.
       _v215LessonDescHook(lessonName) {
         const hooks = ['Nesta aula exploramos…', 'Vamos aprender…', 'Nesta aula você vai entender…', 'O foco desta aula é…', 'Prepare-se: nesta aula…'];
         let h = 0; const s = String(lessonName || '');
