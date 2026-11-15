@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Frente R3A (Plyr) — Fundo do botao play/pausa da BARRA do player:
+     SO-ICONE, sem disco/circulo (Plyr: botoes da barra sao so o icone,
+     fundo transparente; plyr-control-icon-size 18px, padding 7px,
+     radius 3px). Normal = transparente. Foco D-pad (TV) e pressionado:
+     state layer branco + anel 3dp na cor da marca — o foco TEM de se ver
+     (FocusAnimator soma escala 1.10x na TV). Mesmo padrao do
+     player_chip_bg (radius 16dp la; aqui 3dp, o radius do Plyr). -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="3dp" />
+            <solid android:color="#29FFFFFF" />
+        </shape>
+    </item>
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="3dp" />
+            <solid android:color="#1FFFFFFF" />
+            <stroke android:width="3dp" android:color="@color/md_primary" />
+        </shape>
+    </item>
+    <item android:state_hovered="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="3dp" />
+            <solid android:color="#14FFFFFF" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="3dp" />
+            <solid android:color="@android:color/transparent" />
+        </shape>
+    </item>
+</selector>
