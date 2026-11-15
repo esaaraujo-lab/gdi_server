@@ -20,7 +20,10 @@ import com.bibigyn.app.ui.reader.MdReaderActivity
 import com.bibigyn.app.ui.reader.PdfReaderActivity
 import com.bibigyn.app.ui.search.SearchActivity
 import com.bibigyn.app.ui.settings.SettingsActivity
+import com.bibigyn.app.util.FocusAnimator
+import com.bibigyn.app.util.PlaylistManager
 import com.bibigyn.app.util.SessionManager
+import com.bibigyn.app.util.TapFeedback
 import com.bibigyn.app.util.TvUtils
 
 /**
@@ -89,6 +92,14 @@ class MyListActivity : AppCompatActivity() {
         binding.tabCourses.setOnClickListener { selectTab(Tab.COURSES) }
         binding.tabFiles.setOnClickListener { selectTab(Tab.FILES) }
         binding.tabConcursos.setOnClickListener { selectTab(Tab.CONCURSOS) }
+
+        // Frente G (TV) — as abas são focáveis mas os fundos são
+        // estáticos: sem FocusAnimator o D-pad chegava sem se ver
+        // onde estava (mesmo padrão da Frente A no detalhe).
+        if (TvUtils.isTv(this)) {
+            listOf(binding.tabCourses, binding.tabFiles, binding.tabConcursos)
+                .forEach { FocusAnimator.attach(it, true) }
+        }
 
         selectTab(Tab.COURSES)
         loadFavorites()
@@ -202,7 +213,15 @@ class MyListActivity : AppCompatActivity() {
                 startActivity(intent)
             }
             else -> {
+                // Frente H — guarda contra duplo toque (um toque = uma navegação).
+                if (!TapFeedback.tryNavigate(fullUrl)) return
                 SessionManager.get(this).saveLastWatched(file.folderPath ?: "/", file.name)
+                // Frente H — guarda o link no recent (ver DetailActivity).
+                SessionManager.get(this).addRecent(file.folderPath ?: "/", file.name, null, link)
+                // Frente G: a Minha lista NÃO monta playlist — sem
+                // isto o player tocava a playlist persistida de
+                // uma sessão anterior em vez do vídeo tocado.
+                PlaylistManager.clear()
                 val intent = Intent(this, PlayerActivity::class.java)
                 intent.putExtra(PlayerActivity.EXTRA_URL, fullUrl)
                 intent.putExtra(PlayerActivity.EXTRA_TITLE, file.name)
