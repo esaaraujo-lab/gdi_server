@@ -4,7 +4,7 @@
      nada de rosa solido nem laranja. O rosa da marca fica SO para o
      anel de FOCO (player_play_ring). Antes o estado normal era o
      btn_play_circle rosa (foto: circulo rosa gigante + pause laranja).
-     Tamanho: 64dp no celular, 96dp na TV (play_fab_size). -->
+     Tamanho: 48dp no celular, 72dp na TV (player_fab_size, Frente E). -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_pressed="true" android:drawable="@drawable/player_play_ring" />
     <item android:state_focused="true" android:drawable="@drawable/player_play_ring" />
