@@ -113,13 +113,17 @@ class DescriptionPregenerator(private val context: Context) {
                 ) {
                     is LessonDescription.Outcome.Ready -> {
                         sm.saveLessonDescription(folderPath, outcome.text)
-                        val fileName = LessonDescription.folderFileName(context, folderName)
                         val lessonFile = LessonDescription.lessonFilePath(folderPath, files)
                         if (lessonFile != null) {
-                            // Best-effort: grava na pasta de materiais.
+                            // Frente K — grava resumo + pilulas +
+                            // questoes na pasta de materiais (o MESMO
+                            // caminho do detalhe: MaterialSaver).
+                            // Best-effort: nunca trava a fila.
                             runCatching {
-                                com.meggy.app.data.AiService.saveToFolder(
-                                    context, lessonFile, fileName, outcome.text
+                                MaterialSaver.saveGenerated(
+                                    context, lessonFile, folderName,
+                                    outcome.bundle.summary, outcome.bundle.mindmap,
+                                    outcome.bundle.questionsJson
                                 )
                             }
                         }
