@@ -15,6 +15,7 @@ import com.vovofit.app.data.driveIndexFromPath
 import com.vovofit.app.databinding.ItemRailCardBinding
 import com.vovofit.app.util.CardGradient
 import com.vovofit.app.util.FocusAnimator
+import com.vovofit.app.util.TapFeedback
 import com.vovofit.app.util.CoverLibrary
 import com.vovofit.app.util.loadCoverChain
 import com.vovofit.app.util.Format
@@ -70,6 +71,7 @@ class RailAdapter(
                 if (pos != RecyclerView.NO_POSITION) onClick(items[pos])
             }
             FocusAnimator.attachCard(binding.cardRoot, TvUtils.isTv(binding.root.context))
+            TapFeedback.attachPress(binding.cardRoot, TvUtils.isTv(binding.root.context))
             // Frente A (TV): nextFocus explícito (ver params).
             if (nextFocusUpId != View.NO_ID) itemView.nextFocusUpId = nextFocusUpId
             if (nextFocusDownId != View.NO_ID) itemView.nextFocusDownId = nextFocusDownId
