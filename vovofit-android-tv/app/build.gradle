@@ -22,8 +22,8 @@ android {
         //   4 drives: Queima Diária (12), Todo Dia (13), Clube de Casa (14), Saúde e Fitness (15).
         //   Brand: deep teal #0F3D3E + lime green #A3E635. Tag prefix vovofit-v*.
         // v1.0.8 — layout do conceito + auto-update na abertura.
-        versionCode 14
-        versionName "1.0.13"
+        versionCode 15
+        versionName "1.0.14"
     }
 
     // ★ v1.4.0: Signing config com keystore FIXA (mesma em todos os builds)
