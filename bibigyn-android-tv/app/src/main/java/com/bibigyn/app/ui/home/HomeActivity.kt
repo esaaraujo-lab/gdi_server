@@ -121,6 +121,7 @@ class HomeActivity : AppCompatActivity() {
         setupHero()
         setupContinueRail()
         setupDrivesRail()
+        setupTvFocusChains()
         fetchFeaturedCovers()
         // Camada 3 — biblioteca de capas por tipo (Elton 2026-11-14
         // 19:50): busca o manifesto em 2º plano; quando chega,
@@ -440,7 +441,17 @@ class HomeActivity : AppCompatActivity() {
                 driveIcon = DriveItem.iconForPath(r.folderPath)
             )
         }
-        binding.railContinue.adapter = RailAdapter(railItems) { item ->
+        // Frente A (TV) — o destaque ("Continuar de onde parou") só
+        // existe quando há resume: calcula-se ANTES do adapter,
+        // porque o nextFocusUp dos cards depende dele (o
+        // setupFeaturedContinue corre depois e já não o corrige).
+        val hasFeatured = TvUtils.isTv(this) &&
+            recents.any { sm.hasResume(it.folderPath, it.videoName) }
+        binding.railContinue.adapter = RailAdapter(
+            railItems,
+            nextFocusUpId = if (hasFeatured) R.id.featuredCard else R.id.heroPlay,
+            nextFocusDownId = R.id.railDrives
+        ) { item ->
             lastFocusContinue = railItems.indexOf(item)
             val match = recents.find { it.videoName == item.title } ?: return@RailAdapter
             continueWatching(match.folderPath, match.videoName, item.subtitle)
@@ -748,12 +759,40 @@ class HomeActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
+    /**
+     * Frente A (TV) — cadeias D-pad explícitas da home (só TV).
+     * Do hero: DOWN vai ao destaque quando existe, senão ao rail
+     * visível de cima; do destaque: UP volta ao hero, DOWN vai ao
+     * rail visível de cima. Sem isto, o FocusFinder decide sozinho
+     * entre secções que estão fora do viewport do ScrollView.
+     */
+    private fun setupTvFocusChains() {
+        if (!TvUtils.isTv(this)) return
+        val featuredVisible = binding.featuredSection.visibility == View.VISIBLE
+        val continueVisible = binding.railContinue.visibility == View.VISIBLE
+        binding.heroPlay.nextFocusDownId =
+            if (featuredVisible) R.id.featuredCard
+            else if (continueVisible) R.id.railContinue
+            else R.id.railDrives
+        binding.featuredCard.nextFocusUpId = R.id.heroPlay
+        binding.featuredCard.nextFocusDownId =
+            if (continueVisible) R.id.railContinue else R.id.railDrives
+    }
+
     private fun setupDrivesRail() {
         binding.railDrives.layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         binding.railDrives.addItemDecoration(RailGutterDecoration(8))
+        // Frente A (TV) — UP do tile de drive volta ao rail de cima
+        // ("Continue assistindo", destaque ou hero — o que existir).
+        val drivesUpId = when {
+            binding.railContinue.visibility == View.VISIBLE -> R.id.railContinue
+            binding.featuredSection.visibility == View.VISIBLE -> R.id.featuredCard
+            else -> R.id.heroPlay
+        }
         drivesAdapter = DriveRailAdapter(
-            DriveItem.ALL, featuredCoverByPath
+            DriveItem.ALL, featuredCoverByPath,
+            nextFocusUpId = drivesUpId
         ) { drive ->
             lastFocusDrives = DriveItem.ALL.indexOf(drive)
             openDrive(drive)
