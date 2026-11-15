@@ -10,9 +10,9 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.bibigyn.app.R
+import com.bibigyn.app.data.DriveItem
 import com.bibigyn.app.data.FileItem
 import com.bibigyn.app.data.colorFromString
-import com.bibigyn.app.data.monogramFor
 import com.bibigyn.app.databinding.ItemMylistCardBinding
 import com.bibigyn.app.util.CardGradient
 import com.bibigyn.app.util.CoverLibrary
@@ -75,25 +75,27 @@ class MyListAdapter(
             mylistBg.background = CardGradient.drawable(res, colorFromString(item.name))
 
             // Camada 3 — biblioteca por tipo (nome do arquivo →
-            // pasta); sem thumb (ou se ela falhar), a imagem da
-            // biblioteca; sem match, o monograma.
-            val showLibraryOrMonogram = {
-                val libraryUrl = CoverLibrary.resolve(ctx, item.name, item.folderPath)
+            // pasta), ESTRITA (2.1.12, sem 'geral'); sem thumb (ou se
+            // ela falhar), a imagem da biblioteca; sem match, a capa
+            // gerada do drive (nunca monograma).
+            val coverRes = item.folderPath?.let { DriveItem.coverResForPath(it) }
+            val showLibraryOrCover = {
+                val libraryUrl = CoverLibrary.resolveStrict(ctx, item.name, item.folderPath)
                 if (!libraryUrl.isNullOrBlank()) {
                     mylistThumb.visibility = View.VISIBLE
                     mylistMonogram.visibility = View.GONE
                     mylistThumb.load(libraryUrl) {
-                        error(R.drawable.card_gradient_pink)
+                        error(coverRes ?: R.drawable.card_gradient_pink)
                         listener(onError = { _, _ ->
-                            mylistThumb.visibility = View.GONE
-                            mylistMonogram.visibility = View.VISIBLE
-                            mylistMonogram.text = monogramFor(item.name)
+                            mylistThumb.visibility = View.VISIBLE
+                            mylistMonogram.visibility = View.GONE
+                            mylistThumb.setImageResource(coverRes ?: R.drawable.card_gradient_pink)
                         })
                     }
                 } else {
-                    mylistThumb.visibility = View.GONE
-                    mylistMonogram.visibility = View.VISIBLE
-                    mylistMonogram.text = monogramFor(item.name)
+                    mylistThumb.visibility = View.VISIBLE
+                    mylistMonogram.visibility = View.GONE
+                    mylistThumb.setImageResource(coverRes ?: R.drawable.card_gradient_pink)
                 }
             }
             val thumb = item.thumbnailLink
@@ -102,7 +104,7 @@ class MyListAdapter(
                 mylistMonogram.visibility = View.GONE
                 mylistThumb.load(thumb) {
                     error(R.drawable.card_gradient_pink)
-                    listener(onError = { _, _ -> showLibraryOrMonogram() })
+                    listener(onError = { _, _ -> showLibraryOrCover() })
                 }
             } else {
                 showLibraryOrMonogram()
