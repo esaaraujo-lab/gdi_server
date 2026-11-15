@@ -20,8 +20,8 @@ android {
         targetSdk 34
         // ★ v2.0.0: Bottom Nav (4 tabs) + Hero rotativo + Search/MyList/Settings + Player gestures
         // ★ v2.1.2: Login persistence (auto re-login when cookie expires) + TV keyboard fix (showSoftInput)
-        versionCode 26
-        versionName "2.1.19"
+        versionCode 27
+        versionName "2.1.20"
     }
 
     // ★ v1.4.0: Signing config com keystore FIXA (mesma em todos os builds)
@@ -71,6 +71,8 @@ dependencies {
     implementation 'androidx.media3:media3-datasource:1.2.1'
     implementation 'androidx.media3:media3-datasource-okhttp:1.2.1'
     implementation 'androidx.media3:media3-database:1.2.1'
+    // build-fix 2.7.21 (R4C): NotificationCompat.MediaStyle vive em androidx.media, nao em core.
+    implementation 'androidx.media:media:1.7.0'
     // v2.1.5: leitor de MD (Markwon + tabelas + tachado) e busca no texto
     // do PDF (pdfbox-android — só para extração de texto; a renderização
     // continua no PdfRenderer nativo).
