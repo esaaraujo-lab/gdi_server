@@ -77,6 +77,7 @@
     <string name="pdf_summary_extracting">A extrair o texto do PDF…</string>
     <string name="pdf_summary_ocr">A ler a página %1$d de %2$d (OCR)…</string>
     <string name="pdf_summary_generating">A gerar o resumo com a Meggy…</string>
+    <string name="pdf_summary_generating_fallback">O primeiro caminho falhou — a gerar o resumo por outro caminho…</string>
     <string name="pdf_summary_no_text">Este PDF não tem texto legível — parece escaneado e a Meggy não conseguiu lê-lo por OCR.</string>
     <string name="pdf_summary_unavailable">A IA da Meggy não está disponível neste servidor.</string>
     <string name="pdf_summary_rate_limited">Limite de mensagens da Meggy por hora atingido. Tente novamente mais tarde.</string>
