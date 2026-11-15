@@ -713,6 +713,12 @@
   //   unificado), por chave normalizada — o loadUnifiedExtras antigo
   //   descartava kind 'course' e o detalhe nunca via c.total.
   let __unifiedCourseTotals={};
+  // ★ v2.15.32 (B): cursos do D1 (kind 'course' do unificado) SEM
+  //   gémeo manual — viram tiles próprios (v. loadUnifiedExtras e
+  //   renderCursos). Reposta a cada leitura do unificado (como os
+  //   mapas de totais/capas); o cache de 60s do unificado vale
+  //   para ela também (o early-return preserva o valor).
+  let __unifiedOwnCourses=[];
   function __unifiedCourseTotalFor(key){
     if(!key) return null;
     try{
@@ -725,6 +731,24 @@
       if(__unifiedCourseTotals[k3]!=null) return __unifiedCourseTotals[k3];
     }catch(_){}
     return null;
+  }
+  // ★ v2.15.32 (C — gémeo órfão): nome normalizado p/ comparar o curso
+  //   local com um concurso/destaque — o concurso não tem coursePath, por
+  //   isso o match é por nome (acentos fora, só [a-z0-9]): "TJSP Oficial
+  //   de Justiça", "TJSP - Oficial de Justiça" e "TJ SP - Oficial de
+  //   Justiça…" dão todos "tjspoficialdejustica".
+  function __normTwinName(s){
+    try{ return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,''); }catch(_){ return ''; }
+  }
+  // ★ v2.15.32 (C): gémeo por nome — igual, ou prefixo comum com ≥12
+  //   chars no lado mais curto (o nome local pode ter sufixo, ex. ano:
+  //   "…Justiça 2024"). O piso de 12 evita casar siglas curtas ("TJSP").
+  function __isTwinName(a,b){
+    if(!a||!b) return false;
+    if(a===b) return true;
+    const m=Math.min(a.length,b.length);
+    if(m<12) return false;
+    return a.indexOf(b)===0||b.indexOf(a)===0;
   }
   // ★ v2.10.2: invalida o cache unificado (criar/excluir concurso)
   function __unifiedCourseCoverFor(key){
@@ -914,6 +938,10 @@
   async function loadUnifiedExtras(){
     const now=Date.now();
     if(__unifiedCache && now-__unifiedAt<60000) return __unifiedCache;
+    // ★ v2.15.32 (B): reset ANTES do fetch — se o fetch falhar, o
+    //   catch do chamador dá [] e a grade rende sem tiles D1
+    //   obsoletos de uma leitura anterior (fail-closed).
+    __unifiedOwnCourses=[];
     const r=await fetch('/api/courses/unified',{credentials:'include',cache:'no-store'});
     const d=await r.json();
     if(!d||!d.ok||!Array.isArray(d.items)) throw new Error('unified failed');
@@ -921,8 +949,16 @@
     __unifiedCourseTotals={};
     __unifiedCourseCovers={};
     for(const it of d.items){
-      // ★ v2.15.7 (P8): kind 'course' alimenta o mapa de totais (não vira
-      //   cartão — o curso local já está na grade via collectCourses).
+      // ★ v2.15.7 (P8): kind 'course' alimenta o mapa de totais.
+      //   ★ v2.15.32 (B): …e VIRA CARTÃO quando não há gémeo manual
+      //   (o merge é no renderCursos). A premissa antiga — "o curso
+      //   local já está na grade via collectCourses" — é falsa
+      //   quando o LS nunca foi sincronizado com o D1: o sync só
+      //   corre no 'user:ready' (study-scanner.js), um evento sem
+      //   replay que normalmente dispara antes de o módulo carregar
+      //   (v. nota no scanner). O unificado JÁ traz os cursos do D1
+      //   nesta mesma leitura — descartá-los era o ponto exato da
+      //   queda (Passo 29: 8 cursos no /api/courses/list, 0 tiles).
       if(it.kind==='course' && it.coursePath){
         try{
           const k=low(String(it.coursePath));
@@ -930,6 +966,21 @@
           try{ const kd=low(decodeURIComponent(String(it.coursePath))); if(kd!==k) __unifiedCourseTotals[kd]=it.total||0; }catch(_){}
           if(it.coverUrl){ __unifiedCourseCovers[k]=it.coverUrl; try{ const kd=low(decodeURIComponent(String(it.coursePath))); if(kd!==k) __unifiedCourseCovers[kd]=it.coverUrl; }catch(_){} }
         }catch(_){}
+        // ★ v2.15.32 (B): tile D1. Sem `kind`: os ramos existentes
+        //   (bestIn, busca, cabeçalho, paginação) tratam-no como um
+        //   curso local — `d1Course` distingue-o do manual (sem
+        //   "Remover curso manual", sem "Meggy processando…").
+        //   total/watched vêm do unificado (D1), não do scanner;
+        //   a remoção usa o handler partilhado (POST
+        //   /api/courses/remove c/ c.key → apaga a linha do D1).
+        __unifiedOwnCourses.push({
+          key:it.coursePath, coursePath:it.coursePath,
+          name:it.name||'', manual:false, d1Course:true,
+          manualCourse:{name:it.name||'', icon:it.icon||'📁', color:it.color||''},
+          coverUrl:it.coverUrl||null,
+          total:it.total||0, totalLessons:it.total||0,
+          watched:it.watched||0, lessons:new Set(), lastAt:0
+        });
       }
       if(it.kind==='concurso') out.push({kind:'concurso', key:'concurso:'+it.concursoId, concursoId:it.concursoId, name:it.name, examDate:it.examDate||'', total:it.total||0, coverUrl:it.coverUrl||null, lessons:new Set(), watched:0});  // ★ v2.15.30 (B): coverUrl passa p/ a hierarquia de capa (a); null se o unificado não a enviar
       // ★ v2.15.16 (R): o registo em destaque guarda o caminho antigo
@@ -961,7 +1012,58 @@
     //   (v. __unifiedCourseTotals em loadUnifiedExtras) — o cartão e o
     //   detalhe passam a mostrar o mesmo total da prévia.
     for (const c of cs) { const t = __unifiedCourseTotalFor(c.key); if (t != null) c.total = t; const cv = __unifiedCourseCoverFor(c.key); if (cv) c.coverUrl = cv; }
-    const all=cs.concat(__extras);
+    // ★ v2.15.32 (B): cursos do D1 sem gémeo manual entram na grade.
+    //   Chave de comparação = caminho canónico em minúsculas (o
+    //   rebase legado /11: → /9: vive em __canonCoursePath): um
+    //   manual '/11:/CURSOS 2026' suprime o gémeo D1 '/9:/CURSOS
+    //   2026' (fica o manual, c/ o botão "Remover curso manual");
+    //   um curso oculto (LS_HIDDEN) não ressuscita via D1; duas
+    //   grafias do mesmo curso no D1 dão um só tile (a 1ª, ordem
+    //   do servidor = added_at DESC). Ordem: manuais (lastAt DESC)
+    //   e a seguir os D1 (ordem do servidor) — sem re-ordenar.
+    const __manualKeys=new Set();
+    for(const _mc of cs){ try{ __manualKeys.add(low(__canonCoursePath(_mc.key))); }catch(_){ try{ __manualKeys.add(low(_mc.key)); }catch(__){} } }
+    const __hiddenKeys=new Set();
+    try{ for(const _h of listHiddenCourses()){ try{ __hiddenKeys.add(low(__canonCoursePath(_h))); }catch(_){ try{ __hiddenKeys.add(low(_h)); }catch(__){} } } }catch(_){}
+    const __d1Only=[];
+    const __seenD1=new Set();
+    for(const _u of __unifiedOwnCourses){
+      if(!_u||!_u.key)continue;
+      let _k; try{ _k=low(__canonCoursePath(_u.key)); }catch(_){ try{ _k=low(_u.key); }catch(__){ continue; } }
+      if(__manualKeys.has(_k))continue;   // gémeo manual — fica o manual
+      if(__hiddenKeys.has(_k))continue;   // oculto pelo utilizador
+      if(__seenD1.has(_k))continue;       // grafias gémeas no D1
+      __seenD1.add(_k);
+      __d1Only.push(_u);
+    }
+    // ★ v2.15.32 (C — gémeo órfão): um curso manual LOCAL (LS) gémeo por
+    //   NOME de um concurso ou destaque, sem aulas indexadas no D1
+    //   (c.total 0 — órfão, ex. path /7:/ inexistente no drive 7) e sem
+    //   progresso (watched 0), é o mesmo preparo que o concurso/destaque
+    //   já mostra — o cartão órfão some da grade E do cabeçalho. O
+    //   concurso não tem coursePath, por isso o match é por nome
+    //   normalizado (__normTwinName/__isTwinName) — nunca por path. A
+    //   regra do worker (ownPaths.has, grafia exacta) não cobre este
+    //   caso: o curso local nem chega ao worker (só LS) e o path /7:/
+    //   difere do destaque. Curso com aulas (total>0) ou progresso
+    //   (watched>0) NUNCA é suprimido (pode ser pasta distinta com o
+    //   mesmo nome). Só render: nada é apagado do LS/D1; o curso
+    //   reaparece sozinho quando o D1 ganhar aulas p/ ele ou o gémeo
+    //   desaparecer.
+    const __twinNames21532=new Set();
+    for(const __it of __extras){ if(__it&&(__it.kind==='concurso'||__it.kind==='featured')){ const __n=__normTwinName(__it.name); if(__n) __twinNames21532.add(__n); } }
+    const __isTwin21532=c=>{
+      if(!c||c.kind||c.manual!==true) return false;
+      if((c.total||0)>0||(c.watched||0)>0) return false;
+      let __nm='';
+      try{ const __mc=c.manualCourse||{}; __nm=__mc.name||''; if(__nm&&String(__nm).indexOf('%')>=0) __nm=decodeURIComponent(__nm); }catch(_){}
+      if(!__nm){ try{ __nm=courseName(c.key)||''; }catch(_){ __nm=''; } }
+      const __n=__normTwinName(__nm);
+      if(!__n) return false;
+      for(const __t of __twinNames21532){ if(__isTwinName(__n,__t)) return true; }
+      return false;
+    };
+    const all=cs.concat(__d1Only,__extras).filter(c=>!__isTwin21532(c));
     // ★ v2.15.30 (C — contagem do cabeçalho): o cabeçalho contava all
     //   (próprios + em destaque) mas a grade "Meus Cursos" mostra só os
     //   próprios — "8 cursos em andamento" com 4 tiles. O número principal
@@ -1171,12 +1273,23 @@
       if(!c.coverUrl){ try{ el.setAttribute('data-v21528-cover',''); el.setAttribute('data-v21528-cover-name',name); el.setAttribute('data-v21528-cover-path',c.key||''); }catch(_){} }
       // ★ destaque visual para curso manual: border-left com a cor do manualCourse
       if(isManual)el.style.borderLeft='4px solid '+color;
+      // ★ v2.15.32 (A — Escrevente truncado): o título manual NÃO tem
+      //   clamp nenhum. A v2.15.30 pôs clamp 4 a estimar ~20-22 chars/linha
+      //   num tile de ~200px — mas a largura real do TEXTO é 122px no
+      //   desktop (padding 18×2 + botão remover 26 + gap 8 + ícone 18 + gap
+      //   6) e 92-107px no celular: o nome de 73 chars precisa de 5-7 linhas
+      //   (8-9 a 320px) e o clamp 4 cortava-o a meio (Passo 29: 4 linhas
+      //   "TJ SP - / Escrevente / Técnico / Judiciário do…"). Sem clamp o
+      //   título cresce as linhas que precisar (altura auto; o cartão não
+      //   tem altura fixa) e o nome aparece inteiro, sem reticências.
+      //   O tooltip (title do <b>) continua com o nome completo. Ramo
+      //   concurso/destaque mantém clamp 2 (:1112); drive mantém clamp 3.
       el.innerHTML=`
         ${c.coverUrl?`<div class="gdi-course-cover"><span class="gdi-course-cover-icon">${icon}</span><img src="${esc(c.coverUrl)}" alt="" onerror="this.style.display='none'"></div>`:`<div class="gdi-course-cover">${__tileCoverHtml(c,icon)}</div>`}
         <div class="gdi-course-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
           <b class="gdi-course-title" title="${escHtml(_mcName||courseName(c.key))}" style="flex:1;min-width:0;display:flex;align-items:flex-start;gap:6px;">
             ${isManual?`<span style="font-size:18px;flex:none;">${icon}</span>`:''}
-            <span style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;white-space:normal;overflow-wrap:break-word;">${escHtml(name)}</span>
+            <span style="overflow:hidden;white-space:normal;overflow-wrap:break-word;min-width:0;">${escHtml(name)}</span>
           </b>
           <button class="gdi-course-remove" title="${isManual?'Remover curso manual':'Remover curso'}" style="background:transparent;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:14px;padding:2px 6px;flex:none;border-radius:6px;transition:all .15s;"><i class="bi bi-x-lg"></i></button>
         </div>
