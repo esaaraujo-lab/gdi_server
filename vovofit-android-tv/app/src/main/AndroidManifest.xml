@@ -17,6 +17,20 @@
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.hardware.faketouch" android:required="false" />
 
+    <!-- R8A — visibilidade de pacote (API 30+): sem <queries>, o
+         queryIntentActivities() do UpdateChecker pode devolver vazio e o
+         instalador nunca abrir, mesmo existindo no aparelho. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="application/vnd.android.package-archive" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.INSTALL_PACKAGE" />
+            <data android:mimeType="application/vnd.android.package-archive" />
+        </intent>
+    </queries>
+
     <application
         android:name=".VovoFitApp"
         android:allowBackup="true"
