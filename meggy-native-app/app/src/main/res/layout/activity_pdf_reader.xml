@@ -1,11 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  v2.7.6 — Leitor de PDF (conceito leitor-pdf): header voltar + nome
-  + busca + compartilhar; página como card branco (PdfRenderer);
-  barra inferior "‹ Página X de N ›" + zoom "− 100% +" + bookmark.
-  TV: mesmos controles focáveis por D-pad; página rola com as setas.
-  Busca no texto via pdfbox-android (PDFTextStripper); PDFs
-  escaneados sem texto não retornam ocorrências (documentado).
+  v2.7.15 — Leitor de PDF (Frente I): scroll contínuo em tela
+  cheia (RecyclerView vertical, uma página por item); no celular
+  desliza-se para baixo entre páginas — sem botões gigantes.
+  Barra inferior fina: ‹ › + zoom −/+ pequenos (36dp, 16sp),
+  rótulo da página (toque = ir para página) e bookmark.
+  Zoom por botões + pinch (um passo por gesto); ao ampliar, a
+  página rola na horizontal dentro do item. Toolbar 56dp com
+  "<" (voltar) de tamanho normal. TV: mesmos controlos
+  focáveis por D-pad; o RecyclerView recebe o foco e rola
+  com as setas. Busca/bookmark/compartilhar: inalterados.
+  Frente J: botão "✨ Resumo" na toolbar (btnSummary) — gera o resumo do PDF pela Meggy.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -17,7 +22,7 @@
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
-        android:layout_height="64dp"
+        android:layout_height="56dp"
         android:background="@color/md_background"
         android:elevation="0dp"
         app:navigationIconTint="@color/md_primary"
@@ -52,6 +57,21 @@
                 android:padding="12dp"
                 android:src="@drawable/ic_share"
                 android:tint="@color/md_on_surface" />
+
+            <!-- Frente J — botão "Gerar resumo" (Meggy, no servidor). -->
+            <TextView
+                android:id="@+id/btnSummary"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:clickable="true"
+                android:contentDescription="Gerar resumo com a Meggy"
+                android:focusable="true"
+                android:gravity="center"
+                android:paddingHorizontal="10dp"
+                android:text="✨ Resumo"
+                android:textColor="@color/md_primary"
+                android:textSize="14sp"
+                android:textStyle="bold" />
         </LinearLayout>
     </com.google.android.material.appbar.MaterialToolbar>
 
@@ -99,82 +119,57 @@
 
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btnSearchPrev"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
             android:background="@drawable/chip_outline"
             android:focusable="true"
             android:text="‹"
             android:textColor="@color/md_on_surface"
-            android:textSize="20sp" />
+            android:textSize="16sp" />
 
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btnSearchNext"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
             android:layout_marginStart="@dimen/spacing_xs"
             android:background="@drawable/chip_outline"
             android:focusable="true"
             android:text="›"
             android:textColor="@color/md_on_surface"
-            android:textSize="20sp" />
+            android:textSize="16sp" />
     </LinearLayout>
 
-    <!-- Página -->
-    <HorizontalScrollView
-        android:id="@+id/pageScrollH"
+    <!-- Páginas em scroll contínuo (Frente I): RecyclerView vertical;
+         cada página é um item; deslizar para baixo muda de página. -->
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:fillViewport="true"
-        android:focusable="true"
-        android:scrollbars="none">
+        android:layout_weight="1">
 
-        <ScrollView
-            android:id="@+id/pageScrollV"
-            android:layout_width="wrap_content"
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/pdfPages"
+            android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:fillViewport="true"
             android:focusable="true"
-            android:scrollbars="none">
+            android:scrollbars="vertical" />
 
-            <FrameLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:padding="@dimen/spacing_lg">
+        <ProgressBar
+            android:id="@+id/loadingView"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:visibility="gone" />
 
-                <com.google.android.material.card.MaterialCardView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    app:cardCornerRadius="@dimen/radius_md"
-                    app:cardElevation="@dimen/elevation_3"
-                    app:cardBackgroundColor="@android:color/white">
-
-                    <ImageView
-                        android:id="@+id/pageImage"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:contentDescription="Página do PDF" />
-                </com.google.android.material.card.MaterialCardView>
-
-                <ProgressBar
-                    android:id="@+id/loadingView"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:visibility="gone" />
-
-                <TextView
-                    android:id="@+id/errorView"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:gravity="center"
-                    android:textColor="@color/md_on_surface_variant"
-                    android:textSize="@dimen/text_detail_body"
-                    android:visibility="gone" />
-            </FrameLayout>
-        </ScrollView>
-    </HorizontalScrollView>
+        <TextView
+            android:id="@+id/errorView"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:textColor="@color/md_on_surface_variant"
+            android:textSize="@dimen/text_detail_body"
+            android:visibility="gone" />
+    </FrameLayout>
 
     <!-- Barra inferior: página + zoom + bookmark -->
     <LinearLayout
@@ -183,7 +178,7 @@
         android:background="@color/md_surface_container"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:padding="@dimen/spacing_md">
+        android:padding="@dimen/spacing_sm">
 
         <LinearLayout
             android:layout_width="0dp"
@@ -194,13 +189,13 @@
 
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/btnPrevPage"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
                 android:background="@drawable/chip_outline"
                 android:focusable="true"
                 android:text="‹"
                 android:textColor="@color/md_on_surface"
-                android:textSize="22sp" />
+                android:textSize="16sp" />
 
             <TextView
                 android:id="@+id/pageLabel"
@@ -216,24 +211,24 @@
 
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/btnNextPage"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
                 android:background="@drawable/chip_outline"
                 android:focusable="true"
                 android:text="›"
                 android:textColor="@color/md_on_surface"
-                android:textSize="22sp" />
+                android:textSize="16sp" />
         </LinearLayout>
 
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btnZoomOut"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
             android:background="@drawable/chip_outline"
             android:focusable="true"
             android:text="−"
             android:textColor="@color/md_on_surface"
-            android:textSize="22sp" />
+            android:textSize="16sp" />
 
         <TextView
             android:id="@+id/zoomLabel"
@@ -247,18 +242,18 @@
 
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btnZoomIn"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
             android:background="@drawable/chip_outline"
             android:focusable="true"
             android:text="+"
             android:textColor="@color/md_on_surface"
-            android:textSize="22sp" />
+            android:textSize="16sp" />
 
         <TextView
             android:id="@+id/btnBookmark"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
             android:layout_marginStart="@dimen/spacing_md"
             android:background="@drawable/chip_outline"
             android:clickable="true"
@@ -266,7 +261,7 @@
             android:gravity="center"
             android:text="☆"
             android:textColor="@color/md_primary"
-            android:textSize="22sp" />
+            android:textSize="18sp" />
     </LinearLayout>
 
     <!-- Bottom nav (conceito) — oculta na TV (código) -->
