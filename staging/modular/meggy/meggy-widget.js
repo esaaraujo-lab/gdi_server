@@ -598,6 +598,85 @@
   //   previous user's AI response (or restore their input text) AFTER
   //   destroySession cleared messages + sessionStorage — a cross-user
   //   privacy leak (User B would see User A's last exchange on next open).
+  // ── v2.15.6-drawer-hook: gancho de abertura nos resumos do drawer ──
+  // A ordem do Elton (21:48) vale para CADA resumo da Meggy: abre com uma
+  // prévia da aula ("Nessa aula vamos estudar [assunto]..."). O batalhão +
+  // o cache-save já garantem o gancho deterministicamente — mas o chat do
+  // drawer NUNCA passa por eles: send() exibe a resposta crua da IA e o
+  // widget NÃO salva o resumo em lugar nenhum (não há saveIsaSummary /
+  // cacheSave no widget). O ponto único de garantia do drawer é, portanto,
+  // a EXIBIÇÃO em send(): quando o pedido é um resumo, o texto passa por
+  // ensureDrawerSummaryHook antes do addMsg. Se a IA já abriu com o gancho,
+  // não toca; se abriu com título fixo ("## Resumo:", "Resumo: ...") ou com
+  // o alerta ⚠️, o gancho determinístico é inserido (mesma rotação por aula
+  // do batalhão). O trigger "Resumo:" é um alargamento em relação ao worker
+  // (que só olha '#' e '⚠️') — é exatamente o formato que a IA do chat
+  // devolveu ao vivo ("Resumo: Aplicabilidade das Normas...").
+  function drawerSummaryHookSubject(lesson, pdfName){
+    function cleanName(s){
+      let t = String(s || '').replace(/\.[a-z0-9]+$/i, '').trim();
+      t = t.replace(/^(aula\s*[-–.:]?\s*\d+|0*\d+)\s*[-–.:]?\s*/i, '').trim();
+      t = t.replace(/\s*[-–.:]?\s*aula\s+\d+\s*$/i, '').trim();
+      return t;
+    }
+    function fromLesson(l){
+      let t = String(l || '').split('/').filter(Boolean).pop() || '';
+      t = t.replace(/\.[a-z0-9]+$/i, '').replace(/[-_]+/g, ' ').trim();
+      t = t.replace(/^isolada\s+/i, '');
+      t = t.replace(/^(aula\s*[-–.:]?\s*\d+|0*\d+)\s*[-–.:]?\s*/i, '').trim();
+      t = t.replace(/\s*[-–.:]?\s*aula\s+\d+\s*$/i, '').trim();
+      return t;
+    }
+    function isGeneric(t){
+      if(!t) return true;
+      const b = t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      if(/^\d+$/.test(b)) return true;
+      if(/^(aula|video|lesson|capitulo|parte|material)(\s+\d+)?$/.test(b)) return true;
+      return false;
+    }
+    let subj = cleanName(pdfName);
+    if(isGeneric(subj)) subj = fromLesson(lesson);
+    if(isGeneric(subj)) return 'este tema';
+    return subj.toLowerCase();
+  }
+  function drawerSummaryHook(lesson, pdfName){
+    const templates = ['Nessa aula vamos estudar ', 'Nesta aula, vamos mergulhar em ', 'Hoje vamos estudar ', 'Nesta aula, você vai entender ', 'Prepare-se: nesta aula vamos estudar '];
+    let h = 0; const s = String(lesson || '') + '/' + String(pdfName || '');
+    for(let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return templates[h % templates.length] + drawerSummaryHookSubject(lesson, pdfName) + '…';
+  }
+  function ensureDrawerSummaryHook(text, lesson, pdfName){
+    const t = String(text || '');
+    if(!t.trim()) return t;
+    const lines = t.split('\n');
+    let i = 0; while(i < lines.length && !lines[i].trim()) i++;
+    if(i >= lines.length) return t;
+    const first = lines[i].trim();
+    if(first.startsWith('#') || first.startsWith('⚠️') || /^resumo\b/i.test(first)){
+      lines.splice(i, 0, drawerSummaryHook(lesson, pdfName), '');
+      return lines.join('\n');
+    }
+    return t;
+  }
+  function isSummaryRequest(txt){
+    return /resum/i.test(String(txt || ''));
+  }
+  function currentLessonName(){
+    try{
+      if(typeof window.realLessonName === 'function'){
+        const n = window.realLessonName('') || '';
+        if(n) return n;
+      }
+    }catch(_){}
+    const t = document.title || '';
+    let n = t.split(' - ')[0].split(' | ')[0].trim();
+    if(!n){
+      const p = window.location.pathname;
+      const seg = p.split('/').filter(Boolean).pop() || '';
+      try{ n = decodeURIComponent(seg); }catch(_){ n = seg; }
+    }
+    return n;
+  }
   let _sessionGen = 0;
   async function send(){
     const txt=input.value.trim();
@@ -720,13 +799,17 @@
         if(_sessionGen !== myGen){ return; }
         if(fullText){
           // Re-renderiza Markdown final (com formatação completa)
-          bubble.innerHTML=renderMd(fullText);
+          // ★ v2.15.6-drawer-hook: o resumo do drawer abre com o gancho —
+          // o texto exibido (e guardado no histórico/memória) passa pelo
+          // gancho determinístico quando o pedido é um resumo.
+          const shownText = isSummaryRequest(txt) ? ensureDrawerSummaryHook(fullText, currentLessonName(), '') : fullText;
+          bubble.innerHTML=renderMd(shownText);
           // Adiciona ao histórico de mensagens
-          addMsg('assistant',fullText);
+          addMsg('assistant',shownText);
           // Remove o bubble temporário (addMsg já adicionou um novo)
           streamEl.remove();
           // ★ atualiza banco de memória
-          updateMemory(undefined,{question:txt,response:fullText});
+          updateMemory(undefined,{question:txt,response:shownText});
         }else{
           bubble.innerHTML='<span style="color:#ff8b8b;">Resposta vazia. Tente novamente.</span>';
         }
@@ -747,9 +830,11 @@
     //   success path which skips the server block above).
     if(_sessionGen !== myGen){ hideTyping(); return; }
     hideTyping();
-    addMsg('assistant',response);
+    // ★ v2.15.6-drawer-hook: resumo do drawer abre com o gancho (ver D2).
+    const shownResponse = isSummaryRequest(txt) ? ensureDrawerSummaryHook(response, currentLessonName(), '') : response;
+    addMsg('assistant',shownResponse);
     // ★ atualiza banco de memória com a interação
-    updateMemory(undefined,{question:txt,response:response});
+    updateMemory(undefined,{question:txt,response:shownResponse});
     if(usedLocal)updateStatus(); // confirma que usou local
     } finally {
       busy=false;
