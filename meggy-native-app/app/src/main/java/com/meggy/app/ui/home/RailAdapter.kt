@@ -83,13 +83,12 @@ class RailAdapter(
             val baseColor = colorFromString(item.colorHint ?: item.title)
             cardBg.background = CardGradient.drawable(res, baseColor)
 
-            // v2.7.11 onda 2 + camada (3) — thumb fotográfica quando
-            // houver; sem ela, a imagem da biblioteca por tipo de aula
-            // (nome da aula → curso → pasta); sem match, a imagem
-            // 'geral' (fallback da camada 3); sem manifesto, a capa
-            // GERADA do drive (ThumbArt) — inclusive quando o Coil falhar.
-            // Monograma com letras NUNCA mais é thumb.
-            val thumb = LibraryCovers.remoteCover(
+            // v2.7.11 onda 2 + camada (3) ESTRITA (2.7.13, sem 'geral')
+            // — thumb fotográfica quando houver; sem ela, a imagem da
+            // biblioteca por tipo de aula (nome da aula → curso → pasta);
+            // sem match, a capa GERADA do drive (ThumbArt) — inclusive
+            // quando o Coil falhar. Monograma com letras NUNCA mais é thumb.
+            val thumb = LibraryCovers.remoteCoverStrict(
                 item.thumbnailUrl ?: item.file?.thumbnailLink,
                 item.displayTitle ?: item.title, item.subtitle,
                 item.file?.folderPath
