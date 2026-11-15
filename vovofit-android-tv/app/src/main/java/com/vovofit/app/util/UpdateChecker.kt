@@ -70,15 +70,33 @@ import java.util.concurrent.atomic.AtomicBoolean
  *    o FileProvider não serve o APK e o instalador nunca abre.
  *  - Depois de a instalação ser confirmada, o APK é apagado
  *    (deleteDownloadedApkIfInstalled + UpdateCleanupReceiver).
+ * ★ R8A (2026-11-15) — throttle 24h → 1h (regra do Elton §11);
+ *   falha de checagem/download espera 15 min (não queima a janela de
+ *   1h, nem tenta em cada onResume); guarda em memória 30 s contra a
+ *   dupla checagem Splash+Home; guarda offered_version (não existia);
+ *   <queries> no manifesto p/ o instalador ser visível (API 30+).
  */
 object UpdateChecker {
 
     private const val PREFS_UPDATE = "meggy_update"
     private const val KEY_LAST_CHECK = "last_check_ms"
-    private const val CHECK_INTERVAL_MS = 24L * 60 * 60 * 1000 // 24h
+    // R8A — intervalo entre checagens de rede: 1h (era 24h). Regra do
+    // Elton (§11): ao abrir o app, se houver versão nova, a TV baixa e
+    // instala — com 24h uma release publicada depois da última checagem
+    // só aparecia até 24h depois. 1h é o mínimo seguro sem martelar a
+    // API do GitHub (sem auth: 60 req/h por IP; 1 aparelho = 24/dia).
+    private const val CHECK_INTERVAL_MS = 1L * 60 * 60 * 1000 // 1h
+    // R8A — falha de checagem NÃO queima a janela de 1h, mas também não
+    // pode tentar em cada onResume: após uma falha, espera 15 min.
+    private const val KEY_LAST_FAILED_CHECK = "last_failed_check_ms"
+    private const val FAILED_CHECK_RETRY_MS = 15L * 60 * 1000 // 15 min
+    // R8A — guarda em memória (30 s) p/ a dupla checagem Splash +
+    // Home não disparar 2 requests antes de o timestamp gravar
+    // (mesmo padrão da BiBi 2.1.9; a Vovó não o tinha).
+    private var lastCheckAttemptMs = 0L
 
     /**
-     * v1.0.4 — Checagem com throttle (máx. 1×/24h, persistido em prefs).
+     * v1.0.4 — Checagem com throttle (máx. 1×/1h desde a R8A, era 1×/24h; persistido em prefs).
      * v1.0.6 — timestamp só após HTTP 200 + corpo válido
      * (antes era gravado ANTES da rede e uma falha queimava a janela).
      *
@@ -89,7 +107,7 @@ object UpdateChecker {
      *
      * O resume de um APK pendente NUNCA é adiado pelo throttle: um APK
      * já baixado tem que instalar na hora, mesmo que a checagem esteja
-     * dentro da janela de 24h.
+     * dentro da janela de 1h.
      */
     /**
      * v1.0.8 — `silent = true` (Splash, app a abrir): checa e baixa em
@@ -106,15 +124,26 @@ object UpdateChecker {
         // 1) APK pendente primeiro — nunca atrasado pelo throttle. Se
         // instalou, retorna (o checkForUpdate faria a mesma instalação).
         if (!silent && resumePendingApk(context)) return
-        // 2) Throttle: 1×/24h.
+        // R8A — guarda em memória (30 s): Splash + Home disparam no
+        // mesmo arranque; sem isto iam 2 requests ao GitHub antes de
+        // o timestamp da checagem gravar.
+        val nowAttempt = System.currentTimeMillis()
+        if (nowAttempt - lastCheckAttemptMs < 30_000L) return
+        lastCheckAttemptMs = nowAttempt
+        // 2) Throttle: 1×/1h (R8A; era 1×/24h).
         val prefs = context.getSharedPreferences(PREFS_UPDATE, Context.MODE_PRIVATE)
         val last = prefs.getLong(KEY_LAST_CHECK, 0L)
         val now = System.currentTimeMillis()
         if (now - last < CHECK_INTERVAL_MS) return
+        // R8A — falha recente: espera FAILED_CHECK_RETRY_MS antes de
+        // tentar de novo. Sem isto, cada onResume disparava 1 request
+        // enquanto a rede/GitHub estivesse fora.
+        val lastFailed = prefs.getLong(KEY_LAST_FAILED_CHECK, 0L)
+        if (now - lastFailed < FAILED_CHECK_RETRY_MS) return
         // v1.0.6 — o timestamp NÃO é gravado aqui: só após uma
         // resposta bem-sucedida (HTTP 200 + corpo JSON válido) dentro de
         // checkForUpdate. Uma checagem que falha (sem rede / rate limit)
-        // não queima a janela de 24h.
+        // não queima a janela de 1h (R8A: espera 15 min — ver FAILED_CHECK_RETRY_MS).
         checkForUpdate(context, currentVersion, showFeedback = false, silentDownload = silent)
     }
 
@@ -146,6 +175,10 @@ object UpdateChecker {
     private const val PREFS_NAME = "meggy_update"
     private const val KEY_DOWNLOADED_VERSION = "downloaded_version"
     private const val KEY_PENDING_APK = "pending_apk_path"
+    // R8A — versão cujo instalador já foi aberto no automático (a Vovó
+    // não tinha este guarda: com o throttle a 1h, quem dispensasse o
+    // instalador seria incomodado de novo a cada hora).
+    private const val KEY_OFFERED_VERSION = "offered_version"
     private const val KEY_PERMISSION_DECLINED_AT = "perm_declined_at"
     private const val PERMISSION_REPROMPT_MS = 24L * 60 * 60 * 1000 // 24h
     // §9 (GOLDEN_RULES.md, 2026-11-15) — atualização SEMPRE pela pasta
@@ -350,12 +383,16 @@ object UpdateChecker {
                     .build()
                 val response = client.newCall(request).execute()
                 if (!response.isSuccessful) {
+                    // R8A — falha: regista p/ tentar de novo em 15 min
+                    // (não queima a janela de 1h, nem tenta em cada resume).
+                    prefs.edit().putLong(KEY_LAST_FAILED_CHECK, System.currentTimeMillis()).apply()
                     if (showFeedback) showToast(context, "Erro ao verificar (HTTP ${response.code})")
                     return@Thread
                 }
 
                 val body = response.body?.string()
                 if (body.isNullOrBlank()) {
+                    prefs.edit().putLong(KEY_LAST_FAILED_CHECK, System.currentTimeMillis()).apply()
                     if (showFeedback) showToast(context, "Resposta vazia do servidor")
                     return@Thread
                 }
@@ -364,8 +401,9 @@ object UpdateChecker {
 
                 // v1.0.6 — checagem OK (HTTP 200 + corpo válido): grava o
                 // timestamp do throttle agora. Falhas de rede/HTTP acima
-                // retornam antes daqui e não queimam a janela de 24h.
-                prefs.edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).apply()
+                // retornam antes daqui e não queimam a janela de 1h (R8A).
+                prefs.edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis())
+                    .remove(KEY_LAST_FAILED_CHECK).apply()
 
                 // Busca a primeira release com tag prefix "vovofit-v"
                 var remoteVersion = ""
@@ -397,6 +435,14 @@ object UpdateChecker {
                     return@Thread
                 }
 
+                // R8A — automático (showFeedback=false): esta versão já
+                // foi oferecida (instalador aberto e dispensado) — não
+                // baixar nem lançar de novo. A checagem manual em
+                // Ajustes ignora este guarda. Sem isto, o throttle a 1h
+                // incomodaria o usuário de hora em hora.
+                val offered = prefs.getString(KEY_OFFERED_VERSION, "") ?: ""
+                if (!showFeedback && remoteVersion == offered) return@Thread
+
                 // Mesma versao — NAO fazer nada (silencioso)
                 if (remoteVersion == localVersion) {
                     if (showFeedback) showToast(context, "Voce esta na versao mais recente (v$localVersion)")
@@ -419,7 +465,7 @@ object UpdateChecker {
                             prefs.edit().putString(KEY_PENDING_APK, downloadedFile.absolutePath).apply()
                         } else {
                             showToast(context, "Instalando v$remoteVersion...")
-                            installApk(context, downloadedFile)
+                            installApk(context, downloadedFile, remoteVersion)
                         }
                     } else {
                         // v1.0.8 — download automatico em 2o plano: o unico
@@ -433,6 +479,8 @@ object UpdateChecker {
                     if (showFeedback) showToast(context, "Voce esta na versao mais recente (v$localVersion)")
                 }
             } catch (e: Exception) {
+                // R8A — falha de rede: tenta de novo em 15 min.
+                prefs.edit().putLong(KEY_LAST_FAILED_CHECK, System.currentTimeMillis()).apply()
                 if (showFeedback) showToast(context, "Erro de rede: ${e.message ?: "verifique sua conexao"}")
             }
         }.start()
@@ -564,7 +612,7 @@ object UpdateChecker {
                     prefs.edit().putString(KEY_PENDING_APK, target.absolutePath).apply()
                     showToast(context, "Atualização baixada — instala ao abrir a tela inicial", long = false)
                 } else {
-                    installApk(context, target)
+                    installApk(context, target, remoteVersion)
                 }
             } catch (e: InterruptedException) {
                 mainHandler.post { dialog?.dismiss() }
@@ -572,6 +620,15 @@ object UpdateChecker {
                 showToast(context, "Download cancelado")
             } catch (e: Exception) {
                 mainHandler.post { dialog?.dismiss() }
+                // R8A — falha de download no automático: limpa o timestamp
+                // da checagem (padrão da BiBi 2.1.9) e regista a falha p/
+                // tentar de novo em 15 min, não só na próxima janela de 1h.
+                // Automático = sem diálogo de progresso (showProgressDialog
+                // só é true na checagem manual em Ajustes).
+                if (!showProgressDialog) {
+                    prefs.edit().remove(KEY_LAST_CHECK)
+                        .putLong(KEY_LAST_FAILED_CHECK, System.currentTimeMillis()).apply()
+                }
                 // Fallback: fluxo antigo via DownloadManager do sistema.
                 showToast(context, "Download direto falhou — tentando pelo sistema...")
                 downloadAndInstall(context, url, fileName, remoteVersion, prefs)
@@ -606,7 +663,7 @@ object UpdateChecker {
                         val file = publicDownloadFile(fileName)
                         if (file.exists()) {
                             prefs.edit().putString(KEY_DOWNLOADED_VERSION, remoteVersion).apply()
-                            installApk(context, file)
+                            installApk(context, file, remoteVersion)
                         }
                         try { context.unregisterReceiver(this) } catch (_: Exception) {}
                     }
@@ -631,7 +688,7 @@ object UpdateChecker {
      *     diálogo com o caminho do APK em vez de falhar em silêncio.
      *  3. Se o instalador abrir, confirma com toast.
      */
-    private fun installApk(context: Context, file: File) {
+    private fun installApk(context: Context, file: File, version: String? = null) {
         // v1.0.8 — nunca interromper reprodução: com o player em
         // primeiro plano, guarda como pendente e sai em silêncio. A
         // Home retoma a instalação (resumePendingApk) quando o usuário
@@ -719,6 +776,10 @@ object UpdateChecker {
                     return
                 }
                 try {
+                    if (version != null) {
+                        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                            .edit().putString(KEY_OFFERED_VERSION, version).apply()
+                    }
                     context.startActivity(altIntent)
                     showToast(context, "📲 Instalador aberto — confirme a instalação na tela do sistema")
                 } catch (_: Exception) {
@@ -727,6 +788,12 @@ object UpdateChecker {
                 return
             }
 
+            // R8A — instalador aberto: regista como "oferecida" p/ o
+            // automático não relançar esta versão se dispensada.
+            if (version != null) {
+                context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    .edit().putString(KEY_OFFERED_VERSION, version).apply()
+            }
             context.startActivity(installIntent)
             // Passo 3: confirmação de que a instalação foi disparada.
             showToast(context, "📲 Instalador aberto — confirme a instalação na tela do sistema")
