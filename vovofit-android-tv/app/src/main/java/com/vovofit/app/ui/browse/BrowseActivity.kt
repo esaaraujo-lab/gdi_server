@@ -185,13 +185,15 @@ class BrowseActivity : AppCompatActivity() {
             val playIndex = playableItems.indexOfFirst { it.id == file.id }
 
             if (playableItems.size > 1 && playIndex >= 0) {
-                PlaylistManager.setPlaylist(playableItems, playIndex, this)
+                // Ronda 15 Frente B (B1): carimbar folderPath — sem isto o progresso cai na loja legada pos_<url>.
+                PlaylistManager.setPlaylist(playableItems.map { it.copy(folderPath = currentPath) }, playIndex, this)
                 launchPlayer(fullUrl, file.name, currentPath)
             } else {
                 // Frente H — ver DetailActivity.openFileInFolder: navega
                 // já; a playlist interfolder é enriquecida pelo player.
                 if (playableItems.isNotEmpty() && playIndex >= 0) {
-                    PlaylistManager.setPlaylist(playableItems, playIndex, this)
+                    // Ronda 15 Frente B (B1): carimbar folderPath — sem isto o progresso cai na loja legada pos_<url>.
+                    PlaylistManager.setPlaylist(playableItems.map { it.copy(folderPath = currentPath) }, playIndex, this)
                 } else {
                     PlaylistManager.setPlaylist(
                         listOf(file.copy(folderPath = currentPath)), 0, this
