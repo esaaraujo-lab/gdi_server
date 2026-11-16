@@ -151,6 +151,7 @@
         android:textSize="@dimen/text_section_title"
         android:textStyle="bold" />
 
+    <!-- R15C: sem corte do foco (linhas de largura total escalam 1.10x na TV); sem padding — ver NOTES.md. -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recycler"
         android:layout_width="match_parent"
@@ -158,6 +159,7 @@
         android:layout_weight="1"
         android:layout_marginTop="@dimen/spacing_md"
         android:clipToPadding="false"
+        android:clipChildren="false"
         android:paddingHorizontal="@dimen/content_margin"
         android:overScrollMode="never" />
 
