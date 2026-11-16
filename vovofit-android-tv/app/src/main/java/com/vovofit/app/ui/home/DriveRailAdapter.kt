@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.vovofit.app.R
 import com.vovofit.app.data.AdminDrive
+import com.vovofit.app.data.ApiService
 import com.vovofit.app.data.DriveItem
 import com.vovofit.app.data.driveCoverRes
 import com.vovofit.app.util.CoverLibrary
@@ -194,9 +195,9 @@ class DriveRailAdapter(
      * Hierarquia da capa: (1) coverUrl do admin; sem ela, (3) imagem
      * da biblioteca por nome do drive; sem match, a capa genérica
      * (driveCoverRes(15) — a convenção do app p/ índice desconhecido,
-     * ver coverResForPath). A estrela de favorito NÃO existe aqui: não
-     * há path "/N:/" p/ favoritar um drive do admin (nem ele abre,
-     * ver onAdminDriveClick).
+     * ver coverResForPath). A estrela de favorito EXISTE aqui: o drive
+     * do admin agora tem caminho ("by-id:<id>"), guardado como
+     * favorito e reaberto por ID.
      */
     private fun bindAdmin(holder: VH, adminDrive: AdminDrive) {
         with(holder.binding) {
@@ -240,8 +241,25 @@ class DriveRailAdapter(
                 }
             }
 
-            driveFavStar.visibility = View.GONE
-            driveFavStar.setOnClickListener(null)
+            // Ronda 13 Frente C — o drive do admin agora TEM caminho
+            // ("by-id:<id>"): a estrela favorita como nos fixos; o
+            // favorito guarda o path por ID e a Minha Lista reabre-o
+            // pelo DetailActivity (o listFolder despacha p/ by-id).
+            // (Tambem corrige um vazamento da Ronda 10: o GONE aqui
+            // ficava no view-holder reciclado e escondia a estrela
+            // dos fixos a seguir.)
+            val adminCoursePath = ApiService.byIdPath(adminDrive.driveId)
+            driveFavStar.visibility = View.VISIBLE
+            val sm = SessionManager.get(holder.itemView.context)
+            driveFavStar.text = if (sm.isFavoriteCourse(adminCoursePath)) "⭐" else "☆"
+            driveFavStar.setOnClickListener {
+                val nowFav = sm.toggleFavoriteCourse(adminCoursePath, adminDrive.name)
+                driveFavStar.text = if (nowFav) "⭐" else "☆"
+                Toast.makeText(holder.itemView.context,
+                    if (nowFav) "⭐ Curso adicionado à Minha lista"
+                    else "Curso removido da Minha lista",
+                    Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
