@@ -60,6 +60,7 @@ import com.bibigyn.app.util.CardGradient
 import com.bibigyn.app.util.CoverLibrary
 import com.bibigyn.app.util.Format
 import com.bibigyn.app.util.LessonDescription
+import com.bibigyn.app.util.MaterialDiscovery
 import com.bibigyn.app.util.MarkdownRenderer
 import com.bibigyn.app.util.PlaylistManager
 import com.bibigyn.app.util.DescriptionPregenerator
@@ -422,6 +423,10 @@ class PlayerActivity : AppCompatActivity() {
     // Frente R4 — Materiais da aula no retrato (ver bloco no fim da classe).
     private var materialsJob: Job? = null
     private var materialsSummary: String? = null
+
+    // Frente R14B — geração ao PLAY, 1x por aula por sessão: chaves
+    // (videoPath) já enfileiradas. Em memória, nunca persistido.
+    private val generationEnqueuedForSession = mutableSetOf<String>()
 
     private enum class SubtitleState { UNKNOWN, READY, GENERATING, NONE }
 
@@ -1388,6 +1393,44 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /**
+     * Frente R14B — geração automática ao PLAY (Elton 2026-11-15
+     * 21:48): dispara 1x por aula por sessão, em 2º plano, sem
+     * bloquear o vídeo e sem nenhuma UI em caso de falha. O POST
+     * vai para AiService.enqueueGeneration (a rota é da Frente
+     * R14C — sem ela, falha silenciosa). O gatilho é o
+     * onIsPlayingChanged(true): a reprodução arrancou de facto
+     * (não o "okay" nem a abertura da aula). O avanço automático
+     * para a aula seguinte também passa por aqui: o Media3 volta
+     * a disparar onIsPlayingChanged(true) quando a aula seguinte
+     * fica pronta. A guarda por sessão (videoPath) impede o
+     * re-disparo ao pausar e retomar; a idempotência final é do
+     * servidor. NÃO substitui o triggerOnly do batalhão em
+     * startPregenerator — os dois coexistem até a R14C ligar a
+     * fila nova.
+     */
+    private fun maybeEnqueueGenerationOnPlay() {
+        val item = currentItem ?: return
+        if (item.name.isBlank()) return
+        val lessonPath = (item.folderPath
+            ?: intent.getStringExtra(EXTRA_FOLDER_PATH))
+            ?.takeIf { it.isNotBlank() } ?: return
+        val videoPath = LessonDescription.lessonFilePath(lessonPath, listOf(item)) ?: return
+        if (!generationEnqueuedForSession.add(videoPath)) return
+        lifecycleScope.launch {
+            try {
+                AiService.enqueueGeneration(
+                    this@PlayerActivity,
+                    lessonPath,
+                    videoPath,
+                    LessonDescription.parentPath(lessonPath)
+                )
+            } catch (_: Exception) {
+                // Silencioso por desenho (ver KDoc acima).
+            }
+        }
+    }
+
+    /**
      * Frente H — enriquecimento da playlist EM 2º PLANO, depois da
      * navegação. Quando o vídeo tocado era o único da pasta, o
      * Detail/Browse/Home já navegou com uma playlist de 1 item; a
@@ -1535,6 +1578,10 @@ class PlayerActivity : AppCompatActivity() {
                 // Frente R4C — play/pausa (da UI ou da notificação):
                 // a notificação passa a mostrar o estado certo.
                 BackgroundAudioService.refresh(this@PlayerActivity)
+                // Frente R14B — geração automática ao PLAY (Elton
+                // 2026-11-15 21:48): o primeiro play da sessão para
+                // esta aula enfileira a geração em 2º plano.
+                if (isPlaying) maybeEnqueueGenerationOnPlay()
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -1881,6 +1928,10 @@ class PlayerActivity : AppCompatActivity() {
     // curto + "Tentar de novo" — sem crash, sem bounce para o login:
     // o vídeo está a tocar e um bounce matava a reprodução).
     // Recarrega a cada troca de aula (Anterior/Próxima/autoplay).
+    // Frente R14A — os materiais podem estar na mesma pasta do vídeo
+    // OU numa pasta ao lado (ver MaterialDiscovery): quando a pasta
+    // da aula não tem materiais, procuram-se as subpastas, a pasta
+    // pai e as pastas-irmãs; na TV nada muda (a secção nem existe).
 
     /** Uma questão do pacote gerado (formato do batalhão, worker.js:7760). */
     private data class MaterialsQuestion(
@@ -1932,7 +1983,18 @@ class PlayerActivity : AppCompatActivity() {
                     showMaterialsError()
                     return@launch
                 }
-                val materialNames = files.filter { it.isPdf || it.isMarkdown }.map { it.name }
+                // Frente R14A — materiais da pasta ao lado (ver
+                // MaterialDiscovery): só se procura fora quando a
+                // pasta da aula não tem materiais próprios; corre
+                // em 2º plano e nunca atrasa o vídeo.
+                val extraMaterials = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching {
+                        MaterialDiscovery.discoverExtraMaterials(api, folderPath, files)
+                    }.getOrDefault(emptyList())
+                }
+                val allFiles = (files + extraMaterials)
+                    .distinctBy { it.name.lowercase() }
+                val materialNames = allFiles.filter { it.isPdf || it.isMarkdown }.map { it.name }
                 val lessonFile = LessonDescription.lessonFilePath(folderPath, files)
                 val bundle = LessonDescription.fetchGenerated(
                     this@PlayerActivity, folderPath, materialNames, lessonFile
@@ -1947,7 +2009,7 @@ class PlayerActivity : AppCompatActivity() {
                     summary = summary?.takeIf { it.isNotBlank() },
                     pills = parseMaterialsPills(pillsText),
                     questions = parseMaterialsQuestions(questionsText),
-                    files = materialsLessonFiles(files)
+                    files = materialsLessonFiles(allFiles)
                 )
             } catch (_: Exception) {
                 showMaterialsError()
@@ -2074,6 +2136,7 @@ class PlayerActivity : AppCompatActivity() {
             list?.addView(TextView(this).apply {
                 text = "•  $pill"
                 textSize = 14f
+                setLineSpacing(0f, 1.35f)
                 setTextColor(ContextCompat.getColor(this@PlayerActivity, R.color.md_on_surface))
                 setPadding(0, pad / 2, 0, pad / 2)
             })
@@ -2097,6 +2160,7 @@ class PlayerActivity : AppCompatActivity() {
             list?.addView(TextView(this).apply {
                 text = "${idx + 1}. ${q.statement}"
                 textSize = 14f
+                setLineSpacing(0f, 1.35f)
                 setTypeface(null, android.graphics.Typeface.BOLD)
                 setTextColor(ContextCompat.getColor(this@PlayerActivity, R.color.md_on_surface))
                 setPadding(0, pad, 0, pad / 2)
@@ -2148,7 +2212,10 @@ class PlayerActivity : AppCompatActivity() {
                 setPadding(0, pad / 2, 0, pad / 2)
                 isClickable = true
                 isFocusable = true
-                setOnClickListener { openMaterialFile(file, folderPath) }
+                // Frente R14A — o material da pasta ao lado abre pela
+                // pasta DELE (carimbada na descoberta); os da pasta da
+                // aula continuam pela pasta da aula, como antes.
+                setOnClickListener { openMaterialFile(file, file.folderPath ?: folderPath) }
             })
         }
     }
