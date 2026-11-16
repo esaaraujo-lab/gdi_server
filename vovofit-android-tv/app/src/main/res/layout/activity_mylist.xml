@@ -141,12 +141,14 @@
                 android:textSize="@dimen/text_section_title"
                 android:textStyle="bold" />
 
+            <!-- R15C: sem corte do foco (linhas de largura total escalam 1.10x na TV); sem padding — ver NOTES.md. -->
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/recyclerCourses"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_md"
                 android:clipToPadding="false"
+                android:clipChildren="false"
                 android:nestedScrollingEnabled="false"
                 android:overScrollMode="never" />
 
@@ -160,12 +162,14 @@
                 android:textSize="@dimen/text_section_title"
                 android:textStyle="bold" />
 
+            <!-- R15C: sem corte do foco (linhas de largura total escalam 1.10x na TV); sem padding — ver NOTES.md. -->
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/recycler"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_md"
                 android:clipToPadding="false"
+                android:clipChildren="false"
                 android:nestedScrollingEnabled="false"
                 android:overScrollMode="never" />
 
@@ -180,12 +184,14 @@
                 android:textStyle="bold"
                 android:visibility="gone" />
 
+            <!-- R15C: sem corte do foco (linhas de largura total escalam 1.10x na TV); sem padding — ver NOTES.md. -->
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/recyclerBookmarks"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_md"
                 android:clipToPadding="false"
+                android:clipChildren="false"
                 android:nestedScrollingEnabled="false"
                 android:overScrollMode="never"
                 android:visibility="gone" />
