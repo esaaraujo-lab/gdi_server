@@ -395,6 +395,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/spacing_md"
+                    android:lineSpacingMultiplier="1.35"
                     android:textColor="@color/md_on_surface"
                     android:textSize="@dimen/text_detail_body" />
 
