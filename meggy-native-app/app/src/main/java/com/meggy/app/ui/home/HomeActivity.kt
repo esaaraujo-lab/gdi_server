@@ -714,7 +714,8 @@ class HomeActivity : AppCompatActivity() {
 
                     if (playable.size > 1) {
                         val idx = playable.indexOfFirst { it.name == videoName }
-                        PlaylistManager.setPlaylist(playable, if (idx >= 0) idx else 0, this@HomeActivity)
+                        // Ronda 15 Frente B (B1): carimbar folderPath — sem isto o progresso cai na loja legada pos_<url>.
+                        PlaylistManager.setPlaylist(playable.map { it.copy(folderPath = folderPath) }, if (idx >= 0) idx else 0, this@HomeActivity)
                         launchPlayer(MeggyApp.BASE_URL + clickedVideo.link, videoName, folderPath, clickedVideo.thumbnailLink)
                         return@launch
                     } else {
