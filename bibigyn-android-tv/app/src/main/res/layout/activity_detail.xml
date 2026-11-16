@@ -59,6 +59,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
+            android:clipChildren="false"
             android:paddingHorizontal="@dimen/content_margin"
             android:paddingBottom="@dimen/spacing_lg">
 
@@ -415,6 +416,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
+                android:clipChildren="false"
                 android:visibility="gone">
 
                 <com.google.android.material.textfield.TextInputLayout
@@ -504,12 +506,16 @@
                     android:textStyle="bold"
                     android:visibility="gone" />
 
+                <!-- R15C (ronda 15, frente C): halo de foco TV — 16dp laterais / 12dp verticais + sem corte (clipChildren=false). -->
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/railContinue"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/spacing_md"
                     android:clipToPadding="false"
+                    android:paddingHorizontal="16dp"
+                    android:paddingVertical="12dp"
+                    android:clipChildren="false"
                     android:overScrollMode="never"
                     android:visibility="gone" />
 
@@ -523,12 +529,15 @@
                     android:textSize="@dimen/text_section_title"
                     android:textStyle="bold" />
 
+                <!-- R15C (ronda 15, frente C): halo de foco na grade — padding 16dp nos 4 lados + sem corte. -->
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/recycler"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/spacing_md"
                     android:clipToPadding="false"
+                    android:padding="16dp"
+                    android:clipChildren="false"
                     android:nestedScrollingEnabled="false"
                     android:overScrollMode="never" />
 
