@@ -321,6 +321,19 @@ class PlayerActivity : AppCompatActivity() {
     private var player: ExoPlayer? = null
     private var trackSelector: DefaultTrackSelector? = null
     private var currentItem: FileItem? = null
+
+    /**
+     * Ronda 13 Frente C — base de playback: ver DetailActivity.
+     * fileBaseUrl — os links sao cunhados pelo worker que listou a
+     * pasta. A pasta e por ID ("by-id:<id>") quando o video veio de
+     * um drive do admin; nos drives fixos, "/N:/...".
+     */
+    private fun linkBaseUrl(): String {
+        val folder = currentItem?.folderPath
+            ?: intent.getStringExtra(EXTRA_FOLDER_PATH) ?: ""
+        return if (ApiService.isByIdPath(folder)) ApiService.SANDBOX_BASE_URL
+        else BiBiGynApp.BASE_URL
+    }
     private var currentUrl: String? = null
 
     private var saveJob: Job? = null
@@ -444,7 +457,7 @@ class PlayerActivity : AppCompatActivity() {
             if (!url.isNullOrBlank()) {
                 item = FileItem(
                     name = title, mimeType = "video/mp4", id = "",
-                    driveId = null, link = url.removePrefix(BiBiGynApp.BASE_URL),
+                    driveId = null, link = ApiService.linkFromPlaybackUrl(url) ?: "",
                     size = 0L, modifiedTime = null, folderLabel = null, folderPath = folderPath
                 )
             }
@@ -1215,7 +1228,7 @@ class PlayerActivity : AppCompatActivity() {
             }
             val result = SubtitleFetcher.fetch(
                 this@PlayerActivity, folderPath, item.name,
-                sidecar?.link?.let { BiBiGynApp.BASE_URL + it }, sidecar?.name
+                sidecar?.link?.let { linkBaseUrl() + it }, sidecar?.name
             )
             when (result) {
                 is SubtitleFetcher.Result.Ready -> {
@@ -1417,7 +1430,7 @@ class PlayerActivity : AppCompatActivity() {
             if (current?.name != target.name) return@launch
             if ((current.folderPath ?: "") != (target.folderPath ?: "")) return@launch
             fun toMedia(f: FileItem) =
-                MediaItem.Builder().setUri(BiBiGynApp.BASE_URL + (f.link ?: "")).build()
+                MediaItem.Builder().setUri(linkBaseUrl() + (f.link ?: "")).build()
             val before = result.items.subList(0, result.startIndex)
             val after = result.items.subList(result.startIndex + 1, result.items.size)
             if (before.isNotEmpty()) p.addMediaItems(0, before.map(::toMedia))
@@ -1430,7 +1443,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun initialisePlayer() {
         val item = currentItem
         val link = item?.link
-        val url = if (!link.isNullOrEmpty()) BiBiGynApp.BASE_URL + link else intent.getStringExtra(EXTRA_URL)
+        val url = if (!link.isNullOrEmpty()) linkBaseUrl() + link else intent.getStringExtra(EXTRA_URL)
         if (url.isNullOrBlank()) {
             Snackbar.make(binding.root, "URL de playback ausente.", Snackbar.LENGTH_LONG).show()
             finish()
@@ -1456,7 +1469,7 @@ class PlayerActivity : AppCompatActivity() {
         val startIndex = PlaylistManager.index()
         if (playlist.isNotEmpty() && startIndex in playlist.indices) {
             val mediaItems = playlist.map { file ->
-                val fullUrl = BiBiGynApp.BASE_URL + (file.link ?: "")
+                val fullUrl = linkBaseUrl() + (file.link ?: "")
                 MediaItem.Builder().setUri(fullUrl).build()
             }
             exo.setMediaItems(mediaItems, startIndex, 0L)
@@ -1534,7 +1547,7 @@ class PlayerActivity : AppCompatActivity() {
                     val newItem = PlaylistManager.getCurrent()
                     if (newItem != null) {
                         currentItem = newItem
-                        currentUrl = BiBiGynApp.BASE_URL + (newItem.link ?: "")
+                        currentUrl = linkBaseUrl() + (newItem.link ?: "")
                         isAudio = newItem.isAudio
                         openedResumeMs = 0L
                         subtitleState = SubtitleState.UNKNOWN
@@ -1635,7 +1648,7 @@ class PlayerActivity : AppCompatActivity() {
             val idx = playlist.indexOfFirst { it.name == item.name && (it.folderPath ?: "") == (item.folderPath ?: "") }
             if (idx >= 0) {
                 val watched = isWatched(item)
-                val resume = if (watched) 0L else resumeFor(item, BiBiGynApp.BASE_URL + (item.link ?: ""))
+                val resume = if (watched) 0L else resumeFor(item, linkBaseUrl() + (item.link ?: ""))
                 p.seekTo(idx, resume)
                 val defSpeed = SessionManager.get(this).defaultSpeed
                 speedIndex = speeds.indexOfFirst { it == defSpeed }.coerceAtLeast(1)
@@ -2172,7 +2185,7 @@ class PlayerActivity : AppCompatActivity() {
             file.isPdf -> openPdf(file, folderPath)
             file.isMarkdown -> openMd(file, folderPath)
             else -> {
-                val url = BiBiGynApp.BASE_URL + (file.link ?: "")
+                val url = linkBaseUrl() + (file.link ?: "")
                 val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 try { startActivity(intent) } catch (_: Exception) {}
@@ -2183,7 +2196,7 @@ class PlayerActivity : AppCompatActivity() {
     /** v2.7.6: PDF abre no leitor embutido (igual ao detalhe). */
     private fun openPdf(file: FileItem, folderPath: String) {
         val intent = Intent(this, PdfReaderActivity::class.java)
-        intent.putExtra(PdfReaderActivity.EXTRA_URL, BiBiGynApp.BASE_URL + (file.link ?: ""))
+        intent.putExtra(PdfReaderActivity.EXTRA_URL, linkBaseUrl() + (file.link ?: ""))
         intent.putExtra(PdfReaderActivity.EXTRA_NAME, file.name)
         intent.putExtra(PdfReaderActivity.EXTRA_PATH, materialFilePath(folderPath, file.name))
         startActivity(intent)
@@ -2192,7 +2205,7 @@ class PlayerActivity : AppCompatActivity() {
     /** .md/transcrição abre no leitor de MD embutido (igual ao detalhe). */
     private fun openMd(file: FileItem, folderPath: String) {
         val intent = Intent(this, MdReaderActivity::class.java)
-        intent.putExtra(MdReaderActivity.EXTRA_URL, BiBiGynApp.BASE_URL + (file.link ?: ""))
+        intent.putExtra(MdReaderActivity.EXTRA_URL, linkBaseUrl() + (file.link ?: ""))
         intent.putExtra(MdReaderActivity.EXTRA_NAME, file.name)
         intent.putExtra(MdReaderActivity.EXTRA_PATH, materialFilePath(folderPath, file.name))
         startActivity(intent)
