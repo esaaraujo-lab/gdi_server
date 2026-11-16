@@ -24,10 +24,16 @@ import kotlinx.coroutines.withContext
  * "Como nasce o texto explicativo da aula" (1. pasta → 2. Meggy lê
  * → 3. IA escreve → 4. aparece na aba Resumo, guardado).
  *
- * CADEIA DE FALLBACK (ordem exata, decisão do Elton 00:21):
+ * CADEIA DE FALLBACK (ordem exata, decisão do Elton 00:21;
+ *   R14B 2026-11-15 21:48: a provisória passa a ser o NOME DO
+ *   ARQUIVO do vídeo; o nome da pasta só vale quando a pasta tem
+ *   uma só aula — o nome da pasta de um curso com várias aulas
+ *   não descreve nenhuma delas):
  *   (a) descrição gerada guardada → mostra ela;
- *   (b) senão, nome real de aula (nome da pasta) → usa o NOME como
- *       descrição PROVISÓRIA até a Meggy gerar a de verdade;
+ *   (b) senão, nome real de aula (NOME DO ARQUIVO do vídeo; sem
+ *       ele, NOME DA PASTA quando a pasta tem só uma aula) → usa
+ *       o NOME como descrição PROVISÓRIA até a Meggy gerar a de
+ *       verdade;
  *   (c) senão, nome genérico (ex. "001 - aula.mp3", "Aula 01") →
  *       EM BRANCO até a Meggy processar os materiais.
  *   Precedência final (ver §4 do REDESIGN_NOTES): quando se verifica
@@ -100,7 +106,9 @@ object LessonDescription {
     // ───────── (b)/(c) — heurística de "nome real de aula" ─────────
     //
     // Regra exata (nada de adivinhar na hora do teste):
-    //   1. Candidato = nome da pasta; sem pasta, o nome do arquivo.
+    //   1. Candidato = UM nome de cada vez (o chamador escolhe a
+    //      ordem — R14B: o ARQUIVO primeiro; a PASTA só quando tem
+    //      uma só aula, ver provisionalDescription).
     //   2. Remove a extensão (.mp4/.mp3/.pdf/.md/...).
     //   3. Remove prefixos de numeração no início, até 2 vezes:
     //      "001 - ", "01. ", "1) " e "Aula 01 - ", "Ep. 12 — ",
@@ -159,11 +167,22 @@ object LessonDescription {
     }
 
     /**
-     * Descrição provisória (b): tenta o nome da pasta, depois o nome
-     * do primeiro arquivo de vídeo/áudio. Null → branco (c).
+     * Descrição provisória (b) — R14B (Elton 2026-11-15 21:48):
+     * tenta o NOME DO ARQUIVO do vídeo primeiro; sem tema no
+     * arquivo, tenta o NOME DA PASTA — SÓ quando a pasta tem uma
+     * só aula (folderHasSingleLesson). Numa pasta com várias
+     * aulas, o nome da pasta é o nome do curso/módulo e não
+     * descreve nenhuma aula — nesse caso não há provisória.
+     * Null → branco (c). O resumo gerado pela Meggy não muda:
+     * isto é só o fallback provisório.
      */
-    fun provisionalDescription(folderName: String?, fileName: String?): String? {
-        return extractTopic(folderName) ?: extractTopic(fileName)
+    fun provisionalDescription(
+        folderName: String?,
+        fileName: String?,
+        folderHasSingleLesson: Boolean = false
+    ): String? {
+        return extractTopic(fileName)
+            ?: if (folderHasSingleLesson) extractTopic(folderName) else null
     }
 
     // ───────── fontes / resolução do material ─────────
