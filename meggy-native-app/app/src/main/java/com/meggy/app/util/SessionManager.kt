@@ -144,6 +144,61 @@ class SessionManager private constructor(context: Context) {
         prefs.edit().remove("pos_$fileUrl").apply()
     }
 
+    // ───────── Ronda 15 Frente B (B2): migração 1× loja legada ─────────
+    //
+    // O progresso já visto antes do fix vive em `pos_<url>` (loja legada
+    // por URL de playback), que nenhuma UI lê. Os recents_v1 guardam o
+    // (folderPath, videoName, link) certo — por isso, uma única vez após
+    // o update, cada posição legada é reposta na loja por (pasta, vídeo).
+    //
+    // LIMITES HONESTOS (diagnóstico §5.1/B2):
+    //  • a duração (dur_) NÃO existe na loja legada e não pode ser
+    //    inventada — o % só aparece após a 1.ª reprodução pós-fix
+    //    (o player volta a gravar dur_ no 1.º saveResumeFor). A migração
+    //    repõe a POSIÇÃO ("Continuar" retoma); o % vem depois.
+    //  • a flag watched também não é recuperável — fica false até o
+    //    vídeo terminar pós-fix.
+    //  • recents sem link (anteriores à Frente H) não dão para migrar:
+    //    sem o link não se reconstrói a URL legada — são ignorados.
+    //  • nunca sobrescreve uma posição já guardada na loja certa.
+    //  • as chaves legadas pos_ NÃO são apagadas (a loja nova tem
+    //    precedência no player; apagar seria perder o fallback).
+    //  • a base da URL legada depende do caminho: pastas por ID
+    //    ("by-id:", == ApiService.BY_ID_PREFIX) usam o host do sandbox;
+    //    drives fixos usam BASE_URL. Recents do Browse em pastas por ID
+    //    guardam o link já como URL completa — detectam-se pelo prefixo
+    //    http(s) e usam-se como estão.
+    // Guarda 1×: KEY_LEGACY_RESUME_MIGRATED. Idempotente (o salto por
+    // resume_ já existente torna um 2.º arranque inofensivo).
+    fun migrateLegacyUrlResumes(baseUrl: String, sandboxBaseUrl: String): Int {
+        if (prefs.getBoolean(KEY_LEGACY_RESUME_MIGRATED, false)) return 0
+        var migrated = 0
+        try {
+            for (recent in getRecents()) {
+                try {
+                    val link = recent.link ?: continue
+                    if (recent.folderPath.isBlank() || recent.videoName.isBlank()) continue
+                    if (getResume(recent.folderPath, recent.videoName) > 0L) continue
+                    val url = when {
+                        link.startsWith("http://") || link.startsWith("https://") -> link
+                        recent.folderPath.startsWith("by-id:") -> sandboxBaseUrl + link
+                        else -> baseUrl + link
+                    }
+                    val pos = getResumePosition(url)
+                    if (pos > 0L) {
+                        saveResume(recent.folderPath, recent.videoName, pos)
+                        migrated++
+                    }
+                } catch (_: Exception) {
+                    // Best-effort por recent: um item mau não trava os outros.
+                }
+            }
+        } finally {
+            prefs.edit().putBoolean(KEY_LEGACY_RESUME_MIGRATED, true).apply()
+        }
+        return migrated
+    }
+
     // ───────── per-(folder, video) resume (v1.2.0) ─────────
 
     fun saveResume(folderPath: String, videoName: String, positionMs: Long) {
@@ -623,6 +678,7 @@ class SessionManager private constructor(context: Context) {
         private const val KEY_USERNAME = "username"
         private const val KEY_PASSWORD = "password"
         private const val KEY_RECENTS = "recents_v1"
+        private const val KEY_LEGACY_RESUME_MIGRATED = "r15_legacy_resume_migrated"
         private const val KEY_FAVORITES = "favorites_v1"
         private const val KEY_FAV_COURSES = "fav_courses_v1"
         private const val KEY_DEFAULT_SPEED = "default_speed"
