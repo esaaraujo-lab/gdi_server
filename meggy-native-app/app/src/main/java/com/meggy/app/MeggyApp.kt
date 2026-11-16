@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.Application
 import android.app.Application.ActivityLifecycleCallbacks
 import android.os.Bundle
+import com.meggy.app.util.SessionManager
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -54,6 +55,11 @@ class MeggyApp : Application() {
     
     override fun onCreate() {
         super.onCreate()
+        // Ronda 15 Frente B (B2): migração 1× das posições legadas
+        // pos_<url> para resume_<pasta>::<vídeo> (ver SessionManager).
+        // AI_BASE_URL é a base dos caminhos por ID (== ApiService.
+        // SANDBOX_BASE_URL); BASE_URL, a dos drives fixos.
+        SessionManager.get(this).migrateLegacyUrlResumes(BASE_URL, AI_BASE_URL)
         // v2.7.11 — rastreia a activity em 1º plano (auto-update).
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityResumed(activity: Activity) {
