@@ -107,9 +107,9 @@
     <!-- Ronda 10 Frente B — gerir drives (só admin) -->
     <string name="admin_drives_title">Gerir drives</string>
     <string name="admin_drives_row">Gerir drives (admin)</string>
-    <string name="admin_drives_row_sub">Adicionar ou remover drives por ID</string>
+    <string name="admin_drives_row_sub">Adicionar, editar ou remover drives por ID</string>
     <string name="admin_drives_loading">A carregar os drives do admin…</string>
-    <string name="admin_drives_unavailable">Função indisponível: o servidor ainda não ativou a gestão de drives (ou não há conexão). Tente novamente mais tarde.</string>
+    <string name="admin_drives_unavailable">Função indisponível: o servidor não respondeu (ou não há conexão). Tente novamente mais tarde.</string>
     <string name="admin_drives_empty">Ainda não há drives do admin.</string>
     <string name="admin_drives_form_title">ADICIONAR DRIVE</string>
     <string name="admin_drives_drive_id_hint">ID da pasta no Drive</string>
@@ -127,6 +127,9 @@
     <string name="admin_drives_remove_title">Remover drive?</string>
     <string name="admin_drives_remove_confirm">Remover \"%1$s\" dos APKs? A pasta no Drive não é apagada — só o registo do drive.</string>
     <string name="admin_drives_saved">Drive adicionado.</string>
+    <string name="admin_drives_edit">Editar</string>
+    <string name="admin_drives_save_edit">Guardar alterações</string>
+    <string name="admin_drives_updated">Drive atualizado.</string>
     <string name="admin_drives_removed">Drive removido.</string>
     <string name="admin_drives_not_admin">Só o administrador pode gerir drives.</string>
     <string name="admin_drives_error_drive_id">Indique o ID da pasta no Drive.</string>
@@ -137,5 +140,4 @@
     <string name="admin_drives_error_generic">Não foi possível concluir. Verifique a conexão e tente novamente.</string>
     <!-- Ronda 10 Frente C — drives do admin na Home -->
     <string name="admin_drive_tile_tag">Drive do admin</string>
-    <string name="admin_drive_not_openable_yet">Este drive ainda não pode ser aberto: o servidor ainda não tem a listagem por ID.</string>
 </resources>
