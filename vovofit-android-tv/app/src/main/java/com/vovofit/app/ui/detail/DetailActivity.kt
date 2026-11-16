@@ -430,7 +430,8 @@ class DetailActivity : AppCompatActivity() {
                     val playable = files.filter { (it.isVideo || it.isAudio) && !it.link.isNullOrEmpty() }
                     if (playable.size > 1) {
                         val idx = playable.indexOfFirst { it.name == videoName }
-                        PlaylistManager.setPlaylist(playable, if (idx >= 0) idx else 0, this@DetailActivity)
+                        // Ronda 15 Frente B (B1): carimbar folderPath — sem isto o progresso cai na loja legada pos_<url>.
+                        PlaylistManager.setPlaylist(playable.map { it.copy(folderPath = folderPath) }, if (idx >= 0) idx else 0, this@DetailActivity)
                         launchPlayer(fileBaseUrl(folderPath) + clickedVideo.link, videoName, folderPath, clickedVideo.thumbnailLink)
                         return@launch
                     } else {
@@ -525,10 +526,14 @@ class DetailActivity : AppCompatActivity() {
                 else -> "${files.size} arquivos"
             }
             val sm = SessionManager.get(this@DetailActivity)
-            val watchedCount = files.count { (it.isVideo || it.isAudio) && sm.isWatched(currentPath, it.name) }
-            val total = videoCount
-            val pct = if (total > 0) watchedCount * 100 / total else 0
-            binding.chipProgress.text = "$pct% concluído"
+            if (folderCount == 0) {
+                updateProgressChip(files)
+            } else {
+                // Ronda 15 Frente B (B3): os grupos ainda não foram
+                // reconstruídos para esta pasta — o % só é calculado
+                // depois do buildLessonGroups + prefetch (refreshLessonList).
+                binding.chipProgress.text = "a calcular…"
+            }
             binding.chipFolders.text = "$folderCount pastas"
 
             // Resumo: descrição gerada / provisória / branco (00:21).
@@ -767,6 +772,51 @@ class DetailActivity : AppCompatActivity() {
         binding.heroTime.visibility = View.GONE
         binding.ctaContinue.text = getString(R.string.cta_watch)
         binding.detailFooter.text = ""
+    }
+
+    /**
+     * Ronda 15 Frente B (B3) — chip "X% concluído" sobre os vídeos da
+     * SUBÁRVORE, não sobre os filhos directos.
+     *
+     * Modo plano (pasta sem subpastas): os vídeos são os filhos
+     * directos e o listFolder já os trouxe — dados completos, o %
+     * calcula-se logo.
+     *
+     * Modo interfolder (pasta de curso): os filhos directos são
+     * pastas; o % conta os vídeos dos grupos (filhos prefetched).
+     * Enquanto houver um grupo sem filhos carregados, o denominador
+     * está incompleto e o chip mostra "a calcular…" — NUNCA
+     * "0% concluído" com dados incompletos. O refreshLessonList()
+     * volta a chamar isto quando o prefetch (ou um expandir) entrega
+     * filhos. Cursos com >20 grupos ficam em "a calcular…" (o
+     * prefetch pára nos 20): os cartões mostram o progresso real na
+     * mesma, via recents (B4).
+     */
+    private fun updateProgressChip(files: List<FileItem>) {
+        val sm = SessionManager.get(this)
+        if (files.none { it.isFolder }) {
+            val videos = files.filter { it.isVideo || it.isAudio }
+            val watched = videos.count { sm.isWatched(currentPath, it.name) }
+            val pct = if (videos.isNotEmpty()) watched * 100 / videos.size else 0
+            binding.chipProgress.text = "$pct% concluído"
+            return
+        }
+        if (lessonGroups.isEmpty() || lessonGroups.any { it.children == null }) {
+            binding.chipProgress.text = "a calcular…"
+            return
+        }
+        var total = 0
+        var watched = 0
+        for (group in lessonGroups) {
+            for (v in group.children.orEmpty()) {
+                if (v.isVideo || v.isAudio) {
+                    total++
+                    if (sm.isWatched(group.folderPath, v.name)) watched++
+                }
+            }
+        }
+        val pct = if (total > 0) watched * 100 / total else 0
+        binding.chipProgress.text = "$pct% concluído"
     }
 
     // ──────────── Ronda 9 Frente B — Questões/Flashcards da aula ────────────
@@ -1344,6 +1394,9 @@ class DetailActivity : AppCompatActivity() {
             else lessonGroups.filter { it.folder.name.contains(query, ignoreCase = true) }
         lessonListAdapter?.submit(filtered)
         lessonGridAdapter?.submit(filtered)
+        // Ronda 15 Frente B (B3): o prefetch (ou um expandir) entregou
+        // filhos — o chip do hero pode sair de "a calcular…".
+        updateProgressChip(allFiles)
     }
 
     // Frente R4B — chips Todos / Vídeos / Materiais (lista plana,
@@ -1604,7 +1657,8 @@ class DetailActivity : AppCompatActivity() {
                     ?: emptyList()
                 val idx = siblings.indexOfFirst { it.id == file.id }
                 if (siblings.size > 1 && idx >= 0) {
-                    PlaylistManager.setPlaylist(siblings, idx, this)
+                    // Ronda 15 Frente B (B1): carimbar folderPath — sem isto o progresso cai na loja legada pos_<url>.
+                    PlaylistManager.setPlaylist(siblings.map { it.copy(folderPath = folderPath) }, idx, this)
                 } else {
                     PlaylistManager.setPlaylist(
                         listOf(file.copy(folderPath = folderPath)), 0, this
@@ -1637,7 +1691,8 @@ class DetailActivity : AppCompatActivity() {
             val playableItems = allFiles.filter { (it.isVideo || it.isAudio) && !it.link.isNullOrEmpty() }
             val playIndex = playableItems.indexOfFirst { it.id == file.id }
             if (playableItems.size > 1 && playIndex >= 0) {
-                PlaylistManager.setPlaylist(playableItems, playIndex, this)
+                // Ronda 15 Frente B (B1): carimbar folderPath — sem isto o progresso cai na loja legada pos_<url>.
+                PlaylistManager.setPlaylist(playableItems.map { it.copy(folderPath = currentPath) }, playIndex, this)
             } else {
                 // Frente H — ver openFileInFolder: navega já com só este
                 // vídeo; a playlist interfolder é enriquecida pelo player.
