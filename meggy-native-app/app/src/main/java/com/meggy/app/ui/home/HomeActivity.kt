@@ -10,7 +10,6 @@ import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
 import android.widget.TextView
-import android.widget.Toast
 import android.view.animation.AlphaAnimation
 import android.view.animation.AnimationSet
 import android.view.animation.DecelerateInterpolator
@@ -36,6 +35,7 @@ import com.meggy.app.ui.player.PlayerActivity
 import com.meggy.app.ui.search.SearchActivity
 import com.meggy.app.ui.settings.SettingsActivity
 import com.meggy.app.util.AuthHelper
+import com.meggy.app.util.AdminDriveUi
 import com.meggy.app.util.DriveRailItem
 import com.meggy.app.util.PlaylistManager
 import com.meggy.app.util.SessionManager
@@ -67,6 +67,14 @@ class HomeActivity : AppCompatActivity() {
     // /api/admin-drives, filtrados por targetApps) + itens do
     // rail (fixos + admin) na ordem em que aparecem na Home.
     private var adminDrives: List<AdminDrive> = emptyList()
+    // Ronda 13 Frente C — fonte de verdade do servidor: null = o
+    // GET /api/admin-drives ainda nao respondeu ou falhou (fallback
+    // p/ DriveItem.ALL); nao-null = a lista do servidor SUBSTITUI
+    // DriveItem.ALL (ja filtrada por targetApps p/ este APK).
+    private var serverDrives: List<AdminDrive>? = null
+    // Capas do servidor p/ os drives fixos ("/N:/" -> URL), p/ fundir
+    // com as capas dos cursos em destaque (ver buildDriveRailItems).
+    private var serverCoverByPath: Map<String, String> = emptyMap()
     private var driveRailItems: List<DriveRailItem> = emptyList()
     private var drivesAdapter: DriveRailAdapter? = null
     // v2.7.11 camada (3) — recents p/ re-aplicar o destaque da TV
@@ -177,7 +185,7 @@ class HomeActivity : AppCompatActivity() {
             }.toMap()
             if (map.isEmpty()) return@launch
             featuredCoverByPath = map
-            drivesAdapter?.setFeaturedCovers(map)
+            drivesAdapter?.setFeaturedCovers(map + serverCoverByPath)
             val current = heroRotator?.currentItem() ?: return@launch
             if (current.coverUrl?.isNotBlank() == true) return@launch
             if (map[current.drivePath].isNullOrBlank()) return@launch
@@ -869,12 +877,46 @@ class HomeActivity : AppCompatActivity() {
     }
 
     /**
-     * Ronda 10 Frente C — itens do rail de drives: os fixos primeiro
-     * (DriveItem.ALL, ordem actual) + os drives do admin a seguir
-     * (ordem do servidor). Guarda a lista p/ o foco da TV e p/ o
-     * clique (lastFocusDrives é a posição NESTA lista, não em ALL).
+     * Ronda 13 Frente C — itens do rail de drives. FONTE DE VERDADE:
+     * quando o servidor respondeu (serverDrives != null), a lista do
+     * servidor SUBSTITUI DriveItem.ALL (nao funde): os 16 fixos vem
+     * do servidor como registos geridos (source='hardcoded',
+     * rootIndex) e os do admin a seguir — sem duplicados (dedupe por
+     * driveId e por rootIndex). Um fixo REMOVIDO no admin nao volta a
+     * aparecer: o seed do servidor so corre com a tabela vazia, e o
+     * app nao o repoe a partir de DriveItem.ALL quando o servidor
+     * respondeu. Offline/falha (serverDrives == null) -> fallback
+     * DriveItem.ALL + admin (comportamento da Ronda 10).
+     * Um registo gerido casa com o DriveItem fixo do mesmo rootIndex
+     * (icone/tagline/capa gerada do codigo; nome e capa do servidor)
+     * e abre pela producao ("/N:/"); sem casa, e um drive do admin
+     * e abre por ID (POST /api/drive/by-id).
      */
     private fun buildDriveRailItems(): List<DriveRailItem> {
+        val server = serverDrives
+        if (server != null) {
+            val items = ArrayList<DriveRailItem>(server.size)
+            val seenIds = HashSet<String>()
+            val seenRoots = HashSet<Int>()
+            val covers = LinkedHashMap<String, String>()
+            for (d in server) {
+                if (!seenIds.add(d.driveId)) continue
+                val idx = d.rootIndex
+                val fixed = if (idx != null && seenRoots.add(idx)) {
+                    DriveItem.ALL.firstOrNull { it.index == idx }
+                        ?.takeIf { it.rootFolderId == null || it.rootFolderId == d.driveId }
+                } else null
+                if (d.coverUrl?.isNotBlank() == true && idx != null) {
+                    covers["/$idx:/"] = d.coverUrl
+                }
+                if (fixed != null) items.add(DriveRailItem.Fixed(fixed.copy(name = d.name)))
+                else items.add(DriveRailItem.Admin(d))
+            }
+            serverCoverByPath = covers
+            drivesAdapter?.setFeaturedCovers(featuredCoverByPath + serverCoverByPath)
+            driveRailItems = items
+            return items
+        }
         val items = ArrayList<DriveRailItem>(DriveItem.ALL.size + adminDrives.size)
         items.addAll(DriveItem.ALL.map { DriveRailItem.Fixed(it) })
         items.addAll(adminDrives.map { DriveRailItem.Admin(it) })
@@ -883,48 +925,43 @@ class HomeActivity : AppCompatActivity() {
     }
 
     /**
-     * Ronda 10 Frente C — busca os drives do admin (GET
-     * /api/admin-drives — dependência do servidor v2.15.x, AINDA NÃO
-     * EXISTE: hoje dá 404 e getAdminDrives() devolve null). Best-effort
-     * e silencioso: null/falha → só os fixos, sem crash, sem toast.
-     * Filtra por targetApps p/ o APK actual (o admin vê TODOS no ecrã
-     * "Gerir drives"; na Home cada APK só mostra os seus). Chamado no
-     * onCreate e no onResume — o remover da Frente B faz o tile sumir
-     * sem reiniciar o app.
+     * Ronda 13 Frente C — busca os drives do servidor (GET
+     * /api/admin-drives, SANDBOX). Best-effort e silencioso:
+     * null/falha → serverDrives fica null e a Home usa o fallback
+     * (DriveItem.ALL), sem crash, sem toast. Filtra por targetApps
+     * p/ o APK actual (o admin vê TODOS no ecrã "Gerir drives"; na
+     * Home cada APK só mostra os seus). Chamado no onCreate e no
+     * onResume — o remover/editar da Frente B faz o tile sumir/mudar
+     * sem reiniciar o app. Quando o servidor responde, a lista dele
+     * SUBSTITUI DriveItem.ALL (ver buildDriveRailItems).
      */
     private fun fetchAdminDrives() {
         lifecycleScope.launch {
             val drives = withContext(Dispatchers.IO) {
                 runCatching { api.getAdminDrives() }.getOrNull()
-            }?.filter { it.targets(packageName) } ?: emptyList()
-            adminDrives = drives
+            }?.filter { it.targets(packageName) }
+            serverDrives = drives
+            adminDrives = drives ?: emptyList()
             drivesAdapter?.updateItems(buildDriveRailItems())
         }
     }
 
     /**
-     * Ronda 10 Frente C — toque num drive do admin. LIMITE HONESTO: a
-     * rota de listagem por ID NÃO existe no servidor (dependência
-     * v2.15.x; o router só aceita /<idx>:/...), por isso o drive HOJE
-     * NÃO PODE listar o conteúdo. Mostra uma mensagem clara em pt-BR
-     * — NUNCA um bounce para o login (o listFolder()==null hoje
-     * significa sessão expirada; um drive do admin NÃO pode cair nesse
-     * caminho), NUNCA um crash, NUNCA uma lista vazia enganadora.
-     *
-     * TODO (Ronda 10 Frente C) — ponto de ligação: quando o servidor
-     * ganhar a listagem por ID (POST /api/drive/by-id ou equivalente),
-     * trocar o toast por navegar p/ o DetailActivity:
-     *   val intent = Intent(this, DetailActivity::class.java)
-     *   intent.putExtra("drivePath", <path da rota por ID>)
-     *   intent.putExtra("folderName", drive.name)
-     *   AdminDriveUi.putAdminDrive(intent, drive, <mesmo path>)
-     *   startActivity(intent)
-     * (o DetailActivity já sabe ler os extras: sub-capa + capas de
-     * sub-pasta — ver AdminDriveUi e DetailActivity.)
+     * Ronda 13 Frente C — toque num drive do admin: abre o
+     * DetailActivity pelo ID (POST /api/drive/by-id; ver ApiService).
+     * O drivePath é "by-id:<folderId>" — sem índice "/N:/" — e o
+     * detalhe navega por folderId (sub-pastas por ID). Os extras do
+     * admin (sub-capa + capas de sub-pasta) seguem no intent, como
+     * nas navegacoes p/ sub-pastas dos drives fixos (ver
+     * AdminDriveUi.putAdminDrive / forwardAdminDrive).
      */
     private fun onAdminDriveClick(drive: AdminDrive) {
-        Toast.makeText(this, R.string.admin_drive_not_openable_yet,
-            Toast.LENGTH_LONG).show()
+        val byIdPath = ApiService.byIdPath(drive.driveId)
+        val intent = Intent(this, DetailActivity::class.java)
+        intent.putExtra("drivePath", byIdPath)
+        intent.putExtra("folderName", drive.name)
+        AdminDriveUi.putAdminDrive(intent, drive, byIdPath)
+        startActivity(intent)
     }
 
     private fun openDrive(drive: DriveItem) {
