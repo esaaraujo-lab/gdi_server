@@ -107,6 +107,19 @@ class DetailActivity : AppCompatActivity() {
     // (null = drive fixo; ver AdminDriveUi). Enquanto não for
     // null, o hero usa a sub-capa e as pastas usam subfolderCovers.
     private var adminDrive: AdminDrive? = null
+
+    /**
+     * Ronda 13 Frente C — base de ficheiros deste detalhe: os links
+     * (/download.aspx?...) sao cunhados com as chaves do worker que
+     * listou a pasta — os do sandbox SO o sandbox os serve (a
+     * producao nao os decifra). Em modo por ID (caminho
+     * "by-id:<folderId>") a base e o sandbox; nos drives fixos, a
+     * producao. [path] e o caminho da pasta do ficheiro (currentPath
+     * ou o folderPath do grupo/pai).
+     */
+    private fun fileBaseUrl(path: String): String =
+        if (ApiService.isByIdPath(path)) ApiService.SANDBOX_BASE_URL
+        else VovoFitApp.BASE_URL
     private var fileAdapter: com.vovofit.app.ui.browse.FileAdapter? = null
     private var lessonListAdapter: LessonListAdapter? = null
     private var lessonGridAdapter: LessonGridAdapter? = null
@@ -394,7 +407,7 @@ class DetailActivity : AppCompatActivity() {
                 folderPath = folderPath
             )
             PlaylistManager.setPlaylist(listOf(item), 0, this)
-            launchPlayer(VovoFitApp.BASE_URL + fastLink, videoName, folderPath, recent.thumbnailLink)
+            launchPlayer(fileBaseUrl(folderPath) + fastLink, videoName, folderPath, recent.thumbnailLink)
             return
         }
         Snackbar.make(binding.root, "Carregando \"$videoName\"...", Snackbar.LENGTH_SHORT).show()
@@ -411,7 +424,7 @@ class DetailActivity : AppCompatActivity() {
                     if (playable.size > 1) {
                         val idx = playable.indexOfFirst { it.name == videoName }
                         PlaylistManager.setPlaylist(playable, if (idx >= 0) idx else 0, this@DetailActivity)
-                        launchPlayer(VovoFitApp.BASE_URL + clickedVideo.link, videoName, folderPath, clickedVideo.thumbnailLink)
+                        launchPlayer(fileBaseUrl(folderPath) + clickedVideo.link, videoName, folderPath, clickedVideo.thumbnailLink)
                         return@launch
                     } else {
                         // Frente H — sem esperar pela montagem interfolder:
@@ -420,7 +433,7 @@ class DetailActivity : AppCompatActivity() {
                         PlaylistManager.setPlaylist(
                             listOf(clickedVideo.copy(folderPath = folderPath)), 0, this@DetailActivity
                         )
-                        launchPlayer(VovoFitApp.BASE_URL + clickedVideo.link, videoName, folderPath, clickedVideo.thumbnailLink)
+                        launchPlayer(fileBaseUrl(folderPath) + clickedVideo.link, videoName, folderPath, clickedVideo.thumbnailLink)
                         return@launch
                     }
                 }
@@ -1241,7 +1254,12 @@ class DetailActivity : AppCompatActivity() {
         val folders = files.filter { it.isFolder }
         val loose = files.filter { !it.isFolder }
         val groups = folders.map { folder ->
-            val path = if (currentPath.endsWith("/")) "$currentPath${folder.name}/" else "$currentPath/${folder.name}/"
+            // Ronda 13 Frente C — modo por ID: o grupo navega pelo
+            // ID da pasta (POST /api/drive/by-id), nao pelo nome
+            // (nao ha caminho "/N:/..." p/ concatenar — ver Ronda 12:
+            // concatenar o nome ao caminho do grupo duplicava-o).
+            val path = if (ApiService.isByIdPath(currentPath)) ApiService.byIdPath(folder.id)
+                else if (currentPath.endsWith("/")) "$currentPath${folder.name}/" else "$currentPath/${folder.name}/"
             LessonGroup(folder = folder, folderPath = path)
         }.toMutableList()
         if (loose.isNotEmpty()) {
@@ -1457,7 +1475,10 @@ class DetailActivity : AppCompatActivity() {
     }
 
     private fun openFolderInLesson(file: FileItem, folderPath: String) {
-        val newPath = if (folderPath.endsWith("/")) "$folderPath${file.name}/" else "$folderPath/${file.name}/"
+        // Ronda 13 Frente C — modo por ID: a sub-pasta navega pelo
+        // ID do ficheiro (o pai "by-id:<id>" nao tem nome p/ anexar).
+        val newPath = if (ApiService.isByIdPath(folderPath)) ApiService.byIdPath(file.id)
+            else if (folderPath.endsWith("/")) "$folderPath${file.name}/" else "$folderPath/${file.name}/"
         val intent = Intent(this, DetailActivity::class.java)
         intent.putExtra("drivePath", newPath)
         intent.putExtra("folderName", file.name)
@@ -1493,7 +1514,9 @@ class DetailActivity : AppCompatActivity() {
     }
 
     private fun openFolder(file: FileItem) {
-        val newPath = if (currentPath.endsWith("/")) {
+        // Ronda 13 Frente C — modo por ID: ver openFolderInLesson.
+        val newPath = if (ApiService.isByIdPath(currentPath)) ApiService.byIdPath(file.id)
+        else if (currentPath.endsWith("/")) {
             "$currentPath${file.name}/"
         } else {
             "$currentPath/${file.name}/"
@@ -1511,7 +1534,7 @@ class DetailActivity : AppCompatActivity() {
     private fun openFileInFolder(file: FileItem, folderPath: String) {
         val link = file.link
         if (link.isNullOrEmpty()) return
-        val fullUrl = VovoFitApp.BASE_URL + link
+        val fullUrl = fileBaseUrl(folderPath) + link
         when {
             file.isVideo || file.isAudio -> {
                 // Frente H — navegação IMEDIATA: a playlist da mesma
@@ -1552,7 +1575,7 @@ class DetailActivity : AppCompatActivity() {
     private fun openFile(file: FileItem) {
         val link = file.link
         if (link.isNullOrEmpty()) return
-        val fullUrl = VovoFitApp.BASE_URL + link
+        val fullUrl = fileBaseUrl(currentPath) + link
         if (file.isVideo || file.isAudio) {
             val playableItems = allFiles.filter { (it.isVideo || it.isAudio) && !it.link.isNullOrEmpty() }
             val playIndex = playableItems.indexOfFirst { it.id == file.id }
@@ -1581,7 +1604,7 @@ class DetailActivity : AppCompatActivity() {
     /** v1.0.4: PDF abre no leitor embutido (não mais app externo). */
     private fun openPdf(file: FileItem, folderPath: String) {
         val intent = Intent(this, PdfReaderActivity::class.java)
-        intent.putExtra(PdfReaderActivity.EXTRA_URL, VovoFitApp.BASE_URL + (file.link ?: ""))
+        intent.putExtra(PdfReaderActivity.EXTRA_URL, fileBaseUrl(folderPath) + (file.link ?: ""))
         intent.putExtra(PdfReaderActivity.EXTRA_NAME, file.name)
         intent.putExtra(PdfReaderActivity.EXTRA_PATH, "$folderPath${file.name}")
         startActivity(intent)
@@ -1590,7 +1613,7 @@ class DetailActivity : AppCompatActivity() {
     /** v1.0.4: .md/transcrição abre no leitor de MD embutido. */
     private fun openMd(file: FileItem, folderPath: String) {
         val intent = Intent(this, MdReaderActivity::class.java)
-        intent.putExtra(MdReaderActivity.EXTRA_URL, VovoFitApp.BASE_URL + (file.link ?: ""))
+        intent.putExtra(MdReaderActivity.EXTRA_URL, fileBaseUrl(folderPath) + (file.link ?: ""))
         intent.putExtra(MdReaderActivity.EXTRA_NAME, file.name)
         intent.putExtra(MdReaderActivity.EXTRA_PATH, "$folderPath${file.name}")
         startActivity(intent)
@@ -1604,7 +1627,7 @@ class DetailActivity : AppCompatActivity() {
         sm.saveLastWatched(folderPath, title)
         // Frente H — guarda o link de playback no recent (além da thumb):
         // o "Continuar assistindo" passa a navegar sem listFolder prévio.
-        sm.addRecent(folderPath, title, thumbnailLink, url.removePrefix(VovoFitApp.BASE_URL).takeIf { it != url })
+        sm.addRecent(folderPath, title, thumbnailLink, ApiService.linkFromPlaybackUrl(url))
         val intent = Intent(this, PlayerActivity::class.java)
         intent.putExtra(PlayerActivity.EXTRA_URL, url)
         intent.putExtra(PlayerActivity.EXTRA_TITLE, title)
