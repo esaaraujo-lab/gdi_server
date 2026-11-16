@@ -51,6 +51,7 @@ import com.vovofit.app.util.PlaylistManager
 import com.vovofit.app.util.SessionManager
 import com.vovofit.app.util.TapFeedback
 import com.vovofit.app.util.TvUtils
+import com.vovofit.app.util.MaterialDiscovery
 import com.vovofit.app.util.FocusAnimator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -127,6 +128,12 @@ class DetailActivity : AppCompatActivity() {
     // Frente R4B — filtro da lista plana (Todos / Vídeos / Materiais).
     private var flatFilter: FlatFilter = FlatFilter.ALL
     private var isFlatMode: Boolean = false
+    // Frente R14A — materiais vindos da pasta ao lado (ver
+    // MaterialDiscovery): só entram na secção Materiais da lista
+    // plana do telemóvel; nunca na contagem, no hero, na playlist
+    // nem na grade da TV. Job cancelado ao recarregar/sair.
+    private var extraMaterials: List<FileItem> = emptyList()
+    private var extraMaterialsJob: Job? = null
     // Ronda 9 Frente B — questões/flashcards da aula (ver
     // loadQuestionsFlashcards): carregados UMA vez por abertura, a
     // partir do pacote ISA + da pasta de materiais (.gdi-questoess/
@@ -471,6 +478,10 @@ class DetailActivity : AppCompatActivity() {
                 return@launch
             }
             allFiles = files
+            // Frente R14A — limpa os extras da pasta anterior (se a
+            // tela recarregar, a descoberta corre de novo no ramo plano).
+            extraMaterialsJob?.cancel()
+            extraMaterials = emptyList()
 
             // Hero: foto do 1º vídeo (thumb real), senao a imagem da
             // biblioteca pelo nome/pasta (camada 3), senao a capa do drive
@@ -581,8 +592,8 @@ class DetailActivity : AppCompatActivity() {
                     val adapter = FlatLessonAdapter(
                         folderPath = currentPath,
                         onPlay = { file -> openFile(file) },
-                        onOpenPdf = { file -> openPdf(file, currentPath) },
-                        onOpenMd = { file -> openMd(file, currentPath) },
+                        onOpenPdf = { file -> openPdf(file, file.folderPath ?: currentPath) },
+                        onOpenMd = { file -> openMd(file, file.folderPath ?: currentPath) },
                         onOpenOther = { file -> openFile(file) }
                     )
                     flatAdapter = adapter
@@ -591,6 +602,11 @@ class DetailActivity : AppCompatActivity() {
                     // Frente R4B — a lista chega já partida em secções
                     // (Vídeos .mp4 / Materiais), sem as legendas.
                     refreshFlatList()
+                    // Frente R14A — materiais da pasta ao lado: corre
+                    // em 2º plano (nunca atrasa a tela); quando chega,
+                    // só a secção Materiais ganha os ficheiros novos
+                    // (a TV nem corre isto — está no ramo do telemóvel).
+                    loadExtraMaterials(files)
                 }
             }
         }
@@ -601,8 +617,9 @@ class DetailActivity : AppCompatActivity() {
      *
      * Cadeia de fallback (ordem exata):
      *   (a) descrição gerada guardada (cache local → servidor) → mostra ela;
-     *   (b) senão, nome real de aula (nome da pasta) → provisória até a
-     *       Meggy gerar a de verdade;
+     *   (b) senão, nome real de aula (NOME DO ARQUIVO do vídeo; sem
+     *       ele, NOME DA PASTA quando a pasta tem só uma aula — R14B)
+     *       → provisória até a Meggy gerar a de verdade;
      *   (c) senão, nome genérico (ex. "001 - aula.mp3", "Aula 01") → em
      *       branco até a Meggy processar os materiais.
      * Ao abrir uma PASTA DE AULA, o app dispara a geração
@@ -656,8 +673,12 @@ class DetailActivity : AppCompatActivity() {
             return
         }
         // (b)/(c) provisória imediata (ou branco) enquanto resolve.
+        // R14B: o nome da pasta só vale quando a pasta tem uma só
+        // aula (um vídeo/áudio na pasta); com várias aulas, o nome
+        // da pasta é o do curso e não descreve nenhuma delas.
         val firstVideo = files.firstOrNull { it.isVideo || it.isAudio }?.name
-        val provisional = LessonDescription.provisionalDescription(folderName, firstVideo)
+        val singleLesson = files.count { it.isVideo || it.isAudio } == 1
+        val provisional = LessonDescription.provisionalDescription(folderName, firstVideo, singleLesson)
         if (provisional != null) {
             showDescription(provisional, getString(R.string.summary_state_provisional))
         } else {
@@ -1381,9 +1402,14 @@ class DetailActivity : AppCompatActivity() {
         val base = if (query.isBlank()) allFiles
             else allFiles.filter { it.name.contains(query, ignoreCase = true) }
         val videos = base.filter { it.name.endsWith(".mp4", true) }
-        val materials = base.filter { f ->
+        // Frente R14A — aos materiais da pasta somam-se os da pasta
+        // ao lado (extraMaterials); o vídeo nunca entra aqui e as
+        // legendas continuam de fora. A pasta ganha ao nome repetido.
+        val materials = (base.filter { f ->
             !f.isFolder && !f.isSubtitle && !f.name.endsWith(".mp4", true)
-        }
+        } + extraMaterials.filter { f ->
+            query.isBlank() || f.name.contains(query, ignoreCase = true)
+        }).distinctBy { it.name.lowercase() }
         adapter.submitSections(videos, materials, flatFilter)
         findViewById<View>(R.id.filterChipsRow)?.visibility = View.VISIBLE
         updateFlatChipStyles()
@@ -1398,6 +1424,33 @@ class DetailActivity : AppCompatActivity() {
         } else {
             binding.emptyState.text = getString(R.string.browse_empty)
             binding.emptyState.visibility = View.GONE
+        }
+    }
+
+    // Frente R14A — busca os materiais da pasta ao lado (ver
+    // MaterialDiscovery) e funde-os na secção Materiais da lista
+    // plana. Só corre no telemóvel (o ramo plano do telemóvel é quem
+    // chama); a TV usa a grade e nunca chama isto. Best-effort:
+    // falha de rede deixa a lista como estava — nunca crash, nunca
+    // bounce para o login com a tela aberta.
+    private fun loadExtraMaterials(sameFolderFiles: List<FileItem>) {
+        extraMaterialsJob?.cancel()
+        extraMaterials = emptyList()
+        extraMaterialsJob = lifecycleScope.launch {
+            val extra = withContext(Dispatchers.IO) {
+                runCatching {
+                    MaterialDiscovery.discoverExtraMaterials(api, currentPath, sameFolderFiles)
+                }.getOrDefault(emptyList())
+            }
+            if (extra.isEmpty() || isFinishing || isDestroyed) return@launch
+            extraMaterials = extra
+            refreshFlatList()
+            // Os nomes dos materiais novos alimentam o resumo e as
+            // questões (o fetchGenerated usa os nomes dos PDFs/MDs):
+            // recarregam-se com a lista fundida, sem tocar no resto.
+            val merged = (sameFolderFiles + extra).distinctBy { it.name.lowercase() }
+            loadLessonDescription(merged)
+            loadQuestionsFlashcards(merged)
         }
     }
 
@@ -1575,7 +1628,11 @@ class DetailActivity : AppCompatActivity() {
     private fun openFile(file: FileItem) {
         val link = file.link
         if (link.isNullOrEmpty()) return
-        val fullUrl = fileBaseUrl(currentPath) + link
+        // Frente R14A — um material da pasta ao lado abre pela pasta
+        // DELE (file.folderPath, carimbada na descoberta); os da
+        // pasta da aula continuam por currentPath, como antes.
+        val fileFolder = file.folderPath ?: currentPath
+        val fullUrl = fileBaseUrl(fileFolder) + link
         if (file.isVideo || file.isAudio) {
             val playableItems = allFiles.filter { (it.isVideo || it.isAudio) && !it.link.isNullOrEmpty() }
             val playIndex = playableItems.indexOfFirst { it.id == file.id }
@@ -1590,9 +1647,9 @@ class DetailActivity : AppCompatActivity() {
             }
             launchPlayer(fullUrl, file.name, currentPath, file.thumbnailLink)
         } else if (file.isPdf) {
-            openPdf(file, currentPath)
+            openPdf(file, fileFolder)
         } else if (file.isMarkdown) {
-            openMd(file, currentPath)
+            openMd(file, fileFolder)
         } else {
             val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(fullUrl))
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
