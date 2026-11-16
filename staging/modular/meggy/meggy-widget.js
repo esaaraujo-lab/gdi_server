@@ -259,6 +259,131 @@
     return window.location.pathname || '';
   }
 
+  // ═══ v2.15.35-R14D: chat da Meggy lê a aula aberta ═══
+  // O widget anexa ao pedido /api/ai o contexto da aula aberta
+  // (lessonPath + TEXTO dos materiais). O texto vem daqui — o worker
+  // NUNCA extrai PDF do binário (lê lixo): MD de transcrição lido
+  // direto, texto do PDF via pdf.js, reutilizando a extração
+  // PASSO 2A/2B (gdi-meggy.js:1035 generateAll / meggy-cache.js:609).
+  // Sem MD nem PDF com texto, não se inventa contexto — o worker
+  // responde a recusa honesta. Itens = a mesma lista em memória do
+  // painel M9 (gdi-core.js:1250 `tabsEl.__items`).
+  const LESSON_MATERIAL_MAX = 80000; // ★ v2.15.35: mesmo teto do /api/ai (meggy-cache.js:780, worker 80K)
+  const LESSON_MATERIAL_MIN = 50;    // ★ v2.15.35: mesmo limiar do PASSO 2A/2B
+  // ★ v2.15.35: réplicas de gdi-core.js:1018/1025 — os helpers vivem
+  //   dentro do IIFE do gdi-core e não são exportados.
+  function _isAiGeneratedMd(name){
+    const n=(name||'').toLowerCase();
+    if(!/\.md$|\.txt$/.test(n))return false;
+    return /ebook.*ia|resumo.*ia|gerado.*por.*ia|\bia\b.*gerad|intelig.*artif/i.test(n);
+  }
+  function _isTranscriptionFile(name){ return /transcri/i.test((name||'').toLowerCase()); }
+  function getLessonItems(){
+    try{
+      const tabs=document.getElementById('gdi-mat-tabs');
+      const items=tabs&&tabs.__items;
+      return Array.isArray(items)?items.filter(it=>it&&it.name&&it.url):[];
+    }catch(_){ return []; }
+  }
+  // Cache em memória da extração (10 min, por aula+ficheiros): sem ele,
+  // "resumo" e depois "questões" re-extraíam os PDFs todos (30-60s cada).
+  // Só cacheia quando houve itens (o painel M9 pode ainda não ter
+  // carregado __items — nesse caso volta a tentar no próximo pedido).
+  let _lessonMaterialCache=null;
+  // PASSO 2A/2B reutilizado — devolve {kind:'md'|'pdf'|null, text, name}.
+  async function getLessonMaterialText(){
+    const lessonPath=getCurrentLessonPath();
+    const items=getLessonItems();
+    const cacheKey=lessonPath+'|'+items.map(i=>i.name).join('|');
+    if(_lessonMaterialCache&&_lessonMaterialCache.key===cacheKey&&Date.now()-_lessonMaterialCache.at<10*60*1000)return _lessonMaterialCache;
+    const pdf=window.__gdiMeggy&&window.__gdiMeggy.pdf;
+    const extractTextFile=pdf&&pdf.extractTextFile;
+    const extractPdfText=pdf&&pdf.extractPdfText;
+    let result={kind:null,text:'',name:''};
+    if(items.length&&extractTextFile&&extractPdfText){
+      const safe=items.filter(it=>!_isAiGeneratedMd(it.name)); // ★ nunca resumir um resumo
+      const transc=safe.filter(it=>_isTranscriptionFile(it.name));
+      const others=safe.filter(it=>!_isTranscriptionFile(it.name));
+      // ★ PASSO 2A: transcrição primeiro — usa SÓ ela (não extrai PDFs)
+      let tText='';
+      for(const item of transc){
+        try{
+          const t=await extractTextFile(item.url);
+          if(t&&t.trim().length>50){ tText+=(tText?'\n\n---\n\n':'')+t; if(!result.name)result.name=item.name; }
+        }catch(e){ console.warn('[Meggy] transcrição falhou:',item.name,e&&e.message||e); }
+      }
+      if(tText.trim().length>=LESSON_MATERIAL_MIN){
+        result={kind:'md',text:tText.slice(0,LESSON_MATERIAL_MAX),name:result.name||''};
+      }else{
+        // ★ PASSO 2B: sem transcrição — extrai PDFs/materiais em paralelo
+        const res=await Promise.allSettled(others.map(async item=>{
+          const t=/\.pdf$/i.test(item.name||'')?await extractPdfText(item.url):await extractTextFile(item.url);
+          return {name:item.name,text:t};
+        }));
+        let all='';
+        res.forEach(r=>{
+          if(r.status==='fulfilled'&&r.value.text&&r.value.text.trim().length>50){
+            all+=(all?'\n\n---\n\n':'')+r.value.text;
+            if(!result.name)result.name=r.value.name;
+          }
+        });
+        if(all.trim().length>=LESSON_MATERIAL_MIN)result={kind:'pdf',text:all.slice(0,LESSON_MATERIAL_MAX),name:result.name||''};
+      }
+    }
+    if(items.length)_lessonMaterialCache={key:cacheKey,kind:result.kind,text:result.text,name:result.name,at:Date.now()};
+    return result;
+  }
+  // Intenção "sobre a aula aberta": só nestes casos o pedido leva o
+  // material anexado (extrair PDFs custa 30-60s — não vale a pena em
+  // conversa genérica). Devolve 'resumo'|'explicar'|'questoes'|null.
+  function lessonIntentOf(txt){
+    const t=(txt||'').toLowerCase();
+    if(/\bresum|\bs[ií]ntese/.test(t))return 'resumo';
+    if(/\bexpli[qc]/.test(t))return 'explicar';
+    if(/\bquest[õo]es|\bp[íi]lulas|\bflashcards|\bmapa mental/.test(t))return 'questoes';
+    return null;
+  }
+  // Pedido de aula → POST /api/ai (não /api/ai/stream: o stream é só
+  // NVIDIA, sem cadeia de fallback nem gravação). Devolve 'handled' ou
+  // 'aborted' (sessão destruída a meio — CYCLE2-7).
+  async function sendLessonRequest(txt,intent,hist,myGen){
+    const lessonPath=getCurrentLessonPath();
+    const isLessonUrl=/^\/\d+:\//.test(lessonPath); // ★ mesmo teste de meggy-summaries.js:_deriveLessonPath
+    let lessonName='';
+    try{ if(typeof window.realLessonName==='function')lessonName=window.realLessonName('')||''; }catch(_){}
+    if(!lessonName){ const t=document.title||''; lessonName=t.split(' - ')[0].split(' | ')[0].trim(); }
+    let material={kind:null,text:'',name:''};
+    if(isLessonUrl){
+      try{ material=await getLessonMaterialText(); }catch(e){ console.warn('[Meggy] extração do material falhou:',e&&e.message||e); material={kind:null,text:'',name:''}; }
+    }
+    if(_sessionGen!==myGen){ hideTyping(); return 'aborted'; }
+    const showErr=(msg)=>{
+      hideTyping();
+      input.value=txt;
+      const errEl=document.createElement('div');errEl.className='gdi-ai-err';
+      errEl.textContent=msg;
+      body.appendChild(errEl);body.scrollTop=body.scrollHeight;
+      setTimeout(()=>errEl.remove(),5000);
+    };
+    try{
+      const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({message:txt,messages:hist,lesson:{lessonPath:isLessonUrl?lessonPath:'',lessonName:lessonName||'',materialText:material.text||'',materialKind:material.kind,materialName:material.name||''}})});
+      if(_sessionGen!==myGen){ hideTyping(); return 'aborted'; }
+      if(!r.ok){ showErr('Não consegui responder agora. Tente novamente.'); return 'handled'; }
+      const d=await r.json().catch(()=>null);
+      hideTyping();
+      if(_sessionGen!==myGen){ return 'aborted'; }
+      if(!d||!d.ok||!d.response){ showErr('Não consegui responder agora. Tente novamente.'); return 'handled'; }
+      addMsg('assistant',d.response);
+      updateMemory(undefined,{question:txt,response:d.response});
+      return 'handled';
+    }catch(e){
+      if(_sessionGen!==myGen){ hideTyping(); return 'aborted'; }
+      showErr('Erro de conexão. Verifique sua internet.');
+      return 'handled';
+    }
+  }
+
   // Render a questoes JSON payload as readable Markdown inside the chat bubble.
   function _renderQuestoesAsMarkdown(content){
     try{
@@ -437,12 +562,13 @@
         console.warn('[Meggy] shared material check failed (non-critical):', e && e.message || e);
       }
 
-      // Fall through to AI generation
-      const ctx = lessonName ? ` (Aula atual: ${lessonName}. URL: ${window.location.pathname}) ` : ' ';
+      // Fall through to AI generation — a aula viaja como campos
+      // estruturados `lesson:` (send() deteta a intenção e anexa o
+      // material); já não se injeta o nome/URL no texto do prompt.
       let prompt = '';
-      if(action === 'resumir') prompt = `Gere um resumo${ctx}desta aula`;
-      else if(action === 'questoes') prompt = `Crie 5 questões${ctx}sobre o tema desta aula`;
-      else if(action === 'explicar') prompt = `Explique${ctx}o conceito principal desta aula`;
+      if(action === 'resumir') prompt = 'Gere um resumo desta aula';
+      else if(action === 'questoes') prompt = 'Crie 5 questões sobre o tema desta aula';
+      else if(action === 'explicar') prompt = 'Explique o conceito principal desta aula';
       if(prompt){ input.value = prompt; await send(); }
     };
   });
@@ -714,6 +840,18 @@
     const memCtx=buildMemoryContext();
     if(memCtx&&hist.length>0){
       hist[0]={role:'assistant',content:'Contexto do aluno: '+memCtx};
+    }
+
+
+    // ★ v2.15.35-R14D: pedido sobre a aula aberta (resumo/explicar/
+    //   questões) — vai p/ /api/ai com o material anexado, NÃO p/ o
+    //   stream (NVIDIA-only, sem fallback nem gravação) nem p/ a IA
+    //   do navegador (não vê os ficheiros da aula). Fora de uma página
+    //   de aula (/N:/...), cai no comportamento atual (stream/navegador).
+    const _lessonIntent=lessonIntentOf(txt);
+    if(_lessonIntent&&/^\/\d+:\//.test(getCurrentLessonPath())){
+      await sendLessonRequest(txt,_lessonIntent,hist,myGen);
+      return;
     }
 
     let response=null,usedLocal=false;
@@ -1109,6 +1247,8 @@
     // ★ Task 9 (Scanner Distribuído): shared materials bridge
     tryOpenSharedMaterial, displaySharedMaterial, addSharedHint,
     getCurrentLessonPath,
+    // ★ v2.15.35-R14D: leitura da aula aberta (diagnóstico/testes)
+    getLessonMaterialText, lessonIntentOf, getLessonItems,
     __gdiMeggySuggest,
     // ★ FIX-MEGGY #13: explicit teardown hook (used when Bus is unavailable)
     destroySession
