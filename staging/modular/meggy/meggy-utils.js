@@ -193,21 +193,93 @@
     return k || '/';
   }
 
-  // ── Real lesson name from playlist (não "video.mp4") ──
-  // A playlist tem .name que pode incluir o label da pasta (ex: "Aula 02 - ...").
-  // Se não houver playlist, cai pro file header, depois pro base passado.
+  // ── Tema de um nome de aula (espelho de LessonDescription.extractTopic no APK) ──
+  // Tira a extensão e os prefixos de numeração/aula do início (até 2
+  // rodadas) e rejeita nomes genéricos ("Aula 01", "001 - aula.mp4").
+  // Null = sem tema real — nunca inventar conteúdo.
+  const GENERIC_ONLY_RE = /^(aula|v[íi]deo|[áa]udio|epis[óo]dio|parte|cap[íi]tulo|li[çc][ãa]o|m[óo]dulo|t[óo]pico|arquivo|file)(\s+\d+)?$/i;
+  const HAS_LETTER_RE = /[A-Za-zÀ-ÿ]/;
+  function extractLessonTopic(candidate){
+    if(!candidate) return null;
+    let topic = String(candidate).trim();
+    topic = topic.replace(/\.[A-Za-z0-9]{2,5}$/, '');
+    for(let i = 0; i < 2; i++){
+      const before = topic;
+      topic = topic.replace(/^\d{1,3}\s*[-–—.)\s]+/, '');
+      topic = topic.replace(/^(aula|ep\.?|episódio|episodio|parte|cap\.?|capítulo|capitulo|lição|licao|módulo|modulo)\s*\d{0,3}\s*[-–—.)\s:]*/i, '');
+      topic = topic.trim();
+      if(topic === before) break;
+    }
+    topic = topic.replace(/^[\s\-–—:.]+|[\s\-–—:.]+$/g, '').trim();
+    if(!topic || topic.length < 4) return null;
+    if(!HAS_LETTER_RE.test(topic)) return null;
+    if(GENERIC_ONLY_RE.test(topic)) return null;
+    return topic;
+  }
+
+  // Pasta da aula a partir do pathname: "/0:/Curso/Aula 01/video.mp4" -> "Aula 01".
+  function lessonFolderName(){
+    try{
+      const segs = window.location.pathname.split('?')[0].split('/').filter(Boolean);
+      if(segs.length >= 2) return decodeURIComponent(segs[segs.length - 2]);
+    }catch(_){}
+    return '';
+  }
+
+  // Verdadeiro quando a pasta da aula tem UMA só aula: a playlist só
+  // tem um vídeo na pasta atual. Sem playlist (ou sem .folder/pageUrl
+  // nos itens), não se sabe — false (a pasta nunca vale como nome).
+  function folderHasSingleLesson(){
+    try{
+      const pv = window.playlistVideos;
+      if(!Array.isArray(pv) || !pv.length) return false;
+      let folder = '';
+      try{
+        const cur = pv[window.currentIndex];
+        if(cur && cur.folder) folder = cur.folder;
+      }catch(_){}
+      if(!folder) folder = window.location.pathname.split('/').slice(0, -1).join('/') + '/';
+      let n = 0;
+      for(const v of pv){
+        if(!v) continue;
+        if(v.folder){
+          if(v.folder === folder) n++;
+        }else if(typeof v.pageUrl === 'string' && v.pageUrl.indexOf(folder) === 0){
+          n++;
+        }
+      }
+      return n === 1;
+    }catch(_){ return false; }
+  }
+
+  // ── Nome real da aula (Frente R14B — Elton 2026-11-15 21:48) ──
+  // Regra (a mesma do APK, LessonDescription.provisionalDescription):
+  //   1. NOME DO ARQUIVO do vídeo (playlist .name/.origName, depois o
+  //      cabeçalho do ficheiro) — se trouxer um tema real;
+  //   2. senão, NOME DA PASTA — SÓ quando a pasta tem uma só aula;
+  //   3. senão, o fallback passado pelo chamador (filtrado pelo tema),
+  //      salvo quando ele É o nome da pasta (nesse caso vale a regra 2);
+  //   4. 'Aula' como último recurso (título, nunca descrição).
+  // O resumo gerado pela Meggy NÃO muda — isto é só o nome de
+  // fallback, usado como título/descrição provisória.
   function realLessonName(fallback){
     try{
       if(window.playlistVideos&&typeof window.currentIndex==='number'&&window.currentIndex>=0){
         const v=window.playlistVideos[window.currentIndex];
-        if(v&&v.name&&v.name!=='video.mp4'&&v.name.length>3)return v.name;
-        // tenta origName também
-        if(v&&v.origName&&v.origName!=='video.mp4'&&v.origName.length>3)return v.origName;
+        const t1 = extractLessonTopic(v && v.name) || extractLessonTopic(v && v.origName);
+        if(t1) return t1;
       }
     }catch(_){}
-    const h=document.querySelector('.gdi-file-header-name');
-    if(h&&h.textContent&&h.textContent.trim().length>3)return h.textContent.trim();
-    return fallback||'Aula';
+    try{
+      const h=document.querySelector('.gdi-file-header-name');
+      const t2 = h && extractLessonTopic(h.textContent);
+      if(t2) return t2;
+    }catch(_){}
+    const folderTopic = extractLessonTopic(lessonFolderName());
+    if(folderTopic && folderHasSingleLesson()) return folderTopic;
+    const t4 = extractLessonTopic(fallback);
+    if(t4 && (!folderTopic || t4.toLowerCase() !== folderTopic.toLowerCase())) return t4;
+    return 'Aula';
   }
 
   // ── ISA call (POST /api/ai) ──
@@ -314,6 +386,14 @@
 .gdi-mat-isa-err{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:30px;text-align:center;}
 .gdi-mat-isa-err i{font-size:36px;color:#ff8b8b;}
 .gdi-mat-isa-err div{color:var(--ferreto-text,#e6edf3);font-size:14px;max-width:420px;}
+/* Frente R14B — polimento mobile das superfícies de materiais: mais
+   respiro e leitura confortável em ecrãs pequenos; nada muda no desktop. */
+@media (max-width:640px){
+.gdi-mat-isa-result{padding:16px 14px;font-size:14px;line-height:1.7;}
+.gdi-isa-summary-body{padding:16px;font-size:14px;line-height:1.75;}
+.gdi-isa-summary-body h1{font-size:18px;}
+.gdi-isa-summary-body h2{font-size:16px;}
+}
 `;
     document.head.appendChild(s);
   }
@@ -323,7 +403,7 @@
     esc, lsGet, lsSet, uid,
     parseJsonArray, renderMd,
     setLoading, setError,
-    lessonKey, realLessonName,
+    lessonKey, realLessonName, extractLessonTopic,
     callIsa, callIsaKeyed,
     CONSTS: {
       LS_SUM, LQ, LS_SUBJECTS, ANSWERED_KEY, MEMORY_KEY, STORE,
