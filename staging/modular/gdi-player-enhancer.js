@@ -4,6 +4,7 @@
 // 1. Memória de velocidade por curso (cada curso lembra sua velocidade)
 // 2. Atalhos de teclado (J/K/L, ←→, ↑↓, números, M, F)
 // 3. "Continuar de onde parou" — prompt visual com resume
+// 4. Geração automática ao PLAY (Frente R14B): POST /api/generation/enqueue em 2º plano, silencioso
 //
 // Funciona com TODOS os players (plyr, videojs, dplayer, jwplayer, shaka, native)
 // porque opera no elemento <video> diretamente, não na API do player.
@@ -189,11 +190,55 @@
     tryShowResume(0);
   }
 
+  // ═══ 4. GERAÇÃO AUTOMÁTICA AO PLAY (Frente R14B) ═══
+  // Quando a reprodução arranca de facto (evento 'play' do <video>),
+  // enfileira em 2º plano a geração dos materiais de apoio + descrição
+  // da aula (POST /api/generation/enqueue — contrato da Frente R14C;
+  // o worker garante a idempotência no servidor). 1x por vídeo por
+  // carregamento da página (chave = pathname + currentSrc); falha
+  // silenciosa (sem toast, sem diálogo, sem tocar no play) e sem
+  // bloquear o vídeo (fetch sem await). Não é ao "okay" nem ao abrir
+  // a aula — é ao PLAY (Elton 2026-11-15 21:48).
+  const playEnqueuedKeys = new Set();
+  function parentFolderPath(p){
+    const clean = String(p || '').replace(/\/+$/, '');
+    const idx = clean.lastIndexOf('/');
+    return idx <= 0 ? '/' : clean.slice(0, idx) + '/';
+  }
+  function enqueueGenerationOnPlay(video){
+    try{
+      const videoPath = window.location.pathname.split('?')[0];
+      if(!videoPath) return;
+      const src = (video && video.currentSrc) || '';
+      const key = videoPath + '|' + src;
+      if(playEnqueuedKeys.has(key)) return;
+      playEnqueuedKeys.add(key);
+      const lessonPath = courseKey();
+      fetch('/api/generation/enqueue', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          lessonPath: lessonPath,
+          videoPath: videoPath,
+          courseKey: parentFolderPath(lessonPath),
+          source: 'play'
+        }),
+        keepalive: true
+      }).catch(()=>{});
+    }catch(_){}
+  }
+  function setupPlayEnqueue(video){
+    if(!video || video.__gdiPlayEnqueue) return;
+    video.__gdiPlayEnqueue = true;
+    video.addEventListener('play', function(){ enqueueGenerationOnPlay(video); });
+  }
+
   // ═══ INICIALIZAÇÃO ═══
   function enhanceVideo(video){
     if(!video)return;
     setupSpeedMemory(video);
     setupKeyboardShortcuts(video);
+    setupPlayEnqueue(video);
     // ★ v1.0.183: showResumePrompt REMOVIDO — o toast do app.min.js (showResumeToast) é a UI canônica.
     // Antes, ambos apareciam simultaneamente (overlay + toast), confundindo o usuário.
     // showResumePrompt(video);
