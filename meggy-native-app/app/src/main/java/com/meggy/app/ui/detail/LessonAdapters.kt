@@ -47,6 +47,47 @@ data class LessonGroup(
     var pdfFolderCount: Int = -1 // -1 = não carregado
 )
 
+/**
+ * Ronda 15 Frente B (B4) — progresso de um grupo (aula).
+ *
+ * O progresso do 1.º vídeo dos filhos carregados (como antes) é
+ * combinado com o melhor progresso dos recents em memória para o
+ * mesmo folderPath. Isto resolve o caso children == null (o prefetch
+ * pára nos 20 grupos): o grupo pode ter progresso real mesmo sem os
+ * filhos carregados, porque o recent guarda o (folderPath, videoName)
+ * certo — sem listFolder nenhum, sem rede extra.
+ *
+ * [hasResume] cobre o caso migrado (B2) em que há posição guardada
+ * mas ainda não há duração: o % é desconhecido mas o vídeo pode ser
+ * retomado — o cartão mostra "Continuar", não "não iniciada".
+ * [known] é falso só quando não há NENHUMA fonte de progresso
+ * (sem filhos carregados E sem recents): aí o cartão NÃO pode afirmar
+ * "não iniciada" — fica no estado neutro "a carregar…".
+ */
+private data class GroupProgress(
+    val progress: Int,
+    val watched: Boolean,
+    val hasResume: Boolean,
+    val known: Boolean
+)
+
+private fun groupProgress(sm: SessionManager, group: LessonGroup): GroupProgress {
+    val video = group.children?.firstOrNull { it.isVideo || it.isAudio }
+    val directProgress = if (video != null) sm.getResumeProgress(group.folderPath, video.name) else 0
+    val directWatched = if (video != null) sm.isWatched(group.folderPath, video.name) else false
+    val directHasResume = if (video != null) sm.hasResume(group.folderPath, video.name) else false
+    val recents = sm.getRecents().filter { it.folderPath == group.folderPath }
+    val recentProgress = recents.maxOfOrNull { sm.getResumeProgress(it.folderPath, it.videoName) } ?: 0
+    val recentWatched = recents.any { sm.isWatched(it.folderPath, it.videoName) }
+    val recentHasResume = recents.any { sm.hasResume(it.folderPath, it.videoName) }
+    return GroupProgress(
+        progress = maxOf(directProgress, recentProgress),
+        watched = directWatched || recentWatched,
+        hasResume = directHasResume || recentHasResume,
+        known = group.children != null || recents.isNotEmpty()
+    )
+}
+
 class LessonListAdapter(
     private val onPlayVideo: (FileItem, String) -> Unit,
     private val onOpenPdf: (FileItem, String) -> Unit,
@@ -124,25 +165,29 @@ class LessonListAdapter(
             is LessonGroup -> {
                 val b = (holder as HeaderVH).binding
                 b.lessonTitle.text = row.folder.name
-                // Progresso da aula = progresso do vídeo principal (se já
-                // foi listado) ou do resume do nome da aula.
+                // Ronda 15 Frente B (B4): progresso via groupProgress —
+                // recents em memória + 1.º vídeo dos filhos carregados.
                 val video = row.children?.firstOrNull { it.isVideo || it.isAudio }
-                val videoName = video?.name ?: row.folder.name
-                val progress = sm.getResumeProgress(row.folderPath, videoName)
-                val watched = sm.isWatched(row.folderPath, videoName)
-                b.lessonProgress.progress = progress
+                val gp = groupProgress(sm, row)
+                val progress = gp.progress
+                val watched = gp.watched
+                val hasResume = gp.hasResume
+                val known = gp.known
+                b.lessonProgress.progress = if (watched) 100 else progress
                 b.lessonProgressText.text = when {
                     watched -> "100% concluído"
                     progress > 0 -> "$progress% concluído"
+                    hasResume -> "Continuar"
+                    !known -> "a carregar…"
                     else -> "não iniciado"
                 }
                 b.lessonBadge.visibility = if (watched) View.VISIBLE else View.GONE
-                b.lessonContinue.visibility = if (progress > 0 && !watched) View.VISIBLE else View.GONE
+                b.lessonContinue.visibility = if ((progress > 0 || hasResume) && !watched) View.VISIBLE else View.GONE
                 b.lessonContinue.setOnClickListener {
                     if (video != null) onPlayVideo(video, row.folderPath)
                 }
                 b.lessonProgressRow.visibility =
-                    if (watched || progress > 0) View.VISIBLE else View.GONE
+                    if (watched || progress > 0 || hasResume || !known) View.VISIBLE else View.GONE
                 val meta = buildList {
                     video?.let { add(if (it.isAudio) "áudio" else "vídeo") }
                     val pdfs = row.children?.count { it.isPdf } ?: 0
@@ -242,9 +287,13 @@ class LessonGridAdapter(
         val ctx = holder.itemView.context
         val sm = SessionManager.get(ctx)
         val video = group.children?.firstOrNull { it.isVideo || it.isAudio }
-        val videoName = video?.name ?: group.folder.name
-        val progress = sm.getResumeProgress(group.folderPath, videoName)
-        val watched = sm.isWatched(group.folderPath, videoName)
+        // Ronda 15 Frente B (B4): ver groupProgress — o grupo pode ter
+        // progresso nos recents mesmo sem filhos carregados.
+        val gp = groupProgress(sm, group)
+        val progress = gp.progress
+        val watched = gp.watched
+        val hasResume = gp.hasResume
+        val known = gp.known
         val dur = if (video != null) sm.getResumeDuration(group.folderPath, video.name) else 0L
 
         with(holder.binding) {
@@ -290,6 +339,8 @@ class LessonGridAdapter(
             lessonCardProgressText.text = when {
                 watched -> "100% concluída"
                 progress > 0 -> "$progress% concluída"
+                hasResume -> "Continuar"
+                !known -> "a carregar…"
                 else -> "não iniciada"
             }
         }
