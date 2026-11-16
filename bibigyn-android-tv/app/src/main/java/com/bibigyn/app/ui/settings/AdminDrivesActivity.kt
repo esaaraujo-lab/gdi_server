@@ -28,9 +28,9 @@ import kotlinx.coroutines.launch
  * do admin podem ser removidos (confirmação; a pasta no Drive NÃO é
  * apagada — só o registo).
  *
- * DEPENDÊNCIA DO SERVIDOR (v2.15.x, AINDA NÃO EXISTE): tabela D1
+ * Servidor (Frente A da ronda 13, DEPLOYADO no sandbox): tabela D1
  * admin_drives + GET /api/admin-drives, POST
- * /api/admin/admin-drives/add|delete e GET /api/me. Sem endpoint, o
+ * /api/admin/admin-drives/add|update|delete e GET /api/me. Sem endpoint, o
  * ecrã mostra "função indisponível até o servidor a ativar" (nunca
  * uma lista vazia enganadora, nunca crash). O admin vê TODOS os
  * drives que criou, em qualquer APK (o filtro por targetApps é da
@@ -43,6 +43,9 @@ class AdminDrivesActivity : AppCompatActivity() {
 
     /** null = ainda sem resposta do servidor; false = rota ausente/falha. */
     private var serverAvailable: Boolean? = null
+
+    /** Ronda 13 Frente C — id do drive em edicao (null = a adicionar). */
+    private var editingId: Long? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -125,10 +128,44 @@ class AdminDrivesActivity : AppCompatActivity() {
         }
         row.findViewById<TextView>(R.id.driveCovers).text =
             bits.joinToString(" · ")
+        row.findViewById<View>(R.id.btnEditDrive).setOnClickListener {
+            startEdit(drive)
+        }
         row.findViewById<View>(R.id.btnRemoveDrive).setOnClickListener {
             confirmRemove(drive)
         }
         binding.drivesList.addView(row)
+    }
+
+    /**
+     * Ronda 13 Frente C — edicao (POST /api/admin/admin-drives/
+     * update): carrega o drive no formulario e troca o Guardar p/
+     * atualizar. O ID da pasta NAO muda (o update identifica pela
+     * chave `id`); o campo fica desligado p/ nao sugerir o contrario.
+     * Os campos vazios de capa/sub-capa no Guardar limpam-nas no
+     * servidor (null JSON — ver ApiService.updateAdminDrive).
+     */
+    private fun startEdit(drive: AdminDrive) {
+        editingId = drive.id
+        binding.inputDriveId.setText(drive.driveId)
+        binding.inputDriveId.isEnabled = false
+        binding.inputDriveName.setText(drive.name)
+        binding.inputCoverUrl.setText(drive.coverUrl ?: "")
+        binding.inputSubCoverUrl.setText(drive.subCoverUrl ?: "")
+        binding.checkMeggy.isChecked = AdminDrive.TARGET_MEGGY in drive.targetApps
+        binding.checkBibi.isChecked = AdminDrive.TARGET_BIBI in drive.targetApps
+        binding.checkVovo.isChecked = AdminDrive.TARGET_VOVO in drive.targetApps
+        binding.subfolderCoversContainer.removeAllViews()
+        for ((path, url) in drive.subfolderCovers) addSubfolderCoverRow(path, url)
+        binding.btnSaveDrive.setText(R.string.admin_drives_save_edit)
+        binding.inputDriveName.requestFocus()
+    }
+
+    /** Volta o formulario ao modo "adicionar" (apos guardar). */
+    private fun resetEditMode() {
+        editingId = null
+        binding.inputDriveId.isEnabled = true
+        binding.btnSaveDrive.setText(R.string.admin_drives_save)
     }
 
     private fun confirmRemove(drive: AdminDrive) {
@@ -237,12 +274,20 @@ class AdminDrivesActivity : AppCompatActivity() {
             subfolderCovers[path] = url
         }
         binding.btnSaveDrive.isEnabled = false
+        val editId = editingId
         lifecycleScope.launch {
             val result = try {
-                api.addAdminDrive(
-                    driveId, name, targets,
-                    coverUrl.ifEmpty { null }, subCoverUrl.ifEmpty { null },
-                    subfolderCovers)
+                if (editId != null) {
+                    api.updateAdminDrive(
+                        editId, name, targets,
+                        coverUrl.ifEmpty { null }, subCoverUrl.ifEmpty { null },
+                        subfolderCovers)
+                } else {
+                    api.addAdminDrive(
+                        driveId, name, targets,
+                        coverUrl.ifEmpty { null }, subCoverUrl.ifEmpty { null },
+                        subfolderCovers)
+                }
             } catch (_: Exception) {
                 AdminDriveResult.Error(
                     getString(R.string.admin_drives_error_generic))
@@ -251,7 +296,8 @@ class AdminDrivesActivity : AppCompatActivity() {
             when (result) {
                 AdminDriveResult.Success -> {
                     Toast.makeText(this@AdminDrivesActivity,
-                        R.string.admin_drives_saved, Toast.LENGTH_SHORT).show()
+                        if (editId != null) R.string.admin_drives_updated
+                        else R.string.admin_drives_saved, Toast.LENGTH_SHORT).show()
                     clearForm()
                     loadDrives()
                 }
@@ -266,6 +312,7 @@ class AdminDrivesActivity : AppCompatActivity() {
     }
 
     private fun clearForm() {
+        resetEditMode()
         binding.inputDriveId.text?.clear()
         binding.inputDriveName.text?.clear()
         binding.inputCoverUrl.text?.clear()
