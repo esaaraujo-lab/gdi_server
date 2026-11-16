@@ -1838,7 +1838,14 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun saveResumeFor(item: FileItem, url: String?, positionMs: Long) {
-        val fp = item.folderPath
+        // Ronda 15 Frente B (B1, defesa): se o item da playlist não
+        // trouxer folderPath (caminho antigo ou futuro), o intent do
+        // player traz sempre EXTRA_FOLDER_PATH (launchPlayer) — usá-lo
+        // antes de cair na loja legada por URL. Não substitui o carimbo
+        // na montagem da playlist: markEnded/isWatched usam
+        // item.folderPath directamente.
+        val fp = item.folderPath?.takeIf { it.isNotBlank() }
+            ?: intent.getStringExtra(EXTRA_FOLDER_PATH)?.takeIf { it.isNotBlank() }
         if (!fp.isNullOrBlank() && !item.name.isBlank()) {
             SessionManager.get(this).saveResume(fp, item.name, positionMs)
             val p = player
