@@ -268,7 +268,13 @@ data class HeroItem(
  * servidor v2.15.x, AINDA NÃO EXISTE; ver ApiService.getAdminDrives).
  * GET /api/admin-drives → {ok, drives:[{id, driveId, name,
  * targetApps:["meggy"|"bibi"|"vovo"], coverUrl, subCoverUrl,
- * subfolderCovers:{path: url}}]}.
+ * subfolderCovers:{path: url}, source, rootIndex}]}.
+ *
+ * Ronda 13 Frente C — `source` ('hardcoded' = registo do seed dos 16
+ * drives fixos; 'admin' = adicionado pelo admin) e `rootIndex`
+ * (indice canonico 0–15, so no seed): a Home usa-os p/ casar o
+ * registo gerido com o DriveItem fixo do mesmo indice (ver
+ * HomeActivity.buildDriveRailItems).
  *
  * Parse defensivo (mesmo padrão de FeaturedCourse.fromJson): aceita
  * snake_case e camelCase, campos ausentes → null/vazio, valores de
@@ -283,7 +289,12 @@ data class AdminDrive(
     val targetApps: List<String>,
     val coverUrl: String?,
     val subCoverUrl: String?,
-    val subfolderCovers: Map<String, String>
+    val subfolderCovers: Map<String, String>,
+    // Ronda 13 Frente C — origem do registo + indice canonico (ver
+    // KDoc acima). Defaults p/ nao quebrar os parse/construtores
+    // antigos: sem os campos, o registo e tratado como do admin.
+    val source: String = "admin",
+    val rootIndex: Int? = null
 ) {
     companion object {
         const val TARGET_MEGGY = "meggy"
@@ -332,7 +343,11 @@ data class AdminDrive(
                 targetApps = targets,
                 coverUrl = cover,
                 subCoverUrl = subCover,
-                subfolderCovers = covers
+                subfolderCovers = covers,
+                source = o.optString("source", "").takeIf { it.isNotBlank() } ?: "admin",
+                rootIndex = if (o.has("rootIndex") && !o.isNull("rootIndex")) o.optInt("rootIndex")
+                    else if (o.has("root_index") && !o.isNull("root_index")) o.optInt("root_index")
+                    else null
             )
         }
 
@@ -345,6 +360,9 @@ data class AdminDrive(
             return out
         }
     }
+
+    /** Este registo veio do seed dos 16 drives fixos (não de um add do admin). */
+    val isHardcoded: Boolean get() = source == "hardcoded"
 
     /** Este drive tem como destino o app que está a correr? */
     fun targets(packageName: String): Boolean =
