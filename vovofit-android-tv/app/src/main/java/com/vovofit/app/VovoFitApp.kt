@@ -3,6 +3,7 @@ package com.vovofit.app
 import android.app.Application
 import okhttp3.OkHttpClient
 import com.vovofit.app.util.CoverLibrary
+import com.vovofit.app.util.SessionManager
 import java.util.concurrent.TimeUnit
 
 class VovoFitApp : Application() {
@@ -42,6 +43,11 @@ class VovoFitApp : Application() {
     
     override fun onCreate() {
         super.onCreate()
+        // Ronda 15 Frente B (B2): migração 1× das posições legadas
+        // pos_<url> para resume_<pasta>::<vídeo> (ver SessionManager).
+        // AI_BASE_URL é a base dos caminhos por ID (== ApiService.
+        // SANDBOX_BASE_URL); BASE_URL, a dos drives fixos.
+        SessionManager.get(this).migrateLegacyUrlResumes(BASE_URL, AI_BASE_URL)
         // v1.0.8 — camada 3 das capas: busca o manifesto da biblioteca
         // em 2o plano (silencioso; sem URL configurada, nao faz nada).
         CoverLibrary.refreshAsync(this)
