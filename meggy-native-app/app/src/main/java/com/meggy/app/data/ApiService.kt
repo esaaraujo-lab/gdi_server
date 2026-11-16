@@ -462,7 +462,7 @@ class ApiService(private val context: Context) {
         /**
          * Ronda 13 Frente C — DECISAO DA BASE URL: as rotas de
          * admin-drives (GET /api/admin-drives, POST
-         * /api/admin/admin-drives/*, GET /api/me) e a listagem por ID
+         * /api/admin/admin-drives/..., GET /api/me) e a listagem por ID
          * (POST /api/drive/by-id) existem SO no sandbox (staging-c +
          * meuc, Frente A da ronda 13); a PRODUCAO (BASE_URL =
          * educa.eu.org, worker v1.0.216) NAO as serve — funcao
