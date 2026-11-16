@@ -222,7 +222,19 @@ object AdminDriveUi {
                 break
             }
         }
-        if (!inScope) return null
+        // Ronda 13 Frente C — modo por ID: os caminhos sao
+        // "by-id:<id>" (sem nomes de pastas no caminho), por isso o
+        // ambito por prefixo nunca casa. Quando a raiz E um dos nomes
+        // sao por ID, a resolucao esta dentro da sub-arvore do drive
+        // do admin (so o detalhe por ID constroi caminhos "by-id:") —
+        // os drives fixos passam caminhos "/N:/..." e nunca entram
+        // aqui. Sem isto, as capas de sub-pasta por NOME SIMPLES
+        // ("Aula 01") nunca se aplicavam nos drives por ID; as chaves
+        // por caminho completo continuam sem casar neste modo (o
+        // caminho relativo nao existe por ID — limitacao documentada).
+        val byIdScope = root.startsWith("by-id:") &&
+            names.any { normalizePath(it)?.startsWith("by-id:") == true }
+        if (!inScope && !byIdScope) return null
         // 1.º passe: caminho completo — absoluto ("0:/drive/sub") ou
         // relativo ao drive ("drive/sub", sem o prefixo "N:/"). O
         // caminho completo vence o nome simples: sem os dois passes,
