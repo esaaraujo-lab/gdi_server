@@ -357,6 +357,53 @@ object AiService {
         }
     }
 
+    /** Resultado do POST /api/generation/enqueue (Frente R14B). */
+    enum class GenerationEnqueueResult { QUEUED, EXISTS, RUNNING, DONE }
+
+    /**
+     * Frente R14B — enfileira a geração automática ao PLAY
+     * (POST /api/generation/enqueue — contrato da Frente R14C, que
+     * implementa a rota no worker; codificado contra o contrato).
+     * Corpo: lessonPath (pasta da aula), videoPath (ficheiro do
+     * vídeo), courseKey (pasta do curso = pai da pasta da aula),
+     * source "play". Resposta: ok + status queued, exists, running
+     * ou done. A idempotência é do servidor; o chamador (Player)
+     * só dispara 1x por aula por sessão como primeira barreira.
+     * Silencioso por desenho: null em qualquer falha ou rota
+     * ausente (o worker antigo ainda não tem a rota — um 404 aqui
+     * NÃO arma backendUnavailable, por isso latchOn404=false).
+     * Nunca lança exceção.
+     */
+    suspend fun enqueueGeneration(
+        context: Context,
+        lessonPath: String,
+        videoPath: String,
+        courseKey: String
+    ): GenerationEnqueueResult? {
+        if (lessonPath.isBlank() || videoPath.isBlank()) return null
+        return try {
+            val body = JSONObject().apply {
+                put("lessonPath", lessonPath)
+                put("videoPath", videoPath)
+                put("courseKey", courseKey)
+                put("source", "play")
+            }.toString()
+            val res = postJson(context, "/api/generation/enqueue", body, latchOn404 = false)
+            if (res.code != 200) return null
+            val json = JSONObject(res.body ?: return null)
+            if (!json.optBoolean("ok", false)) return null
+            when (json.optString("status")) {
+                "queued" -> GenerationEnqueueResult.QUEUED
+                "exists" -> GenerationEnqueueResult.EXISTS
+                "running" -> GenerationEnqueueResult.RUNNING
+                "done" -> GenerationEnqueueResult.DONE
+                else -> null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     /**
      * Dispara o batalhão para o curso. `pdfs` leva o TEXTO de cada
      * material (o worker não extrai texto de PDF — sem texto, o item
