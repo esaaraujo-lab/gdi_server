@@ -25,6 +25,7 @@ import com.bibigyn.app.BiBiGynApp
 import com.bibigyn.app.R
 import com.bibigyn.app.data.AdminDrive
 import com.bibigyn.app.data.ApiService
+import com.bibigyn.app.data.FolderResult
 import com.bibigyn.app.data.DriveItem
 import com.bibigyn.app.data.FileItem
 import com.bibigyn.app.data.HeroItem
@@ -564,13 +565,13 @@ class HomeActivity : AppCompatActivity() {
      * Null = sem vídeo com thumb no drive → gradiente escuro limpo.
      */
     private suspend fun fetchHeroThumb(drivePath: String): String? {
-        val root = withContext(Dispatchers.IO) { api.listFolder(drivePath, maxPages = 1) }
+        val root = withContext(Dispatchers.IO) { api.listFolder(drivePath, maxPages = 1).filesOrNull }
             ?: return null
         root.firstOrNull { (it.isVideo || it.isAudio) && !it.thumbnailLink.isNullOrBlank() }
             ?.thumbnailLink?.let { return it }
         val firstFolder = root.firstOrNull { it.isFolder } ?: return null
         val sub = withContext(Dispatchers.IO) {
-            api.listFolder("$drivePath${firstFolder.name}/", maxPages = 1)
+            api.listFolder("$drivePath${firstFolder.name}/", maxPages = 1).filesOrNull
         } ?: return null
         return sub.firstOrNull { (it.isVideo || it.isAudio) && !it.thumbnailLink.isNullOrBlank() }
             ?.thumbnailLink
@@ -776,7 +777,7 @@ class HomeActivity : AppCompatActivity() {
         for (r in recents) {
             if (!r.thumbnailLink.isNullOrBlank()) continue
             val files = withContext(Dispatchers.IO) {
-                api.listFolder(r.folderPath, maxPages = 1)
+                api.listFolder(r.folderPath, maxPages = 1).filesOrNull
             } ?: continue
             val match = files.firstOrNull {
                 it.name == r.videoName && !it.thumbnailLink.isNullOrBlank()
@@ -1027,13 +1028,25 @@ class HomeActivity : AppCompatActivity() {
         ).show()
 
         lifecycleScope.launch {
-            val files = withContext(Dispatchers.IO) { api.listFolder(folderPath) }
-
-            // ★ v2.1.0: Use AuthHelper for consistent expired-session handling.
-            if (files == null) {
+            // R19B (P1+P2): o listFolder agora distingue sessão
+            // expirada de falha transitória. Transitória mostra erro
+            // e NUNCA faz bounce; expirada tenta o re-login
+            // silencioso uma vez e só faz bounce se ele falhar.
+            val result = withContext(Dispatchers.IO) {
+                AuthHelper.listFolderWithRelogin(api, folderPath)
+            }
+            if (result is FolderResult.SessionExpired) {
                 AuthHelper.bounceToLogin(this@HomeActivity)
                 return@launch
             }
+            if (result is FolderResult.Transient) {
+                com.google.android.material.snackbar.Snackbar.make(
+                    binding.root, "Não foi possível carregar o vídeo. Verifique a conexão e tente de novo.",
+                    com.google.android.material.snackbar.Snackbar.LENGTH_LONG
+                ).show()
+                return@launch
+            }
+            val files = (result as FolderResult.Ok).files
 
             if (files.isNotEmpty()) {
                 val clickedVideo = files.find { it.name == videoName && (it.isVideo || it.isAudio) }
