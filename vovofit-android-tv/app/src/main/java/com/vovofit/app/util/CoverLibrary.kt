@@ -351,8 +351,13 @@ object CoverLibrary {
      * mas SEM o fallback 'geral'. Sem match, devolve null e o chamador
      * cai na camada (4) — a capa local do drive. Usar em superfícies
      * por drive/curso (tile de drive, hero, detalhe do curso): o livro
-     * 'geral' não é banner de nenhum curso — Queima Diária e os outros
-     * drives Vovó não casam nenhuma keyword (Elton 2026-11-14 22:21).
+     * 'geral' não é banner de nenhum curso. Contra o manifesto v2
+     * (81 entradas) só o TODO DIA não casa nenhuma keyword: QUEIMA
+     * DIÁRIA casa (`treinos`, via tagline "Treinos intensos"), CLUBE
+     * DE CASA casa (`treino em casa`, via tagline "Treinos em casa")
+     * e SAÚDE E FITNESS casa (`fitness`, via nome). Ronda 16 Frente C
+     * — comentário corrigido (DIAGNOSIS.md §5.3); o comportamento
+     * de resolveStrict não muda.
      */
     fun resolveStrict(context: Context, vararg names: String?): String? =
         resolveInternal(context, names, allowGeneral = false)
