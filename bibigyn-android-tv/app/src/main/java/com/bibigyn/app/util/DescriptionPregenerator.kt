@@ -94,8 +94,10 @@ class DescriptionPregenerator(private val context: Context) {
                 if (!waitWhilePaused(isPlaying, isActive)) return@launch
                 // Já tem descrição guardada → nada a gerar.
                 if (sm.getLessonDescription(folderPath) != null) continue
+                // R19B (P1): FolderResult — filesOrNull: falha
+                // (expirada ou transitória) vale como sem ficheiros.
                 val files = try {
-                    api.listFolder(folderPath)
+                    api.listFolder(folderPath).filesOrNull
                 } catch (_: Exception) {
                     null
                 }
