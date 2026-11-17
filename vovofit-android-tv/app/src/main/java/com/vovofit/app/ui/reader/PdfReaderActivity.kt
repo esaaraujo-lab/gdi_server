@@ -913,8 +913,10 @@ class PdfReaderActivity : AppCompatActivity() {
     private suspend fun resolveSummarySource(): PdfSummarySource? {
         // 1) MD da pasta da aula primeiro (falha de rede ao listar →
         //    segue como antes, sem bloquear a geração).
+        // R19B (P1): FolderResult — filesOrNull: falha de rede ao
+        // listar segue como antes, sem bloquear a geração.
         val files = runCatching {
-            ApiService(this).listFolder(lessonFolderPath())
+            ApiService(this).listFolder(lessonFolderPath()).filesOrNull
         }.getOrNull()
         if (files != null) {
             val (source, _) = LessonDescription.resolveSourceText(this, files)
