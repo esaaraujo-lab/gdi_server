@@ -9,6 +9,7 @@ import android.util.Log
 import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewTreeObserver
 import android.widget.TextView
 import android.view.animation.AlphaAnimation
 import android.view.animation.AnimationSet
@@ -83,13 +84,45 @@ class HomeActivity : AppCompatActivity() {
     private val libraryReadyListener: () -> Unit = {
         if (!isFinishing && !isDestroyed) {
             heroRotator?.refreshHeroArt()
-            binding.railContinue.adapter?.notifyDataSetChanged()
-            drivesAdapter?.notifyDataSetChanged()
+            // Ronda 17 Frente B (gatilho C) — o manifesto redesenha só
+            // os itens visíveis, com o foco/rolagem repostos: sem
+            // re-bind total a meio da navegação.
+            val snap = captureHomeFocus()
+            refreshVisibleItems(binding.railContinue)
+            refreshVisibleItems(binding.railDrives)
+            restoreHomeFocus(snap)
             setupFeaturedContinue(homeRecents)
         }
     }
-    private var lastFocusContinue = 0
-    private var lastFocusDrives = 0
+    private var lastFocusContinue = -1
+    private var lastFocusDrives = -1
+    // Ronda 17 Frente B — rail "Continue assistindo" criado UMA só
+    // vez (o onResume só actualiza os dados); último rail focado
+    // (0 = nenhum, 1 = Continue, 2 = Drives) + scrollY guardado
+    // para restauro após morte do processo (onSaveInstanceState).
+    // Ver o observador global de foco (globalFocusListener).
+    private var continueAdapter: RailAdapter? = null
+    private var lastFocusedRail = 0
+    private var savedScrollY = 0
+    private var isFirstResume = true
+    private var focusObserver: ViewTreeObserver? = null
+    private var focusListenerRegistered = false
+    private val globalFocusListener = ViewTreeObserver.OnGlobalFocusChangeListener { _, newFocus ->
+        val view = newFocus ?: return@OnGlobalFocusChangeListener
+        val continuePos = adapterPositionIn(binding.railContinue, view)
+        if (continuePos != null) {
+            lastFocusContinue = continuePos
+            lastFocusedRail = 1
+            return@OnGlobalFocusChangeListener
+        }
+        val drivesPos = adapterPositionIn(binding.railDrives, view)
+        if (drivesPos != null) {
+            lastFocusDrives = drivesPos
+            lastFocusedRail = 2
+            return@OnGlobalFocusChangeListener
+        }
+        lastFocusedRail = 0
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -107,6 +140,15 @@ class HomeActivity : AppCompatActivity() {
         }
 
         api = ApiService(this)
+        // Ronda 17 Frente B — repõe o foco/rolagem guardados se a
+        // activity foi recriada (morte do processo): o 1.º onResume
+        // toma o caminho de restauro, não o da 1.ª abertura.
+        savedInstanceState?.let {
+            lastFocusContinue = it.getInt("r17b_focus_continue", -1)
+            lastFocusDrives = it.getInt("r17b_focus_drives", -1)
+            savedScrollY = it.getInt("r17b_scroll_y", 0)
+            isFirstResume = false
+        }
         // v2.7.6: checagem com throttle (máx. 1×/24h) + resume de APK
         // pendente — ver UpdateChecker.checkForUpdateThrottled.
         UpdateChecker.checkForUpdateThrottled(this, BuildConfig.VERSION_NAME)
@@ -185,7 +227,9 @@ class HomeActivity : AppCompatActivity() {
             }.toMap()
             if (map.isEmpty()) return@launch
             featuredCoverByPath = map
+            val snap = captureHomeFocus()
             drivesAdapter?.setFeaturedCovers(map + serverCoverByPath)
+            restoreHomeFocus(snap)
             val current = heroRotator?.currentItem() ?: return@launch
             if (current.coverUrl?.isNotBlank() == true) return@launch
             if (map[current.drivePath].isNullOrBlank()) return@launch
@@ -193,8 +237,109 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        // Ronda 17 Frente B — foco real + scrollY sobrevivem à morte
+        // do processo (o onCreate repõe-nos e o 1.º onResume restaura).
+        outState.putInt("r17b_scroll_y", binding.homeScroll.scrollY)
+        outState.putInt("r17b_focus_continue", lastFocusContinue)
+        outState.putInt("r17b_focus_drives", lastFocusDrives)
+    }
+
+    // ──────────── Ronda 17 Frente B — foco + rolagem ────────────
+    //
+    // O foco REAL (D-pad) guarda-se com um observador GLOBAL de foco
+    // (OnGlobalFocusChangeListener), não com setOnFocusChangeListener
+    // na vista: o FocusAnimator é dono desse listener em cada card
+    // (attach/attachCard) e sobrepô-lo matava o anel/escala de foco.
+    // O observador regista-se no onResume — no onCreate a vista ainda
+    // não está ligada à janela e o ViewTreeObserver seria o flutuante.
+    // [lastFocusedRail]: 0 = nenhum, 1 = rail Continue, 2 = rail Drives.
+
+    /** Foto instantânea do foco/rolagem actuais (antes de um re-bind). */
+    private data class HomeFocusSnapshot(val target: Int, val pos: Int, val scrollY: Int)
+
+    /** Posição do adapter do item que contém a vista focada (o foco
+     *  pode estar num filho do card): sobe-se até ao filho directo
+     *  do RecyclerView. null = o foco não está neste RecyclerView. */
+    private fun adapterPositionIn(recyclerView: RecyclerView, focused: View): Int? {
+        var v: View? = focused
+        while (v != null && v != recyclerView) {
+            val parent = v.parent
+            if (parent === recyclerView) {
+                val pos = recyclerView.getChildAdapterPosition(v)
+                return if (pos != RecyclerView.NO_POSITION) pos else null
+            }
+            v = parent as? View
+        }
+        return null
+    }
+
+    private fun captureHomeFocus(): HomeFocusSnapshot {
+        val y = binding.homeScroll.scrollY
+        return when {
+            binding.railContinue.hasFocus() -> HomeFocusSnapshot(1, lastFocusContinue, y)
+            binding.railDrives.hasFocus() -> HomeFocusSnapshot(2, lastFocusDrives, y)
+            else -> HomeFocusSnapshot(0, -1, y)
+        }
+    }
+
+    /** Repõe foco + rolagem guardados (depois do re-bind, no próximo layout). */
+    private fun restoreHomeFocus(snap: HomeFocusSnapshot) {
+        if (snap.target == 0 && snap.scrollY <= 0) return
+        binding.homeScroll.post {
+            if (snap.scrollY > 0) binding.homeScroll.scrollTo(0, snap.scrollY)
+            val rail = when (snap.target) {
+                1 -> binding.railContinue
+                2 -> binding.railDrives
+                else -> null
+            } ?: return@post
+            val count = rail.adapter?.itemCount ?: 0
+            if (count <= 0 || snap.pos < 0) return@post
+            val pos = snap.pos.coerceAtMost(count - 1)
+            (rail.layoutManager as? LinearLayoutManager)?.scrollToPosition(pos)
+            rail.post {
+                rail.findViewHolderForAdapterPosition(pos)?.itemView?.requestFocus()
+            }
+        }
+    }
+
+    /** Restauro do onResume: usa o último rail focado + a posição guardada. */
+    private fun restoreHomeFocusOnResume() {
+        val y = binding.homeScroll.scrollY.takeIf { it > 0 } ?: savedScrollY
+        val snap = when (lastFocusedRail) {
+            1 -> HomeFocusSnapshot(1, lastFocusContinue, y)
+            2 -> HomeFocusSnapshot(2, lastFocusDrives, y)
+            else -> HomeFocusSnapshot(0, -1, y)
+        }
+        restoreHomeFocus(snap)
+    }
+
+    /**
+     * Redesenha só os itens visíveis do RecyclerView (ex.: chegada
+     * do manifesto de capas). Os itens fora do ecrã resolvem a capa
+     * no próximo bind — sem re-bind total, sem perda de foco.
+     */
+    private fun refreshVisibleItems(recyclerView: RecyclerView) {
+        val lm = recyclerView.layoutManager as? LinearLayoutManager ?: return
+        val first = lm.findFirstVisibleItemPosition()
+        val last = lm.findLastVisibleItemPosition()
+        if (first == RecyclerView.NO_POSITION || last == RecyclerView.NO_POSITION) return
+        for (pos in first..last) recyclerView.adapter?.notifyItemChanged(pos)
+    }
+
     override fun onResume() {
         super.onResume()
+        // Ronda 17 Frente B — o observador regista-se aqui (e não no
+        // onCreate): no onCreate a vista ainda não está ligada à
+        // janela e o ViewTreeObserver seria o flutuante, que morre
+        // ao ligar; no onResume a vista já está ligada.
+        if (!focusListenerRegistered) {
+            focusListenerRegistered = true
+            focusObserver = binding.root.viewTreeObserver
+            focusObserver?.addOnGlobalFocusChangeListener(globalFocusListener)
+        }
         // v2.7.11 — a nav inferior SEMPRE mostra "Início" aqui: o
         // BottomNavigationView marcava o item tocado (ex. Ajustes) ao
         // abrir a outra aba, e voltar com Back não passava por onCreate
@@ -217,18 +362,25 @@ class HomeActivity : AppCompatActivity() {
         // v2.7.6: re-checa atualização ao voltar (throttle 1×/24h) e
         // restaura o foco nos rails (TV).
         UpdateChecker.checkForUpdateThrottled(this, BuildConfig.VERSION_NAME)
+        // Ronda 17 Frente B (gatilho A) — o restauro foca a posição
+        // REAL (observador global de foco), não a posição 0: D-pad sem
+        // clique já não perde o lugar. 1.ª abertura: posição 0 (como
+        // hoje); regresso: foco + scrollY guardados.
         if (TvUtils.isTv(this)) {
-            binding.railContinue.post {
-                binding.railContinue.findViewHolderForAdapterPosition(lastFocusContinue)
-                    ?.itemView?.requestFocus()
-            }
-            // v2.7.7: mesmo para o rail de drives — sem isso, voltar de um
-            // detalhe de drive perdia o foco do tile do drive na TV.
-            binding.railDrives.post {
-                binding.railDrives.findViewHolderForAdapterPosition(lastFocusDrives)
-                    ?.itemView?.requestFocus()
+            if (isFirstResume) {
+                binding.railContinue.post {
+                    binding.railContinue.findViewHolderForAdapterPosition(0)
+                        ?.itemView?.requestFocus()
+                }
+                binding.railDrives.post {
+                    binding.railDrives.findViewHolderForAdapterPosition(0)
+                        ?.itemView?.requestFocus()
+                }
+            } else {
+                restoreHomeFocusOnResume()
             }
         }
+        isFirstResume = false
     }
 
     // ★ v2.0.2: If HomeActivity is brought back to front (singleTask), ensure
@@ -401,9 +553,17 @@ class HomeActivity : AppCompatActivity() {
 
         binding.labelContinue.visibility = View.VISIBLE
         binding.railContinue.visibility = View.VISIBLE
-        binding.railContinue.layoutManager =
-            LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
-        binding.railContinue.addItemDecoration(RailGutterDecoration(tvAutoFit?.gutterDp(200f) ?: 8))
+        // Ronda 17 Frente B (gatilho A) — LayoutManager, decoração e
+        // adapter criados UMA só vez: recriá-los no onResume apagava
+        // a rolagem do rail e repunha a posição em 0 (e as decorações
+        // acumulavam-se a cada onResume). Depois da 1.ª vez, só os
+        // DADOS são actualizados (updateItems, abaixo).
+        val firstBuild = continueAdapter == null
+        if (binding.railContinue.layoutManager == null) {
+            binding.railContinue.layoutManager =
+                LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+            binding.railContinue.addItemDecoration(RailGutterDecoration(tvAutoFit?.gutterDp(200f) ?: 8))
+        }
 
         // ★ v2.5.0: Show the COURSE NAME (not the folder path) as subtitle.
         // extractCourseName() returns a human-friendly label like
@@ -438,17 +598,28 @@ class HomeActivity : AppCompatActivity() {
         // setupFeaturedContinue corre depois e já não o corrige).
         val hasFeatured = TvUtils.isTv(this) &&
             recents.any { sm.hasResume(it.folderPath, it.videoName) }
-        val continueAdapter = RailAdapter(
-            railItems,
-            nextFocusUpId = if (hasFeatured) R.id.featured_card else R.id.heroPlay,
-            nextFocusDownId = R.id.railDrives
-        ) { item ->
-            lastFocusContinue = railItems.indexOf(item)
-            val match = recents.find { it.videoName == item.title } ?: return@RailAdapter
-            continueWatching(match.folderPath, match.videoName, item.subtitle)
+        if (firstBuild) {
+            continueAdapter = RailAdapter(
+                railItems,
+                nextFocusUpId = if (hasFeatured) R.id.featured_card else R.id.heroPlay,
+                nextFocusDownId = R.id.railDrives
+            ) { item ->
+                lastFocusContinue = railItems.indexOf(item)
+                val match = recents.find { it.videoName == item.title } ?: return@RailAdapter
+                continueWatching(match.folderPath, match.videoName, item.subtitle)
+            }
+            binding.railContinue.adapter = continueAdapter
+        } else {
+            // Só os dados mudam (o foco/rolagem repõem-se se mudou algo).
+            val snap = captureHomeFocus()
+            val changed = continueAdapter?.updateItems(railItems) ?: false
+            continueAdapter?.updateFocusIds(
+                if (hasFeatured) R.id.featured_card else R.id.heroPlay,
+                R.id.railDrives
+            )
+            if (changed) restoreHomeFocus(snap)
         }
-        binding.railContinue.adapter = continueAdapter
-        backfillRecentThumbs(recents, railItems, continueAdapter)
+        continueAdapter?.let { backfillRecentThumbs(recents, railItems, it) }
         setupFeaturedContinue(recents)
     }
 
@@ -854,9 +1025,6 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun setupDrivesRail() {
-        binding.railDrives.layoutManager =
-            LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
-        binding.railDrives.addItemDecoration(RailGutterDecoration(tvAutoFit?.gutterDp(150f) ?: 8))
         // Frente A (TV) — UP do tile de drive volta ao rail de cima
         // ("Continue assistindo", destaque ou hero — o que existir).
         val drivesUpId = when {
@@ -864,17 +1032,29 @@ class HomeActivity : AppCompatActivity() {
             binding.featuredSection.visibility == View.VISIBLE -> R.id.featured_card
             else -> R.id.heroPlay
         }
-        drivesAdapter = DriveRailAdapter(
-            buildDriveRailItems(), featuredCoverByPath,
-            nextFocusUpId = drivesUpId
-        ) { item ->
-            lastFocusDrives = driveRailItems.indexOf(item)
-            when (item) {
-                is DriveRailItem.Fixed -> openDrive(item.drive)
-                is DriveRailItem.Admin -> onAdminDriveClick(item.drive)
+        // Ronda 17 Frente B — LayoutManager, decoração e adapter
+        // criados UMA só vez (como o rail Continue): hoje corriam em
+        // cada chamada e as decorações acumulavam-se. Depois da 1.ª
+        // vez, só o id de foco UP é actualizado (o conteúdo vem por
+        // updateItems, no fetchAdminDrives).
+        if (drivesAdapter == null) {
+            binding.railDrives.layoutManager =
+                LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+            binding.railDrives.addItemDecoration(RailGutterDecoration(tvAutoFit?.gutterDp(150f) ?: 8))
+            drivesAdapter = DriveRailAdapter(
+                buildDriveRailItems(), featuredCoverByPath,
+                nextFocusUpId = drivesUpId
+            ) { item ->
+                lastFocusDrives = driveRailItems.indexOf(item)
+                when (item) {
+                    is DriveRailItem.Fixed -> openDrive(item.drive)
+                    is DriveRailItem.Admin -> onAdminDriveClick(item.drive)
+                }
             }
+            binding.railDrives.adapter = drivesAdapter
+        } else {
+            drivesAdapter?.updateFocusIds(drivesUpId)
         }
-        binding.railDrives.adapter = drivesAdapter
     }
 
     /**
@@ -943,7 +1123,12 @@ class HomeActivity : AppCompatActivity() {
             }?.filter { it.targets(packageName) }
             serverDrives = drives
             adminDrives = drives ?: emptyList()
+            // Ronda 17 Frente B (gatilho E) — a lista pode chegar a
+            // meio da navegação: repõe-se o foco/rolagem. Sem
+            // mudanças, o updateItems nem redesenha (early-return).
+            val snap = captureHomeFocus()
             drivesAdapter?.updateItems(buildDriveRailItems())
+            restoreHomeFocus(snap)
         }
     }
 
@@ -996,6 +1181,8 @@ class HomeActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         LibraryCovers.removeOnReadyListener(libraryReadyListener)
+        focusObserver?.removeOnGlobalFocusChangeListener(globalFocusListener)
+        focusObserver = null
         super.onDestroy()
         heroRotator?.stop()
     }
