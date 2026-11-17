@@ -1,830 +1,862 @@
 {
-  "version": 2,
-  "images": [
-    {
-      "id": "tjsc",
-      "keywords": [
-        "tjsc",
-        "tribunal de justica de santa catarina",
-        "jornada fgv tjsc",
-        "jornada fgv"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/tjsc.jpg"
-    },
-    {
-      "id": "tj-sp-oficial",
-      "keywords": [
-        "tj sp",
-        "tjsp",
-        "oficial de justica",
-        "tribunal de justica de sao paulo"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/tj-sp-oficial.jpg"
-    },
-    {
-      "id": "direito-processual-civil",
-      "keywords": [
-        "direito processual civil",
-        "processual civil",
-        "processo civil",
-        "recurso especial",
-        "juizado"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-processual-civil.jpg"
-    },
-    {
-      "id": "direito-processual-penal",
-      "keywords": [
-        "direito processual penal",
-        "processual penal",
-        "processo penal"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-processual-penal.jpg"
-    },
-    {
-      "id": "lingua-portuguesa",
-      "keywords": [
-        "lingua portuguesa",
-        "portugues",
-        "gramatica",
-        "interpretacao de texto",
-        "literatura",
-        "linguagens",
-        "leitura dinamica",
-        "metaleitura"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/lingua-portuguesa.jpg"
-    },
-    {
-      "id": "direito-penal",
-      "keywords": [
-        "direito penal",
-        "penal",
-        "codigo penal",
-        "criminal"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-penal.jpg"
-    },
-    {
-      "id": "penal-crimes-administracao",
-      "keywords": [
-        "crimes contra a administracao publica",
-        "peculato",
-        "concussao",
-        "corrupcao",
-        "prevaricacao"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/penal-crimes-administracao.jpg"
-    },
-    {
-      "id": "penal-crimes-dignidade-sexual",
-      "keywords": [
-        "crimes contra a dignidade sexual",
-        "estupro"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/penal-crimes-dignidade-sexual.jpg"
-    },
-    {
-      "id": "tj-sp-escrevente",
-      "keywords": [
-        "escrevente tecnico judiciario",
-        "escrevente",
-        "tj sp escrevente"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/tj-sp-escrevente.jpg"
-    },
-    {
-      "id": "trt",
-      "keywords": [
-        "trt",
-        "reta final trt",
-        "reta final trts",
-        "tribunal regional do trabalho"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/trt.jpg"
-    },
-    {
-      "id": "penal-crimes-fe-publica",
-      "keywords": [
-        "crimes contra a fe publica",
-        "moeda falsa",
-        "falsidade",
-        "documento falso"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/penal-crimes-fe-publica.jpg"
-    },
-    {
-      "id": "penal-crimes-patrimonio",
-      "keywords": [
-        "crimes contra o patrimonio",
-        "furto",
-        "roubo",
-        "estelionato",
-        "receptacao",
-        "extorsao",
-        "dano"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/penal-crimes-patrimonio.jpg"
-    },
-    {
-      "id": "penal-crimes-liberdade",
-      "keywords": [
-        "crimes contra a liberdade",
-        "liberdade pessoal",
-        "liberdade individual"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/penal-crimes-liberdade.jpg"
-    },
-    {
-      "id": "pf",
-      "keywords": [
-        "policia federal",
-        "agente da policia federal",
-        "agente pf",
-        "delegado",
-        "caveira",
-        "agente"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/pf.jpg"
-    },
-    {
-      "id": "legislacao-tjsc",
-      "keywords": [
-        "legislacao tjsc",
-        "tjsc",
-        "legislacao catarinense"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/legislacao-tjsc.jpg"
-    },
-    {
-      "id": "penal-crimes-honra",
-      "keywords": [
-        "crimes contra a honra",
-        "calunia",
-        "difamacao",
-        "injuria"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/penal-crimes-honra.jpg"
-    },
-    {
-      "id": "treino-funcional",
-      "keywords": [
-        "treinamento funcional",
-        "treino funcional",
-        "funcional",
-        "treino em casa",
-        "bonde",
-        "missao sarada",
-        "sarada",
-        "lar 2025",
-        "pascoa fit",
-        "folia fit",
-        "saiba como executar",
-        "sangue suor e lagrimas",
-        "semana corpo dos sonhos",
-        "corpo dos sonhos",
-        "treinos",
-        "laboratorio de exercicios",
-        "clube fit",
-        "fitness",
-        "calistenia"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/treino-funcional.jpg"
-    },
-    {
-      "id": "penal-crimes-vida",
-      "keywords": [
-        "crimes contra a vida",
-        "homicidio",
-        "infanticidio",
-        "aborto"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/penal-crimes-vida.jpg"
-    },
-    {
-      "id": "enem",
-      "keywords": [
-        "enem",
-        "vestibular",
-        "vestibulares",
-        "enem e vestibulares"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/enem.jpg"
-    },
-    {
-      "id": "oab",
-      "keywords": [
-        "oab",
-        "exame da oab",
-        "ordem dos advogados"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/oab.jpg"
-    },
-    {
-      "id": "penal-penas",
-      "keywords": [
-        "das penas",
-        "medida de seguranca",
-        "reabilitacao"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/penal-penas.jpg"
-    },
-    {
-      "id": "tribunais",
-      "keywords": [
-        "tribunais",
-        "tudo de tribunais",
-        "tribunal"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/tribunais.jpg"
-    },
-    {
-      "id": "musculacao",
-      "keywords": [
-        "musculacao",
-        "hipertrofia",
-        "treino de forca",
-        "treino em academia",
-        "treinos de superiores",
-        "pam",
-        "substituicao de exercicios"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/musculacao.jpg"
-    },
-    {
-      "id": "papa-concursos",
-      "keywords": [
-        "papa concursos",
-        "papa"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/papa-concursos.jpg"
-    },
-    {
-      "id": "hipopressivos",
-      "keywords": [
-        "hipopressivos",
-        "hipopressivo",
-        "barriga chapada",
-        "barriga negativa",
-        "diastase",
-        "respiratoria",
-        "avaliacao fisica"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/hipopressivos.jpg"
-    },
-    {
-      "id": "alfacon",
-      "keywords": [
-        "alfacon",
-        "alfacon 2026"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/alfacon.jpg"
-    },
-    {
-      "id": "penal-prescricao",
-      "keywords": [
-        "prescricao",
-        "punibilidade"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/penal-prescricao.jpg"
-    },
-    {
-      "id": "pernas",
-      "keywords": [
-        "pernas",
-        "quadriceps",
-        "agachamento",
-        "treinos de inferiores"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/pernas.jpg"
-    },
-    {
-      "id": "penal-exercicios",
-      "keywords": [
-        "exercicios",
-        "questoes",
-        "simulado"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/penal-exercicios.jpg"
-    },
-    {
-      "id": "abdomen-core",
-      "keywords": [
-        "abdomen",
-        "abdominal",
-        "core",
-        "prancha",
-        "abdominais"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/abdomen-core.jpg"
-    },
-    {
-      "id": "cardio",
-      "keywords": [
-        "cardio",
-        "aerobico",
-        "hiit",
-        "corrida",
-        "esteira",
-        "tabata",
-        "ciclo insano",
-        "insano",
-        "insana",
-        "esquenta",
-        "fritar",
-        "the flash",
-        "treinos de cardio"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/cardio.jpg"
-    },
-    {
-      "id": "direito",
-      "keywords": [
-        "direito",
-        "advogado",
-        "advocacia",
-        "advogue",
-        "damasio",
-        "g7 juridico",
-        "magistratura",
-        "procuradoria",
-        "pro leges",
-        "especial jus"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito.jpg"
-    },
-    {
-      "id": "gluteos",
-      "keywords": [
-        "gluteos",
-        "gluteo",
-        "bumbum",
-        "bumbum de aco",
-        "gap",
-        "exercicios 1 ao 4",
-        "exercicios 5 ao 8",
-        "exercicios 9 ao 13",
-        "como executar os exercicios"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/gluteos.jpg"
-    },
-    {
-      "id": "triceps",
-      "keywords": [
-        "triceps"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/triceps.jpg"
-    },
-    {
-      "id": "biceps",
-      "keywords": [
-        "biceps"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/biceps.jpg"
-    },
-    {
-      "id": "prf",
-      "keywords": [
-        "prf",
-        "policia rodoviaria federal",
-        "policial rodoviario federal"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/prf.jpg"
-    },
-    {
-      "id": "etica",
-      "keywords": [
-        "etica",
-        "etica no servico publico"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/etica.jpg"
-    },
-    {
-      "id": "carreiras-educacionais",
-      "keywords": [
-        "carreiras educacionais"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/carreiras-educacionais.jpg"
-    },
-    {
-      "id": "direito-administrativo",
-      "keywords": [
-        "direito administrativo",
-        "administrativo",
-        "licitacoes",
-        "agentes publicos",
-        "administracao publica",
-        "igepp",
-        "politicas publicas"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-administrativo.jpg"
-    },
-    {
-      "id": "direito-constitucional",
-      "keywords": [
-        "direito constitucional",
-        "constitucional",
-        "constituicao"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-constitucional.jpg"
-    },
-    {
-      "id": "direito-previdenciario",
-      "keywords": [
-        "direito previdenciario",
-        "previdenciario",
-        "inss"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-previdenciario.jpg"
-    },
-    {
-      "id": "atualidades",
-      "keywords": [
-        "atualidades",
-        "conhecimentos gerais"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/atualidades.jpg"
-    },
-    {
-      "id": "direito-trabalho",
-      "keywords": [
-        "direito do trabalho",
-        "direito trabalhista",
-        "clt",
-        "trabalhista"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-trabalho.jpg"
-    },
-    {
-      "id": "direito-tributario",
-      "keywords": [
-        "direito tributario",
-        "tributario",
-        "tributos"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-tributario.jpg"
-    },
-    {
-      "id": "raciocinio-logico",
-      "keywords": [
-        "raciocinio logico",
-        "raciocinio",
-        "logica"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/raciocinio-logico.jpg"
-    },
-    {
-      "id": "legislacao",
-      "keywords": [
-        "legislacao",
-        "decreto",
-        "lei complementar"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/legislacao.jpg"
-    },
-    {
-      "id": "musica-canto",
-      "keywords": [
-        "musica e canto",
-        "musica",
-        "canto",
-        "vocal",
-        "vocais",
-        "voz",
-        "cante",
-        "cantando",
-        "atividade fisica",
-        "exercicios vocais",
-        "exercicios isometricos",
-        "exercicios isotonicos"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/musica-canto.jpg"
-    },
-    {
-      "id": "alongamento",
-      "keywords": [
-        "alongamento",
-        "flexibilidade",
-        "mobilidade"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/alongamento.jpg"
-    },
-    {
-      "id": "direito-civil",
-      "keywords": [
-        "direito civil",
-        "codigo civil",
-        "civil"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-civil.jpg"
-    },
-    {
-      "id": "informatica",
-      "keywords": [
-        "informatica",
-        "tecnologia da informacao",
-        "programacao",
-        "coding",
-        "shell script",
-        "landing pages"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/informatica.jpg"
-    },
-    {
-      "id": "matematica",
-      "keywords": [
-        "matematica"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/matematica.jpg"
-    },
-    {
-      "id": "ombros",
-      "keywords": [
-        "ombros",
-        "deltoides"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/ombros.jpg"
-    },
-    {
-      "id": "peito",
-      "keywords": [
-        "peito",
-        "peitoral",
-        "supino"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/peito.jpg"
-    },
-    {
-      "id": "ingles",
-      "keywords": [
-        "ingles",
-        "english"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/ingles.jpg"
-    },
-    {
-      "id": "pilates",
-      "keywords": [
-        "pilates",
-        "gestacao",
-        "gestante",
-        "gravida"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/pilates.jpg"
-    },
-    {
-      "id": "costas",
-      "keywords": [
-        "costas",
-        "dorsal",
-        "remada"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/costas.jpg"
-    },
-    {
-      "id": "yoga",
-      "keywords": [
-        "yoga",
-        "se cuida",
-        "ioga"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/yoga.jpg"
-    },
-    {
-      "id": "cursos-2026",
-      "keywords": [
-        "cursos 2026"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/cursos-2026.jpg"
-    },
-    {
-      "id": "medicina",
-      "keywords": [
-        "medicina",
-        "medcurso",
-        "enfermagem",
-        "sanar",
-        "medplus",
-        "lair ribeiro",
-        "casalmedresumos"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/medicina.jpg"
-    },
-    {
-      "id": "psicologia",
-      "keywords": [
-        "psicologia",
-        "psicologo",
-        "tdah",
-        "autismo",
-        "psiquiatria",
-        "freud",
-        "inteligencia emocional"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/psicologia.jpg"
-    },
-    {
-      "id": "nutricao",
-      "keywords": [
-        "nutricao",
-        "dietetica",
-        "receitas",
-        "alimentacao",
-        "culinaria",
-        "dieta"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/nutricao.jpg"
-    },
-    {
-      "id": "estetica",
-      "keywords": [
-        "plastica",
-        "estetica",
-        "face academy",
-        "faceacademy",
-        "hof",
-        "odontopediatria",
-        "lobuloplastia"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/estetica.jpg"
-    },
-    {
-      "id": "violao",
-      "keywords": [
-        "violao",
-        "viola",
-        "guitarra",
-        "improvisacao",
-        "harmoniadegigante",
-        "harmoniaavancadavol",
-        "exercicios desafios"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/violao.jpg"
-    },
-    {
-      "id": "teclado",
-      "keywords": [
-        "teclado",
-        "tecladista",
-        "piano"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/teclado.jpg"
-    },
-    {
-      "id": "audio-producao",
-      "keywords": [
-        "audio production",
-        "producao musical"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/audio-producao.jpg"
-    },
-    {
-      "id": "biologia",
-      "keywords": [
-        "biologia",
-        "natureza"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/biologia.jpg"
-    },
-    {
-      "id": "fisica",
-      "keywords": [
-        "fisica"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/fisica.jpg"
-    },
-    {
-      "id": "quimica",
-      "keywords": [
-        "quimica"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/quimica.jpg"
-    },
-    {
-      "id": "historia",
-      "keywords": [
-        "historia",
-        "humanas"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/historia.jpg"
-    },
-    {
-      "id": "geografia",
-      "keywords": [
-        "geografia"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/geografia.jpg"
-    },
-    {
-      "id": "filosofia",
-      "keywords": [
-        "filosofia",
-        "sociologia",
-        "conservadorismo",
-        "marx"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/filosofia.jpg"
-    },
-    {
-      "id": "redacao",
-      "keywords": [
-        "redacao",
-        "discursivas"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/redacao.jpg"
-    },
-    {
-      "id": "russo",
-      "keywords": [
-        "russo"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/russo.jpg"
-    },
-    {
-      "id": "pedagogia",
-      "keywords": [
-        "pedagogicos",
-        "magisterio",
-        "sme sp",
-        "see paraiba",
-        "see pe",
-        "peif",
-        "grancursos",
-        "ta na lousa",
-        "cursinho da gloria",
-        "getusp",
-        "gestusp",
-        "concursos sme",
-        "ta nalousa",
-        "tanalousa"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/pedagogia.jpg"
-    },
-    {
-      "id": "estatistica",
-      "keywords": [
-        "estatistica"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/estatistica.jpg"
-    },
-    {
-      "id": "beleza",
-      "keywords": [
-        "maquiagem",
-        "beleza",
-        "makeup",
-        "make up",
-        "unhas",
-        "cabelos",
-        "sobrancelhas"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/beleza.jpg"
-    },
-    {
-      "id": "inteligencia-artificial",
-      "keywords": [
-        "inteligencia artificial",
-        "chatgpt",
-        "agentes de ia",
-        "ferramentas de ia",
-        "nocodeia",
-        "imersao ia",
-        "aplicativo com ia"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/inteligencia-artificial.jpg"
-    },
-    {
-      "id": "militares",
-      "keywords": [
-        "militar",
-        "carreiras militares",
-        "espcex"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/militares.jpg"
-    },
-    {
-      "id": "oratoria",
-      "keywords": [
-        "oratoria"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/oratoria.jpg"
-    },
-    {
-      "id": "tcc",
-      "keywords": [
-        "tcc sem drama",
-        "tcc em sete dias",
-        "modelos tcc",
-        "tcc de respeito"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/tcc.jpg"
-    },
-    {
-      "id": "geral",
-      "keywords": [
-        "meggy"
-      ],
-      "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/geral.jpg"
-    }
-  ]
+ "version": 2,
+ "images": [
+  {
+   "id": "tjsc",
+   "keywords": [
+    "tjsc",
+    "tribunal de justica de santa catarina",
+    "jornada fgv tjsc",
+    "jornada fgv"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/tjsc.jpg"
+  },
+  {
+   "id": "tj-sp-oficial",
+   "keywords": [
+    "tj sp",
+    "tjsp",
+    "oficial de justica",
+    "tribunal de justica de sao paulo"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/tj-sp-oficial.jpg"
+  },
+  {
+   "id": "direito-processual-civil",
+   "keywords": [
+    "direito processual civil",
+    "processual civil",
+    "processo civil",
+    "recurso especial",
+    "juizado"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-processual-civil.jpg"
+  },
+  {
+   "id": "direito-processual-penal",
+   "keywords": [
+    "direito processual penal",
+    "processual penal",
+    "processo penal"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-processual-penal.jpg"
+  },
+  {
+   "id": "lingua-portuguesa",
+   "keywords": [
+    "lingua portuguesa",
+    "portugues",
+    "gramatica",
+    "interpretacao de texto",
+    "literatura",
+    "linguagens",
+    "leitura dinamica",
+    "metaleitura"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/lingua-portuguesa.jpg"
+  },
+  {
+   "id": "direito-penal",
+   "keywords": [
+    "direito penal",
+    "penal",
+    "codigo penal",
+    "criminal"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-penal.jpg"
+  },
+  {
+   "id": "penal-crimes-administracao",
+   "keywords": [
+    "crimes contra a administracao publica",
+    "peculato",
+    "concussao",
+    "corrupcao",
+    "prevaricacao"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/penal-crimes-administracao.jpg"
+  },
+  {
+   "id": "penal-crimes-dignidade-sexual",
+   "keywords": [
+    "crimes contra a dignidade sexual",
+    "estupro"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/penal-crimes-dignidade-sexual.jpg"
+  },
+  {
+   "id": "tj-sp-escrevente",
+   "keywords": [
+    "escrevente tecnico judiciario",
+    "escrevente",
+    "tj sp escrevente"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/tj-sp-escrevente.jpg"
+  },
+  {
+   "id": "trt",
+   "keywords": [
+    "trt",
+    "reta final trt",
+    "reta final trts",
+    "tribunal regional do trabalho"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/trt.jpg"
+  },
+  {
+   "id": "penal-crimes-fe-publica",
+   "keywords": [
+    "crimes contra a fe publica",
+    "moeda falsa",
+    "falsidade",
+    "documento falso"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/penal-crimes-fe-publica.jpg"
+  },
+  {
+   "id": "penal-crimes-patrimonio",
+   "keywords": [
+    "crimes contra o patrimonio",
+    "furto",
+    "roubo",
+    "estelionato",
+    "receptacao",
+    "extorsao",
+    "dano"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/penal-crimes-patrimonio.jpg"
+  },
+  {
+   "id": "penal-crimes-liberdade",
+   "keywords": [
+    "crimes contra a liberdade",
+    "liberdade pessoal",
+    "liberdade individual"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/penal-crimes-liberdade.jpg"
+  },
+  {
+   "id": "pf",
+   "keywords": [
+    "policia federal",
+    "agente da policia federal",
+    "agente pf",
+    "delegado",
+    "caveira",
+    "agente"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/pf.jpg"
+  },
+  {
+   "id": "legislacao-tjsc",
+   "keywords": [
+    "legislacao tjsc",
+    "tjsc",
+    "legislacao catarinense"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/legislacao-tjsc.jpg"
+  },
+  {
+   "id": "penal-crimes-honra",
+   "keywords": [
+    "crimes contra a honra",
+    "calunia",
+    "difamacao",
+    "injuria"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/penal-crimes-honra.jpg"
+  },
+  {
+   "id": "treino-funcional",
+   "keywords": [
+    "treinamento funcional",
+    "treino funcional",
+    "funcional",
+    "treino em casa",
+    "bonde",
+    "missao sarada",
+    "sarada",
+    "lar 2025",
+    "pascoa fit",
+    "folia fit",
+    "saiba como executar",
+    "sangue suor e lagrimas",
+    "semana corpo dos sonhos",
+    "corpo dos sonhos",
+    "treinos",
+    "laboratorio de exercicios",
+    "clube fit",
+    "fitness",
+    "calistenia"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/treino-funcional.jpg"
+  },
+  {
+   "id": "penal-crimes-vida",
+   "keywords": [
+    "crimes contra a vida",
+    "homicidio",
+    "infanticidio",
+    "aborto"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/penal-crimes-vida.jpg"
+  },
+  {
+   "id": "enem",
+   "keywords": [
+    "enem",
+    "vestibular",
+    "vestibulares",
+    "enem e vestibulares"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/enem.jpg"
+  },
+  {
+   "id": "oab",
+   "keywords": [
+    "oab",
+    "exame da oab",
+    "ordem dos advogados"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/oab.jpg"
+  },
+  {
+   "id": "penal-penas",
+   "keywords": [
+    "das penas",
+    "medida de seguranca",
+    "reabilitacao"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/penal-penas.jpg"
+  },
+  {
+   "id": "tribunais",
+   "keywords": [
+    "tribunais",
+    "tudo de tribunais",
+    "tribunal"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/tribunais.jpg"
+  },
+  {
+   "id": "musculacao",
+   "keywords": [
+    "musculacao",
+    "hipertrofia",
+    "treino de forca",
+    "treino em academia",
+    "treinos de superiores",
+    "pam",
+    "substituicao de exercicios"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/musculacao.jpg"
+  },
+  {
+   "id": "papa-concursos",
+   "keywords": [
+    "papa concursos",
+    "papa"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/papa-concursos.jpg"
+  },
+  {
+   "id": "hipopressivos",
+   "keywords": [
+    "hipopressivos",
+    "hipopressivo",
+    "barriga chapada",
+    "barriga negativa",
+    "diastase",
+    "respiratoria",
+    "avaliacao fisica"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/hipopressivos.jpg"
+  },
+  {
+   "id": "alfacon",
+   "keywords": [
+    "alfacon",
+    "alfacon 2026"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/alfacon.jpg"
+  },
+  {
+   "id": "penal-prescricao",
+   "keywords": [
+    "prescricao",
+    "punibilidade"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/penal-prescricao.jpg"
+  },
+  {
+   "id": "pernas",
+   "keywords": [
+    "pernas",
+    "quadriceps",
+    "agachamento",
+    "treinos de inferiores"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/pernas.jpg"
+  },
+  {
+   "id": "penal-exercicios",
+   "keywords": [
+    "exercicios",
+    "questoes",
+    "simulado"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/penal-exercicios.jpg"
+  },
+  {
+   "id": "abdomen-core",
+   "keywords": [
+    "abdomen",
+    "abdominal",
+    "core",
+    "prancha",
+    "abdominais"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/abdomen-core.jpg"
+  },
+  {
+   "id": "cardio",
+   "keywords": [
+    "cardio",
+    "aerobico",
+    "hiit",
+    "corrida",
+    "esteira",
+    "tabata",
+    "ciclo insano",
+    "insano",
+    "insana",
+    "esquenta",
+    "fritar",
+    "the flash",
+    "treinos de cardio"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/cardio.jpg"
+  },
+  {
+   "id": "direito",
+   "keywords": [
+    "direito",
+    "advogado",
+    "advocacia",
+    "advogue",
+    "damasio",
+    "g7 juridico",
+    "magistratura",
+    "procuradoria",
+    "pro leges",
+    "especial jus"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito.jpg"
+  },
+  {
+   "id": "gluteos",
+   "keywords": [
+    "gluteos",
+    "gluteo",
+    "bumbum",
+    "bumbum de aco",
+    "gap",
+    "exercicios 1 ao 4",
+    "exercicios 5 ao 8",
+    "exercicios 9 ao 13",
+    "como executar os exercicios"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/gluteos.jpg"
+  },
+  {
+   "id": "triceps",
+   "keywords": [
+    "triceps"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/triceps.jpg"
+  },
+  {
+   "id": "biceps",
+   "keywords": [
+    "biceps"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/biceps.jpg"
+  },
+  {
+   "id": "prf",
+   "keywords": [
+    "prf",
+    "policia rodoviaria federal",
+    "policial rodoviario federal"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/prf.jpg"
+  },
+  {
+   "id": "etica",
+   "keywords": [
+    "etica",
+    "etica no servico publico"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/etica.jpg"
+  },
+  {
+   "id": "carreiras-educacionais",
+   "keywords": [
+    "carreiras educacionais"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/carreiras-educacionais.jpg"
+  },
+  {
+   "id": "direito-administrativo",
+   "keywords": [
+    "direito administrativo",
+    "administrativo",
+    "licitacoes",
+    "agentes publicos",
+    "administracao publica",
+    "igepp",
+    "politicas publicas"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-administrativo.jpg"
+  },
+  {
+   "id": "direito-constitucional",
+   "keywords": [
+    "direito constitucional",
+    "constitucional",
+    "constituicao"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-constitucional.jpg"
+  },
+  {
+   "id": "direito-previdenciario",
+   "keywords": [
+    "direito previdenciario",
+    "previdenciario",
+    "inss"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-previdenciario.jpg"
+  },
+  {
+   "id": "atualidades",
+   "keywords": [
+    "atualidades",
+    "conhecimentos gerais"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/atualidades.jpg"
+  },
+  {
+   "id": "direito-trabalho",
+   "keywords": [
+    "direito do trabalho",
+    "direito trabalhista",
+    "clt",
+    "trabalhista"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-trabalho.jpg"
+  },
+  {
+   "id": "direito-tributario",
+   "keywords": [
+    "direito tributario",
+    "tributario",
+    "tributos"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-tributario.jpg"
+  },
+  {
+   "id": "raciocinio-logico",
+   "keywords": [
+    "raciocinio logico",
+    "raciocinio",
+    "logica"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/raciocinio-logico.jpg"
+  },
+  {
+   "id": "legislacao",
+   "keywords": [
+    "legislacao",
+    "decreto",
+    "lei complementar"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/legislacao.jpg"
+  },
+  {
+   "id": "musica-canto",
+   "keywords": [
+    "musica e canto",
+    "musica",
+    "canto",
+    "vocal",
+    "vocais",
+    "voz",
+    "cante",
+    "cantando",
+    "atividade fisica",
+    "exercicios vocais",
+    "exercicios isometricos",
+    "exercicios isotonicos"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/musica-canto.jpg"
+  },
+  {
+   "id": "alongamento",
+   "keywords": [
+    "alongamento",
+    "flexibilidade",
+    "mobilidade"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/alongamento.jpg"
+  },
+  {
+   "id": "direito-civil",
+   "keywords": [
+    "direito civil",
+    "codigo civil",
+    "civil"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-civil.jpg"
+  },
+  {
+   "id": "informatica",
+   "keywords": [
+    "informatica",
+    "tecnologia da informacao",
+    "programacao",
+    "coding",
+    "shell script",
+    "landing pages"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/informatica.jpg"
+  },
+  {
+   "id": "matematica",
+   "keywords": [
+    "matematica"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/matematica.jpg"
+  },
+  {
+   "id": "ombros",
+   "keywords": [
+    "ombros",
+    "deltoides"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/ombros.jpg"
+  },
+  {
+   "id": "peito",
+   "keywords": [
+    "peito",
+    "peitoral",
+    "supino"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/peito.jpg"
+  },
+  {
+   "id": "ingles",
+   "keywords": [
+    "ingles",
+    "english"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/ingles.jpg"
+  },
+  {
+   "id": "pilates",
+   "keywords": [
+    "pilates",
+    "gestacao",
+    "gestante",
+    "gravida"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/pilates.jpg"
+  },
+  {
+   "id": "costas",
+   "keywords": [
+    "costas",
+    "dorsal",
+    "remada"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/costas.jpg"
+  },
+  {
+   "id": "yoga",
+   "keywords": [
+    "yoga",
+    "se cuida",
+    "ioga"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/yoga.jpg"
+  },
+  {
+   "id": "cursos-2026",
+   "keywords": [
+    "cursos 2026"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/cursos-2026.jpg"
+  },
+  {
+   "id": "medicina",
+   "keywords": [
+    "medicina",
+    "medcurso",
+    "enfermagem",
+    "sanar",
+    "medplus",
+    "lair ribeiro",
+    "casalmedresumos"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/medicina.jpg"
+  },
+  {
+   "id": "psicologia",
+   "keywords": [
+    "psicologia",
+    "psicologo",
+    "tdah",
+    "autismo",
+    "psiquiatria",
+    "freud",
+    "inteligencia emocional"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/psicologia.jpg"
+  },
+  {
+   "id": "nutricao",
+   "keywords": [
+    "nutricao",
+    "dietetica",
+    "receitas",
+    "alimentacao",
+    "culinaria",
+    "dieta"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/nutricao.jpg"
+  },
+  {
+   "id": "estetica",
+   "keywords": [
+    "plastica",
+    "estetica",
+    "face academy",
+    "faceacademy",
+    "hof",
+    "odontopediatria",
+    "lobuloplastia"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/estetica.jpg"
+  },
+  {
+   "id": "violao",
+   "keywords": [
+    "violao",
+    "viola",
+    "guitarra",
+    "improvisacao",
+    "harmoniadegigante",
+    "harmoniaavancadavol",
+    "exercicios desafios"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/violao.jpg"
+  },
+  {
+   "id": "teclado",
+   "keywords": [
+    "teclado",
+    "tecladista",
+    "piano"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/teclado.jpg"
+  },
+  {
+   "id": "audio-producao",
+   "keywords": [
+    "audio production",
+    "producao musical"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/audio-producao.jpg"
+  },
+  {
+   "id": "biologia",
+   "keywords": [
+    "biologia",
+    "natureza"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/biologia.jpg"
+  },
+  {
+   "id": "fisica",
+   "keywords": [
+    "fisica"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/fisica.jpg"
+  },
+  {
+   "id": "quimica",
+   "keywords": [
+    "quimica"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/quimica.jpg"
+  },
+  {
+   "id": "historia",
+   "keywords": [
+    "historia",
+    "humanas"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/historia.jpg"
+  },
+  {
+   "id": "geografia",
+   "keywords": [
+    "geografia"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/geografia.jpg"
+  },
+  {
+   "id": "filosofia",
+   "keywords": [
+    "filosofia",
+    "sociologia",
+    "conservadorismo",
+    "marx"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/filosofia.jpg"
+  },
+  {
+   "id": "redacao",
+   "keywords": [
+    "redacao",
+    "discursivas"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/redacao.jpg"
+  },
+  {
+   "id": "russo",
+   "keywords": [
+    "russo"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/russo.jpg"
+  },
+  {
+   "id": "pedagogia",
+   "keywords": [
+    "pedagogicos",
+    "magisterio",
+    "sme sp",
+    "see paraiba",
+    "see pe",
+    "peif",
+    "grancursos",
+    "ta na lousa",
+    "cursinho da gloria",
+    "getusp",
+    "gestusp",
+    "concursos sme",
+    "ta nalousa",
+    "tanalousa"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/pedagogia.jpg"
+  },
+  {
+   "id": "estatistica",
+   "keywords": [
+    "estatistica"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/estatistica.jpg"
+  },
+  {
+   "id": "beleza",
+   "keywords": [
+    "maquiagem",
+    "beleza",
+    "makeup",
+    "make up",
+    "unhas",
+    "cabelos",
+    "sobrancelhas"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/beleza.jpg"
+  },
+  {
+   "id": "inteligencia-artificial",
+   "keywords": [
+    "inteligencia artificial",
+    "chatgpt",
+    "agentes de ia",
+    "ferramentas de ia",
+    "nocodeia",
+    "imersao ia",
+    "aplicativo com ia"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/inteligencia-artificial.jpg"
+  },
+  {
+   "id": "militares",
+   "keywords": [
+    "militar",
+    "carreiras militares",
+    "espcex"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/militares.jpg"
+  },
+  {
+   "id": "oratoria",
+   "keywords": [
+    "oratoria"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/oratoria.jpg"
+  },
+  {
+   "id": "tcc",
+   "keywords": [
+    "tcc sem drama",
+    "tcc em sete dias",
+    "modelos tcc",
+    "tcc de respeito"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/tcc.jpg"
+  },
+  {
+   "id": "cursos-plataformas",
+   "keywords": [
+    "cursos plataformas completas",
+    "plataformas completas",
+    "cursos completos"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/cursos-plataformas.jpg"
+  },
+  {
+   "id": "todo-dia",
+   "keywords": [
+    "todo dia",
+    "rotinas diarias"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/todo-dia.jpg"
+  },
+  {
+   "id": "queima-diaria",
+   "keywords": [
+    "queima diaria",
+    "queima"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/queima-diaria.jpg"
+  },
+  {
+   "id": "clube-de-casa",
+   "keywords": [
+    "clube de casa"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/clube-de-casa.jpg"
+  },
+  {
+   "id": "geral",
+   "keywords": [
+    "meggy"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/geral.jpg"
+  }
+ ]
 }
