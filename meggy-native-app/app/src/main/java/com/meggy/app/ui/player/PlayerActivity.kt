@@ -418,6 +418,11 @@ class PlayerActivity : AppCompatActivity() {
         override fun seekByMs(deltaMs: Long) = seekBy(deltaMs)
         override fun stopPlaybackFromNotification() = this@PlayerActivity.stopPlaybackFromNotification()
         override fun currentTitle(): String = displayTitle(currentItem)
+        // R19B (P4): extras do vídeo corrente para o intent da
+        // notificação de áudio (ver BackgroundAudioService).
+        override fun currentPlaybackUrl(): String? = currentUrl
+        override fun currentPlaybackFolderPath(): String? =
+            currentItem?.folderPath ?: intent.getStringExtra(EXTRA_FOLDER_PATH)
     }
     // Frente H — o enriquecimento da playlist (1× por sessão).
     private var playlistEnriched = false
@@ -1199,7 +1204,7 @@ class PlayerActivity : AppCompatActivity() {
         subtitleFetchJob?.cancel()
         subtitleFetchJob = lifecycleScope.launch {
             val api = ApiService(this@PlayerActivity)
-            val files = withContext(kotlinx.coroutines.Dispatchers.IO) { api.listFolder(folderPath) }
+            val files = withContext(kotlinx.coroutines.Dispatchers.IO) { api.listFolder(folderPath).filesOrNull }
             val base = item.name.substringBeforeLast(".")
             val sidecar = files?.firstOrNull { f ->
                 f.isSubtitle && f.name.startsWith(base, ignoreCase = true)
@@ -1379,7 +1384,7 @@ class PlayerActivity : AppCompatActivity() {
                     if (AiService.backendUnavailable) return@launch
                     val api = ApiService(this@PlayerActivity)
                     val files = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        runCatching { api.listFolder(currentFolder) }.getOrNull()
+                        api.listFolder(currentFolder).filesOrNull
                     } ?: return@launch
                     if (!LessonDescription.isLessonFolder(files)) return@launch
                     val folderName = currentFolder.trimEnd('/').substringAfterLast('/')
@@ -1506,8 +1511,12 @@ class PlayerActivity : AppCompatActivity() {
         val link = item?.link
         val url = if (!link.isNullOrEmpty()) linkBaseUrl() + link else intent.getStringExtra(EXTRA_URL)
         if (url.isNullOrBlank()) {
-            Snackbar.make(binding.root, "URL de playback ausente.", Snackbar.LENGTH_LONG).show()
-            finish()
+            // R19B (P4): URL em branco NÃO fecha o Player em
+            // silêncio — o finish() aqui devolvia o utilizador à
+            // Home sem explicar nada (o mesmo sintoma do bounce).
+            // Mostra o erro e fica no Player; sair é pelo BACK.
+            binding.playerLoading.visibility = View.GONE
+            Snackbar.make(binding.root, "Não foi possível abrir este vídeo (URL em falta). Volte e tente de novo.", Snackbar.LENGTH_LONG).show()
             return
         }
         currentUrl = url
@@ -2003,7 +2012,7 @@ class PlayerActivity : AppCompatActivity() {
             val data = try {
                 val api = ApiService(this@PlayerActivity)
                 val files = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    runCatching { api.listFolder(folderPath) }.getOrNull()
+                    api.listFolder(folderPath).filesOrNull
                 }
                 if (files == null) {
                     showMaterialsError()
