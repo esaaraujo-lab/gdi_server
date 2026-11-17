@@ -231,17 +231,6 @@
                             android:textSize="@dimen/tv_chip_text" />
 
                         <TextView
-                            android:id="@+id/chipFolders"
-                            android:layout_width="wrap_content"
-                            android:layout_height="48dp"
-                            android:layout_marginEnd="@dimen/spacing_md"
-                            android:background="@drawable/chip_outline"
-                            android:gravity="center"
-                            android:paddingHorizontal="@dimen/spacing_lg"
-                            android:textColor="@color/md_on_surface"
-                            android:textSize="@dimen/tv_chip_text" />
-
-                        <TextView
                             android:id="@+id/chipProgress"
                             android:layout_width="wrap_content"
                             android:layout_height="48dp"
