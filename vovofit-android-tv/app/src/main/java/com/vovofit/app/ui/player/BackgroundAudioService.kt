@@ -55,6 +55,10 @@ class BackgroundAudioService : Service() {
         fun seekByMs(deltaMs: Long)
         fun stopPlaybackFromNotification()
         fun currentTitle(): String
+        /** R19B (P4): URL de playback corrente (null se ainda não resolvido). */
+        fun currentPlaybackUrl(): String?
+        /** R19B (P4): pasta da aula corrente (null se desconhecida). */
+        fun currentPlaybackFolderPath(): String?
     }
 
     companion object {
@@ -118,11 +122,21 @@ class BackgroundAudioService : Service() {
             val playing = controls.isPlaying()
             val title = controls.currentTitle().ifBlank { context.getString(R.string.app_name) }
             val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            // R19B (P4): o intent da notificação leva os extras do
+            // vídeo corrente (URL + título + pasta) — sem eles, uma
+            // instância nova do Player nascia sem URL e fechava-se
+            // sozinha (ver PlayerActivity.initialisePlayer).
+            val openPlayerIntent = Intent(context, PlayerActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            controls.currentPlaybackUrl()?.takeIf { it.isNotBlank() }?.let {
+                openPlayerIntent.putExtra(PlayerActivity.EXTRA_URL, it)
+            }
+            openPlayerIntent.putExtra(PlayerActivity.EXTRA_TITLE, controls.currentTitle())
+            controls.currentPlaybackFolderPath()?.takeIf { it.isNotBlank() }?.let {
+                openPlayerIntent.putExtra(PlayerActivity.EXTRA_FOLDER_PATH, it)
+            }
             val openPlayer = PendingIntent.getActivity(
-                context, 0,
-                Intent(context, PlayerActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
-                flags
+                context, 0, openPlayerIntent, flags
             )
             fun actionIntent(action: String, requestCode: Int): PendingIntent =
                 PendingIntent.getService(
