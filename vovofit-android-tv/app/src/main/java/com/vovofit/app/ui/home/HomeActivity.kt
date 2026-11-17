@@ -24,6 +24,7 @@ import com.vovofit.app.VovoFitApp
 import com.vovofit.app.R
 import com.vovofit.app.data.AdminDrive
 import com.vovofit.app.data.ApiService
+import com.vovofit.app.data.FolderResult
 import com.vovofit.app.data.DriveItem
 import com.vovofit.app.data.FileItem
 import com.vovofit.app.data.HeroItem
@@ -667,7 +668,7 @@ class HomeActivity : AppCompatActivity() {
             val sm = SessionManager.get(this@HomeActivity)
             var updated = false
             for (r in missing) {
-                val files = withContext(Dispatchers.IO) { api.listFolder(r.folderPath) } ?: break
+                val files = withContext(Dispatchers.IO) { api.listFolder(r.folderPath).filesOrNull } ?: break
                 val match = files.find { it.name == r.videoName && (it.isVideo || it.isAudio) }
                 val thumb = match?.thumbnailLink
                 if (!thumb.isNullOrBlank()) {
@@ -892,13 +893,25 @@ class HomeActivity : AppCompatActivity() {
         ).show()
 
         lifecycleScope.launch {
-            val files = withContext(Dispatchers.IO) { api.listFolder(folderPath) }
-
-            // ★ v2.1.0: Use AuthHelper for consistent expired-session handling.
-            if (files == null) {
+            // R19B (P1+P2): o listFolder agora distingue sessão
+            // expirada de falha transitória. Transitória mostra erro
+            // e NUNCA faz bounce; expirada tenta o re-login
+            // silencioso uma vez e só faz bounce se ele falhar.
+            val result = withContext(Dispatchers.IO) {
+                AuthHelper.listFolderWithRelogin(api, folderPath)
+            }
+            if (result is FolderResult.SessionExpired) {
                 AuthHelper.bounceToLogin(this@HomeActivity)
                 return@launch
             }
+            if (result is FolderResult.Transient) {
+                com.google.android.material.snackbar.Snackbar.make(
+                    binding.root, "Não foi possível carregar o vídeo. Verifique a conexão e tente de novo.",
+                    com.google.android.material.snackbar.Snackbar.LENGTH_LONG
+                ).show()
+                return@launch
+            }
+            val files = (result as FolderResult.Ok).files
 
             if (files.isNotEmpty()) {
                 val clickedVideo = files.find { it.name == videoName && (it.isVideo || it.isAudio) }
