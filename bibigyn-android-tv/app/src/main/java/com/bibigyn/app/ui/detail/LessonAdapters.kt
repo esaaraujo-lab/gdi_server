@@ -57,6 +57,15 @@ data class LessonGroup(
  * filhos carregados, porque o recent guarda o (folderPath, videoName)
  * certo — sem listFolder nenhum, sem rede extra.
  *
+ * Ronda 16 Frente B — os recents passam a casar por PREFIXO (a
+ * subárvore inteira), não só por igualdade exacta: um vídeo visto
+ * numa subpasta marca a pasta-mãe como iniciada ("Continuar" ou
+ * "N% concluída", nunca "não iniciada" falso). O prefixo é
+ * normalizado com "/" final para não casar com irmãs de nome mais
+ * comprido — em modo por ID ("by-id:<id>", sem "/") o prefixo
+ * nunca casa com descendentes (ids opacos); aí vale a igualdade.
+ * O % continua a ser o MÁXIMO (maxOf), não uma média.
+ *
  * [hasResume] cobre o caso migrado (B2) em que há posição guardada
  * mas ainda não há duração: o % é desconhecido mas o vídeo pode ser
  * retomado — o cartão mostra "Continuar", não "não iniciada".
@@ -76,7 +85,18 @@ private fun groupProgress(sm: SessionManager, group: LessonGroup): GroupProgress
     val directProgress = if (video != null) sm.getResumeProgress(group.folderPath, video.name) else 0
     val directWatched = if (video != null) sm.isWatched(group.folderPath, video.name) else false
     val directHasResume = if (video != null) sm.hasResume(group.folderPath, video.name) else false
-    val recents = sm.getRecents().filter { it.folderPath == group.folderPath }
+    // Ronda 16 Frente B — a pasta vê os recents de TODA a subárvore, não
+    // só os da própria pasta: um vídeo numa subpasta (qualquer nível)
+    // marca a pasta-mãe como iniciada. O prefixo leva "/" final — o
+    // folderPath por caminho já a traz (buildLessonGroups), mas o modo
+    // por ID (ApiService.byIdPath = "by-id:<id>") não: sem a "/" o
+    // prefixo casaria com pastas-irmãs de id mais comprido
+    // ("by-id:abc" casaria "by-id:abcd"). Em modo por ID os ids são
+    // opacos — a hierarquia não está no caminho — por isso o prefixo
+    // nunca casa com descendentes aí (limite, ver NOTES.md): vale a
+    // igualdade exacta para a pasta imediata, como antes.
+    val folderPrefix = if (group.folderPath.endsWith("/")) group.folderPath else group.folderPath + "/"
+    val recents = sm.getRecents().filter { it.folderPath == group.folderPath || it.folderPath.startsWith(folderPrefix) }
     val recentProgress = recents.maxOfOrNull { sm.getResumeProgress(it.folderPath, it.videoName) } ?: 0
     val recentWatched = recents.any { sm.isWatched(it.folderPath, it.videoName) }
     val recentHasResume = recents.any { sm.hasResume(it.folderPath, it.videoName) }
