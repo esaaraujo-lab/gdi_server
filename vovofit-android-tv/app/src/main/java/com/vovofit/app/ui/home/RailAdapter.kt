@@ -6,6 +6,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AnimationUtils
 import android.widget.Toast
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.vovofit.app.R
@@ -79,15 +80,61 @@ class RailAdapter(
      */
     fun updateItems(newItems: List<RailItem>): Boolean {
         if (newItems == items) return false
+        val oldItems = items
         items = newItems
-        notifyDataSetChanged()
+        // Ronda 18 Frente C (F2) — DiffUtil em vez de
+        // notifyDataSetChanged() total: só os itens que mudaram /
+        // entraram / saíram são re-ligados; os holders dos outros nem
+        // se desanexam — mata o flicker do BACK do player e a janela
+        // em que o toque caía sobre um holder destacado (o clique
+        // consulta bindingAdapterPosition e é ignorado quando o holder
+        // está destacado). A identidade é (título, pasta): o par
+        // (folder, video) é a identidade do recent (ver
+        // SessionManager.addRecent).
+        DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+            override fun getOldListSize(): Int = oldItems.size
+            override fun getNewListSize(): Int = newItems.size
+            override fun areItemsTheSame(oldPos: Int, newPos: Int): Boolean {
+                val old = oldItems[oldPos]
+                val new = newItems[newPos]
+                return old.title == new.title &&
+                    old.file?.folderPath == new.file?.folderPath
+            }
+            override fun areContentsTheSame(oldPos: Int, newPos: Int): Boolean =
+                oldItems[oldPos] == newItems[newPos]
+        }).dispatchUpdatesTo(this)
         return true
     }
 
+    // Ronda 18 Frente C (F2) — o DiffUtil já não re-liga os itens que
+    // não mudaram, por isso os ids de foco D-pad têm de ser
+    // re-aplicados aos holders JÁ ligados quando mudam (antes o
+    // notifyDataSetChanged() total fazia-o por acidente, ao re-ligar
+    // tudo). O onBind continua a aplicá-los aos holders reciclados.
+    private var attachedRecyclerView: RecyclerView? = null
+
+    override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
+        attachedRecyclerView = recyclerView
+    }
+
+    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+        if (attachedRecyclerView === recyclerView) attachedRecyclerView = null
+    }
+
     fun updateFocusIds(upId: Int, downId: Int) {
+        if (upId == nextFocusUpId && downId == nextFocusDownId) return
         nextFocusUpId = upId
         nextFocusDownId = downId
+        val rv = attachedRecyclerView ?: return
+        for (i in 0 until rv.childCount) {
+            val child = rv.getChildAt(i)
+            if (upId != View.NO_ID) child.nextFocusUpId = upId
+            if (downId != View.NO_ID) child.nextFocusDownId = downId
+        }
     }
+
+    /** Posição actual do item nos dados do adapter (-1 se já não existir). */
+    fun indexOf(item: RailItem): Int = items.indexOf(item)
 
     inner class VH(val binding: ItemRailCardBinding) : RecyclerView.ViewHolder(binding.root) {
         init {
