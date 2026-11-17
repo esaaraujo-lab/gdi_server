@@ -26,6 +26,7 @@ import com.meggy.app.R
 import com.meggy.app.data.AiService
 import com.meggy.app.data.AdminDrive
 import com.meggy.app.data.ApiService
+import com.meggy.app.data.FolderResult
 import com.meggy.app.data.FileItem
 import com.meggy.app.data.colorFromString
 import com.meggy.app.databinding.ActivityDetailBinding
@@ -635,11 +636,23 @@ class DetailActivity : AppCompatActivity() {
         }
         Snackbar.make(binding.root, "Carregando \"$videoName\"...", Snackbar.LENGTH_SHORT).show()
         lifecycleScope.launch {
-            val files = withContext(Dispatchers.IO) { api.listFolder(folderPath) }
-            if (files == null) {
+            // R19B (P1+P2): o listFolder agora distingue sessão
+            // expirada de falha transitória. Transitória mostra erro
+            // e NUNCA faz bounce; expirada tenta o re-login
+            // silencioso uma vez e só faz bounce se ele falhar.
+            val result = withContext(Dispatchers.IO) {
+                AuthHelper.listFolderWithRelogin(api, folderPath)
+            }
+            if (result is FolderResult.SessionExpired) {
                 AuthHelper.bounceToLogin(this@DetailActivity)
                 return@launch
             }
+            if (result is FolderResult.Transient) {
+                Snackbar.make(binding.root, "Não foi possível carregar o vídeo. Verifique a conexão e tente de novo.", Snackbar.LENGTH_LONG).show()
+                return@launch
+            }
+            val files = (result as FolderResult.Ok).files
+
             if (files.isNotEmpty()) {
                 val clickedVideo = files.find { it.name == videoName && (it.isVideo || it.isAudio) }
                 if (clickedVideo != null && !clickedVideo.link.isNullOrEmpty()) {
@@ -687,13 +700,31 @@ class DetailActivity : AppCompatActivity() {
         binding.emptyState.visibility = View.GONE
 
         lifecycleScope.launch {
-            val files = withContext(Dispatchers.IO) { api.listFolder(currentPath) }
+            // R19B (P1+P2): o listFolder agora distingue sessão
+            // expirada de falha transitória. Transitória mostra o
+            // erro com "Tentar de novo" e NUNCA faz bounce;
+            // expirada tenta o re-login silencioso uma vez e só
+            // faz bounce se ele falhar.
+            val result = withContext(Dispatchers.IO) {
+                AuthHelper.listFolderWithRelogin(api, currentPath)
+            }
             binding.loadingView.visibility = View.GONE
 
-            if (files == null) {
+            if (result is FolderResult.SessionExpired) {
                 AuthHelper.bounceToLogin(this@DetailActivity)
                 return@launch
             }
+            if (result is FolderResult.Transient) {
+                // Falha transitória: o destino FICA aberto, mostra o
+                // erro e oferece retry — nunca o bounce para o login.
+                binding.emptyState.text = "Não foi possível carregar esta pasta. Verifique a conexão e tente de novo."
+                binding.emptyState.visibility = View.VISIBLE
+                Snackbar.make(binding.root, "Falha de rede — toque em \"Tentar de novo\".", Snackbar.LENGTH_LONG)
+                    .setAction("Tentar de novo") { loadFolder() }
+                    .show()
+                return@launch
+            }
+            val files = (result as FolderResult.Ok).files
             allFiles = files
             // Frente R14A — limpa os extras da pasta anterior (se a
             // tela recarregar, a descoberta corre de novo no ramo plano).
@@ -735,6 +766,7 @@ class DetailActivity : AppCompatActivity() {
             loadQuestionsFlashcards(files)
 
             if (files.isEmpty()) {
+                binding.emptyState.text = getString(R.string.browse_empty)
                 binding.emptyState.visibility = View.VISIBLE
                 binding.recycler.adapter = null
             } else if (folderCount > 0) {
@@ -1641,7 +1673,7 @@ class DetailActivity : AppCompatActivity() {
             val toLoad = lessonGroups.filter { it.children == null }.take(20)
             val results = withContext(Dispatchers.IO) {
                 toLoad.map { group ->
-                    group to (api.listFolder(group.folderPath) ?: emptyList())
+                    group to api.listFolder(group.folderPath).orEmpty()
                 }
             }
             var changed = false
@@ -1821,8 +1853,8 @@ class DetailActivity : AppCompatActivity() {
         group.expanded = !group.expanded
         if (group.expanded && group.children == null) {
             lifecycleScope.launch {
-                val children = withContext(Dispatchers.IO) { api.listFolder(group.folderPath) }
-                group.children = children ?: emptyList()
+                val children = withContext(Dispatchers.IO) { api.listFolder(group.folderPath).orEmpty() }
+                group.children = children
                 group.pdfFolderCount = group.children!!.count { it.isFolder }
                 refreshLessonList()
             }
