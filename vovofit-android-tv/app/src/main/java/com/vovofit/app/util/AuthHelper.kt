@@ -4,13 +4,17 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import com.vovofit.app.ui.login.LoginActivity
+import com.vovofit.app.data.ApiService
+import com.vovofit.app.data.FolderResult
 
 /**
  * v2.1.0 — Centralized authentication helper.
  *
- * All activities that detect an expired session (null API response) call
- * [bounceToLogin] instead of duplicating the clearSession + startActivity
- * logic. This guarantees consistent behavior across the app:
+ * All activities that detect an expired session call [bounceToLogin]
+ * instead of duplicating the clearSession + startActivity logic. This
+ * guarantees consistent behavior across the app. R19B (P1+P2): a sessão
+ * só se dá como expirada depois do [listFolderWithRelogin] (re-login
+ * silencioso + 1 repetição); uma falha transitória nunca faz bounce.
  *
  *  • Clears the stale session cookie + playlist.
  *  • Starts LoginActivity with FLAG_ACTIVITY_NEW_TASK | CLEAR_TASK so the
@@ -18,15 +22,18 @@ import com.vovofit.app.ui.login.LoginActivity
  *    the expired activity).
  *  • Finishes the current activity.
  *
- * Usage from any Activity:
- *   if (files == null) { AuthHelper.bounceToLogin(this); return }
+ * Usage from any Activity (R19B):
+ *   val r = AuthHelper.listFolderWithRelogin(api, path)
+ *   if (r is FolderResult.SessionExpired) AuthHelper.bounceToLogin(this)
+ *   // Transient -> erro + retry; nunca bounce. Ok -> r.files.
  */
 object AuthHelper {
 
     /**
      * Clears the session and routes to LoginActivity with a clean back stack.
-     * Call this when an API call returns null (indicating an expired cookie
-     * or an HTML login redirect from the server).
+     * Call this ONLY when the session is proven expired AND the silent
+     * re-login failed (see [listFolderWithRelogin]) — never on a
+     * transient network/server failure.
      */
     fun bounceToLogin(activity: Activity) {
         // Clear the stale session so SplashActivity routes to Login next time.
@@ -39,16 +46,43 @@ object AuthHelper {
     }
 
     /**
-     * Returns true if the given result (from ApiService.listFolder etc.)
-     * indicates an expired session. ApiService returns null when the server
-     * responds with an HTML login redirect or a non-2xx status code.
+     * R19B (P2) — listFolder com re-login silencioso antes do bounce.
      *
-     * Usage:
-     *   val files = api.listFolder(path)
-     *   if (AuthHelper.isSessionExpired(files)) {
-     *       AuthHelper.bounceToLogin(this)
-     *       return
-     *   }
+     * 1. Corre o listFolder uma vez. Se não for SessionExpired,
+     *    devolve-o tal como está (Ok OU Transient — transitória nunca
+     *    faz bounce, o chamador mostra erro + retry).
+     * 2. Se for SessionExpired, tenta [ApiService.validateOrReLogin]
+     *    UMA vez (usa a senha guardada — [SessionManager.clearSession]
+     *    nunca a apaga, por isso o re-login continua possível).
+     * 3. Se o re-login resultar, repete o listFolder UMA vez e devolve
+     *    esse resultado (Ok na maioria dos casos — o destino nem pisca).
+     * 4. Se o re-login falhar, devolve SessionExpired — aí sim o
+     *    chamador faz [bounceToLogin] (sessão genuinamente expirada).
+     *
+     * Corre em Dispatchers.IO no chamador (o OkHttp é bloqueante).
      */
-    fun isSessionExpired(apiResult: Any?): Boolean = apiResult == null
+    suspend fun listFolderWithRelogin(
+        api: ApiService,
+        path: String,
+        maxPages: Int = 20,
+    ): FolderResult {
+        val first = api.listFolder(path, maxPages)
+        if (first !is FolderResult.SessionExpired) return first
+        val relogged = try {
+            api.validateOrReLogin()
+        } catch (_: Exception) {
+            false
+        }
+        if (!relogged) return FolderResult.SessionExpired
+        return api.listFolder(path, maxPages)
+    }
+
+    /**
+     * True quando o resultado tipado de [ApiService.listFolder] diz
+     * sessão expirada (HTTP 401/403 ou corpo HTML de login). R19B: o
+     * null único morreu — a distinção é [FolderResult.SessionExpired]
+     * vs [FolderResult.Transient].
+     */
+    fun isSessionExpired(result: FolderResult): Boolean =
+        result is FolderResult.SessionExpired
 }
