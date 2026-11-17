@@ -92,12 +92,10 @@ class DriveRailAdapter(
                     height = fit.layoutPx(32f)
                 }
                 binding.driveFavStar.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(16f))
-                val iconBox = binding.driveIcon.parent as View
-                iconBox.layoutParams = iconBox.layoutParams.apply {
-                    width = fit.layoutPx(64f)
-                    height = fit.layoutPx(64f)
-                }
-                binding.driveIcon.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(32f))
+                // Ronda 16 Frente C — bloco do quadrado do icone removido:
+                // o FrameLayout pai do driveIcon vai a GONE em todos os
+                // binds (ver bindFixed/bindAdmin); redimensiona-lo aqui
+                // era codigo morto.
             }
             // Frente A (TV): nextFocus explícito (ver params).
             if (nextFocusUpId != View.NO_ID) itemView.nextFocusUpId = nextFocusUpId
@@ -131,7 +129,12 @@ class DriveRailAdapter(
      */
     private fun bindFixed(holder: VH, drive: DriveItem) {
         with(holder.binding) {
-            driveIcon.text = drive.icon  // patch: emoji do drive de volta (2.7.5)
+            // Ronda 16 Frente C — sem quadrado rosa nem emoji (Elton
+            // 2026-11-16 20:56): imagem + nome bastam, como na BiBi
+            // 2.1.11 / Vovo 1.0.11. O rosa esta no FrameLayout PAI do
+            // driveIcon (item_drive_card.xml:61-74) — e o PAI que vai
+            // a GONE, nunca so o TextView (deixava o quadrado vazio).
+            (driveIcon.parent as View).visibility = View.GONE
             driveName.setWordEllipsized(drive.name)
             driveMeta.setWordEllipsized(drive.tagline)
             driveMeta.visibility = if (drive.tagline.isBlank()) View.GONE else View.VISIBLE
@@ -188,7 +191,9 @@ class DriveRailAdapter(
      */
     private fun bindAdmin(holder: VH, adminDrive: AdminDrive) {
         with(holder.binding) {
-            driveIcon.text = "\uD83D\uDCC1"
+            // Ronda 16 Frente C — idem bindFixed: sem quadrado rosa
+            // nem pasta 📁 no drive do admin; o PAI vai a GONE.
+            (driveIcon.parent as View).visibility = View.GONE
             driveName.setWordEllipsized(adminDrive.name)
             driveMeta.setWordEllipsized(
                 holder.itemView.context.getString(R.string.admin_drive_tile_tag))
