@@ -524,8 +524,19 @@ class DetailActivity : AppCompatActivity() {
         // Ronda 10 Frente C — desactiva as capas de sub-pasta
         // do drive do admin.
         AdminDriveUi.clearSubfolderCovers()
-        focusObserver?.removeOnGlobalFocusChangeListener(globalFocusListener)
+        // Ronda 20 — nunca remover com o observer guardado: quando a vista já
+        // foi desligada da janela, o observer guardado está morto e o remove
+        // lança IllegalStateException ("This ViewTreeObserver is not alive").
+        // Um observer fresco obtido aqui é sempre seguro: vista ligada → o
+        // observer vivo da janela (o remove funciona); vista desligada → o
+        // observer flutuante (o remove é um no-op) — e a guarda isAlive cobre
+        // o resto.
+        val observer = binding.root.viewTreeObserver
+        if (observer.isAlive) {
+            observer.removeOnGlobalFocusChangeListener(globalFocusListener)
+        }
         focusObserver = null
+        focusListenerRegistered = false
         LibraryCovers.removeOnReadyListener(libraryReadyListener)
         descriptionJob?.cancel()
         qfJob?.cancel()
