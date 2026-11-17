@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
+import android.view.ViewTreeObserver
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -146,7 +147,34 @@ class DetailActivity : AppCompatActivity() {
     private var lessonGroups: List<LessonGroup> = emptyList()
     private var allFiles: List<FileItem> = emptyList()
     private var currentTab: Tab = Tab.LESSONS
-    private var lastFocusedContinuePos = 0
+    private var lastFocusedContinuePos = -1
+    // Ronda 17 Frente B — posição real do foco (D-pad) na grade/lista
+    // de aulas (-1 = nenhuma) + alvo do restauro (0 = nenhum, 1 =
+    // grade/lista, 2 = rail) + scrollY guardado para restauro após
+    // morte do processo (onSaveInstanceState). Ver o observador
+    // global de foco (globalFocusListener, registado no onResume).
+    private var lastFocusedLessonPos = -1
+    private var lastFocusedTarget = 0
+    private var savedScrollY = 0
+    private var isFirstResume = true
+    private var focusObserver: ViewTreeObserver? = null
+    private var focusListenerRegistered = false
+    private val globalFocusListener = ViewTreeObserver.OnGlobalFocusChangeListener { _, newFocus ->
+        val view = newFocus ?: return@OnGlobalFocusChangeListener
+        val lessonPos = adapterPositionIn(binding.recycler, view)
+        if (lessonPos != null) {
+            lastFocusedLessonPos = lessonPos
+            lastFocusedTarget = 1
+            return@OnGlobalFocusChangeListener
+        }
+        val railPos = adapterPositionIn(binding.railContinue, view)
+        if (railPos != null) {
+            lastFocusedContinuePos = railPos
+            lastFocusedTarget = 2
+            return@OnGlobalFocusChangeListener
+        }
+        lastFocusedTarget = 0
+    }
 
     private enum class Tab { SUMMARY, LESSONS, QUESTIONS, FLASHCARDS }
 
@@ -156,6 +184,15 @@ class DetailActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         api = ApiService(this)
+        // Ronda 17 Frente B — repõe o foco/rolagem guardados se a
+        // activity foi recriada (morte do processo): o 1.º onResume
+        // toma o caminho de restauro, não o da 1.ª abertura.
+        savedInstanceState?.let {
+            lastFocusedContinuePos = it.getInt("r17b_focus_continue", -1)
+            lastFocusedLessonPos = it.getInt("r17b_focus_lesson", -1)
+            savedScrollY = it.getInt("r17b_scroll_y", 0)
+            isFirstResume = false
+        }
         // Camada 3 — biblioteca de capas por tipo: busca o manifesto
         // em 2º plano (nunca bloqueia); o hero resolve a imagem
         // quando o manifesto já chegou (a listagem da pasta roda
@@ -263,8 +300,117 @@ class DetailActivity : AppCompatActivity() {
         loadFolder()
     }
 
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        // Ronda 17 Frente B — foco real + scrollY sobrevivem à morte
+        // do processo (o onCreate repõe-nos e o 1.º onResume restaura).
+        outState.putInt("r17b_scroll_y", binding.detailScroll.scrollY)
+        outState.putInt("r17b_focus_continue", lastFocusedContinuePos)
+        outState.putInt("r17b_focus_lesson", lastFocusedLessonPos)
+    }
+
+    // ──────────── Ronda 17 Frente B — foco + rolagem ────────────
+    //
+    // O foco REAL (D-pad) guarda-se com um observador GLOBAL de foco
+    // (OnGlobalFocusChangeListener), não com setOnFocusChangeListener
+    // na vista: o FocusAnimator é dono desse listener em cada card
+    // (attach/attachCard) e sobrepô-lo matava o anel/escala de foco.
+    // O observador regista-se no onResume — no onCreate a vista ainda
+    // não está ligada à janela e o ViewTreeObserver seria o flutuante.
+    // [lastFocusedTarget]: 0 = nenhum, 1 = grade/lista, 2 = rail.
+
+    /** Foto instantânea do foco/rolagem actuais (antes de um re-bind). */
+    private data class DetailFocusSnapshot(val target: Int, val pos: Int, val scrollY: Int)
+
+    /** Posição do adapter do item que contém a vista focada (o foco
+     *  pode estar num filho do card, ex.: o botão "Continuar" do
+     *  cabeçalho): sobe-se até ao filho directo do RecyclerView.
+     *  null = o foco não está neste RecyclerView. */
+    private fun adapterPositionIn(recyclerView: RecyclerView, focused: View): Int? {
+        var v: View? = focused
+        while (v != null && v != recyclerView) {
+            val parent = v.parent
+            if (parent === recyclerView) {
+                val pos = recyclerView.getChildAdapterPosition(v)
+                return if (pos != RecyclerView.NO_POSITION) pos else null
+            }
+            v = parent as? View
+        }
+        return null
+    }
+
+    private fun captureDetailFocus(): DetailFocusSnapshot {
+        val y = binding.detailScroll.scrollY
+        return when {
+            binding.railContinue.hasFocus() -> DetailFocusSnapshot(2, lastFocusedContinuePos, y)
+            binding.recycler.hasFocus() -> DetailFocusSnapshot(1, lastFocusedLessonPos, y)
+            else -> DetailFocusSnapshot(0, -1, y)
+        }
+    }
+
+    /** Repõe foco + rolagem guardados (depois do re-bind, no próximo layout). */
+    private fun restoreDetailFocus(snap: DetailFocusSnapshot) {
+        if (snap.target == 0 && snap.scrollY <= 0) return
+        binding.detailScroll.post {
+            if (snap.scrollY > 0) binding.detailScroll.scrollTo(0, snap.scrollY)
+            val rail = when (snap.target) {
+                1 -> binding.recycler
+                2 -> binding.railContinue
+                else -> null
+            } ?: return@post
+            val count = rail.adapter?.itemCount ?: 0
+            if (count <= 0 || snap.pos < 0) return@post
+            val pos = snap.pos.coerceAtMost(count - 1)
+            (rail.layoutManager as? LinearLayoutManager)?.scrollToPosition(pos)
+            rail.post {
+                rail.findViewHolderForAdapterPosition(pos)?.itemView?.requestFocus()
+            }
+        }
+    }
+
+    /** Restauro do onResume: usa as posições guardadas (não o foco vivo). */
+    private fun restoreDetailFocusOnResume() {
+        val y = binding.detailScroll.scrollY.takeIf { it > 0 } ?: savedScrollY
+        val snap = when (lastFocusedTarget) {
+            2 -> DetailFocusSnapshot(2, lastFocusedContinuePos, y)
+            1 -> DetailFocusSnapshot(1, lastFocusedLessonPos, y)
+            else -> DetailFocusSnapshot(0, -1, y)
+        }
+        restoreDetailFocus(snap)
+    }
+
+    /**
+     * Redesenha só os itens visíveis do RecyclerView (ex.: chegada
+     * do manifesto de capas). Os itens fora do ecrã resolvem a capa
+     * no próximo bind — sem re-bind total, sem perda de foco.
+     */
+    private fun refreshVisibleItems(recyclerView: RecyclerView) {
+        val lm = recyclerView.layoutManager as? LinearLayoutManager ?: return
+        val first = lm.findFirstVisibleItemPosition()
+        val last = lm.findLastVisibleItemPosition()
+        if (first == RecyclerView.NO_POSITION || last == RecyclerView.NO_POSITION) return
+        for (pos in first..last) recyclerView.adapter?.notifyItemChanged(pos)
+    }
+
+    /** Grupos visíveis com a busca actual aplicada (a mesma do submit). */
+    private fun filteredLessonGroups(): List<LessonGroup> {
+        val query = binding.lessonSearch.text?.toString().orEmpty()
+        return if (query.isBlank()) lessonGroups
+            else lessonGroups.filter { it.folder.name.contains(query, ignoreCase = true) }
+    }
+
     override fun onResume() {
         super.onResume()
+        // Ronda 17 Frente B — o observador regista-se aqui (e não no
+        // onCreate): no onCreate a vista ainda não está ligada à
+        // janela e o ViewTreeObserver seria o flutuante, que morre
+        // ao ligar; no onResume a vista já está ligada.
+        if (!focusListenerRegistered) {
+            focusListenerRegistered = true
+            focusObserver = binding.root.viewTreeObserver
+            focusObserver?.addOnGlobalFocusChangeListener(globalFocusListener)
+        }
         // Ronda 10 Frente C — re-activa as capas de sub-pasta
         // do drive do admin (um detalhe-filho destruído limpa
         // o registo ao sair; ao voltar, este detalhe volta a
@@ -273,25 +419,33 @@ class DetailActivity : AppCompatActivity() {
             val root = AdminDriveUi.adminDriveRootFromIntent(intent) ?: currentPath
             AdminDriveUi.setSubfolderCovers(root, drive.subfolderCovers)
         }
-        // Restaura o foco no rail "Continuar de onde parou" (TV).
-        if (TvUtils.isTv(this) && binding.railContinue.visibility == View.VISIBLE) {
-            binding.railContinue.post {
-                binding.railContinue.findViewHolderForAdapterPosition(lastFocusedContinuePos)
-                    ?.itemView?.requestFocus()
+        // Ronda 17 Frente B (gatilho D) — o CTA do topo NUNCA é focado
+        // no onResume: voltar de uma subpasta punha a página no início.
+        // 1.ª abertura: foco no 1.º card do rail quando há rail (como
+        // hoje); sem rail, não se foca nada — o 1.º D-pad cai na 1.ª
+        // vista focável (todas têm anel desde a Frente A).
+        // Regresso: repõe o foco real guardado + o scrollY.
+        if (TvUtils.isTv(this)) {
+            if (isFirstResume) {
+                if (binding.railContinue.visibility == View.VISIBLE) {
+                    binding.railContinue.post {
+                        binding.railContinue.findViewHolderForAdapterPosition(0)
+                            ?.itemView?.requestFocus()
+                    }
+                }
+            } else {
+                restoreDetailFocusOnResume()
             }
-        } else if (TvUtils.isTv(this)) {
-            // Frente A (TV) — sem recents não há rail: o foco inicial
-            // é o CTA "Continuar assistindo" (o layout TV anuncia-o
-            // como "EM FOCO"), em vez de a tela abrir sem foco nenhum
-            // e o 1º D-pad cair na lupa sem anel visível.
-            binding.ctaContinue.post { binding.ctaContinue.requestFocus() }
         }
+        isFirstResume = false
     }
 
     override fun onDestroy() {
         // Ronda 10 Frente C — desactiva as capas de sub-pasta
         // do drive do admin.
         AdminDriveUi.clearSubfolderCovers()
+        focusObserver?.removeOnGlobalFocusChangeListener(globalFocusListener)
+        focusObserver = null
         descriptionJob?.cancel()
         qfJob?.cancel()
         super.onDestroy()
@@ -1418,19 +1572,44 @@ class DetailActivity : AppCompatActivity() {
                 group.pdfFolderCount = children.count { it.isFolder }
                 changed = true
             }
-            if (changed) refreshLessonList()
+            if (changed) refreshPrefetchedGroups(toLoad)
         }
     }
 
     private fun refreshLessonList() {
-        val query = binding.lessonSearch.text?.toString().orEmpty()
-        val filtered = if (query.isBlank()) lessonGroups
-            else lessonGroups.filter { it.folder.name.contains(query, ignoreCase = true) }
+        val filtered = filteredLessonGroups()
+        // Ronda 17 Frente B — o submit total desanexa o item focado;
+        // guarda-se o foco/rolagem e repõe-se depois do re-bind.
+        val snap = captureDetailFocus()
         lessonListAdapter?.submit(filtered)
         lessonGridAdapter?.submit(filtered)
         // Ronda 15 Frente B (B3): o prefetch (ou um expandir) entregou
         // filhos — o chip do hero pode sair de "a calcular…".
         updateProgressChip(allFiles)
+        restoreDetailFocus(snap)
+    }
+
+    /**
+     * Ronda 17 Frente B (gatilho B) — o prefetch actualiza SÓ os
+     * grupos que ganharam filhos (notifyItemChanged), em vez do
+     * submit() total que saltava a página para o topo a meio da
+     * navegação. O foco/rolagem repõem-se na mesma (o card focado
+     * pode ser um dos actualizados).
+     */
+    private fun refreshPrefetchedGroups(changed: List<LessonGroup>) {
+        val snap = captureDetailFocus()
+        val visible = filteredLessonGroups()
+        val positions = changed.mapNotNull { g ->
+            visible.indexOfFirst { it === g }.takeIf { it >= 0 }
+        }
+        if (positions.isNotEmpty()) {
+            lessonGridAdapter?.refreshPositions(positions)
+            lessonListAdapter?.refreshGroups(changed.filter { g -> visible.any { it === g } })
+        }
+        // Ronda 15 Frente B (B3): o prefetch entregou filhos — o chip
+        // do hero pode sair de "a calcular…".
+        updateProgressChip(allFiles)
+        restoreDetailFocus(snap)
     }
 
     // Frente R4B — chips Todos / Vídeos / Materiais (lista plana,
