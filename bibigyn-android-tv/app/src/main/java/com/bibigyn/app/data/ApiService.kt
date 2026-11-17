@@ -13,6 +13,36 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 
+/**
+ * R19B (P1) — resultado tipado de [ApiService.listFolder] /
+ * [ApiService.listFolderById]. O null único morreu: ele escondia dois
+ * casos com tratamento oposto — sessão expirada (bounce para o login,
+ * depois de tentar o re-login) e falha transitória (erro + retry, o
+ * destino fica aberto e NUNCA faz bounce). Ver DIAGNOSIS R19A §4.
+ *
+ *  • [Ok] — listagem OK. Pode ser parcial: uma falha numa página > 0
+ *    devolve o que já foi acumulado em vez de derrubar a tela.
+ *  • [SessionExpired] — HTTP 401/403 ou corpo HTML de login.
+ *  • [Transient] — excepção de rede/timeout, outro não-2xx (ex.: 5xx),
+ *    corpo nulo ou JSON inválido. NUNCA faz bounce.
+ */
+sealed class FolderResult {
+    /** Listagem OK (ver [FolderResult] — pode ser parcial). */
+    data class Ok(val files: List<FileItem>) : FolderResult()
+
+    /** Sessão expirada: HTTP 401/403 ou corpo HTML de login. */
+    object SessionExpired : FolderResult()
+
+    /** Falha transitória (rede/timeout/servidor) — nunca faz bounce. */
+    object Transient : FolderResult()
+
+    /** A lista quando [Ok], null nos outros casos. */
+    val filesOrNull: List<FileItem>? get() = (this as? Ok)?.files
+
+    /** A lista quando [Ok], vazia nos outros casos (chamadores best-effort). */
+    fun orEmpty(): List<FileItem> = filesOrNull ?: emptyList()
+}
+
 class ApiService(private val context: Context) {
     
     private val sessionManager get() = SessionManager.get(context)
@@ -53,10 +83,11 @@ class ApiService(private val context: Context) {
     // nextPageToken no TOPO do JSON (não dentro de data); a próxima
     // página usa esse token (page_index é só ecoado como curPageIndex).
     // Travas: no máximo `maxPages` páginas e parada se o token repetir.
-    // Falha na página 0 mantém a semântica antiga (null = sessão
-    // expirada → bounceToLogin); falha numa página posterior devolve o
-    // que já foi acumulado em vez de derrubar a tela para o login.
-    suspend fun listFolder(fullPath: String, maxPages: Int = 20): List<FileItem>? {
+    // R19B (P1): falha na página 0 devolve um FolderResult tipado —
+    // SessionExpired (401/403 ou HTML de login) ou Transient (rede/
+    // timeout, outro não-2xx, corpo nulo, JSON inválido). Falha numa
+    // página posterior devolve o que já foi acumulado (Ok parcial).
+    suspend fun listFolder(fullPath: String, maxPages: Int = 20): FolderResult {
         // Ronda 13 Frente C — caminho por ID ("by-id:<folderId>"): a
         // listagem vai para o sandbox (POST /api/drive/by-id), nao
         // para a producao (o router dela so aceita /<idx>:/...).
@@ -88,18 +119,29 @@ class ApiService(private val context: Context) {
             val page: Pair<List<FileItem>, String?> = try {
                 val response = BiBiGynApp.okHttpClient.newCall(request).execute()
                 if (!response.isSuccessful) {
-                    if (pageIndex == 0) return null
+                    // R19B (P1): 401/403 = sessão expirada;
+                    // qualquer outro não-2xx (ex.: 5xx) = falha
+                    // transitória — nunca faz bounce.
+                    if (pageIndex == 0) {
+                        return if (response.code == 401 || response.code == 403) {
+                            FolderResult.SessionExpired
+                        } else {
+                            FolderResult.Transient
+                        }
+                    }
                     break
                 }
                 val body = response.body?.string()
                 if (body == null) {
-                    if (pageIndex == 0) return null
+                    // R19B (P1): corpo nulo = falha transitória.
+                    if (pageIndex == 0) return FolderResult.Transient
                     break
                 }
 
                 // ★ v1.0.8: verificar se resposta é HTML (login redirect) em vez de JSON
                 if (body.trimStart().startsWith("<!DOCTYPE") || body.trimStart().startsWith("<html")) {
-                    if (pageIndex == 0) return null  // sessão expirou — precisa re-login
+                    // R19B (P1): HTML de login = sessão expirada.
+                    if (pageIndex == 0) return FolderResult.SessionExpired
                     break
                 }
 
@@ -124,7 +166,9 @@ class ApiService(private val context: Context) {
                     else json.optString("nextPageToken").takeIf { it.isNotBlank() }
                 items to next
             } catch (e: Exception) {
-                if (pageIndex == 0) return null
+                // R19B (P1): excepção de rede/timeout = falha
+                // transitória — nunca faz bounce.
+                if (pageIndex == 0) return FolderResult.Transient
                 break
             }
             result.addAll(page.first)
@@ -133,7 +177,7 @@ class ApiService(private val context: Context) {
             pageToken = next
             pageIndex++
         }
-        return result
+        return FolderResult.Ok(result)
     }
     
     /**
@@ -403,12 +447,14 @@ class ApiService(private val context: Context) {
      * Ronda 13 Frente C — POST /api/drive/by-id {folderId, pageToken?,
      * pageIndex?} (SANDBOX): lista a pasta pelo ID, com o MESMO
      * envelope do listFolder ({data:{files}, nextPageToken}) e a mesma
-     * paginacao (maxPages; null na falha da pagina 0 = sessa o
-     * expirada / pasta inexistente — o chamador decide; 404 da pasta
-     * vem como ok:false e cai no mesmo null). O `link` de cada ficheiro
+     * paginacao (maxPages; FolderResult na falha da pagina 0 —
+     * SessionExpired = sessao expirada, Transient = falha de rede/
+     * servidor ou pasta inexistente; o chamador decide; 404 da pasta
+     * vem como ok:false e cai em Transient, nunca em bounce). O `link`
+     * de cada ficheiro
      * e cunhado pelo sandbox (ver fileBaseUrl no DetailActivity).
      */
-    suspend fun listFolderById(folderId: String, maxPages: Int = 20): List<FileItem>? {
+    suspend fun listFolderById(folderId: String, maxPages: Int = 20): FolderResult {
         val result = mutableListOf<FileItem>()
         var pageToken: String? = null
         var pageIndex = 0
@@ -420,21 +466,32 @@ class ApiService(private val context: Context) {
             }.toString()
             val (code, body) = sandboxCall("/api/drive/by-id", jsonBody)
             if (code !in 200..299 || body == null) {
-                if (pageIndex == 0) return null
+                // R19B (P1): 401/403 = sessão expirada; código 0
+                // (falha de rede, sem resposta), outro não-2xx ou
+                // corpo nulo = falha transitória.
+                if (pageIndex == 0) {
+                    return if (code == 401 || code == 403) FolderResult.SessionExpired
+                    else FolderResult.Transient
+                }
                 break
             }
             if (body.trimStart().startsWith("<!DOCTYPE") || body.trimStart().startsWith("<html")) {
-                if (pageIndex == 0) return null
+                // R19B (P1): HTML de login = sessão expirada.
+                if (pageIndex == 0) return FolderResult.SessionExpired
                 break
             }
             val json = try {
                 JSONObject(body)
             } catch (_: Exception) {
-                if (pageIndex == 0) return null
+                // R19B (P1): JSON inválido = falha transitória.
+                if (pageIndex == 0) return FolderResult.Transient
                 break
             }
             if (!json.optBoolean("ok", false)) {
-                if (pageIndex == 0) return null
+                // R19B (P1): ok:false com 200 = o servidor
+                // respondeu (a sessão está válida) — ex.: pasta
+                // inexistente. Transitória, nunca bounce.
+                if (pageIndex == 0) return FolderResult.Transient
                 break
             }
             val files = json.optJSONObject("data")?.optJSONArray("files")
@@ -451,7 +508,7 @@ class ApiService(private val context: Context) {
             pageToken = next
             pageIndex++
         }
-        return result
+        return FolderResult.Ok(result)
     }
 
     companion object {
@@ -528,16 +585,18 @@ class ApiService(private val context: Context) {
     suspend fun validateOrReLogin(): Boolean {
         // 1) Probe with a lightweight listFolder call — listing the first
         //    drive root is cheap (one round-trip, JSON-encoded folder list).
-        //    listFolder returns null on (a) non-2xx, (b) HTML body (login
-        //    redirect), or (c) any exception — all 3 mean session is gone.
+        //    R19B (P1): listFolder devolve um FolderResult tipado —
+        //    SessionExpired (401/403 ou HTML de login) ou Transient
+        //    (rede/timeout, outro não-2xx, corpo nulo). Só Ok significa
+        //    sessão válida; o resto tenta o re-login abaixo.
         //    v2.1.6: maxPages = 1 — o probe só precisa saber se a sessão
         //    responde; não precisa listar a pasta inteira.
         val probe = try {
             listFolder("0:", maxPages = 1)
         } catch (_: Exception) {
-            null
+            FolderResult.Transient
         }
-        if (probe != null) return true  // session is valid
+        if (probe is FolderResult.Ok) return true  // session is valid
 
         // 2) Session is invalid — see if we have saved credentials.
         val user = sessionManager.username
