@@ -373,7 +373,9 @@ class LessonGridAdapter(
                 if (pos == RecyclerView.NO_POSITION) return@setOnClickListener
                 onPlayLesson(groups[pos])
             }
-            FocusAnimator.attachCard(binding.lessonCardRoot, TvUtils.isTv(binding.root.context))
+            // R18B (Bug 1 #4): 1.05x na TV — ±9,9dp < gap 12dp,
+            // zero sobreposição; anel 3dp + elevação mantidos.
+            FocusAnimator.attachCard(binding.lessonCardRoot, TvUtils.isTv(binding.root.context), scaleTv = FocusAnimator.SCALE_TV_DENSE)
             TapFeedback.attachPress(binding.lessonCardRoot, TvUtils.isTv(binding.root.context))
         }
     }
