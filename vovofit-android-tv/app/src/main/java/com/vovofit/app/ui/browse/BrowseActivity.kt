@@ -15,6 +15,7 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.vovofit.app.VovoFitApp
 import com.vovofit.app.data.ApiService
+import com.vovofit.app.data.FolderResult
 import com.vovofit.app.data.FileItem
 import com.vovofit.app.databinding.ActivityBrowseBinding
 import com.vovofit.app.ui.player.PlayerActivity
@@ -114,15 +115,28 @@ class BrowseActivity : AppCompatActivity() {
         binding.emptyState.visibility = View.GONE
 
         lifecycleScope.launch {
-            val files = withContext(Dispatchers.IO) { api.listFolder(currentPath) }
+            // R19B (P1+P2): o listFolder agora distingue sessão
+            // expirada de falha transitória. Transitória mostra o
+            // erro com "Tentar de novo" e NUNCA faz bounce;
+            // expirada tenta o re-login silencioso uma vez e só
+            // faz bounce se ele falhar.
+            val result = withContext(Dispatchers.IO) {
+                AuthHelper.listFolderWithRelogin(api, currentPath)
+            }
             binding.loadingView.visibility = View.GONE
 
-            // ★ v2.1.0: Use AuthHelper for consistent expired-session handling.
-            // Direct null check enables Kotlin smart-casting (AuthHelper.isSessionExpired doesn't).
-            if (files == null) {
+            if (result is FolderResult.SessionExpired) {
                 AuthHelper.bounceToLogin(this@BrowseActivity)
                 return@launch
             }
+            if (result is FolderResult.Transient) {
+                // Falha transitória: fica na Browse, mostra o erro
+                // com o botão "Tentar de novo" — nunca o bounce.
+                binding.errorText?.text = "Não foi possível carregar esta pasta. Verifique a conexão e toque em \"Tentar de novo\"."
+                binding.errorState?.visibility = View.VISIBLE
+                return@launch
+            }
+            val files = (result as FolderResult.Ok).files
 
             val adapter = FileAdapter(
                 onFolder = { file -> openFolder(file) },
