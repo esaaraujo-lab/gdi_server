@@ -6,6 +6,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AnimationUtils
 import android.widget.Toast
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.bibigyn.app.R
@@ -54,30 +55,84 @@ class DriveRailAdapter(
     private val onClick: (DriveRailItem) -> Unit
 ) : RecyclerView.Adapter<DriveRailAdapter.VH>() {
 
+    // Ronda 18 Frente C (F2) — ver RailAdapter.updateFocusIds: o
+    // DiffUtil já não re-liga os itens que não mudaram, por isso os
+    // ids de foco D-pad re-aplicam-se aos holders já ligados.
+    private var attachedRecyclerView: RecyclerView? = null
+
+    override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
+        attachedRecyclerView = recyclerView
+    }
+
+    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+        if (attachedRecyclerView === recyclerView) attachedRecyclerView = null
+    }
+
     /**
      * Ronda 17 Frente B — guarda os ids de foco D-pad; o onBind
      * aplica-os aos holders (ver RailAdapter.updateFocusIds).
      */
     fun updateFocusIds(upId: Int) {
+        if (upId == nextFocusUpId) return
         nextFocusUpId = upId
+        val rv = attachedRecyclerView ?: return
+        for (i in 0 until rv.childCount) {
+            val child = rv.getChildAt(i)
+            if (upId != View.NO_ID) child.nextFocusUpId = upId
+        }
     }
 
     /** Atualiza as capas do admin e redesenha os cards. */
-    fun setFeaturedCovers(covers: Map<String, String>) {
+    fun setFeaturedCovers(covers: Map<String, String>): Boolean {
         // Ronda 17 Frente B — sem mudanças, nem redesenha (o
         // fetchAdminDrives corre em cada onResume — gatilho E).
-        if (covers == featuredCovers) return
+        if (covers == featuredCovers) return false
+        val old = featuredCovers
         featuredCovers = covers
-        notifyDataSetChanged()
+        // Ronda 18 Frente C (F2) — só os tiles cuja capa mudou são
+        // re-ligados (a capa só afecta os fixos, por "/N:/"); os do
+        // admin usam a coverUrl do registo, nunca este mapa.
+        var changed = false
+        items.forEachIndexed { index, item ->
+            if (item is DriveRailItem.Fixed) {
+                val key = "/${item.drive.index}:/"
+                if (old[key] != covers[key]) {
+                    notifyItemChanged(index)
+                    changed = true
+                }
+            }
+        }
+        return changed
     }
 
     /** Ronda 10 Frente C — substitui os itens do rail (fixos +
      *  admin) e redesenha. */
-    fun updateItems(newItems: List<DriveRailItem>) {
+    fun updateItems(newItems: List<DriveRailItem>): Boolean {
         // Ronda 17 Frente B — sem mudanças, nem redesenha (ver acima).
-        if (newItems == items) return
+        if (newItems == items) return false
+        val oldItems = items
         items = newItems
-        notifyDataSetChanged()
+        // Ronda 18 Frente C (F2) — DiffUtil em vez de
+        // notifyDataSetChanged() total (ver RailAdapter.updateItems).
+        // Identidade: índice do drive (fixos) / driveId (admin).
+        DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+            override fun getOldListSize(): Int = oldItems.size
+            override fun getNewListSize(): Int = newItems.size
+            override fun areItemsTheSame(oldPos: Int, newPos: Int): Boolean {
+                val old = oldItems[oldPos]
+                val new = newItems[newPos]
+                return when {
+                    old is DriveRailItem.Fixed && new is DriveRailItem.Fixed ->
+                        old.drive.index == new.drive.index
+                    old is DriveRailItem.Admin && new is DriveRailItem.Admin ->
+                        old.drive.driveId == new.drive.driveId
+                    else -> false
+                }
+            }
+            override fun areContentsTheSame(oldPos: Int, newPos: Int): Boolean =
+                oldItems[oldPos] == newItems[newPos]
+        }).dispatchUpdatesTo(this)
+        return true
     }
 
     inner class VH(val binding: ItemDriveCardBinding) : RecyclerView.ViewHolder(binding.root) {
