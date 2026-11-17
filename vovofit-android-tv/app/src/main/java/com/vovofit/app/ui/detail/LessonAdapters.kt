@@ -66,6 +66,25 @@ data class LessonGroup(
  * nunca casa com descendentes (ids opacos); aí vale a igualdade.
  * O % continua a ser o MÁXIMO (maxOf), não uma média.
  *
+ * Ronda 17 Frente B — a % passa a ser uma FRAÇÃO (terminados /
+ * total): 100% SÓ quando TODOS os vídeos conhecidos terminaram. O
+ * numerador conta os vídeos directos (filhos carregados) + os
+ * recents da subárvore que não são directos (dedup por (pasta,
+ * vídeo)); o denominador é a soma dos dois. Só vídeos/áudios —
+ * PDFs e pastas ficam FORA (um PDF não tem watched nem %; se
+ * contasse, uma pasta com PDFs nunca chegaria a 100%). O grupo
+ * "Arquivos avulsos" (__loose__, folderPath = currentPath) casa
+ * recents SÓ por igualdade exacta: o prefixo seria a pasta inteira
+ * e os vídeos das subpastas (grupos próprios) seriam contados
+ * aqui também. Limites honestos ("dos conhecidos"): os recents
+ * são só os últimos 8 — um vídeo terminado fora dos recents e fora
+ * dos filhos directos é invisível (o % fica por defeito, nunca um
+ * 100% falso); em modo por ID o prefixo nunca casa com
+ * descendentes (ids opacos); vídeos a ≥2 níveis nunca abertos não
+ * entram no denominador — o mesmo limite do chip. E 100% exige
+ * filhos carregados (children != null): sem eles o denominador
+ * directo é desconhecido e o cartão diz "Em curso", nunca 100%.
+ *
  * [hasResume] cobre o caso migrado (B2) em que há posição guardada
  * mas ainda não há duração: o % é desconhecido mas o vídeo pode ser
  * retomado — o cartão mostra "Continuar", não "não iniciada".
@@ -74,17 +93,36 @@ data class LessonGroup(
  * "não iniciada" — fica no estado neutro "a carregar…".
  */
 private data class GroupProgress(
+    /** Melhor progresso parcial conhecido (0..100), para "Em curso". */
     val progress: Int,
-    val watched: Boolean,
+    /** Vídeos/áudios conhecidos terminados (flag watched_* por vídeo). */
+    val watchedCount: Int,
+    /** Vídeos/áudios conhecidos no total (denominador da fração). */
+    val totalCount: Int,
     val hasResume: Boolean,
-    val known: Boolean
-)
+    val known: Boolean,
+    /** Filhos carregados (children != null): sem eles o denominador directo é desconhecido. */
+    val childrenLoaded: Boolean
+) {
+    /** % de conclusão da pasta: terminados/total ("dos conhecidos"). */
+    val pct: Int get() = if (totalCount > 0) watchedCount * 100 / totalCount else 0
+    /**
+     * Completa só quando há vídeos conhecidos, todos terminaram E os
+     * filhos estão carregados: sem children o denominador directo é
+     * desconhecido (ex.: grupos além dos 20 do prefetch) e um 100%
+     * por recents seria o mesmo bug de antes, noutra forma.
+     */
+    val isComplete: Boolean
+        get() = totalCount > 0 && watchedCount >= totalCount && childrenLoaded
+}
 
 private fun groupProgress(sm: SessionManager, group: LessonGroup): GroupProgress {
-    val video = group.children?.firstOrNull { it.isVideo || it.isAudio }
-    val directProgress = if (video != null) sm.getResumeProgress(group.folderPath, video.name) else 0
-    val directWatched = if (video != null) sm.isWatched(group.folderPath, video.name) else false
-    val directHasResume = if (video != null) sm.hasResume(group.folderPath, video.name) else false
+    // Vídeos directos conhecidos: os filhos carregados. PDFs e pastas
+    // ficam FORA do denominador (ver o KDoc acima).
+    val directVideos = group.children?.filter { it.isVideo || it.isAudio }.orEmpty()
+    val directWatched = directVideos.count { sm.isWatched(group.folderPath, it.name) }
+    val directProgress = directVideos.maxOfOrNull { sm.getResumeProgress(group.folderPath, it.name) } ?: 0
+    val directHasResume = directVideos.any { sm.hasResume(group.folderPath, it.name) }
     // Ronda 16 Frente B — a pasta vê os recents de TODA a subárvore, não
     // só os da própria pasta: um vídeo numa subpasta (qualquer nível)
     // marca a pasta-mãe como iniciada. O prefixo leva "/" final — o
@@ -95,16 +133,38 @@ private fun groupProgress(sm: SessionManager, group: LessonGroup): GroupProgress
     // opacos — a hierarquia não está no caminho — por isso o prefixo
     // nunca casa com descendentes aí (limite, ver NOTES.md): vale a
     // igualdade exacta para a pasta imediata, como antes.
+    // Ronda 17 Frente B — o grupo sintético "Arquivos avulsos"
+    // (id "__loose__", folderPath = currentPath) casa recents SÓ por
+    // igualdade exacta: o prefixo seria a pasta inteira e os vídeos
+    // das subpastas (grupos próprios) seriam contados aqui também.
+    // Os filhos soltos já estão pré-carregados em children — o
+    // denominador directo cobre-os; os recents só confirmam.
     val folderPrefix = if (group.folderPath.endsWith("/")) group.folderPath else group.folderPath + "/"
-    val recents = sm.getRecents().filter { it.folderPath == group.folderPath || it.folderPath.startsWith(folderPrefix) }
-    val recentProgress = recents.maxOfOrNull { sm.getResumeProgress(it.folderPath, it.videoName) } ?: 0
-    val recentWatched = recents.any { sm.isWatched(it.folderPath, it.videoName) }
-    val recentHasResume = recents.any { sm.hasResume(it.folderPath, it.videoName) }
+    val recents = if (group.folder.id == "__loose__") {
+        sm.getRecents().filter { it.folderPath == group.folderPath }
+    } else {
+        sm.getRecents().filter { it.folderPath == group.folderPath || it.folderPath.startsWith(folderPrefix) }
+    }
+    // Recents que NÃO são vídeos directos: vídeos de subpastas (≥2
+    // níveis) ou de pastas cujos filhos ainda não carregaram. Dedup
+    // por (pasta, vídeo) — um recent do vídeo directo não conta duas
+    // vezes. Os recents são só os últimos 8: um vídeo terminado fora
+    // dos recents e fora dos filhos directos é invisível — o % fica
+    // por defeito (nunca um 100% falso; ver o KDoc acima).
+    val directKeys = directVideos.map { group.folderPath to it.name }.toSet()
+    val extraRecents = recents
+        .filter { (it.folderPath to it.videoName) !in directKeys }
+        .distinctBy { it.folderPath to it.videoName }
+    val extraWatched = extraRecents.count { sm.isWatched(it.folderPath, it.videoName) }
+    val extraProgress = extraRecents.maxOfOrNull { sm.getResumeProgress(it.folderPath, it.videoName) } ?: 0
+    val extraHasResume = extraRecents.any { sm.hasResume(it.folderPath, it.videoName) }
     return GroupProgress(
-        progress = maxOf(directProgress, recentProgress),
-        watched = directWatched || recentWatched,
-        hasResume = directHasResume || recentHasResume,
-        known = group.children != null || recents.isNotEmpty()
+        progress = maxOf(directProgress, extraProgress),
+        watchedCount = directWatched + extraWatched,
+        totalCount = directVideos.size + extraRecents.size,
+        hasResume = directHasResume || extraHasResume,
+        known = group.children != null || recents.isNotEmpty(),
+        childrenLoaded = group.children != null
     )
 }
 
@@ -131,6 +191,21 @@ class LessonListAdapter(
             if (g.expanded) g.children?.forEach { rows.add(LessonChild(g, it)) }
         }
         notifyDataSetChanged()
+    }
+
+    /**
+     * Ronda 17 Frente B — actualiza SÓ os cabeçalhos dos grupos
+     * indicados (ex.: o prefetch entregou-lhes os filhos). Sem
+     * re-bind total: o foco D-pad sobrevive. Os filhos expandidos
+     * não são recriados aqui — um grupo expandido com children a
+     * null é uma corrida estreita (o expandir carrega logo os
+     * filhos); o próximo submit repõe as linhas-filhas.
+     */
+    fun refreshGroups(changed: Collection<LessonGroup>) {
+        for (g in changed) {
+            val row = rows.indexOfFirst { it === g }
+            if (row >= 0) notifyItemChanged(row)
+        }
     }
 
     data class LessonChild(val group: LessonGroup, val item: FileItem)
@@ -185,29 +260,38 @@ class LessonListAdapter(
             is LessonGroup -> {
                 val b = (holder as HeaderVH).binding
                 b.lessonTitle.text = row.folder.name
-                // Ronda 15 Frente B (B4): progresso via groupProgress —
-                // recents em memória + 1.º vídeo dos filhos carregados.
+                // Ronda 17 Frente B — progresso via groupProgress, agora
+                // uma FRAÇÃO (terminados/total): 100% só com tudo
+                // terminado; parcial sem nenhum terminado é "Em curso".
                 val video = row.children?.firstOrNull { it.isVideo || it.isAudio }
                 val gp = groupProgress(sm, row)
                 val progress = gp.progress
-                val watched = gp.watched
+                val watchedCount = gp.watchedCount
+                val pct = gp.pct
+                val complete = gp.isComplete
                 val hasResume = gp.hasResume
                 val known = gp.known
-                b.lessonProgress.progress = if (watched) 100 else progress
+                // Barra: 100 só quando completa; com terminados, a
+                // fração; senão, o melhor parcial (nunca o máximo
+                // como "% concluído" — ver o texto abaixo).
+                val barProgress = if (complete) 100 else if (watchedCount > 0) pct else progress
+                b.lessonProgress.progress = barProgress
                 b.lessonProgressText.text = when {
-                    watched -> "100% concluído"
-                    progress > 0 -> "$progress% concluído"
+                    complete -> "100% concluído"
+                    watchedCount > 0 && pct < 100 -> "$pct% concluído"
+                    watchedCount > 0 -> "Em curso"
+                    progress > 0 -> "Em curso · $progress%"
                     hasResume -> "Continuar"
                     !known -> "a carregar…"
                     else -> "não iniciado"
                 }
-                b.lessonBadge.visibility = if (watched) View.VISIBLE else View.GONE
-                b.lessonContinue.visibility = if ((progress > 0 || hasResume) && !watched) View.VISIBLE else View.GONE
+                b.lessonBadge.visibility = if (complete) View.VISIBLE else View.GONE
+                b.lessonContinue.visibility = if ((progress > 0 || hasResume) && !complete) View.VISIBLE else View.GONE
                 b.lessonContinue.setOnClickListener {
                     if (video != null) onPlayVideo(video, row.folderPath)
                 }
                 b.lessonProgressRow.visibility =
-                    if (watched || progress > 0 || hasResume || !known) View.VISIBLE else View.GONE
+                    if (complete || watchedCount > 0 || progress > 0 || hasResume || !known) View.VISIBLE else View.GONE
                 val meta = buildList {
                     video?.let { add(if (it.isAudio) "áudio" else "vídeo") }
                     val pdfs = row.children?.count { it.isPdf } ?: 0
@@ -270,6 +354,18 @@ class LessonGridAdapter(
         notifyDataSetChanged()
     }
 
+    /**
+     * Ronda 17 Frente B — actualiza SÓ as posições indicadas (ex.:
+     * o prefetch entregou-lhes os filhos). Sem re-bind total: o
+     * foco D-pad sobrevive. As posições são as da lista filtrada
+     * que o adapter detém (ver DetailActivity.refreshPrefetchedGroups).
+     */
+    fun refreshPositions(positions: Collection<Int>) {
+        for (pos in positions) {
+            if (pos in groups.indices) notifyItemChanged(pos)
+        }
+    }
+
     inner class VH(val binding: ItemLessonCardBinding) : RecyclerView.ViewHolder(binding.root) {
         init {
             binding.root.setOnClickListener {
@@ -307,11 +403,13 @@ class LessonGridAdapter(
         val ctx = holder.itemView.context
         val sm = SessionManager.get(ctx)
         val video = group.children?.firstOrNull { it.isVideo || it.isAudio }
-        // Ronda 15 Frente B (B4): ver groupProgress — o grupo pode ter
-        // progresso nos recents mesmo sem filhos carregados.
+        // Ronda 17 Frente B — ver groupProgress: fração
+        // (terminados/total); 100% só com tudo terminado.
         val gp = groupProgress(sm, group)
         val progress = gp.progress
-        val watched = gp.watched
+        val watchedCount = gp.watchedCount
+        val pct = gp.pct
+        val complete = gp.isComplete
         val hasResume = gp.hasResume
         val known = gp.known
         val dur = if (video != null) sm.getResumeDuration(group.folderPath, video.name) else 0L
@@ -343,10 +441,15 @@ class LessonGridAdapter(
             } else {
                 lessonCardChipPdf.visibility = View.GONE
             }
-            lessonCardProgress.progress = if (watched) 100 else progress
+            // Barra: ver o bind da lista (100 só quando completa;
+            // com terminados, a fração; senão, o melhor parcial).
+            val barProgress = if (complete) 100 else if (watchedCount > 0) pct else progress
+            lessonCardProgress.progress = barProgress
             lessonCardProgressText.text = when {
-                watched -> "100% concluída"
-                progress > 0 -> "$progress% concluída"
+                complete -> "100% concluída"
+                watchedCount > 0 && pct < 100 -> "$pct% concluída"
+                watchedCount > 0 -> "Em curso"
+                progress > 0 -> "Em curso · $progress%"
                 hasResume -> "Continuar"
                 !known -> "a carregar…"
                 else -> "não iniciada"
