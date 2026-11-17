@@ -81,6 +81,13 @@ class HomeActivity : AppCompatActivity() {
     private var drivesAdapter: DriveRailAdapter? = null
     private var lastFocusContinue = -1
     private var lastFocusDrives = -1
+    // Ronda 18 Frente C (F3) — geração do restauro de foco/rolagem:
+    // cada restoreHomeFocus() carimba a sua geração e os post{} só
+    // actuam se ainda for a actual. O foco (D-pad) ou um toque depois
+    // do snapshot invalida o restauro pendente — o utilizador já
+    // navegou, não se repõe nada por cima dele.
+    private var focusRestoreGeneration = 0
+    private var pendingFocusRestore: HomeFocusSnapshot? = null
     // Ronda 17 Frente B — rail "Continue assistindo" criado UMA só
     // vez (o onResume só actualiza os dados); último rail focado
     // (0 = nenhum, 1 = Continue, 2 = Drives) + scrollY guardado
@@ -98,15 +105,40 @@ class HomeActivity : AppCompatActivity() {
         if (continuePos != null) {
             lastFocusContinue = continuePos
             lastFocusedRail = 1
+            invalidateStaleFocusRestore(1, continuePos)
             return@OnGlobalFocusChangeListener
         }
         val drivesPos = adapterPositionIn(binding.railDrives, view)
         if (drivesPos != null) {
             lastFocusDrives = drivesPos
             lastFocusedRail = 2
+            invalidateStaleFocusRestore(2, drivesPos)
             return@OnGlobalFocusChangeListener
         }
         lastFocusedRail = 0
+        invalidateStaleFocusRestore(0, -1)
+    }
+
+    /**
+     * Ronda 18 Frente C (F3) — um restauro de foco/rolagem pendente só
+     * vale enquanto o foco não saiu do sítio para onde ele ia repor:
+     * se o utilizador já navegou para outro alvo, o restauro é
+     * cancelado (a geração avança e os post{} agendados ignoram-se
+     * quando correm). O restauro que repõe o próprio alvo não se
+     * cancela a si mesmo.
+     */
+    private fun invalidateStaleFocusRestore(target: Int, pos: Int) {
+        val pending = pendingFocusRestore ?: return
+        if (pending.target == target && pending.pos == pos) return
+        pendingFocusRestore = null
+        focusRestoreGeneration++
+    }
+
+    /** Ronda 18 Frente C (F3) — um toque também invalida o restauro pendente. */
+    private fun invalidatePendingFocusRestore() {
+        if (pendingFocusRestore == null) return
+        pendingFocusRestore = null
+        focusRestoreGeneration++
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -245,19 +277,37 @@ class HomeActivity : AppCompatActivity() {
     /** Repõe foco + rolagem guardados (depois do re-bind, no próximo layout). */
     private fun restoreHomeFocus(snap: HomeFocusSnapshot) {
         if (snap.target == 0 && snap.scrollY <= 0) return
+        // Ronda 18 Frente C (F3) — carimba a geração do restauro: os
+        // post{} abaixo só actuam se a geração ainda for a actual. Um
+        // foco ou toque posterior invalida o restauro pendente (ver
+        // invalidateStaleFocusRestore / dispatchTouchEvent) — o
+        // utilizador já navegou, não se repõe nada por cima dele.
+        focusRestoreGeneration++
+        pendingFocusRestore = snap
+        val gen = focusRestoreGeneration
         binding.homeScroll.post {
+            if (gen != focusRestoreGeneration) return@post
             if (snap.scrollY > 0) binding.homeScroll.scrollTo(0, snap.scrollY)
             val rail = when (snap.target) {
                 1 -> binding.railContinue
                 2 -> binding.railDrives
                 else -> null
-            } ?: return@post
+            }
+            if (rail == null) {
+                pendingFocusRestore = null
+                return@post
+            }
             val count = rail.adapter?.itemCount ?: 0
-            if (count <= 0 || snap.pos < 0) return@post
+            if (count <= 0 || snap.pos < 0) {
+                pendingFocusRestore = null
+                return@post
+            }
             val pos = snap.pos.coerceAtMost(count - 1)
             (rail.layoutManager as? LinearLayoutManager)?.scrollToPosition(pos)
             rail.post {
+                if (gen != focusRestoreGeneration) return@post
                 rail.findViewHolderForAdapterPosition(pos)?.itemView?.requestFocus()
+                pendingFocusRestore = null
             }
         }
     }
@@ -284,6 +334,14 @@ class HomeActivity : AppCompatActivity() {
         val last = lm.findLastVisibleItemPosition()
         if (first == RecyclerView.NO_POSITION || last == RecyclerView.NO_POSITION) return
         for (pos in first..last) recyclerView.adapter?.notifyItemChanged(pos)
+    }
+
+    // Ronda 18 Frente C (F3) — um toque a meio de um restauro
+    // pendente cancela-o: o utilizador tomou conta da página e o
+    // post{} já não deve puxar o foco/rolagem para o snapshot velho.
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.action == MotionEvent.ACTION_DOWN) invalidatePendingFocusRestore()
+        return super.dispatchTouchEvent(ev)
     }
 
     override fun onResume() {
@@ -335,6 +393,16 @@ class HomeActivity : AppCompatActivity() {
             } else {
                 restoreHomeFocusOnResume()
             }
+        } else if (!isFirstResume && savedScrollY > 0) {
+            // Ronda 18 Frente C (F4) — no telemóvel o onResume nunca
+            // repunha o scrollY guardado (só a TV o fazia): depois de
+            // a activity ser recriada (morte do processo) a página
+            // voltava ao topo. Repõe-se uma só vez (o valor é
+            // consumido) e só quando houve recriação — num regresso
+            // normal o ScrollView já guardou a posição sozinho.
+            val y = savedScrollY
+            savedScrollY = 0
+            binding.homeScroll.post { binding.homeScroll.scrollTo(0, y) }
         }
         isFirstResume = false
     }
@@ -366,8 +434,11 @@ class HomeActivity : AppCompatActivity() {
             if (byDrive.isEmpty()) return@launch
             featuredCovers = byDrive
             val snap = captureHomeFocus()
-            drivesAdapter?.setFeaturedCovers(byDrive + serverCoverByIndex)
-            restoreHomeFocus(snap)
+            // Ronda 18 Frente C (F3) — idem fetchAdminDrives: só se
+            // repõe quando alguma capa mudou E o snapshot tem algo
+            // a repor.
+            val coversChanged = drivesAdapter?.setFeaturedCovers(byDrive + serverCoverByIndex) ?: false
+            if (coversChanged && (snap.target != 0 || snap.scrollY > 0)) restoreHomeFocus(snap)
             heroRotator?.updateCoverUrls(byDrive)
         }
     }
@@ -543,8 +614,21 @@ class HomeActivity : AppCompatActivity() {
                 nextFocusUpId = if (hasFeatured) R.id.featured_card else R.id.heroPlay,
                 nextFocusDownId = R.id.railDrives
             ) { item ->
-                lastFocusContinue = railItems.indexOf(item)
-                val match = recents.find { it.videoName == item.title } ?: return@RailAdapter
+                // Ronda 18 Frente C (F1) — a lambda nasce UMA só vez
+                // (firstBuild) mas os recents mudam a cada vídeo visto:
+                // fechar sobre os `recents` da 1.ª construção deixava
+                // o tile morto (find -> null -> return) e podia casar o
+                // vídeo errado (mesmo nome noutra pasta). Lêem-se os
+                // recents ACTUAIS no momento do toque; o casamento é
+                // por (pasta, vídeo) — o nome só é o fallback. A
+                // posição do foco lê-se do adapter actual (não da
+                // lista da 1.ª construção).
+                val currentRecents = SessionManager.get(this).getRecents()
+                val match = currentRecents.find {
+                    it.folderPath == item.file?.folderPath && it.videoName == item.title
+                } ?: currentRecents.find { it.videoName == item.title }
+                    ?: return@RailAdapter
+                lastFocusContinue = continueAdapter?.indexOf(item) ?: -1
                 continueWatching(match.folderPath, match.videoName, item.subtitle)
             }
             binding.railContinue.adapter = continueAdapter
@@ -662,7 +746,7 @@ class HomeActivity : AppCompatActivity() {
         }
         // v1.0.7 — o CARD GRANDE e o alvo do foco na TV: clicavel e
         // focavel, com FocusAnimator.attachCard (anel 3dp da marca +
-        // escala 1.10x + elevacao). Antes so o botao interno era
+        // escala 1.00x na TV (R18B) + elevacao). Antes so o botao interno era
         // focavel e o fundo dele (btn_primary_pill, shape estatico)
         // nao tinha estado de foco — por isso o Elton nao via
         // feedback nenhum no card de "Continuar de onde parou".
@@ -673,7 +757,10 @@ class HomeActivity : AppCompatActivity() {
         binding.featuredCard.setOnClickListener {
             continueWatching(best.folderPath, best.videoName, extractCourseName(best.folderPath))
         }
-        FocusAnimator.attachCard(binding.featuredCard, true)
+        // R18B (Bug 1 #1): 1.00x na TV — o cartão tem 848dp
+        // (largura total); qualquer escala é cortada nas laterais
+        // e invade o overscan. Ficam anel 3dp + elevação 16dp.
+        FocusAnimator.attachCard(binding.featuredCard, true, scaleTv = FocusAnimator.SCALE_TV_NONE)
     }
 
     /**
@@ -1058,8 +1145,12 @@ class HomeActivity : AppCompatActivity() {
             // meio da navegação: repõe-se o foco/rolagem. Sem
             // mudanças, o updateItems nem redesenha (early-return).
             val snap = captureHomeFocus()
-            drivesAdapter?.updateItems(buildDriveRailItems())
-            restoreHomeFocus(snap)
+            // Ronda 18 Frente C (F3) — a lista só se repõe quando
+            // mudou de facto (o updateItems já nem redesenha sem
+            // mudança) E o snapshot tem algo a repor: nada focado +
+            // scroll 0 = nada a fazer, não se agenda post{} nenhum.
+            val changed = drivesAdapter?.updateItems(buildDriveRailItems()) ?: false
+            if (changed && (snap.target != 0 || snap.scrollY > 0)) restoreHomeFocus(snap)
         }
     }
 
