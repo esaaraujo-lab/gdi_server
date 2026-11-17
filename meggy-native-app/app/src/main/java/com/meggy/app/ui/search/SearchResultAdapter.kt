@@ -58,7 +58,9 @@ class SearchResultAdapter(
                     is SearchResult.File -> onFile(item.file)
                 }
             }
-            FocusAnimator.attach(binding.root, TvUtils.isTv(binding.root.context))
+            // R18B (Bug 1 #8): 1.05x na TV — ±22,4dp < 32dp de
+            // respiro, anel inteiro; o halo vai na raiz do layout.
+            FocusAnimator.attach(binding.root, TvUtils.isTv(binding.root.context), scaleTv = FocusAnimator.SCALE_TV_DENSE)
             TapFeedback.attachPress(binding.root, TvUtils.isTv(binding.root.context))
         }
     }
