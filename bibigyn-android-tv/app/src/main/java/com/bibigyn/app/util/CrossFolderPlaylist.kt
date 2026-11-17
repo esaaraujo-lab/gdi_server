@@ -55,7 +55,9 @@ object CrossFolderPlaylist {
     ): Result {
         val parentPath = parentOf(currentPath)
 
-        val siblings = (api.listFolder(parentPath) ?: emptyList())
+        // R19B (P1): FolderResult — best-effort: qualquer falha
+        // (expirada ou transitória) vale como lista vazia aqui.
+        val siblings = api.listFolder(parentPath).orEmpty()
             .filter { it.isFolder }
             .take(MAX_SIBLINGS)
 
@@ -70,7 +72,7 @@ object CrossFolderPlaylist {
                 chunk.map { sib ->
                     async {
                         val subPath = joinPath(parentPath, sib.name)
-                        val files = api.listFolder(subPath) ?: emptyList()
+                        val files = api.listFolder(subPath).orEmpty()
                         subPath to files.filter { it.isVideo && !it.link.isNullOrEmpty() }
                     }
                 }.awaitAll()
