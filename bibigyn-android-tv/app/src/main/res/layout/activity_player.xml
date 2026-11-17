@@ -799,9 +799,10 @@
     <!-- Overlay do modo Descanso (Frente D): TELA CHEIA — último filho
          da raiz, acima de player_container, info_scroll e bottom_nav
          (elevation 16dp > elevation_3 da bottom nav). Toque no overlay
-         sai do descanso; o áudio e o progresso continuam. A dica central
-         é bem fraca de propósito (só para descobrir a saída); se o Elton
-         quiser breu total, apagar o TextView sleep_overlay_hint. -->
+         sai do descanso; o áudio e o progresso continuam. A dica fica
+         em BAIXO (Ronda 16 Frente B2, Elton 20:58 -03) — bem fraca de
+         propósito (só para descobrir a saída) — e não no centro, para
+         o resto da tela ficar breu total. -->
     <FrameLayout
         android:id="@+id/sleep_overlay"
         android:layout_width="0dp"
@@ -820,7 +821,8 @@
             android:id="@+id/sleep_overlay_hint"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginBottom="48dp"
             android:text="🌙 Modo descanso — toque na tela para sair"
             android:textColor="#80FFFFFF"
             android:textSize="14sp" />
