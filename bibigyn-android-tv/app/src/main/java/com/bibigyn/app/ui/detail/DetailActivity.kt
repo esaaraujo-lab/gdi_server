@@ -7,6 +7,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewTreeObserver
 import android.widget.LinearLayout
@@ -155,6 +156,11 @@ class DetailActivity : AppCompatActivity() {
     // global de foco (globalFocusListener, registado no onResume).
     private var lastFocusedLessonPos = -1
     private var lastFocusedTarget = 0
+    // Ronda 18 Frente C (F3) — geração do restauro de foco/rolagem
+    // (o mesmo mecanismo da Home): os post{} de restoreDetailFocus
+    // só actuam se a geração ainda for a actual.
+    private var focusRestoreGeneration = 0
+    private var pendingDetailRestore: DetailFocusSnapshot? = null
     private var savedScrollY = 0
     private var isFirstResume = true
     private var focusObserver: ViewTreeObserver? = null
@@ -165,15 +171,37 @@ class DetailActivity : AppCompatActivity() {
         if (lessonPos != null) {
             lastFocusedLessonPos = lessonPos
             lastFocusedTarget = 1
+            invalidateStaleDetailRestore(1, lessonPos)
             return@OnGlobalFocusChangeListener
         }
         val railPos = adapterPositionIn(binding.railContinue, view)
         if (railPos != null) {
             lastFocusedContinuePos = railPos
             lastFocusedTarget = 2
+            invalidateStaleDetailRestore(2, railPos)
             return@OnGlobalFocusChangeListener
         }
         lastFocusedTarget = 0
+        invalidateStaleDetailRestore(0, -1)
+    }
+
+    /**
+     * Ronda 18 Frente C (F3) — idem HomeActivity
+     * (invalidateStaleFocusRestore): um restauro pendente só vale
+     * enquanto o foco não saiu do sítio para onde ele ia repor.
+     */
+    private fun invalidateStaleDetailRestore(target: Int, pos: Int) {
+        val pending = pendingDetailRestore ?: return
+        if (pending.target == target && pending.pos == pos) return
+        pendingDetailRestore = null
+        focusRestoreGeneration++
+    }
+
+    /** Ronda 18 Frente C (F3) — um toque também invalida o restauro pendente. */
+    private fun invalidatePendingDetailRestore() {
+        if (pendingDetailRestore == null) return
+        pendingDetailRestore = null
+        focusRestoreGeneration++
     }
 
     private enum class Tab { SUMMARY, LESSONS, QUESTIONS, FLASHCARDS }
@@ -260,13 +288,16 @@ class DetailActivity : AppCompatActivity() {
         // lupa não tinham NENHUM feedback de foco (fundos estáticos,
         // sem FocusAnimator): o D-pad chegava lá sem se ver onde
         // estava. Escala 1.10× + elevação (attach) e anel via
+        // R18B (Bug 1 #11): as 4 abas passam a 1.00× (gap 0 —
+        // qualquer escala sobrepõe o vizinho); ficam anel de
+        // fundo + elevação. FAB/fav/lupa NÃO mudam (isolados).
         // seletores com estado focado (abas e lupa:
         // focus_ring_transparent; play: btn_play_circle). Só TV.
         if (isTv) {
-            FocusAnimator.attach(binding.tabResumo, true)
-            FocusAnimator.attach(binding.tabAulas, true)
-            FocusAnimator.attach(binding.tabQuestoes, true)
-            FocusAnimator.attach(binding.tabFlashcards, true)
+            FocusAnimator.attach(binding.tabResumo, true, scaleTv = FocusAnimator.SCALE_TV_NONE)
+            FocusAnimator.attach(binding.tabAulas, true, scaleTv = FocusAnimator.SCALE_TV_NONE)
+            FocusAnimator.attach(binding.tabQuestoes, true, scaleTv = FocusAnimator.SCALE_TV_NONE)
+            FocusAnimator.attach(binding.tabFlashcards, true, scaleTv = FocusAnimator.SCALE_TV_NONE)
             FocusAnimator.attach(binding.heroPlayFab, true)
             FocusAnimator.attach(binding.heroFav, true)
             FocusAnimator.attach(binding.headerSearch, true)
@@ -352,19 +383,35 @@ class DetailActivity : AppCompatActivity() {
     /** Repõe foco + rolagem guardados (depois do re-bind, no próximo layout). */
     private fun restoreDetailFocus(snap: DetailFocusSnapshot) {
         if (snap.target == 0 && snap.scrollY <= 0) return
+        // Ronda 18 Frente C (F3) — carimba a geração do restauro (ver
+        // HomeActivity.restoreHomeFocus): os post{} só actuam se a
+        // geração ainda for a actual.
+        focusRestoreGeneration++
+        pendingDetailRestore = snap
+        val gen = focusRestoreGeneration
         binding.detailScroll.post {
+            if (gen != focusRestoreGeneration) return@post
             if (snap.scrollY > 0) binding.detailScroll.scrollTo(0, snap.scrollY)
             val rail = when (snap.target) {
                 1 -> binding.recycler
                 2 -> binding.railContinue
                 else -> null
-            } ?: return@post
+            }
+            if (rail == null) {
+                pendingDetailRestore = null
+                return@post
+            }
             val count = rail.adapter?.itemCount ?: 0
-            if (count <= 0 || snap.pos < 0) return@post
+            if (count <= 0 || snap.pos < 0) {
+                pendingDetailRestore = null
+                return@post
+            }
             val pos = snap.pos.coerceAtMost(count - 1)
             (rail.layoutManager as? LinearLayoutManager)?.scrollToPosition(pos)
             rail.post {
+                if (gen != focusRestoreGeneration) return@post
                 rail.findViewHolderForAdapterPosition(pos)?.itemView?.requestFocus()
+                pendingDetailRestore = null
             }
         }
     }
@@ -398,6 +445,13 @@ class DetailActivity : AppCompatActivity() {
         val query = binding.lessonSearch.text?.toString().orEmpty()
         return if (query.isBlank()) lessonGroups
             else lessonGroups.filter { it.folder.name.contains(query, ignoreCase = true) }
+    }
+
+    // Ronda 18 Frente C (F3) — um toque a meio de um restauro
+    // pendente cancela-o (ver HomeActivity.dispatchTouchEvent).
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.action == MotionEvent.ACTION_DOWN) invalidatePendingDetailRestore()
+        return super.dispatchTouchEvent(ev)
     }
 
     override fun onResume() {
@@ -436,6 +490,14 @@ class DetailActivity : AppCompatActivity() {
             } else {
                 restoreDetailFocusOnResume()
             }
+        } else if (!isFirstResume && savedScrollY > 0) {
+            // Ronda 18 Frente C (F4) — idem HomeActivity: no telemóvel
+            // o onResume nunca repunha o scrollY guardado; depois de
+            // a activity ser recriada a página voltava ao topo.
+            // Repõe-se uma só vez (o valor é consumido).
+            val y = savedScrollY
+            savedScrollY = 0
+            binding.detailScroll.post { binding.detailScroll.scrollTo(0, y) }
         }
         isFirstResume = false
     }
@@ -517,7 +579,16 @@ class DetailActivity : AppCompatActivity() {
             nextFocusDownId = R.id.recycler
         ) { item ->
             lastFocusedContinuePos = railItems.indexOf(item)
-            val match = driveRecents.find { it.videoName == item.title } ?: return@RailAdapter
+            // Ronda 18 Frente C (F1) — como na Home: os recents
+            // lêem-se no momento do toque (não os da construção do
+            // adapter) e o casamento é por (pasta, vídeo) — o nome só
+            // é o fallback (o mesmo "video.mp4" existe em várias
+            // subpastas do mesmo drive).
+            val currentRecents = SessionManager.get(this).getRecents()
+            val match = currentRecents.find {
+                it.folderPath == item.file?.folderPath && it.videoName == item.title
+            } ?: currentRecents.find { it.videoName == item.title }
+                ?: return@RailAdapter
             continueWatching(match.folderPath, match.videoName, item.subtitle)
         }
     }
@@ -1609,7 +1680,10 @@ class DetailActivity : AppCompatActivity() {
         // Ronda 15 Frente B (B3): o prefetch entregou filhos — o chip
         // do hero pode sair de "a calcular…".
         updateProgressChip(allFiles)
-        restoreDetailFocus(snap)
+        // Ronda 18 Frente C (F3) — o prefetch é uma conclusão
+        // assíncrona: sem grupos re-ligados não há nada a repor e
+        // não se agenda post{} nenhum.
+        if (positions.isNotEmpty()) restoreDetailFocus(snap)
     }
 
     // Frente R4B — chips Todos / Vídeos / Materiais (lista plana,
