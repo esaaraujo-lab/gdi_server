@@ -66,7 +66,10 @@ class FileAdapter(
                 val item = getItem(pos)
                 if (item.isFolder) onFolder(item) else onFile(item)
             }
-            FocusAnimator.attachCard(binding.cardRoot, TvUtils.isTv(binding.root.context))
+            // R18B (Bug 1 #7): 1.05x na TV — a 1.10x a folga era
+            // só 1,1dp (e a vertical já tocava o vizinho); 1.05x dá
+            // 5,5dp / 4,9dp de folga, simétrico com a grade #4.
+            FocusAnimator.attachCard(binding.cardRoot, TvUtils.isTv(binding.root.context), scaleTv = FocusAnimator.SCALE_TV_DENSE)
             TapFeedback.attachPress(binding.cardRoot, TvUtils.isTv(binding.root.context))
         }
     }
