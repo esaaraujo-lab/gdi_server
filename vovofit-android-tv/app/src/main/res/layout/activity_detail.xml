@@ -202,17 +202,6 @@
                     android:textSize="@dimen/text_chip" />
 
                 <TextView
-                    android:id="@+id/chipFolders"
-                    android:layout_width="wrap_content"
-                    android:layout_height="@dimen/chip_height"
-                    android:layout_marginEnd="@dimen/spacing_sm"
-                    android:background="@drawable/chip_outline"
-                    android:gravity="center"
-                    android:paddingHorizontal="@dimen/spacing_md"
-                    android:textColor="@color/md_on_surface"
-                    android:textSize="@dimen/text_chip" />
-
-                <TextView
                     android:id="@+id/chipProgress"
                     android:layout_width="wrap_content"
                     android:layout_height="@dimen/chip_height"
