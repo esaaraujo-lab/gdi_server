@@ -21,17 +21,29 @@ import com.bibigyn.app.R
  * o drawable `tile_focus_border` como background ficaria escondido
  * atrás do card. Em linhas (LinearLayout/FrameLayout) o anel vem do
  * background `tile_focus_border` (state_focused).
+ *
+ * R18B (Bug 1) — escala por tile na TV: `attach`/`attachCard`
+ * aceitam `scaleTv` (só o ramo TV; o telemóvel fica a 1.06×).
+ * `SCALE_TV_DENSE` (1.05×) para rails/grades densos onde 1.10×
+ * sobrepõe o vizinho; `SCALE_TV_NONE` (1.00×) onde qualquer
+ * escala é cortada ou sobrepõe (destaque de largura total,
+ * abas com gap 0). Anel 3dp + elevação NÃO mudam — onde a escala
+ * vai a 1.00× ficam sempre DOIS sinais de foco (§5.1).
  */
 object FocusAnimator {
     private const val DURATION_MS = 180L
     private const val SCALE_TV = 1.10f
     private const val SCALE_PHONE = 1.06f
+    /** R18B: escala TV para tiles densos (1.05×, anel + elevação mantidos). */
+    const val SCALE_TV_DENSE = 1.05f
+    /** R18B: sem escala na TV (1.00×; anel 3dp + elevação são os sinais). */
+    const val SCALE_TV_NONE = 1.00f
     private const val ELEV_TV_DP = 16f
     private const val ELEV_PHONE_DP = 8f
 
     /** Liga a animação de foco a uma view genérica (linhas, botões). */
-    fun attach(view: View, isTv: Boolean) {
-        val scale = if (isTv) SCALE_TV else SCALE_PHONE
+    fun attach(view: View, isTv: Boolean, scaleTv: Float? = null) {
+        val scale = if (isTv) (scaleTv ?: SCALE_TV) else SCALE_PHONE
         val elevDp = if (isTv) ELEV_TV_DP else ELEV_PHONE_DP
         val density = view.resources.displayMetrics.density
         view.setOnFocusChangeListener { v, hasFocus ->
@@ -43,8 +55,8 @@ object FocusAnimator {
      * Liga a animação de foco a um MaterialCardView, incluindo o anel:
      * stroke 3dp na cor da marca + fundo `tile_bg_focused` quando focado.
      */
-    fun attachCard(card: MaterialCardView, isTv: Boolean) {
-        val scale = if (isTv) SCALE_TV else SCALE_PHONE
+    fun attachCard(card: MaterialCardView, isTv: Boolean, scaleTv: Float? = null) {
+        val scale = if (isTv) (scaleTv ?: SCALE_TV) else SCALE_PHONE
         val elevDp = if (isTv) ELEV_TV_DP else ELEV_PHONE_DP
         val density = card.resources.displayMetrics.density
         val ringColor = ContextCompat.getColor(card.context, R.color.tile_focus_ring)
