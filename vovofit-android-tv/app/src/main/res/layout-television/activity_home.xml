@@ -19,6 +19,7 @@
     android:paddingBottom="@dimen/tv_margin_bottom">
 
     <ScrollView
+        android:id="@+id/homeScroll"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
