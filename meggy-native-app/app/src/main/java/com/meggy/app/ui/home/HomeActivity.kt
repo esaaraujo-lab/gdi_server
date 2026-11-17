@@ -24,6 +24,7 @@ import com.meggy.app.MeggyApp
 import com.meggy.app.R
 import com.meggy.app.data.AdminDrive
 import com.meggy.app.data.ApiService
+import com.meggy.app.data.FolderResult
 import com.meggy.app.data.DriveItem
 import com.meggy.app.data.FileItem
 import com.meggy.app.data.HeroItem
@@ -583,7 +584,7 @@ class HomeActivity : AppCompatActivity() {
             showHeroCover(item)
             lifecycleScope.launch {
                 val thumb = withContext(Dispatchers.IO) {
-                    runCatching { api.listFolder(item.drivePath, 1) }.getOrNull()
+                    api.listFolder(item.drivePath, 1).filesOrNull
                         ?.firstOrNull { (it.isVideo || it.isAudio) && !it.thumbnailLink.isNullOrBlank() }
                         ?.thumbnailLink
                 }
@@ -738,7 +739,7 @@ class HomeActivity : AppCompatActivity() {
         lifecycleScope.launch {
             for (r in missing) {
                 val thumb = withContext(Dispatchers.IO) {
-                    runCatching { api.listFolder(r.folderPath) }.getOrNull()
+                    api.listFolder(r.folderPath).filesOrNull
                         ?.firstOrNull { it.name == r.videoName }?.thumbnailLink
                 }
                 if (thumb.isNullOrBlank()) continue
@@ -960,13 +961,25 @@ class HomeActivity : AppCompatActivity() {
         ).show()
 
         lifecycleScope.launch {
-            val files = withContext(Dispatchers.IO) { api.listFolder(folderPath) }
-
-            // ★ v2.1.0: Use AuthHelper for consistent expired-session handling.
-            if (files == null) {
+            // R19B (P1+P2): o listFolder agora distingue sessão
+            // expirada de falha transitória. Transitória mostra erro
+            // e NUNCA faz bounce; expirada tenta o re-login
+            // silencioso uma vez e só faz bounce se ele falhar.
+            val result = withContext(Dispatchers.IO) {
+                AuthHelper.listFolderWithRelogin(api, folderPath)
+            }
+            if (result is FolderResult.SessionExpired) {
                 AuthHelper.bounceToLogin(this@HomeActivity)
                 return@launch
             }
+            if (result is FolderResult.Transient) {
+                com.google.android.material.snackbar.Snackbar.make(
+                    binding.root, "Não foi possível carregar o vídeo. Verifique a conexão e tente de novo.",
+                    com.google.android.material.snackbar.Snackbar.LENGTH_LONG
+                ).show()
+                return@launch
+            }
+            val files = (result as FolderResult.Ok).files
 
             if (files.isNotEmpty()) {
                 val clickedVideo = files.find { it.name == videoName && (it.isVideo || it.isAudio) }
