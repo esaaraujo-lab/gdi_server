@@ -501,7 +501,6 @@ class DetailActivity : AppCompatActivity() {
                 // depois do buildLessonGroups + prefetch (refreshLessonList).
                 binding.chipProgress.text = "a calcular…"
             }
-            binding.chipFolders.text = "$folderCount pastas"
 
             // Resumo: descrição gerada / provisória / branco (00:21).
             loadLessonDescription(files)
@@ -802,6 +801,14 @@ class DetailActivity : AppCompatActivity() {
      * filhos. Cursos com >20 grupos ficam em "a calcular…" (o
      * prefetch pára nos 20): os cartões mostram o progresso real na
      * mesma, via recents (B4).
+     *
+     * Ronda 16 Frente B (opção (c) do diagnóstico): com 0 vídeos
+     * terminados mas um resume na subárvore (recents por prefixo, o
+     * mesmo filtro do herói), o chip mostra "Em curso · N%" com o
+     * melhor progresso parcial — nunca "0% concluído" com progresso
+     * real. Sem resume na subárvore, o comportamento é o actual.
+     * Limite honesto: o denominador continua a não conhecer vídeos
+     * a ≥2 níveis — o chip não inventa um % exacto da subárvore.
      */
     private fun updateProgressChip(files: List<FileItem>) {
         val sm = SessionManager.get(this)
@@ -827,6 +834,22 @@ class DetailActivity : AppCompatActivity() {
             }
         }
         val pct = if (total > 0) watched * 100 / total else 0
+        if (watched > 0) {
+            binding.chipProgress.text = "$pct% concluído"
+            return
+        }
+        // Ronda 16 Frente B (opção (c)): 0 terminados mas um resume
+        // na subárvore (recents por prefixo, o mesmo filtro do herói)
+        // — o chip mostra o melhor progresso parcial conhecido, nunca
+        // "0% concluído" com progresso real. Sem resume, cai no
+        // comportamento actual. Se o resume não tem duração (posição
+        // migrada), o % é desconhecido e o chip diz só "Em curso".
+        val subtreeRecents = sm.getRecents().filter { it.folderPath.startsWith(currentPath) }
+        val subtreeBest = subtreeRecents.maxOfOrNull { sm.getResumeProgress(it.folderPath, it.videoName) } ?: 0
+        if (subtreeRecents.any { sm.hasResume(it.folderPath, it.videoName) }) {
+            binding.chipProgress.text = if (subtreeBest > 0) "Em curso · $subtreeBest%" else "Em curso"
+            return
+        }
         binding.chipProgress.text = "$pct% concluído"
     }
 
