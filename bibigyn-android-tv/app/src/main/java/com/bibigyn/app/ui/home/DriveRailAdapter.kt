@@ -48,14 +48,25 @@ class DriveRailAdapter(
      * (mesmo motivo do RailAdapter: o rail de cima pode estar fora
      * do viewport do ScrollView quando o foco está no de baixo).
      */
-    private val nextFocusUpId: Int = View.NO_ID,
-    private val nextFocusDownId: Int = View.NO_ID,
+    private var nextFocusUpId: Int = View.NO_ID,
+    private var nextFocusDownId: Int = View.NO_ID,
     // Build-fix 2.7.16: onClick em ULTIMO (mesmo motivo do RailAdapter).
     private val onClick: (DriveRailItem) -> Unit
 ) : RecyclerView.Adapter<DriveRailAdapter.VH>() {
 
+    /**
+     * Ronda 17 Frente B — guarda os ids de foco D-pad; o onBind
+     * aplica-os aos holders (ver RailAdapter.updateFocusIds).
+     */
+    fun updateFocusIds(upId: Int) {
+        nextFocusUpId = upId
+    }
+
     /** Atualiza as capas do admin e redesenha os cards. */
     fun setFeaturedCovers(covers: Map<String, String>) {
+        // Ronda 17 Frente B — sem mudanças, nem redesenha (o
+        // fetchAdminDrives corre em cada onResume — gatilho E).
+        if (covers == featuredCovers) return
         featuredCovers = covers
         notifyDataSetChanged()
     }
@@ -63,6 +74,8 @@ class DriveRailAdapter(
     /** Ronda 10 Frente C — substitui os itens do rail (fixos +
      *  admin) e redesenha. */
     fun updateItems(newItems: List<DriveRailItem>) {
+        // Ronda 17 Frente B — sem mudanças, nem redesenha (ver acima).
+        if (newItems == items) return
         items = newItems
         notifyDataSetChanged()
     }
@@ -110,6 +123,10 @@ class DriveRailAdapter(
     }
 
     override fun onBindViewHolder(holder: VH, position: Int) {
+        // Ronda 17 Frente B — os ids de foco D-pad re-aplicam-se a
+        // cada bind (o updateFocusIds da Home só os guarda).
+        if (nextFocusUpId != View.NO_ID) holder.itemView.nextFocusUpId = nextFocusUpId
+        if (nextFocusDownId != View.NO_ID) holder.itemView.nextFocusDownId = nextFocusDownId
         // Ronda 10 Frente C — o tile fixo e o tile do admin
         // partilham o layout, mas a capa e o favorito diferem
         // (ver bindFixed / bindAdmin).
