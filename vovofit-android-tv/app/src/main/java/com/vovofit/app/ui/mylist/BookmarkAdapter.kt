@@ -29,7 +29,9 @@ class BookmarkAdapter(
                 if (pos == RecyclerView.NO_POSITION) return@setOnClickListener
                 onOpen(getItem(pos))
             }
-            FocusAnimator.attach(binding.root, TvUtils.isTv(binding.root.context))
+            // R18B (Bug 1 #9): 1.05x na TV (latente — sem ponto
+            // de entrada na TV; a thumb sobrevive ao corte).
+            FocusAnimator.attach(binding.root, TvUtils.isTv(binding.root.context), scaleTv = FocusAnimator.SCALE_TV_DENSE)
             TapFeedback.attachPress(binding.root, TvUtils.isTv(binding.root.context))
         }
     }
