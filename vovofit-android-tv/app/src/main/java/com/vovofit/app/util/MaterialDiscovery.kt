@@ -103,7 +103,9 @@ object MaterialDiscovery {
         for (sub in subfolders) {
             val subPath = if (byId) ApiService.byIdPath(sub.id)
                 else joinPath(folderPath, sub.name)
-            val files = runCatching { api.listFolder(subPath) }.getOrNull() ?: continue
+            // R19B (P1): FolderResult — best-effort: falha vale
+            // como sem ficheiros (continua sem os extras).
+            val files = api.listFolder(subPath).filesOrNull ?: continue
             if (add(files, withTrailingSlash(subPath))) break
             if (found.size >= MAX_EXTRA_FILES) break
         }
@@ -114,7 +116,7 @@ object MaterialDiscovery {
         if (byId) return found
         val parent = LessonDescription.parentPath(folderPath)
         if (parent == "/" || isDriveRoot(parent)) return found
-        val parentFiles = runCatching { api.listFolder(parent) }.getOrNull() ?: return found
+        val parentFiles = api.listFolder(parent).filesOrNull ?: return found
         // Passo 2 — ficheiros de material DIRETAMENTE na pasta pai
         // (o site, M9: gdiListAllFiles da pasta pai).
         add(parentFiles, withTrailingSlash(parent))
@@ -128,7 +130,7 @@ object MaterialDiscovery {
             .take(MAX_SIBLINGS_TRIED)
         for (sib in siblings) {
             val sibPath = joinPath(parent, sib.name)
-            val files = runCatching { api.listFolder(sibPath) }.getOrNull() ?: continue
+            val files = api.listFolder(sibPath).filesOrNull ?: continue
             if (add(files, withTrailingSlash(sibPath))) break
             if (found.size >= MAX_EXTRA_FILES) break
         }
