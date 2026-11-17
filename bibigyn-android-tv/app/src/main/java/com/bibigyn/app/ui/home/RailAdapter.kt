@@ -54,7 +54,7 @@ data class RailItem(
 )
 
 class RailAdapter(
-    private val items: List<RailItem>,
+    private var items: List<RailItem>,
     /**
      * Frente A (TV) — roteamento D-pad explícito dos cards do rail.
      * O FocusFinder ignora vistas fora do viewport do ScrollView
@@ -62,13 +62,35 @@ class RailAdapter(
      * UP/DOWN entre rails precisa destes ids. NO_ID = roteamento
      * padrão (o host que não passa nada não muda nada).
      */
-    private val nextFocusUpId: Int = View.NO_ID,
-    private val nextFocusDownId: Int = View.NO_ID,
+    private var nextFocusUpId: Int = View.NO_ID,
+    private var nextFocusDownId: Int = View.NO_ID,
     // Build-fix 2.7.16: onClick em ULTIMO — os call sites usam trailing
     // lambda; com onClick em 2o a lambda ligava a nextFocusDownId (Int)
     // e onClick ficava sem valor (compileReleaseKotlin falhou na 2.7.15).
     private val onClick: (RailItem) -> Unit
 ) : RecyclerView.Adapter<RailAdapter.VH>() {
+
+    /**
+     * Ronda 17 Frente B — substitui os itens sem recriar o adapter:
+     * sem mudanças, nem redesenha (a Home chama isto em cada
+     * onResume — re-desenhar sempre era o gatilho A). Devolve true
+     * quando houve mudança real (a Home repõe o foco nesse caso).
+     * [updateFocusIds] só guarda os ids — o onBind aplica-os aos
+     * holders (os já criados apanham-nos no próximo bind, que o
+     * updateItems provoca quando há mudança; sem mudança nos dados
+     * os ids também não mudam, porque derivam dos mesmos recents).
+     */
+    fun updateItems(newItems: List<RailItem>): Boolean {
+        if (newItems == items) return false
+        items = newItems
+        notifyDataSetChanged()
+        return true
+    }
+
+    fun updateFocusIds(upId: Int, downId: Int) {
+        nextFocusUpId = upId
+        nextFocusDownId = downId
+    }
 
     inner class VH(val binding: ItemRailCardBinding) : RecyclerView.ViewHolder(binding.root) {
         init {
@@ -125,6 +147,10 @@ class RailAdapter(
 
     override fun onBindViewHolder(holder: VH, position: Int) {
         val item = items[position]
+        // Ronda 17 Frente B — os ids de foco D-pad re-aplicam-se a
+        // cada bind (o updateFocusIds da Home só os guarda).
+        if (nextFocusUpId != View.NO_ID) holder.itemView.nextFocusUpId = nextFocusUpId
+        if (nextFocusDownId != View.NO_ID) holder.itemView.nextFocusDownId = nextFocusDownId
         val res = holder.itemView.resources
         val ctx = holder.itemView.context
 
