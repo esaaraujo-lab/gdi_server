@@ -732,6 +732,31 @@
     }catch(_){}
     return null;
   }
+  // ★ v2.15.44 (contagens /cursos + detalhe) — START
+  // DIAGNÓSTICO (provado ao vivo, meuc 2026-11-20): o cartão não-manual e
+  //   o detalhe mostravam a contagem LOCAL (totalLessons do pdfCount/scan
+  //   local — ex.: 60) em vez do total do D1 do unificado (557 pastas de
+  //   aula p/ o mesmo curso). O enriquecimento do renderCursos só gravava
+  //   c.total; o ramo não-manual do cartão lê c.totalLessons
+  //   (_cardTotal = c.totalLessons || c.lessons.size) e o detalhe parte
+  //   do mesmo objecto — o total do servidor não chegava a nenhum deles.
+  // FIX: aplicar o total do unificado (kind 'course') aos DOIS campos:
+  //   c.total = t (como já fazia o loop do renderCursos) e
+  //   c.totalLessons = max(local, t) — o total do servidor é a definição
+  //   canónica de "aulas" (nº de pastas de aula no D1); o max() nunca
+  //   baixa um totalLessons local maior (scan local mais recente que o
+  //   D1). Total 0 no mapa → c.total = 0 e o totalLessons local fica: a
+  //   regra "Em breve / Aulas em indexação" mantém-se intacta. Sem
+  //   entrada no mapa (ou mapa por carregar) → null, objecto intacto.
+  function __applyUnifiedTotal21544(c){
+    if(!c||!c.key) return null;
+    const t=__unifiedCourseTotalFor(c.key);
+    if(t==null) return null;
+    c.total=t;
+    if((c.totalLessons||0)<t) c.totalLessons=t;
+    return t;
+  }
+  // ★ v2.15.44 (contagens /cursos + detalhe) — END
   // ★ v2.15.32 (C — gémeo órfão): nome normalizado p/ comparar o curso
   //   local com um concurso/destaque — o concurso não tem coursePath, por
   //   isso o match é por nome (acentos fora, só [a-z0-9]): "TJSP Oficial
@@ -1011,7 +1036,10 @@
     // ★ v2.15.7 (P8): enriquece o curso LOCAL com o total D1 do unificado
     //   (v. __unifiedCourseTotals em loadUnifiedExtras) — o cartão e o
     //   detalhe passam a mostrar o mesmo total da prévia.
-    for (const c of cs) { const t = __unifiedCourseTotalFor(c.key); if (t != null) c.total = t; const cv = __unifiedCourseCoverFor(c.key); if (cv) c.coverUrl = cv; }
+    // ★ v2.15.44: o enriquecimento passa por __applyUnifiedTotal21544 —
+    //   grava c.total E c.totalLessons (max c/ o local); só c.total não
+    //   chegava ao ramo não-manual do cartão nem ao total do detalhe.
+    for (const c of cs) { __applyUnifiedTotal21544(c); const cv = __unifiedCourseCoverFor(c.key); if (cv) c.coverUrl = cv; }
     // ★ v2.15.32 (B): cursos do D1 sem gémeo manual entram na grade.
     //   Chave de comparação = caminho canónico em minúsculas (o
     //   rebase legado /11: → /9: vive em __canonCoursePath): um
@@ -2316,6 +2344,13 @@
   }
   // ★ Painel de detalhes do curso (abre ao clicar no card)
   function openCourseDetail(box,c){
+    // ★ v2.15.44: aplica já o total do unificado a este objecto — o
+    //   detalhe pode ser aberto com um objecto que NÃO passou pelo
+    //   enriquecimento do renderCursos (collectCourses novo vindo de
+    //   outra vista) e tanto o total provisório (abaixo) como o max()
+    //   final lêem c.total/c.totalLessons daqui. No fluxo normal
+    //   (cartão → detalhe) é idempotente; sem mapa carregado é no-op.
+    __applyUnifiedTotal21544(c);
     const name=cleanCourseName(c.key);
     const drive=driveNameOf(c.key);
     // ★ FIX 3b (Task 14): usa totalLessons real (do manual course) ao invés de c.lessons.size
