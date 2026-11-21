@@ -1015,6 +1015,82 @@
     return {answered:false,wrong:false};
   };
 
+  // ═══ ★ v2.15.53 — PONTE do BANCO DE FLASHCARDS (espelho da ponte
+  //   __gdiBank*21548 das questões): a prática do banco (deck em
+  //   shell.js) regista no SRS de CARTÕES local (gdi-cards-v1) — o
+  //   MESMO armazém dos "flashcards das erradas" e da Área do Aluno
+  //   (meggy-flashcards.js) — e avalia com o SM-2 existente
+  //   (window.gdiGradeCard, gdi-core.js): Sei = qualidade 3 (bom),
+  //   Não sei = qualidade 1 (de novo). A identidade de um cartão do
+  //   banco é a sua FRENTE normalizada — os cartões nascidos de
+  //   erros de questões guardam 'Q: ' + enunciado truncado, por isso
+  //   a dedup compara as duas formas.
+  const _cardBankKey21553 = (front) => bankNorm21548(front || '');
+  const _cardBankAltKey21553 = (front) => bankNorm21548('Q: ' + String(front || '').slice(0, 200));
+  const _cardBankFind21553 = (cards, front) => {
+    const k = _cardBankKey21553(front), ka = _cardBankAltKey21553(front);
+    return (cards || []).find(c => _cardBankKey21553(c.f) === k || _cardBankKey21553(c.f) === ka) || null;
+  };
+  // Importa (dedup por frente) um cartão do banco p/ gdi-cards-v1.
+  //   path = disciplina (o SRS agrupa por path); topic viaja no
+  //   cartão. Devolve Promise<id|null>.
+  window.__gdiCardBankImport21553 = function (card) {
+    if (!card || !String(card.front || '').trim()) return Promise.resolve(null);
+    return _cardsRMW(function (cards) {
+      const found = _cardBankFind21553(cards, card.front);
+      if (found) return found.id;
+      const nc = {
+        id: Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+        f: String(card.front || ''), b: String(card.back || ''),
+        path: String(card.disciplina || 'Banco de flashcards'),
+        topic: String(card.topic || ''),
+        at: Date.now(), box: 0, due: Date.now() + 86400000
+      };
+      cards.push(nc);
+      return nc.id;
+    });
+  };
+  // Avalia um cartão do banco: garante a importação (UMA escrita via
+  //   _cardsRMW) e aplica o SM-2 existente. Sem gdiGradeCard (módulo
+  //   da Área do Aluno ausente), o cartão fica importado com due
+  //   amanhã — o mesmo comportamento de meggy-flashcards.js.
+  window.__gdiCardBankGrade21553 = function (card, knew) {
+    if (!card || !String(card.front || '').trim()) return Promise.resolve(null);
+    return _cardsRMW(function (cards) {
+      let found = _cardBankFind21553(cards, card.front);
+      if (!found) {
+        found = {
+          id: Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+          f: String(card.front || ''), b: String(card.back || ''),
+          path: String(card.disciplina || 'Banco de flashcards'),
+          topic: String(card.topic || ''),
+          at: Date.now(), box: 0, due: Date.now() + 86400000
+        };
+        cards.push(found);
+      }
+      if (typeof window.gdiGradeCard === 'function') {
+        try { window.gdiGradeCard(found, knew ? 3 : 1); } catch (_) {}
+      }
+      return found.id;
+    });
+  };
+  // Estado local de um cartão do banco (p/ filtros e desempenho):
+  //   {practiced, due, box} lidos de gdi-cards-v1 (síncrono).
+  window.__gdiCardBankState21553 = function (card) {
+    const out = { practiced: false, due: false, box: 0 };
+    if (!card) return out;
+    try {
+      const cards = JSON.parse(localStorage.getItem('gdi-cards-v1') || '[]');
+      const c = _cardBankFind21553(Array.isArray(cards) ? cards : [], card.front || card.statement || '');
+      if (c) {
+        out.practiced = true;
+        out.box = c.box || 0;
+        out.due = !(c.due && c.due > Date.now());
+      }
+    } catch (_) {}
+    return out;
+  };
+
   // ★ Expõe gradeQ para o quiz do M9-ISA (interativo na aba de questões)
   window.__gdiGradeQ=gradeQ;
 
