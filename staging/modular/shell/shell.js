@@ -1156,6 +1156,16 @@
         //   a barra final cai no ramo get_single_file e a listagem volta
         //   []. Deep links (destaque, gémeo) chegam sem a barra.
         if (typeof path === 'string' && /^\/\d+:\//.test(path) && !path.endsWith('/')) path += '/';
+        // ★ v2.15.45: a forma NUA de raiz ('/N:') também é pasta — o
+        //   snapshot de fallback dos destaques traz os caminhos de raiz
+        //   na forma canónica '/N:' (sem a barra; no D1 estão '/N:/') e
+        //   a normalização da v2.15.17 não a apanhava (/^\/\d+:\// exige
+        //   a '/' depois dos ':'). Sem a barra, o POST de listagem cai
+        //   fora da rota do worker (/^\/\d+:\/.*$/) e volta HTML → o
+        //   front lê [] → "Pasta vazia" (destaques ENEM '/2:' e Reta
+        //   Final '/0:'). Os tiles de Drives usam '/N:/' — por isso
+        //   listavam bem.
+        if (typeof path === 'string' && /^\/\d+:$/.test(path)) path += '/';
         // ★ Guardar pasta atual para o player usar (interfolder + material)
         Shell.state.currentFolderPath = path;
 
