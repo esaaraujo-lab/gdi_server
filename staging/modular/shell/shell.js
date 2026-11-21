@@ -1251,7 +1251,7 @@
                 for (const f of folders) {
                   const fp = path + encodeURIComponent(f.name) + '/';
                   html += `
-                    <div class="meggy-card" data-folder="${path}${f.name}/" style="position:relative;">
+                    <div class="meggy-card" data-folder="${fp}" style="position:relative;"> <!-- ★ v2.15.50 (Frente B): navegar com o caminho CODIFICADO (fp, como a checkbox ao lado) — o nome cru criava o segmento misto ( %XX + % literal) que a listagem não resolvia e a pasta abria vazia -->
                       <input type="checkbox" class="v215-folder-check" data-path="${fp}" title="Selecionar para adicionar ao curso" style="position:absolute;top:8px;left:8px;accent-color:#ff8b9f;cursor:pointer;z-index:2;" />
                       <div class="meggy-card-icon">📁</div>
                       <div class="meggy-card-title">${f.name}</div>
@@ -7130,6 +7130,30 @@ el.scrollTop = 0;
       return questions;
     },
 
+    // ★ v2.15.50 (Frente A): ECRÃ DE SEMELHANÇA (réplica do worker —
+    //   qbTokens21550/qbIsNearDupPair21550, mesmos limiares) — no
+    //   merge do "gerar mais", descarta do lote novo as questões que
+    //   são REFORMULAÇÕES das já existentes na aula (mesmo facto,
+    //   fraseado diferente — o fingerprint exacto não as apanha e o
+    //   avoid do prompt também não, observado na .49) ou de outra
+    //   nova já aceite do mesmo lote. Devolve {kept, dropped}.
+    _qbNearDupFilter21550(cands, existing) {
+      const STOP = { a:1, o:1, as:1, os:1, um:1, uma:1, uns:1, umas:1, de:1, do:1, da:1, dos:1, das:1, em:1, no:1, na:1, nos:1, nas:1, e:1, ou:1, que:1, com:1, por:1, pelo:1, pela:1, pelos:1, pelas:1, para:1, pra:1, ao:1, aos:1, se:1, lhe:1, seu:1, sua:1, seus:1, suas:1, este:1, esta:1, isto:1, esse:1, essa:1, isso:1, aquele:1, aquela:1, mais:1, muito:1, ja:1, ser:1, sao:1, foi:1, como:1, quando:1, onde:1, entre:1, sobre:1, apos:1, ate:1, tambem:1, assinale:1, alternativa:1, correta:1, correto:1, incorreta:1, item:1, julgue:1, certo:1, errado:1 };
+      const norm = (s) => String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+      const correctText = (q) => { if (!q) return ''; if (q.type === 'tf') return (Number(q.correct) === 1) ? 'certo' : 'errado'; const opts = Array.isArray(q.options) ? q.options : []; const ct = opts[Number(q.correct) || 0]; if (ct != null && String(ct).trim()) return String(ct); return String(q.correctText || ''); };
+      const tokens = (q) => { const all = new Set(), cor = new Set(); const add = (set, txt) => { norm(txt).split(' ').forEach(t => { if (t && !STOP[t]) set.add(t); }); }; add(all, q && q.statement); add(cor, correctText(q)); cor.forEach(t => all.add(t)); return { all, correct: cor }; };
+      const contain = (small, big) => { if (!small.size) return 0; let inter = 0; small.forEach(t => { if (big.has(t)) inter++; }); return inter / small.size; };
+      const near = (ta, tb) => { if (!ta || !tb || ta.all.size < 6 || tb.all.size < 6) return false; let inter = 0; const small = ta.all.size <= tb.all.size ? ta.all : tb.all, big = ta.all.size <= tb.all.size ? tb.all : ta.all; small.forEach(t => { if (big.has(t)) inter++; }); if (inter) { const jac = inter / (ta.all.size + tb.all.size - inter), cont = inter / Math.min(ta.all.size, tb.all.size); if (jac >= 0.6 || cont >= 0.75) return true; } if (ta.correct.size >= 3 && contain(ta.correct, tb.all) >= 0.8) return true; if (tb.correct.size >= 3 && contain(tb.correct, ta.all) >= 0.8) return true; return false; };
+      const pool = (Array.isArray(existing) ? existing : []).map(tokens);
+      const kept = []; let dropped = 0;
+      (Array.isArray(cands) ? cands : []).forEach(q => {
+        const ts = tokens(q);
+        if (ts.all.size >= 6 && pool.some(s => near(ts, s))) { dropped++; return; }
+        kept.push(q); pool.push(ts);
+      });
+      return { kept, dropped };
+    },
+
     // ★ v2.15.48: parse de questões p/ o "Gerar mais" — extracção do array
     //   + salvamento objecto a objecto (nunca lança).
     _isaParseQuestions21548(resp) {
@@ -7274,8 +7298,14 @@ el.scrollTop = 0;
         if (!r.ok) throw new Error('AI HTTP ' + r.status);
         const d = await r.json();
         const arr = Shell._isaParseQuestions21548(d.response || d.markdown || '');
-        const valid = arr.filter(q => q && typeof q.statement === 'string' && q.statement.trim());
-        if (!valid.length || !Shell._isIsaValidContent('questions', valid)) throw new Error('sem questões válidas');
+        const validAll = arr.filter(q => q && typeof q.statement === 'string' && q.statement.trim());
+        if (!validAll.length || !Shell._isIsaValidContent('questions', validAll)) throw new Error('sem questões válidas');
+        // ★ v2.15.50 (Frente A): ecrã de semelhança ANTES do merge —
+        //   paráfrases das existentes (ou do próprio lote) não entram
+        //   no cache da aula nem são partilhadas p/ o banco.
+        const _screen = Shell._qbNearDupFilter21550(validAll, existing);
+        const valid = _screen.kept;
+        if (!valid.length) { _toast(_screen.dropped + ' questão(ões) parecida(s) com as existentes foi/foram descartada(s) — nenhuma nova.'); if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-plus-circle"></i> Gerar mais questões'; } return; }
         const merged = existing.concat(valid);
         try { Shell._qbStamp21549(merged, lists, (lessonName || '') + ' ' + (ctx.courseName || '')); } catch (_) {} // ★ v2.15.49 (F4)
         const newEntry = Object.assign({}, entry, { questions: merged, lessonName: lessonName });
@@ -7290,7 +7320,7 @@ el.scrollTop = 0;
         }
         ctx.entry = newEntry;
         Shell._renderISAResult('isa-questions', merged, bodyEl, lessonName, false, newEntry);
-        _toast('+' + valid.length + ' questões adicionadas à aula e ao banco');
+        _toast('+' + valid.length + ' questões adicionadas à aula e ao banco' + (_screen.dropped ? ' (' + _screen.dropped + ' parecida(s) descartada(s))' : ''));
       } catch (e) {
         console.warn('[Shell] gen-more questions:', e);
         _toast('Não foi possível gerar mais questões agora');
