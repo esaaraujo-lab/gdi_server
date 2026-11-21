@@ -2572,9 +2572,18 @@
                       try {
                         if (!q || typeof q !== 'object') return null;
                         const statement = String(q.statement || q.question || q.pergunta || q.enunciado || '');
-                        const options = Array.isArray(q.options) ? q.options.map(String)
+                        let options = Array.isArray(q.options) ? q.options.map(String)
                           : (Array.isArray(q.alternatives) ? q.alternatives.map(String)
                           : (Array.isArray(q.alternativas) ? q.alternativas.map(String) : null));
+                        // ★ v2.15.51 (higiene): prefixos literais de opção
+                        //   ("a) ", "b) ", …) removidos à importação — regra
+                        //   sequencial segura (letra = índice, ≥ 2 na mesma
+                        //   questão), réplica de qbStripOptionPrefixes21551.
+                        if (options && options.length >= 2) {
+                          const _re51 = /^\s*([a-fA-F])\s*[).]\s+/;
+                          const _hits51 = options.map((o, i) => { const m = _re51.exec(o); return !!(m && (m[1].toLowerCase().charCodeAt(0) - 97) === i); });
+                          if (_hits51.filter(Boolean).length >= 2) options = options.map((o, i) => _hits51[i] ? o.replace(_re51, '') : o);
+                        }
                         let correct = q.correct;
                         if (typeof correct === 'string') {
                           const t = correct.trim().toUpperCase();
@@ -2849,6 +2858,23 @@
                 //   ANTES do save em cache, da partilha e do render,
                 //   para todos os lotes classificarem igual.
                 try { if (gen.questions && gen.questions.length) Shell._qbStamp21549(gen.questions, _qbLists21548, (lessonName || '') + ' ' + (courseName || '') + ' ' + (cacheKey || '')); } catch (_) {}
+                // ★ v2.15.51 (E3 + E1): a CADEIA também peneira e também
+                //   dá feedback. Na .50, as questões nascidas aqui não
+                //   passavam por nenhum ecrã do front nem mostravam
+                //   contagens — a sessão de teste regenerou por este
+                //   caminho (aula sem o campo em cache / pós-Regerar) e
+                //   só viu o selo "✓ N questões" com o total. Ecrã
+                //   intra-lote (exactas + parecidas, regras .50/.51)
+                //   ANTES do save/partilha/render; o texto viaja em
+                //   cached2.__qFeedback21551 p/ a linha persistente do
+                //   cartão (o POST do cache usa outro objecto e o
+                //   saneador nem gravaria esse campo).
+                let _chainQFb21551 = '';
+                if (gen.questions && gen.questions.length) {
+                  const _scrC = Shell._qbNearDupFilter21550(gen.questions, []);
+                  if (_scrC.dropped) { gen.questions = _scrC.kept; gen.flashcards = autoCreateFlashcards(gen.questions); }
+                  _chainQFb21551 = gen.questions.length + ' questões geradas' + (_scrC.droppedExact ? ' · ' + _scrC.droppedExact + ' exacta(s) descartada(s)' : '') + (_scrC.droppedNear ? ' · ' + _scrC.droppedNear + ' parecida(s) descartada(s)' : '');
+                }
 
                 // ─── 4. Save no cache (aguardado) + pasta (background) ───
                 // ★ v2.15.6-resumo: o POST do cache é AGUARDADO — sem isso
@@ -2913,7 +2939,7 @@
                 } catch (_) {}
 
                 // ─── 6. Render requested type ───
-                const cached2 = { summary: gen.summary, questions: gen.questions.length ? gen.questions : null, mindmap: gen.mindmap, lessonName: lessonName };
+                const cached2 = { summary: gen.summary, questions: gen.questions.length ? gen.questions : null, mindmap: gen.mindmap, lessonName: lessonName, __qFeedback21551: _chainQFb21551 || '' };  // ★ v2.15.51 (E3): linha de feedback do cartão (só apresentação)
                 let toShow = gen[isaField];
                 if (type === 'isa-flashcards') toShow = gen.flashcards.length ? gen.flashcards : null;
                 if (isaField === 'questions' && (!toShow || !toShow.length)) toShow = null;
@@ -7141,17 +7167,35 @@ el.scrollTop = 0;
       const STOP = { a:1, o:1, as:1, os:1, um:1, uma:1, uns:1, umas:1, de:1, do:1, da:1, dos:1, das:1, em:1, no:1, na:1, nos:1, nas:1, e:1, ou:1, que:1, com:1, por:1, pelo:1, pela:1, pelos:1, pelas:1, para:1, pra:1, ao:1, aos:1, se:1, lhe:1, seu:1, sua:1, seus:1, suas:1, este:1, esta:1, isto:1, esse:1, essa:1, isso:1, aquele:1, aquela:1, mais:1, muito:1, ja:1, ser:1, sao:1, foi:1, como:1, quando:1, onde:1, entre:1, sobre:1, apos:1, ate:1, tambem:1, assinale:1, alternativa:1, correta:1, correto:1, incorreta:1, item:1, julgue:1, certo:1, errado:1 };
       const norm = (s) => String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
       const correctText = (q) => { if (!q) return ''; if (q.type === 'tf') return (Number(q.correct) === 1) ? 'certo' : 'errado'; const opts = Array.isArray(q.options) ? q.options : []; const ct = opts[Number(q.correct) || 0]; if (ct != null && String(ct).trim()) return String(ct); return String(q.correctText || ''); };
-      const tokens = (q) => { const all = new Set(), cor = new Set(); const add = (set, txt) => { norm(txt).split(' ').forEach(t => { if (t && !STOP[t]) set.add(t); }); }; add(all, q && q.statement); add(cor, correctText(q)); cor.forEach(t => all.add(t)); return { all, correct: cor }; };
+      const tokens = (q) => { const all = new Set(), cor = new Set(), stmt = new Set(); const add = (set, txt) => { norm(txt).split(' ').forEach(t => { if (t && !STOP[t]) set.add(t); }); }; add(all, q && q.statement); add(stmt, q && q.statement); add(cor, correctText(q)); cor.forEach(t => all.add(t)); return { all, correct: cor, stmt }; };  // ★ v2.15.51: stmt = tokens SÓ do enunciado
       const contain = (small, big) => { if (!small.size) return 0; let inter = 0; small.forEach(t => { if (big.has(t)) inter++; }); return inter / small.size; };
-      const near = (ta, tb) => { if (!ta || !tb || ta.all.size < 6 || tb.all.size < 6) return false; let inter = 0; const small = ta.all.size <= tb.all.size ? ta.all : tb.all, big = ta.all.size <= tb.all.size ? tb.all : ta.all; small.forEach(t => { if (big.has(t)) inter++; }); if (inter) { const jac = inter / (ta.all.size + tb.all.size - inter), cont = inter / Math.min(ta.all.size, tb.all.size); if (jac >= 0.6 || cont >= 0.75) return true; } if (ta.correct.size >= 3 && contain(ta.correct, tb.all) >= 0.8) return true; if (tb.correct.size >= 3 && contain(tb.correct, ta.all) >= 0.8) return true; return false; };
+      // ★ v2.15.51 (regra só-enunciado, réplica do worker): contenção ≥ 0.70 ou Jaccard ≥ 0.65 dos tokens do enunciado, guarda ≥ 4 tokens — apanha o mesmo facto com gabarito diferente (E1). Protegido: mesmo artigo/alínea diferente ≈ 0.67 de contenção → passa.
+      const stmtNear = (ta, tb) => { const sa = ta.stmt, sb = tb.stmt; if (!sa || !sb || sa.size < 4 || sb.size < 4) return false; let inter = 0; const small = sa.size <= sb.size ? sa : sb, big = sa.size <= sb.size ? sb : sa; small.forEach(t => { if (big.has(t)) inter++; }); if (!inter) return false; if (inter / Math.min(sa.size, sb.size) >= 0.7) return true; return inter / (sa.size + sb.size - inter) >= 0.65; };
+      const near = (ta, tb) => { if (!ta || !tb || ta.all.size < 6 || tb.all.size < 6) return false; let inter = 0; const small = ta.all.size <= tb.all.size ? ta.all : tb.all, big = ta.all.size <= tb.all.size ? tb.all : ta.all; small.forEach(t => { if (big.has(t)) inter++; }); if (inter) { const jac = inter / (ta.all.size + tb.all.size - inter), cont = inter / Math.min(ta.all.size, tb.all.size); if (jac >= 0.6 || cont >= 0.75) return true; } if (stmtNear(ta, tb)) return true; if (ta.correct.size >= 3 && contain(ta.correct, tb.all) >= 0.8) return true; if (tb.correct.size >= 3 && contain(tb.correct, ta.all) >= 0.8) return true; return false; };
       const pool = (Array.isArray(existing) ? existing : []).map(tokens);
-      const kept = []; let dropped = 0;
+      const poolStmt = new Set((Array.isArray(existing) ? existing : []).map(q => norm(q && q.statement)).filter(Boolean));  // ★ v2.15.51 (regra dura): enunciados normalizados das existentes
+      const kept = []; let dropped = 0, droppedExact = 0, droppedNear = 0;
       (Array.isArray(cands) ? cands : []).forEach(q => {
+        // ★ v2.15.51 (REGRA DURA): enunciado normalizado IDÊNTICO = duplicada exacta, SEMPRE — mesmo com opções/gabarito diferentes (caso E1 ao vivo: Q18 = Q16 no enunciado).
+        const sn = norm(q && q.statement);
+        if (sn && poolStmt.has(sn)) { dropped++; droppedExact++; return; }
         const ts = tokens(q);
-        if (ts.all.size >= 6 && pool.some(s => near(ts, s))) { dropped++; return; }
-        kept.push(q); pool.push(ts);
+        if (ts.all.size >= 6 && pool.some(s => near(ts, s))) { dropped++; droppedNear++; return; }
+        kept.push(q); pool.push(ts); if (sn) poolStmt.add(sn);
       });
-      return { kept, dropped };
+      return { kept, dropped, droppedExact, droppedNear };
+    },
+
+    // ★ v2.15.51 (higiene): prefixos LITERAIS de opção ("a) ", "b) ", …)
+    //   removidos à importação — réplica de qbStripOptionPrefixes21551
+    //   do worker (regra sequencial segura: letra = índice da opção e
+    //   ≥ 2 ocorrências na mesma questão; um "a)" isolado fica intacto).
+    _qbStripOptPrefixes21551(options) {
+      if (!Array.isArray(options) || options.length < 2) return options;
+      const re = /^\s*([a-fA-F])\s*[).]\s+/;
+      const hits = options.map((o, i) => { const m = re.exec(String(o == null ? '' : o)); return !!(m && (m[1].toLowerCase().charCodeAt(0) - 97) === i); });
+      if (hits.filter(Boolean).length < 2) return options;
+      return options.map((o, i) => hits[i] ? String(o).replace(re, '') : o);
     },
 
     // ★ v2.15.48: parse de questões p/ o "Gerar mais" — extracção do array
@@ -7299,13 +7343,24 @@ el.scrollTop = 0;
         const d = await r.json();
         const arr = Shell._isaParseQuestions21548(d.response || d.markdown || '');
         const validAll = arr.filter(q => q && typeof q.statement === 'string' && q.statement.trim());
+        validAll.forEach(q => { if (q && Array.isArray(q.options)) q.options = Shell._qbStripOptPrefixes21551(q.options); });  // ★ v2.15.51 (higiene): prefixos de opção fora ANTES do ecrã/save
         if (!validAll.length || !Shell._isIsaValidContent('questions', validAll)) throw new Error('sem questões válidas');
         // ★ v2.15.50 (Frente A): ecrã de semelhança ANTES do merge —
         //   paráfrases das existentes (ou do próprio lote) não entram
         //   no cache da aula nem são partilhadas p/ o banco.
         const _screen = Shell._qbNearDupFilter21550(validAll, existing);
         const valid = _screen.kept;
-        if (!valid.length) { _toast(_screen.dropped + ' questão(ões) parecida(s) com as existentes foi/foram descartada(s) — nenhuma nova.'); if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-plus-circle"></i> Gerar mais questões'; } return; }
+        if (!valid.length) {
+          // ★ v2.15.51 (E3): contagens DISTINTAS no toast E na linha
+          //   persistente do cartão (actualizada no lugar — neste ramo
+          //   não há re-render).
+          const _fbTxt0 = '0 adicionadas' + (_screen.droppedExact ? ' · ' + _screen.droppedExact + ' exacta(s) descartada(s)' : '') + (_screen.droppedNear ? ' · ' + _screen.droppedNear + ' parecida(s) descartada(s)' : '');
+          _toast(_fbTxt0 + ' — nenhuma nova.');
+          const _fbEl0 = bodyEl.querySelector('#gdi-isa-qfeedback21551');
+          if (_fbEl0) _fbEl0.innerHTML = '<i class="bi bi-funnel"></i> <b>Geração:</b> ' + Shell._esc(_fbTxt0);
+          if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-plus-circle"></i> Gerar mais questões'; }
+          return;
+        }
         const merged = existing.concat(valid);
         try { Shell._qbStamp21549(merged, lists, (lessonName || '') + ' ' + (ctx.courseName || '')); } catch (_) {} // ★ v2.15.49 (F4)
         const newEntry = Object.assign({}, entry, { questions: merged, lessonName: lessonName });
@@ -7319,8 +7374,14 @@ el.scrollTop = 0;
           } catch (_) {}
         }
         ctx.entry = newEntry;
+        // ★ v2.15.51 (E3): feedback com contagens DISTINTAS (exactas vs
+        //   parecidas) no toast E numa linha persistente dentro do
+        //   cartão — viaja em __qFeedback21551 (o saneador do cache não
+        //   grava esse campo; é só apresentação).
+        const _fbTxt = '+' + valid.length + ' adicionada(s)' + (_screen.droppedExact ? ' · ' + _screen.droppedExact + ' exacta(s) descartada(s)' : '') + (_screen.droppedNear ? ' · ' + _screen.droppedNear + ' parecida(s) descartada(s)' : '');
+        newEntry.__qFeedback21551 = _fbTxt;
         Shell._renderISAResult('isa-questions', merged, bodyEl, lessonName, false, newEntry);
-        _toast('+' + valid.length + ' questões adicionadas à aula e ao banco' + (_screen.dropped ? ' (' + _screen.dropped + ' parecida(s) descartada(s))' : ''));
+        _toast(_fbTxt);
       } catch (e) {
         console.warn('[Shell] gen-more questions:', e);
         _toast('Não foi possível gerar mais questões agora');
@@ -7420,8 +7481,15 @@ el.scrollTop = 0;
         return Shell._renderMd(content);
       }
 
+      // ★ v2.15.51 (E3): linha de feedback da geração de questões
+      //   DENTRO do cartão — persistente, ao contrário do toast de
+      //   3,5 s da bridge (que se perdia; o cartão só mostrava o selo
+      //   com o total). Vem em fullCache.__qFeedback21551.
+      const _qFb21551 = (type === 'isa-questions' && fullCache && fullCache.__qFeedback21551)
+        ? '<div id="gdi-isa-qfeedback21551" class="meggy-chain-badge" style="background:rgba(93,222,218,.08);border-color:rgba(93,222,218,.35);color:#5ddeda;"><i class="bi bi-funnel"></i> <b>Geração:</b> ' + Shell._esc(fullCache.__qFeedback21551) + '</div>'
+        : '';
       bodyEl.innerHTML = '<div class="gdi-mat-isa-result" style="max-width:760px;margin:0 auto;">' +
-        chainBadge +
+        chainBadge + _qFb21551 +
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;padding:12px 16px;background:linear-gradient(135deg,rgba(255,139,159,.12),rgba(93,222,218,.06));border:1px solid rgba(255,139,159,.2);border-radius:14px;flex-wrap:wrap;">' +
           '<div style="display:flex;align-items:center;gap:8px;min-width:0;">' +
             '<i class="bi ' + icon + '" style="color:#ff8b9f;font-size:20px;flex:none;"></i>' +
