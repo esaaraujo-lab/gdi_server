@@ -595,9 +595,9 @@
             continueHTML = '<div class="meggy-continue-section"><h2>▶ Continue assistindo</h2><div class="meggy-cards-grid">';
             for (const h of recent) {
               const rawName = h.name || h.path?.split('/').pop()?.replace(/\.\w+$/, '') || 'Aula';
-              const name = decodeURIComponent(rawName).replace(/\+/g, ' ');
+              const name = (function(){ try { return decodeURIComponent(rawName); } catch (_) { return rawName; } })().replace(/\+/g, ' '); // ★ v2.15.49 (F7)
               const rawCourse = h.path?.split('/')[2] || h.coursePath?.split('/')[2] || '';
-              const course = decodeURIComponent(rawCourse).replace(/\+/g, ' ');
+              const course = (function(){ try { return decodeURIComponent(rawCourse); } catch (_) { return rawCourse; } })().replace(/\+/g, ' '); // ★ v2.15.49 (F7)
               // Pegar posição do resume (procurar por URL ou path)
               let pos = 0;
               for (const [k, v] of Object.entries(resume)) {
@@ -1210,7 +1210,7 @@
             let cumPath = '';
             for (const part of parts) {
               cumPath += '/' + part;
-              const label = part.match(/^\d+:$/) ? (window.drive_names[+part.slice(0, -1)] || part) : decodeURIComponent(part);
+              const label = part.match(/^\d+:$/) ? (window.drive_names[+part.slice(0, -1)] || part) : (function(){ try { return decodeURIComponent(part); } catch (_) { return part; } })(); // ★ v2.15.49 (F7): '%' literal no nome da pasta lançava URIError
               const shortLabel = label.length > 20 ? label.slice(0, 17) + '…' : label;
               bcHTML += ` <span class="meggy-breadcrumb-sep">/</span> <a data-path="${cumPath}/">${shortLabel}</a>`;
             }
@@ -1555,7 +1555,7 @@
         let cumPath = '';
         for (let i = 0; i < parts.length; i++) {
           cumPath += '/' + parts[i];
-          const label = parts[i].match(/^\d+:$/) ? (window.drive_names?.[+parts[i].slice(0,-1)] || parts[i]) : decodeURIComponent(parts[i]);
+          const label = parts[i].match(/^\d+:$/) ? (window.drive_names?.[+parts[i].slice(0,-1)] || parts[i]) : (function(){ try { return decodeURIComponent(parts[i]); } catch (_) { return parts[i]; } })(); // ★ v2.15.49 (F7)
           const short = label.length > 20 ? label.slice(0,17) + '…' : label;
           // ★ v2.15.12-C1 (P6b regressão, Passo 16): o href do breadcrumb
           //   codificava o ':' do prefixo do drive ('9:' → '9%3A') e DUPLICAVA
@@ -2845,6 +2845,10 @@
                     }
                   }
                 });
+                // ★ v2.15.49 (F4): carimbo de classificação do lote —
+                //   ANTES do save em cache, da partilha e do render,
+                //   para todos os lotes classificarem igual.
+                try { if (gen.questions && gen.questions.length) Shell._qbStamp21549(gen.questions, _qbLists21548, (lessonName || '') + ' ' + (courseName || '') + ' ' + (cacheKey || '')); } catch (_) {}
 
                 // ─── 4. Save no cache (aguardado) + pasta (background) ───
                 // ★ v2.15.6-resumo: o POST do cache é AGUARDADO — sem isso
@@ -3360,15 +3364,21 @@
       // ═══ Estudos — views funcionais (cache + Meggy AI) ═══
 
       async _loadStudyCache() {
+        // ★ v2.15.49 (F3): timeout de 15 s (fetch + corpo) — sem ele,
+        //   um /api/ai/cache/list lento sob quota pendurava /resumos e
+        //   /flashcards antes de qualquer secção renderizar. Fail-open
+        //   como antes (devolve [] em erro/timeout).
+        const _ctl = new AbortController();
+        const _to = setTimeout(() => { try { _ctl.abort(); } catch (_) {} }, 15000);
         try {
-          const r = await fetch('/api/ai/cache/list', { headers: { 'Accept': 'application/json' }, credentials: 'include' });
+          const r = await fetch('/api/ai/cache/list', { headers: { 'Accept': 'application/json' }, credentials: 'include', signal: _ctl.signal });
           if (!r.ok) return [];
           const d = await r.json();
           return (d && d.entries) ? d.entries : [];
         } catch (e) {
           console.warn('[Shell] _loadStudyCache:', e);
           return [];
-        }
+        } finally { clearTimeout(_to); }
       },
 
       // ★ Parse cache key into { drive, curso, disciplina, assunto, fileName }
@@ -3645,15 +3655,27 @@
           const subject = subjectSel.value || '';
           const author = authorSel.value || '';
           listEl.innerHTML = '<div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando questões...</div></div>';
-          try {
-            const q = ['kind=question'];
-            if (subject) q.push('subject=' + encodeURIComponent(subject));
-            if (author) q.push('author=' + encodeURIComponent(author));
-            const d = await fetchJson('/api/ai/shared-flashcards?' + q.join('&'), 20000);
+          // ★ v2.15.49 (F1): UMA retentativa automática antes do estado
+          //   de erro — sob quota, a 1ª tentativa pode cair num isolate
+          //   frio (snapshot + journal a carregar) e estourar o
+          //   timeout; a 2ª apanha as caches quentes do worker.
+          let d = null, _loaded21549 = false;
+          for (let _att = 0; _att < 2 && !_loaded21549; _att++) {
+            try {
+              const q = ['kind=question'];
+              if (subject) q.push('subject=' + encodeURIComponent(subject));
+              if (author) q.push('author=' + encodeURIComponent(author));
+              d = await fetchJson('/api/ai/shared-flashcards?' + q.join('&'), 20000);
+              _loaded21549 = true;
+            } catch (e) {
+              if (_att === 0) await new Promise(r => setTimeout(r, 1200));
+            }
+          }
+          if (_loaded21549) {
             items = (d && d.ok && Array.isArray(d.items)) ? d.items : [];
             renderList();
             renderTopics();
-          } catch (e) {
+          } else {
             listEl.innerHTML = '<div style="color:#ff8b8b;font-size:13px;padding:12px 0;">Não foi possível carregar o banco agora. Tente de novo em instantes.</div>';
           }
         };
@@ -3722,10 +3744,10 @@
         try {
           const _metaJobs = [];
           if (!Shell.__sharedAuthors || !Shell.__sharedAuthors.length) { // ★ v2.15.12-D6a
-            _metaJobs.push(_fetchMeta21548('/api/ai/shared-authors').then(d => { Shell.__sharedAuthors = (d && d.ok && Array.isArray(d.authors)) ? d.authors : []; }).catch(() => {}));
+            _metaJobs.push(_fetchMeta21548('/api/ai/shared-authors').then(d => { Shell.__sharedAuthors = (d && d.ok && Array.isArray(d.authors)) ? d.authors : []; }).catch(() => { if (!Shell.__sharedAuthors) Shell.__sharedAuthors = []; })); // ★ v2.15.49 (F3)
           }
           if (!Shell.__sharedSubjects || !Shell.__sharedSubjects.summaryLessons || !Shell.__sharedSubjects.summaryLessons.length) { // ★ v2.15.12-D6b — vazio ([]) é truthy: sem isto os filtros ficavam com o vazio da 1ª carga a sessão inteira, mesmo depois de aparecerem itens
-            _metaJobs.push(_fetchMeta21548('/api/ai/shared-subjects').then(d => { Shell.__sharedSubjects = (d && d.ok) ? d : { summaryLessons: [], flashcardSubjects: [] }; }).catch(() => {}));
+            _metaJobs.push(_fetchMeta21548('/api/ai/shared-subjects').then(d => { Shell.__sharedSubjects = (d && d.ok) ? d : { summaryLessons: [], flashcardSubjects: [], questionSubjects: [] }; }).catch(() => { if (!Shell.__sharedSubjects) Shell.__sharedSubjects = { summaryLessons: [], flashcardSubjects: [], questionSubjects: [] }; })); // ★ v2.15.49 (F3)
           }
           await Promise.all(_metaJobs);
         } catch (_) {}
@@ -3739,11 +3761,16 @@
         //   ainda não o devolver, cai p/ flashcardSubjects, o total
         //   antigo); flashcards -> flashcardSubjects (total, que é
         //   exatamente o que a aba lista, sem filtro de kind).
+        // ★ v2.15.49 (F3): NUNCA desreferenciar Shell.__sharedSubjects
+        //   sem guarda — com os metadados em fail-open ele pode estar
+        //   undefined e o TypeError matava a secção ANTES de loadList()
+        //   (spinner "Carregando compartilhados..." eterno, sem erro).
+        const _ss21549 = Shell.__sharedSubjects || {};
         const subjects = kind === 'resumos'
-          ? (Shell.__sharedSubjects.summaryLessons || [])
+          ? (_ss21549.summaryLessons || [])
           : kind === 'questoes'
-            ? (Shell.__sharedSubjects.questionSubjects || Shell.__sharedSubjects.flashcardSubjects || [])
-            : (Shell.__sharedSubjects.flashcardSubjects || []);
+            ? (_ss21549.questionSubjects || _ss21549.flashcardSubjects || [])
+            : (_ss21549.flashcardSubjects || []);
         if (kind === 'resumos') subjectSel.querySelector('option').textContent = 'Todas as aulas';
         subjects.forEach((s) => {
           const o = document.createElement('option');
@@ -3769,9 +3796,13 @@
           authorSel.appendChild(o);
         });
         const _fetchList21548 = async (url) => {
+          // ★ v2.15.49 (F3): o timeout cobre também a LEITURA do corpo
+          //   (r.json()) — na .48 o temporizador era desarmado quando
+          //   os headers chegavam e um corpo lento pendurava a vista
+          //   sem lista nem erro. Devolve já o JSON parseado.
           const _ctl = new AbortController();
           const _to = setTimeout(() => { try { _ctl.abort(); } catch (_) {} }, 20000);
-          try { return await fetch(url, { cache: 'no-store', signal: _ctl.signal }); } finally { clearTimeout(_to); }
+          try { const r = await fetch(url, { cache: 'no-store', signal: _ctl.signal }); return await r.json(); } finally { clearTimeout(_to); }
         };
         const loadList = async () => {
           const subject = subjectSel.value || '';
@@ -3783,16 +3814,14 @@
               const q = [];
               if (subject) q.push('lesson=' + encodeURIComponent(subject));
               if (author) q.push('author=' + encodeURIComponent(author));
-              const r = await _fetchList21548('/api/ai/shared-summaries' + (q.length ? '?' + q.join('&') : ''));
-              const d = await r.json();
+              const d = await _fetchList21548('/api/ai/shared-summaries' + (q.length ? '?' + q.join('&') : ''));
               items = (d && d.ok && Array.isArray(d.summaries)) ? d.summaries : [];
             } else {
               const q = [];
               if (kind === 'questoes') q.push('kind=question');
               if (subject) q.push('subject=' + encodeURIComponent(subject));
               if (author) q.push('author=' + encodeURIComponent(author));
-              const r = await _fetchList21548('/api/ai/shared-flashcards?' + q.join('&'));
-              const d = await r.json();
+              const d = await _fetchList21548('/api/ai/shared-flashcards?' + q.join('&'));
               items = (d && d.ok && Array.isArray(d.items)) ? d.items : [];
             }
             if (!items.length) {
@@ -4766,7 +4795,7 @@ el.scrollTop = 0;
                   //   duplicado que o fetch não resolvia ("Erro ao carregar.").
                   if (i === 0) { acc = '/' + p + (p.endsWith(':') ? '/' : ''); }
                   else { acc += (acc.endsWith('/') ? '' : '/') + p + '/'; }
-                  html += ' / <span style="color:#9aa4b8;cursor:pointer;" class="cw-bc-part" data-path="' + Shell._esc(acc) + '">' + Shell._esc(decodeURIComponent(p)) + '</span>';
+                  html += ' / <span style="color:#9aa4b8;cursor:pointer;" class="cw-bc-part" data-path="' + Shell._esc(acc) + '">' + Shell._esc((function(){ try { return decodeURIComponent(p); } catch (_) { return p; } })()) /* ★ v2.15.49 (F7) */ + '</span>';
                 });
                 bc.innerHTML = html;
               }
@@ -7048,7 +7077,11 @@ el.scrollTop = 0;
       Shell.__qbListsPromise21548 = (async () => {
         try {
           const _ctl = new AbortController();
-          const _to = setTimeout(() => { try { _ctl.abort(); } catch (_) {} }, 2500);
+          // ★ v2.15.49 (F1): 2,5 s → 8 s — com o worker a servir as
+          //   listas do snapshot (fallback sob quota), um isolate frio
+          //   demora mais que os 2,5 s antigos e a classificação nascia
+          //   vazia. Fail-open mantém-se.
+          const _to = setTimeout(() => { try { _ctl.abort(); } catch (_) {} }, 8000);
           try {
             const r = await fetch('/api/ai/question-bank/lists', { cache: 'no-store', signal: _ctl.signal });
             const d = await r.json();
@@ -7063,6 +7096,38 @@ el.scrollTop = 0;
     _qbPromptBlock(lists) {
       if (!lists || !Array.isArray(lists.disciplines) || !lists.disciplines.length) return '';
       return '\n\nCLASSIFICAÇÃO (obrigatório em CADA questão):\n- "disciplina": escolhe UMA desta lista: ' + lists.disciplines.slice(0, 40).join('; ') + '\n- "assunto": o tópico específico da questão, curto (ex.: "Crimes contra a pessoa"); se a disciplina já tiver assuntos em uso, prefere um deles.';
+    },
+
+    // ★ v2.15.49 (F4): CARIMBO de classificação — garante disciplina e
+    //   assunto em CADA questão do lote antes de cache/partilha/render.
+    //   Ordem: valor da própria questão → maioria do lote → casamento
+    //   determinístico (mais longo) das listas canónicas contra o
+    //   contexto da aula (nome + curso + caminho). Na .48, um lote
+    //   gerado com as listas em fail-open ficava sem disciplina e os
+    //   registos a jusante (partilha/SRS) classificavam-no diferente
+    //   do lote seguinte ("Banco" vs "Direito Penal").
+    _qbStamp21549(questions, lists, ctxText) {
+      if (!Array.isArray(questions) || !questions.length) return questions;
+      const norm = (s) => String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+      const majority = (key) => { const c = {}; let b = '', n = 0; questions.forEach(q => { const v = q && q[key]; if (v) { const k = String(v); c[k] = (c[k] || 0) + 1; if (c[k] > n) { n = c[k]; b = k; } } }); return b; };
+      let disc = majority('disciplina');
+      const hay = ' ' + norm(ctxText || '') + ' ';
+      if (!disc && lists && Array.isArray(lists.disciplines)) {
+        let bestLen = 3;
+        lists.disciplines.forEach(d => { const nd = norm(d); if (nd && nd.length > bestLen && hay.indexOf(' ' + nd + ' ') >= 0) { bestLen = nd.length; disc = d; } });
+      }
+      let topic = majority('assunto');
+      if (!topic && disc && lists && lists.topics && Array.isArray(lists.topics[disc])) {
+        let bestLen = 3;
+        lists.topics[disc].forEach(t => { const nt = norm(t); if (nt && nt.length > bestLen && hay.indexOf(' ' + nt + ' ') >= 0) { bestLen = nt.length; topic = t; } });
+      }
+      questions.forEach(q => {
+        if (!q) return;
+        if (!q.disciplina && disc) q.disciplina = disc;
+        if (!q.assunto && topic) q.assunto = topic;
+        if (!q.topic && q.assunto) q.topic = q.assunto;
+      });
+      return questions;
     },
 
     // ★ v2.15.48: parse de questões p/ o "Gerar mais" — extracção do array
@@ -7092,7 +7157,7 @@ el.scrollTop = 0;
       const qs = Array.isArray(questions) ? questions : [];
       if (!qs.length) { container.innerHTML = '<div style="color:#9aa4b8;font-size:13px;">Sem questões para praticar.</div>'; return; }
       const esc = (s) => Shell._esc(String(s == null ? '' : s));
-      const lotDisc = (fullCache && fullCache.bankMeta && fullCache.bankMeta.disciplina) || '';
+      const lotDisc = (fullCache && fullCache.bankMeta && fullCache.bankMeta.disciplina) || (() => { const _c = {}; qs.forEach(q => { if (q && q.disciplina) _c[q.disciplina] = (_c[q.disciplina] || 0) + 1; }); let _b = '', _n = 0; Object.keys(_c).forEach(k => { if (_c[k] > _n) { _n = _c[k]; _b = k; } }); return _b; })(); // ★ v2.15.49 (F4): sem bankMeta (entradas do front), a disciplina do lote é a maioria das questões
       let current = 0;
       const state = {};
       const renderQ = () => {
@@ -7110,11 +7175,14 @@ el.scrollTop = 0;
           optionsHTML = '<div class="meggy-quiz-option" data-idx="1"><span class="meggy-quiz-option-letter">✓</span><span class="meggy-quiz-option-text">Certo</span></div>' +
             '<div class="meggy-quiz-option" data-idx="0"><span class="meggy-quiz-option-letter">✗</span><span class="meggy-quiz-option-text">Errado</span></div>';
         }
-        const badge = '<div class="meggy-quiz-type-badge">' + (isMC ? 'Múltipla Escolha' : 'CEBRASPE — Certo ou Errado') + ' · Q' + (current + 1) + ' de ' + qs.length + ((q.disciplina || lotDisc) ? ' · ' + esc(q.disciplina || lotDisc) + (q.assunto ? ' · ' + esc(q.assunto) : '') : '') + '</div>';
+        // ★ v2.15.49 (F5): o ASSUNTO só entra no badge DEPOIS de
+        //   responder — o texto devolvido pela IA como "assunto" pode
+        //   ser a própria resposta (ex.: o nome do código correcto) e
+        //   revelava o gabarito antes do clique.
+        const badge = '<div class="meggy-quiz-type-badge">' + (isMC ? 'Múltipla Escolha' : 'CEBRASPE — Certo ou Errado') + ' · Q' + (current + 1) + ' de ' + qs.length + ((q.disciplina || lotDisc) ? ' · ' + esc(q.disciplina || lotDisc) + ((st && q.assunto) ? ' · ' + esc(q.assunto) : '') : '') + '</div>';
         container.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:13px;color:#9aa4b8;"><span>' + esc(lessonName || 'Aula') + '</span><span>Acertos: <strong style="color:#5ddeda;">' + score + '</strong>/' + answeredCount + '</span></div>' +
           '<div class="meggy-quiz-card">' + badge +
             '<div class="meggy-quiz-statement">' + esc(q.statement || '') + '</div>' +
-            (q.legalText ? '<div style="font-size:12px;color:#9aa4b8;border-left:2px solid #ff8b9f;padding-left:8px;margin:8px 0;">📜 ' + esc(q.legalText) + '</div>' : '') +
             '<div class="meggy-quiz-options">' + optionsHTML + '</div>' +
             '<div class="meggy-quiz-feedback" style="display:none;"></div>' +
           '</div>' +
@@ -7134,6 +7202,7 @@ el.scrollTop = 0;
           });
           fb.style.display = 'block';
           fb.innerHTML = '<div class="meggy-quiz-feedback-' + (st.correct ? 'correct' : 'wrong') + '">' + (st.correct ? '✓ Correto!' : '✗ Incorreto') + '</div>' +
+            (q.legalText ? '<div style="font-size:12px;color:#9aa4b8;border-left:2px solid #ff8b9f;padding-left:8px;margin:8px 0;">📜 ' + esc(q.legalText) + '</div>' : '') +
             (q.explanation ? '<div class="meggy-quiz-feedback-expl">' + esc(q.explanation) + '</div>' : '') +
             (q.fundamentacao ? '<div class="meggy-quiz-feedback-fund"><strong>Fundamentação:</strong> ' + esc(q.fundamentacao) + '</div>' : '');
         }
@@ -7191,8 +7260,16 @@ el.scrollTop = 0;
         const lists = await Shell._qbLists();
         const summary = typeof entry.summary === 'string' ? entry.summary : '';
         const material = summary ? summary.slice(0, 20000) : ('Aula: ' + lessonName + '\nCurso: ' + (ctx.courseName || '') + '\n\nNOTA IMPORTANTE: não há resumo em cache desta aula — só a identificação acima. NÃO peças o material ao utilizador: usa o teu conhecimento do tema indicado pelo nome da aula.');
-        const avoid = existing.map(q => '- ' + String((q && q.statement) || '').slice(0, 120)).join('\n');
-        const prompt = 'Você é um examinador de concurso público brasileiro experiente. Gere 5 questões NOVAS de concurso em JSON array (misture múltipla escolha e certo/errado CEBRASPE), formato: [{"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"disciplina":"...","assunto":"...","legalText":"...","explanation":"...","fundamentacao":"..."},{"type":"tf","statement":"...","correct":1,"disciplina":"...","assunto":"...","legalText":"...","explanation":"...","fundamentacao":"..."}].\nSem comentários, só JSON.' + Shell._qbPromptBlock(lists) + (avoid ? '\n\nNÃO repitas estas questões já existentes:\n' + avoid : '') + '\n\nMaterial:\n' + material;
+        // ★ v2.15.49 (F6): enunciado (quase) completo + texto da
+        //   correcta por questão — na .48 o avoid ia truncado a 120
+        //   chars e a paráfrase da mesma questão passou (Q8 ≈ Q15).
+        const avoid = existing.map(q => {
+          if (!q) return '';
+          const _opts = Array.isArray(q.options) ? q.options : [];
+          const _ct = q.type === 'tf' ? ((Number(q.correct) === 1) ? 'Certo' : 'Errado') : String(_opts[Number(q.correct) || 0] || q.correctText || '');
+          return '- ' + String(q.statement || '').slice(0, 400) + (_ct ? ' [resposta: ' + _ct.slice(0, 120) + ']' : '');
+        }).filter(Boolean).join('\n');
+        const prompt = 'Você é um examinador de concurso público brasileiro experiente. Gere 5 questões NOVAS de concurso em JSON array (misture múltipla escolha e certo/errado CEBRASPE), formato: [{"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"disciplina":"...","assunto":"...","legalText":"...","explanation":"...","fundamentacao":"..."},{"type":"tf","statement":"...","correct":1,"disciplina":"...","assunto":"...","legalText":"...","explanation":"...","fundamentacao":"..."}].\nSem comentários, só JSON.' + Shell._qbPromptBlock(lists) + (avoid ? '\n\nQUESTÕES JÁ EXISTENTES DESTA AULA — NÃO repitas NEM REFORMULES nenhuma delas: a mesma pergunta com outras palavras, com outro exemplo, com outra ordem de opções ou com números diferentes CONTA COMO REPETIÇÃO. Gera questões sobre aspectos DIFERENTES do material:\n' + avoid : '') + '\n\nMaterial:\n' + material;
         const r = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: prompt, messages: [], kind: 'questoes' }) });
         if (!r.ok) throw new Error('AI HTTP ' + r.status);
         const d = await r.json();
@@ -7200,6 +7277,7 @@ el.scrollTop = 0;
         const valid = arr.filter(q => q && typeof q.statement === 'string' && q.statement.trim());
         if (!valid.length || !Shell._isIsaValidContent('questions', valid)) throw new Error('sem questões válidas');
         const merged = existing.concat(valid);
+        try { Shell._qbStamp21549(merged, lists, (lessonName || '') + ' ' + (ctx.courseName || '')); } catch (_) {} // ★ v2.15.49 (F4)
         const newEntry = Object.assign({}, entry, { questions: merged, lessonName: lessonName });
         try {
           await fetch('/api/ai/cache', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ key: ctx.cacheKey }, Shell._isaSanitizeEntry(newEntry))) });
