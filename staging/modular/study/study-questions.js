@@ -610,45 +610,76 @@
             <option value="">Todos os cursos</option>
             ${courseNames.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('')}
           </select>
+          <label style="font-size:12px;color:var(--ferreto-text-muted,#8b949e);">Disciplina (banco):</label>
+          <select id="sim-disc" style="background:var(--ferreto-bg-2,#0d1119);border:1px solid var(--ferreto-border,#30363d);border-radius:6px;color:var(--ferreto-text,#e6edf3);padding:5px 8px;font-size:12px;max-width:260px;">
+            <option value="">Todas</option>
+          </select>
           <label style="font-size:12px;color:var(--ferreto-text-muted,#8b949e);">Questões:</label>
           <input id="sim-n" type="number" min="5" max="50" value="10" style="width:64px;background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);border-radius:6px;color:var(--ferreto-text,#e6edf3);padding:5px;text-align:center;font-size:12px;">
           <label style="font-size:12px;color:var(--ferreto-text-muted,#8b949e);">Tempo (min):</label>
           <input id="sim-time" type="number" min="5" max="180" value="30" style="width:64px;background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);border-radius:6px;color:var(--ferreto-text,#e6edf3);padding:5px;text-align:center;font-size:12px;">
           <button id="sim-go" class="gdi-btn gdi-btn-primary" style="font-size:12px;" ${qs.length>=5?'':'disabled'}><i class="bi bi-play-fill"></i> Iniciar simulado</button>
         </div>
-        ${qs.length<5?'<p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin-top:8px;">Adicione ao menos 5 questões (gerar com a Meggy ou importar).</p>':''}
+        ${qs.length<5?'<p id="sim-bank-hint" style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin-top:8px;">Adicione ao menos 5 questões (gerar com a Meggy ou importar).</p>':''}
         <p style="color:var(--ferreto-text-faint,#6b7488);font-size:11px;margin-top:8px;">O simulado usa questões dos cursos matriculados + questões de outros alunos da mesma matéria, quando disponíveis.</p>
       </div>
       <h4 style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:18px 0 8px;">Histórico</h4>
       <div id="sim-hist" style="display:flex;flex-direction:column;gap:6px;max-width:760px;"></div>
     `;
-    if(qs.length>=5){
+    // ★ v2.15.48: disciplinas do BANCO no select + o portão "≥5" conta
+    //   também o banco partilhado (antes só o banco local: o simulado
+    //   pedia "adicione 5 questões" havendo questões geradas nas aulas).
+    (async()=>{ try{
+      const r=await fetch('/api/ai/question-bank/lists',{cache:'no-store'}); const d=await r.json();
+      const sel=box.querySelector('#sim-disc');
+      if(sel&&d&&d.ok&&Array.isArray(d.disciplines)){ d.disciplines.forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n; sel.appendChild(o); }); }
+    }catch(_){} })();
+    (async()=>{ try{
+      if(window.gdiIsaPdf&&window.gdiIsaPdf.fetchSharedQuestions){
+        const extra=await window.gdiIsaPdf.fetchSharedQuestions('');
+        const btn=box.querySelector('#sim-go');
+        if(btn&&qs.length+(extra?extra.length:0)>=5){ btn.disabled=false; const hint=box.querySelector('#sim-bank-hint'); if(hint)hint.textContent='O simulado sorteia do banco de questões (das aulas e de colegas) por disciplina/assunto.'; }
+      }
+    }catch(_){} })();
+    {
       box.querySelector('#sim-go').onclick=()=>{
-        const n=Math.min(parseInt(box.querySelector('#sim-n').value,10)||10,qs.length);
         const mins=parseInt(box.querySelector('#sim-time').value,10)||30;
         const courseFilter=box.querySelector('#sim-course').value;
+        const discSel=box.querySelector('#sim-disc');
+        const discFilter=discSel?discSel.value:'';
+        const nWant=parseInt(box.querySelector('#sim-n').value,10)||10;
         // filtra por curso (subject/path) quando selecionado
         let pool=qs;
         if(courseFilter){
           pool=qs.filter(q=>(q.subject&&q.subject.includes(courseFilter))||(q.path&&q.path.includes(courseFilter)));
           if(pool.length<5){showToast('Poucas questões deste curso — usando todas');pool=qs;}
         }
-        // tenta enriquecer com questões compartilhadas por outros alunos da mesma matéria
-        if(window.gdiIsaPdf && window.gdiIsaPdf.fetchSharedQuestions){
-          window.gdiIsaPdf.fetchSharedQuestions(courseFilter).then(extra=>{
-            if(extra && extra.length){
-              pool=[...pool,...extra];
-              showToast(pool.length+' questões disponíveis (incl. colegas)');
-            }
-            const shuffled=fisherYates(pool).slice(0,n);
-            startSimulado(box,shuffled,mins);
-          }).catch(()=>{
-            const shuffled=fisherYates(pool).slice(0,n);
-            startSimulado(box,shuffled,mins);
-          });
-        }else{
+        if(discFilter){
+          pool=pool.filter(q=>q.subject===discFilter);
+        }
+        // ★ v2.15.48: o simulado sorteia do BANCO por disciplina — as
+        //   questões partilhadas entram no banco local (import) p/ os ids
+        //   serem locais e o gradeQ registar SRS/caderno de erros.
+        const finish21548=()=>{
+          const n=Math.min(nWant,pool.length);
+          if(n<1){showToast('Sem questões para o simulado');return;}
           const shuffled=fisherYates(pool).slice(0,n);
           startSimulado(box,shuffled,mins);
+        };
+        if(window.gdiIsaPdf && window.gdiIsaPdf.fetchSharedQuestions){
+          window.gdiIsaPdf.fetchSharedQuestions(discFilter||courseFilter).then(extra=>{
+            if(extra && extra.length){
+              const seenIds=new Set(pool.map(q=>q.id));
+              extra.forEach(eq=>{
+                const lid=window.__gdiBankImport21548?window.__gdiBankImport21548({statement:eq.statement,options:eq.options,correct:eq.correct,type:eq.type,explanation:eq.explanation,legalText:eq.legalText,fundamentacao:eq.fundamentacao,disciplina:discFilter||eq.disciplina||eq.subject||'',topic:eq.topic||'',id:eq.id}):null;
+                if(lid!=null&&!seenIds.has(lid)){ const lq=getQ(lid); if(lq){ pool.push(lq); seenIds.add(lid); } }
+              });
+              showToast(pool.length+' questões disponíveis (banco incl.)');
+            }
+            finish21548();
+          }).catch(()=>{ finish21548(); });
+        }else{
+          finish21548();
         }
       };
     }
@@ -918,6 +949,71 @@
     `;
     document.head.appendChild(s);
   }
+
+  // ═══ ★ v2.15.48 — PONTE DO BANCO (disciplina → assunto) ═══
+  // As sessões da aula (shell) e do banco chamam __gdiBankAnswer21548:
+  // a questão do banco entra no banco LOCAL (subject=disciplina, topic=
+  // assunto) se ainda não existir — dedup pela mesma fingerprint do
+  // worker (enunciado normalizado + texto da correcta) — e a resposta é
+  // registada pelo gradeQ existente (SRS Leitner + caderno de erros).
+  // Quem lê estes registos: Mapa de Fracos (renderRadar lê
+  // gdi-questions-v1 + gdi-q-srs-v1), Coach (gdi-meggy, mesmas chaves) e
+  // as revisões daqui. Nenhum sistema paralelo.
+  function bankNorm21548(s){return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim();}
+  function bankCorrectText21548(q){
+    if(!q)return '';
+    if(q.type==='tf')return (Number(q.correct)===1)?'certo':'errado';
+    const opts=Array.isArray(q.options)?q.options:[];
+    const ct=opts[Number(q.correct)||0];
+    if(ct!=null&&String(ct).trim())return String(ct);
+    return String(q.correctText||'');
+  }
+  function bankFp21548(q){return bankNorm21548(q&&q.statement)+'|'+bankNorm21548(bankCorrectText21548(q));}
+  window.__gdiBankImport21548=function(q){
+    if(!q||!q.statement)return null;
+    const fp=bankFp21548(q);
+    const all=questions();
+    for(const ex of all){
+      if(bankFp21548(ex)===fp){
+        if(q.topic&&!ex.topic){ex.topic=q.topic;saveQ(all);}
+        return ex.id;
+      }
+    }
+    const item=addQ({
+      subject:q.disciplina||q.subject||'Banco',
+      topic:q.topic||q.assunto||'',
+      statement:String(q.statement||''),
+      options:Array.isArray(q.options)?q.options.map(String):[],
+      correct:(typeof q.correct==='number'?q.correct:(parseInt(q.correct,10)||0)),
+      type:q.type||'mc',
+      explanation:q.explanation||'',
+      legalText:q.legalText||'',
+      fundamentacao:q.fundamentacao||'',
+      source:'banco',
+      d1Id:(q.id!=null?q.id:null)
+    });
+    return item.id;
+  };
+  window.__gdiBankAnswer21548=function(q,acertou){
+    const id=window.__gdiBankImport21548(q);
+    if(id!=null)gradeQ(id,!!acertou);
+    return id;
+  };
+  window.__gdiBankState21548=function(q){
+    if(!q||!q.statement)return {answered:false,wrong:false};
+    const fp=bankFp21548(q);
+    const all=questions();
+    const srs=qSrs();
+    const errArr=lsGet(LS_ERR,[]);
+    const errSet=new Set(Array.isArray(errArr)?errArr:[]);
+    for(const ex of all){
+      if(bankFp21548(ex)===fp){
+        const s=srs[ex.id];
+        return {answered:!!s, wrong:errSet.has(ex.id)||!!(s&&s.box===0)};
+      }
+    }
+    return {answered:false,wrong:false};
+  };
 
   // ★ Expõe gradeQ para o quiz do M9-ISA (interativo na aba de questões)
   window.__gdiGradeQ=gradeQ;
