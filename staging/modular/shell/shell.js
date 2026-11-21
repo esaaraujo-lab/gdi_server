@@ -161,6 +161,77 @@
     }catch(_){}
   }
   // ★ v2.15.28 (A — capas em destaque) — END
+  // ★ v2.15.37 (A — nº de aulas no tile de destaque da Home) — START
+  //   O /api/featured-courses não traz totais; os totais vêm do
+  //   /api/courses/unified (kind:'featured'), como os tiles de /cursos.
+  //   O unified é pesado e dá 1102 com o worker sobrecarregado — por
+  //   isso é best-effort com timeout: se falhar, os tiles ficam como
+  //   antes ("Curso em destaque", sem contagem). Nunca "0 aulas":
+  //   total 0 em destaque = "Em breve / Aulas em indexação" (linguagem
+  //   da v2.15.28) e total desconhecido = sem contagem.
+  var __V21537_UNIFIED_TIMEOUT_MS = 10000;
+  function __v21537HomeCountText(total){
+    if(total == null || typeof total !== 'number' || isNaN(total)) return null;
+    if(total <= 0) return 'Em breve / Aulas em indexação';
+    return total.toLocaleString('pt-BR') + ' aulas';
+  }
+  function __v21537UnifiedTotalsMap(items){
+    // ★ só kind:'featured' — o mesmo caminho existe como kind:'course'
+    //   com outro total (ex.: /9:/CURSOS 2026 é 7776 em destaque e 98
+    //   como curso); o tile de destaque usa o total do destaque.
+    var map = {};
+    if(!Array.isArray(items)) return map;
+    for(var i = 0; i < items.length; i++){
+      var it = items[i];
+      if(!it || it.kind !== 'featured') continue;
+      var t = (typeof it.total === 'number') ? it.total : 0;
+      var keys = [];
+      try{ keys.push(__canonCoursePath(it.coursePath).toLowerCase()); }catch(_){}
+      try{ keys.push(String(it.coursePath || '').toLowerCase()); }catch(_){}
+      try{ var d = decodeURIComponent(String(it.coursePath || '')); if(d) keys.push(__canonCoursePath(d).toLowerCase()); }catch(_){}
+      for(var k = 0; k < keys.length; k++){ if(keys[k]) map[keys[k]] = t; }
+    }
+    return map;
+  }
+  function __v21537TotalsKeyFor(coursePath){
+    try{ return __canonCoursePath(coursePath).toLowerCase(); }catch(_){ return String(coursePath || '').toLowerCase(); }
+  }
+  async function __v21537UpgradeHomeCounts(sec){
+    // ★ best-effort: se o unified falhar (1102/timeout), os tiles ficam
+    //   como estão — sem contagem, sem erro, sem "0 aulas".
+    try{
+      if(!sec || typeof sec.querySelectorAll !== 'function') return;
+      var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+      var timer = null;
+      if(ctrl) timer = setTimeout(function(){ try{ ctrl.abort(); }catch(_){} }, __V21537_UNIFIED_TIMEOUT_MS);
+      var r;
+      try{
+        r = await fetch('/api/courses/unified', { headers: { 'Accept': 'application/json' }, credentials: 'include', cache: 'no-store', signal: ctrl ? ctrl.signal : undefined });
+      } finally {
+        if(timer) clearTimeout(timer);
+      }
+      if(!r || !r.ok) return;
+      var d = await r.json();
+      var items = (d && d.items) || [];
+      var map = __v21537UnifiedTotalsMap(items);
+      var cards = sec.querySelectorAll('.meggy-card[data-course]');
+      for(var i = 0; i < cards.length; i++){
+        try{
+          var card = cards[i];
+          if(!card || card.isConnected === false) continue;
+          var key = __v21537TotalsKeyFor(card.dataset && card.dataset.course);
+          if(!key || map[key] == null) continue;
+          var meta = card.querySelector ? card.querySelector('.meggy-card-meta') : null;
+          if(!meta) continue;
+          var txt = __v21537HomeCountText(map[key]);
+          if(txt == null) continue;
+          meta.textContent = 'Curso em destaque · ' + txt;
+        }catch(_){}
+      }
+    }catch(_){}
+  }
+  // ★ v2.15.37 (A — nº de aulas no tile de destaque da Home) — END
+
 
   const Shell = {
     state: {
@@ -618,6 +689,8 @@
           }).join('') + '</div></div>';
           // ★ v2.15.28 (A): upgrade das capas da biblioteca (assíncrono).
           __v21528UpgradeTileCovers(sec).catch(() => {});
+          // ★ v2.15.37 (A): upgrade das contagens de aulas (assíncrono, best-effort).
+          __v21537UpgradeHomeCounts(sec).catch(() => {});
           sec.querySelectorAll('.meggy-card[data-course]').forEach(card => {
             card.onclick = () => {
               const cp = card.dataset.course;
