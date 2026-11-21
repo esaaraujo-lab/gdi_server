@@ -980,7 +980,7 @@
       }
     }
     const item=addQ({
-      subject:q.disciplina||q.subject||'Banco',
+      subject:q.disciplina||q.subject||'A classificar', // ★ v2.15.49 (F4): o default 'Banco' criava uma disciplina falsa nos registos SRS/caderno
       topic:q.topic||q.assunto||'',
       statement:String(q.statement||''),
       options:Array.isArray(q.options)?q.options.map(String):[],
