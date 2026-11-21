@@ -185,6 +185,8 @@
           legalText:it.legalText||'',
           fundamentacao:it.fundamentacao||'',
           author:it.author||'',
+          topic:it.topic||'',
+          disciplina:it.subject||'',
           source:'shared'
         }));
       }
