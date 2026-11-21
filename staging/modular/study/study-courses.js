@@ -926,7 +926,7 @@
   function __tileStatsHtml(c){
     const t=c?((c.total)||0):0;
     if(t>0) return '<div class="gdi-course-stats" style="grid-template-columns:repeat(1,1fr);"><div class="gdi-course-stat"><span class="gdi-course-stat-num">'+t+'</span><span class="gdi-course-stat-label">Aulas</span></div></div>';
-    return '<div class="gdi-course-stats" style="grid-template-columns:repeat(1,1fr);"><div class="gdi-course-stat"><span class="gdi-course-stat-num" style="font-size:15px;color:#ffd43b;">Em breve</span><span class="gdi-course-stat-label">Aulas em indexação</span></div></div>';
+    return '<div class="gdi-course-stats" style="grid-template-columns:repeat(1,1fr);"><div class="gdi-course-stat"><span class="gdi-course-stat-num" style="font-size:15px;color:var(--meggy-amber,#ffd43b);">Em breve</span><span class="gdi-course-stat-label">Aulas em indexação</span></div></div>';
   }
   // ★ upgrade assíncrono: cartões marcados (sem coverUrl) ganham a capa
   //   da biblioteca quando o manifesto chega. Não bloqueia o render;
@@ -1292,7 +1292,7 @@
       //   então o cartão mostrava 0 aulas e "restantes" negativo.
       const _cardTotal=c.totalLessons||c.lessons.size||0;
       const progress=_cardTotal>0?Math.round(c.watched/_cardTotal*100):0;
-      const progressColor=progress>=80?'#3fb950':progress>=40?'#ffd43b':'var(--ferreto-primary,#ff8b9f)';
+      const progressColor=progress>=80?'#3fb950':progress>=40?'var(--meggy-amber,#ffd43b)':'var(--ferreto-primary,#ff8b9f)';
       const remaining=Math.max(0,_cardTotal-c.watched);
       const el=document.createElement('div');el.className='gdi-course';
       el.style.cursor='pointer';
@@ -1322,7 +1322,7 @@
           <button class="gdi-course-remove" title="${isManual?'Remover curso manual':'Remover curso'}" style="background:transparent;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:14px;padding:2px 6px;flex:none;border-radius:6px;transition:all .15s;"><i class="bi bi-x-lg"></i></button>
         </div>
         ${isManual
-          ? `<small style="color:var(--ferreto-secondary,#5ddeda);font-size:10px;display:block;margin-top:4px;"><i class="bi bi-hdd"></i> ${escHtml(drive||'Drive')} · <span style="color:#ffd43b;"><i class="bi bi-hourglass-split"></i> Meggy processando…</span></small>`
+          ? `<small style="color:var(--ferreto-secondary,#5ddeda);font-size:10px;display:block;margin-top:4px;"><i class="bi bi-hdd"></i> ${escHtml(drive||'Drive')} · <span style="color:var(--meggy-amber,#ffd43b);"><i class="bi bi-hourglass-split"></i> Meggy processando…</span></small>`
           : (drive?`<small style="color:var(--ferreto-secondary,#5ddeda);font-size:10px;display:block;margin-top:2px;"><i class="bi bi-hdd"></i> ${escHtml(drive)}${c.lastAt?` · última: ${dateBr(c.lastAt)}`:''}</small>`:'<small>&nbsp;</small>')
         }
         <div class="gdi-course-stats">
@@ -1345,11 +1345,11 @@
             ? ((c.total || 0) > 0
               ? `<div class="gdi-course-stat"><span class="gdi-course-stat-num">${c.total}</span><span class="gdi-course-stat-label">Aulas</span></div>
                <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:#3fb950;">${c.watched || 0}</span><span class="gdi-course-stat-label">Assistidas</span></div>`
-              : `<div class="gdi-course-stat"><span class="gdi-course-stat-num" style="font-size:15px;color:#ffd43b;">Em breve</span><span class="gdi-course-stat-label">Aulas em indexação</span></div>
+              : `<div class="gdi-course-stat"><span class="gdi-course-stat-num" style="font-size:15px;color:var(--meggy-amber,#ffd43b);">Em breve</span><span class="gdi-course-stat-label">Aulas em indexação</span></div>
                <div class="gdi-course-stat"><span class="gdi-course-stat-num">0</span><span class="gdi-course-stat-label">Assistidas</span></div>`)
             : `<div class="gdi-course-stat"><span class="gdi-course-stat-num">${_cardTotal}</span><span class="gdi-course-stat-label">Aulas</span></div>
                <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:#3fb950;">${c.watched}</span><span class="gdi-course-stat-label">Feitas</span></div>
-               <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:#ffd43b;">${remaining}</span><span class="gdi-course-stat-label">Restam</span></div>
+               <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:var(--meggy-amber,#ffd43b);">${remaining}</span><span class="gdi-course-stat-label">Restam</span></div>
                <div class="gdi-course-stat"><span class="gdi-course-stat-num" style="color:${progressColor};">${progress}%</span><span class="gdi-course-stat-label">Concl.</span></div>`
           }
         </div>
@@ -2361,7 +2361,7 @@
     let watched=c.watched||0;
     let remaining=Math.max(0,total-watched);  // ★ nunca negativo
     let progress=total>0?Math.min(100,Math.round(watched/total*100)):(watched>0?100:0);
-    let progressColor=progress>=80?'#3fb950':progress>=40?'#ffd43b':'var(--ferreto-primary,#ff8b9f)';
+    let progressColor=progress>=80?'#3fb950':progress>=40?'var(--meggy-amber,#ffd43b)':'var(--ferreto-primary,#ff8b9f)';
     const coursePath=c.key;  // e.g. /4:/CANTE COM EXCELENCIA 2.0 + COMUNIDADE/
 
     // coleta aulas individuais do curso
@@ -2534,7 +2534,7 @@
     watched=Math.min(watched,total);
     remaining=Math.max(0,total-watched);
     progress=total>0?Math.min(100,Math.round(watched/total*100)):(watched>0?100:0);
-    progressColor=progress>=80?'#3fb950':progress>=40?'#ffd43b':'var(--ferreto-primary,#ff8b9f)';
+    progressColor=progress>=80?'#3fb950':progress>=40?'var(--meggy-amber,#ffd43b)':'var(--ferreto-primary,#ff8b9f)';
     // ★ v2.15.5 (item 9): o aviso de erro do scanner só vale quando o erro é
     //   ATUAL e relevante — um erro antigo persistido no localStorage (com as
     //   aulas já presentes) não pode assustar para sempre. Mostra quando não
@@ -2570,7 +2570,7 @@
           <div style="font-size:10px;color:var(--ferreto-text-muted,#8b949e);text-transform:uppercase;letter-spacing:.05em;margin-top:2px;">Assistidas</div>
         </div>
         <div style="background:var(--ferreto-surface-2,#161b22);border:1px solid var(--ferreto-border,#21262d);border-radius:10px;padding:12px;text-align:center;">
-          <div style="font-size:22px;font-weight:700;color:#ffd43b;">${remaining}</div>
+          <div style="font-size:22px;font-weight:700;color:var(--meggy-amber,#ffd43b);">${remaining}</div>
           <div style="font-size:10px;color:var(--ferreto-text-muted,#8b949e);text-transform:uppercase;letter-spacing:.05em;margin-top:2px;">Restantes</div>
         </div>
         <div style="background:var(--ferreto-surface-2,#161b22);border:1px solid var(--ferreto-border,#21262d);border-radius:10px;padding:12px;text-align:center;">
@@ -2669,7 +2669,7 @@
             const g = groups[disc];
             const remaining = Math.max(0, g.total - g.watched);
             const pct = g.total > 0 ? Math.round(g.watched / g.total * 100) : 0;
-            const color = pct >= 80 ? '#3fb950' : pct >= 40 ? '#ffd43b' : 'var(--ferreto-primary,#ff8b9f)';
+            const color = pct >= 80 ? '#3fb950' : pct >= 40 ? 'var(--meggy-amber,#ffd43b)' : 'var(--ferreto-primary,#ff8b9f)';
             return '<div class="gdi-note" style="display:flex;align-items:center;gap:12px;cursor:pointer;padding:10px 12px;" data-disc-path="'+escHtml(g.path)+'">'
               + '<i class="bi bi-folder-fill" style="color:var(--ferreto-secondary,#5ddeda);font-size:18px;flex:none;"></i>'
               + '<div style="flex:1;min-width:0;">'
@@ -2677,7 +2677,7 @@
               + '<div style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);margin-top:2px;">'
               + '<span style="color:#3fb950;">'+g.watched+' assistidas</span> · '
               + '<span>'+g.total+' aulas</span> · '
-              + '<span style="color:#ffd43b;">'+remaining+' restantes</span>'
+              + '<span style="color:var(--meggy-amber,#ffd43b);">'+remaining+' restantes</span>'
               + '</div>'
               + '</div>'
               + '<div style="flex:none;text-align:right;">'
