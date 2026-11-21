@@ -3731,6 +3731,195 @@
         })();
       },
 
+      // ★ v2.15.53: o BANCO de flashcards (espelho de
+      //   _renderQuestionBank): filtros disciplina/aluno/estado,
+      //   linhas de assuntos com contagens + desempenho local
+      //   (praticados / a rever, do SRS de cartões gdi-cards-v1 via
+      //   ponte __gdiCardBank*21553), autor visível, prática = deck
+      //   de virar com auto-avaliação (Sei / Não sei) que alimenta
+      //   o SRS. Os itens vêm com kind=flashcard (todas as linhas do
+      //   banco — cada linha é um cartão) e com 2 tentativas, como
+      //   no banco de questões: era a falta da 2ª tentativa que
+      //   deixava os antigos "Compartilhados" em erro no meuc.
+      async _renderFlashcardBank(el) {
+        const root = el.querySelector('#meggy-fcbank-root');
+        if (!root) return;
+        const esc = Shell.views._esc;
+        const toast = (m) => { try { if (typeof window.showToast === 'function') window.showToast(m); } catch (_) {} };
+        const fetchJson = async (url, ms) => {
+          const _ctl = new AbortController();
+          const _to = setTimeout(() => { try { _ctl.abort(); } catch (_) {} }, ms || 15000);
+          try { const r = await fetch(url, { cache: 'no-store', signal: _ctl.signal }); return await r.json(); } finally { clearTimeout(_to); }
+        };
+        root.innerHTML = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' +
+          '<select id="meggy-fcbank-subject" style="flex:1;min-width:160px;background:rgba(255,255,255,.06);border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:8px 10px;font-size:13px;"><option value="">Todas as disciplinas</option></select>' +
+          '<select id="meggy-fcbank-author" style="flex:1;min-width:160px;background:rgba(255,255,255,.06);border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:8px 10px;font-size:13px;"><option value="">Todos os alunos</option></select>' +
+          '<select id="meggy-fcbank-state" style="flex:1;min-width:160px;background:rgba(255,255,255,.06);border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:8px 10px;font-size:13px;"><option value="">Todos</option><option value="new">Não praticados</option><option value="due">A rever</option></select>' +
+        '</div>' +
+        '<div id="meggy-fcbank-topics" style="margin-bottom:14px;"></div>' +
+        '<div id="meggy-fcbank-list"><div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando flashcards...</div></div></div>';
+        const subjectSel = root.querySelector('#meggy-fcbank-subject');
+        const authorSel = root.querySelector('#meggy-fcbank-author');
+        const stateSel = root.querySelector('#meggy-fcbank-state');
+        const topicsEl = root.querySelector('#meggy-fcbank-topics');
+        const listEl = root.querySelector('#meggy-fcbank-list');
+        let items = [];
+        const frontOf = (it) => it.front || it.statement || '';
+        const backOf = (it) => {
+          if (it.back) return it.back;
+          // verso derivado (receita do cartão da aula): texto da
+          //   correcta + explicação + legal + fundamentação.
+          const q = Shell.views._sharedCardToQuestion(it);
+          let b = '';
+          if (q.type === 'mc' && Array.isArray(q.options) && q.options.length) b = String.fromCharCode(65 + (q.correct || 0)) + ') ' + (q.options[q.correct] || '');
+          else b = (q.correct === 1 || q.correct === '1') ? 'Certo' : 'Errado';
+          if (q.explanation) b += '\n\n💡 ' + q.explanation;
+          if (q.legalText) b += '\n\n⚖️ ' + q.legalText;
+          if (q.fundamentacao) b += '\n\n📚 ' + q.fundamentacao;
+          return b;
+        };
+        const stateOf = (it) => {
+          try { if (typeof window.__gdiCardBankState21553 === 'function') return window.__gdiCardBankState21553({ front: frontOf(it) }); } catch (_) {}
+          return { practiced: false, due: false };
+        };
+        const applyStateFilter = (arr) => {
+          const f = stateSel.value || '';
+          if (f === 'new') return arr.filter(it => !stateOf(it).practiced);
+          if (f === 'due') return arr.filter(it => stateOf(it).due);
+          return arr;
+        };
+        const toDeckCard = (it) => {
+          // cartão p/ o deck: com verso guardado, o verso É a
+          //   resposta (opção única); sem verso, o deck deriva-o da
+          //   questão (autoCreateFlashcards). disciplina/assunto/
+          //   autor viajam no cartão p/ a ponte do SRS.
+          let card;
+          if (it.back) card = { statement: frontOf(it), options: [it.back], correct: 0, type: 'mc', explanation: '', legalText: '', fundamentacao: '' };
+          else card = Shell.views._sharedCardToQuestion(it);
+          card.front = frontOf(it);
+          card.back = backOf(it);
+          card.disciplina = it.subject || '';
+          card.topic = it.topic || '';
+          card.author = it.author || '';
+          return card;
+        };
+        const gradeHook = (qq, knew) => {
+          try { if (typeof window.__gdiCardBankGrade21553 === 'function') window.__gdiCardBankGrade21553({ front: qq.front || qq.statement || '', back: qq.back || '', disciplina: qq.disciplina || '', topic: qq.topic || '' }, knew); } catch (_) {}
+        };
+        const openDeck = (pool, startIndex, title) => {
+          Shell.views._showFlashcardDeck(el, { lessonName: title, author: '', questions: pool.map(toDeckCard), startIndex: startIndex || 0, onGrade: gradeHook });
+        };
+        const renderList = () => {
+          const filtered = applyStateFilter(items);
+          if (!filtered.length) { listEl.innerHTML = '<div style="color:#9aa4b8;font-size:13px;padding:12px 0;">Nenhum flashcard com esses filtros.</div>'; return; }
+          let html = '<div class="meggy-study-list">';
+          filtered.forEach((it, idx) => {
+            const sub = (it.subject || '') + (it.topic ? ' · ' + it.topic : '');
+            const date = it.date ? new Date(it.date).toLocaleDateString('pt-BR') : '';
+            const st = stateOf(it);
+            const stTxt = st.practiced ? (st.due ? ' · <span style="color:#ffd43b;">a rever</span>' : ' · praticado') : '';
+            html += '<div class="meggy-study-item meggy-fcbank-item" data-idx="' + idx + '" style="cursor:pointer;"><div class="meggy-study-item-icon">🃏</div><div class="meggy-study-item-body"><div class="meggy-study-item-title">' + esc(frontOf(it) || 'Flashcard') + '</div><div class="meggy-study-item-meta">' + esc(sub) + stTxt + '</div><div class="meggy-study-item-meta" style="color:#ff8b9f;">por ' + esc(it.author || '—') + (date ? ' · ' + date : '') + '</div></div><i class="bi bi-chevron-right meggy-study-item-chevron"></i></div>';
+          });
+          html += '</div>';
+          listEl.innerHTML = html;
+          listEl.querySelectorAll('.meggy-fcbank-item').forEach((node) => {
+            node.onclick = () => {
+              const ix = parseInt(node.dataset.idx, 10);
+              const it = filtered[ix];
+              if (!it) return;
+              openDeck(filtered, ix, (it.subject || 'Flashcards') + (it.topic ? ' · ' + it.topic : ''));
+            };
+          });
+        };
+        const practice = (topic) => {
+          let pool = items;
+          if (topic) pool = pool.filter(it => (it.topic || 'A classificar') === topic);
+          pool = applyStateFilter(pool);
+          if (!pool.length) { toast('Sem flashcards para praticar com esses filtros'); return; }
+          const shuffled = pool.slice();
+          for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = t; }
+          openDeck(shuffled, 0, (subjectSel.value || 'Banco de flashcards') + (topic ? ' · ' + topic : ''));
+        };
+        const renderTopics = async () => {
+          const subject = subjectSel.value || '';
+          if (!subject) { topicsEl.innerHTML = ''; return; }
+          topicsEl.innerHTML = '<div style="color:#9aa4b8;font-size:12px;">Carregando assuntos...</div>';
+          try {
+            const d = await fetchJson('/api/ai/flashcard-topics?subject=' + encodeURIComponent(subject), 12000);
+            const topics = (d && d.ok && Array.isArray(d.topics)) ? d.topics : [];
+            if (!topics.length) { topicsEl.innerHTML = ''; return; }
+            const perf = {};
+            items.forEach(it => {
+              const t = it.topic || 'A classificar';
+              const st = stateOf(it);
+              perf[t] = perf[t] || { p: 0, d: 0 };
+              if (st.practiced) perf[t].p++;
+              if (st.due) perf[t].d++;
+            });
+            let html = '<div style="display:flex;flex-direction:column;gap:6px;">';
+            topics.forEach(t => {
+              const pf = perf[t.topic];
+              const pfTxt = pf && (pf.p || pf.d) ? ' · praticados: ' + pf.p + (pf.d ? ' · <span style="color:#ffd43b;">a rever: ' + pf.d + '</span>' : '') : '';
+              html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;"><div style="flex:1;min-width:0;"><b style="color:#f0f6fc;font-size:13px;">' + esc(t.topic) + '</b><div style="color:#9aa4b8;font-size:12px;">' + t.count + ' flashcards' + pfTxt + '</div></div><button class="meggy-header-btn meggy-fcbank-practice" data-topic="' + esc(t.topic) + '" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;font-size:12px;"><i class="bi bi-play-fill"></i> Praticar</button></div>';
+            });
+            html += '</div>';
+            topicsEl.innerHTML = html;
+            topicsEl.querySelectorAll('.meggy-fcbank-practice').forEach(b => { b.onclick = () => practice(b.dataset.topic); });
+          } catch (e) { topicsEl.innerHTML = ''; }
+        };
+        const loadList = async () => {
+          const subject = subjectSel.value || '';
+          const author = authorSel.value || '';
+          listEl.innerHTML = '<div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando flashcards...</div></div>';
+          // ★ 2 tentativas (o padrão da vista do banco de questões):
+          //   sob quota, a 1ª pode cair num isolate frio (snapshot +
+          //   journal) e estourar o timeout; a 2ª apanha as caches.
+          let d = null, _loaded = false;
+          for (let _att = 0; _att < 2 && !_loaded; _att++) {
+            try {
+              const q = ['kind=flashcard'];
+              if (subject) q.push('subject=' + encodeURIComponent(subject));
+              if (author) q.push('author=' + encodeURIComponent(author));
+              d = await fetchJson('/api/ai/shared-flashcards?' + q.join('&'), 20000);
+              _loaded = true;
+            } catch (e) {
+              if (_att === 0) await new Promise(r => setTimeout(r, 1200));
+            }
+          }
+          if (_loaded) {
+            items = (d && d.ok && Array.isArray(d.items)) ? d.items : [];
+            renderList();
+            renderTopics();
+          } else {
+            listEl.innerHTML = '<div style="color:#ff8b8b;font-size:13px;padding:12px 0;">Não foi possível carregar o banco agora. Tente de novo em instantes.</div>';
+          }
+        };
+        subjectSel.onchange = loadList;
+        authorSel.onchange = loadList;
+        stateSel.onchange = () => { renderList(); renderTopics(); };
+        loadList();
+        (async () => {
+          try {
+            const _rs = await Promise.all([
+              fetchJson('/api/ai/flashcard-bank/lists', 8000).catch(() => null),
+              fetchJson('/api/ai/shared-subjects', 8000).catch(() => null),
+              fetchJson('/api/ai/shared-authors', 8000).catch(() => null)
+            ]);
+            const dl = _rs[0], ds = _rs[1], da = _rs[2];
+            const subs = (dl && dl.ok && Array.isArray(dl.disciplines) && dl.disciplines.length) ? dl.disciplines : ((ds && ds.ok) ? (ds.flashcardSubjects || []) : []);
+            if (subs.length) {
+              const cur = subjectSel.value;
+              subs.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; subjectSel.appendChild(o); });
+              subjectSel.value = cur;
+            }
+            if (da && da.ok && Array.isArray(da.authors)) {
+              const cur = authorSel.value;
+              da.authors.forEach(a => { const o = document.createElement('option'); o.value = a.author; o.textContent = a.author + ' (' + (a.flashcards != null ? a.flashcards : 0) + ')'; authorSel.appendChild(o); });
+              authorSel.value = cur;
+            }
+          } catch (_) {}
+        })();
+      },
       async _renderSharedSection(el, kind) {
         if (!el) return;
         const titles = { flashcards: 'Flashcards', questoes: 'Questões', resumos: 'Resumos' };
@@ -4155,28 +4344,34 @@
       },
 
       flashcards(el) {
+        // ★ v2.15.53: /flashcards é UM sistema só — o BANCO de
+        //   flashcards por disciplina → assunto (espelho de /questoes;
+        //   ordem do Elton: "o flashcard deve ser exatamente igual às
+        //   questões"). A árvore por curso saiu (os flashcards por
+        //   aula vivem no cartão da própria aula, derivados das
+        //   questões) e os antigos "Compartilhados" SÃO o banco — os
+        //   filtros por disciplina/assunto e por aluno (autor
+        //   visível) vivem aqui como filtros do banco.
         el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">🃏 Flashcards</h1></div>' +
-          '<div id="meggy-flashcards-container"><div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando flashcards...</div></div></div>';
-        (async () => {
-          const entries = await Shell.views._loadStudyCache();
-          const withCards = entries.filter(e => e.questions && Array.isArray(e.questions) && e.questions.length > 0);
-          const container = document.getElementById('meggy-flashcards-container');
-          if (!container) return;
-          if (withCards.length === 0) { Shell.views._renderGenerateHint(el, 'flashcards'); Shell.views._renderSharedSection(el, 'flashcards'); return; }
-          // ★ Agrupar por curso → disciplina → assunto
-          const tree = Shell.views._groupEntriesByHierarchy(withCards);
-          Shell.views._renderStudyTree(container, tree, 'flashcards', el, withCards);
-          Shell.views._renderSharedSection(el, 'flashcards');
-        })();
+          '<div style="color:#9aa4b8;font-size:13px;margin-bottom:12px;">Banco de flashcards de todos os cursos e alunos, organizado por disciplina e assunto. Gere questões numa aula e os flashcards entram aqui automaticamente.</div>' +
+          '<div id="meggy-fcbank-root"><div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando o banco de flashcards...</div></div></div>';
+        Shell.views._renderFlashcardBank(el);
       },
 
       _showFlashcardDeck(el, entry) {
         const questions = entry.questions || [];
         const lessonName = Shell.views._esc(entry.lessonName || 'Aula');
-        let current = 0;
+        let current = (typeof entry.startIndex === 'number' && entry.startIndex > 0) ? Math.min(entry.startIndex, Math.max(questions.length - 1, 0)) : 0;
+        // ★ v2.15.53: auto-avaliação opcional (prática do banco) —
+        //   entry.onGrade(q, knew) liga os botões Sei/Não sei e a
+        //   contagem; sem onGrade o deck é o de sempre (só virar).
+        const graded21553 = {};
+        let know21553 = 0, dontKnow21553 = 0;
+        let flipped21553 = false;
         const renderCard = () => {
           const q = questions[current];
           if (!q) return;
+          flipped21553 = false;
           const isMC = q.type === 'mc';
           const front = Shell.views._esc(q.statement || '');
           let back = '';
@@ -4195,7 +4390,7 @@
               '<h1 class="meggy-view-title" style="font-size:16px;">🃏 ' + lessonName + '</h1>' +
             '</div>' +
             '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:13px;color:#9aa4b8;">' +
-              '<span>Cartão ' + (current + 1) + ' de ' + questions.length + (entry.author ? ' · por ' + Shell.views._esc(entry.author) : '') + '</span>' +
+              '<span>Cartão ' + (current + 1) + ' de ' + questions.length + (entry.author ? ' · por ' + Shell.views._esc(entry.author) : '') + (entry.onGrade ? ' · <span id="meggy-fc-grade-count">Sei ' + know21553 + ' · Não sei ' + dontKnow21553 + '</span>' : '') + '</span>' +
               '<span style="color:#ff8b9f;">Clique no cartão para virar</span>' +
             '</div>' +
             '<div class="meggy-flashcard-deck">' +
@@ -4215,9 +4410,39 @@
             '<div class="meggy-flashcard-nav">' +
               '<button class="meggy-header-btn" id="meggy-fc-prev" ' + (current === 0 ? 'disabled' : '') + '><i class="bi bi-chevron-left"></i> Anterior</button>' +
               '<button class="meggy-header-btn" id="meggy-fc-next" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">Próximo <i class="bi bi-chevron-right"></i></button>' +
-            '</div>';
+            '</div>' +
+            (entry.onGrade ? '<div id="meggy-fc-grade" style="display:flex;gap:8px;justify-content:center;margin-top:12px;"><button class="meggy-header-btn" id="meggy-fc-dontknow" style="border-color:rgba(255,139,159,.5);color:#ff8b9f;" disabled><i class="bi bi-x-lg"></i> Não sei</button><button class="meggy-header-btn" id="meggy-fc-know" style="background:linear-gradient(135deg,#3fb950,#2ea043);color:#fff;border:none;" disabled><i class="bi bi-check-lg"></i> Sei</button></div><div id="meggy-fc-grade-hint" style="text-align:center;color:#9aa4b8;font-size:12px;margin-top:8px;">Vira o cartão e diz se sabias — a resposta alimenta a tua revisão espaçada.</div>' : '');
           document.getElementById('meggy-fc-prev').onclick = () => { if (current > 0) { current--; renderCard(); } };
           document.getElementById('meggy-fc-next').onclick = () => { if (current < questions.length - 1) { current++; renderCard(); } else { Shell.views.flashcards(el); } };
+          // ★ v2.15.53: cablagem da auto-avaliação (só com onGrade) —
+          //   os botões acordam quando o cartão está virado; uma
+          //   avaliação por cartão; a nota vai p/ entry.onGrade (a
+          //   prática do banco regista no SRS de cartões) e avança.
+          if (entry.onGrade) {
+            const cardEl21553 = document.getElementById('meggy-flashcard-card');
+            const knowBtn21553 = document.getElementById('meggy-fc-know');
+            const dontBtn21553 = document.getElementById('meggy-fc-dontknow');
+            const hint21553 = document.getElementById('meggy-fc-grade-hint');
+            const setGradeEnabled21553 = (on) => { if (knowBtn21553) knowBtn21553.disabled = !on; if (dontBtn21553) dontBtn21553.disabled = !on; };
+            if (graded21553[current]) { setGradeEnabled21553(false); if (hint21553) hint21553.textContent = graded21553[current] === 'know' ? 'Já avaliaste este cartão: Sei ✓' : 'Já avaliaste este cartão: Não sei'; }
+            if (cardEl21553) cardEl21553.addEventListener('click', () => {
+              flipped21553 = cardEl21553.classList.contains('flipped');
+              if (!graded21553[current]) { setGradeEnabled21553(flipped21553); if (hint21553) hint21553.textContent = flipped21553 ? 'Sabias a resposta?' : 'Vira o cartão e diz se sabias — a resposta alimenta a tua revisão espaçada.'; }
+            });
+            const doGrade21553 = (knew) => {
+              if (graded21553[current]) return;
+              graded21553[current] = knew ? 'know' : 'dontknow';
+              if (knew) know21553++; else dontKnow21553++;
+              try { entry.onGrade(q, knew); } catch (_) {}
+              const gc21553 = document.getElementById('meggy-fc-grade-count');
+              if (gc21553) gc21553.textContent = 'Sei ' + know21553 + ' · Não sei ' + dontKnow21553;
+              setGradeEnabled21553(false);
+              if (hint21553) hint21553.textContent = knew ? 'Boa! Fica registado na tua revisão espaçada.' : 'Fica na revisão espaçada para reveres em breve.';
+              setTimeout(() => { if (current < questions.length - 1) { current++; renderCard(); } }, 450);
+            };
+            if (knowBtn21553) knowBtn21553.onclick = () => doGrade21553(true);
+            if (dontBtn21553) dontBtn21553.onclick = () => doGrade21553(false);
+          }
           el.scrollTop = 0;
         };
         renderCard();
