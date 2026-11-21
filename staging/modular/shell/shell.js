@@ -282,7 +282,7 @@
             <i class="bi bi-list"></i>
           </button>
           <div class="meggy-header-logo" id="meggy-logo">
-            <span style="font-size:20px;">🐩</span> Meggy
+            <img class="meggy-logo-img meggy-logo-img-light" src="https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/shell/meggy-icon.webp" alt="Meggy" style="height:26px;width:auto;border-radius:50%;vertical-align:middle;"><img class="meggy-logo-img meggy-logo-img-dark" src="https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/shell/meggy-icon-dark.webp" alt="Meggy" style="height:26px;width:auto;border-radius:50%;vertical-align:middle;"> Meggy
           </div>
           <div class="meggy-header-search">
             <input type="search" placeholder="Buscar aulas, cursos, questões..." id="meggy-search-input" />
