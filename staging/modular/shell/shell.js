@@ -2207,6 +2207,7 @@
                   //   passado ao render: o selo (B2) é que decide o que selar.
                   const _jcVal = _isaCachedField(_jc, isaField);
                   if (_jcVal) {
+                    if (type === 'isa-questions') Shell.__isaQCtx21548 = { lessonName: lessonName, courseName: lessonPath.split('/').filter(Boolean).slice(-1)[0] || '', cacheKey: cacheKey, entry: _jc };
                     Shell._renderISAResult(type, _jcVal, bodyEl, lessonName, true, _jc);
                     return;
                   }
@@ -2231,6 +2232,7 @@
                 //   possível gerar' — nunca sela a recusa.
                 const _cachedVal = _isaCachedField(cached, isaField);
                 if (_cachedVal) {
+                  if (type === 'isa-questions') Shell.__isaQCtx21548 = { lessonName: lessonName, courseName: lessonPath.split('/').filter(Boolean).slice(-1)[0] || '', cacheKey: cacheKey, entry: cached };
                   Shell._renderISAResult(type, _cachedVal, bodyEl, lessonName, true, cached);
                   return;
                 }
@@ -2446,7 +2448,10 @@
                   'Crie um resumo em Markdown deste material. Use ## títulos e bullets. Material:\n' + textSlice.slice(0, 10000) + CTX_ONLY_NOTE // ★ v2.15.13-D5d
                 ];
                 const PILULAS_PROMPT = 'Crie "Pílulas" deste material — pontos-chave para revisão rápida ANTES da prova. Formato Markdown:\n# Pílulas de Revisão\n\n## Conceitos Essenciais\n- **Conceito 1**: explicação curta com exemplo\n- **Conceito 2**: explicação curta\n\n## Pegadinhas Rápidas\n- ⚠️ Pegadinha 1\n- ⚠️ Pegadinha 2\n\n## Mnemônicos\n- Dica para memorizar\n\nMáximo 20 bullets no total. Seja OBJETIVO mas COMPLETO.\n\nConteúdo:\n' + textSlice.slice(0, 15000) + CTX_ONLY_NOTE; // ★ v2.15.13-D5e
-                const QUESTOES_PROMPT = 'Você é um examinador de concurso público brasileiro experiente. Baseado neste material, gere 10 questões de concurso em JSON array. Misture:\n- 6 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"legalText":"...","explanation":"...","fundamentacao":"..."}\n- 4 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"legalText":"...","explanation":"...","fundamentacao":"..."}\n\nCAMPOS:\n- statement: enunciado claro, contexto completo\n- legalText: o dispositivo legal aplicável (ex: "art. 5º, CF")\n- explanation: explicação técnica do acerto/erro\n- fundamentacao: fundamentação didática completa\n\nSem comentários, só JSON.\n\n' + textSlice.slice(0, 60000) + CTX_ONLY_NOTE; // ★ v2.15.13-D5f
+                // ★ v2.15.48: listas canónicas (disciplina/assunto) p/ classificar as questões
+                const _qbLists21548 = await Shell._qbLists();
+                const _qbBlock21548 = Shell._qbPromptBlock(_qbLists21548);
+                const QUESTOES_PROMPT = 'Você é um examinador de concurso público brasileiro experiente. Baseado neste material, gere 10 questões de concurso em JSON array. Misture:\n- 6 múltipla escolha: {"type":"mc","disciplina":"...","assunto":"...","statement":"...","options":["a","b","c","d"],"correct":0,"legalText":"...","explanation":"...","fundamentacao":"..."}\n- 4 certo/errado (CEBRASPE): {"type":"tf","disciplina":"...","assunto":"...","statement":"...","correct":1,"legalText":"...","explanation":"...","fundamentacao":"..."}\n\nCAMPOS:\n- statement: enunciado claro, contexto completo\n- legalText: o dispositivo legal aplicável (ex: "art. 5º, CF")\n- explanation: explicação técnica do acerto/erro\n- fundamentacao: fundamentação didática completa\n\nSem comentários, só JSON.\n\n' + textSlice.slice(0, 60000) + CTX_ONLY_NOTE + _qbBlock21548; // ★ v2.15.13-D5f + v2.15.48 (classificação)
                 // ★ v2.15.12-D2a-prompt-escalado: o retry E13 repetia o MESMO
                 //   prompt byte-idêntico — uma falha SISTEMÁTICA de formato
                 //   (ex.: o modelo de raciocínio devolve <think> + prosa)
@@ -2456,7 +2461,7 @@
                 const QUESTOES_PROMPT_STRICT = '\n\nREGRA DE FORMATO (obrigatória): responda SOMENTE com o JSON array. Sem <think>, sem raciocínio, sem explicações, sem markdown, sem texto antes ou depois. Comece a resposta com [ e termine com ].';
                 const QUESTOES_PROMPTS = [QUESTOES_PROMPT,
                   QUESTOES_PROMPT + QUESTOES_PROMPT_STRICT,
-                  QUESTOES_PROMPT + QUESTOES_PROMPT_STRICT + '\nExemplo de 1 questão (siga este formato exato): [{"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"legalText":"...","explanation":"...","fundamentacao":"..."}]'];
+                  QUESTOES_PROMPT + QUESTOES_PROMPT_STRICT + '\nExemplo de 1 questão (siga este formato exato): [{"type":"mc","disciplina":"...","assunto":"...","statement":"...","options":["a","b","c","d"],"correct":0,"legalText":"...","explanation":"...","fundamentacao":"..."}]'];
 
                 // ★ Helper: chama /api/ai com fallback de prompt (3 níveis para resumo)
                 async function callIsa(prompt, kind) {
@@ -2894,10 +2899,11 @@
                     fetch('/api/ai/shared-summaries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lessonName: lessonName, summary: gen.summary, questions: gen.questions.length ? gen.questions : null }) }).catch(() => {});
                   }
                   if (gen.questions && gen.questions.length) {
+                    const _lotDisc21548 = (() => { const _c = {}; gen.questions.forEach(q => { if (q && q.disciplina) _c[q.disciplina] = (_c[q.disciplina] || 0) + 1; }); let _b = '', _n = 0; Object.keys(_c).forEach(k => { if (_c[k] > _n) { _n = _c[k]; _b = k; } }); return _b; })();
                     for (let _qi = 0; _qi < gen.questions.length; _qi++) {
                       const _q = gen.questions[_qi];
                       const _back = (gen.flashcards && gen.flashcards[_qi]) ? gen.flashcards[_qi].b : '';
-                      fetch('/api/ai/shared-flashcards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subject: lessonName, front: _q.statement || '', back: _back || '', statement: _q.statement || '', options: Array.isArray(_q.options) ? _q.options : null, correct: (typeof _q.correct === 'number' ? _q.correct : 0), explanation: _q.explanation || '', legalText: _q.legalText || '', fundamentacao: _q.fundamentacao || '', type: _q.type || 'mc' }) }).catch(() => {});
+                      fetch('/api/ai/shared-flashcards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subject: (_q.disciplina || _lotDisc21548 || lessonName), disciplina: (_q.disciplina || _lotDisc21548 || ''), topic: _q.assunto || '', assunto: _q.assunto || '', source: JSON.stringify({ course: courseName || '', lesson: lessonName }), lessonPath: lessonPath, front: _q.statement || '', back: _back || '', statement: _q.statement || '', options: Array.isArray(_q.options) ? _q.options : null, correct: (typeof _q.correct === 'number' ? _q.correct : 0), correctText: _q.correctText || '', explanation: _q.explanation || '', legalText: _q.legalText || '', fundamentacao: _q.fundamentacao || '', type: _q.type || 'mc' }) }).catch(() => {});
                     }
                   }
                 } catch (_) {}
@@ -2915,6 +2921,7 @@
                   // Flashcards usa render especial (flip deck)
                   Shell._renderFlashcardDeck(bodyEl, { flashcards: gen.flashcards, lessonName: lessonName, questions: gen.questions });
                 } else {
+                  if (type === 'isa-questions') Shell.__isaQCtx21548 = { lessonName: lessonName, courseName: courseName, cacheKey: cacheKey, entry: cached2 };
                   Shell._renderISAResult(type, toShow, bodyEl, lessonName, false, cached2);
                 }
                 if (!_cacheSaveOk && (gen.summary || gen.mindmap || (gen.questions && gen.questions.length))) {
@@ -3537,6 +3544,145 @@
 
       // ★ v2.15.1: seção "Compartilhados" — itens de TODOS os alunos, com
       // filtros por assunto e por aluno, autor visível em cada card.
+      // ★ v2.15.48: o BANCO de questões (vista de /questoes) — disciplina →
+      //   assunto → praticar, sobre as linhas partilhadas (que SÃO o
+      //   banco). Filtros: disciplina, aluno (autor visível) e estado das
+      //   respostas do aluno (dos registos locais/SRS, via ponte
+      //   __gdiBankState21548). Todos os fetch com timeout — a vista nunca
+      //   fica num spinner infinito (o bug dos "Compartilhados").
+      async _renderQuestionBank(el) {
+        const root = el.querySelector('#meggy-qbank-root');
+        if (!root) return;
+        const esc = Shell.views._esc;
+        const toast = (m) => { try { if (typeof window.showToast === 'function') window.showToast(m); } catch (_) {} };
+        const fetchJson = async (url, ms) => {
+          const _ctl = new AbortController();
+          const _to = setTimeout(() => { try { _ctl.abort(); } catch (_) {} }, ms || 15000);
+          try { const r = await fetch(url, { cache: 'no-store', signal: _ctl.signal }); return await r.json(); } finally { clearTimeout(_to); }
+        };
+        root.innerHTML = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' +
+          '<select id="meggy-qbank-subject" style="flex:1;min-width:160px;background:rgba(255,255,255,.06);border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:8px 10px;font-size:13px;"><option value="">Todas as disciplinas</option></select>' +
+          '<select id="meggy-qbank-author" style="flex:1;min-width:160px;background:rgba(255,255,255,.06);border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:8px 10px;font-size:13px;"><option value="">Todos os alunos</option></select>' +
+          '<select id="meggy-qbank-state" style="flex:1;min-width:160px;background:rgba(255,255,255,.06);border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:8px 10px;font-size:13px;"><option value="">Todas</option><option value="new">Não respondidas</option><option value="wrong">Erradas</option></select>' +
+        '</div>' +
+        '<div id="meggy-qbank-topics" style="margin-bottom:14px;"></div>' +
+        '<div id="meggy-qbank-list"><div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando questões...</div></div></div>';
+        const subjectSel = root.querySelector('#meggy-qbank-subject');
+        const authorSel = root.querySelector('#meggy-qbank-author');
+        const stateSel = root.querySelector('#meggy-qbank-state');
+        const topicsEl = root.querySelector('#meggy-qbank-topics');
+        const listEl = root.querySelector('#meggy-qbank-list');
+        let items = [];
+        const stateOf = (q) => {
+          try { if (typeof window.__gdiBankState21548 === 'function') return window.__gdiBankState21548(q); } catch (_) {}
+          return { answered: false, wrong: false };
+        };
+        const applyStateFilter = (arr) => {
+          const f = stateSel.value || '';
+          if (f === 'new') return arr.filter(q => !stateOf(q).answered);
+          if (f === 'wrong') return arr.filter(q => stateOf(q).wrong);
+          return arr;
+        };
+        const renderList = () => {
+          const filtered = applyStateFilter(items);
+          if (!filtered.length) { listEl.innerHTML = '<div style="color:#9aa4b8;font-size:13px;padding:12px 0;">Nenhuma questão com esses filtros.</div>'; return; }
+          let html = '<div class="meggy-study-list">';
+          filtered.forEach((it, idx) => {
+            const sub = (it.subject || '') + (it.topic ? ' · ' + it.topic : '');
+            const date = it.date ? new Date(it.date).toLocaleDateString('pt-BR') : '';
+            html += '<div class="meggy-study-item meggy-qbank-item" data-idx="' + idx + '" style="cursor:pointer;"><div class="meggy-study-item-icon">❓</div><div class="meggy-study-item-body"><div class="meggy-study-item-title">' + esc(it.statement || it.front || 'Questão') + '</div><div class="meggy-study-item-meta">' + esc(sub) + '</div><div class="meggy-study-item-meta" style="color:#ff8b9f;">por ' + esc(it.author || '—') + (date ? ' · ' + date : '') + '</div></div><i class="bi bi-chevron-right meggy-study-item-chevron"></i></div>';
+          });
+          html += '</div>';
+          listEl.innerHTML = html;
+          listEl.querySelectorAll('.meggy-qbank-item').forEach((node) => {
+            node.onclick = () => {
+              const it = filtered[parseInt(node.dataset.idx, 10)];
+              if (!it) return;
+              const q = Shell.views._sharedCardToQuestion(it);
+              Shell.views._showQuiz(el, { lessonName: it.subject || 'Questão', author: it.author || '', questions: [q], onAnswer: (qq, ok) => { try { if (typeof window.__gdiBankAnswer21548 === 'function') window.__gdiBankAnswer21548(qq, ok); } catch (_) {} renderList(); } });
+            };
+          });
+        };
+        const practice = (topic) => {
+          const subject = subjectSel.value || '';
+          let pool = items;
+          if (topic) pool = pool.filter(q => (q.topic || 'A classificar') === topic);
+          pool = applyStateFilter(pool);
+          if (!pool.length) { toast('Sem questões para praticar com esses filtros'); return; }
+          const shuffled = pool.slice();
+          for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = t; }
+          const qs = shuffled.map(it => Shell.views._sharedCardToQuestion(it));
+          Shell.views._showQuiz(el, { lessonName: (subject || 'Banco de questões') + (topic ? ' · ' + topic : ''), questions: qs, onAnswer: (qq, ok) => { try { if (typeof window.__gdiBankAnswer21548 === 'function') window.__gdiBankAnswer21548(qq, ok); } catch (_) {} } });
+        };
+        const renderTopics = async () => {
+          const subject = subjectSel.value || '';
+          if (!subject) { topicsEl.innerHTML = ''; return; }
+          topicsEl.innerHTML = '<div style="color:#9aa4b8;font-size:12px;">Carregando assuntos...</div>';
+          try {
+            const d = await fetchJson('/api/ai/question-topics?subject=' + encodeURIComponent(subject), 12000);
+            const topics = (d && d.ok && Array.isArray(d.topics)) ? d.topics : [];
+            if (!topics.length) { topicsEl.innerHTML = ''; return; }
+            const acc = {};
+            items.forEach(q => {
+              const t = q.topic || 'A classificar';
+              const st = stateOf(q);
+              if (!st.answered) return;
+              acc[t] = acc[t] || { a: 0, w: 0 };
+              acc[t].a++; if (st.wrong) acc[t].w++;
+            });
+            let html = '<div style="display:flex;flex-direction:column;gap:6px;">';
+            topics.forEach(t => {
+              const a = acc[t.topic];
+              const accTxt = a && a.a ? ' · seu acerto: ' + Math.round((a.a - a.w) / a.a * 100) + '% (' + a.a + ' respondidas)' : '';
+              html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;"><div style="flex:1;min-width:0;"><b style="color:#f0f6fc;font-size:13px;">' + esc(t.topic) + '</b><div style="color:#9aa4b8;font-size:12px;">' + t.count + ' questões' + accTxt + '</div></div><button class="meggy-header-btn meggy-qbank-practice" data-topic="' + esc(t.topic) + '" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;font-size:12px;"><i class="bi bi-play-fill"></i> Praticar</button></div>';
+            });
+            html += '</div>';
+            topicsEl.innerHTML = html;
+            topicsEl.querySelectorAll('.meggy-qbank-practice').forEach(b => { b.onclick = () => practice(b.dataset.topic); });
+          } catch (e) { topicsEl.innerHTML = ''; }
+        };
+        const loadList = async () => {
+          const subject = subjectSel.value || '';
+          const author = authorSel.value || '';
+          listEl.innerHTML = '<div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando questões...</div></div>';
+          try {
+            const q = ['kind=question'];
+            if (subject) q.push('subject=' + encodeURIComponent(subject));
+            if (author) q.push('author=' + encodeURIComponent(author));
+            const d = await fetchJson('/api/ai/shared-flashcards?' + q.join('&'), 20000);
+            items = (d && d.ok && Array.isArray(d.items)) ? d.items : [];
+            renderList();
+            renderTopics();
+          } catch (e) {
+            listEl.innerHTML = '<div style="color:#ff8b8b;font-size:13px;padding:12px 0;">Não foi possível carregar o banco agora. Tente de novo em instantes.</div>';
+          }
+        };
+        subjectSel.onchange = loadList;
+        authorSel.onchange = loadList;
+        stateSel.onchange = () => { renderList(); renderTopics(); };
+        loadList();
+        (async () => {
+          try {
+            const _rs = await Promise.all([
+              fetchJson('/api/ai/shared-subjects', 8000).catch(() => null),
+              fetchJson('/api/ai/shared-authors', 8000).catch(() => null)
+            ]);
+            const ds = _rs[0], da = _rs[1];
+            if (ds && ds.ok) {
+              const subs = ds.questionSubjects || ds.flashcardSubjects || [];
+              const cur = subjectSel.value;
+              subs.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; subjectSel.appendChild(o); });
+              subjectSel.value = cur;
+            }
+            if (da && da.ok && Array.isArray(da.authors)) {
+              const cur = authorSel.value;
+              da.authors.forEach(a => { const o = document.createElement('option'); o.value = a.author; o.textContent = a.author + ' (' + (a.questions != null ? a.questions : (a.summaries || 0) + (a.flashcards || 0)) + ')'; authorSel.appendChild(o); });
+              authorSel.value = cur;
+            }
+          } catch (_) {}
+        })();
+      },
+
       async _renderSharedSection(el, kind) {
         if (!el) return;
         const titles = { flashcards: 'Flashcards', questoes: 'Questões', resumos: 'Resumos' };
@@ -3563,17 +3709,25 @@
         const esc = Shell.views._esc;
         const fmtDate = (d) => { try { return d ? new Date(d).toLocaleDateString('pt-BR') : ''; } catch (_) { return ''; } };
         const toast = (m) => { try { if (typeof window.showToast === 'function') window.showToast(m); } catch (_) {} };
+        // ★ v2.15.48 (fix do carregamento infinito): metadados em
+        //   PARALELO e com timeout de 8 s — antes eram sequenciais e sem
+        //   timeout: com o worker em fallback lento (D1 esgotado →
+        //   snapshots do Drive), a secção ficava em "Carregando
+        //   compartilhados..." para sempre e a lista nem começava.
+        const _fetchMeta21548 = async (url) => {
+          const _ctl = new AbortController();
+          const _to = setTimeout(() => { try { _ctl.abort(); } catch (_) {} }, 8000);
+          try { const r = await fetch(url, { cache: 'no-store', signal: _ctl.signal }); return await r.json(); } finally { clearTimeout(_to); }
+        };
         try {
+          const _metaJobs = [];
           if (!Shell.__sharedAuthors || !Shell.__sharedAuthors.length) { // ★ v2.15.12-D6a
-            const r = await fetch('/api/ai/shared-authors', { cache: 'no-store' });
-            const d = await r.json();
-            Shell.__sharedAuthors = (d && d.ok && Array.isArray(d.authors)) ? d.authors : [];
+            _metaJobs.push(_fetchMeta21548('/api/ai/shared-authors').then(d => { Shell.__sharedAuthors = (d && d.ok && Array.isArray(d.authors)) ? d.authors : []; }).catch(() => {}));
           }
           if (!Shell.__sharedSubjects || !Shell.__sharedSubjects.summaryLessons || !Shell.__sharedSubjects.summaryLessons.length) { // ★ v2.15.12-D6b — vazio ([]) é truthy: sem isto os filtros ficavam com o vazio da 1ª carga a sessão inteira, mesmo depois de aparecerem itens
-            const r = await fetch('/api/ai/shared-subjects', { cache: 'no-store' });
-            const d = await r.json();
-            Shell.__sharedSubjects = (d && d.ok) ? d : { summaryLessons: [], flashcardSubjects: [] };
+            _metaJobs.push(_fetchMeta21548('/api/ai/shared-subjects').then(d => { Shell.__sharedSubjects = (d && d.ok) ? d : { summaryLessons: [], flashcardSubjects: [] }; }).catch(() => {}));
           }
+          await Promise.all(_metaJobs);
         } catch (_) {}
         // ★ v2.15.13-E2-3-assunto-por-kind: flashcardSubjects tem TODOS os
         //   subjects de shared_flashcards, incluindo assuntos com só
@@ -3614,6 +3768,11 @@
           o.textContent = a.author + ' (' + _n + ')';
           authorSel.appendChild(o);
         });
+        const _fetchList21548 = async (url) => {
+          const _ctl = new AbortController();
+          const _to = setTimeout(() => { try { _ctl.abort(); } catch (_) {} }, 20000);
+          try { return await fetch(url, { cache: 'no-store', signal: _ctl.signal }); } finally { clearTimeout(_to); }
+        };
         const loadList = async () => {
           const subject = subjectSel.value || '';
           const author = authorSel.value || '';
@@ -3624,7 +3783,7 @@
               const q = [];
               if (subject) q.push('lesson=' + encodeURIComponent(subject));
               if (author) q.push('author=' + encodeURIComponent(author));
-              const r = await fetch('/api/ai/shared-summaries' + (q.length ? '?' + q.join('&') : ''), { cache: 'no-store' });
+              const r = await _fetchList21548('/api/ai/shared-summaries' + (q.length ? '?' + q.join('&') : ''));
               const d = await r.json();
               items = (d && d.ok && Array.isArray(d.summaries)) ? d.summaries : [];
             } else {
@@ -3632,7 +3791,7 @@
               if (kind === 'questoes') q.push('kind=question');
               if (subject) q.push('subject=' + encodeURIComponent(subject));
               if (author) q.push('author=' + encodeURIComponent(author));
-              const r = await fetch('/api/ai/shared-flashcards?' + q.join('&'), { cache: 'no-store' });
+              const r = await _fetchList21548('/api/ai/shared-flashcards?' + q.join('&'));
               const d = await r.json();
               items = (d && d.ok && Array.isArray(d.items)) ? d.items : [];
             }
@@ -3703,7 +3862,12 @@
           legalText: it.legalText || '',
           fundamentacao: it.fundamentacao || '',
           type: it.type || 'mc',
-          author: it.author || ''
+          author: it.author || '',
+          id: (it.id != null ? it.id : null),
+          disciplina: it.subject || '',
+          topic: it.topic || '',
+          assunto: it.topic || '',
+          source: it.source || ''
         };
         if (!q.statement && it.back) {
           // card frente/verso sem enunciado: frente vira pergunta, verso vira resposta única
@@ -4005,19 +4169,16 @@
       },
 
       questoes(el) {
+        // ★ v2.15.48: /questoes é UM sistema só — o BANCO de questões por
+        //   disciplina → assunto. A árvore por curso (pastas → disciplina
+        //   → assunto) saiu: as questões por aula vivem no cartão
+        //   interactivo da própria aula (R1). Os antigos "Compartilhados"
+        //   SÃO o banco — os filtros por disciplina/assunto e por aluno
+        //   (autor visível) vivem aqui como filtros do banco.
         el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">❓ Questões</h1></div>' +
-          '<div id="meggy-questoes-container"><div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando questões...</div></div></div>';
-        (async () => {
-          const entries = await Shell.views._loadStudyCache();
-          const withQ = entries.filter(e => e.questions && Array.isArray(e.questions) && e.questions.length > 0);
-          const container = document.getElementById('meggy-questoes-container');
-          if (!container) return;
-          if (withQ.length === 0) { Shell.views._renderGenerateHint(el, 'questoes'); Shell.views._renderSharedSection(el, 'questoes'); return; }
-          // ★ Agrupar por curso → disciplina → assunto
-          const tree = Shell.views._groupEntriesByHierarchy(withQ);
-          Shell.views._renderStudyTree(container, tree, 'questoes', el, withQ);
-          Shell.views._renderSharedSection(el, 'questoes');
-        })();
+          '<div style="color:#9aa4b8;font-size:13px;margin-bottom:12px;">Banco de questões de todos os cursos e alunos, organizado por disciplina e assunto. Gere questões numa aula e elas entram aqui automaticamente.</div>' +
+          '<div id="meggy-qbank-root"><div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando o banco de questões...</div></div></div>';
+        Shell.views._renderQuestionBank(el);
       },
 
       _showQuiz(el, entry) {
@@ -4075,9 +4236,14 @@
               const isCorrect = (chosen === correctIdx);
               if (isCorrect) score++;
               answered++;
-              opts.forEach((o, i) => {
-                if (i === correctIdx) o.classList.add('correct');
-                else if (i === chosen) o.classList.add('wrong');
+              opts.forEach((o) => {
+                // ★ v2.15.48: comparar por data-idx (o valor da resposta),
+                //   não pelo índice no DOM — em Certo/Errado os dois
+                //   trocam (Certo=1 vem primeiro) e o destaque saía
+                //   invertido. Múltipla escolha: data-idx === índice (igual).
+                const _di = parseInt(o.dataset.idx, 10);
+                if (_di === correctIdx) o.classList.add('correct');
+                else if (_di === chosen) o.classList.add('wrong');
                 o.style.cursor = 'default';
               });
               const fb = document.getElementById('meggy-quiz-feedback');
@@ -4093,6 +4259,12 @@
                   const chosenText = isMC ? (q.options[chosen] || '') : (chosen === 1 ? 'Certo' : 'Errado');
                   fetch('/api/concursos/' + encodeURIComponent(Shell.__v215ConcursoId) + '/errors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pergunta: q.statement || '', respostaCerta: correctText, respostaAluno: chosenText, modulo: Shell.__lastQuizLessonName || '' }) }).catch(() => {});
                 } catch (_) {}
+              }
+              // ★ v2.15.48: gancho opcional do chamador (a prática do
+              //   banco regista a resposta nos registos locais → SRS +
+              //   caderno de erros → mapa de fracos).
+              if (typeof entry.onAnswer === 'function') {
+                try { entry.onAnswer(q, isCorrect, chosen); } catch (_) {}
               }
               const scoreEl = document.getElementById('meggy-quiz-score');
               if (scoreEl) scoreEl.textContent = String(score);
@@ -6867,6 +7039,187 @@ el.scrollTop = 0;
       return Shell._esc(txt).replace(/\n/g, '<br>');
     },
 
+    // ★ v2.15.48: listas canónicas do banco de questões (disciplinas +
+    //   assuntos por disciplina) — cache em memória + pedido em voo
+    //   partilhado; falhar devolve listas vazias (a geração continua).
+    async _qbLists() {
+      if (Shell.__qbLists21548) return Shell.__qbLists21548;
+      if (Shell.__qbListsPromise21548) return Shell.__qbListsPromise21548;
+      Shell.__qbListsPromise21548 = (async () => {
+        try {
+          const _ctl = new AbortController();
+          const _to = setTimeout(() => { try { _ctl.abort(); } catch (_) {} }, 2500);
+          try {
+            const r = await fetch('/api/ai/question-bank/lists', { cache: 'no-store', signal: _ctl.signal });
+            const d = await r.json();
+            if (d && d.ok && Array.isArray(d.disciplines)) { Shell.__qbLists21548 = { disciplines: d.disciplines, topics: d.topics || {} }; return Shell.__qbLists21548; }
+          } finally { clearTimeout(_to); }
+        } catch (_) {}
+        return { disciplines: [], topics: {} };
+      })();
+      try { return await Shell.__qbListsPromise21548; } finally { Shell.__qbListsPromise21548 = null; }
+    },
+
+    _qbPromptBlock(lists) {
+      if (!lists || !Array.isArray(lists.disciplines) || !lists.disciplines.length) return '';
+      return '\n\nCLASSIFICAÇÃO (obrigatório em CADA questão):\n- "disciplina": escolhe UMA desta lista: ' + lists.disciplines.slice(0, 40).join('; ') + '\n- "assunto": o tópico específico da questão, curto (ex.: "Crimes contra a pessoa"); se a disciplina já tiver assuntos em uso, prefere um deles.';
+    },
+
+    // ★ v2.15.48: parse de questões p/ o "Gerar mais" — extracção do array
+    //   + salvamento objecto a objecto (nunca lança).
+    _isaParseQuestions21548(resp) {
+      if (!resp || typeof resp !== 'string') return [];
+      let t = resp.replace(/<think>[\s\S]*?<\/think>/gi, ' ').replace(/```(?:json)?\s*/gi, ' ').replace(/```/g, ' ');
+      const f = t.indexOf('['), l = t.lastIndexOf(']');
+      if (f >= 0 && l > f) {
+        try { const a = JSON.parse(t.slice(f, l + 1)); if (Array.isArray(a)) return a; } catch (_) {}
+      }
+      const out = [];
+      const re = /\{[^{}]*"statement"\s*:[^{}]*\}/g;
+      let m;
+      while ((m = re.exec(t)) !== null) { try { const o = JSON.parse(m[0]); if (o && o.statement) out.push(o); } catch (_) {} }
+      return out;
+    },
+
+    // ★ v2.15.48 (R1): sessão interactiva de questões DENTRO do cartão da
+    //   aula — mesma linguagem do _showQuiz (classes meggy-quiz-*), com
+    //   estado por questão guardado ao navegar. A correcta só se revela
+    //   DEPOIS de responder; explicação + fundamentação a seguir. Cada
+    //   resposta alimenta os registos existentes (banco local → SRS +
+    //   caderno de erros) via __gdiBankAnswer21548, com disciplina+assunto.
+    _isaQuizInit(container, questions, lessonName, fullCache) {
+      if (!container) return;
+      const qs = Array.isArray(questions) ? questions : [];
+      if (!qs.length) { container.innerHTML = '<div style="color:#9aa4b8;font-size:13px;">Sem questões para praticar.</div>'; return; }
+      const esc = (s) => Shell._esc(String(s == null ? '' : s));
+      const lotDisc = (fullCache && fullCache.bankMeta && fullCache.bankMeta.disciplina) || '';
+      let current = 0;
+      const state = {};
+      const renderQ = () => {
+        const q = qs[current];
+        if (!q) return;
+        const isMC = q.type !== 'tf';
+        const st = state[current];
+        const answeredCount = Object.keys(state).length;
+        const score = Object.keys(state).filter(k => state[k].correct).length;
+        let optionsHTML = '';
+        if (isMC && Array.isArray(q.options)) {
+          const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
+          optionsHTML = q.options.map((opt, idx) => '<div class="meggy-quiz-option" data-idx="' + idx + '"><span class="meggy-quiz-option-letter">' + (letters[idx] || (idx + 1)) + '</span><span class="meggy-quiz-option-text">' + esc(opt) + '</span></div>').join('');
+        } else {
+          optionsHTML = '<div class="meggy-quiz-option" data-idx="1"><span class="meggy-quiz-option-letter">✓</span><span class="meggy-quiz-option-text">Certo</span></div>' +
+            '<div class="meggy-quiz-option" data-idx="0"><span class="meggy-quiz-option-letter">✗</span><span class="meggy-quiz-option-text">Errado</span></div>';
+        }
+        const badge = '<div class="meggy-quiz-type-badge">' + (isMC ? 'Múltipla Escolha' : 'CEBRASPE — Certo ou Errado') + ' · Q' + (current + 1) + ' de ' + qs.length + ((q.disciplina || lotDisc) ? ' · ' + esc(q.disciplina || lotDisc) + (q.assunto ? ' · ' + esc(q.assunto) : '') : '') + '</div>';
+        container.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:13px;color:#9aa4b8;"><span>' + esc(lessonName || 'Aula') + '</span><span>Acertos: <strong style="color:#5ddeda;">' + score + '</strong>/' + answeredCount + '</span></div>' +
+          '<div class="meggy-quiz-card">' + badge +
+            '<div class="meggy-quiz-statement">' + esc(q.statement || '') + '</div>' +
+            (q.legalText ? '<div style="font-size:12px;color:#9aa4b8;border-left:2px solid #ff8b9f;padding-left:8px;margin:8px 0;">📜 ' + esc(q.legalText) + '</div>' : '') +
+            '<div class="meggy-quiz-options">' + optionsHTML + '</div>' +
+            '<div class="meggy-quiz-feedback" style="display:none;"></div>' +
+          '</div>' +
+          '<div class="meggy-flashcard-nav">' +
+            '<button class="meggy-header-btn" data-nav="prev" ' + (current === 0 ? 'disabled' : '') + '><i class="bi bi-chevron-left"></i> Anterior</button>' +
+            '<button class="meggy-header-btn" data-nav="next" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">' + (current < qs.length - 1 ? 'Próxima' : 'Finalizar') + ' <i class="bi bi-chevron-right"></i></button>' +
+          '</div>';
+        const correctIdx = isMC ? (typeof q.correct === 'number' ? q.correct : parseInt(q.correct, 10)) : ((q.correct === 1 || q.correct === '1' || q.correct === true) ? 1 : 0);
+        const opts = container.querySelectorAll('.meggy-quiz-option');
+        const fb = container.querySelector('.meggy-quiz-feedback');
+        if (st) {
+          opts.forEach((o) => {
+            const _di = parseInt(o.dataset.idx, 10);
+            if (_di === correctIdx) o.classList.add('correct');
+            else if (_di === st.chosen) o.classList.add('wrong');
+            o.style.cursor = 'default';
+          });
+          fb.style.display = 'block';
+          fb.innerHTML = '<div class="meggy-quiz-feedback-' + (st.correct ? 'correct' : 'wrong') + '">' + (st.correct ? '✓ Correto!' : '✗ Incorreto') + '</div>' +
+            (q.explanation ? '<div class="meggy-quiz-feedback-expl">' + esc(q.explanation) + '</div>' : '') +
+            (q.fundamentacao ? '<div class="meggy-quiz-feedback-fund"><strong>Fundamentação:</strong> ' + esc(q.fundamentacao) + '</div>' : '');
+        }
+        opts.forEach(opt => {
+          opt.onclick = () => {
+            if (state[current]) return;
+            const chosen = parseInt(opt.dataset.idx, 10);
+            const isCorrect = (chosen === correctIdx);
+            state[current] = { chosen: chosen, correct: isCorrect };
+            try {
+              if (typeof window.__gdiBankAnswer21548 === 'function') {
+                window.__gdiBankAnswer21548({ statement: q.statement, options: q.options, correct: q.correct, type: q.type, explanation: q.explanation, legalText: q.legalText, fundamentacao: q.fundamentacao, disciplina: q.disciplina || lotDisc || '', topic: q.assunto || q.topic || '', assunto: q.assunto || '' }, isCorrect);
+              } else if (q.id != null && typeof window.__gdiGradeQ === 'function') {
+                window.__gdiGradeQ(q.id, isCorrect);
+              }
+            } catch (_) {}
+            if (!isCorrect && Shell.__v215ConcursoId) {
+              try {
+                const correctText = isMC ? (q.options[correctIdx] || '') : (correctIdx === 1 ? 'Certo' : 'Errado');
+                const chosenText = isMC ? (q.options[chosen] || '') : (chosen === 1 ? 'Certo' : 'Errado');
+                fetch('/api/concursos/' + encodeURIComponent(Shell.__v215ConcursoId) + '/errors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pergunta: q.statement || '', respostaCerta: correctText, respostaAluno: chosenText, modulo: lessonName || '' }) }).catch(() => {});
+              } catch (_) {}
+            }
+            renderQ();
+          };
+        });
+        const prev = container.querySelector('[data-nav="prev"]');
+        const next = container.querySelector('[data-nav="next"]');
+        if (prev) prev.onclick = () => { if (current > 0) { current--; renderQ(); } };
+        if (next) next.onclick = () => {
+          if (current < qs.length - 1) { current++; renderQ(); return; }
+          const sc = Object.keys(state).filter(k => state[k].correct).length;
+          const tot = qs.length;
+          const pct = tot > 0 ? Math.round(sc / tot * 100) : 0;
+          container.innerHTML = '<div class="meggy-quiz-result"><div class="meggy-quiz-result-emoji">' + (pct >= 80 ? '🏆' : pct >= 50 ? '👍' : '📚') + '</div><div class="meggy-quiz-result-score">' + sc + ' / ' + tot + '</div><div class="meggy-quiz-result-pct">' + pct + '% de acerto</div><div class="meggy-quiz-result-msg">' + (pct >= 80 ? 'Excelente! Você dominou esta aula.' : pct >= 50 ? 'Bom trabalho! Continue praticando.' : 'Revise o conteúdo e tente novamente.') + '</div><div style="display:flex;gap:8px;justify-content:center;margin-top:16px;"><button class="meggy-header-btn" data-act="redo" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-arrow-repeat"></i> Refazer</button></div></div>';
+          const redo = container.querySelector('[data-act="redo"]');
+          if (redo) redo.onclick = () => { Object.keys(state).forEach(k => delete state[k]); current = 0; renderQ(); };
+        };
+      };
+      renderQ();
+    },
+
+    // ★ v2.15.48: "Gerar mais questões" na aula — novo lote pelo mesmo
+    //   endpoint da geração (/api/ai, kind 'questoes'), acrescenta ao
+    //   cache da aula E ao mesmo balde do banco (POST de partilha).
+    async _isaGenMoreQuestions(bodyEl, lessonName) {
+      const _toast = (m) => { try { if (typeof window.showToast === 'function') window.showToast(m); } catch (_) {} };
+      const ctx = Shell.__isaQCtx21548;
+      if (!ctx || ctx.lessonName !== lessonName || !ctx.cacheKey) { _toast('Abra as questões da aula para gerar mais.'); return; }
+      const btn = bodyEl.querySelector('#gdi-isa-qmore');
+      if (btn) { btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Gerando…'; }
+      try {
+        const entry = ctx.entry || {};
+        const existing = Array.isArray(entry.questions) ? entry.questions.slice() : [];
+        const lists = await Shell._qbLists();
+        const summary = typeof entry.summary === 'string' ? entry.summary : '';
+        const material = summary ? summary.slice(0, 20000) : ('Aula: ' + lessonName + '\nCurso: ' + (ctx.courseName || '') + '\n\nNOTA IMPORTANTE: não há resumo em cache desta aula — só a identificação acima. NÃO peças o material ao utilizador: usa o teu conhecimento do tema indicado pelo nome da aula.');
+        const avoid = existing.map(q => '- ' + String((q && q.statement) || '').slice(0, 120)).join('\n');
+        const prompt = 'Você é um examinador de concurso público brasileiro experiente. Gere 5 questões NOVAS de concurso em JSON array (misture múltipla escolha e certo/errado CEBRASPE), formato: [{"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"disciplina":"...","assunto":"...","legalText":"...","explanation":"...","fundamentacao":"..."},{"type":"tf","statement":"...","correct":1,"disciplina":"...","assunto":"...","legalText":"...","explanation":"...","fundamentacao":"..."}].\nSem comentários, só JSON.' + Shell._qbPromptBlock(lists) + (avoid ? '\n\nNÃO repitas estas questões já existentes:\n' + avoid : '') + '\n\nMaterial:\n' + material;
+        const r = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: prompt, messages: [], kind: 'questoes' }) });
+        if (!r.ok) throw new Error('AI HTTP ' + r.status);
+        const d = await r.json();
+        const arr = Shell._isaParseQuestions21548(d.response || d.markdown || '');
+        const valid = arr.filter(q => q && typeof q.statement === 'string' && q.statement.trim());
+        if (!valid.length || !Shell._isIsaValidContent('questions', valid)) throw new Error('sem questões válidas');
+        const merged = existing.concat(valid);
+        const newEntry = Object.assign({}, entry, { questions: merged, lessonName: lessonName });
+        try {
+          await fetch('/api/ai/cache', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ key: ctx.cacheKey }, Shell._isaSanitizeEntry(newEntry))) });
+        } catch (e) { console.warn('[Shell] gen-more cache save:', e); }
+        const _lotDisc = (() => { const _c = {}; valid.forEach(q => { if (q && q.disciplina) _c[q.disciplina] = (_c[q.disciplina] || 0) + 1; }); let _b = '', _n = 0; Object.keys(_c).forEach(k => { if (_c[k] > _n) { _n = _c[k]; _b = k; } }); return _b; })();
+        for (const _q of valid) {
+          try {
+            fetch('/api/ai/shared-flashcards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subject: (_q.disciplina || _lotDisc || lessonName), disciplina: (_q.disciplina || _lotDisc || ''), topic: _q.assunto || '', assunto: _q.assunto || '', source: JSON.stringify({ course: ctx.courseName || '', lesson: lessonName }), front: _q.statement || '', back: '', statement: _q.statement || '', options: Array.isArray(_q.options) ? _q.options : null, correct: (typeof _q.correct === 'number' ? _q.correct : 0), correctText: _q.correctText || '', explanation: _q.explanation || '', legalText: _q.legalText || '', fundamentacao: _q.fundamentacao || '', type: _q.type || 'mc' }) }).catch(() => {});
+          } catch (_) {}
+        }
+        ctx.entry = newEntry;
+        Shell._renderISAResult('isa-questions', merged, bodyEl, lessonName, false, newEntry);
+        _toast('+' + valid.length + ' questões adicionadas à aula e ao banco');
+      } catch (e) {
+        console.warn('[Shell] gen-more questions:', e);
+        _toast('Não foi possível gerar mais questões agora');
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-plus-circle"></i> Gerar mais questões'; }
+      }
+    },
+
     // _renderISAResult: toolbar production-faithful (gradient pink→cyan, 4 buttons, cache badge, chain badge)
     async _renderISAResult(type, content, bodyEl, lessonName, fromCache, fullCache) {
       const isaField = type.replace('isa-', '');
@@ -6917,8 +7270,10 @@ el.scrollTop = 0;
 
       function renderBody() {
         if (type === 'isa-questions' && Array.isArray(content)) {
-          // Questões: render como lista estática (quiz interativo fica na aba Questões)
-          let h = '';
+          // ★ v2.15.48 (R1): a sessão interactiva vive AQUI, no cartão da
+          //   aula (responder → correcta só depois → feedback/explicação).
+          //   A lista estática fica atrás do botão "Rever gabarito".
+          let h = '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;"><button id="gdi-isa-qmode-practice" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;"><i class="bi bi-play-fill"></i> Praticar</button><button id="gdi-isa-qmode-reveal" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#e6edf3;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;"><i class="bi bi-card-checklist"></i> Rever gabarito</button></div><div id="gdi-isa-qpractice"></div><div id="gdi-isa-qstatic" style="display:none;">';
           content.forEach((q, i) => {
             const isTF = q.type === 'tf';
             const correctText = isTF ? ((q.correct === 1 || q.correct === '1') ? 'Certo' : 'Errado') : (q.options && q.options[q.correct] ? String.fromCharCode(65 + q.correct) + ') ' + q.options[q.correct] : '');
@@ -6940,7 +7295,7 @@ el.scrollTop = 0;
             if (q.fundamentacao) h += '<div style="font-size:11px;color:#9aa4b8;"><b>📚 Fundamentação:</b> ' + Shell._esc(q.fundamentacao) + '</div>';
             h += '</div>';
           });
-          return h;
+          return h + '</div>';
         }
         if (type === 'isa-flashcards' && Array.isArray(content)) {
           let h = '';
@@ -6966,6 +7321,7 @@ el.scrollTop = 0;
           '</div>' +
           '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
             cacheBadge +
+            (type === 'isa-questions' ? '<button id="gdi-isa-qmore" title="Gerar mais questões" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#e6edf3;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;"><i class="bi bi-plus-circle"></i> Gerar mais questões</button>' : '') +
             (type === 'isa-summary' || type === 'isa-mindmap' ? '<button id="gdi-isa-regen" title="Regerar" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#e6edf3;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;"><i class="bi bi-arrow-clockwise"></i> Regerar</button>' : '') +
             '<button id="gdi-isa-dl" title="Baixar em PDF" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#e6edf3;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;"><i class="bi bi-file-earmark-pdf"></i> PDF</button>' +
             '<button id="gdi-isa-copy" title="Copiar" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#e6edf3;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;"><i class="bi bi-clipboard"></i> Copiar</button>' +
@@ -6985,6 +7341,21 @@ el.scrollTop = 0;
         const text = bodyEl.querySelector('#gdi-isa-summary-text').innerText;
         navigator.clipboard.writeText(text).then(() => { copy.innerHTML = '<i class="bi bi-check2"></i> Copiado!'; setTimeout(() => { copy.innerHTML = '<i class="bi bi-clipboard"></i> Copiar'; }, 2000); });
       };
+      // ★ v2.15.48 (R1): sessão interactiva + alternância p/ o gabarito
+      //   estático + botão "Gerar mais questões".
+      if (type === 'isa-questions' && Array.isArray(content)) {
+        const _qPractice = bodyEl.querySelector('#gdi-isa-qpractice');
+        const _qStatic = bodyEl.querySelector('#gdi-isa-qstatic');
+        const _bP = bodyEl.querySelector('#gdi-isa-qmode-practice');
+        const _bR = bodyEl.querySelector('#gdi-isa-qmode-reveal');
+        if (_qPractice) Shell._isaQuizInit(_qPractice, content, lessonName, fullCache);
+        if (_bP && _bR && _qStatic && _qPractice) {
+          _bR.onclick = () => { _qStatic.style.display = ''; _qPractice.style.display = 'none'; };
+          _bP.onclick = () => { _qStatic.style.display = 'none'; _qPractice.style.display = ''; };
+        }
+        const _qMore = bodyEl.querySelector('#gdi-isa-qmore');
+        if (_qMore) _qMore.onclick = () => Shell._isaGenMoreQuestions(bodyEl, lessonName);
+      }
       const regen = bodyEl.querySelector('#gdi-isa-regen');
       if (regen) regen.onclick = () => {
         // Limpar cache e regerar
