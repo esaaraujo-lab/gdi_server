@@ -3595,3 +3595,150 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     transition: transform 150ms ease-out, outline-color 150ms ease-out;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   ★ v2.15.47 — Tema claro: legibilidade (títulos, dropdowns, acentos)
+   Diagnóstico: o tema claro só tinha overrides p/ a moldura (shell,
+   header, sidebar, .meggy-card); os TÍTULOS dentro das vistas ficaram
+   com a cor fixa do tema escuro (#e6edf3) sobre fundos claros.
+   E nenhum ficheiro de front definia color-scheme nem regras p/
+   <option>: todos os <select> têm estilo inline escuro
+   (color:#e6edf3) — no popup nativo, as opções herdavam esse color
+   claro sobre o fundo branco do esquema claro → ilegíveis excepto
+   a opção em :hover (que ganha fundo de destaque do SO).
+   Este bloco SÓ ACRESCENTA regras: o tema escuro fica igual.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Popup nativo dos <select> segue o tema da página (antes: esquema
+   do SO, porque nenhum CSS declarava color-scheme) */
+[data-bs-theme="light"] { color-scheme: light; }
+[data-bs-theme="dark"] { color-scheme: dark; }
+
+/* <option>/<optgroup>: cores próprias nos dois temas
+   (antes: nenhuma regra em todo o front) */
+select option,
+select optgroup {
+  background-color: #161b26;
+  color: #e6edf3;
+}
+[data-bs-theme="light"] select option,
+[data-bs-theme="light"] select optgroup {
+  background-color: #ffffff;
+  color: #1f2540;
+}
+
+/* <select> fechado no tema claro: os estilos inline são do tema
+   escuro (texto #e6edf3 sobre rgba(255,255,255,.06)) — ilegível
+   sobre fundo claro. !important p/ vencer o inline, SÓ no claro. */
+[data-bs-theme="light"] select {
+  background-color: #ffffff !important;
+  color: #1f2540 !important;
+  border-color: rgba(15, 23, 42, 0.28) !important;
+}
+/* …excepto dentro de modais, cujo fundo continua escuro (#0d1119)
+   nos dois temas — aí mantém-se o aspecto escuro do controlo
+   (o popup de opções usa a regra clara acima e lê-se bem). */
+[data-bs-theme="light"] .meggy-modal-content select {
+  background-color: rgba(255, 255, 255, 0.06) !important;
+  color: #e6edf3 !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+/* Títulos de vista/secção/cartão: cor fixa #e6edf3 (tema escuro)
+   sobre fundos que no tema claro passam a claros
+   (.meggy-view-title = "🏠 Home" e "📚 Meus Cursos" do shell;
+   .meggy-continue-section h2 = "⭐ Cursos em destaque";
+   .meggy-card-title = títulos dos cartões da Home) */
+[data-bs-theme="light"] .meggy-view-title { color: #1f2540; }
+[data-bs-theme="light"] .meggy-continue-section h2 { color: #1f2540; }
+[data-bs-theme="light"] .meggy-card-title { color: #1f2540; }
+[data-bs-theme="light"] .meggy-placeholder-title { color: #5a6478; }
+[data-bs-theme="light"] .meggy-mobile-menu-btn { color: #1f2540; }
+
+/* Logótipo do cabeçalho (shell.js #meggy-logo): duas variantes do
+   ícone, uma por tema — claro = degradê rosa/violeta,
+   escuro = fundo violeta escuro. Sem atributo (arranque) vale o
+   escuro, como no toggleTheme do shell.js. */
+.meggy-logo-img-light { display: none; }
+[data-bs-theme="light"] .meggy-logo-img-light { display: inline-block; }
+[data-bs-theme="light"] .meggy-logo-img-dark { display: none; }
+
+/* Acento âmbar tematizado: #ffd43b (bom no escuro) é pálido demais
+   sobre branco; no claro usa âmbar escuro. Consumido por
+   study-courses.js via var(--meggy-amber,#ffd43b) — "Em breve",
+   "Meggy processando…", "Restam", % de conclusão e barra. */
+#meggy-shell { --meggy-amber: #ffd43b; }
+[data-bs-theme="light"] #meggy-shell { --meggy-amber: #b58900; }
+
+/* Linha de metadados dos cartões de curso (study-courses.js):
+   ciano var(--ferreto-secondary,#5ddeda) pálido sobre o cartão
+   claro. !important p/ vencer o color inline, SÓ no claro. */
+[data-bs-theme="light"] .gdi-course small { color: #0e7c86 !important; }
+
+/* ── ★ v2.15.47 — absorção do catálogo ao vivo (2026-11-21) ───────
+   Itens provados ao vivo (telemóvel/navegador, tema claro) que a
+   auditoria estática não distinguia. Só tema claro; o escuro fica
+   pixel-idêntico. Regras cirúrgicas por ID/contexto onde a classe
+   é partilhada com superfícies que ficam escuras nos dois temas. */
+
+/* Árvore de conteúdos (Questões/Flashcards/Resumos): nomes das
+   pastas .meggy-tree-label (#e6edf3) sobre cabeçalhos com tinta
+   clara (curso: rgba(255,139,159,.04)) → ilegíveis no claro */
+[data-bs-theme="light"] .meggy-tree-label { color: #1f2540; }
+[data-bs-theme="light"] .meggy-tree-count { color: #5a6478; background: rgba(15, 23, 42, 0.07); }
+
+/* Título da secção "🤝 Compartilhados — de todos os alunos"
+   (shell.js _renderSharedSection): <h2> com color inline #f0f6fc
+   sobre o fundo da vista → !important só no claro */
+[data-bs-theme="light"] .meggy-shared-section h2 { color: #1f2540 !important; }
+
+/* Detalhe do curso (study-courses.js): botões com cor inline
+   ciano/vermelho pálidos sobre o fundo claro da vista */
+[data-bs-theme="light"] #gdi-detail-restart-scan,
+[data-bs-theme="light"] .gdi-rescan-btn,
+[data-bs-theme="light"] #gdi-detail-scan { color: #0e7c86 !important; border-color: rgba(14, 124, 134, 0.5) !important; }
+[data-bs-theme="light"] #gdi-detail-remove,
+[data-bs-theme="light"] #gdi-detail-hide { color: #c92a2a !important; border-color: rgba(201, 42, 42, 0.45) !important; }
+
+/* "Tudo em dia!" no detalhe: #gdi-detail-continue desactivado
+   passa a .gdi-mode-btn (texto #9aa4b8 a 40% de opacidade) */
+[data-bs-theme="light"] #gdi-detail-continue:disabled { color: #1e7d32; opacity: 0.85; }
+
+/* Botões .gdi-mode-btn sobre superfícies claras — a classe também
+   serve painéis escuros (modal de adicionar curso), por isso a
+   correcção é por ID: acções e paginação de /cursos e os botões
+   Anterior/Próxima da aula (o desvanecimento vem de
+   .gdi-mode-btn{color:#9aa4b8} + :disabled{opacity:.4}) */
+[data-bs-theme="light"] #gdi-add-manual-course,
+[data-bs-theme="light"] #gdi-show-hidden,
+[data-bs-theme="light"] #gdi-restore-courses,
+[data-bs-theme="light"] #gdi-courses-prev,
+[data-bs-theme="light"] #gdi-courses-next,
+[data-bs-theme="light"] #gdi-prev-btn,
+[data-bs-theme="light"] #gdi-next-btn { color: #3c4457; }
+[data-bs-theme="light"] #gdi-courses-prev:disabled,
+[data-bs-theme="light"] #gdi-courses-next:disabled,
+[data-bs-theme="light"] #gdi-prev-btn:disabled,
+[data-bs-theme="light"] #gdi-next-btn:disabled { color: #5a6478; opacity: 0.6; }
+
+/* Aula: título do ficheiro sobre o player (shell.js
+   #gdi-file-header-name, color inline #e6edf3) */
+[data-bs-theme="light"] #gdi-file-header-name { color: #1f2540 !important; }
+
+/* Aula: painel "📝 Anotações" — título (1.º <div> de .gdi-notes) e
+   campo de texto, ambos com color inline #e6edf3 sobre
+   rgba(255,255,255,.04) */
+[data-bs-theme="light"] .gdi-notes > div:first-child { color: #1f2540 !important; }
+[data-bs-theme="light"] #gdi-note-input { background-color: #ffffff !important; border-color: rgba(15, 23, 42, 0.2) !important; color: #1f2540 !important; }
+
+/* Aula: botão "Playlist 1/1" (#gdi-pl-toggle é .gdi-mode-btn; o
+   contador #gdi-pl-count tem color inline #9aa4b8) e item actual
+   da playlist (inline rosa #ff8b9f sobre rgba(255,139,159,.12)) */
+[data-bs-theme="light"] #gdi-pl-toggle { color: #3c4457; }
+[data-bs-theme="light"] #gdi-pl-count { color: #5a6478 !important; }
+[data-bs-theme="light"] .gdi-playlist-item.cur { background-color: rgba(255, 139, 159, 0.16) !important; color: #c2255c !important; }
+
+/* Explorar Drives: botão "＋ Adicionar selecionadas (0)"
+   desactivado — .meggy-header-btn já está tematizado no claro;
+   o desvanecimento é o opacity:0.5 inline do botão */
+[data-bs-theme="light"] #v215-drives-add-selected:disabled { opacity: 0.8; }
