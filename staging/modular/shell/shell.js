@@ -1266,10 +1266,11 @@
                       <div class="meggy-card-meta">${f.size ? (f.size/1024/1024).toFixed(1)+' MB' : 'Vídeo'}</div>
                     </div>`;
                 }
+                let _fi21564 = 0;
                 for (const f of others.slice(0, 20)) {
                   const icon = (f.mimeType||'').includes('pdf') ? '📄' : (f.mimeType||'').includes('audio') ? '🎵' : '📄';
                   html += `
-                    <div class="meggy-card">
+                    <div class="meggy-card" data-file-idx21564="${_fi21564++}" style="cursor:pointer;" title="Abrir para leitura">
                       <div class="meggy-card-icon">${icon}</div>
                       <div class="meggy-card-title">${f.name}</div>
                       <div class="meggy-card-meta">${f.size ? (f.size/1024/1024).toFixed(1)+' MB' : 'Arquivo'}</div>
@@ -1281,6 +1282,12 @@
                 // Bind folder clicks (RECURSIVE — stays in shell, NEVER location.href)
                 container.querySelectorAll('.meggy-card[data-folder]').forEach(card => {
                   card.onclick = () => Shell.views._renderDrives(card.dataset.folder);
+                });
+                // ★ v2.15.64: ficheiros ABREM p/ leitura no clique (a
+                //   selecção p/ adicionar continua a ser só a checkbox
+                //   das pastas — ficheiros nunca foram seleccionáveis).
+                container.querySelectorAll('.meggy-card[data-file-idx21564]').forEach(card => {
+                  card.onclick = () => { const f = others[parseInt(card.dataset.fileIdx21564, 10)]; if (f) Shell.views._openDriveFile21564(container, f, path); };
                 });
                 // ★ v2.15.2 (C): checkbox não navega; o botão anexa as marcadas.
                 const selBtn = container.querySelector('#v215-drives-add-selected');
@@ -1339,6 +1346,58 @@
         } catch (e) {
           console.error('[Shell] drives view:', e);
           container.innerHTML = `<div class="meggy-placeholder"><div class="meggy-placeholder-icon">⚠️</div><div class="meggy-placeholder-title">Erro</div><div class="meggy-placeholder-desc">${e.message}</div></div>`;
+        }
+      },
+
+
+      // ★ v2.15.64: abrir um FICHEIRO p/ LEITURA a partir do Explorar
+      //   Drives — os cartões de ficheiro não tinham acção nenhuma (o
+      //   clique não abria; a selecção p/ adicionar é só das PASTAS,
+      //   pela checkbox). Reutiliza o leitor da página da aula
+      //   (showMaterial): PDF em iframe inline; MD/TXT/HTML via fetch
+      //   + Shell._renderMd com a mesma toolbar/Baixar PDF; áudio em
+      //   <audio>; resto → botão Abrir. "Voltar" re-renderiza a pasta.
+      async _openDriveFile21564(container, f, folderPath) {
+        if (!container || !f) return;
+        const esc = Shell._esc || ((s) => String(s == null ? '' : s));
+        let link = '';
+        if (f.link) { link = f.link.startsWith('http') ? f.link : (window.location.origin + f.link); }
+        const ext = (String(f.name || '').split('.').pop() || '').toLowerCase();
+        container.innerHTML = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;"><button class="meggy-header-btn" id="v21564-file-back" style="font-size:12px;flex:none;"><i class="bi bi-arrow-left"></i> Voltar</button><span style="font-size:13px;color:#e6edf3;font-weight:600;word-break:break-all;">' + esc(f.name || 'Ficheiro') + '</span></div>' +
+          '<div id="v21564-file-body"><div class="meggy-loading"><div class="spinner-border"></div><div>Abrir ficheiro...</div></div></div>';
+        const backBtn = container.querySelector('#v21564-file-back');
+        if (backBtn) backBtn.onclick = () => Shell.views._renderDrives(folderPath);
+        const body = container.querySelector('#v21564-file-body');
+        if (!body) return;
+        if (!link) { body.innerHTML = '<div style="text-align:center;padding:40px;color:#6b7488;">Sem preview</div>'; return; }
+        if (ext === 'pdf') {
+          const src = link.includes('inline=') ? link : link + (link.includes('?') ? '&' : '?') + 'inline=true';
+          body.innerHTML = '<iframe src="' + src + '" style="width:100%;height:70vh;border:none;border-radius:12px;"></iframe>';
+        } else if (ext === 'md' || ext === 'txt' || ext === 'html') {
+          body.innerHTML = '<div id="v21564-md" style="width:100%;max-height:75vh;overflow:auto;color:#e6edf3;font-size:14px;">Carregando...</div>';
+          try {
+            const r = await fetch(link);
+            const txt = await r.text();
+            const el = body.querySelector('#v21564-md');
+            if (!el) return;
+            await Shell._ensureMdLibs();
+            let h = Shell._renderMd(txt);
+            h = '<div style="margin-bottom:12px;padding:8px 12px;background:rgba(255,139,159,0.08);border:1px solid rgba(255,139,159,0.2);border-radius:8px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:2;backdrop-filter:blur(8px);">' +
+                '<span style="font-size:12px;color:#9aa4b8;"><i class="bi bi-file-earmark-text"></i> ' + esc(f.name || '') + '</span>' +
+                '<button onclick="window._downloadMdAsPdf(' + esc(JSON.stringify(f.name || 'material')) + ')" style="background:rgba(255,139,159,0.12);border:1px solid rgba(255,139,159,0.3);color:#ff8b9f;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;"><i class="bi bi-download"></i> Baixar PDF</button>' +
+                '</div>' +
+                '<div class="gdi-isa-summary-body" style="padding:16px;">' + h + '</div>';
+            el.innerHTML = h;
+            window._lastMdText = txt;
+            window._lastMdName = f.name;
+          } catch (_) {
+            const el = body.querySelector('#v21564-md');
+            if (el) el.textContent = 'Não foi possível carregar o texto.';
+          }
+        } else if ((f.mimeType || '').startsWith('audio/') || ext === 'mp3' || ext === 'm4a' || ext === 'wav' || ext === 'ogg') {
+          body.innerHTML = '<div style="padding:24px;text-align:center;"><audio controls src="' + link + '" style="width:100%;max-width:520px;"></audio></div>';
+        } else {
+          body.innerHTML = '<div style="text-align:center;padding:40px;"><a href="' + link + '" target="_blank" class="gdi-mode-btn"><i class="bi bi-download"></i> Abrir</a></div>';
         }
       },
 
@@ -3758,9 +3817,21 @@
         loadList();
         (async () => {
           try {
+        const _fetchMetaRetry21564 = async (url) => {
+          // ★ v2.15.64: UMA retentativa dos metadados — na 1ª carga, um
+          //   isolate frio com o D1 morto serve subjects/authors do
+          //   fallback (agregado+journal do Drive) e estoura os 8 s; o
+          //   filtro nascia vazio e só o reload o populava. Mesmo
+          //   padrão .49 do loadList: espera 1,2 s e tenta com 15 s.
+          for (let _a21564 = 0; _a21564 < 2; _a21564++) {
+            try { const _d21564 = await fetchJson(url, _a21564 === 0 ? 8000 : 15000); if (_d21564) return _d21564; } catch (_) {}
+            if (_a21564 === 0) await new Promise(r => setTimeout(r, 1200));
+          }
+          return null;
+        };
             const _rs = await Promise.all([
-              fetchJson('/api/ai/shared-subjects', 8000).catch(() => null),
-              fetchJson('/api/ai/shared-authors', 8000).catch(() => null)
+              _fetchMetaRetry21564('/api/ai/shared-subjects'),
+              _fetchMetaRetry21564('/api/ai/shared-authors')
             ]);
             const ds = _rs[0], da = _rs[1];
             if (ds && ds.ok) {
@@ -3947,10 +4018,22 @@
         loadList();
         (async () => {
           try {
+        const _fetchMetaRetry21564 = async (url) => {
+          // ★ v2.15.64: UMA retentativa dos metadados — na 1ª carga, um
+          //   isolate frio com o D1 morto serve subjects/authors do
+          //   fallback (agregado+journal do Drive) e estoura os 8 s; o
+          //   filtro nascia vazio e só o reload o populava. Mesmo
+          //   padrão .49 do loadList: espera 1,2 s e tenta com 15 s.
+          for (let _a21564 = 0; _a21564 < 2; _a21564++) {
+            try { const _d21564 = await fetchJson(url, _a21564 === 0 ? 8000 : 15000); if (_d21564) return _d21564; } catch (_) {}
+            if (_a21564 === 0) await new Promise(r => setTimeout(r, 1200));
+          }
+          return null;
+        };
             const _rs = await Promise.all([
-              fetchJson('/api/ai/flashcard-bank/lists', 8000).catch(() => null),
-              fetchJson('/api/ai/shared-subjects', 8000).catch(() => null),
-              fetchJson('/api/ai/shared-authors', 8000).catch(() => null)
+              _fetchMetaRetry21564('/api/ai/flashcard-bank/lists'),
+              _fetchMetaRetry21564('/api/ai/shared-subjects'),
+              _fetchMetaRetry21564('/api/ai/shared-authors')
             ]);
             const dl = _rs[0], ds = _rs[1], da = _rs[2];
             const subs = (dl && dl.ok && Array.isArray(dl.disciplines) && dl.disciplines.length) ? dl.disciplines : ((ds && ds.ok) ? (ds.flashcardSubjects || []) : []);
