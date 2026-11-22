@@ -2933,7 +2933,7 @@
                     for (let _qi = 0; _qi < gen.questions.length; _qi++) {
                       const _q = gen.questions[_qi];
                       const _back = (gen.flashcards && gen.flashcards[_qi]) ? gen.flashcards[_qi].b : '';
-                      fetch('/api/ai/shared-flashcards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subject: (_q.disciplina || _lotDisc21548 || lessonName), disciplina: (_q.disciplina || _lotDisc21548 || ''), topic: _q.assunto || '', assunto: _q.assunto || '', source: JSON.stringify({ course: courseName || '', lesson: lessonName }), lessonPath: lessonPath, front: _q.statement || '', back: _back || '', statement: _q.statement || '', options: Array.isArray(_q.options) ? _q.options : null, correct: (typeof _q.correct === 'number' ? _q.correct : 0), correctText: _q.correctText || '', explanation: _q.explanation || '', legalText: _q.legalText || '', fundamentacao: _q.fundamentacao || '', type: _q.type || 'mc' }) }).catch(() => {});
+                      fetch('/api/ai/shared-flashcards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subject: (_q.disciplina || _lotDisc21548 || ''), disciplina: (_q.disciplina || _lotDisc21548 || ''), topic: _q.assunto || '', assunto: _q.assunto || '', source: JSON.stringify({ course: courseName || '', lesson: lessonName }), lessonPath: lessonPath, lessonSummary: String(gen.summary || '').slice(0, 700), lessonPills: String(gen.mindmap || '').slice(0, 500), front: _q.statement || '', back: _back || '', statement: _q.statement || '', options: Array.isArray(_q.options) ? _q.options : null, correct: (typeof _q.correct === 'number' ? _q.correct : 0), correctText: _q.correctText || '', explanation: _q.explanation || '', legalText: _q.legalText || '', fundamentacao: _q.fundamentacao || '', type: _q.type || 'mc' }) }).catch(() => {});
                     }
                   }
                 } catch (_) {}
@@ -7362,15 +7362,36 @@ el.scrollTop = 0;
       const norm = (s) => String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
       const majority = (key) => { const c = {}; let b = '', n = 0; questions.forEach(q => { const v = q && q[key]; if (v) { const k = String(v); c[k] = (c[k] || 0) + 1; if (c[k] > n) { n = c[k]; b = k; } } }); return b; };
       let disc = majority('disciplina');
+      // ★ v2.15.54: maioria que seja NOME DE FICHEIRO não vale — o
+      //   nome da aula (ficheiro) nunca é disciplina.
+      if (disc && /\.(mp4|m4a|mp3|wav|ogg|webm|mkv|avi|mov|pdf|md|txt|json|png|jpe?g|gif|webp|docx?|pptx?|xlsx?|zip)$/i.test(String(disc).trim())) disc = '';
       const hay = ' ' + norm(ctxText || '') + ' ';
+      // ★ v2.15.54: além da frase exacta, casamento por TOKENS de
+      //   conteúdo DENTRO do mesmo segmento do caminho (sem os
+      //   conectores e/de/do/da): a pasta "Administração Financeira
+      //   Orçamentária" casa com a canónica "Administração Financeira
+      //   e Orçamentária" — na .53 a frase exacta nunca casava
+      //   (faltava o "e" no nome da pasta) e o lote nascia sem
+      //   disciplina. Frase exacta vale mais; entre tokens vence o
+      //   nome com MAIS tokens (o mais específico).
+      const _stop54 = { e: 1, de: 1, do: 1, da: 1, dos: 1, das: 1, em: 1, no: 1, na: 1, nos: 1, nas: 1, para: 1, com: 1 };
+      const _tok54 = (s) => { const out = new Set(); norm(s).split(' ').forEach(t => { if (t && !_stop54[t]) out.add(t); }); return out; };
+      const _segs54 = String(ctxText || '').split('/').map(_tok54);
+      const _match54 = (name) => {
+        const nd = norm(name); if (!nd) return 0;
+        if (hay.indexOf(' ' + nd + ' ') >= 0) return 1000 + nd.length;
+        const nt = _tok54(name); if (nt.size < 2) return 0;
+        for (const seg of _segs54) { let all = true; nt.forEach(t => { if (!seg.has(t)) all = false; }); if (all) return nt.size * 10 + nd.length; }
+        return 0;
+      };
       if (!disc && lists && Array.isArray(lists.disciplines)) {
-        let bestLen = 3;
-        lists.disciplines.forEach(d => { const nd = norm(d); if (nd && nd.length > bestLen && hay.indexOf(' ' + nd + ' ') >= 0) { bestLen = nd.length; disc = d; } });
+        let bestScore = 0;
+        lists.disciplines.forEach(d => { const sc = _match54(d); if (sc > bestScore) { bestScore = sc; disc = d; } });
       }
       let topic = majority('assunto');
       if (!topic && disc && lists && lists.topics && Array.isArray(lists.topics[disc])) {
-        let bestLen = 3;
-        lists.topics[disc].forEach(t => { const nt = norm(t); if (nt && nt.length > bestLen && hay.indexOf(' ' + nt + ' ') >= 0) { bestLen = nt.length; topic = t; } });
+        let bestScore = 0;
+        lists.topics[disc].forEach(t => { const sc = _match54(t); if (sc > bestScore) { bestScore = sc; topic = t; } });
       }
       questions.forEach(q => {
         if (!q) return;
@@ -7596,7 +7617,7 @@ el.scrollTop = 0;
         const _lotDisc = (() => { const _c = {}; valid.forEach(q => { if (q && q.disciplina) _c[q.disciplina] = (_c[q.disciplina] || 0) + 1; }); let _b = '', _n = 0; Object.keys(_c).forEach(k => { if (_c[k] > _n) { _n = _c[k]; _b = k; } }); return _b; })();
         for (const _q of valid) {
           try {
-            fetch('/api/ai/shared-flashcards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subject: (_q.disciplina || _lotDisc || lessonName), disciplina: (_q.disciplina || _lotDisc || ''), topic: _q.assunto || '', assunto: _q.assunto || '', source: JSON.stringify({ course: ctx.courseName || '', lesson: lessonName }), front: _q.statement || '', back: '', statement: _q.statement || '', options: Array.isArray(_q.options) ? _q.options : null, correct: (typeof _q.correct === 'number' ? _q.correct : 0), correctText: _q.correctText || '', explanation: _q.explanation || '', legalText: _q.legalText || '', fundamentacao: _q.fundamentacao || '', type: _q.type || 'mc' }) }).catch(() => {});
+            fetch('/api/ai/shared-flashcards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subject: (_q.disciplina || _lotDisc || ''), disciplina: (_q.disciplina || _lotDisc || ''), topic: _q.assunto || '', assunto: _q.assunto || '', source: JSON.stringify({ course: ctx.courseName || '', lesson: lessonName }), lessonPath: ctx.cacheKey || '', lessonSummary: String(entry.summary || '').slice(0, 700), lessonPills: String(entry.mindmap || '').slice(0, 500), front: _q.statement || '', back: '', statement: _q.statement || '', options: Array.isArray(_q.options) ? _q.options : null, correct: (typeof _q.correct === 'number' ? _q.correct : 0), correctText: _q.correctText || '', explanation: _q.explanation || '', legalText: _q.legalText || '', fundamentacao: _q.fundamentacao || '', type: _q.type || 'mc' }) }).catch(() => {});
           } catch (_) {}
         }
         ctx.entry = newEntry;
