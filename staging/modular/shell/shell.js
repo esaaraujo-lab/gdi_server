@@ -3580,6 +3580,31 @@
 
       // ★ v2.15.1: seção "Compartilhados" — itens de TODOS os alunos, com
       // filtros por assunto e por aluno, autor visível em cada card.
+      // ★ v2.15.55: TODAS as questões de um assunto (disciplina +
+      //   assunto [+ aluno]), paginando o GET partilhado — o tecto
+      //   de 200 do pedido único cortava assuntos grandes. Quem
+      //   chama injecta o seu fetchJson (com timeout); este helper
+      //   faz UMA tentativa por página e FALHA no erro — o chamador
+      //   degrada p/ o pool da lista carregada. Pára em página
+      //   curta (< pageSize) ou no tecto de segurança (5.200).
+      async _qbTopicPool21555(fetchJson, subject, topic, author) {
+        const pageSize = 200;
+        const all = [];
+        let offset = 0;
+        while (offset <= 5000) {
+          const q = ['kind=question', 'limit=' + pageSize, 'offset=' + offset];
+          if (subject) q.push('subject=' + encodeURIComponent(subject));
+          if (topic) q.push('topic=' + encodeURIComponent(topic));
+          if (author) q.push('author=' + encodeURIComponent(author));
+          const d = await fetchJson('/api/ai/shared-flashcards?' + q.join('&'), 20000);
+          if (!d || !d.ok || !Array.isArray(d.items)) throw new Error('qbTopicPool21555: resposta inválida');
+          for (const it of d.items) all.push(it);
+          if (d.items.length < pageSize) break;
+          offset += pageSize;
+        }
+        return all;
+      },
+
       // ★ v2.15.48: o BANCO de questões (vista de /questoes) — disciplina →
       //   assunto → praticar, sobre as linhas partilhadas (que SÃO o
       //   banco). Filtros: disciplina, aluno (autor visível) e estado das
@@ -3639,12 +3664,28 @@
             };
           });
         };
-        const practice = (topic) => {
+        // ★ v2.15.55: praticar um assunto = TODAS as questões
+        //   dele, em sequência. O pool vai buscar-se ao endpoint
+        //   por subject+topic, paginado (_qbTopicPool21555) — a
+        //   lista carregada corta nas 200 mais recentes da
+        //   disciplina e um assunto podia ficar cortado. Filtros:
+        //   ALUNO vai no pedido (servidor); ESTADO aplica-se aqui,
+        //   sobre o conjunto completo do assunto. Se o fetch
+        //   falhar, degrada p/ o pool da lista (o comportamento
+        //   .48–.54) — nunca fica pior.
+        const practice = async (topic) => {
           const subject = subjectSel.value || '';
-          let pool = items;
-          if (topic) pool = pool.filter(q => (q.topic || 'A classificar') === topic);
-          pool = applyStateFilter(pool);
-          if (!pool.length) { toast('Sem questões para praticar com esses filtros'); return; }
+          const author = authorSel.value || '';
+          let pool = null;
+          if (topic) {
+            topicsEl.innerHTML = '<div style="color:#9aa4b8;font-size:12px;">A carregar as questões do assunto...</div>';
+            try { pool = await Shell.views._qbTopicPool21555(fetchJson, subject, topic, author); } catch (_) { pool = null; }
+            if (!pool) pool = items.filter(q => (q.topic || 'A classificar') === topic);
+          } else {
+            pool = items;
+          }
+          pool = applyStateFilter(pool || []);
+          if (!pool.length) { toast('Sem questões para praticar com esses filtros'); renderTopics(); return; }
           const shuffled = pool.slice();
           for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = t; }
           const qs = shuffled.map(it => Shell.views._sharedCardToQuestion(it));
@@ -3652,7 +3693,7 @@
         };
         const renderTopics = async () => {
           const subject = subjectSel.value || '';
-          if (!subject) { topicsEl.innerHTML = ''; return; }
+          if (!subject) { topicsEl.innerHTML = '<div style="color:#9aa4b8;font-size:12px;padding:2px 0 4px;">Escolhe uma disciplina acima: aparecem os assuntos dela e podes <b style="color:#e6edf3;">praticar assunto a assunto</b> — todas as questões do assunto, em sequência.</div>'; return; }
           topicsEl.innerHTML = '<div style="color:#9aa4b8;font-size:12px;">Carregando assuntos...</div>';
           try {
             const d = await fetchJson('/api/ai/question-topics?subject=' + encodeURIComponent(subject), 12000);
@@ -3666,15 +3707,16 @@
               acc[t] = acc[t] || { a: 0, w: 0 };
               acc[t].a++; if (st.wrong) acc[t].w++;
             });
-            let html = '<div style="display:flex;flex-direction:column;gap:6px;">';
+            let html = '<div style="color:#9aa4b8;font-size:12px;margin-bottom:6px;">Assuntos de <b style="color:#e6edf3;">' + esc(subject) + '</b> — toca num assunto para resolver TODAS as questões dele, em sequência:</div><div style="display:flex;flex-direction:column;gap:6px;">';
             topics.forEach(t => {
               const a = acc[t.topic];
               const accTxt = a && a.a ? ' · seu acerto: ' + Math.round((a.a - a.w) / a.a * 100) + '% (' + a.a + ' respondidas)' : '';
-              html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;"><div style="flex:1;min-width:0;"><b style="color:#f0f6fc;font-size:13px;">' + esc(t.topic) + '</b><div style="color:#9aa4b8;font-size:12px;">' + t.count + ' questões' + accTxt + '</div></div><button class="meggy-header-btn meggy-qbank-practice" data-topic="' + esc(t.topic) + '" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;font-size:12px;"><i class="bi bi-play-fill"></i> Praticar</button></div>';
+              html += '<div class="meggy-qbank-topic-row" data-topic="' + esc(t.topic) + '" title="Praticar todas as questões deste assunto" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;cursor:pointer;"><div style="flex:1;min-width:0;"><b style="color:#f0f6fc;font-size:13px;">' + esc(t.topic) + '</b><div style="color:#9aa4b8;font-size:12px;">' + t.count + ' questões' + accTxt + '</div></div><button class="meggy-header-btn meggy-qbank-practice" data-topic="' + esc(t.topic) + '" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;font-size:12px;"><i class="bi bi-play-fill"></i> Praticar assunto</button></div>';
             });
             html += '</div>';
             topicsEl.innerHTML = html;
-            topicsEl.querySelectorAll('.meggy-qbank-practice').forEach(b => { b.onclick = () => practice(b.dataset.topic); });
+            topicsEl.querySelectorAll('.meggy-qbank-practice').forEach(b => { b.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); practice(b.dataset.topic); } });
+            topicsEl.querySelectorAll('.meggy-qbank-topic-row').forEach(r => { r.onclick = () => practice(r.dataset.topic); });  // ★ v2.15.55: a linha inteira do assunto abre a prática do assunto
           } catch (e) { topicsEl.innerHTML = ''; }
         };
         const loadList = async () => {
@@ -4467,8 +4509,20 @@
         Shell.__lastQuizQuestions = questions;
         Shell.__lastQuizLessonName = entry.lessonName || 'Aula';
         let current = 0;
+        // ★ v2.15.55: estado por questão — navegar (Anterior/
+        //   Próxima) não perde a resposta dada nem a deixa
+        //   repetir: o placar e a ponte SRS/erros contam cada
+        //   questão UMA vez. Antes, voltar a uma questão já
+        //   respondida permitia responder de novo (placar > N,
+        //   gradeQ duplicado); nas sessões por assunto (N
+        //   questões) navegar é o caminho normal.
+        const qState21555 = questions.map(() => null);
         let score = 0;
         let answered = 0;
+        const tally21555 = () => { score = 0; answered = 0; qState21555.forEach(s => { if (s) { answered++; if (s.correct) score++; } }); };
+        const feedbackHTML21555 = (qq, okFlag) => '<div class="meggy-quiz-feedback-' + (okFlag ? 'correct' : 'wrong') + '">' + (okFlag ? '✓ Correto!' : '✗ Incorreto') + '</div>' +
+          (qq.explanation ? '<div class="meggy-quiz-feedback-expl">' + Shell.views._esc(qq.explanation) + '</div>' : '') +
+          (qq.fundamentacao ? '<div class="meggy-quiz-feedback-fund"><strong>Fundamentação:</strong> ' + Shell.views._esc(qq.fundamentacao) + '</div>' : '');
         const renderQ = () => {
           const q = questions[current];
           if (!q) return;
@@ -4506,31 +4560,36 @@
               '<button class="meggy-header-btn" id="meggy-q-next" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">' + (current < questions.length - 1 ? 'Próxima' : 'Finalizar') + ' <i class="bi bi-chevron-right"></i></button>' +
             '</div>';
           const correctIdx = isMC ? (typeof q.correct === 'number' ? q.correct : parseInt(q.correct, 10)) : ((q.correct === 1 || q.correct === '1' || q.correct === true) ? 1 : 0);
-          let isAnswered = false;
+          let isAnswered = !!qState21555[current];
           const opts = document.querySelectorAll('#meggy-quiz-options .meggy-quiz-option');
+          // ★ v2.15.55: pintar o estado respondido — ao responder
+          //   E ao navegar de volta a uma questão já respondida
+          //   (mesmas classes e feedback do momento da resposta).
+          const paintAnswered21555 = (st) => {
+            opts.forEach((o) => {
+              // ★ v2.15.48: comparar por data-idx (o valor da resposta),
+              //   não pelo índice no DOM — em Certo/Errado os dois
+              //   trocam (Certo=1 vem primeiro) e o destaque saía
+              //   invertido. Múltipla escolha: data-idx === índice (igual).
+              const _di = parseInt(o.dataset.idx, 10);
+              if (_di === correctIdx) o.classList.add('correct');
+              else if (_di === st.chosen) o.classList.add('wrong');
+              o.style.cursor = 'default';
+            });
+            const fb = document.getElementById('meggy-quiz-feedback');
+            if (fb) { fb.style.display = 'block'; fb.innerHTML = feedbackHTML21555(q, st.correct); }
+            const nx = document.getElementById('meggy-q-next');
+            if (nx) nx.innerHTML = (current < questions.length - 1 ? 'Próxima <i class="bi bi-chevron-right"></i>' : 'Finalizar <i class="bi bi-check"></i>');
+          };
           opts.forEach(opt => {
             opt.onclick = () => {
               if (isAnswered) return;
               isAnswered = true;
               const chosen = parseInt(opt.dataset.idx, 10);
               const isCorrect = (chosen === correctIdx);
-              if (isCorrect) score++;
-              answered++;
-              opts.forEach((o) => {
-                // ★ v2.15.48: comparar por data-idx (o valor da resposta),
-                //   não pelo índice no DOM — em Certo/Errado os dois
-                //   trocam (Certo=1 vem primeiro) e o destaque saía
-                //   invertido. Múltipla escolha: data-idx === índice (igual).
-                const _di = parseInt(o.dataset.idx, 10);
-                if (_di === correctIdx) o.classList.add('correct');
-                else if (_di === chosen) o.classList.add('wrong');
-                o.style.cursor = 'default';
-              });
-              const fb = document.getElementById('meggy-quiz-feedback');
-              fb.style.display = 'block';
-              fb.innerHTML = '<div class="meggy-quiz-feedback-' + (isCorrect ? 'correct' : 'wrong') + '">' + (isCorrect ? '✓ Correto!' : '✗ Incorreto') + '</div>' +
-                (q.explanation ? '<div class="meggy-quiz-feedback-expl">' + Shell.views._esc(q.explanation) + '</div>' : '') +
-                (q.fundamentacao ? '<div class="meggy-quiz-feedback-fund"><strong>Fundamentação:</strong> ' + Shell.views._esc(q.fundamentacao) + '</div>' : '');
+              qState21555[current] = { chosen: chosen, correct: isCorrect };
+              tally21555();
+              paintAnswered21555(qState21555[current]);
               // ★ v2.15.0: erro registrado no caderno do concurso (só quando a
               // aula foi aberta a partir do plano desse concurso)
               if (!isCorrect && Shell.__v215ConcursoId) {
@@ -4550,9 +4609,9 @@
               if (scoreEl) scoreEl.textContent = String(score);
               const answeredEl = document.getElementById('meggy-quiz-answered');
               if (answeredEl) answeredEl.textContent = String(answered);
-              document.getElementById('meggy-q-next').innerHTML = (current < questions.length - 1 ? 'Próxima <i class="bi bi-chevron-right"></i>' : 'Finalizar <i class="bi bi-check"></i>');
             };
           });
+          if (isAnswered) paintAnswered21555(qState21555[current]);  // ★ v2.15.55: ao voltar a uma questão respondida, o estado reaparece (sem re-disparar onAnswer)
           document.getElementById('meggy-q-prev').onclick = () => { if (current > 0) { current--; renderQ(); } };
           document.getElementById('meggy-q-next').onclick = () => {
             if (current < questions.length - 1) { current++; renderQ(); }
