@@ -2857,7 +2857,7 @@
                 // ★ v2.15.49 (F4): carimbo de classificação do lote —
                 //   ANTES do save em cache, da partilha e do render,
                 //   para todos os lotes classificarem igual.
-                try { if (gen.questions && gen.questions.length) Shell._qbStamp21549(gen.questions, _qbLists21548, (lessonName || '') + ' ' + (courseName || '') + ' ' + (cacheKey || '')); } catch (_) {}
+                try { if (gen.questions && gen.questions.length) Shell._qbStamp21549(gen.questions, _qbLists21548, (lessonName || '') + ' ' + (courseName || '') + ' ' + (cacheKey || ''), lessonName || ''); } catch (_) {}
                 // ★ v2.15.51 (E3 + E1): a CADEIA também peneira e também
                 //   dá feedback. Na .50, as questões nascidas aqui não
                 //   passavam por nenhum ecrã do front nem mostravam
@@ -7416,7 +7416,7 @@ el.scrollTop = 0;
     //   gerado com as listas em fail-open ficava sem disciplina e os
     //   registos a jusante (partilha/SRS) classificavam-no diferente
     //   do lote seguinte ("Banco" vs "Direito Penal").
-    _qbStamp21549(questions, lists, ctxText) {
+    _qbStamp21549(questions, lists, ctxText, titleText) {
       if (!Array.isArray(questions) || !questions.length) return questions;
       const norm = (s) => String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
       const majority = (key) => { const c = {}; let b = '', n = 0; questions.forEach(q => { const v = q && q[key]; if (v) { const k = String(v); c[k] = (c[k] || 0) + 1; if (c[k] > n) { n = c[k]; b = k; } } }); return b; };
@@ -7424,7 +7424,6 @@ el.scrollTop = 0;
       // ★ v2.15.54: maioria que seja NOME DE FICHEIRO não vale — o
       //   nome da aula (ficheiro) nunca é disciplina.
       if (disc && /\.(mp4|m4a|mp3|wav|ogg|webm|mkv|avi|mov|pdf|md|txt|json|png|jpe?g|gif|webp|docx?|pptx?|xlsx?|zip)$/i.test(String(disc).trim())) disc = '';
-      const hay = ' ' + norm(ctxText || '') + ' ';
       // ★ v2.15.54: além da frase exacta, casamento por TOKENS de
       //   conteúdo DENTRO do mesmo segmento do caminho (sem os
       //   conectores e/de/do/da): a pasta "Administração Financeira
@@ -7433,24 +7432,35 @@ el.scrollTop = 0;
       //   (faltava o "e" no nome da pasta) e o lote nascia sem
       //   disciplina. Frase exacta vale mais; entre tokens vence o
       //   nome com MAIS tokens (o mais específico).
+      // ★ v2.15.57: o casamento corre em DOIS tempos — primeiro só
+      //   contra o NOME DA AULA (titleText = o título; nome de
+      //   ficheiro NÃO conta como nome da aula e salta este tempo),
+      //   depois contra o contexto todo (curso + caminho/pastas).
+      //   É a nova ordem do Elton (21:54) no carimbo: título antes
+      //   da pasta. Sem titleText, comportamento = .54.
       const _stop54 = { e: 1, de: 1, do: 1, da: 1, dos: 1, das: 1, em: 1, no: 1, na: 1, nos: 1, nas: 1, para: 1, com: 1 };
       const _tok54 = (s) => { const out = new Set(); norm(s).split(' ').forEach(t => { if (t && !_stop54[t]) out.add(t); }); return out; };
-      const _segs54 = String(ctxText || '').split('/').map(_tok54);
-      const _match54 = (name) => {
-        const nd = norm(name); if (!nd) return 0;
-        if (hay.indexOf(' ' + nd + ' ') >= 0) return 1000 + nd.length;
-        const nt = _tok54(name); if (nt.size < 2) return 0;
-        for (const seg of _segs54) { let all = true; nt.forEach(t => { if (!seg.has(t)) all = false; }); if (all) return nt.size * 10 + nd.length; }
-        return 0;
+      const _mkMatch57 = (text) => {
+        const hay = ' ' + norm(text || '') + ' ';
+        const segs = String(text || '').split('/').map(_tok54);
+        return (name) => {
+          const nd = norm(name); if (!nd) return 0;
+          if (hay.indexOf(' ' + nd + ' ') >= 0) return 1000 + nd.length;
+          const nt = _tok54(name); if (nt.size < 2) return 0;
+          for (const seg of segs) { let all = true; nt.forEach(t => { if (!seg.has(t)) all = false; }); if (all) return nt.size * 10 + nd.length; }
+          return 0;
+        };
       };
+      const _match54 = _mkMatch57(ctxText);
+      const _title57 = String(titleText || '').trim();
+      const _matchTitle57 = (_title57 && !/\.(mp4|m4a|mp3|wav|ogg|webm|mkv|avi|mov|pdf|md|txt|json|png|jpe?g|gif|webp|docx?|pptx?|xlsx?|zip)$/i.test(_title57)) ? _mkMatch57(_title57) : null;
+      const _best57 = (names, matchers) => { for (const m of matchers) { if (!m) continue; let b = '', bs = 0; names.forEach(n => { const sc = m(n); if (sc > bs) { bs = sc; b = n; } }); if (b) return b; } return ''; };
       if (!disc && lists && Array.isArray(lists.disciplines)) {
-        let bestScore = 0;
-        lists.disciplines.forEach(d => { const sc = _match54(d); if (sc > bestScore) { bestScore = sc; disc = d; } });
+        disc = _best57(lists.disciplines, [_matchTitle57, _match54]);
       }
       let topic = majority('assunto');
       if (!topic && disc && lists && lists.topics && Array.isArray(lists.topics[disc])) {
-        let bestScore = 0;
-        lists.topics[disc].forEach(t => { const sc = _match54(t); if (sc > bestScore) { bestScore = sc; topic = t; } });
+        topic = _best57(lists.topics[disc], [_matchTitle57, _match54]);
       }
       questions.forEach(q => {
         if (!q) return;
@@ -7668,7 +7678,7 @@ el.scrollTop = 0;
           return;
         }
         const merged = existing.concat(valid);
-        try { Shell._qbStamp21549(merged, lists, (lessonName || '') + ' ' + (ctx.courseName || '')); } catch (_) {} // ★ v2.15.49 (F4)
+        try { Shell._qbStamp21549(merged, lists, (lessonName || '') + ' ' + (ctx.courseName || ''), lessonName || ''); } catch (_) {} // ★ v2.15.49 (F4)
         const newEntry = Object.assign({}, entry, { questions: merged, lessonName: lessonName });
         try {
           await fetch('/api/ai/cache', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ key: ctx.cacheKey }, Shell._isaSanitizeEntry(newEntry))) });
