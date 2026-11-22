@@ -2292,6 +2292,57 @@
                   console.warn('[Shell] gdiListAllFiles falhou 2x em ' + _p + ':', _lastErr);
                   return { ok: false, files: [], failed: true };
                 }
+                // ★ v2.15.63 (regra do Elton 2026-11-15): FONTE DO RESUMO —
+                //   (1) material de TEXTO (md/txt/html; transcrições
+                //   primeiro) da pasta da aula e das subpastas; (2) PDF
+                //   só se NENHUM texto der conteúdo. Antes, a passagem
+                //   das subpastas não tinha prioridade nenhuma: extraía
+                //   o PDF da subpasta "material" mesmo com a
+                //   "001 - Transcrição.md" ao lado (caso ao vivo
+                //   2026-11-22 — Administração Geral, Aula 01: o print
+                //   do Elton mostrava "Extraindo PDF da subpasta" com a
+                //   transcrição MD na mesma subpasta). A extracção em
+                //   si (pdf.js/fetch), as mensagens e os limites por
+                //   ficheiro não mudam.
+                // [21563-src-order-begin]
+                function _srcOrder21563(list) {
+                  const _ext = (f) => (String((f && f.name) || '').split('.').pop() || '').toLowerCase();
+                  const texts = [], pdfs = [];
+                  for (const f of (list || [])) {
+                    const e = _ext(f);
+                    if (e === 'md' || e === 'txt' || e === 'html') texts.push(f);
+                    else if (e === 'pdf') pdfs.push(f);
+                  }
+                  const _tr = (f) => /transcri/i.test(f.name) ? 0 : 1;
+                  texts.sort((a, b) => _tr(a) - _tr(b));
+                  return { texts: texts, pdfs: pdfs };
+                }
+                // [21563-src-order-end]
+                async function _extractMat21563(m, inSub) {
+                  const ext = (m.name.split('.').pop() || '').toLowerCase();
+                  if (ext === 'pdf') {
+                    // ★ Extrair texto do PDF usando pdf.js (não apenas placeholder)
+                    setLoading(inSub ? ('📄 Extraindo PDF da subpasta: ' + m.name + '…') : ('📄 Extraindo texto do PDF: ' + m.name + '…'));
+                    if (m.link) {
+                      const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
+                      const pdfText = await Shell._extractPdfText(link);
+                      if (pdfText && pdfText.length > 50) {
+                        materialContent += '\n\n--- ' + m.name + ' ---\n' + pdfText.substring(0, inSub ? 30000 : 40000);
+                      } else if (!inSub) {
+                        materialContent += '\n[Material PDF: ' + m.name + ' (não foi possível extrair texto — pode ser escaneado)]';
+                      }
+                    }
+                  } else if (m.link) {
+                    try {
+                      const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
+                      const resp = await fetch(link);
+                      if (resp.ok) {
+                        const text = await resp.text();
+                        materialContent += '\n\n--- ' + m.name + ' ---\n' + text.substring(0, inSub ? 20000 : 30000);
+                      }
+                    } catch (e) { /* skip */ }
+                  }
+                }
                 setLoading('📖 Extraindo material da aula…');
                 let materialContent = '';
                 let materialsList = [];
@@ -2304,80 +2355,34 @@
                       const ext = (f.name.split('.').pop() || '').toLowerCase();
                       return ext === 'pdf' || ext === 'md' || ext === 'txt' || ext === 'html';
                     });
-                    // ★ Transcription-priority: arquivos com "transcri" primeiro
-                    materialsList.sort((a, b) => {
-                      const at = /transcri/i.test(a.name) ? 0 : 1;
-                      const bt = /transcri/i.test(b.name) ? 0 : 1;
-                      return at - bt;
-                    });
-                    for (const m of materialsList.slice(0, 3)) {
-                      const ext = (m.name.split('.').pop() || '').toLowerCase();
-                      if (ext === 'pdf') {
-                        // ★ Extrair texto do PDF usando pdf.js (não apenas placeholder)
-                        setLoading('📄 Extraindo texto do PDF: ' + m.name + '…');
-                        if (m.link) {
-                          const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
-                          const pdfText = await Shell._extractPdfText(link);
-                          if (pdfText && pdfText.length > 50) {
-                            materialContent += '\n\n--- ' + m.name + ' ---\n' + pdfText.substring(0, 40000);
-                          } else {
-                            materialContent += '\n[Material PDF: ' + m.name + ' (não foi possível extrair texto — pode ser escaneado)]';
-                          }
-                        }
-                      } else if (m.link) {
-                        try {
-                          const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
-                          const resp = await fetch(link);
-                          if (resp.ok) {
-                            const text = await resp.text();
-                            materialContent += '\n\n--- ' + m.name + ' ---\n' + text.substring(0, 30000);
-                          }
-                        } catch (e) { /* skip */ }
+                    // (1) TEXTOS da pasta da aula (transcrições primeiro)
+                    const _ord21563 = _srcOrder21563(files);
+                    for (const m of _ord21563.texts.slice(0, 3)) await _extractMat21563(m, false);
+                    // (1b) TEXTOS das subpastas (ex.: "material") — antes de qualquer PDF;
+                    //   os PDFs das subpastas ficam guardados p/ o recurso.
+                    let _subPdfs21563 = [];
+                    if (materialContent.length < 200) {
+                      const subs = files.filter(f => f.mimeType === 'application/vnd.google-apps.folder').slice(0, 5);
+                      for (const sf of subs) {
+                        const fp = lessonPath + encodeURIComponent(sf.name) + '/';
+                        const _subListed = await _listLessonFiles(fp); // ★ v2.15.13-D3d
+                        if (!_subListed.ok) _materialListFailed = true;
+                        const _subOrd21563 = _srcOrder21563(_subListed.files);
+                        for (const m of _subOrd21563.texts.slice(0, 3)) await _extractMat21563(m, true);
+                        for (const m of _subOrd21563.pdfs) _subPdfs21563.push(m);
+                        if (materialContent.length >= 200) break;
                       }
+                    }
+                    // (2) PDFs SÓ como recurso (nenhum texto deu conteúdo):
+                    //   primeiro os da pasta da aula, depois os das subpastas.
+                    if (materialContent.length < 200) {
+                      for (const m of _ord21563.pdfs.slice(0, 3)) await _extractMat21563(m, false);
+                    }
+                    if (materialContent.length < 200) {
+                      for (const m of _subPdfs21563.slice(0, 3)) await _extractMat21563(m, true);
                     }
                   }
                 } catch (e) { console.warn('[Shell] material extract:', e); }
-
-                // ★ Subpastas (especialmente "material") se não encontrou conteúdo suficiente
-                if (materialContent.length < 200 && window.gdiListAllFiles && lessonPath) {
-                  try {
-                    const _listed2 = await _listLessonFiles(lessonPath); // ★ v2.15.13-D3c
-                    if (!_listed2.ok) _materialListFailed = true;
-                    const files = _listed2.files;
-                    const subs = files.filter(f => f.mimeType === 'application/vnd.google-apps.folder').slice(0, 5);
-                    for (const sf of subs) {
-                      const fp = lessonPath + encodeURIComponent(sf.name) + '/';
-                      const _subListed = await _listLessonFiles(fp); // ★ v2.15.13-D3d
-                      if (!_subListed.ok) _materialListFailed = true;
-                      const subFiles = _subListed.files;
-                      const subMats = subFiles.filter(f => {
-                        const ext = (f.name.split('.').pop() || '').toLowerCase();
-                        return ext === 'pdf' || ext === 'md' || ext === 'txt';
-                      });
-                      for (const m of subMats.slice(0, 3)) {
-                        const ext = (m.name.split('.').pop() || '').toLowerCase();
-                        if (ext === 'pdf' && m.link) {
-                          setLoading('📄 Extraindo PDF da subpasta: ' + m.name + '…');
-                          const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
-                          const pdfText = await Shell._extractPdfText(link);
-                          if (pdfText && pdfText.length > 50) {
-                            materialContent += '\n\n--- ' + m.name + ' ---\n' + pdfText.substring(0, 30000);
-                          }
-                        } else if (m.link) {
-                          try {
-                            const link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link);
-                            const resp = await fetch(link);
-                            if (resp.ok) {
-                              const text = await resp.text();
-                              materialContent += '\n\n--- ' + m.name + ' ---\n' + text.substring(0, 20000);
-                            }
-                          } catch (e) { /* skip */ }
-                        }
-                      }
-                      if (materialContent.length > 200) break;
-                    }
-                  } catch (e) { console.warn('[Shell] material extract (subpastas):', e); /* ★ v2.15.13-D3e — era skip silencioso */ }
-                }
 
                 if (materialContent.length > 80000) {
                   materialContent = materialContent.substring(0, 80000) + '\n[...truncado...]';
@@ -3651,7 +3656,7 @@
           filtered.forEach((it, idx) => {
             const sub = (it.subject || '') + (it.topic ? ' · ' + it.topic : '');
             const date = it.date ? new Date(it.date).toLocaleDateString('pt-BR') : '';
-            html += '<div class="meggy-study-item meggy-qbank-item" data-idx="' + idx + '" style="cursor:pointer;"><div class="meggy-study-item-icon">❓</div><div class="meggy-study-item-body"><div class="meggy-study-item-title">' + esc(it.statement || it.front || 'Questão') + '</div><div class="meggy-study-item-meta">' + esc(sub) + '</div><div class="meggy-study-item-meta" style="color:#ff8b9f;">por ' + esc(it.author || '—') + (date ? ' · ' + date : '') + '</div></div><i class="bi bi-chevron-right meggy-study-item-chevron"></i></div>';
+            html += '<div class="meggy-study-item meggy-qbank-item" data-idx="' + idx + '" style="cursor:pointer;"><div class="meggy-study-item-icon">❓</div><div class="meggy-study-item-body"><div class="meggy-study-item-title">' + esc(it.statement || it.front || 'Questão') + '</div><div class="meggy-study-item-meta">' + esc(sub) + '</div><div class="meggy-study-item-meta" style="color:#ff8b9f;">Gerado por: ' + esc(it.author || '—') + (date ? ' · ' + date : '') + '</div></div><i class="bi bi-chevron-right meggy-study-item-chevron"></i></div>';
           });
           html += '</div>';
           listEl.innerHTML = html;
@@ -3860,7 +3865,7 @@
             const date = it.date ? new Date(it.date).toLocaleDateString('pt-BR') : '';
             const st = stateOf(it);
             const stTxt = st.practiced ? (st.due ? ' · <span style="color:#ffd43b;">a rever</span>' : ' · praticado') : '';
-            html += '<div class="meggy-study-item meggy-fcbank-item" data-idx="' + idx + '" style="cursor:pointer;"><div class="meggy-study-item-icon">🃏</div><div class="meggy-study-item-body"><div class="meggy-study-item-title">' + esc(frontOf(it) || 'Flashcard') + '</div><div class="meggy-study-item-meta">' + esc(sub) + stTxt + '</div><div class="meggy-study-item-meta" style="color:#ff8b9f;">por ' + esc(it.author || '—') + (date ? ' · ' + date : '') + '</div></div><i class="bi bi-chevron-right meggy-study-item-chevron"></i></div>';
+            html += '<div class="meggy-study-item meggy-fcbank-item" data-idx="' + idx + '" style="cursor:pointer;"><div class="meggy-study-item-icon">🃏</div><div class="meggy-study-item-body"><div class="meggy-study-item-title">' + esc(frontOf(it) || 'Flashcard') + '</div><div class="meggy-study-item-meta">' + esc(sub) + stTxt + '</div><div class="meggy-study-item-meta" style="color:#ff8b9f;">Gerado por: ' + esc(it.author || '—') + (date ? ' · ' + date : '') + '</div></div><i class="bi bi-chevron-right meggy-study-item-chevron"></i></div>';
           });
           html += '</div>';
           listEl.innerHTML = html;
@@ -4090,7 +4095,7 @@
             items.forEach((it, idx) => {
               const author = esc(it.author || '—');
               const date = fmtDate(it.date);
-              const byline = 'por ' + author + (date ? ' · ' + date : '');
+              const byline = 'Gerado por: ' + author + (date ? ' · ' + date : '');
               if (kind === 'resumos') {
                 const title = esc(it.lessonName || it.lesson || 'Aula');
                 const prev = esc(String(it.summary || '').replace(/[#*`>]/g, '').replace(/\n/g, ' ').substring(0, 120));
@@ -4432,7 +4437,7 @@
               '<h1 class="meggy-view-title" style="font-size:16px;">🃏 ' + lessonName + '</h1>' +
             '</div>' +
             '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:13px;color:#9aa4b8;">' +
-              '<span>Cartão ' + (current + 1) + ' de ' + questions.length + (entry.author ? ' · por ' + Shell.views._esc(entry.author) : '') + (entry.onGrade ? ' · <span id="meggy-fc-grade-count">Sei ' + know21553 + ' · Não sei ' + dontKnow21553 + '</span>' : '') + '</span>' +
+              '<span>Cartão ' + (current + 1) + ' de ' + questions.length + (entry.author ? ' · Gerado por: ' + Shell.views._esc(entry.author) : '') + (entry.onGrade ? ' · <span id="meggy-fc-grade-count">Sei ' + know21553 + ' · Não sei ' + dontKnow21553 + '</span>' : '') + '</span>' +
               '<span style="color:#ff8b9f;">Clique no cartão para virar</span>' +
             '</div>' +
             '<div class="meggy-flashcard-deck">' +
@@ -4546,7 +4551,7 @@
               '<h1 class="meggy-view-title" style="font-size:16px;">❓ ' + lessonName + '</h1>' +
             '</div>' +
             '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:13px;color:#9aa4b8;">' +
-              '<span>Questão ' + (current + 1) + ' de ' + questions.length + (entry.author ? ' · por ' + Shell.views._esc(entry.author) : '') + '</span>' +
+              '<span>Questão ' + (current + 1) + ' de ' + questions.length + (entry.author ? ' · Gerado por: ' + Shell.views._esc(entry.author) : '') + '</span>' +
               '<span>Acertos: <strong id="meggy-quiz-score" style="color:#5ddeda;">' + score + '</strong>/<span id="meggy-quiz-answered">' + answered + '</span></span>' +
             '</div>' +
             '<div class="meggy-quiz-card">' +
