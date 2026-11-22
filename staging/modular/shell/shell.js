@@ -3668,6 +3668,28 @@
         }
         return all;
       },
+      // ★ v2.15.65: pool paginado GENÉRICO do banco (kind +
+      //   disciplina [+ assunto]) — o gémeo de _qbTopicPool21555
+      //   p/ qualquer kind (o das questões tem autor e fica como
+      //   está). Pagina o GET partilhado até ter o conjunto
+      //   COMPLETO (pára em página curta ou no tecto de segurança
+      //   5.200); FALHA no erro — quem chama decide a degradação.
+      async _bankPool21565(fetchJson, kind, subject, topic) {
+        const pageSize = 200;
+        const all = [];
+        let offset = 0;
+        while (offset <= 5000) {
+          const q = ['kind=' + kind, 'limit=' + pageSize, 'offset=' + offset];
+          if (subject) q.push('subject=' + encodeURIComponent(subject));
+          if (topic) q.push('topic=' + encodeURIComponent(topic));
+          const d = await fetchJson('/api/ai/shared-flashcards?' + q.join('&'), 20000);
+          if (!d || !d.ok || !Array.isArray(d.items)) throw new Error('bankPool21565: resposta inválida');
+          for (const it of d.items) all.push(it);
+          if (d.items.length < pageSize) break;
+          offset += pageSize;
+        }
+        return all;
+      },
 
       // ★ v2.15.48: o BANCO de questões (vista de /questoes) — disciplina →
       //   assunto → praticar, sobre as linhas partilhadas (que SÃO o
@@ -3675,6 +3697,18 @@
       //   respostas do aluno (dos registos locais/SRS, via ponte
       //   __gdiBankState21548). Todos os fetch com timeout — a vista nunca
       //   fica num spinner infinito (o bug dos "Compartilhados").
+      // ★ v2.15.65: BANCO PREGUIÇOSO (desenho do Elton 2026-11-22
+      //   15:37 + aclaração 15:38): a página abre SEM carregar
+      //   questões — só a lista de disciplinas (endpoint leve de
+      //   listas) e o convite "Escolhe a disciplina". O filtro de
+      //   ALUNO saiu; no lugar dele, o filtro de ASSUNTO
+      //   (desactivado até haver disciplina; "Todos os assuntos" é
+      //   o defeito). A carga dispara na escolha da disciplina:
+      //   com Todos os assuntos carrega TUDO o dela (pool
+      //   paginado); um assunto concreto só estreita o conjunto
+      //   (conjunto completo desse assunto). "Todas as disciplinas"
+      //   (__all__) é uma escolha activa que carrega tudo; o valor
+      //   inicial '' não carrega nada.
       async _renderQuestionBank(el) {
         const root = el.querySelector('#meggy-qbank-root');
         if (!root) return;
@@ -3685,19 +3719,38 @@
           const _to = setTimeout(() => { try { _ctl.abort(); } catch (_) {} }, ms || 15000);
           try { const r = await fetch(url, { cache: 'no-store', signal: _ctl.signal }); return await r.json(); } finally { clearTimeout(_to); }
         };
+        // ★ v2.15.64 (mantido na .65): UMA retentativa dos pedidos
+        //   leves (listas/assuntos) — num isolate frio com o D1
+        //   morto, a resposta do fallback (agregado+journal do
+        //   Drive) pode estourar os 8 s; a 2ª tentativa (15 s)
+        //   apanha as caches quentes do worker.
+        const fetchMetaRetry = async (url) => {
+          for (let _a = 0; _a < 2; _a++) {
+            try { const _d = await fetchJson(url, _a === 0 ? 8000 : 15000); if (_d) return _d; } catch (_) {}
+            if (_a === 0) await new Promise(r => setTimeout(r, 1200));
+          }
+          return null;
+        };
+        const SEL = 'flex:1;min-width:160px;background:rgba(255,255,255,.06);border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:8px 10px;font-size:13px;';
         root.innerHTML = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' +
-          '<select id="meggy-qbank-subject" style="flex:1;min-width:160px;background:rgba(255,255,255,.06);border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:8px 10px;font-size:13px;"><option value="">Todas as disciplinas</option></select>' +
-          '<select id="meggy-qbank-author" style="flex:1;min-width:160px;background:rgba(255,255,255,.06);border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:8px 10px;font-size:13px;"><option value="">Todos os alunos</option></select>' +
-          '<select id="meggy-qbank-state" style="flex:1;min-width:160px;background:rgba(255,255,255,.06);border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:8px 10px;font-size:13px;"><option value="">Todas</option><option value="new">Não respondidas</option><option value="wrong">Erradas</option></select>' +
+          '<select id="meggy-qbank-subject" style="' + SEL + '"><option value="">Escolhe a disciplina...</option><option value="__all__">Todas as disciplinas</option></select>' +
+          '<select id="meggy-qbank-topic" style="' + SEL + '" disabled><option value="">Todos os assuntos</option></select>' +
+          '<select id="meggy-qbank-state" style="' + SEL + '"><option value="">Todas</option><option value="new">Não respondidas</option><option value="wrong">Erradas</option></select>' +
         '</div>' +
         '<div id="meggy-qbank-topics" style="margin-bottom:14px;"></div>' +
-        '<div id="meggy-qbank-list"><div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando questões...</div></div></div>';
+        '<div id="meggy-qbank-list"><div style="color:#9aa4b8;font-size:13px;padding:16px 0;">Escolhe uma disciplina acima para veres os assuntos e as questões dela.</div></div>';
         const subjectSel = root.querySelector('#meggy-qbank-subject');
-        const authorSel = root.querySelector('#meggy-qbank-author');
+        const topicSel = root.querySelector('#meggy-qbank-topic');
         const stateSel = root.querySelector('#meggy-qbank-state');
         const topicsEl = root.querySelector('#meggy-qbank-topics');
         const listEl = root.querySelector('#meggy-qbank-list');
-        let items = [];
+        const HINT = '<div style="color:#9aa4b8;font-size:12px;padding:2px 0 4px;">Escolhe uma disciplina acima: aparecem os assuntos dela e podes <b style="color:#e6edf3;">praticar assunto a assunto</b> — todas as questões do assunto, em sequência.</div>';
+        topicsEl.innerHTML = HINT;
+        let items = [];          // conjunto carregado (o que a lista mostra)
+        let subjectItems = [];   // pool completo da escolha actual (base do "seu acerto %" e do regresso a Todos os assuntos sem refetch)
+        let curSubject = '';     // '' = nenhuma · '__all__' = todas · nome = disciplina
+        let curTopic = '';       // '' = Todos os assuntos
+        let topicsData = null;   // {subject, topics:[{topic,count}]} da disciplina actual
         const stateOf = (q) => {
           try { if (typeof window.__gdiBankState21548 === 'function') return window.__gdiBankState21548(q); } catch (_) {}
           return { answered: false, wrong: false };
@@ -3728,124 +3781,136 @@
             };
           });
         };
-        // ★ v2.15.55: praticar um assunto = TODAS as questões
-        //   dele, em sequência. O pool vai buscar-se ao endpoint
-        //   por subject+topic, paginado (_qbTopicPool21555) — a
-        //   lista carregada corta nas 200 mais recentes da
-        //   disciplina e um assunto podia ficar cortado. Filtros:
-        //   ALUNO vai no pedido (servidor); ESTADO aplica-se aqui,
-        //   sobre o conjunto completo do assunto. Se o fetch
-        //   falhar, degrada p/ o pool da lista (o comportamento
-        //   .48–.54) — nunca fica pior.
+        // ★ v2.15.55 (mantido): praticar um assunto = TODAS as
+        //   questões dele, em sequência — pool por subject+topic
+        //   paginado; se o fetch falhar, degrada p/ o pool já
+        //   carregado (disciplina completa ou a lista) — nunca
+        //   fica pior. O filtro de ESTADO aplica-se sobre o
+        //   conjunto completo do assunto.
         const practice = async (topic) => {
-          const subject = subjectSel.value || '';
-          const author = authorSel.value || '';
+          if (!curSubject || curSubject === '__all__') return;
+          topicsEl.innerHTML = '<div style="color:#9aa4b8;font-size:12px;">A carregar as questões do assunto...</div>';
           let pool = null;
-          if (topic) {
-            topicsEl.innerHTML = '<div style="color:#9aa4b8;font-size:12px;">A carregar as questões do assunto...</div>';
-            try { pool = await Shell.views._qbTopicPool21555(fetchJson, subject, topic, author); } catch (_) { pool = null; }
-            if (!pool) pool = items.filter(q => (q.topic || 'A classificar') === topic);
-          } else {
-            pool = items;
-          }
+          try { pool = await Shell.views._qbTopicPool21555(fetchJson, curSubject, topic, ''); } catch (_) { pool = null; }
+          if (!pool) pool = (subjectItems.length ? subjectItems : items).filter(q => (q.topic || 'A classificar') === topic);
           pool = applyStateFilter(pool || []);
           if (!pool.length) { toast('Sem questões para praticar com esses filtros'); renderTopics(); return; }
           const shuffled = pool.slice();
           for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = t; }
           const qs = shuffled.map(it => Shell.views._sharedCardToQuestion(it));
-          Shell.views._showQuiz(el, { lessonName: (subject || 'Banco de questões') + (topic ? ' · ' + topic : ''), questions: qs, onAnswer: (qq, ok) => { try { if (typeof window.__gdiBankAnswer21548 === 'function') window.__gdiBankAnswer21548(qq, ok); } catch (_) {} } });
+          Shell.views._showQuiz(el, { lessonName: curSubject + ' · ' + topic, questions: qs, onAnswer: (qq, ok) => { try { if (typeof window.__gdiBankAnswer21548 === 'function') window.__gdiBankAnswer21548(qq, ok); } catch (_) {} } });
         };
-        const renderTopics = async () => {
-          const subject = subjectSel.value || '';
-          if (!subject) { topicsEl.innerHTML = '<div style="color:#9aa4b8;font-size:12px;padding:2px 0 4px;">Escolhe uma disciplina acima: aparecem os assuntos dela e podes <b style="color:#e6edf3;">praticar assunto a assunto</b> — todas as questões do assunto, em sequência.</div>'; return; }
+        const renderTopics = () => {
+          if (!curSubject) { topicsEl.innerHTML = HINT; return; }
+          if (curSubject === '__all__' || !topicsData || topicsData.subject !== curSubject) { topicsEl.innerHTML = ''; return; }
+          const topics = topicsData.topics || [];
+          if (!topics.length) { topicsEl.innerHTML = ''; return; }
+          // "seu acerto %" sobre o pool COMPLETO da disciplina
+          //   (subjectItems), não sobre o conjunto estreitado.
+          const accBase = subjectItems.length ? subjectItems : items;
+          const acc = {};
+          accBase.forEach(q => {
+            const t = q.topic || 'A classificar';
+            const st = stateOf(q);
+            if (!st.answered) return;
+            acc[t] = acc[t] || { a: 0, w: 0 };
+            acc[t].a++; if (st.wrong) acc[t].w++;
+          });
+          let html = '<div style="color:#9aa4b8;font-size:12px;margin-bottom:6px;">Assuntos de <b style="color:#e6edf3;">' + esc(curSubject) + '</b> — toca num assunto para resolver TODAS as questões dele, em sequência:</div><div style="display:flex;flex-direction:column;gap:6px;">';
+          topics.forEach(t => {
+            const a = acc[t.topic];
+            const accTxt = a && a.a ? ' · seu acerto: ' + Math.round((a.a - a.w) / a.a * 100) + '% (' + a.a + ' respondidas)' : '';
+            html += '<div class="meggy-qbank-topic-row" data-topic="' + esc(t.topic) + '" title="Praticar todas as questões deste assunto" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;cursor:pointer;"><div style="flex:1;min-width:0;"><b style="color:#f0f6fc;font-size:13px;">' + esc(t.topic) + '</b><div style="color:#9aa4b8;font-size:12px;">' + t.count + ' questões' + accTxt + '</div></div><button class="meggy-header-btn meggy-qbank-practice" data-topic="' + esc(t.topic) + '" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;font-size:12px;"><i class="bi bi-play-fill"></i> Praticar assunto</button></div>';
+          });
+          html += '</div>';
+          topicsEl.innerHTML = html;
+          topicsEl.querySelectorAll('.meggy-qbank-practice').forEach(b => { b.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); practice(b.dataset.topic); } });
+          topicsEl.querySelectorAll('.meggy-qbank-topic-row').forEach(r => { r.onclick = () => practice(r.dataset.topic); });  // ★ v2.15.55: a linha inteira do assunto abre a prática do assunto
+        };
+        // assuntos da disciplina: popula o filtro de assunto e as
+        //   linhas (contagens do endpoint de topics).
+        const loadTopics = async (subject) => {
+          const d = await fetchMetaRetry('/api/ai/question-topics?subject=' + encodeURIComponent(subject));
+          if (subject !== curSubject) return;  // a selecção mudou entretanto
+          const topics = (d && d.ok && Array.isArray(d.topics)) ? d.topics : [];
+          topicsData = { subject: subject, topics: topics };
+          const cur = topicSel.value || '';
+          topicSel.innerHTML = '<option value="">Todos os assuntos</option>' + topics.map(t => '<option value="' + esc(t.topic) + '">' + esc(t.topic) + '</option>').join('');
+          topicSel.value = topics.some(t => t.topic === cur) ? cur : '';
+          curTopic = topicSel.value || '';
+          renderTopics();
+        };
+        // carrega um conjunto (disciplina [__all__ = todas] +
+        //   assunto opcional) — pool paginado completo, 2
+        //   tentativas (padrão .49). Respostas fora de prazo
+        //   (a selecção mudou) são descartadas.
+        const loadSet = async (subject, topic) => {
+          listEl.innerHTML = '<div class="meggy-loading"><div class="spinner-border" role="status"></div><div>' + (topic ? 'Carregando questões do assunto...' : 'Carregando questões...') + '</div></div>';
+          let pool = null;
+          for (let _att = 0; _att < 2 && !pool; _att++) {
+            try { pool = await Shell.views._qbTopicPool21555(fetchJson, subject === '__all__' ? '' : subject, topic || '', ''); }
+            catch (_) { pool = null; if (_att === 0) await new Promise(r => setTimeout(r, 1200)); }
+          }
+          if (!pool) {
+            if (subject === curSubject && (topic || '') === curTopic) { items = []; listEl.innerHTML = '<div style="color:#ff8b8b;font-size:13px;padding:12px 0;">Não foi possível carregar o banco agora. Tente de novo em instantes.</div>'; }
+            return;
+          }
+          if (!topic && subject === curSubject) subjectItems = pool;  // base completa da disciplina, mesmo que a vista já tenha estreitado
+          if (subject !== curSubject || (topic || '') !== curTopic) return;
+          items = pool;
+          renderList();
+        };
+        subjectSel.onchange = () => {
+          curSubject = subjectSel.value || '';
+          curTopic = '';
+          items = []; subjectItems = []; topicsData = null;
+          topicSel.innerHTML = '<option value="">Todos os assuntos</option>';
+          topicSel.value = '';
+          if (!curSubject) {
+            topicSel.disabled = true;
+            topicsEl.innerHTML = HINT;
+            listEl.innerHTML = '<div style="color:#9aa4b8;font-size:13px;padding:16px 0;">Escolhe uma disciplina acima para veres os assuntos e as questões dela.</div>';
+            return;
+          }
+          if (curSubject === '__all__') {
+            topicSel.disabled = true;
+            topicsEl.innerHTML = '';
+            loadSet('__all__', '');
+            return;
+          }
+          topicSel.disabled = false;
           topicsEl.innerHTML = '<div style="color:#9aa4b8;font-size:12px;">Carregando assuntos...</div>';
-          try {
-            const d = await fetchJson('/api/ai/question-topics?subject=' + encodeURIComponent(subject), 12000);
-            const topics = (d && d.ok && Array.isArray(d.topics)) ? d.topics : [];
-            if (!topics.length) { topicsEl.innerHTML = ''; return; }
-            const acc = {};
-            items.forEach(q => {
-              const t = q.topic || 'A classificar';
-              const st = stateOf(q);
-              if (!st.answered) return;
-              acc[t] = acc[t] || { a: 0, w: 0 };
-              acc[t].a++; if (st.wrong) acc[t].w++;
-            });
-            let html = '<div style="color:#9aa4b8;font-size:12px;margin-bottom:6px;">Assuntos de <b style="color:#e6edf3;">' + esc(subject) + '</b> — toca num assunto para resolver TODAS as questões dele, em sequência:</div><div style="display:flex;flex-direction:column;gap:6px;">';
-            topics.forEach(t => {
-              const a = acc[t.topic];
-              const accTxt = a && a.a ? ' · seu acerto: ' + Math.round((a.a - a.w) / a.a * 100) + '% (' + a.a + ' respondidas)' : '';
-              html += '<div class="meggy-qbank-topic-row" data-topic="' + esc(t.topic) + '" title="Praticar todas as questões deste assunto" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;cursor:pointer;"><div style="flex:1;min-width:0;"><b style="color:#f0f6fc;font-size:13px;">' + esc(t.topic) + '</b><div style="color:#9aa4b8;font-size:12px;">' + t.count + ' questões' + accTxt + '</div></div><button class="meggy-header-btn meggy-qbank-practice" data-topic="' + esc(t.topic) + '" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;font-size:12px;"><i class="bi bi-play-fill"></i> Praticar assunto</button></div>';
-            });
-            html += '</div>';
-            topicsEl.innerHTML = html;
-            topicsEl.querySelectorAll('.meggy-qbank-practice').forEach(b => { b.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); practice(b.dataset.topic); } });
-            topicsEl.querySelectorAll('.meggy-qbank-topic-row').forEach(r => { r.onclick = () => practice(r.dataset.topic); });  // ★ v2.15.55: a linha inteira do assunto abre a prática do assunto
-          } catch (e) { topicsEl.innerHTML = ''; }
+          loadTopics(curSubject);
+          loadSet(curSubject, '');
         };
-        const loadList = async () => {
-          const subject = subjectSel.value || '';
-          const author = authorSel.value || '';
-          listEl.innerHTML = '<div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando questões...</div></div>';
-          // ★ v2.15.49 (F1): UMA retentativa automática antes do estado
-          //   de erro — sob quota, a 1ª tentativa pode cair num isolate
-          //   frio (snapshot + journal a carregar) e estourar o
-          //   timeout; a 2ª apanha as caches quentes do worker.
-          let d = null, _loaded21549 = false;
-          for (let _att = 0; _att < 2 && !_loaded21549; _att++) {
-            try {
-              const q = ['kind=question'];
-              if (subject) q.push('subject=' + encodeURIComponent(subject));
-              if (author) q.push('author=' + encodeURIComponent(author));
-              d = await fetchJson('/api/ai/shared-flashcards?' + q.join('&'), 20000);
-              _loaded21549 = true;
-            } catch (e) {
-              if (_att === 0) await new Promise(r => setTimeout(r, 1200));
-            }
-          }
-          if (_loaded21549) {
-            items = (d && d.ok && Array.isArray(d.items)) ? d.items : [];
-            renderList();
-            renderTopics();
+        topicSel.onchange = () => {
+          curTopic = topicSel.value || '';
+          if (!curSubject || curSubject === '__all__') return;
+          if (!curTopic) {
+            // Todos os assuntos: volta ao pool da disciplina já
+            //   carregado (sem refetch); se ele falhou, retenta.
+            if (subjectItems.length) { items = subjectItems; renderList(); }
+            else loadSet(curSubject, '');
           } else {
-            listEl.innerHTML = '<div style="color:#ff8b8b;font-size:13px;padding:12px 0;">Não foi possível carregar o banco agora. Tente de novo em instantes.</div>';
+            loadSet(curSubject, curTopic);
           }
         };
-        subjectSel.onchange = loadList;
-        authorSel.onchange = loadList;
         stateSel.onchange = () => { renderList(); renderTopics(); };
-        loadList();
+        // abertura preguiçosa: SÓ as disciplinas (listas leves,
+        //   com a retentativa .64; degrada p/ shared-subjects).
+        //   Nenhuma questão é pedida antes de uma escolha activa.
         (async () => {
-          try {
-        const _fetchMetaRetry21564 = async (url) => {
-          // ★ v2.15.64: UMA retentativa dos metadados — na 1ª carga, um
-          //   isolate frio com o D1 morto serve subjects/authors do
-          //   fallback (agregado+journal do Drive) e estoura os 8 s; o
-          //   filtro nascia vazio e só o reload o populava. Mesmo
-          //   padrão .49 do loadList: espera 1,2 s e tenta com 15 s.
-          for (let _a21564 = 0; _a21564 < 2; _a21564++) {
-            try { const _d21564 = await fetchJson(url, _a21564 === 0 ? 8000 : 15000); if (_d21564) return _d21564; } catch (_) {}
-            if (_a21564 === 0) await new Promise(r => setTimeout(r, 1200));
+          let subs = [];
+          const dl = await fetchMetaRetry('/api/ai/question-bank/lists');
+          if (dl && dl.ok && Array.isArray(dl.disciplines) && dl.disciplines.length) subs = dl.disciplines;
+          if (!subs.length) {
+            const ds = await fetchMetaRetry('/api/ai/shared-subjects');
+            if (ds && ds.ok && Array.isArray(ds.questionSubjects)) subs = ds.questionSubjects;
           }
-          return null;
-        };
-            const _rs = await Promise.all([
-              _fetchMetaRetry21564('/api/ai/shared-subjects'),
-              _fetchMetaRetry21564('/api/ai/shared-authors')
-            ]);
-            const ds = _rs[0], da = _rs[1];
-            if (ds && ds.ok) {
-              const subs = ds.questionSubjects || ds.flashcardSubjects || [];
-              const cur = subjectSel.value;
-              subs.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; subjectSel.appendChild(o); });
-              subjectSel.value = cur;
-            }
-            if (da && da.ok && Array.isArray(da.authors)) {
-              const cur = authorSel.value;
-              da.authors.forEach(a => { const o = document.createElement('option'); o.value = a.author; o.textContent = a.author + ' (' + (a.questions != null ? a.questions : (a.summaries || 0) + (a.flashcards || 0)) + ')'; authorSel.appendChild(o); });
-              authorSel.value = cur;
-            }
-          } catch (_) {}
+          if (!subs.length) return;
+          const cur = subjectSel.value;
+          subs.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; subjectSel.appendChild(o); });
+          subjectSel.value = cur;
         })();
       },
 
@@ -3859,6 +3924,12 @@
       //   banco — cada linha é um cartão) e com 2 tentativas, como
       //   no banco de questões: era a falta da 2ª tentativa que
       //   deixava os antigos "Compartilhados" em erro no meuc.
+      // ★ v2.15.65: BANCO PREGUIÇOSO, como o de questões (desenho
+      //   do Elton 2026-11-22): abre sem carregar cartões (só as
+      //   disciplinas); filtro de aluno removido → filtro de
+      //   ASSUNTO (desactivado até haver disciplina; "Todos os
+      //   assuntos" por defeito carrega tudo o da disciplina;
+      //   assunto concreto estreita p/ o conjunto completo dele).
       async _renderFlashcardBank(el) {
         const root = el.querySelector('#meggy-fcbank-root');
         if (!root) return;
@@ -3869,19 +3940,35 @@
           const _to = setTimeout(() => { try { _ctl.abort(); } catch (_) {} }, ms || 15000);
           try { const r = await fetch(url, { cache: 'no-store', signal: _ctl.signal }); return await r.json(); } finally { clearTimeout(_to); }
         };
+        // ★ v2.15.64 (mantido na .65): retentativa dos pedidos
+        //   leves (listas/assuntos) — padrão .49, como em /questoes.
+        const fetchMetaRetry = async (url) => {
+          for (let _a = 0; _a < 2; _a++) {
+            try { const _d = await fetchJson(url, _a === 0 ? 8000 : 15000); if (_d) return _d; } catch (_) {}
+            if (_a === 0) await new Promise(r => setTimeout(r, 1200));
+          }
+          return null;
+        };
+        const SEL = 'flex:1;min-width:160px;background:rgba(255,255,255,.06);border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:8px 10px;font-size:13px;';
         root.innerHTML = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' +
-          '<select id="meggy-fcbank-subject" style="flex:1;min-width:160px;background:rgba(255,255,255,.06);border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:8px 10px;font-size:13px;"><option value="">Todas as disciplinas</option></select>' +
-          '<select id="meggy-fcbank-author" style="flex:1;min-width:160px;background:rgba(255,255,255,.06);border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:8px 10px;font-size:13px;"><option value="">Todos os alunos</option></select>' +
-          '<select id="meggy-fcbank-state" style="flex:1;min-width:160px;background:rgba(255,255,255,.06);border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:8px 10px;font-size:13px;"><option value="">Todos</option><option value="new">Não praticados</option><option value="due">A rever</option></select>' +
+          '<select id="meggy-fcbank-subject" style="' + SEL + '"><option value="">Escolhe a disciplina...</option><option value="__all__">Todas as disciplinas</option></select>' +
+          '<select id="meggy-fcbank-topic" style="' + SEL + '" disabled><option value="">Todos os assuntos</option></select>' +
+          '<select id="meggy-fcbank-state" style="' + SEL + '"><option value="">Todos</option><option value="new">Não praticados</option><option value="due">A rever</option></select>' +
         '</div>' +
         '<div id="meggy-fcbank-topics" style="margin-bottom:14px;"></div>' +
-        '<div id="meggy-fcbank-list"><div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando flashcards...</div></div></div>';
+        '<div id="meggy-fcbank-list"><div style="color:#9aa4b8;font-size:13px;padding:16px 0;">Escolhe uma disciplina acima para veres os assuntos e os flashcards dela.</div></div>';
         const subjectSel = root.querySelector('#meggy-fcbank-subject');
-        const authorSel = root.querySelector('#meggy-fcbank-author');
+        const topicSel = root.querySelector('#meggy-fcbank-topic');
         const stateSel = root.querySelector('#meggy-fcbank-state');
         const topicsEl = root.querySelector('#meggy-fcbank-topics');
         const listEl = root.querySelector('#meggy-fcbank-list');
+        const HINT = '<div style="color:#9aa4b8;font-size:12px;padding:2px 0 4px;">Escolhe uma disciplina acima: aparecem os assuntos dela e podes <b style="color:#e6edf3;">praticar assunto a assunto</b>.</div>';
+        topicsEl.innerHTML = HINT;
         let items = [];
+        let subjectItems = [];
+        let curSubject = '';
+        let curTopic = '';
+        let topicsData = null;
         const frontOf = (it) => it.front || it.statement || '';
         const backOf = (it) => {
           if (it.back) return it.back;
@@ -3949,105 +4036,119 @@
             };
           });
         };
-        const practice = (topic) => {
-          let pool = items;
-          if (topic) pool = pool.filter(it => (it.topic || 'A classificar') === topic);
-          pool = applyStateFilter(pool);
+        // prática de um assunto: conjunto COMPLETO dele (pool
+        //   paginado kind=flashcard); degrada p/ o pool carregado.
+        const practice = async (topic) => {
+          if (!curSubject || curSubject === '__all__') return;
+          let pool = null;
+          try { pool = await Shell.views._bankPool21565(fetchJson, 'flashcard', curSubject, topic); } catch (_) { pool = null; }
+          if (!pool) pool = (subjectItems.length ? subjectItems : items).filter(it => (it.topic || 'A classificar') === topic);
+          pool = applyStateFilter(pool || []);
           if (!pool.length) { toast('Sem flashcards para praticar com esses filtros'); return; }
           const shuffled = pool.slice();
           for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = t; }
-          openDeck(shuffled, 0, (subjectSel.value || 'Banco de flashcards') + (topic ? ' · ' + topic : ''));
+          openDeck(shuffled, 0, curSubject + ' · ' + topic);
         };
-        const renderTopics = async () => {
-          const subject = subjectSel.value || '';
-          if (!subject) { topicsEl.innerHTML = ''; return; }
+        const renderTopics = () => {
+          if (!curSubject) { topicsEl.innerHTML = HINT; return; }
+          if (curSubject === '__all__' || !topicsData || topicsData.subject !== curSubject) { topicsEl.innerHTML = ''; return; }
+          const topics = topicsData.topics || [];
+          if (!topics.length) { topicsEl.innerHTML = ''; return; }
+          // desempenho local sobre o pool COMPLETO da disciplina.
+          const perfBase = subjectItems.length ? subjectItems : items;
+          const perf = {};
+          perfBase.forEach(it => {
+            const t = it.topic || 'A classificar';
+            const st = stateOf(it);
+            perf[t] = perf[t] || { p: 0, d: 0 };
+            if (st.practiced) perf[t].p++;
+            if (st.due) perf[t].d++;
+          });
+          let html = '<div style="display:flex;flex-direction:column;gap:6px;">';
+          topics.forEach(t => {
+            const pf = perf[t.topic];
+            const pfTxt = pf && (pf.p || pf.d) ? ' · praticados: ' + pf.p + (pf.d ? ' · <span style="color:#ffd43b;">a rever: ' + pf.d + '</span>' : '') : '';
+            html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;"><div style="flex:1;min-width:0;"><b style="color:#f0f6fc;font-size:13px;">' + esc(t.topic) + '</b><div style="color:#9aa4b8;font-size:12px;">' + t.count + ' flashcards' + pfTxt + '</div></div><button class="meggy-header-btn meggy-fcbank-practice" data-topic="' + esc(t.topic) + '" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;font-size:12px;"><i class="bi bi-play-fill"></i> Praticar</button></div>';
+          });
+          html += '</div>';
+          topicsEl.innerHTML = html;
+          topicsEl.querySelectorAll('.meggy-fcbank-practice').forEach(b => { b.onclick = () => practice(b.dataset.topic); });
+        };
+        const loadTopics = async (subject) => {
+          const d = await fetchMetaRetry('/api/ai/flashcard-topics?subject=' + encodeURIComponent(subject));
+          if (subject !== curSubject) return;
+          const topics = (d && d.ok && Array.isArray(d.topics)) ? d.topics : [];
+          topicsData = { subject: subject, topics: topics };
+          const cur = topicSel.value || '';
+          topicSel.innerHTML = '<option value="">Todos os assuntos</option>' + topics.map(t => '<option value="' + esc(t.topic) + '">' + esc(t.topic) + '</option>').join('');
+          topicSel.value = topics.some(t => t.topic === cur) ? cur : '';
+          curTopic = topicSel.value || '';
+          renderTopics();
+        };
+        const loadSet = async (subject, topic) => {
+          listEl.innerHTML = '<div class="meggy-loading"><div class="spinner-border" role="status"></div><div>' + (topic ? 'Carregando flashcards do assunto...' : 'Carregando flashcards...') + '</div></div>';
+          let pool = null;
+          for (let _att = 0; _att < 2 && !pool; _att++) {
+            try { pool = await Shell.views._bankPool21565(fetchJson, 'flashcard', subject === '__all__' ? '' : subject, topic || ''); }
+            catch (_) { pool = null; if (_att === 0) await new Promise(r => setTimeout(r, 1200)); }
+          }
+          if (!pool) {
+            if (subject === curSubject && (topic || '') === curTopic) { items = []; listEl.innerHTML = '<div style="color:#ff8b8b;font-size:13px;padding:12px 0;">Não foi possível carregar o banco agora. Tente de novo em instantes.</div>'; }
+            return;
+          }
+          if (!topic && subject === curSubject) subjectItems = pool;  // idem questões
+          if (subject !== curSubject || (topic || '') !== curTopic) return;
+          items = pool;
+          renderList();
+        };
+        subjectSel.onchange = () => {
+          curSubject = subjectSel.value || '';
+          curTopic = '';
+          items = []; subjectItems = []; topicsData = null;
+          topicSel.innerHTML = '<option value="">Todos os assuntos</option>';
+          topicSel.value = '';
+          if (!curSubject) {
+            topicSel.disabled = true;
+            topicsEl.innerHTML = HINT;
+            listEl.innerHTML = '<div style="color:#9aa4b8;font-size:13px;padding:16px 0;">Escolhe uma disciplina acima para veres os assuntos e os flashcards dela.</div>';
+            return;
+          }
+          if (curSubject === '__all__') {
+            topicSel.disabled = true;
+            topicsEl.innerHTML = '';
+            loadSet('__all__', '');
+            return;
+          }
+          topicSel.disabled = false;
           topicsEl.innerHTML = '<div style="color:#9aa4b8;font-size:12px;">Carregando assuntos...</div>';
-          try {
-            const d = await fetchJson('/api/ai/flashcard-topics?subject=' + encodeURIComponent(subject), 12000);
-            const topics = (d && d.ok && Array.isArray(d.topics)) ? d.topics : [];
-            if (!topics.length) { topicsEl.innerHTML = ''; return; }
-            const perf = {};
-            items.forEach(it => {
-              const t = it.topic || 'A classificar';
-              const st = stateOf(it);
-              perf[t] = perf[t] || { p: 0, d: 0 };
-              if (st.practiced) perf[t].p++;
-              if (st.due) perf[t].d++;
-            });
-            let html = '<div style="display:flex;flex-direction:column;gap:6px;">';
-            topics.forEach(t => {
-              const pf = perf[t.topic];
-              const pfTxt = pf && (pf.p || pf.d) ? ' · praticados: ' + pf.p + (pf.d ? ' · <span style="color:#ffd43b;">a rever: ' + pf.d + '</span>' : '') : '';
-              html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;"><div style="flex:1;min-width:0;"><b style="color:#f0f6fc;font-size:13px;">' + esc(t.topic) + '</b><div style="color:#9aa4b8;font-size:12px;">' + t.count + ' flashcards' + pfTxt + '</div></div><button class="meggy-header-btn meggy-fcbank-practice" data-topic="' + esc(t.topic) + '" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;font-size:12px;"><i class="bi bi-play-fill"></i> Praticar</button></div>';
-            });
-            html += '</div>';
-            topicsEl.innerHTML = html;
-            topicsEl.querySelectorAll('.meggy-fcbank-practice').forEach(b => { b.onclick = () => practice(b.dataset.topic); });
-          } catch (e) { topicsEl.innerHTML = ''; }
+          loadTopics(curSubject);
+          loadSet(curSubject, '');
         };
-        const loadList = async () => {
-          const subject = subjectSel.value || '';
-          const author = authorSel.value || '';
-          listEl.innerHTML = '<div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando flashcards...</div></div>';
-          // ★ 2 tentativas (o padrão da vista do banco de questões):
-          //   sob quota, a 1ª pode cair num isolate frio (snapshot +
-          //   journal) e estourar o timeout; a 2ª apanha as caches.
-          let d = null, _loaded = false;
-          for (let _att = 0; _att < 2 && !_loaded; _att++) {
-            try {
-              const q = ['kind=flashcard'];
-              if (subject) q.push('subject=' + encodeURIComponent(subject));
-              if (author) q.push('author=' + encodeURIComponent(author));
-              d = await fetchJson('/api/ai/shared-flashcards?' + q.join('&'), 20000);
-              _loaded = true;
-            } catch (e) {
-              if (_att === 0) await new Promise(r => setTimeout(r, 1200));
-            }
-          }
-          if (_loaded) {
-            items = (d && d.ok && Array.isArray(d.items)) ? d.items : [];
-            renderList();
-            renderTopics();
+        topicSel.onchange = () => {
+          curTopic = topicSel.value || '';
+          if (!curSubject || curSubject === '__all__') return;
+          if (!curTopic) {
+            if (subjectItems.length) { items = subjectItems; renderList(); }
+            else loadSet(curSubject, '');
           } else {
-            listEl.innerHTML = '<div style="color:#ff8b8b;font-size:13px;padding:12px 0;">Não foi possível carregar o banco agora. Tente de novo em instantes.</div>';
+            loadSet(curSubject, curTopic);
           }
         };
-        subjectSel.onchange = loadList;
-        authorSel.onchange = loadList;
         stateSel.onchange = () => { renderList(); renderTopics(); };
-        loadList();
+        // abertura preguiçosa: SÓ as disciplinas (flashcard-bank/
+        //   lists com retentativa; degrada p/ shared-subjects).
         (async () => {
-          try {
-        const _fetchMetaRetry21564 = async (url) => {
-          // ★ v2.15.64: UMA retentativa dos metadados — na 1ª carga, um
-          //   isolate frio com o D1 morto serve subjects/authors do
-          //   fallback (agregado+journal do Drive) e estoura os 8 s; o
-          //   filtro nascia vazio e só o reload o populava. Mesmo
-          //   padrão .49 do loadList: espera 1,2 s e tenta com 15 s.
-          for (let _a21564 = 0; _a21564 < 2; _a21564++) {
-            try { const _d21564 = await fetchJson(url, _a21564 === 0 ? 8000 : 15000); if (_d21564) return _d21564; } catch (_) {}
-            if (_a21564 === 0) await new Promise(r => setTimeout(r, 1200));
+          let subs = [];
+          const dl = await fetchMetaRetry('/api/ai/flashcard-bank/lists');
+          if (dl && dl.ok && Array.isArray(dl.disciplines) && dl.disciplines.length) subs = dl.disciplines;
+          if (!subs.length) {
+            const ds = await fetchMetaRetry('/api/ai/shared-subjects');
+            if (ds && ds.ok && Array.isArray(ds.flashcardSubjects)) subs = ds.flashcardSubjects;
           }
-          return null;
-        };
-            const _rs = await Promise.all([
-              _fetchMetaRetry21564('/api/ai/flashcard-bank/lists'),
-              _fetchMetaRetry21564('/api/ai/shared-subjects'),
-              _fetchMetaRetry21564('/api/ai/shared-authors')
-            ]);
-            const dl = _rs[0], ds = _rs[1], da = _rs[2];
-            const subs = (dl && dl.ok && Array.isArray(dl.disciplines) && dl.disciplines.length) ? dl.disciplines : ((ds && ds.ok) ? (ds.flashcardSubjects || []) : []);
-            if (subs.length) {
-              const cur = subjectSel.value;
-              subs.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; subjectSel.appendChild(o); });
-              subjectSel.value = cur;
-            }
-            if (da && da.ok && Array.isArray(da.authors)) {
-              const cur = authorSel.value;
-              da.authors.forEach(a => { const o = document.createElement('option'); o.value = a.author; o.textContent = a.author + ' (' + (a.flashcards != null ? a.flashcards : 0) + ')'; authorSel.appendChild(o); });
-              authorSel.value = cur;
-            }
-          } catch (_) {}
+          if (!subs.length) return;
+          const cur = subjectSel.value;
+          subs.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; subjectSel.appendChild(o); });
+          subjectSel.value = cur;
         })();
       },
       async _renderSharedSection(el, kind) {
