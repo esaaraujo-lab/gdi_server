@@ -549,6 +549,18 @@
                     android:textColor="@color/md_on_surface_variant"
                     android:textSize="@dimen/text_detail_body"
                     android:visibility="gone" />
+
+                <!-- R21: retry PERSISTENTE do erro de rede (antes vivia
+                     só como ação de um Snackbar temporário; quando ele
+                     desaparecia, o ecrã de erro ficava sem saída). -->
+                <Button
+                    android:id="@+id/retryButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="@dimen/spacing_md"
+                    android:text="Tentar de novo"
+                    android:visibility="gone" />
             </LinearLayout>
 
             <!-- Painel: Questões -->

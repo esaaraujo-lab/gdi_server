@@ -165,6 +165,7 @@
         <!-- Play/pause central (quando pausado) -->
         <TextView
             android:id="@+id/center_play_pause"
+            android:contentDescription="@string/cd_play_pause"
             android:layout_width="@dimen/player_center_size"
             android:layout_height="@dimen/player_center_size"
             android:layout_gravity="center"
@@ -212,6 +213,7 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/restart_button"
+                    android:contentDescription="@string/cd_restart"
                     style="@style/Widget.Material3.Button.TextButton"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -225,6 +227,7 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/sleep_timer_button"
+                    android:contentDescription="@string/cd_sleep_timer"
                     style="@style/Widget.Material3.Button.TextButton"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -237,6 +240,7 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/fav_button"
+                    android:contentDescription="@string/cd_favorite"
                     style="@style/Widget.Material3.Button.TextButton"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -284,6 +288,7 @@
 
                 <TextView
                     android:id="@+id/btn_play_pause_bar"
+                    android:contentDescription="@string/cd_play_pause"
                     android:layout_width="@dimen/player_bar_btn_size"
                     android:layout_height="@dimen/player_bar_btn_size"
                     android:background="@drawable/player_bar_btn_bg"
@@ -301,6 +306,7 @@
 
                 <TextView
                     android:id="@+id/btn_rest_bar"
+                    android:contentDescription="@string/cd_rest_mode"
                     android:layout_width="wrap_content"
                     android:layout_height="40dp"
                     android:layout_marginEnd="@dimen/spacing_sm"
@@ -316,6 +322,7 @@
                 
                 <TextView
                     android:id="@+id/btn_speed_bar"
+                    android:contentDescription="@string/cd_speed"
                     android:layout_width="wrap_content"
                     android:layout_height="40dp"
                     android:layout_marginEnd="@dimen/spacing_sm"
@@ -331,6 +338,7 @@
 
                 <TextView
                     android:id="@+id/btn_exit_fullscreen"
+                    android:contentDescription="@string/cd_exit_fullscreen"
                     android:layout_width="48dp"
                     android:layout_height="48dp"
                     android:background="@drawable/player_chip_bg"
@@ -454,6 +462,7 @@
 
                     <TextView
                         android:id="@+id/btn_speed_info"
+                        android:contentDescription="@string/cd_speed"
                         android:layout_width="wrap_content"
                         android:layout_height="40dp"
                         android:background="@drawable/player_chip_bg"
@@ -469,6 +478,7 @@
                     
                     <TextView
                         android:id="@+id/btn_rest_info"
+                        android:contentDescription="@string/cd_rest_mode"
                         android:layout_width="wrap_content"
                         android:layout_height="40dp"
                         android:layout_marginStart="@dimen/spacing_sm"
@@ -484,6 +494,7 @@
 
                     <TextView
                         android:id="@+id/btn_fullscreen"
+                        android:contentDescription="@string/cd_fullscreen"
                         android:layout_width="48dp"
                         android:layout_height="40dp"
                         android:layout_marginStart="@dimen/spacing_sm"
@@ -554,6 +565,7 @@
 
                 <androidx.appcompat.widget.AppCompatButton
                     android:id="@+id/btn_prev"
+                    android:contentDescription="@string/cd_prev_lesson"
                     android:layout_width="0dp"
                     android:layout_height="48dp"
                     android:layout_marginEnd="@dimen/spacing_sm"
@@ -566,6 +578,7 @@
 
                 <androidx.appcompat.widget.AppCompatButton
                     android:id="@+id/btn_next"
+                    android:contentDescription="@string/cd_next_lesson"
                     android:layout_width="0dp"
                     android:layout_height="48dp"
                     android:layout_marginStart="@dimen/spacing_sm"
