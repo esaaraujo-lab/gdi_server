@@ -40,6 +40,10 @@ class SearchResultAdapter(
     private val onFile: (FileItem) -> Unit
 ) : RecyclerView.Adapter<SearchResultAdapter.VH>() {
 
+    // R21 — maior posição já animada neste adapter (ver onBindViewHolder).
+    private var lastAnimatedPosition = -1
+
+
     private val items = mutableListOf<SearchResult>()
 
     fun submit(newItems: List<SearchResult>) {
@@ -150,9 +154,16 @@ class SearchResultAdapter(
                 }
             }
         }
-        val anim = AnimationUtils.loadAnimation(ctx, R.anim.tile_appear)
-        anim.startOffset = (position % 12) * 40L
-        holder.binding.root.startAnimation(anim)
+        // R21: a animação de entrada corre só na PRIMEIRA aparição
+        // da posição — antes corria em TODOS os binds, incluindo a
+        // reciclagem ao rolar (replay constante = jank, sobretudo
+        // na TV). Ver lastAnimatedPosition no adapter.
+        if (position > lastAnimatedPosition) {
+            lastAnimatedPosition = position
+            val anim = AnimationUtils.loadAnimation(ctx, R.anim.tile_appear)
+            anim.startOffset = (position % 12) * 40L
+            holder.binding.root.startAnimation(anim)
+        }
     }
 
     override fun getItemCount(): Int = items.size
