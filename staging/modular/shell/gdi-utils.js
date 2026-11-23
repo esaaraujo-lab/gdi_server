@@ -649,12 +649,13 @@
       },
 
       // History (last 12 visited pages)
-      pushHistory: function (p, name) {
+      pushHistory: function (p, name, minutes) {
         const k = _full(p);
         if (!gdiOkPath(k)) return;
+        const mins21576 = Math.max(0, Math.floor(Number(minutes) || 0));  // ★ v2.15.76: minutos vistos — o worker grava em user_history_events.minutes (sem isto, MIN 0 sempre)
         mut(function (s) {
           s.history = (s.history || []).filter(function (h) { return h.path !== k; });
-          s.history.unshift({ path: k, name: String(name || '').slice(0, 120), at: Date.now() });
+          s.history.unshift({ path: k, name: String(name || '').slice(0, 120), at: Date.now(), minutes: mins21576 });
           if (s.history.length > MAX_HISTORY) s.history.length = MAX_HISTORY;
         }, ['history']);
       },
