@@ -344,7 +344,7 @@
 
       console.log('[Meggy Shell] ✓ shell mounted into #meggy-root');
 
-      // ★ v2.15.66 (FAB Meggy): botão flutuante com a carinha da Meggy
+      // ★ v2.15.67 (FAB Meggy): botão flutuante com a carinha da Meggy
       //   (retrato fiel, aprovado pelo Elton em 2026-11-23) — abre o chat
       //   (drawer da Meggy AI). Some enquanto o drawer está aberto.
       try {
@@ -353,7 +353,7 @@
           fab.id = 'meggy-fab';
           fab.title = 'Falar com a Meggy';
           fab.setAttribute('aria-label', 'Falar com a Meggy');
-          fab.style.cssText = 'position:fixed;right:18px;bottom:18px;width:62px;height:62px;border-radius:50%;border:none;padding:0;background:none;cursor:pointer;z-index:1040;box-shadow:0 6px 20px rgba(0,0,0,.35);overflow:hidden;';
+          fab.style.cssText = 'position:fixed;right:18px;bottom:18px;width:62px;height:62px;border-radius:50%;border:none;padding:0;background:none;cursor:pointer;z-index:10000;box-shadow:0 6px 20px rgba(0,0,0,.35);overflow:hidden;';
           const imgL = document.createElement('img');
           imgL.src = 'https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/shell/meggy-fab.webp';
           imgL.alt = 'Meggy';
@@ -371,7 +371,9 @@
             fab.style.display = Shell.meggyAIDrawerOpen ? 'none' : 'block';
           };
           fab.onclick = () => { Shell.openMeggyAIDrawer(); syncFab(); };
-          document.body.appendChild(fab);
+          // ★ Dentro da raiz do shell (z 9999): no body o shell cobria o FAB.
+          //   Drawer tem z 10001 — o FAB (10000) fica abaixo dele aberto.
+          (document.getElementById('meggy-shell') || document.getElementById('meggy-root') || document.body).appendChild(fab);
           new MutationObserver(syncFab).observe(document.documentElement, { attributes: true, attributeFilter: ['data-bs-theme'] });
           setInterval(syncFab, 1500);
           syncFab();
