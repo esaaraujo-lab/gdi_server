@@ -402,7 +402,7 @@
         // Load CSS
         const link = document.createElement('link');
         link.rel = 'stylesheet';
-        link.href = '/modular/shell/shell.css?v=33';
+        link.href = '/modular/shell/shell.css?v=34';
         link.onerror = () => console.error('[GDI Loader] shell.css falhou');
         document.head.appendChild(link);
         console.log('[GDI Loader] ✓ shell.css carregado');
