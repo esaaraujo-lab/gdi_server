@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
@@ -14,12 +16,14 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.view.GestureDetector
+import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
@@ -455,6 +459,12 @@ class PlayerActivity : AppCompatActivity() {
 
     // Frente R4 — Materiais da aula no retrato (ver bloco no fim da classe).
     private var materialsJob: Job? = null
+
+    // R22 — UMA re-verificação diferida dos materiais por aula
+    // (chave = folderPath já tentado): cobre a geração que termina
+    // com o ecrã aberto (o load inicial leu um pacote parcial).
+    private var materialsRetryJob: Job? = null
+    private var materialsRetriedFor: String? = null
     private var materialsSummary: String? = null
 
     // Frente R14B — geração ao PLAY, 1x por aula por sessão: chaves
@@ -718,6 +728,15 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun displayTitle(item: FileItem?): String {
         if (item == null) return "Reproduzindo"
+        // R22 — regra do site p/ o nome da aula: nome de ficheiro
+        // genérico ("video.mp4", "001 - aula.mp4") NÃO é o nome da
+        // aula — mostra-se o nome da pasta (folderLabel ou o último
+        // segmento do folderPath). Nome real: exactamente como
+        // estava (nome · pasta).
+        val folder = item.folderLabel?.takeIf { it.isNotBlank() }
+            ?: LessonDescription.folderNameFromPath(item.folderPath)
+        val shown = LessonDescription.displayNameForLesson(item.name, folder) ?: item.name
+        if (shown != item.name) return shown
         val label = item.folderLabel
         return if (!label.isNullOrBlank()) "${item.name}  ·  $label" else item.name
     }
@@ -725,13 +744,42 @@ class PlayerActivity : AppCompatActivity() {
     private fun setTitles(item: FileItem?) {
         val title = displayTitle(item)
         binding.titleLabel.text = title
-        binding.titleInfo.text = item?.name ?: title
+        // R22 — a linha de info também não mostra o nome genérico.
+        binding.titleInfo.text = item?.let {
+            if (LessonDescription.isGenericLessonFileName(it.name)) title else it.name
+        } ?: title
         binding.courseInfo.text = item?.folderLabel ?: ""
+        updateCourseProgressLine()
+    }
+
+    /**
+     * R22 UI (conceito "aula celular") — linha "Aula X de Y · Z% do
+     * curso" + barra fina por baixo do vídeo. Dados REAIS: X/Y da
+     * playlist actual (PlaylistManager) e Z = % de itens da playlist
+     * já marcados assistidos (estado local, o mesmo isWatched do
+     * resto da app). Os ids só existem no layout de celular — na TV
+     * o mat() devolve null e a função não faz nada.
+     */
+    private fun updateCourseProgressLine() {
+        if (isTv) return
+        val text = mat<TextView>(R.id.lesson_progress_text) ?: return
+        val bar = mat<ProgressBar>(R.id.lesson_progress_bar)
+        val all = PlaylistManager.all()
+        if (all.isEmpty()) {
+            text.text = ""
+            bar?.progress = 0
+            return
+        }
+        val idx = PlaylistManager.index().coerceIn(0, all.size - 1)
+        val watched = all.count { isWatched(it) }
+        val pct = watched * 100 / all.size
+        text.text = getString(R.string.lesson_progress_line, idx + 1, all.size, pct)
+        bar?.progress = pct
     }
 
     private fun updateAudioCover(item: FileItem?) {
         if (item == null) return
-        binding.audioCoverTitle.text = item.name
+        binding.audioCoverTitle.text = displayTitle(item)
         binding.audioCoverSub.text = if ((item.folderLabel ?: "").contains("podcast", true) ||
             item.name.contains("podcast", true) || item.name.contains("cast", true)) "🎙 Podcast" else "Áudio"
         // v2.7.11 onda 2 + camada (3) ESTRITA (2.7.13, sem 'geral') —
@@ -768,6 +816,9 @@ class PlayerActivity : AppCompatActivity() {
     private fun updatePrevNextButtons() {
         binding.btnPrev.visibility = if (PlaylistManager.hasPrev()) View.VISIBLE else View.GONE
         binding.btnNext.visibility = if (PlaylistManager.hasNext()) View.VISIBLE else View.GONE
+        // R22 UI — a playlist pode ter sido enriquecida em 2º plano:
+        // a linha "Aula X de Y · Z%" acompanha o tamanho real.
+        updateCourseProgressLine()
     }
 
     private fun updateSpeedLabels() {
@@ -1435,6 +1486,11 @@ class PlayerActivity : AppCompatActivity() {
                                     )
                                 }
                             }
+                            // R22 — o pacote chegou com o ecrã aberto:
+                            // refresca a secção de materiais (antes só
+                            // actualizava ao reabrir a aula). Na TV é
+                            // no-op (loadMaterials retorna logo).
+                            loadMaterials()
                         }
                         else -> Unit
                     }
@@ -2034,11 +2090,16 @@ class PlayerActivity : AppCompatActivity() {
     // da aula não tem materiais, procuram-se as subpastas, a pasta
     // pai e as pastas-irmãs; na TV nada muda (a secção nem existe).
 
-    /** Uma questão do pacote gerado (formato do batalhão, worker.js:7760). */
+    /** Uma questão do pacote gerado (formato do batalhão, worker.js:7760).
+     * R22 UI: correctIndex/explanation vêm do mesmo JSON (os campos que
+     * o DetailActivity já lê) — alimentam o cartão interactivo da aba
+     * Questões (responder → certa verde / errada vermelha + explicação). */
     private data class MaterialsQuestion(
         val statement: String,
         val options: List<String>,
-        val answer: String?
+        val answer: String?,
+        val correctIndex: Int = -1,
+        val explanation: String? = null
     )
 
     private data class MaterialsData(
@@ -2157,6 +2218,7 @@ class PlayerActivity : AppCompatActivity() {
         val summaryCard = mat<LinearLayout>(R.id.materials_summary_card)
         if (data.summary != null) {
             summaryCard?.visibility = View.VISIBLE
+            mat<View>(R.id.materials_summary_empty)?.visibility = View.GONE
             // Ronda 9 Frente A — a prévia também é Markdown: renderiza
             // formatado (o cartão continua com maxLines=4 no layout).
             mat<TextView>(R.id.materials_summary_text)?.let {
@@ -2165,10 +2227,46 @@ class PlayerActivity : AppCompatActivity() {
             summaryCard?.setOnClickListener { showFullSummary() }
         } else {
             summaryCard?.visibility = View.GONE
+            mat<View>(R.id.materials_summary_empty)?.visibility = View.VISIBLE
         }
         renderMaterialsPills(data.pills)
         renderMaterialsQuestions(data.questions)
+        val flashcards = deriveMaterialsFlashcards(data)
+        renderMaterialsFlashcards(flashcards)
         renderMaterialsFiles(data.files)
+        // R22 UI — abas segmentadas (conceito): a aba inicial é a
+        // primeira com conteúdo real (Resumo → Pílulas → Questões →
+        // Flashcards); os painéis sem conteúdo mostram a linha de
+        // vazio honesto dentro da própria aba.
+        wireMaterialsTabs()
+        selectMaterialsTab(
+            when {
+                data.summary != null -> MAT_TAB_RESUMO
+                data.pills.isNotEmpty() -> MAT_TAB_PILULAS
+                data.questions.isNotEmpty() -> MAT_TAB_QUESTOES
+                flashcards.isNotEmpty() -> MAT_TAB_FLASHCARDS
+                else -> MAT_TAB_RESUMO
+            }
+        )
+        // R22 — pacote PARCIAL (resumo existe, pílulas/questões
+        // ainda não): a geração pode estar a produzir o resto com
+        // o ecrã aberto. UMA re-verificação 45 s depois, por aula,
+        // sem loop — o site faz o mesmo com poll limitado na
+        // descrição da aula (v2.15.26-B). Se continuar parcial,
+        // fica como está até à próxima abertura (onStart recarrega).
+        if (data.summary != null && data.pills.isEmpty() && data.questions.isEmpty()) {
+            val folder = materialsFolderPath()
+            if (folder != null && materialsRetriedFor != folder) {
+                materialsRetriedFor = folder
+                materialsRetryJob?.cancel()
+                materialsRetryJob = lifecycleScope.launch {
+                    delay(45_000L)
+                    if (isFinishing || isDestroyed) return@launch
+                    if (materialsFolderPath() != folder) return@launch
+                    loadMaterials()
+                }
+            }
+        }
     }
 
     /** Pílulas: o mindmap é Markdown em bullets ("- ..."). */
@@ -2178,7 +2276,11 @@ class PlayerActivity : AppCompatActivity() {
             .map { it.trim() }
             .filter { it.isNotEmpty() && !it.startsWith("#") }
             .map { it.removePrefix("- ").removePrefix("* ").removePrefix("• ").trim() }
-            .filter { it.isNotEmpty() }
+            // R22 — nunca renderizar o literal "null": ficheiros
+            // .gdi-flashcards gravados por versões antigas podem
+            // conter exactamente isso (o mindmap nulo serializado);
+            // item "null" é ausência, não é uma pílula.
+            .filter { it.isNotEmpty() && !it.equals("null", ignoreCase = true) }
             .take(20)
     }
 
@@ -2195,20 +2297,31 @@ class PlayerActivity : AppCompatActivity() {
             val out = ArrayList<MaterialsQuestion>()
             for (i in 0 until minOf(arr.length(), 10)) {
                 val o = arr.optJSONObject(i) ?: continue
-                val statement = o.optString("statement").takeIf { it.isNotBlank() }
-                    ?: o.optString("question").takeIf { it.isNotBlank() }
-                    ?: o.optString("q").takeIf { it.isNotBlank() }
+                // R22 — optString no Android devolve a string "null"
+                // p/ campos com null JSON: um enunciado "null" não é
+                // uma questão (ver AiService.optText).
+                val statement = o.optString("statement").takeIf { it.isNotBlank() && !it.equals("null", true) }
+                    ?: o.optString("question").takeIf { it.isNotBlank() && !it.equals("null", true) }
+                    ?: o.optString("q").takeIf { it.isNotBlank() && !it.equals("null", true) }
                     ?: continue
                 val options = ArrayList<String>()
                 val opts = o.optJSONArray("options")
                 if (opts != null) {
                     for (j in 0 until opts.length()) {
-                        opts.optString(j).takeIf { it.isNotBlank() }?.let { options.add(it) }
+                        opts.optString(j).takeIf { it.isNotBlank() && !it.equals("null", true) }?.let { options.add(it) }
                     }
                 }
-                val answer = o.optString("correctText").takeIf { it.isNotBlank() }
-                    ?: o.optString("answer").takeIf { it.isNotBlank() }
-                out.add(MaterialsQuestion(statement, options, answer))
+                // R22 UI — índice da certa + explicação (os mesmos
+                // campos que o parseDetailQuestions lê no detalhe):
+                // sem eles o cartão não consegue avaliar a resposta.
+                val correctIndex = o.optInt("correct", -1)
+                    .let { if (it in options.indices) it else -1 }
+                val answer = o.optString("correctText").takeIf { it.isNotBlank() && !it.equals("null", true) }
+                    ?: o.optString("answer").takeIf { it.isNotBlank() && !it.equals("null", true) }
+                    ?: if (correctIndex >= 0) options[correctIndex] else null
+                val explanation = o.optString("explanation").takeIf { it.isNotBlank() && !it.equals("null", true) }
+                    ?: o.optString("fundamentacao").takeIf { it.isNotBlank() && !it.equals("null", true) }
+                out.add(MaterialsQuestion(statement, options, answer, correctIndex, explanation))
             }
             out
         } catch (_: Exception) {
@@ -2221,67 +2334,310 @@ class PlayerActivity : AppCompatActivity() {
     private fun materialsLessonFiles(files: List<FileItem>): List<FileItem> =
         files.filter { f -> !f.isFolder && !f.isVideo && !f.isAudio && !f.isSubtitle }
 
-    private fun renderMaterialsPills(pills: List<String>) {
-        val title = mat<TextView>(R.id.materials_pills_title)
-        val list = mat<LinearLayout>(R.id.materials_pills_list)
-        if (pills.isEmpty()) {
-            title?.visibility = View.GONE
-            list?.visibility = View.GONE
-            return
+    // ──────────── R22 UI — abas dos materiais (conceito) ────────────
+
+    private var materialsTab = MAT_TAB_RESUMO
+
+    /** Liga os cliques das 4 abas (idempotente — chamado a cada render). */
+    private fun wireMaterialsTabs() {
+        val tabs = listOf(
+            R.id.tab_mat_resumo to MAT_TAB_RESUMO,
+            R.id.tab_mat_pilulas to MAT_TAB_PILULAS,
+            R.id.tab_mat_questoes to MAT_TAB_QUESTOES,
+            R.id.tab_mat_flashcards to MAT_TAB_FLASHCARDS
+        )
+        for ((id, tab) in tabs) {
+            mat<TextView>(id)?.setOnClickListener { selectMaterialsTab(tab) }
         }
-        title?.visibility = View.VISIBLE
-        list?.visibility = View.VISIBLE
+    }
+
+    /**
+     * Mostra um painel e esconde os outros; a aba activa ganha o
+     * gradiente da marca (como no conceito), as restantes ficam
+     * transparentes sobre o contentor.
+     */
+    private fun selectMaterialsTab(tab: Int) {
+        materialsTab = tab
+        val panels = listOf(
+            MAT_TAB_RESUMO to R.id.panel_mat_resumo,
+            MAT_TAB_PILULAS to R.id.panel_mat_pilulas,
+            MAT_TAB_QUESTOES to R.id.panel_mat_questoes,
+            MAT_TAB_FLASHCARDS to R.id.panel_mat_flashcards
+        )
+        for ((t, id) in panels) {
+            mat<View>(id)?.visibility = if (t == tab) View.VISIBLE else View.GONE
+        }
+        val tabIds = listOf(
+            MAT_TAB_RESUMO to R.id.tab_mat_resumo,
+            MAT_TAB_PILULAS to R.id.tab_mat_pilulas,
+            MAT_TAB_QUESTOES to R.id.tab_mat_questoes,
+            MAT_TAB_FLASHCARDS to R.id.tab_mat_flashcards
+        )
+        for ((t, id) in tabIds) {
+            val tv = mat<TextView>(id) ?: continue
+            if (t == tab) {
+                tv.background = ContextCompat.getDrawable(this, R.drawable.gradient_cta_pill)
+                tv.setTextColor(ContextCompat.getColor(this, R.color.md_on_primary))
+            } else {
+                tv.background = null
+                tv.setTextColor(ContextCompat.getColor(this, R.color.md_on_surface_variant))
+            }
+        }
+    }
+
+    /** Fundo de cartão dos materiais (superfície do tema, cantos 16dp). */
+    private fun materialsCardBackground(): GradientDrawable = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = 16f * resources.displayMetrics.density
+        setColor(ContextCompat.getColor(this@PlayerActivity, R.color.md_surface_container))
+    }
+
+    /** Pílulas: um mini-cartão por pílula (a aba Pílulas do conceito). */
+    private fun renderMaterialsPills(pills: List<String>) {
+        val list = mat<LinearLayout>(R.id.materials_pills_list)
+        mat<View>(R.id.materials_pills_empty)?.visibility =
+            if (pills.isEmpty()) View.VISIBLE else View.GONE
         list?.removeAllViews()
-        val pad = (12 * resources.displayMetrics.density).toInt()
+        if (pills.isEmpty()) return
+        val density = resources.displayMetrics.density
+        val pad = (14 * density).toInt()
+        val gap = (10 * density).toInt()
         for (pill in pills) {
             list?.addView(TextView(this).apply {
-                text = "•  $pill"
+                text = "💡  $pill"
                 textSize = 14f
                 setLineSpacing(0f, 1.35f)
                 setTextColor(ContextCompat.getColor(this@PlayerActivity, R.color.md_on_surface))
-                setPadding(0, pad / 2, 0, pad / 2)
+                setPadding(pad, pad, pad, pad)
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = 12f * density
+                    setColor(ContextCompat.getColor(this@PlayerActivity, R.color.md_surface_container))
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = gap }
             })
         }
     }
 
     private fun renderMaterialsQuestions(questions: List<MaterialsQuestion>) {
-        val title = mat<TextView>(R.id.materials_questions_title)
         val list = mat<LinearLayout>(R.id.materials_questions_list)
-        if (questions.isEmpty()) {
-            title?.visibility = View.GONE
-            list?.visibility = View.GONE
-            return
-        }
-        title?.visibility = View.VISIBLE
-        list?.visibility = View.VISIBLE
+        mat<View>(R.id.materials_questions_empty)?.visibility =
+            if (questions.isEmpty()) View.VISIBLE else View.GONE
         list?.removeAllViews()
-        val pad = (12 * resources.displayMetrics.density).toInt()
-        val letters = listOf("A", "B", "C", "D", "E", "F")
+        if (questions.isEmpty()) return
         for ((idx, q) in questions.withIndex()) {
-            list?.addView(TextView(this).apply {
-                text = "${idx + 1}. ${q.statement}"
+            list?.addView(buildMaterialsQuestionCard(q, idx, questions.size))
+        }
+    }
+
+    /**
+     * R22 UI — cartão de questão interactiva da aba Questões
+     * (conceito): chip contador "Questão X de Y", enunciado,
+     * alternativas em pílulas empilhadas; tocar avalia — a certa
+     * fica verde, a escolha errada vermelha — e a explicação/resposta
+     * aparece por baixo. A interactividade é a mesma do detalhe
+     * (ronda 9): sem índice correcto no pacote (pacotes antigos), o
+     * cartão mostra a resposta directa, como antes das abas.
+     */
+    private fun buildMaterialsQuestionCard(
+        q: MaterialsQuestion, index: Int, total: Int
+    ): LinearLayout {
+        val density = resources.displayMetrics.density
+        val pad = (16 * density).toInt()
+        val gap = (10 * density).toInt()
+        val onSurface = ContextCompat.getColor(this, R.color.md_on_surface)
+        val pink = ContextCompat.getColor(this, R.color.md_primary)
+        val greenBg = Color.parseColor("#256D2E")
+        val redBg = Color.parseColor("#8C2B2B")
+
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad, pad, pad)
+            background = materialsCardBackground()
+        }
+        card.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = gap; bottomMargin = gap }
+
+        // Chip contador centrado (conceito).
+        val counter = TextView(this).apply {
+            text = "❓ " + getString(R.string.question_counter, index + 1, total)
+            textSize = 12f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setTextColor(pink)
+            background = ContextCompat.getDrawable(this@PlayerActivity, R.drawable.counter_chip)
+            val h = (12 * density).toInt()
+            val v = (5 * density).toInt()
+            setPadding(h, v, h, v)
+        }
+        card.addView(LinearLayout(this).apply {
+            gravity = Gravity.CENTER
+            addView(counter)
+        })
+
+        card.addView(TextView(this).apply {
+            text = q.statement
+            textSize = 15f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setTextColor(onSurface)
+            setLineSpacing(0f, 1.3f)
+            setPadding(0, (12 * density).toInt(), 0, (4 * density).toInt())
+        })
+
+        val feedback = TextView(this).apply {
+            textSize = 14f
+            setTextColor(pink)
+            setLineSpacing(0f, 1.35f)
+            setPadding(0, (10 * density).toInt(), 0, 0)
+            visibility = View.GONE
+        }
+
+        val optionViews = ArrayList<TextView>()
+        var answered = false
+        val letters = listOf("A", "B", "C", "D", "E", "F")
+        for ((oi, opt) in q.options.withIndex()) {
+            val optView = TextView(this).apply {
+                text = "${letters.getOrElse(oi) { "•" }}) $opt"
                 textSize = 14f
-                setLineSpacing(0f, 1.35f)
+                setTextColor(onSurface)
+                setPadding(pad, (12 * density).toInt(), pad, (12 * density).toInt())
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = 20f * density
+                    setColor(ContextCompat.getColor(this@PlayerActivity, R.color.md_surface_variant))
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = gap }
+            }
+            if (q.correctIndex >= 0) {
+                optView.isClickable = true
+                optView.isFocusable = true
+                optView.setOnClickListener {
+                    if (answered) return@setOnClickListener
+                    answered = true
+                    for ((oj, ov) in optionViews.withIndex()) {
+                        val bg = ov.background as? GradientDrawable ?: continue
+                        when {
+                            oj == q.correctIndex -> {
+                                bg.setColor(greenBg)
+                                ov.setTextColor(Color.WHITE)
+                            }
+                            oj == oi -> {
+                                bg.setColor(redBg)
+                                ov.setTextColor(Color.WHITE)
+                            }
+                        }
+                    }
+                    feedback.text = buildString {
+                        if (oi == q.correctIndex) append(getString(R.string.question_correct))
+                        if (!q.answer.isNullOrBlank()) {
+                            if (isNotEmpty()) append("\n")
+                            append(getString(R.string.materials_answer, q.answer))
+                        }
+                        if (!q.explanation.isNullOrBlank()) {
+                            if (isNotEmpty()) append("\n\n💡 ")
+                            append(q.explanation)
+                        }
+                    }
+                    if (feedback.text.isNotBlank()) feedback.visibility = View.VISIBLE
+                }
+            }
+            optionViews.add(optView)
+            card.addView(optView)
+        }
+        card.addView(feedback)
+        // Sem índice correcto (pacote antigo/texto corrido): a
+        // resposta aparece directa em rosa — o comportamento que
+        // existia antes das abas, sem interacção inventada.
+        if (q.correctIndex < 0 && !q.answer.isNullOrBlank()) {
+            feedback.text = getString(R.string.materials_answer, q.answer)
+            feedback.visibility = View.VISIBLE
+        }
+        return card
+    }
+
+    /**
+     * Flashcards DESTA aula, das mesmas fontes do detalhe (ronda 9):
+     * havendo pílulas, cada pílula é um cartão (frente "💡 Pílula N",
+     * verso = o facto); sem pílulas, derivam-se das questões (frente
+     * = enunciado, verso = resposta + explicação). Nada de outra aula.
+     */
+    private fun deriveMaterialsFlashcards(data: MaterialsData): List<Pair<String, String>> =
+        when {
+            data.pills.isNotEmpty() ->
+                data.pills.mapIndexed { i, p -> "💡 Pílula ${i + 1}" to p }
+            else -> data.questions.mapNotNull { q ->
+                val back = buildString {
+                    if (!q.answer.isNullOrBlank()) append(q.answer)
+                    if (!q.explanation.isNullOrBlank()) {
+                        if (isNotEmpty()) append("\n\n💡 ")
+                        append(q.explanation)
+                    }
+                }.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                q.statement to back
+            }
+        }
+
+    /** Flashcards: tocar vira o cartão (frente ↔ verso), como no detalhe. */
+    private fun renderMaterialsFlashcards(cards: List<Pair<String, String>>) {
+        val list = mat<LinearLayout>(R.id.materials_flashcards_list)
+        mat<View>(R.id.materials_flashcards_empty)?.visibility =
+            if (cards.isEmpty()) View.VISIBLE else View.GONE
+        list?.removeAllViews()
+        if (cards.isEmpty()) return
+        val density = resources.displayMetrics.density
+        val pad = (16 * density).toInt()
+        val gap = (10 * density).toInt()
+        val onSurface = ContextCompat.getColor(this, R.color.md_on_surface)
+        val muted = ContextCompat.getColor(this, R.color.md_on_surface_variant)
+        for ((front, back) in cards) {
+            var showingBack = false
+            val body = TextView(this).apply {
+                text = front
+                textSize = 16f
                 setTypeface(null, android.graphics.Typeface.BOLD)
-                setTextColor(ContextCompat.getColor(this@PlayerActivity, R.color.md_on_surface))
-                setPadding(0, pad, 0, pad / 2)
-            })
-            for ((oi, opt) in q.options.withIndex()) {
-                list?.addView(TextView(this).apply {
-                    text = "   ${letters.getOrElse(oi) { "•" }}) $opt"
-                    textSize = 14f
-                    setTextColor(ContextCompat.getColor(this@PlayerActivity, R.color.md_on_surface))
-                    setPadding(0, pad / 4, 0, pad / 4)
-                })
+                setTextColor(onSurface)
+                setLineSpacing(0f, 1.3f)
             }
-            if (!q.answer.isNullOrBlank()) {
-                list?.addView(TextView(this).apply {
-                    text = getString(R.string.materials_answer, q.answer)
-                    textSize = 14f
-                    setTextColor(ContextCompat.getColor(this@PlayerActivity, R.color.md_primary))
-                    setPadding(0, pad / 2, 0, pad / 2)
-                })
+            val hint = TextView(this).apply {
+                text = getString(R.string.qf_card_reveal)
+                textSize = 13f
+                setTextColor(muted)
+                setPadding(0, (8 * density).toInt(), 0, 0)
             }
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(pad, pad, pad, pad)
+                background = materialsCardBackground()
+                isClickable = true
+                isFocusable = true
+                minimumHeight = (120 * density).toInt()
+            }
+            card.layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = gap; bottomMargin = gap }
+            card.setOnClickListener {
+                showingBack = !showingBack
+                body.text = if (showingBack) back else front
+                body.setTypeface(
+                    null,
+                    if (showingBack) android.graphics.Typeface.NORMAL
+                    else android.graphics.Typeface.BOLD
+                )
+                hint.text = getString(
+                    if (showingBack) R.string.qf_card_back else R.string.qf_card_reveal
+                )
+            }
+            card.addView(body)
+            card.addView(hint)
+            list?.addView(card)
         }
     }
 
@@ -2389,5 +2745,11 @@ class PlayerActivity : AppCompatActivity() {
         const val EXTRA_URL = "playback_url"
         const val EXTRA_TITLE = "playback_title"
         const val EXTRA_FOLDER_PATH = "playback_folder_path"
+
+        // R22 UI — abas dos materiais (conceito "aula celular").
+        const val MAT_TAB_RESUMO = 0
+        const val MAT_TAB_PILULAS = 1
+        const val MAT_TAB_QUESTOES = 2
+        const val MAT_TAB_FLASHCARDS = 3
     }
 }
