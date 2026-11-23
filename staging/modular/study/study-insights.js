@@ -93,7 +93,7 @@
             watchedThisWeek:0,
             goalMinutes,
             goalProgress,
-            lastActivity:s.historyCount>0?Date.now():0
+            lastActivity:s.lastActivityAt||0  // ★ v2.15.76: data REAL do worker (máx event_at); era Date.now() fabricado → "agora" sempre
           };
           _analyticsCache=d;
           _analyticsCacheAt=Date.now();
