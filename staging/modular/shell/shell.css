@@ -1841,6 +1841,39 @@ body.meggy-player-active #meggy-sidebar:hover .meggy-sidebar-item {
   flex-shrink: 0;
 }
 
+/* ★ v2.15.73: chips de sugestão do drawer (contexto da página) */
+.meggy-ai-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 12px 10px;
+}
+
+.meggy-ai-chip {
+  background: rgba(255,139,159,0.12);
+  border: 1px solid rgba(255,139,159,0.45);
+  color: #e6edf3;
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.meggy-ai-chip:hover {
+  background: rgba(255,139,159,0.25);
+}
+
+[data-bs-theme="light"] .meggy-ai-chip {
+  background: rgba(255,255,255,0.85);
+  border-color: rgba(214,51,108,0.45);
+  color: #1f2540;
+}
+
+[data-bs-theme="light"] .meggy-ai-chip:hover {
+  background: rgba(255,139,159,0.18);
+}
+
 /* ★ v2.15.4 P2-07 — ÓRFÃO: o layout .alfacon-* não é usado por nenhum
    JS (verificado 2026-11-13; o player real é .gdi-study em shell.js).
    .mode-cols foi contido em min-width:1025px para não quebrar o mobile
