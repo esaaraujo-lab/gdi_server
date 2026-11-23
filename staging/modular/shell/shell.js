@@ -395,6 +395,18 @@
               '[data-bs-theme="light"] .meggy-ai-chat-input textarea { background: rgba(255,255,255,0.9); border-color: rgba(15,23,42,0.14); color: #1f2540; }';
             document.head.appendChild(st);
           }
+          // ★ v2.15.71: variáveis de tema do deck de flashcards da
+          //   aula e dos nomes do banco de questões — as MESMAS
+          //   definições do bloco .71 no shell.css, injectadas via
+          //   JS pelo motivo do drawer (.68): se o shell.css ficar
+          //   preso em cache, os var() resolvem na mesma. Manter os
+          //   dois em sincronia (patch-v2.15.71-front.py).
+          if (!document.getElementById('meggy-fc-vars-style')) {
+            const stv = document.createElement('style');
+            stv.id = 'meggy-fc-vars-style';
+            stv.textContent = ':root,[data-bs-theme="dark"]{--meggy-fc-bg-front:linear-gradient(135deg,rgba(255,139,159,.14),rgba(192,38,211,.08));--meggy-fc-bg-back:linear-gradient(135deg,rgba(93,222,218,.14),rgba(63,185,80,.08));--meggy-fc-text-front:#f0f6fc;--meggy-fc-text-back:#e6edf3;--meggy-fc-label-front:#ff8b9f;--meggy-fc-label-back:#5ddeda;--meggy-fc-meta:#8b949e;--meggy-fc-note:#9aa4b8;--meggy-fc-title:#ff8b9f;--meggy-fc-ok:#3fb950;--meggy-fc-bad:#ff8b8b;--meggy-fc-divider:rgba(255,255,255,.08);--meggy-qb-name:#f0f6fc;--meggy-qb-name-soft:#e6edf3;}[data-bs-theme="light"]{--meggy-fc-bg-front:linear-gradient(135deg,rgba(255,139,159,.20),rgba(192,38,211,.12));--meggy-fc-bg-back:linear-gradient(135deg,rgba(93,222,218,.20),rgba(63,185,80,.12));--meggy-fc-text-front:#1f2328;--meggy-fc-text-back:#1f2328;--meggy-fc-label-front:#d6336c;--meggy-fc-label-back:#0e7c86;--meggy-fc-meta:#59636e;--meggy-fc-note:#59636e;--meggy-fc-title:#d6336c;--meggy-fc-ok:#1a7f37;--meggy-fc-bad:#cf222e;--meggy-fc-divider:rgba(31,35,40,.12);--meggy-qb-name:#1f2328;--meggy-qb-name-soft:#1f2328;}';
+            document.head.appendChild(stv);
+          }
         }
       } catch (e) { console.warn('[Meggy Shell] FAB falhou:', e); }
     },
@@ -619,7 +631,7 @@
           break;
         case 'concursos': Shell.views.concursos(main); break;
         case 'config':    Shell._estudosView(main, 'config'); break;
-        case 'simulado':  Shell._estudosView(main, 'simulado'); break;
+        case 'simulado':  Shell.views.simulado(main); break;
         case 'provas':    Shell._estudosView(main, 'provas'); break;
         case 'redacao':   Shell._estudosView(main, 'redacao'); break;
         case 'cronograma':Shell._estudosView(main, 'cronograma'); break;
@@ -3870,11 +3882,11 @@
             acc[t] = acc[t] || { a: 0, w: 0 };
             acc[t].a++; if (st.wrong) acc[t].w++;
           });
-          let html = '<div style="color:#9aa4b8;font-size:12px;margin-bottom:6px;">Assuntos de <b style="color:#e6edf3;">' + esc(curSubject) + '</b> — toca num assunto para resolver TODAS as questões dele, em sequência:</div><div style="display:flex;flex-direction:column;gap:6px;">';
+          let html = '<div style="color:#9aa4b8;font-size:12px;margin-bottom:6px;">Assuntos de <b style="color:var(--meggy-qb-name-soft,#e6edf3);">' + esc(curSubject) + '</b> — toca num assunto para resolver TODAS as questões dele, em sequência:</div><div style="display:flex;flex-direction:column;gap:6px;">';
           topics.forEach(t => {
             const a = acc[t.topic];
             const accTxt = a && a.a ? ' · seu acerto: ' + Math.round((a.a - a.w) / a.a * 100) + '% (' + a.a + ' respondidas)' : '';
-            html += '<div class="meggy-qbank-topic-row" data-topic="' + esc(t.topic) + '" title="Praticar todas as questões deste assunto" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;cursor:pointer;"><div style="flex:1;min-width:0;"><b style="color:#f0f6fc;font-size:13px;">' + esc(t.topic) + '</b><div style="color:#9aa4b8;font-size:12px;">' + t.count + ' questões' + accTxt + '</div></div><button class="meggy-header-btn meggy-qbank-practice" data-topic="' + esc(t.topic) + '" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;font-size:12px;"><i class="bi bi-play-fill"></i> Praticar assunto</button></div>';
+            html += '<div class="meggy-qbank-topic-row" data-topic="' + esc(t.topic) + '" title="Praticar todas as questões deste assunto" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;cursor:pointer;"><div style="flex:1;min-width:0;"><b style="color:var(--meggy-qb-name,#f0f6fc);font-size:13px;">' + esc(t.topic) + '</b><div style="color:#9aa4b8;font-size:12px;">' + t.count + ' questões' + accTxt + '</div></div><button class="meggy-header-btn meggy-qbank-practice" data-topic="' + esc(t.topic) + '" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;font-size:12px;"><i class="bi bi-play-fill"></i> Praticar assunto</button></div>';
           });
           html += '</div>';
           topicsEl.innerHTML = html;
@@ -4122,7 +4134,7 @@
           topics.forEach(t => {
             const pf = perf[t.topic];
             const pfTxt = pf && (pf.p || pf.d) ? ' · praticados: ' + pf.p + (pf.d ? ' · <span style="color:#ffd43b;">a rever: ' + pf.d + '</span>' : '') : '';
-            html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;"><div style="flex:1;min-width:0;"><b style="color:#f0f6fc;font-size:13px;">' + esc(t.topic) + '</b><div style="color:#9aa4b8;font-size:12px;">' + t.count + ' flashcards' + pfTxt + '</div></div><button class="meggy-header-btn meggy-fcbank-practice" data-topic="' + esc(t.topic) + '" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;font-size:12px;"><i class="bi bi-play-fill"></i> Praticar</button></div>';
+            html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;"><div style="flex:1;min-width:0;"><b style="color:var(--meggy-qb-name,#f0f6fc);font-size:13px;">' + esc(t.topic) + '</b><div style="color:#9aa4b8;font-size:12px;">' + t.count + ' flashcards' + pfTxt + '</div></div><button class="meggy-header-btn meggy-fcbank-practice" data-topic="' + esc(t.topic) + '" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;font-size:12px;"><i class="bi bi-play-fill"></i> Praticar</button></div>';
           });
           html += '</div>';
           topicsEl.innerHTML = html;
@@ -4746,11 +4758,145 @@
         Shell.views._renderQuestionBank(el);
       },
 
+      // ★ v2.15.71: o SIMULADO (vista de /simulado) — monta a prova a
+      //   partir do BANCO UNIFICADO (o mesmo de /questoes e
+      //   /flashcards): disciplina → assunto → nº de questões →
+      //   sorteio do pool paginado → _showQuiz com o registo de
+      //   respostas da prática (__gdiBankAnswer21548 → SRS + caderno
+      //   de erros → mapa de fracos). O histórico vive em
+      //   gdi-simulados-v1 — o MESMO armazém da aba Simulado da aula
+      //   e do contador do dashboard da Área do Aluno. Antes desta
+      //   ronda, /simulado era um placeholder ("Use a Meggy AI…")
+      //   desligado do banco (diagnóstico: SIMULADO_DIAG.md).
+      simulado(el) {
+        el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">📝 Simulado</h1></div>' +
+          '<div style="color:#9aa4b8;font-size:13px;margin-bottom:12px;">Monta uma prova com questões do banco (de todos os cursos e alunos), por disciplina e assunto. As tuas respostas contam para o progresso e para o mapa de fracos, como na prática por assunto.</div>' +
+          '<div id="meggy-sim-root"><div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando o simulado...</div></div></div>';
+        Shell.views._renderSimulado(el);
+      },
+
+      async _renderSimulado(el) {
+        const root = el.querySelector('#meggy-sim-root');
+        if (!root) return;
+        const esc = Shell.views._esc;
+        const toast = (m) => { try { if (typeof window.showToast === 'function') window.showToast(m); } catch (_) {} };
+        const fetchJson = async (url, ms) => {
+          const _ctl = new AbortController();
+          const _to = setTimeout(() => { try { _ctl.abort(); } catch (_) {} }, ms || 15000);
+          try { const r = await fetch(url, { cache: 'no-store', signal: _ctl.signal }); return await r.json(); } finally { clearTimeout(_to); }
+        };
+        // ★ mesmos pedidos leves com retentativa do banco (.64/.65)
+        const fetchMetaRetry = async (url) => {
+          for (let _a = 0; _a < 2; _a++) {
+            try { const _d = await fetchJson(url, _a === 0 ? 8000 : 15000); if (_d) return _d; } catch (_) {}
+            if (_a === 0) await new Promise(r => setTimeout(r, 1200));
+          }
+          return null;
+        };
+        const SEL = 'flex:1;min-width:160px;background:rgba(255,255,255,.06);border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:8px 10px;font-size:13px;';
+        const simsOf = () => { try { const v = JSON.parse(localStorage.getItem('gdi-simulados-v1') || '[]'); return Array.isArray(v) ? v : []; } catch (_) { return []; } };
+        const renderHist = () => {
+          const histEl = root.querySelector('#meggy-sim-hist');
+          if (!histEl) return;
+          const sims = simsOf().slice().reverse().slice(0, 20);
+          if (!sims.length) { histEl.innerHTML = '<div style="color:#9aa4b8;font-size:13px;">Nenhum simulado ainda.</div>'; return; }
+          histEl.innerHTML = sims.map(s => {
+            const pct = s.total > 0 ? Math.round((s.hits || 0) / s.total * 100) : 0;
+            const dur = s.duration ? ' · ' + Math.floor(s.duration / 60) + 'min' : '';
+            return '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;margin-bottom:6px;"><span style="flex:1;min-width:0;"><b style="color:#f0f6fc;font-size:13px;">' + esc(s.title || 'Simulado') + '</b> <span style="color:#9aa4b8;font-size:11px;">· ' + new Date(s.date || Date.now()).toLocaleDateString('pt-BR') + dur + '</span></span>' +
+              '<span style="color:' + (pct >= 60 ? '#3fb950' : '#ff8b8b') + ';font-weight:600;font-size:13px;">' + pct + '%</span>' +
+              '<span style="color:#9aa4b8;font-size:11px;">' + (s.hits || 0) + '/' + (s.total || 0) + '</span></div>';
+          }).join('');
+        };
+        root.innerHTML = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:flex-end;">' +
+          '<select id="meggy-sim-subject" style="' + SEL + '"><option value="">Escolhe a disciplina...</option><option value="__all__">Todas as disciplinas</option></select>' +
+          '<select id="meggy-sim-topic" style="' + SEL + '" disabled><option value="">Todos os assuntos</option></select>' +
+          '<input id="meggy-sim-n" type="number" min="5" max="50" value="10" style="width:76px;background:rgba(255,255,255,.06);border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:8px 10px;font-size:13px;text-align:center;">' +
+          '<button id="meggy-sim-go" class="meggy-header-btn" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;font-size:13px;"><i class="bi bi-play-fill"></i> Iniciar simulado</button>' +
+        '</div>' +
+        '<div id="meggy-sim-msg" style="color:#9aa4b8;font-size:13px;margin-bottom:14px;">Escolhe a disciplina (e o assunto, se quiseres) e o número de questões. A prova é sorteada do banco na hora.</div>' +
+        '<h4 style="color:#9aa4b8;font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:18px 0 8px;">Histórico</h4>' +
+        '<div id="meggy-sim-hist"></div>';
+        const subjectSel = root.querySelector('#meggy-sim-subject');
+        const topicSel = root.querySelector('#meggy-sim-topic');
+        const nInput = root.querySelector('#meggy-sim-n');
+        const goBtn = root.querySelector('#meggy-sim-go');
+        const msgEl = root.querySelector('#meggy-sim-msg');
+        renderHist();
+        subjectSel.onchange = async () => {
+          const subject = subjectSel.value || '';
+          topicSel.innerHTML = '<option value="">Todos os assuntos</option>';
+          topicSel.value = '';
+          topicSel.disabled = true;
+          if (!subject || subject === '__all__') return;
+          const d = await fetchMetaRetry('/api/ai/question-topics?subject=' + encodeURIComponent(subject));
+          if (subject !== (subjectSel.value || '')) return;  // a selecção mudou entretanto
+          const topics = (d && d.ok && Array.isArray(d.topics)) ? d.topics : [];
+          topicSel.innerHTML = '<option value="">Todos os assuntos</option>' + topics.map(t => '<option value="' + esc(t.topic) + '">' + esc(t.topic) + ' (' + (t.count || 0) + ')</option>').join('');
+          topicSel.disabled = false;
+        };
+        goBtn.onclick = async () => {
+          const subject = subjectSel.value || '';
+          if (!subject) { toast('Escolhe a disciplina primeiro'); return; }
+          const topic = (subject === '__all__') ? '' : (topicSel.value || '');
+          let n = parseInt(nInput.value, 10) || 10;
+          n = Math.min(50, Math.max(1, n));
+          goBtn.disabled = true;
+          msgEl.textContent = 'A sortear as questões do banco...';
+          let pool = null;
+          for (let _att = 0; _att < 2 && !pool; _att++) {
+            try { pool = await Shell.views._qbTopicPool21555(fetchJson, subject === '__all__' ? '' : subject, topic || '', ''); }
+            catch (_) { pool = null; if (_att === 0) await new Promise(r => setTimeout(r, 1200)); }
+          }
+          goBtn.disabled = false;
+          if (!pool) { msgEl.innerHTML = '<span style="color:#ff8b8b;">Não foi possível carregar o banco agora. Tente de novo em instantes.</span>'; return; }
+          if (!pool.length) { msgEl.textContent = 'Sem questões neste filtro. Escolhe outra disciplina/assunto.'; return; }
+          if (pool.length < n) { toast('Só há ' + pool.length + ' questões neste filtro — simulado com ' + pool.length); n = pool.length; }
+          const shuffled = pool.slice();
+          for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = t; }
+          const qs = shuffled.slice(0, n).map(it => Shell.views._sharedCardToQuestion(it));
+          const simTitle = 'Simulado · ' + (subject === '__all__' ? 'Todas as disciplinas' : subject) + (topic ? ' · ' + topic : '');
+          Shell.views._showQuiz(el, {
+            lessonName: simTitle,
+            questions: qs,
+            backView: 'simulado',
+            onAnswer: (qq, ok) => { try { if (typeof window.__gdiBankAnswer21548 === 'function') window.__gdiBankAnswer21548(qq, ok); } catch (_) {} },
+            onFinish: (score, total, durSec) => {
+              try {
+                const sims = simsOf();
+                sims.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7), date: Date.now(), title: simTitle, duration: durSec || 0, hits: score, misses: total - score, total: total, answers: qs.map(q => (q.id != null ? q.id : null)) });
+                localStorage.setItem('gdi-simulados-v1', JSON.stringify(sims));
+                localStorage.setItem('gdi-simulados-count', String(sims.length));
+              } catch (_) {}
+            }
+          });
+        };
+        // disciplinas: listas leves do banco (degrada p/ shared-subjects, como em /questoes)
+        (async () => {
+          let subs = [];
+          const dl = await fetchMetaRetry('/api/ai/question-bank/lists');
+          if (dl && dl.ok && Array.isArray(dl.disciplines) && dl.disciplines.length) subs = dl.disciplines;
+          if (!subs.length) {
+            const ds = await fetchMetaRetry('/api/ai/shared-subjects');
+            if (ds && ds.ok && Array.isArray(ds.questionSubjects)) subs = ds.questionSubjects;
+          }
+          const cur = subjectSel.value;
+          subs.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; subjectSel.appendChild(o); });
+          subjectSel.value = cur;
+        })();
+      },
+
       _showQuiz(el, entry) {
         const questions = entry.questions || [];
         const lessonName = Shell.views._esc(entry.lessonName || 'Aula');
         Shell.__lastQuizQuestions = questions;
         Shell.__lastQuizLessonName = entry.lessonName || 'Aula';
+        // ★ v2.15.71: a entrada fica guardada p/ o Refazer a reconstruir
+        //   COM os ganchos (onAnswer/onFinish/backView); backView validado
+        //   decide o destino do botão Voltar (defeito: questoes).
+        Shell.__lastQuizEntry = entry;
+        const _quizBackView21571 = ['questoes', 'simulado', 'flashcards'].indexOf(entry.backView) >= 0 ? entry.backView : 'questoes';
+        const _quizT021571 = Date.now();
         let current = 0;
         // ★ v2.15.55: estado por questão — navegar (Anterior/
         //   Próxima) não perde a resposta dada nem a deixa
@@ -4785,7 +4931,7 @@
               '<div class="meggy-quiz-option" data-idx="0"><span class="meggy-quiz-option-letter">✗</span><span class="meggy-quiz-option-text">Errado</span></div>';
           }
           el.innerHTML = '<div class="meggy-view-header">' +
-              '<button class="meggy-header-btn" onclick="Shell.views.questoes(document.getElementById(\'meggy-main\'))" style="font-size:13px;"><i class="bi bi-arrow-left"></i> Voltar</button>' +
+              '<button class="meggy-header-btn" onclick="Shell.views.' + _quizBackView21571 + '(document.getElementById(\'meggy-main\'))" style="font-size:13px;"><i class="bi bi-arrow-left"></i> Voltar</button>' +
               '<h1 class="meggy-view-title" style="font-size:16px;">❓ ' + lessonName + '</h1>' +
             '</div>' +
             '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:13px;color:#9aa4b8;">' +
@@ -4858,14 +5004,20 @@
           document.getElementById('meggy-q-prev').onclick = () => { if (current > 0) { current--; renderQ(); } };
           document.getElementById('meggy-q-next').onclick = () => {
             if (current < questions.length - 1) { current++; renderQ(); }
-            else { Shell.views._showQuizResult(el, Shell.__lastQuizLessonName, score, questions.length); }
+            else {
+              // ★ v2.15.71: gancho de fim (o Simulado grava o histórico no
+              //   mesmo armazém da aba) — uma vez, antes do resultado.
+              if (typeof entry.onFinish === 'function') { try { entry.onFinish(score, questions.length, Math.round((Date.now() - _quizT021571) / 1000)); } catch (_) {} }
+              Shell.views._showQuizResult(el, Shell.__lastQuizLessonName, score, questions.length, { backView: _quizBackView21571, refazerEntry: entry });
+            }
           };
           el.scrollTop = 0;
         };
         renderQ();
       },
 
-      _showQuizResult(el, lessonName, score, total) {
+      _showQuizResult(el, lessonName, score, total, opts21571) {
+        const _bv21571 = (opts21571 && ['questoes', 'simulado', 'flashcards'].indexOf(opts21571.backView) >= 0) ? opts21571.backView : 'questoes';
         const pct = total > 0 ? Math.round(score / total * 100) : 0;
         const emoji = pct >= 80 ? '🏆' : pct >= 50 ? '👍' : '📚';
         el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title" style="font-size:16px;">❓ ' + Shell.views._esc(lessonName) + '</h1></div>' +
@@ -4875,8 +5027,8 @@
             '<div class="meggy-quiz-result-pct">' + pct + '% de acerto</div>' +
             '<div class="meggy-quiz-result-msg">' + (pct >= 80 ? 'Excelente! Você dominou esta aula.' : pct >= 50 ? 'Bom trabalho! Continue praticando.' : 'Revise o conteúdo e tente novamente.') + '</div>' +
             '<div style="display:flex;gap:8px;justify-content:center;margin-top:20px;flex-wrap:wrap;">' +
-              '<button class="meggy-header-btn" onclick="Shell.views.questoes(document.getElementById(\'meggy-main\'))"><i class="bi bi-list"></i> Outras aulas</button>' +
-              '<button class="meggy-header-btn" onclick="Shell.views._showQuiz(document.getElementById(\'meggy-main\'), {lessonName: Shell.__lastQuizLessonName||\'Aula\', questions: Shell.__lastQuizQuestions||[]})" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-arrow-repeat"></i> Refazer</button>' +
+              '<button class="meggy-header-btn" onclick="Shell.views.' + _bv21571 + '(document.getElementById(\'meggy-main\'))"><i class="bi bi-list"></i> ' + (_bv21571 === 'simulado' ? 'Voltar ao Simulado' : 'Outras aulas') + '</button>' +
+              '<button class="meggy-header-btn" onclick="Shell.views._showQuiz(document.getElementById(\'meggy-main\'), Object.assign({}, Shell.__lastQuizEntry || {}, {lessonName: Shell.__lastQuizLessonName||\'Aula\', questions: Shell.__lastQuizQuestions||[]}))" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-arrow-repeat"></i> Refazer</button>' +
             '</div>' +
           '</div>';
       },
@@ -8264,8 +8416,8 @@ el.scrollTop = 0;
       if (cards.length === 0) {
         bodyEl.innerHTML = '<div class="gdi-mat-isa-result" style="text-align:center;padding:40px;">' +
           '<div style="font-size:48px;margin-bottom:12px;">🃏</div>' +
-          '<div style="color:#ff8b9f;font-weight:600;margin-bottom:8px;">Nenhum flashcard gerado</div>' +
-          '<div style="color:#9aa4b8;font-size:13px;">Os flashcards são criados automaticamente a partir das questões geradas.</div>' +
+          '<div style="color:var(--meggy-fc-label-front,#ff8b9f);font-weight:600;margin-bottom:8px;">Nenhum flashcard gerado</div>' +
+          '<div style="color:var(--meggy-fc-note,#9aa4b8);font-size:13px;">Os flashcards são criados automaticamente a partir das questões geradas.</div>' +
         '</div>';
         return;
       }
@@ -8279,39 +8431,42 @@ el.scrollTop = 0;
         flipped = false;
         const front = Shell._esc(String(c.f || '').slice(0, 300));
         const backHtml = Shell._esc(String(c.b || '').slice(0, 400)).replace(/\n/g, '<br>');
-        // ★ v2.15.70: cores do cartão por tema — as faces usam estilos
-        //   inline (vencem o CSS) e os valores eram só p/ fundo escuro;
-        //   no tema claro o contentor fica #f6f8fa e o texto quase-
-        //   branco somia (~1.1:1). No escuro, valores EXACTOS de sempre.
-        const _lt70 = (document.documentElement.getAttribute('data-bs-theme') || 'dark') === 'light';
-        const _fcBgF70 = _lt70 ? 'linear-gradient(135deg,rgba(255,139,159,.20),rgba(192,38,211,.12))' : 'linear-gradient(135deg,rgba(255,139,159,.14),rgba(192,38,211,.08))';
-        const _fcBgB70 = _lt70 ? 'linear-gradient(135deg,rgba(93,222,218,.20),rgba(63,185,80,.12))' : 'linear-gradient(135deg,rgba(93,222,218,.14),rgba(63,185,80,.08))';
-        const _fcTxF70 = _lt70 ? '#1f2328' : '#f0f6fc';
-        const _fcTxB70 = _lt70 ? '#1f2328' : '#e6edf3';
-        const _fcLbF70 = _lt70 ? '#d6336c' : '#ff8b9f';
-        const _fcLbB70 = _lt70 ? '#0e7c86' : '#5ddeda';
-        const _fcMeta70 = _lt70 ? '#59636e' : '#8b949e';
+        // ★ v2.15.71: cores do cartão por VARIÁVEIS CSS de tema
+        //   (bloco .71 no shell.css + injecção #meggy-fc-vars-style).
+        //   A .70 escolhia a cor inline no momento do draw() — ao
+        //   trocar de tema com o baralho aberto, os cartões já
+        //   desenhados ficavam com o texto do tema anterior sobre o
+        //   fundo do novo (1.0:1, ilegível nos dois sentidos). Com
+        //   var() a troca resolve pelo cascade, sem redesenhar.
+        //   Fallbacks de cada var() = o valor do tema escuro.
+        const _fcBgF71 = 'var(--meggy-fc-bg-front,linear-gradient(135deg,rgba(255,139,159,.14),rgba(192,38,211,.08)))';
+        const _fcBgB71 = 'var(--meggy-fc-bg-back,linear-gradient(135deg,rgba(93,222,218,.14),rgba(63,185,80,.08)))';
+        const _fcTxF71 = 'var(--meggy-fc-text-front,#f0f6fc)';
+        const _fcTxB71 = 'var(--meggy-fc-text-back,#e6edf3)';
+        const _fcLbF71 = 'var(--meggy-fc-label-front,#ff8b9f)';
+        const _fcLbB71 = 'var(--meggy-fc-label-back,#5ddeda)';
+        const _fcMeta71 = 'var(--meggy-fc-meta,#8b949e)';
         bodyEl.innerHTML = '<div class="gdi-mat-isa-result" style="max-width:760px;margin:0 auto;">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">' +
-            '<span style="color:' + _fcMeta70 + ';font-size:12px;">' + Shell._esc(lessonName) + ' · ' + (idx + 1) + '/' + cards.length + '</span>' +
-            '<span style="color:' + _fcMeta70 + ';font-size:12px;">✓ ' + hits + ' ✗ ' + misses + '</span>' +
+            '<span style="color:' + _fcMeta71 + ';font-size:12px;">' + Shell._esc(lessonName) + ' · ' + (idx + 1) + '/' + cards.length + '</span>' +
+            '<span style="color:' + _fcMeta71 + ';font-size:12px;">✓ ' + hits + ' ✗ ' + misses + '</span>' +
           '</div>' +
           '<div style="position:relative;perspective:1500px;height:min(340px,52vh);height:min(340px,52dvh);max-width:560px;margin:0 auto;cursor:pointer;" id="meggy-fc-card">' +
             '<div style="position:absolute;inset:0;transform-style:preserve-3d;transition:transform .55s cubic-bezier(.4,0,.2,1);" id="meggy-fc-inner">' +
-              '<div class="meggy-flashcard-face meggy-flashcard-front" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:18px 16px;border-radius:12px;background:' + _fcBgF70 + ';border:1.5px solid rgba(255,139,159,.4);backface-visibility:hidden;">' +
-                '<div style="font-size:12px;font-weight:700;color:' + _fcLbF70 + ';display:flex;align-items:center;gap:4px;"><i class="bi bi-question-circle"></i> Pergunta</div>' +
-                '<div style="font-size:16px;line-height:1.55;color:' + _fcTxF70 + ';text-align:center;">' + front + '</div>' +
-                '<div style="font-size:12px;color:' + _fcMeta70 + ';font-style:italic;"><i class="bi bi-arrow-repeat"></i> clique para virar</div>' +
+              '<div class="meggy-flashcard-face meggy-flashcard-front" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:18px 16px;border-radius:12px;background:' + _fcBgF71 + ';border:1.5px solid rgba(255,139,159,.4);backface-visibility:hidden;">' +
+                '<div style="font-size:12px;font-weight:700;color:' + _fcLbF71 + ';display:flex;align-items:center;gap:4px;"><i class="bi bi-question-circle"></i> Pergunta</div>' +
+                '<div style="font-size:16px;line-height:1.55;color:' + _fcTxF71 + ';text-align:center;">' + front + '</div>' +
+                '<div style="font-size:12px;color:' + _fcMeta71 + ';font-style:italic;"><i class="bi bi-arrow-repeat"></i> clique para virar</div>' +
               '</div>' +
-              '<div class="meggy-flashcard-face meggy-flashcard-back" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:18px 16px;border-radius:12px;background:' + _fcBgB70 + ';border:1.5px solid rgba(93,222,218,.4);transform:rotateY(180deg);backface-visibility:hidden;">' +
-                '<div style="font-size:12px;font-weight:700;color:' + _fcLbB70 + ';display:flex;align-items:center;gap:4px;"><i class="bi bi-check-circle"></i> Resposta</div>' +
-                '<div style="font-size:14px;line-height:1.55;color:' + _fcTxB70 + ';text-align:left;overflow-y:auto;max-height:240px;">' + backHtml + '</div>' +
-                '<div style="font-size:12px;color:' + _fcMeta70 + ';font-style:italic;"><i class="bi bi-arrow-repeat"></i> clique para voltar</div>' +
+              '<div class="meggy-flashcard-face meggy-flashcard-back" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:18px 16px;border-radius:12px;background:' + _fcBgB71 + ';border:1.5px solid rgba(93,222,218,.4);transform:rotateY(180deg);backface-visibility:hidden;">' +
+                '<div style="font-size:12px;font-weight:700;color:' + _fcLbB71 + ';display:flex;align-items:center;gap:4px;"><i class="bi bi-check-circle"></i> Resposta</div>' +
+                '<div style="font-size:14px;line-height:1.55;color:' + _fcTxB71 + ';text-align:left;overflow-y:auto;max-height:240px;">' + backHtml + '</div>' +
+                '<div style="font-size:12px;color:' + _fcMeta71 + ';font-style:italic;"><i class="bi bi-arrow-repeat"></i> clique para voltar</div>' +
               '</div>' +
             '</div>' +
           '</div>' +
           '<div id="meggy-fc-grade-panel"></div>' +
-          '<div style="display:flex;justify-content:space-between;align-items:center;padding-top:16px;margin-top:8px;border-top:1px solid rgba(255,255,255,.08);">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;padding-top:16px;margin-top:8px;border-top:1px solid var(--meggy-fc-divider,rgba(255,255,255,.08));">' +
             '<button class="meggy-header-btn" id="meggy-fc-prev" ' + (idx === 0 ? 'disabled' : '') + ' style="font-size:13px;"><i class="bi bi-chevron-left"></i> Anterior</button>' +
             '<button class="meggy-header-btn" id="meggy-fc-next" style="font-size:13px;background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">' + (idx < cards.length - 1 ? 'Próximo' : 'Finalizar') + ' <i class="bi bi-chevron-right"></i></button>' +
           '</div>' +
@@ -8373,15 +8528,17 @@ el.scrollTop = 0;
         if (bodyEl._fcKeyHandler) { document.removeEventListener('keydown', bodyEl._fcKeyHandler); bodyEl._fcKeyHandler = null; }
         const total = cards.length;
         const pct = total > 0 ? Math.round(hits / total * 100) : 0;
-        const _lt70r = (document.documentElement.getAttribute('data-bs-theme') || 'dark') === 'light';  // ★ v2.15.70: idem draw()
-        const _fcRsT70 = _lt70r ? '#1f2328' : '#e6edf3';
-        const _fcRsH70 = _lt70r ? '#d6336c' : '#ff8b9f';
-        const _fcRsM70 = _lt70r ? '#59636e' : '#8b949e';
+        // ★ v2.15.71: idem draw() — variáveis de tema, sem leitura
+        //   pontual de data-bs-theme (o ecrã final também ficava com
+        //   as cores do tema em que era desenhado).
+        const _fcRsT71 = 'var(--meggy-fc-text-back,#e6edf3)';
+        const _fcRsH71 = 'var(--meggy-fc-title,#ff8b9f)';
+        const _fcRsM71 = 'var(--meggy-fc-meta,#8b949e)';
         bodyEl.innerHTML = '<div class="gdi-mat-isa-result" style="max-width:760px;margin:0 auto;text-align:center;padding:40px 20px;">' +
           '<div style="font-size:48px;margin-bottom:12px;">' + (pct >= 60 ? '🎉' : '📚') + '</div>' +
-          '<h3 style="color:' + _fcRsH70 + ';font-family:Poppins,sans-serif;">Sessão concluída!</h3>' +
-          '<p style="color:' + _fcRsT70 + ';font-size:16px;margin-top:8px;"><b style="color:' + (pct >= 60 ? '#3fb950' : '#ff8b8b') + ';">' + hits + '/' + total + '</b> · ' + pct + '% acerto</p>' +
-          '<p style="color:' + _fcRsM70 + ';font-size:12px;">Matéria: ' + Shell._esc(lessonName) + '</p>' +
+          '<h3 style="color:' + _fcRsH71 + ';font-family:Poppins,sans-serif;">Sessão concluída!</h3>' +
+          '<p style="color:' + _fcRsT71 + ';font-size:16px;margin-top:8px;"><b style="color:' + (pct >= 60 ? 'var(--meggy-fc-ok,#3fb950)' : 'var(--meggy-fc-bad,#ff8b8b)') + ';">' + hits + '/' + total + '</b> · ' + pct + '% acerto</p>' +
+          '<p style="color:' + _fcRsM71 + ';font-size:12px;">Matéria: ' + Shell._esc(lessonName) + '</p>' +
           '<div style="display:flex;gap:8px;justify-content:center;margin-top:18px;flex-wrap:wrap;">' +
             '<button class="meggy-header-btn" onclick="Shell.state.playerPlaylist && Shell.views._playVideoInline(Shell.state.playerPlaylist[Shell.state.playerIndex].link, Shell.state.playerPlaylist[Shell.state.playerIndex].name, Shell.state.playerPlaylist, Shell.state.playerIndex)" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-arrow-repeat"></i> Voltar ao player</button>' +
           '</div>' +
