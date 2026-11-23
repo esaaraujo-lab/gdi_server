@@ -54,6 +54,10 @@ class MdReaderActivity : AppCompatActivity() {
     private var docPath: String = ""
     private var docName: String = "Documento"
     private var markdown: String? = null
+    // R21 — instância Markwon reutilizável (o tema não muda entre
+    // renders) + job do render em curso (o parse saiu da main thread).
+    private var markwon: Markwon? = null
+    private var renderJob: kotlinx.coroutines.Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -124,14 +128,10 @@ class MdReaderActivity : AppCompatActivity() {
         }
     }
 
-    private fun renderMarkdown() {
-        val text = markdown ?: return
-        val scale = SessionManager.get(this).mdFontScale
-        binding.mdContent.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f * scale)
-
+    private fun buildMarkwon(): Markwon {
         val pink = ContextCompat.getColor(this, R.color.md_primary)
         val codeBg = ContextCompat.getColor(this, R.color.md_surface_container)
-        val markwon = Markwon.builder(this)
+        return Markwon.builder(this)
             .usePlugin(TablePlugin.create(this))
             .usePlugin(StrikethroughPlugin.create())
             .usePlugin(object : AbstractMarkwonPlugin() {
@@ -146,6 +146,25 @@ class MdReaderActivity : AppCompatActivity() {
                 }
             })
             .build()
-        markwon.setMarkdown(binding.mdContent, text)
+    }
+
+    private fun renderMarkdown() {
+        val text = markdown ?: return
+        val scale = SessionManager.get(this).mdFontScale
+        binding.mdContent.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f * scale)
+        val mw = markwon ?: buildMarkwon().also { markwon = it }
+        // R21: o parse Markwon completo corria na MAIN thread (após o
+        // download e a CADA mudança de tamanho de fonte) — transcrições
+        // grandes = jank/ANR. Agora: parse em Dispatchers.Default
+        // (toMarkdown, a metade assíncrona documentada do Markwon) e
+        // só a aplicação (setParsedMarkdown) na UI. Um render novo
+        // cancela o anterior; o guarda por identidade do texto impede
+        // um parse obsoleto de ganhar a um mais recente.
+        renderJob?.cancel()
+        renderJob = lifecycleScope.launch {
+            val node = withContext(Dispatchers.Default) { mw.toMarkdown(text) }
+            if (markdown !== text) return@launch
+            mw.setParsedMarkdown(binding.mdContent, node)
+        }
     }
 }

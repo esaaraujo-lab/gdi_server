@@ -110,6 +110,10 @@ class PdfReaderActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityPdfReaderBinding
     private var renderer: PdfRenderer? = null
+    // R21: o PFD que alimenta o renderer fica guardado e é fechado no
+    // onDestroy (antes vazava 1 FD por PDF aberto — o close() do
+    // renderer não fecha o FD do chamador).
+    private var pdfPfd: ParcelFileDescriptor? = null
     private var pdfFile: File? = null
     private var pageCount = 0
     private var currentPage = 0
@@ -439,6 +443,7 @@ class PdfReaderActivity : AppCompatActivity() {
             pdfFile = file
             try {
                 val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+                pdfPfd = pfd
                 renderer = PdfRenderer(pfd)
                 pageCount = renderer?.pageCount ?: 0
                 if (pageCount <= 0) {
@@ -655,7 +660,10 @@ class PdfReaderActivity : AppCompatActivity() {
         }
 
         inner class PageViewHolder(val itemBinding: ItemPdfPageBinding) :
-            RecyclerView.ViewHolder(itemBinding.root)
+            RecyclerView.ViewHolder(itemBinding.root) {
+            /** R21 — render em curso deste holder (cancelado ao reciclar). */
+            var renderJob: Job? = null
+        }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PageViewHolder {
             val itemBinding = ItemPdfPageBinding.inflate(
@@ -689,11 +697,17 @@ class PdfReaderActivity : AppCompatActivity() {
         }
 
         override fun onViewRecycled(holder: PageViewHolder) {
+            holder.renderJob?.cancel()
+            holder.renderJob = null
             holder.itemBinding.pageImage.setImageBitmap(null)
         }
 
         private fun renderPageInto(holder: PageViewHolder, position: Int) {
-            lifecycleScope.launch(Dispatchers.IO) {
+            // R21: Job por ViewHolder — ao reciclar, o render obsoleto é
+            // cancelado em onViewRecycled em vez de ficar enfileirado
+            // no renderMutex a atrasar as páginas visíveis.
+            holder.renderJob?.cancel()
+            holder.renderJob = lifecycleScope.launch(Dispatchers.IO) {
                 val bitmap = renderBitmap(position) ?: return@launch
                 withContext(Dispatchers.Main) {
                     // Só aplica se o holder ainda mostra esta página.
@@ -720,33 +734,49 @@ class PdfReaderActivity : AppCompatActivity() {
                 pageCache.get(position)?.let { return@withLock it }
                 try {
                     val page = r.openPage(position)
-                    // Supersampling 1.5x para nitidez, com teto p/ memória.
-                    var scale = targetViewWidthPx() * 1.5f / page.width
-                    if (page.width * scale > 1600) scale = 1600 / page.width.toFloat()
-                    if (page.height * scale > 2400) scale = 2400 / page.height.toFloat()
-                    val width = (page.width * scale).toInt().coerceAtLeast(1)
-                    val height = (page.height * scale).toInt().coerceAtLeast(1)
-                    // Frente G (port p/ o leitor novo da Frente I): o teto
-                    // de pixels ja existe (1600x2400), mas sem este catch
-                    // um OOM rebentava a coroutine — catch (Exception)
-                    // nao apanha Error. Fecha a pagina e limpa o cache.
-                    val bitmap = try {
-                        Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-                    } catch (_: OutOfMemoryError) {
-                        page.close()
-                        pageCache.evictAll()
-                        return@withLock null
+                    // R21: page.close() em finally — antes, se
+                    // page.render() lançasse, o catch exterior devolvia
+                    // null SEM fechar a página (página do PdfRenderer
+                    // vazada e erros nos renders seguintes).
+                    try {
+                        // Supersampling 1.5x para nitidez, com teto p/ memória.
+                        var scale = targetViewWidthPx() * 1.5f / page.width
+                        if (page.width * scale > 1600) scale = 1600 / page.width.toFloat()
+                        if (page.height * scale > 2400) scale = 2400 / page.height.toFloat()
+                        val width = (page.width * scale).toInt().coerceAtLeast(1)
+                        val height = (page.height * scale).toInt().coerceAtLeast(1)
+                        // Frente G (port p/ o leitor novo da Frente I): o teto
+                        // de pixels ja existe (1600x2400), mas sem este catch
+                        // um OOM rebentava a coroutine — catch (Exception)
+                        // nao apanha Error. Limpa o cache (o close da
+                        // página é do finally).
+                        val bitmap = try {
+                            Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                        } catch (_: OutOfMemoryError) {
+                            pageCache.evictAll()
+                            return@withLock null
+                        }
+                        bitmap.eraseColor(android.graphics.Color.WHITE)
+                        page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                        pageCache.put(position, bitmap)
+                        bitmap
+                    } finally {
+                        try { page.close() } catch (_: Exception) {}
                     }
-                    bitmap.eraseColor(android.graphics.Color.WHITE)
-                    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                    page.close()
-                    pageCache.put(position, bitmap)
-                    bitmap
                 } catch (_: Exception) {
                     null
                 }
             }
         }
+
+        /**
+         * R21 — corre [block] sob o MESMO mutex dos renders de página.
+         * O OCR do resumo (PdfReaderActivity) usa o PdfRenderer fora
+         * do adapter; o PdfRenderer não é thread-safe, por isso esse
+         * uso tem de ser serializado com os renders do scroll.
+         */
+        suspend fun <T> withRenderLock(block: suspend () -> T): T =
+            renderMutex.withLock { block() }
 
         fun clearCache() {
             pageCache.evictAll()
@@ -772,8 +802,17 @@ class PdfReaderActivity : AppCompatActivity() {
         chromeBarAnims.clear()
         summaryJob?.cancel()
         summaryDialog?.dismiss()
+        // R21: o diálogo "ir para página" também é dismiss-ado (antes
+        // vazava a janela — WindowLeaked — se a Activity saísse com
+        // ele aberto; o summaryDialog já era).
+        goToPageDialog?.dismiss()
+        goToPageDialog = null
         pageAdapter?.release()
         try { renderer?.close() } catch (_: Exception) {}
+        renderer = null
+        // R21: fechar o PFD DEPOIS do renderer (ver campo pdfPfd).
+        try { pdfPfd?.close() } catch (_: Exception) {}
+        pdfPfd = null
     }
 
     // ───────── Frente J — resumo do PDF pela Meggy ─────────
@@ -814,9 +853,11 @@ class PdfReaderActivity : AppCompatActivity() {
     private fun summaryCacheKey(): String = "${lessonFolderPath().trimEnd('/')}/$docName"
 
     private fun onSummaryClicked() {
-        if (pdfSummary != null) {
+        // R21: captura em val local em vez de !! após o guarda.
+        val existingSummary = pdfSummary
+        if (existingSummary != null) {
             openSummaryDialog()
-            showSummaryReady(pdfSummary!!, getString(R.string.pdf_summary_cached))
+            showSummaryReady(existingSummary, getString(R.string.pdf_summary_cached))
             return
         }
         openSummaryDialog()
@@ -1019,7 +1060,17 @@ class PdfReaderActivity : AppCompatActivity() {
         val sb = StringBuilder()
         for (i in 0 until pages) {
             setSummaryLoading(getString(R.string.pdf_summary_ocr, i + 1, pages))
-            val b64 = renderPageForOcr(r, i) ?: continue
+            // R21: o render p/ OCR (page.render + JPEG + Base64) corria
+            // na MAIN thread (summaryJob é lifecycleScope/Main) — até
+            // 4 páginas síncronas = ANR em PDFs grandes. Agora corre
+            // em IO, serializado com os renders do scroll pelo mutex
+            // do adapter (o PdfRenderer não é thread-safe).
+            val adapter = pageAdapter
+            val b64 = if (adapter != null) {
+                adapter.withRenderLock { withContext(Dispatchers.IO) { renderPageForOcr(r, i) } }
+            } else {
+                withContext(Dispatchers.IO) { renderPageForOcr(r, i) }
+            } ?: continue
             val text = AiService.ocrPageImage(this, b64, i + 1, pageCount)
             if (!text.isNullOrBlank()) sb.append(text).append('\n')
             if (sb.length >= SUMMARY_MAX_TEXT_CHARS) break
@@ -1031,21 +1082,26 @@ class PdfReaderActivity : AppCompatActivity() {
 
     /** Renderiza a página para JPEG base64 (OCR) — ~1000 px de largura. */
     private fun renderPageForOcr(r: PdfRenderer, pageIndex: Int): String? {
+        var page: PdfRenderer.Page? = null
+        var bitmap: Bitmap? = null
         return try {
-            val page = r.openPage(pageIndex)
+            page = r.openPage(pageIndex)
             val scale = 1000f / page.width.toFloat()
             val width = (page.width * scale).toInt().coerceAtLeast(1)
             val height = (page.height * scale).toInt().coerceAtLeast(1)
-            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
             bitmap.eraseColor(android.graphics.Color.WHITE)
             page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-            page.close()
             val out = ByteArrayOutputStream()
             bitmap.compress(Bitmap.CompressFormat.JPEG, 70, out)
-            bitmap.recycle()
             Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
         } catch (_: Exception) {
             null
+        } finally {
+            // R21: fechar a página e reciclar o bitmap mesmo quando o
+            // render/compressão lança (antes só o caminho feliz o fazia).
+            try { page?.close() } catch (_: Exception) {}
+            try { bitmap?.recycle() } catch (_: Exception) {}
         }
     }
 
