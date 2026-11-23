@@ -278,6 +278,22 @@ object AiService {
     // ───────── rotas ─────────
 
     /**
+     * R22 — lê um campo de texto que pode vir com null JSON.
+     * No Android, JSONObject.optString() devolve a STRING "null"
+     * quando o campo está presente com valor null (o JSONObject.NULL
+     * é convertido por toString) — foi assim que um pacote ISA só
+     * com resumo (mindmap/questions a null no servidor) virou a
+     * pílula literal "null" no ecrã. Este helper trata null JSON,
+     * vazio e a string "null" como ausência. (O campo `questions`
+     * já tinha a guarda isNull; summary/mindmap não tinham.)
+     */
+    private fun JSONObject.optText(name: String): String? {
+        if (isNull(name)) return null
+        val v = optString(name).trim()
+        return v.takeIf { it.isNotEmpty() && !it.equals("null", ignoreCase = true) }
+    }
+
+    /**
      * Frente K — pacote gerado pelo batalhao para UM material
      * (uma chave `<courseKey>/<pdfName>` do cache ISA): o resumo
      * (`summary`, Markdown), as pilulas (`mindmap`, Markdown em
@@ -311,12 +327,12 @@ object AiService {
             val json = JSONObject(res.body ?: return null)
             if (!json.optBoolean("ok", false)) return null
             val cached = json.optJSONObject("cached") ?: return null
-            val summary = cached.optString("summary").takeIf { it.isNotBlank() }
-            val mindmap = cached.optString("mindmap").takeIf { it.isNotBlank() }
+            val summary = cached.optText("summary")
+            val mindmap = cached.optText("mindmap")
             val questionsJson = if (!cached.isNull("questions")) {
                 val arr = cached.optJSONArray("questions")
                 if (arr != null) arr.toString()
-                else cached.optString("questions").takeIf { it.isNotBlank() }
+                else cached.optText("questions")
             } else {
                 null
             }
@@ -510,7 +526,7 @@ object AiService {
         return try {
             val json = JSONObject(res.body ?: return null)
             if (!json.optBoolean("ok", false)) return null
-            json.optString("content").takeIf { it.isNotBlank() }
+            json.optText("content")
         } catch (_: Exception) {
             null
         }
