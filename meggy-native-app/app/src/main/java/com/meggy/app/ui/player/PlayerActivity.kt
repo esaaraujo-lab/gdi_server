@@ -51,6 +51,7 @@ import com.meggy.app.data.AiService
 import com.meggy.app.data.ApiService
 import com.meggy.app.data.FileItem
 import com.meggy.app.databinding.ActivityPlayerBinding
+import com.meggy.app.ui.detail.DetailActivity
 import com.meggy.app.ui.home.HomeActivity
 import com.meggy.app.ui.mylist.MyListActivity
 import com.meggy.app.ui.reader.MdReaderActivity
@@ -467,6 +468,15 @@ class PlayerActivity : AppCompatActivity() {
     private var materialsRetriedFor: String? = null
     private var materialsSummary: String? = null
 
+    // R22 — ficheiros da pasta da aula actual (para o botão "Gerar"
+    // reutilizar o fluxo de geração sem relistar a pasta) + estado
+    // da geração manual (botão "Gerar" das abas vazias) e a pasta
+    // para a qual foi disparada (mudar de aula cancela-a).
+    private var materialsFiles: List<FileItem> = emptyList()
+    private var generateMaterialsJob: Job? = null
+    private var materialsGenerating = false
+    private var materialsGeneratingFor: String? = null
+
     // Frente R14B — geração ao PLAY, 1x por aula por sessão: chaves
     // (videoPath) já enfileiradas. Em memória, nunca persistido.
     private val generationEnqueuedForSession = mutableSetOf<String>()
@@ -537,6 +547,14 @@ class PlayerActivity : AppCompatActivity() {
         binding.btnSpeedInfo.setOnClickListener { exitRestIfActive(); cycleSpeed() }
         binding.btnRestBar.setOnClickListener { toggleSleepMode() }
         binding.btnRestInfo.setOnClickListener { toggleSleepMode() }
+        // 2.7.41 (P1-T1) — "Ver materiais" da TV: na TV não há secção
+        // de materiais (o info_scroll fica escondido no fullscreen) —
+        // o botão volta ao detalhe na aba Resumo. Só existe no
+        // layout-television; no celular o binding é null.
+        binding.btnMaterialsBar?.setOnClickListener {
+            DetailActivity.openTabOnReturn = DetailActivity.RETURN_TAB_SUMMARY
+            finish()
+        }
         binding.btnFullscreen.setOnClickListener { enterFullscreen() }
         binding.btnExitFullscreen.setOnClickListener { exitFullscreen() }
         // Frente D — Anterior/Próxima NÃO saem do descanso: a troca de
@@ -562,6 +580,7 @@ class PlayerActivity : AppCompatActivity() {
             binding.btnPlayPauseBar, binding.btnRestBar,
             binding.btnSpeedBar, binding.btnExitFullscreen, binding.btnSpeedInfo,
             binding.btnRestInfo, binding.btnFullscreen,
+            binding.btnMaterialsBar,
             binding.centerPlayPause
         ).forEach { FocusAnimator.attach(it, isTv) }
         updateFavButton()
@@ -2126,6 +2145,15 @@ class PlayerActivity : AppCompatActivity() {
         materialsJob?.cancel()
         val section = mat<View>(R.id.materials_section) ?: return
         val folderPath = materialsFolderPath()
+        // R22 — a aula mudou com uma geração manual em curso: cancela
+        // (o resultado pertencia à aula anterior) e repõe os botões.
+        materialsFiles = emptyList()
+        if (materialsGeneratingFor != null && materialsGeneratingFor != folderPath) {
+            generateMaterialsJob?.cancel()
+            generateMaterialsJob = null
+            materialsGeneratingFor = null
+            setMaterialsGenerating(false)
+        }
         if (folderPath.isNullOrBlank()) {
             showMaterialsEmpty()
             return
@@ -2135,6 +2163,9 @@ class PlayerActivity : AppCompatActivity() {
         mat<View>(R.id.materials_empty)?.visibility = View.GONE
         mat<View>(R.id.materials_error)?.visibility = View.GONE
         mat<View>(R.id.materials_content)?.visibility = View.GONE
+        // 2.7.41 (P1-2) — o botão da secção vazia é irmão do conteúdo
+        // (não está dentro dele): esconde-se aqui e no erro.
+        mat<View>(R.id.materials_empty_generate)?.visibility = View.GONE
         materialsJob = lifecycleScope.launch {
             val data = try {
                 val api = ApiService(this@PlayerActivity)
@@ -2156,6 +2187,9 @@ class PlayerActivity : AppCompatActivity() {
                 }
                 val allFiles = (files + extraMaterials)
                     .distinctBy { it.name.lowercase() }
+                // R22 — guarda os ficheiros para o botão "Gerar"
+                // (generateMaterials) não ter de relistar a pasta.
+                materialsFiles = allFiles
                 val materialNames = allFiles.filter { it.isPdf || it.isMarkdown }.map { it.name }
                 val lessonFile = LessonDescription.lessonFilePath(folderPath, files)
                 val bundle = LessonDescription.fetchGenerated(
@@ -2189,6 +2223,10 @@ class PlayerActivity : AppCompatActivity() {
         mat<View>(R.id.materials_empty)?.visibility = View.VISIBLE
         mat<View>(R.id.materials_error)?.visibility = View.GONE
         mat<View>(R.id.materials_content)?.visibility = View.GONE
+        // 2.7.41 (P1-2) — a secção vazia ganha acção quando a pasta tem
+        // ficheiros legíveis (PDF/MD); sem eles, fica só o texto.
+        mat<View>(R.id.materials_empty_generate)?.visibility =
+            if (materialsFiles.any { it.isPdf || it.isMarkdown }) View.VISIBLE else View.GONE
     }
 
     /** Estado de erro: texto curto + "Tentar de novo" (sem crash). */
@@ -2198,6 +2236,7 @@ class PlayerActivity : AppCompatActivity() {
         mat<View>(R.id.materials_empty)?.visibility = View.GONE
         mat<View>(R.id.materials_error)?.visibility = View.VISIBLE
         mat<View>(R.id.materials_content)?.visibility = View.GONE
+        mat<View>(R.id.materials_empty_generate)?.visibility = View.GONE
         mat<View>(R.id.materials_retry)?.setOnClickListener { loadMaterials() }
     }
 
@@ -2229,6 +2268,10 @@ class PlayerActivity : AppCompatActivity() {
             summaryCard?.visibility = View.GONE
             mat<View>(R.id.materials_summary_empty)?.visibility = View.VISIBLE
         }
+        // 2.7.41 (P1-1) — o botão "Gerar resumo" só aparece sem resumo:
+        // com conteúdo, um toque acidental relançava até 3 min de IA.
+        mat<View>(R.id.materials_summary_generate)?.visibility =
+            if (data.summary != null) View.GONE else View.VISIBLE
         renderMaterialsPills(data.pills)
         renderMaterialsQuestions(data.questions)
         val flashcards = deriveMaterialsFlashcards(data)
@@ -2239,6 +2282,9 @@ class PlayerActivity : AppCompatActivity() {
         // Flashcards); os painéis sem conteúdo mostram a linha de
         // vazio honesto dentro da própria aba.
         wireMaterialsTabs()
+        // R22 — estados vazios com acção (Elton 2026-11-23 19:54):
+        // cada aba vazia ganha o seu botão "Gerar …".
+        wireMaterialsGenerateButtons()
         selectMaterialsTab(
             when {
                 data.summary != null -> MAT_TAB_RESUMO
@@ -2352,6 +2398,123 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /**
+     * R22 — estados vazios com acção (Elton 2026-11-23 19:54): cada
+     * aba vazia ganha um botão "Gerar …" que liga ao fluxo de
+     * geração que JÁ EXISTE — LessonDescription.ensureDescription
+     * (o mesmo que o detalhe dispara ao abrir a pasta da aula:
+     * batalhão + poll até 3 min) — sem fluxo novo nem duplicação.
+     * Flashcards: o botão gera o pacote (resumo + pílulas +
+     * questões), porque os flashcards DERIVAM dele (ver
+     * deriveMaterialsFlashcards) — não há geração só de flashcards.
+     * Idempotente (setOnClickListener substitui), como as abas.
+     */
+    private fun wireMaterialsGenerateButtons() {
+        mat<View>(R.id.materials_summary_generate)?.setOnClickListener { generateMaterials() }
+        mat<View>(R.id.materials_pills_generate)?.setOnClickListener { generateMaterials() }
+        mat<View>(R.id.materials_questions_generate)?.setOnClickListener { generateMaterials() }
+        mat<View>(R.id.materials_flashcards_generate)?.setOnClickListener { generateMaterials() }
+        // 2.7.41 (P1-2) — o botão da secção vazia (fora das abas).
+        mat<View>(R.id.materials_empty_generate)?.setOnClickListener { generateMaterials() }
+    }
+
+    /** Liga/desliga os botões "Gerar" + texto "A gerar…" em curso. */
+    private fun setMaterialsGenerating(generating: Boolean) {
+        materialsGenerating = generating
+        val labels = listOf(
+            R.id.materials_summary_generate to R.string.materials_generate_summary,
+            R.id.materials_pills_generate to R.string.materials_generate_pills,
+            R.id.materials_questions_generate to R.string.materials_generate_questions,
+            R.id.materials_flashcards_generate to R.string.materials_generate_flashcards,
+            R.id.materials_empty_generate to R.string.materials_generate_summary
+        )
+        for ((id, label) in labels) {
+            mat<TextView>(id)?.let {
+                it.isEnabled = !generating
+                it.text = getString(if (generating) R.string.materials_generating else label)
+            }
+        }
+    }
+
+    /**
+     * Geração manual a partir de uma aba vazia: reutiliza
+     * LessonDescription.ensureDescription (mesmo fluxo do detalhe).
+     * Ready → grava o pacote na pasta de materiais (Frente K, o
+     * mesmo caminho do detalhe) + cache local do resumo e refresca
+     * as abas; Generating → uma re-verificação 60 s depois (o
+     * batalhão continua no servidor); NoMaterial/Unavailable/
+     * Failed → motivo honesto em Snackbar, sem crash e sem loop.
+     * A geração demora até 3 min (poll do ensureDescription); o
+     * botão fica "A gerar…" e os 4 botões desactivados entretanto.
+     */
+    private fun generateMaterials() {
+        if (materialsGenerating) return
+        val folderPath = materialsFolderPath() ?: return
+        val files = materialsFiles
+        if (files.isEmpty()) {
+            Snackbar.make(binding.root, R.string.materials_generate_no_material, Snackbar.LENGTH_LONG).show()
+            return
+        }
+        if (!LessonDescription.isLessonFolder(files)) {
+            Snackbar.make(binding.root, R.string.materials_generate_not_lesson, Snackbar.LENGTH_LONG).show()
+            return
+        }
+        val folderName = folderPath.trimEnd('/').substringAfterLast('/')
+        materialsGeneratingFor = folderPath
+        setMaterialsGenerating(true)
+        generateMaterialsJob?.cancel()
+        generateMaterialsJob = lifecycleScope.launch {
+            val outcome = LessonDescription.ensureDescription(
+                this@PlayerActivity, folderPath, folderName, files
+            )
+            if (isFinishing || isDestroyed) return@launch
+            when (outcome) {
+                is LessonDescription.Outcome.Ready -> {
+                    val lessonFile = LessonDescription.lessonFilePath(folderPath, files)
+                    if (lessonFile != null) {
+                        runCatching {
+                            MaterialSaver.saveGenerated(
+                                this@PlayerActivity, lessonFile, folderName,
+                                outcome.bundle.summary, outcome.bundle.mindmap,
+                                outcome.bundle.questionsJson
+                            )
+                        }
+                    }
+                    SessionManager.get(this@PlayerActivity)
+                        .saveLessonDescription(folderPath, outcome.text)
+                    Snackbar.make(binding.root, R.string.materials_generate_done, Snackbar.LENGTH_SHORT).show()
+                    if (materialsFolderPath() == folderPath) loadMaterials()
+                }
+                is LessonDescription.Outcome.Generating -> {
+                    Snackbar.make(binding.root, R.string.materials_generate_running, Snackbar.LENGTH_LONG).show()
+                    materialsRetryJob?.cancel()
+                    materialsRetryJob = lifecycleScope.launch {
+                        delay(60_000L)
+                        if (isFinishing || isDestroyed) return@launch
+                        if (materialsFolderPath() != folderPath) return@launch
+                        loadMaterials()
+                    }
+                }
+                is LessonDescription.Outcome.NoMaterial -> {
+                    val reason = when (outcome.reason) {
+                        LessonDescription.NoMaterialReason.SCANNED_PDF -> R.string.summary_state_scanned
+                        LessonDescription.NoMaterialReason.NO_FILES -> R.string.summary_state_no_files
+                        LessonDescription.NoMaterialReason.NO_TEXT -> R.string.summary_state_no_text
+                    }
+                    Snackbar.make(binding.root, reason, Snackbar.LENGTH_LONG).show()
+                }
+                is LessonDescription.Outcome.Unavailable -> {
+                    Snackbar.make(binding.root, R.string.materials_generate_unavailable, Snackbar.LENGTH_LONG).show()
+                }
+                is LessonDescription.Outcome.Failed -> {
+                    Snackbar.make(binding.root, R.string.materials_generate_failed, Snackbar.LENGTH_LONG).show()
+                }
+            }
+            setMaterialsGenerating(false)
+            materialsGeneratingFor = null
+        }
+    }
+
+    /**
      * Mostra um painel e esconde os outros; a aba activa ganha o
      * gradiente da marca (como no conceito), as restantes ficam
      * transparentes sobre o contentor.
@@ -2397,6 +2560,9 @@ class PlayerActivity : AppCompatActivity() {
         val list = mat<LinearLayout>(R.id.materials_pills_list)
         mat<View>(R.id.materials_pills_empty)?.visibility =
             if (pills.isEmpty()) View.VISIBLE else View.GONE
+        // 2.7.41 (P1-1) — "Gerar pílulas" só com a lista vazia.
+        mat<View>(R.id.materials_pills_generate)?.visibility =
+            if (pills.isEmpty()) View.VISIBLE else View.GONE
         list?.removeAllViews()
         if (pills.isEmpty()) return
         val density = resources.displayMetrics.density
@@ -2426,6 +2592,9 @@ class PlayerActivity : AppCompatActivity() {
         val list = mat<LinearLayout>(R.id.materials_questions_list)
         mat<View>(R.id.materials_questions_empty)?.visibility =
             if (questions.isEmpty()) View.VISIBLE else View.GONE
+        // 2.7.41 (P1-1) — "Gerar questões" só com a lista vazia.
+        mat<View>(R.id.materials_questions_generate)?.visibility =
+            if (questions.isEmpty()) View.VISIBLE else View.GONE
         list?.removeAllViews()
         if (questions.isEmpty()) return
         for ((idx, q) in questions.withIndex()) {
@@ -2450,8 +2619,8 @@ class PlayerActivity : AppCompatActivity() {
         val gap = (10 * density).toInt()
         val onSurface = ContextCompat.getColor(this, R.color.md_on_surface)
         val pink = ContextCompat.getColor(this, R.color.md_primary)
-        val greenBg = Color.parseColor("#256D2E")
-        val redBg = Color.parseColor("#8C2B2B")
+        val greenBg = ContextCompat.getColor(this, R.color.md_success_container)
+        val redBg = ContextCompat.getColor(this, R.color.md_error_container)
 
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -2588,6 +2757,9 @@ class PlayerActivity : AppCompatActivity() {
     private fun renderMaterialsFlashcards(cards: List<Pair<String, String>>) {
         val list = mat<LinearLayout>(R.id.materials_flashcards_list)
         mat<View>(R.id.materials_flashcards_empty)?.visibility =
+            if (cards.isEmpty()) View.VISIBLE else View.GONE
+        // 2.7.41 (P1-1) — "Gerar flashcards" só com a lista vazia.
+        mat<View>(R.id.materials_flashcards_generate)?.visibility =
             if (cards.isEmpty()) View.VISIBLE else View.GONE
         list?.removeAllViews()
         if (cards.isEmpty()) return
