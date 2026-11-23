@@ -118,6 +118,9 @@ class HomeActivity : AppCompatActivity() {
     private var lastFocusedRail = 0
     private var savedScrollY = 0
     private var isFirstResume = true
+    // 2.7.41 (P1-13) — o fetch de destaques falhou (ver
+    // fetchFeaturedCovers): alimenta o estado de erro da home.
+    private var featuredLoadFailed: Boolean = false
     private var focusObserver: ViewTreeObserver? = null
     private var focusListenerRegistered = false
     private val globalFocusListener = ViewTreeObserver.OnGlobalFocusChangeListener { _, newFocus ->
@@ -203,6 +206,25 @@ class HomeActivity : AppCompatActivity() {
         findViewById<View>(R.id.homeSearchBtn)?.setOnClickListener {
             startActivity(Intent(this, SearchActivity::class.java))
         }
+        // 2.7.41 (P0-2/P0-3) — atalhos de navegação no cabeçalho da home
+        // TV (só existem no layout-television; no celular o
+        // findViewById devolve null e nada acontece).
+        findViewById<View>(R.id.tvNavSearch)?.setOnClickListener {
+            startActivity(Intent(this, SearchActivity::class.java))
+        }
+        findViewById<View>(R.id.tvNavMylist)?.setOnClickListener {
+            startActivity(Intent(this, MyListActivity::class.java))
+        }
+        findViewById<View>(R.id.tvNavSettings)?.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
+        if (TvUtils.isTv(this)) {
+            listOf(R.id.tvNavSearch, R.id.tvNavMylist, R.id.tvNavSettings).forEach { id ->
+                findViewById<View>(id)?.let { FocusAnimator.attach(it, true) }
+            }
+        }
+        // 2.7.41 (P1-13) — "Tentar novamente" do estado de erro da home.
+        binding.homeRetry.setOnClickListener { reloadHomeContent() }
 
         // ★ v2.0.2: Bottom navigation — NO finish() on tab switch.
         // Each nav activity is declared with launchMode="singleTask" in the
@@ -254,6 +276,46 @@ class HomeActivity : AppCompatActivity() {
         // 2º plano; quando chegar, o listener re-aplica as capas.
         LibraryCovers.warmUp(this)
         LibraryCovers.addOnReadyListener(libraryReadyListener)
+        // 2.7.41 (P1-13) — fim da montagem inicial: esconde o
+        // carregamento (o fetch de destaques, assíncrono, re-avalia o
+        // erro quando terminar — ver fetchFeaturedCovers).
+        updateHomeStateViews()
+    }
+
+    /**
+     * 2.7.41 (P1-13) — estados da home. O conteúdo é local e monta
+     * depressa, por isso o carregamento só cobre o 1.º desenho; o erro
+     * só aparece quando não há nada local (sem recentes nem favoritos)
+     * E os destaques falharam. A lógica de esconder secções vazias com
+     * dados não muda.
+     */
+    private fun updateHomeStateViews() {
+        binding.homeLoading.visibility = View.GONE
+        val hasLocal = SessionManager.get(this).getRecents().isNotEmpty() ||
+            SessionManager.get(this).getFavoriteCourses().isNotEmpty()
+        binding.homeError.visibility =
+            if (!hasLocal && featuredLoadFailed) View.VISIBLE else View.GONE
+    }
+
+    /**
+     * 2.7.41 (P1-13) — "Tentar novamente" do estado de erro: repõe a
+     * montagem inicial (rails locais + destaques + drives do admin).
+     */
+    private fun reloadHomeContent() {
+        featuredLoadFailed = false
+        binding.homeError.visibility = View.GONE
+        binding.homeLoading.visibility = View.VISIBLE
+        // Sem setupHero(): na TV ele criaria um SEGUNDO HeroRotator e o
+        // antigo continuaria a rodar por cima; o hero já corre e o
+        // retry só precisa das secções (setupDestaques é no-op na TV).
+        setupDestaques()
+        setupContinueRail()
+        setupDrivesRail()
+        setupMyCourses()
+        setupTvFocusChains()
+        fetchFeaturedCovers()
+        fetchAdminDrives()
+        updateHomeStateViews()
     }
 
     /**
@@ -265,7 +327,13 @@ class HomeActivity : AppCompatActivity() {
     private fun fetchFeaturedCovers() {
         lifecycleScope.launch {
             val courses = withContext(Dispatchers.IO) { api.getFeaturedCourses() }
-                ?: return@launch
+                ?: run {
+                    // 2.7.41 (P1-13) — null = falha (rede/auth/sem rota):
+                    // regista-se para o estado de erro da home.
+                    featuredLoadFailed = true
+                    updateHomeStateViews()
+                    return@launch
+                }
             val map = courses.mapNotNull { c ->
                 val url = c.coverUrl?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
                 c.coursePath to url
@@ -1221,6 +1289,12 @@ class HomeActivity : AppCompatActivity() {
         if (!TvUtils.isTv(this)) return
         val featuredVisible = binding.featuredSection.visibility == View.VISIBLE
         val continueVisible = binding.railContinue.visibility == View.VISIBLE
+        // 2.7.41 (P0-2/P0-3) — os atalhos do cabeçalho descem para o
+        // hero e o hero volta a subir para o 1.º atalho (Buscar).
+        findViewById<View>(R.id.tvNavSearch)?.nextFocusDownId = R.id.heroPlay
+        findViewById<View>(R.id.tvNavMylist)?.nextFocusDownId = R.id.heroPlay
+        findViewById<View>(R.id.tvNavSettings)?.nextFocusDownId = R.id.heroPlay
+        binding.heroPlay.nextFocusUpId = R.id.tvNavSearch
         binding.heroPlay.nextFocusDownId =
             if (featuredVisible) R.id.featured_card
             else if (continueVisible) R.id.railContinue
