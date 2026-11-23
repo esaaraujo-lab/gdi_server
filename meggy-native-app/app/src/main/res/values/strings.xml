@@ -140,4 +140,16 @@
     <string name="admin_drives_error_generic">Não foi possível concluir. Verifique a conexão e tente novamente.</string>
     <!-- Ronda 10 Frente C — drives do admin na Home -->
     <string name="admin_drive_tile_tag">Drive do admin</string>
+
+    <!-- R21 — descrições de acessibilidade dos controlos só-ícone do player -->
+    <string name="cd_play_pause">Reproduzir ou pausar</string>
+    <string name="cd_restart">Reiniciar aula</string>
+    <string name="cd_sleep_timer">Timer de sono</string>
+    <string name="cd_favorite">Favorito</string>
+    <string name="cd_rest_mode">Modo descanso</string>
+    <string name="cd_speed">Velocidade de reprodução</string>
+    <string name="cd_exit_fullscreen">Sair da tela cheia</string>
+    <string name="cd_fullscreen">Tela cheia</string>
+    <string name="cd_prev_lesson">Aula anterior</string>
+    <string name="cd_next_lesson">Próxima aula</string>
 </resources>
