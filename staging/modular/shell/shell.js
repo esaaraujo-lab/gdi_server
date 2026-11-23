@@ -392,7 +392,8 @@
               '[data-bs-theme="light"] .meggy-ai-msg.bot h1 { border-bottom-color: rgba(214,51,108,0.3); }[data-bs-theme="light"] .meggy-ai-msg.bot h3, [data-bs-theme="light"] .meggy-ai-msg.bot strong { color: #0e7c86; }[data-bs-theme="light"] .meggy-ai-msg.bot code { background: rgba(15,23,42,0.07); }' +
               '[data-bs-theme="light"] .meggy-ai-msg.bot pre { background: rgba(15,23,42,0.05); }[data-bs-theme="light"] .meggy-ai-msg.bot th, [data-bs-theme="light"] .meggy-ai-msg.bot td { border-color: #d0d7de; }[data-bs-theme="light"] .meggy-ai-msg.bot th { background: rgba(15,23,42,0.04); }' +
               '[data-bs-theme="light"] .meggy-ai-msg.bot blockquote { color: #59636e; }[data-bs-theme="light"] .meggy-ai-msg.bot hr { border-top-color: rgba(15,23,42,0.12); }[data-bs-theme="light"] .meggy-ai-chat-input { border-top-color: rgba(15,23,42,0.1); }' +
-              '[data-bs-theme="light"] .meggy-ai-chat-input textarea { background: rgba(255,255,255,0.9); border-color: rgba(15,23,42,0.14); color: #1f2540; }';
+              '[data-bs-theme="light"] .meggy-ai-chat-input textarea { background: rgba(255,255,255,0.9); border-color: rgba(15,23,42,0.14); color: #1f2540; }' +
+              '[data-bs-theme="light"] .meggy-ai-chip { background: rgba(255,255,255,0.85); border-color: rgba(214,51,108,0.45); color: #1f2540; }[data-bs-theme="light"] .meggy-ai-chip:hover { background: rgba(255,139,159,0.18); }';
             document.head.appendChild(st);
           }
           // ★ v2.15.71: variáveis de tema do deck de flashcards da
@@ -7288,12 +7289,84 @@ el.scrollTop = 0;
       return null;
     },
     // ── fim drawer-hook (round 4) ──
+    // ★ v2.15.73: contexto ESTRUTURADO da página p/ o chat da Meggy —
+    //    só estado que a shell já tem (vista/rota da app, aula aberta,
+    //    disciplina/assunto seleccionados nos bancos, progresso do
+    //    aluno nesta aula). NUNCA raspa texto arbitrário do DOM e
+    //    NUNCA envia o caminho da pasta no Drive (regra 3 do system
+    //    prompt): `path` é só a rota da app (ex.: /questoes). Sem
+    //    nada conhecido, devolve {} e o chat comporta-se como antes.
+    _drawerPageContext() {
+      const ctx = {};
+      try {
+        const st = Shell.state || {};
+        if (st.currentView) ctx.view = String(st.currentView).slice(0, 40);
+        try { const p = window.location.pathname || ''; if (p) ctx.path = p.slice(0, 200); } catch (_) {}
+        // Disciplina/assunto seleccionados nas vistas do banco — o
+        // valor dos <select> da própria shell É o estado estruturado
+        // dessas vistas (questões, flashcards e simulado).
+        const selVal = (id) => { try { const el = document.getElementById(id); const v = el ? String(el.value || '') : ''; return (v && v !== '__all__') ? v.slice(0, 120) : ''; } catch (_) { return ''; } };
+        const subj = selVal('meggy-qbank-subject') || selVal('meggy-fcbank-subject') || selVal('meggy-sim-subject');
+        if (subj) ctx.subject = subj;
+        const top = selVal('meggy-qbank-topic') || selVal('meggy-fcbank-topic') || selVal('meggy-sim-topic');
+        if (top) ctx.topic = top;
+        // Aula aberta: título + progresso conhecido (resume/watched
+        // do GDIUser p/ a URL deste vídeo; o <video> da própria shell
+        // dá a posição/duração mais frescas quando está aberto).
+        if (Shell._hasDrawerLesson()) {
+          const ln = Shell._drawerLessonName();
+          if (ln) ctx.title = String(ln).slice(0, 200);
+          try {
+            const item = (st.playerPlaylist && st.playerPlaylist[st.playerIndex]) || null;
+            const link = item && item.link ? String(item.link) : '';
+            const prog = {};
+            if (link && typeof GDIUser !== 'undefined' && GDIUser && GDIUser.state) {
+              const videoUrl = link.startsWith('http') ? link : (window.location.origin + link);
+              const r = GDIUser.state.resume ? GDIUser.state.resume[videoUrl] : null;
+              const pos = (typeof r === 'number') ? r : (r && typeof r.pos === 'number' ? r.pos : 0);
+              if (pos > 0) prog.positionSec = Math.floor(pos);
+              if (GDIUser.state.watched && GDIUser.state.watched[videoUrl]) prog.watched = true;
+            }
+            try {
+              const vid = document.getElementById('meggy-video');
+              if (vid) {
+                if (typeof vid.currentTime === 'number' && vid.currentTime > 0) prog.positionSec = Math.floor(vid.currentTime);
+                if (typeof vid.duration === 'number' && isFinite(vid.duration) && vid.duration > 0) prog.durationSec = Math.floor(vid.duration);
+              }
+            } catch (_) {}
+            if (Object.keys(prog).length) ctx.progress = prog;
+          } catch (_) {}
+        }
+      } catch (_) {}
+      return ctx;
+    },
+    // ★ v2.15.73: sugestões rápidas do drawer, ligadas ao contexto.
+    //    Cada chip ou envia uma mensagem ao chat (o send() já ancora
+    //    no material da aula), ou executa uma acção existente
+    //    (continuar o vídeo na posição guardada; navegar p/ uma
+    //    vista). Sem aula aberta → sugestões genéricas de estudo.
+    _drawerChips(ctx) {
+      const c = ctx || Shell._drawerPageContext();
+      const chips = [];
+      if (c.title) {
+        chips.push({ label: '📝 Resumir esta aula', send: 'Faça um resumo desta aula.' });
+        chips.push({ label: '❓ Questões desta aula', send: 'Gera questões de prática sobre esta aula para eu treinar.' });
+        if (c.progress && c.progress.positionSec > 10) chips.push({ label: '▶ Continuar de onde parei', resume: true });
+        else chips.push({ label: '🎯 Praticar no banco de questões', nav: '/questoes' });
+      } else {
+        chips.push({ label: '📅 Montar meu plano de estudos', nav: '/plano' });
+        chips.push({ label: '❓ Praticar questões', nav: '/questoes' });
+        chips.push({ label: '🎯 Fazer um simulado', nav: '/simulado' });
+      }
+      return chips.slice(0, 3);
+    },
     renderMeggyAITab(tab) {
       const body = document.getElementById('meggy-ai-body');
       if (!body) return;
       // ★ Chat-only (tab 'actions' removido — gerar material só na página de vídeo)
       if (tab === 'chat' || tab === 'actions') {
         body.innerHTML = '<div class="meggy-ai-chat-messages" id="meggy-ai-messages"><div class="meggy-ai-msg bot">Oi! Sou a <b>Meggy</b> 🐩 — sua poodle tutora de estudos.<br><br>Posso ajudar com:<br>• Explicar um tema da aula<br>• Tirar dúvidas<br>• Sugerir um plano de estudos<br><br>Para gerar resumos, questões e flashcards, abra uma aula e use as abas <b>Resumo Meggy</b>, <b>Questões</b>, <b>Pílulas</b> ou <b>Flashcards</b> no player. 🐾</div></div>' +
+        '<div class="meggy-ai-chips" id="meggy-ai-chips"></div>' +
         '<div class="meggy-ai-chat-input"><textarea id="meggy-ai-input" placeholder="Pergunte algo à Meggy..." rows="2"></textarea><button id="meggy-ai-send"><i class="bi bi-send"></i></button></div>';
         const send = async () => {
         const msg = document.getElementById('meggy-ai-input').value.trim();
@@ -7342,7 +7415,7 @@ el.scrollTop = 0;
           }
         }
         try {
-          const r = await fetch('/api/ai', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: _sendMsg, messages: []}) });
+          const r = await fetch('/api/ai', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: _sendMsg, messages: [], context: Shell._drawerPageContext()}) });
           const d = await r.json();
           const resp = d.response || 'Sem resposta';
           // ★ v2.15.5 item 10: renderer único — sem marked, o vendored
@@ -7364,6 +7437,32 @@ el.scrollTop = 0;
         finally { send._busy = false; if (sendBtn) sendBtn.disabled = false; }
         msgs.scrollTop = msgs.scrollHeight;
         };
+        // ★ v2.15.73: chips de sugestão ligados ao contexto da página
+        //    (recalculado a cada abertura do drawer/chat).
+        try {
+          const chipsEl = document.getElementById('meggy-ai-chips');
+          if (chipsEl) {
+            const chips = Shell._drawerChips(Shell._drawerPageContext());
+            chipsEl.innerHTML = chips.map((ch, i) => '<button class="meggy-ai-chip" data-chip="' + i + '">' + Shell._esc(ch.label) + '</button>').join('');
+            chipsEl.querySelectorAll('.meggy-ai-chip').forEach((btn) => {
+              btn.onclick = () => {
+                const ch = chips[parseInt(btn.dataset.chip, 10)];
+                if (!ch) return;
+                if (ch.nav) { Shell.closeMeggyAIDrawer(); Shell.router.navigate(ch.nav); return; }
+                if (ch.resume) {
+                  try {
+                    const vid = document.getElementById('meggy-video');
+                    const pos = (Shell._drawerPageContext().progress || {}).positionSec || 0;
+                    if (vid && pos > 0) { vid.currentTime = pos; const pr = vid.play(); if (pr && pr.catch) pr.catch(() => {}); }
+                  } catch (_) {}
+                  Shell.closeMeggyAIDrawer();
+                  return;
+                }
+                if (ch.send) { const inp = document.getElementById('meggy-ai-input'); if (inp) { inp.value = ch.send; send(); } }
+              };
+            });
+          }
+        } catch (_) {}
         document.getElementById('meggy-ai-send').onclick = send;
         document.getElementById('meggy-ai-input').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
       }
