@@ -205,8 +205,8 @@ class LessonListAdapter(
             if (g.expanded) g.children?.forEach { newRows.add(LessonChild(g, it)) }
         }
         val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
-            override fun getOldSize(): Int = rows.size
-            override fun getNewSize(): Int = newRows.size
+            override fun getOldListSize(): Int = rows.size
+            override fun getNewListSize(): Int = newRows.size
             override fun areItemsTheSame(oldPos: Int, newPos: Int): Boolean {
                 val o = rows[oldPos]
                 val n = newRows[newPos]
@@ -398,8 +398,8 @@ class LessonGridAdapter(
         // R21: DiffUtil (identidade = folderPath; conteúdo = filhos/
         // pdfFolderCount por referência) em vez do rebind total.
         val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
-            override fun getOldSize(): Int = groups.size
-            override fun getNewSize(): Int = newGroups.size
+            override fun getOldListSize(): Int = groups.size
+            override fun getNewListSize(): Int = newGroups.size
             override fun areItemsTheSame(oldPos: Int, newPos: Int): Boolean =
                 groups[oldPos].folderPath == newGroups[newPos].folderPath
             override fun areContentsTheSame(oldPos: Int, newPos: Int): Boolean =
