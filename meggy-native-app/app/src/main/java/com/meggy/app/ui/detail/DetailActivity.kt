@@ -11,6 +11,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewTreeObserver
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -331,6 +332,14 @@ class DetailActivity : AppCompatActivity() {
             FocusAnimator.attach(binding.heroPlayFab, true)
             FocusAnimator.attach(binding.heroFav, true)
             FocusAnimator.attach(binding.headerSearch, true)
+            // R22 UI (conceito "detalhe TV"): botão "Ver questões da
+            // disciplina" do painel esquerdo — só existe no
+            // layout-television; selecciona a aba de questões que já
+            // existe, com o mesmo feedback de foco das abas.
+            findViewById<View>(R.id.btnTvQuestions)?.let { btn ->
+                btn.setOnClickListener { selectTab(Tab.QUESTIONS) }
+                FocusAnimator.attach(btn, true, scaleTv = FocusAnimator.SCALE_TV_NONE)
+            }
         }
 
         // Busca dentro da aba Aulas (filtra as aulas pelo nome, local).
@@ -798,6 +807,8 @@ class DetailActivity : AppCompatActivity() {
                         folderCount > 0 -> "$total aulas · $folderCount pastas"
                         else -> "$total aulas"
                     }
+                    // R22 UI: a linha do curso da TV acompanha o total.
+                    syncTvCourseLine()
                 }
             }
             val sm = SessionManager.get(this@DetailActivity)
@@ -809,6 +820,8 @@ class DetailActivity : AppCompatActivity() {
                 // depois do buildLessonGroups + prefetch (refreshLessonList).
                 binding.chipProgress.text = "a calcular…"
             }
+            // R22 UI: linha do curso da TV (no-op no celular).
+            syncTvCourseLine()
 
             // Resumo: descrição gerada / provisória / branco (00:21).
             loadLessonDescription(files)
@@ -981,10 +994,19 @@ class DetailActivity : AppCompatActivity() {
                         )
                     }
                     showDescription(outcome.text, getString(R.string.summary_state_generated), generated = true)
+                    // R22 — as questões/pílulas foram carregadas UMA
+                    // vez na abertura (antes da geração terminar) e
+                    // nunca mais: o pacote que acabou de chegar tem
+                    // de entrar nas abas sem reabrir a aula.
+                    loadQuestionsFlashcards(files)
                 }
                 is LessonDescription.Outcome.Generating -> {
                     // Ainda gerando após 3 min: mantém o texto e avisa.
                     showDescriptionState(getString(R.string.summary_state_generating))
+                    // R22 — mesmo sem resumo, questões/pílulas podem
+                    // ter aterrado durante o poll (o fetchQuestionsBundle
+                    // aceita pacotes sem resumo): uma recarga única.
+                    loadQuestionsFlashcards(files)
                 }
                 is LessonDescription.Outcome.NoMaterial -> {
                     // Sem material legível: branco COM o motivo (00:21 §4).
@@ -1094,6 +1116,11 @@ class DetailActivity : AppCompatActivity() {
                 binding.heroProgress.progress = progress
                 binding.heroTime.text = "${Format.mmss(pos)} / ${Format.mmss(dur)}"
                 binding.ctaContinue.text = getString(R.string.cta_continue)
+                // R22 UI: na TV o botão diz "Continuar de onde parei"
+                // (conceito aprovado); no celular fica o texto actual.
+                if (TvUtils.isTv(this)) {
+                    binding.ctaContinue.text = getString(R.string.cta_continue_from_here)
+                }
                 binding.detailFooter.text = Format.watchedFooter(progress, pos)
                 return
             }
@@ -1198,6 +1225,36 @@ class DetailActivity : AppCompatActivity() {
             return
         }
         binding.chipProgress.text = "$pct% concluído"
+    }
+
+    /**
+     * R22 UI (conceito "detalhe TV") — linha do curso e barra grossa
+     * do painel esquerdo da TV: "N aulas · Z% concluído". As vistas
+     * só existem no layout-television (findViewById devolve null no
+     * celular = no-op). A fonte são os textos REAIS dos chips
+     * (contagem local/total unified + chip de progresso): a barra só
+     * recebe % quando o chip diz "concluído" ou "(parcial)" — "Em
+     * curso · N%" é o progresso parcial de UMA aula, não do curso,
+     * e "a calcular…" ainda não é número nenhum.
+     */
+    private fun syncTvCourseLine() {
+        val line = findViewById<TextView>(R.id.tvCourseLine) ?: return
+        val bar = findViewById<ProgressBar>(R.id.tvCourseProgress) ?: return
+        val count = binding.chipCount.text?.toString().orEmpty()
+        val progress = binding.chipProgress.text?.toString().orEmpty()
+        val aulas = count.substringBefore(" · ").trim()
+        line.text = when {
+            progress.isBlank() -> aulas
+            aulas.isBlank() -> progress
+            else -> "$aulas · $progress"
+        }
+        bar.progress = if (progress.contains("concluído") || progress.contains("(parcial)")) {
+            Regex("(\\d+)%").find(progress)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+        } else {
+            0
+        }
+        line.visibility = View.VISIBLE
+        bar.visibility = View.VISIBLE
     }
 
     // ──────────── Ronda 9 Frente B — Questões/Flashcards da aula ────────────
@@ -1362,26 +1419,29 @@ class DetailActivity : AppCompatActivity() {
             val out = ArrayList<DetailQuestion>()
             for (i in 0 until minOf(arr.length(), 10)) {
                 val o = arr.optJSONObject(i) ?: continue
-                val statement = o.optString("statement").takeIf { it.isNotBlank() }
-                    ?: o.optString("question").takeIf { it.isNotBlank() }
-                    ?: o.optString("q").takeIf { it.isNotBlank() }
+                // R22 — optString no Android devolve a string "null"
+                // p/ campos com null JSON: "null" nunca é conteúdo
+                // (ver AiService.optText).
+                val statement = o.optString("statement").takeIf { it.isNotBlank() && !it.equals("null", true) }
+                    ?: o.optString("question").takeIf { it.isNotBlank() && !it.equals("null", true) }
+                    ?: o.optString("q").takeIf { it.isNotBlank() && !it.equals("null", true) }
                     ?: continue
                 val options = ArrayList<String>()
                 val opts = o.optJSONArray("options")
                 if (opts != null) {
                     for (j in 0 until opts.length()) {
-                        opts.optString(j).takeIf { it.isNotBlank() }?.let { options.add(it) }
+                        opts.optString(j).takeIf { it.isNotBlank() && !it.equals("null", true) }?.let { options.add(it) }
                     }
                 }
                 val correctIndex = o.optInt("correct", -1)
                     .let { if (it in options.indices) it else -1 }
-                val answer = o.optString("correctText").takeIf { it.isNotBlank() }
-                    ?: o.optString("answer").takeIf { it.isNotBlank() }
+                val answer = o.optString("correctText").takeIf { it.isNotBlank() && !it.equals("null", true) }
+                    ?: o.optString("answer").takeIf { it.isNotBlank() && !it.equals("null", true) }
                     ?: if (correctIndex >= 0) options[correctIndex] else null
-                val explanation = o.optString("explanation").takeIf { it.isNotBlank() }
-                    ?: o.optString("fundamentacao").takeIf { it.isNotBlank() }
-                val legalText = o.optString("legalText").takeIf { it.isNotBlank() }
-                    ?: o.optString("legal_text").takeIf { it.isNotBlank() }
+                val explanation = o.optString("explanation").takeIf { it.isNotBlank() && !it.equals("null", true) }
+                    ?: o.optString("fundamentacao").takeIf { it.isNotBlank() && !it.equals("null", true) }
+                val legalText = o.optString("legalText").takeIf { it.isNotBlank() && !it.equals("null", true) }
+                    ?: o.optString("legal_text").takeIf { it.isNotBlank() && !it.equals("null", true) }
                 out.add(
                     DetailQuestion(statement, options, correctIndex, answer, explanation, legalText)
                 )
@@ -1430,10 +1490,12 @@ class DetailActivity : AppCompatActivity() {
         val out = ArrayList<DetailFlashcard>()
         for (i in 0 until minOf(arr.length(), 20)) {
             val o = arr.optJSONObject(i) ?: continue
-            val front = o.optString("f").takeIf { it.isNotBlank() }
-                ?: o.optString("front").takeIf { it.isNotBlank() } ?: continue
-            val back = o.optString("b").takeIf { it.isNotBlank() }
-                ?: o.optString("back").takeIf { it.isNotBlank() } ?: continue
+            // R22 — idem: frente/verso "null" (null JSON via
+            // optString) não é um cartão.
+            val front = o.optString("f").takeIf { it.isNotBlank() && !it.equals("null", true) }
+                ?: o.optString("front").takeIf { it.isNotBlank() && !it.equals("null", true) } ?: continue
+            val back = o.optString("b").takeIf { it.isNotBlank() && !it.equals("null", true) }
+                ?: o.optString("back").takeIf { it.isNotBlank() && !it.equals("null", true) } ?: continue
             out.add(DetailFlashcard(front, back))
         }
         return out
@@ -1447,7 +1509,9 @@ class DetailActivity : AppCompatActivity() {
             .filter { it.isNotEmpty() && !it.startsWith("#") }
             .map { it.removePrefix("- ").removePrefix("* ").removePrefix("• ").trim() }
             .map { it.replace(Regex("^\\d+[.)]\\s+"), "").trim() }
-            .filter { it.isNotEmpty() }
+            // R22 — item "null" é ausência (ficheiros antigos /
+            // mindmap nulo serializado), nunca uma pílula.
+            .filter { it.isNotEmpty() && !it.equals("null", ignoreCase = true) }
             .take(20)
     }
 
@@ -1794,6 +1858,7 @@ class DetailActivity : AppCompatActivity() {
             prefetchDone = true
             // Última palavra do chip: completo, ou "(parcial)" no tecto.
             updateProgressChip(allFiles)
+            syncTvCourseLine()
         }
     }
 
@@ -1807,6 +1872,7 @@ class DetailActivity : AppCompatActivity() {
         // Ronda 15 Frente B (B3): o prefetch (ou um expandir) entregou
         // filhos — o chip do hero pode sair de "a calcular…".
         updateProgressChip(allFiles)
+        syncTvCourseLine()
         restoreDetailFocus(snap)
     }
 
@@ -1830,6 +1896,7 @@ class DetailActivity : AppCompatActivity() {
         // Ronda 15 Frente B (B3): o prefetch entregou filhos — o chip
         // do hero pode sair de "a calcular…".
         updateProgressChip(allFiles)
+        syncTvCourseLine()
         // Ronda 18 Frente C (F3) — o prefetch é uma conclusão
         // assíncrona: sem grupos re-ligados não há nada a repor e
         // não se agenda post{} nenhum.

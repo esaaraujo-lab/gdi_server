@@ -16,6 +16,7 @@ import com.meggy.app.util.CardGradient
 import com.meggy.app.util.FocusAnimator
 import com.meggy.app.util.TapFeedback
 import com.meggy.app.util.Format
+import com.meggy.app.util.LessonDescription
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.ThumbArt
 import com.meggy.app.util.LibraryCovers
@@ -155,7 +156,12 @@ class FlatLessonAdapter(
         val sm = SessionManager.get(ctx)
 
         with(vh.binding) {
-            flatTitle.text = item.name
+            // R22 — regra do site p/ o nome da aula: ficheiro
+            // genérico ("video.mp4") mostra o nome da pasta da aula;
+            // nome real fica intacto.
+            flatTitle.text = LessonDescription.displayNameForLesson(
+                item.name, LessonDescription.folderNameFromPath(folderPath)
+            ) ?: item.name
             flatThumbBg.background = CardGradient.drawable(res, colorFromString(item.name))
 
             // v2.7.11 onda 2 + camada (3) ESTRITA (2.7.13, sem 'geral')

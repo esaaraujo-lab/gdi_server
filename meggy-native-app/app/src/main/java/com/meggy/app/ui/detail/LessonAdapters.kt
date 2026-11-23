@@ -17,6 +17,7 @@ import com.meggy.app.util.CardGradient
 import com.meggy.app.util.FocusAnimator
 import com.meggy.app.util.TapFeedback
 import com.meggy.app.util.Format
+import com.meggy.app.util.LessonDescription
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.ThumbArt
 import com.meggy.app.util.LibraryCovers
@@ -359,12 +360,28 @@ class LessonListAdapter(
                     item.isFolder -> "📁"
                     else -> "•"
                 }
-                b.childTitle.text = item.name
+                // R22 — regra do site p/ o nome da aula: ficheiro
+                // genérico ("video.mp4") mostra o nome da pasta do
+                // grupo; nome real fica intacto.
+                b.childTitle.text = LessonDescription.displayNameForLesson(
+                    item.name, row.group.folder.name
+                ) ?: item.name
                 b.childMeta.text = when {
                     item.isVideo -> {
                         val pos = sm.getResume(row.group.folderPath, item.name)
                         val dur = sm.getResumeDuration(row.group.folderPath, item.name)
-                        if (dur > 0) "Vídeo — ${Format.mmss(dur)}" else "Vídeo"
+                        // R22 UI: estado real da aula na meta — "✓
+                        // Assistida" nas vistas e "Continuar MM:SS de
+                        // MM:SS" na retoma (conceito da TV; a meta é
+                        // partilhada e o dado é o mesmo nos 2 formatos).
+                        when {
+                            sm.isWatched(row.group.folderPath, item.name) ->
+                                if (dur > 0) "✓ Assistida — ${Format.mmss(dur)}" else "✓ Assistida"
+                            pos > 0 && dur > 0 ->
+                                "Continuar ${Format.mmss(pos)} de ${Format.mmss(dur)}"
+                            dur > 0 -> "Vídeo — ${Format.mmss(dur)}"
+                            else -> "Vídeo"
+                        }
                     }
                     item.isAudio -> "Áudio"
                     item.isPdf -> "PDF · ${item.humanSize}"
@@ -374,6 +391,27 @@ class LessonListAdapter(
                         if (count >= 0) "Pasta de PDFs — $count arquivos" else "Pasta de PDFs"
                     }
                     else -> item.humanSize
+                }
+                // R22 UI (conceito "detalhe TV"): na TV, a linha da
+                // aula em retoma (posição > 0, ainda não assistida)
+                // ganha o destaque em gradiente rosa-violeta com texto
+                // claro; as outras linhas repõem o fundo e as cores
+                // por omissão (a vista é reciclada). No celular, nada
+                // muda (só a meta enriquecida acima, dado real).
+                if (TvUtils.isTv(holder.itemView.context)) {
+                    val ctx = holder.itemView.context
+                    val isResumeRow = item.isVideo &&
+                        !sm.isWatched(row.group.folderPath, item.name) &&
+                        sm.getResume(row.group.folderPath, item.name) > 0
+                    if (isResumeRow) {
+                        holder.itemView.setBackgroundResource(R.drawable.gradient_resume_row)
+                        b.childTitle.setTextColor(ctx.getColor(R.color.md_on_primary))
+                        b.childMeta.setTextColor(ctx.getColor(R.color.md_on_primary))
+                    } else {
+                        holder.itemView.setBackgroundColor(ctx.getColor(R.color.md_surface_container))
+                        b.childTitle.setTextColor(ctx.getColor(R.color.md_on_surface))
+                        b.childMeta.setTextColor(ctx.getColor(R.color.md_on_surface_variant))
+                    }
                 }
             }
         }
