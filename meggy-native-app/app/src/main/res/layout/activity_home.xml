@@ -56,8 +56,8 @@
 
                 <ImageView
                     android:id="@+id/homeSearchBtn"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    android:layout_width="@dimen/button_height"
+                    android:layout_height="@dimen/button_height"
                     android:layout_marginEnd="4dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:clickable="true"
@@ -75,10 +75,77 @@
                     android:focusable="true"
                     android:background="@drawable/focus_ring_transparent"
                     android:focusableInTouchMode="true"
+                    android:minHeight="@dimen/button_height"
+                    android:gravity="center_vertical"
                     android:padding="@dimen/spacing_sm"
                     android:text="@string/home_logout"
                     android:textColor="@color/md_primary"
                     android:textSize="@dimen/text_topbar_action" />
+            </LinearLayout>
+
+            <!-- 2.7.41 (P1-13) — estados de carregamento/erro da home:
+                 o conteúdo é local e monta depressa; o carregamento
+                 cobre o 1.º desenho e o erro só aparece quando não há
+                 nada local (sem recentes nem favoritos) E os destaques
+                 falharam (ver HomeActivity.updateHomeStateViews). -->
+            <LinearLayout
+                android:id="@+id/homeLoading"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:orientation="vertical">
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="180dp"
+                    android:background="@drawable/skeleton_block" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="16dp"
+                    android:layout_marginTop="@dimen/spacing_md"
+                    android:background="@drawable/skeleton_block" />
+
+                <View
+                    android:layout_width="180dp"
+                    android:layout_height="12dp"
+                    android:layout_marginTop="@dimen/spacing_sm"
+                    android:background="@drawable/skeleton_block" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="@dimen/spacing_md"
+                    android:text="@string/home_loading"
+                    android:textColor="@color/md_on_surface_variant"
+                    android:textSize="@dimen/text_card_subtitle" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/homeError"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:gravity="center_horizontal"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:text="@string/home_error"
+                    android:textColor="@color/md_on_surface_variant"
+                    android:textSize="@dimen/text_card_subtitle" />
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/homeRetry"
+                    style="@style/Widget.Meggy.Button.Primary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_md"
+                    android:text="@string/browse_retry" />
             </LinearLayout>
 
             <!-- Hero -->
@@ -189,7 +256,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/continue_watching"
+                    android:text="@string/continue_from_where"
                     android:textColor="@color/md_on_surface"
                     android:textSize="@dimen/text_section_title"
                     android:textStyle="bold" />

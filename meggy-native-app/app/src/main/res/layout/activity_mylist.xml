@@ -91,7 +91,7 @@
                 <TextView
                     android:id="@+id/tabCourses"
                     android:layout_width="wrap_content"
-                    android:layout_height="@dimen/chip_height"
+                    android:layout_height="@dimen/chip_height_interactive"
                     android:layout_marginEnd="@dimen/spacing_sm"
                     android:background="@drawable/btn_primary_pill"
                     android:clickable="true"
@@ -106,7 +106,7 @@
                 <TextView
                     android:id="@+id/tabFiles"
                     android:layout_width="wrap_content"
-                    android:layout_height="@dimen/chip_height"
+                    android:layout_height="@dimen/chip_height_interactive"
                     android:layout_marginEnd="@dimen/spacing_sm"
                     android:background="@drawable/chip_outline"
                     android:clickable="true"
@@ -120,7 +120,7 @@
                 <TextView
                     android:id="@+id/tabConcursos"
                     android:layout_width="wrap_content"
-                    android:layout_height="@dimen/chip_height"
+                    android:layout_height="@dimen/chip_height_interactive"
                     android:background="@drawable/chip_outline"
                     android:clickable="true"
                     android:focusable="true"

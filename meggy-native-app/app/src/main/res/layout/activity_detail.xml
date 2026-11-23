@@ -119,6 +119,7 @@
                         android:id="@+id/heroFav"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:minHeight="@dimen/button_height"
                         android:layout_gravity="top|end"
                         android:layout_margin="@dimen/spacing_sm"
                         android:background="@drawable/badge_resume"
@@ -237,6 +238,7 @@
 
                 <LinearLayout
                     android:id="@+id/tabResumo"
+                    android:minHeight="@dimen/tab_height"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
@@ -270,6 +272,7 @@
 
                 <LinearLayout
                     android:id="@+id/tabAulas"
+                    android:minHeight="@dimen/tab_height"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
@@ -303,6 +306,7 @@
 
                 <LinearLayout
                     android:id="@+id/tabQuestoes"
+                    android:minHeight="@dimen/tab_height"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
@@ -336,6 +340,7 @@
 
                 <LinearLayout
                     android:id="@+id/tabFlashcards"
+                    android:minHeight="@dimen/tab_height"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
@@ -579,6 +584,15 @@
                     android:text="@string/no_questions"
                     android:textColor="@color/md_on_surface_variant"
                     android:textSize="@dimen/text_detail_body" />
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/questoesGenerate"
+                    style="@style/Widget.Meggy.Button.Primary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_md"
+                    android:text="@string/materials_generate_questions"
+                    android:visibility="gone" />
             </LinearLayout>
 
             <!-- Painel: Flashcards -->
@@ -597,6 +611,15 @@
                     android:text="@string/no_flashcards"
                     android:textColor="@color/md_on_surface_variant"
                     android:textSize="@dimen/text_detail_body" />
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/flashcardsGenerate"
+                    style="@style/Widget.Meggy.Button.Primary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_md"
+                    android:text="@string/materials_generate_flashcards"
+                    android:visibility="gone" />
             </LinearLayout>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>

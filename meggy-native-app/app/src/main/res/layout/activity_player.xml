@@ -308,7 +308,7 @@
                     android:id="@+id/btn_rest_bar"
                     android:contentDescription="@string/cd_rest_mode"
                     android:layout_width="wrap_content"
-                    android:layout_height="40dp"
+                    android:layout_height="@dimen/button_height"
                     android:layout_marginEnd="@dimen/spacing_sm"
                     android:background="@drawable/player_chip_bg"
                     android:clickable="true"
@@ -324,7 +324,7 @@
                     android:id="@+id/btn_speed_bar"
                     android:contentDescription="@string/cd_speed"
                     android:layout_width="wrap_content"
-                    android:layout_height="40dp"
+                    android:layout_height="@dimen/button_height"
                     android:layout_marginEnd="@dimen/spacing_sm"
                     android:background="@drawable/player_chip_bg"
                     android:clickable="true"
@@ -464,7 +464,7 @@
                         android:id="@+id/btn_speed_info"
                         android:contentDescription="@string/cd_speed"
                         android:layout_width="wrap_content"
-                        android:layout_height="40dp"
+                        android:layout_height="@dimen/button_height"
                         android:background="@drawable/player_chip_bg"
                         android:clickable="true"
                         android:focusable="true"
@@ -480,7 +480,7 @@
                         android:id="@+id/btn_rest_info"
                         android:contentDescription="@string/cd_rest_mode"
                         android:layout_width="wrap_content"
-                        android:layout_height="40dp"
+                        android:layout_height="@dimen/button_height"
                         android:layout_marginStart="@dimen/spacing_sm"
                         android:background="@drawable/player_chip_bg"
                         android:clickable="true"
@@ -496,7 +496,7 @@
                         android:id="@+id/btn_fullscreen"
                         android:contentDescription="@string/cd_fullscreen"
                         android:layout_width="48dp"
-                        android:layout_height="40dp"
+                        android:layout_height="@dimen/button_height"
                         android:layout_marginStart="@dimen/spacing_sm"
                         android:background="@drawable/player_chip_bg"
                         android:clickable="true"
@@ -562,7 +562,16 @@
                  Próxima em gradiente à direita; barra fina por baixo.
                  Os ids btn_prev/btn_next e os listeners são os mesmos;
                  os ids novos (lesson_progress_*) só existem neste
-                 layout — o código lê-os por findViewById nullable. -->
+                 layout — o código lê-os por findViewById nullable.
+                 R22 fix (Elton 2026-11-23 19:54): o texto "PRÓXIMA
+                 AULA" transbordava da pílula — o AppCompatButton põe
+                 textAllCaps=true por omissão (o rótulo em maiúsculas
+                 é ~20% mais largo) e a altura era 44dp, abaixo do
+                 mínimo M3 de 48dp. Agora: sentence case (M3 Label
+                 Large, 14sp), wrap_content com minWidth, padding
+                 horizontal explícito, 48dp de altura, maxLines=1 com
+                 ellipsize de rede de segurança; o texto de progresso
+                 (weight 1) é quem cede espaço, nunca os botões. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -585,24 +594,34 @@
                     android:id="@+id/btn_prev"
                     android:contentDescription="@string/cd_prev_lesson"
                     android:layout_width="wrap_content"
-                    android:layout_height="44dp"
+                    android:layout_height="48dp"
                     android:layout_marginEnd="@dimen/spacing_sm"
                     android:background="@drawable/chip_outline"
+                    android:ellipsize="end"
                     android:focusable="true"
+                    android:maxLines="1"
+                    android:minWidth="88dp"
+                    android:paddingHorizontal="16dp"
                     android:text="← Anterior"
+                    android:textAllCaps="false"
                     android:textColor="@color/md_on_surface"
-                    android:textSize="13sp" />
+                    android:textSize="@dimen/text_button" />
 
                 <androidx.appcompat.widget.AppCompatButton
                     android:id="@+id/btn_next"
                     android:contentDescription="@string/cd_next_lesson"
                     android:layout_width="wrap_content"
-                    android:layout_height="44dp"
+                    android:layout_height="48dp"
                     android:background="@drawable/gradient_cta_pill"
+                    android:ellipsize="end"
                     android:focusable="true"
+                    android:maxLines="1"
+                    android:minWidth="120dp"
+                    android:paddingHorizontal="20dp"
                     android:text="Próxima aula →"
+                    android:textAllCaps="false"
                     android:textColor="@color/md_on_primary"
-                    android:textSize="13sp"
+                    android:textSize="@dimen/text_button"
                     android:textStyle="bold" />
             </LinearLayout>
 
@@ -672,6 +691,28 @@
                     android:textSize="@dimen/text_card_subtitle"
                     android:visibility="gone" />
 
+                <!-- 2.7.41 (P1-2) — a secção vazia ganha acção: gera o
+                     resumo quando a pasta tem ficheiros legíveis
+                     (ver PlayerActivity.showMaterialsEmpty); sem eles,
+                     fica só o texto acima. Vive FORA de
+                     materials_content (que aqui está escondido). -->
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/materials_empty_generate"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/gradient_cta_pill"
+                    android:focusable="true"
+                    android:maxLines="1"
+                    android:minWidth="120dp"
+                    android:paddingHorizontal="24dp"
+                    android:text="@string/materials_generate_summary"
+                    android:textAllCaps="false"
+                    android:textColor="@color/md_on_primary"
+                    android:textSize="@dimen/text_button"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
                 <!-- Erro + tentar de novo -->
                 <LinearLayout
                     android:id="@+id/materials_error"
@@ -732,6 +773,10 @@
                             android:clickable="true"
                             android:focusable="true"
                             android:gravity="center"
+                            android:maxLines="1"
+                            android:ellipsize="end"
+                            android:minHeight="@dimen/tab_height"
+                            android:paddingHorizontal="4dp"
                             android:paddingVertical="10dp"
                             android:text="@string/tab_summary"
                             android:textSize="@dimen/text_card_subtitle"
@@ -745,6 +790,10 @@
                             android:clickable="true"
                             android:focusable="true"
                             android:gravity="center"
+                            android:maxLines="1"
+                            android:ellipsize="end"
+                            android:minHeight="@dimen/tab_height"
+                            android:paddingHorizontal="4dp"
                             android:paddingVertical="10dp"
                             android:text="@string/tab_pills"
                             android:textSize="@dimen/text_card_subtitle"
@@ -758,6 +807,10 @@
                             android:clickable="true"
                             android:focusable="true"
                             android:gravity="center"
+                            android:maxLines="1"
+                            android:ellipsize="end"
+                            android:minHeight="@dimen/tab_height"
+                            android:paddingHorizontal="4dp"
                             android:paddingVertical="10dp"
                             android:text="@string/tab_questions"
                             android:textSize="@dimen/text_card_subtitle"
@@ -771,6 +824,10 @@
                             android:clickable="true"
                             android:focusable="true"
                             android:gravity="center"
+                            android:maxLines="1"
+                            android:ellipsize="end"
+                            android:minHeight="@dimen/tab_height"
+                            android:paddingHorizontal="4dp"
                             android:paddingVertical="10dp"
                             android:text="@string/tab_flashcards"
                             android:textSize="@dimen/text_card_subtitle"
@@ -793,6 +850,26 @@
                         android:textColor="@color/md_on_surface_variant"
                         android:textSize="@dimen/text_card_subtitle"
                         android:visibility="gone" />
+
+                    <!-- R22 — estado vazio com acção: gera o pacote
+                         (resumo + pílulas + questões) pelo fluxo
+                         existente; ver PlayerActivity.generateMaterials. -->
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/materials_summary_generate"
+                        android:visibility="gone"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/gradient_cta_pill"
+                        android:focusable="true"
+                        android:maxLines="1"
+                        android:minWidth="120dp"
+                        android:paddingHorizontal="24dp"
+                        android:text="@string/materials_generate_summary"
+                        android:textAllCaps="false"
+                        android:textColor="@color/md_on_primary"
+                        android:textSize="@dimen/text_button"
+                        android:textStyle="bold" />
 
                     <!-- Resumo -->
                     <LinearLayout
@@ -854,6 +931,23 @@
                             android:textSize="@dimen/text_card_subtitle"
                             android:visibility="gone" />
 
+                        <androidx.appcompat.widget.AppCompatButton
+                            android:id="@+id/materials_pills_generate"
+                            android:visibility="gone"
+                            android:layout_width="wrap_content"
+                            android:layout_height="48dp"
+                            android:layout_marginTop="12dp"
+                            android:background="@drawable/gradient_cta_pill"
+                            android:focusable="true"
+                            android:maxLines="1"
+                            android:minWidth="120dp"
+                            android:paddingHorizontal="24dp"
+                            android:text="@string/materials_generate_pills"
+                            android:textAllCaps="false"
+                            android:textColor="@color/md_on_primary"
+                            android:textSize="@dimen/text_button"
+                            android:textStyle="bold" />
+
                         <LinearLayout
                             android:id="@+id/materials_pills_list"
                             android:layout_width="match_parent"
@@ -878,6 +972,23 @@
                             android:textColor="@color/md_on_surface_variant"
                             android:textSize="@dimen/text_card_subtitle"
                             android:visibility="gone" />
+
+                        <androidx.appcompat.widget.AppCompatButton
+                            android:id="@+id/materials_questions_generate"
+                            android:visibility="gone"
+                            android:layout_width="wrap_content"
+                            android:layout_height="48dp"
+                            android:layout_marginTop="12dp"
+                            android:background="@drawable/gradient_cta_pill"
+                            android:focusable="true"
+                            android:maxLines="1"
+                            android:minWidth="120dp"
+                            android:paddingHorizontal="24dp"
+                            android:text="@string/materials_generate_questions"
+                            android:textAllCaps="false"
+                            android:textColor="@color/md_on_primary"
+                            android:textSize="@dimen/text_button"
+                            android:textStyle="bold" />
 
                         <LinearLayout
                             android:id="@+id/materials_questions_list"
@@ -904,6 +1015,25 @@
                             android:textColor="@color/md_on_surface_variant"
                             android:textSize="@dimen/text_card_subtitle"
                             android:visibility="gone" />
+
+                        <!-- Gera o pacote (os flashcards derivam das
+                             pílulas/questões — não há geração só deles). -->
+                        <androidx.appcompat.widget.AppCompatButton
+                            android:id="@+id/materials_flashcards_generate"
+                            android:visibility="gone"
+                            android:layout_width="wrap_content"
+                            android:layout_height="48dp"
+                            android:layout_marginTop="12dp"
+                            android:background="@drawable/gradient_cta_pill"
+                            android:focusable="true"
+                            android:maxLines="1"
+                            android:minWidth="120dp"
+                            android:paddingHorizontal="24dp"
+                            android:text="@string/materials_generate_flashcards"
+                            android:textAllCaps="false"
+                            android:textColor="@color/md_on_primary"
+                            android:textSize="@dimen/text_button"
+                            android:textStyle="bold" />
 
                         <LinearLayout
                             android:id="@+id/materials_flashcards_list"

@@ -166,7 +166,7 @@
                 <androidx.appcompat.widget.AppCompatButton
                     android:id="@+id/btnAddSubfolderCover"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+                    android:layout_height="@dimen/button_height"
                     android:layout_marginTop="@dimen/spacing_sm"
                     android:background="@drawable/chip_outline"
                     android:focusable="true"

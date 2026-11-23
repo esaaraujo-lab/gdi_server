@@ -114,7 +114,7 @@
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/mylistContinue"
             android:layout_width="wrap_content"
-            android:layout_height="40dp"
+            android:layout_height="@dimen/button_height"
             android:layout_marginTop="@dimen/spacing_sm"
             android:background="@drawable/btn_primary_pill"
             android:paddingHorizontal="@dimen/spacing_lg"
@@ -127,8 +127,8 @@
 
     <TextView
         android:id="@+id/mylistFav"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
+        android:layout_width="@dimen/button_height"
+        android:layout_height="@dimen/button_height"
         android:layout_gravity="top"
         android:background="@drawable/badge_resume"
         android:clickable="true"
