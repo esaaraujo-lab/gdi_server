@@ -634,7 +634,7 @@
         case 'config':    Shell._estudosView(main, 'config'); break;
         case 'simulado':  Shell.views.simulado(main); break;
         case 'provas':    Shell._estudosView(main, 'provas'); break;
-        case 'redacao':   Shell._estudosView(main, 'redacao'); break;
+        case 'redacao':   Shell.views.redacao(main); break;
         case 'cronograma':Shell._estudosView(main, 'cronograma'); break;
         case 'estatisticas':Shell._estudosView(main, 'estatisticas'); break;
         case 'mapa-fracos':Shell._estudosView(main, 'mapa-fracos'); break;
@@ -4885,6 +4885,102 @@
           subs.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; subjectSel.appendChild(o); });
           subjectSel.value = cur;
         })();
+      },
+
+      // ★ v2.15.75: a REDAÇÃO (vista de /redacao) — vista NATIVA da
+      //   shell. Antes, o router mandava p/ _estudosView, que pinta o
+      //   placeholder "Em breve."; o formulário a sério vivia só no
+      //   shell-bridge (renderRedacaoBridge), que intercepta o
+      //   _estudosView DEPOIS de carregar — na carga directa de
+      //   /redacao o placeholder podia ficar pintado sem re-render
+      //   (mesma classe do defeito do Simulado, corrigido na .71).
+      //   Esta vista chama POST /api/ai/redacao/correct-full (o mesmo
+      //   endpoint da bridge: texto, imagem com OCR, PDF extraído no
+      //   navegador via pdf.js) e inclui o campo TEMA (opcional) —
+      //   sem tema oficial não há detecção séria de fuga ao tema
+      //   (ENEM C2/C3). A bridge fica intacta (§3: sem duplicar — a
+      //   vista nova SUBSTITUI o caminho do router; a bridge continua
+      //   a servir as outras funções).
+      redacao(el) {
+        el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">✍️ Redação</h1></div>' +
+          '<div style="color:#9aa4b8;font-size:13px;margin-bottom:12px;">Correção completa com nota por banca. Cole o texto ou envie um arquivo — imagem/foto passa por OCR, PDF é extraído no navegador. No ENEM, a correção sai pelas 5 competências do INEP (0–200 cada, total /1000).</div>' +
+          '<div id="meggy-red-root"><div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando a redação...</div></div></div>';
+        Shell.views._renderRedacao(el);
+      },
+
+      async _renderRedacao(el) {
+        const root = el.querySelector('#meggy-red-root');
+        if (!root) return;
+        const esc = Shell.views._esc;
+        const SEL = 'background:rgba(255,255,255,.06);border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:8px 10px;font-size:13px;';
+        root.innerHTML = '<div style="max-width:720px;">' +
+          '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">' +
+            '<label style="font-size:12px;color:#9aa4b8;flex:1;min-width:180px;">Banca<br><select id="meggy-red-banca" style="' + SEL + 'width:100%;margin-top:4px;"><option>CEBRASPE (CESPE)</option><option>FGV</option><option>VUNESP</option><option>ENEM (5 competências)</option><option>FUVEST (dissertativa)</option><option value="default">Geral</option></select></label>' +
+            '<label style="font-size:12px;color:#9aa4b8;flex:1;min-width:140px;">Tipo<br><select id="meggy-red-tipo" style="' + SEL + 'width:100%;margin-top:4px;"><option>dissertativa</option><option>argumentativa</option><option>narrativa</option><option>carta</option></select></label>' +
+          '</div>' +
+          '<label style="font-size:12px;color:#9aa4b8;display:block;margin-bottom:12px;">Tema da redação (opcional)<br><input id="meggy-red-tema" type="text" placeholder="Ex.: Desafios da desinformação na era digital" style="' + SEL + 'width:100%;margin-top:4px;box-sizing:border-box;"></label>' +
+          '<div style="font-size:11px;color:#6b7488;margin:-6px 0 12px;">Com o tema oficial, a Meggy detecta fuga ao tema (no ENEM conta nas competências C2 e C3). Sem tema, ela identifica o tema a partir do texto.</div>' +
+          '<textarea id="meggy-red-text" rows="10" placeholder="Cole aqui a sua redação (mín. 50 caracteres)..." style="width:100%;background:rgba(255,255,255,.06);border:1px solid #30363d;border-radius:8px;color:#e6edf3;padding:12px;font-size:14px;line-height:1.6;box-sizing:border-box;"></textarea>' +
+          '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0;">' +
+            '<label class="meggy-header-btn" style="cursor:pointer;">📎 Enviar arquivo<input id="meggy-red-file" type="file" accept=".txt,.md,image/*,.pdf" style="display:none;"></label>' +
+            '<span id="meggy-red-filename" style="font-size:12px;color:#9aa4b8;"></span>' +
+            '<button id="meggy-red-go" class="meggy-header-btn" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;">Corrigir redação</button>' +
+          '</div>' +
+          '<p style="font-size:12px;color:#9aa4b8;">A correção é salva na pasta <code>redacoes/</code> do Drive.</p>' +
+          '<div id="meggy-red-out"></div></div>';
+        const fileInput = root.querySelector('#meggy-red-file');
+        const fileNameEl = root.querySelector('#meggy-red-filename');
+        fileInput.addEventListener('change', () => {
+          fileNameEl.textContent = fileInput.files && fileInput.files[0] ? 'Arquivo: ' + fileInput.files[0].name : '';
+        });
+        root.querySelector('#meggy-red-go').addEventListener('click', async () => {
+          const out = root.querySelector('#meggy-red-out');
+          const banca = root.querySelector('#meggy-red-banca').value;
+          const tipo = root.querySelector('#meggy-red-tipo').value;
+          const tema = root.querySelector('#meggy-red-tema').value.trim();
+          let text = root.querySelector('#meggy-red-text').value.trim();
+          const file = fileInput.files && fileInput.files[0];
+          out.innerHTML = '<div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Corrigindo... (pode levar até ~90s)</div></div>';
+          try {
+            let resp;
+            if (file && file.type === 'application/pdf') {
+              if (!window.pdfjsLib) throw new Error('PDF: o pdf.js não está carregado nesta página. Cole o texto da redação no campo acima.');
+              const buf = await file.arrayBuffer();
+              const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+              const parts = [];
+              for (let p = 1; p <= Math.min(pdf.numPages, 30) && parts.join('\n').length < 30000; p++) {
+                const pg = await pdf.getPage(p);
+                const tc = await pg.getTextContent();
+                parts.push(tc.items.map((it) => it.str).join(' '));
+              }
+              try { pdf.destroy(); } catch (_) {}
+              text = parts.join('\n\n').trim();
+              if (text.length < 50) throw new Error('Não consegui extrair texto suficiente deste PDF. Cole o texto no campo acima.');
+              resp = await fetch('/api/ai/redacao/correct-full', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text, banca: banca, tipo: tipo, tema: tema }) });
+            } else if (file) {
+              const fd = new FormData();
+              fd.append('file', file);
+              fd.append('banca', banca);
+              fd.append('tipo', tipo);
+              if (tema) fd.append('tema', tema);
+              resp = await fetch('/api/ai/redacao/correct-full', { method: 'POST', body: fd });
+            } else {
+              if (text.length < 50) throw new Error('Texto muito curto (mín. 50 caracteres).');
+              resp = await fetch('/api/ai/redacao/correct-full', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text, banca: banca, tipo: tipo, tema: tema }) });
+            }
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok || !data.ok) throw new Error((data && data.error) || ('HTTP ' + resp.status));
+            let mdHtml = '';
+            try { await Shell._ensureMdLibs(); mdHtml = Shell._renderMd(data.correction || ''); } catch (_) { mdHtml = '<pre style="white-space:pre-wrap;">' + esc(data.correction || '') + '</pre>'; }
+            out.innerHTML = '<div style="margin-top:8px;padding:16px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:12px;">' +
+              '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;"><span style="font-size:18px;">📝 Nota: <b style="color:#5ddeda;">' + esc(data.score) + '</b></span>' +
+              (data.ocrUsed ? '<span style="font-size:12px;color:#9aa4b8;">· OCR usado</span>' : '') +
+              (data.saved ? '<span style="font-size:12px;color:#9aa4b8;">· salvo em redacoes/</span>' : '<span style="font-size:12px;color:#ffb86b;">· não salvo no Drive</span>') + '</div>' +
+              '<div class="gdi-isa-summary-body">' + mdHtml + '</div></div>';
+          } catch (e) {
+            out.innerHTML = '<div class="meggy-placeholder"><div class="meggy-placeholder-title">Falha na correção</div><div class="meggy-placeholder-desc">' + esc(e && e.message || e) + '</div></div>';
+          }
+        });
       },
 
       _showQuiz(el, entry) {
