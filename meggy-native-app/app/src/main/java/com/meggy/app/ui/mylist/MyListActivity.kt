@@ -7,8 +7,10 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.lifecycle.lifecycleScope
 import com.meggy.app.MeggyApp
 import com.meggy.app.R
+import com.meggy.app.data.ApiService
 import com.meggy.app.data.DriveItem
 import com.meggy.app.data.FileItem
 import com.meggy.app.databinding.ActivityMylistBinding
@@ -25,6 +27,7 @@ import com.meggy.app.util.PlaylistManager
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.TapFeedback
 import com.meggy.app.util.TvUtils
+import kotlinx.coroutines.launch
 
 /**
  * v2.7.6 — Minha lista (conceito Minha lista).
@@ -113,6 +116,17 @@ class MyListActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         loadFavorites()
+        // R21: totais reais dos cursos (GET /api/courses/unified,
+        // cache de 5 min no ApiService) para a progressão dos cartões
+        // da Minha Lista — best-effort: sem resposta, os cartões
+        // ficam como estavam (sem linha de progresso).
+        lifecycleScope.launch {
+            val totals = ApiService(this@MyListActivity).getUnifiedCourseTotals()
+            if (totals != null && totals != courseAdapter.courseTotals) {
+                courseAdapter.courseTotals = totals
+                courseAdapter.notifyDataSetChanged()
+            }
+        }
     }
 
     private fun selectTab(tab: Tab) {

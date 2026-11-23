@@ -9,6 +9,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
+import com.meggy.app.data.ApiService
 import com.meggy.app.data.colorFromString
 import com.meggy.app.databinding.ItemMylistCardBinding
 import com.meggy.app.util.CardGradient
@@ -32,6 +33,15 @@ class MyListCourseAdapter(
     private val onCourse: (SessionManager.FavCourse) -> Unit,
     private val onRemove: (SessionManager.FavCourse) -> Unit = {}
 ) : ListAdapter<SessionManager.FavCourse, MyListCourseAdapter.VH>(DIFF) {
+
+    // R21 — maior posição já animada neste adapter (ver onBindViewHolder).
+    private var lastAnimatedPosition = -1
+
+    // R21 — totais reais por curso (GET /api/courses/unified via
+    // ApiService; chave normalizada de ApiService.normalizeCourseKey).
+    // Vazio = sem dados: a linha de progresso fica escondida, como antes.
+    var courseTotals: Map<String, Int> = emptyMap()
+
 
     inner class VH(val binding: ItemMylistCardBinding) : RecyclerView.ViewHolder(binding.root) {
         init {
@@ -83,9 +93,22 @@ class MyListCourseAdapter(
                 mylistMonogram.visibility = View.GONE
                 mylistThumb.setImageResource(coverRes)
             }
-            // Sem progresso por curso (não há agregado local); o
-            // progresso vive por aula dentro do detalhe.
-            mylistProgressRow.visibility = View.GONE
+            // R21: progresso do curso quando o total REAL é
+            // conhecido (unified): assistidas locais (SessionManager)
+            // sobre o total do servidor — alinha com a PROG-1 (a
+            // progressão visível nos cartões). Sem total conhecido, a
+            // linha fica escondida: nunca um % inventado.
+            val courseTotal = ApiService.unifiedTotalFor(courseTotals, course.drivePath)
+            if (courseTotal != null && courseTotal > 0) {
+                val watched = SessionManager.get(ctx).watchedCountUnder(course.drivePath)
+                val pct = (watched * 100 / courseTotal).coerceIn(0, 100)
+                mylistProgressRow.visibility = View.VISIBLE
+                mylistProgress.progress = pct
+                mylistProgressText.text = "$watched/$courseTotal aulas · $pct%"
+                mylistMeta.text = "Curso salvo · $pct% concluído"
+            } else {
+                mylistProgressRow.visibility = View.GONE
+            }
             mylistContinue.visibility = View.VISIBLE
             mylistContinue.setOnClickListener { onCourse(course) }
 
@@ -96,9 +119,13 @@ class MyListCourseAdapter(
             }
         }
 
-        val anim = AnimationUtils.loadAnimation(ctx, android.R.anim.fade_in)
-        anim.startOffset = (position % 12) * 40L
-        holder.binding.root.startAnimation(anim)
+        // R21: idem — animação só na primeira aparição da posição.
+        if (position > lastAnimatedPosition) {
+            lastAnimatedPosition = position
+            val anim = AnimationUtils.loadAnimation(ctx, android.R.anim.fade_in)
+            anim.startOffset = (position % 12) * 40L
+            holder.binding.root.startAnimation(anim)
+        }
     }
 
     companion object {
