@@ -116,6 +116,67 @@ object LessonDescription {
     )
     private val HAS_LETTER_REGEX = Regex("[A-Za-zÀ-ÿ]")
 
+    // ───────── R22 — nome de exibição da aula (paridade com o site) ─────────
+    //
+    // Regra do site (shell.js, _v215LessonNameIsGeneric +
+    // updateLessonDescription): quando o nome do FICHEIRO é genérico
+    // ("video.mp4", "001 - aula.mp4", "Aula 03"), o nome apresentado
+    // da aula é o nome da PASTA; o nome da pasta usa-se tal e qual
+    // (só descodificado). A app mostrava o nome cru do ficheiro no
+    // cabeçalho do player e nas listas ("video.mp4" no print do
+    // Elton, 2026-11-23 18:46) — passa a aplicar a MESMA regra.
+    // Nomes de ficheiro reais NÃO são tocados (nem limpos): a regra
+    // só troca o nome quando ele é genérico, como no site.
+
+    private val SITE_GENERIC_NUMBER_ONLY = Regex("^\\d+$")
+    private val SITE_GENERIC_NUMBERED = Regex(
+        "^\\d+\\s*[-–.]?\\s*(aula|video|lesson|capitulo|parte|material)?$"
+    )
+    private val SITE_GENERIC_WORD = Regex(
+        "^(aula|video|lesson|capitulo|parte|material)(\\s+\\d+)?$"
+    )
+    private val ANY_EXTENSION_REGEX = Regex("\\.[A-Za-z0-9]+$")
+
+    /**
+     * Teste de nome genérico EXACTAMENTE como o do site
+     * (_v215LessonNameIsGeneric): sem extensão, minúsculas, sem
+     * acentos; genérico = vazio, só dígitos, "001"/"001 - aula" ou
+     * palavra-rotulo sozinha (aula/video/lesson/capitulo/parte/
+     * material, opcionalmente + número).
+     */
+    fun isGenericLessonFileName(name: String?): Boolean {
+        var base = (name ?: "").trim()
+        base = ANY_EXTENSION_REGEX.replace(base, "").trim().lowercase()
+        base = java.text.Normalizer.normalize(base, java.text.Normalizer.Form.NFD)
+            .replace(Regex("[\\u0300-\\u036f]"), "")
+        if (base.isEmpty()) return true
+        if (SITE_GENERIC_NUMBER_ONLY.matches(base)) return true
+        if (SITE_GENERIC_NUMBERED.matches(base)) return true
+        if (SITE_GENERIC_WORD.matches(base)) return true
+        return false
+    }
+
+    /** Nome da pasta a partir de um path (último segmento, descodificado). */
+    fun folderNameFromPath(path: String?): String? {
+        val seg = (path ?: "").split('/').filter { it.isNotBlank() }.lastOrNull()
+            ?: return null
+        val decoded = runCatching { android.net.Uri.decode(seg) }.getOrDefault(seg)
+        return decoded.trim().takeIf { it.isNotEmpty() }
+    }
+
+    /**
+     * Nome de exibição da aula: o nome do ficheiro quando é real;
+     * quando é genérico, o nome da pasta (regra do site). Sem pasta
+     * conhecida, fica o nome do ficheiro (comportamento anterior).
+     */
+    fun displayNameForLesson(fileName: String?, folderName: String?): String? {
+        val fn = fileName?.trim()?.takeIf { it.isNotEmpty() }
+        if (fn != null && !isGenericLessonFileName(fn)) return fn
+        val folder = folderName?.trim()?.takeIf { it.isNotEmpty() }
+        if (folder != null) return folder
+        return fn
+    }
+
     /** Tema do nome da aula, ou null quando o nome é genérico. */
     fun extractTopic(candidateName: String?): String? {
         if (candidateName.isNullOrBlank()) return null
