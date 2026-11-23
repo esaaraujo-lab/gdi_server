@@ -169,6 +169,7 @@ class SearchActivity : AppCompatActivity() {
 
         if (currentFilter == Filter.RESUMOS) {
             // Sem fonte de dados de resumos no app — estado vazio.
+            binding.emptyState.text = getString(R.string.search_resumos_empty)
             binding.emptyState.visibility = View.VISIBLE
             binding.recycler.visibility = View.GONE
             binding.resultsLabel.text = "Resumos"
@@ -227,6 +228,12 @@ class SearchActivity : AppCompatActivity() {
         }
 
         if (results.isEmpty()) {
+            // 2.7.41 (P1-14) — zero resultados de busca não é "Pasta
+            // vazia.": texto próprio; sem query, mantém-se o vazio
+            // genérico (sugestões sem nada para sugerir).
+            binding.emptyState.text = getString(
+                if (q.isNotBlank()) R.string.search_no_results else R.string.browse_empty
+            )
             binding.emptyState.visibility = View.VISIBLE
             binding.recycler.visibility = View.GONE
             binding.resultsLabel.text = if (q.isBlank()) "Sugestões" else "Nenhum resultado"
