@@ -283,6 +283,11 @@
             </select>
           </div>
         </div>
+        <div style="margin-bottom:12px;">
+          <label style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">Tema da redação (opcional)</label>
+          <input id="red-tema" type="text" placeholder="Ex.: Desafios da desinformação na era digital" style="${inp}width:100%;box-sizing:border-box;">
+          <div style="color:var(--ferreto-text-faint,#6b7488);font-size:11px;margin-top:4px;">Com o tema oficial, a Meggy detecta fuga ao tema (no ENEM, conta nas competências C2 e C3). Sem tema, ela identifica o tema a partir do texto.</div>
+        </div>
         <div id="red-dropzone" style="border:2px dashed var(--ferreto-border-strong,#30363d);border-radius:12px;padding:18px;text-align:center;cursor:pointer;transition:all .2s;background:var(--ferreto-surface-2,rgba(255,255,255,.03));margin-bottom:12px;">
           <i class="bi bi-cloud-arrow-up" style="font-size:28px;color:var(--ferreto-text-muted,#8b949e);"></i>
           <div style="color:var(--ferreto-text,#f0f6fc);font-size:13px;margin-top:6px;">Arraste uma imagem da redação escaneada ou <b style="color:var(--ferreto-primary,#ff8b9f);">clique para enviar</b></div>
@@ -298,7 +303,7 @@
       <div id="red-result"></div>
       ${corrections.length?`<h4 style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:18px 0 8px;">Correções anteriores (${corrections.length})</h4>
       <div style="display:flex;flex-direction:column;gap:6px;">${corrections.slice().reverse().slice(0,10).map(c=>`<div class="gdi-note" style="cursor:pointer;" data-id="${c.id}">
-        <span style="flex:1;"><b style="color:var(--ferreto-text,#f0f6fc);">${esc(c.banca)}</b> · <span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">${new Date(c.date).toLocaleDateString('pt-BR')} · Nota: ${c.score||'—'}${c.tipo? ' · '+esc(c.tipo):''}</span></span>
+        <span style="flex:1;"><b style="color:var(--ferreto-text,#f0f6fc);">${esc(c.banca)}</b> · <span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">${new Date(c.date).toLocaleDateString('pt-BR')} · Nota: ${c.score||'—'}${c.tipo? ' · '+esc(c.tipo):''}${c.tema? ' · Tema: '+esc(c.tema):''}</span></span>
       </div>`).join('')}</div>`:''}
     `;
     const dz=box.querySelector('#red-dropzone');
@@ -350,58 +355,26 @@
       status.innerHTML='<i class="bi bi-hourglass-split"></i> Meggy está corrigindo…';
       result.innerHTML='';
       try{
-        const bancaInfo={
-          'CEBRASPE (CESPE)':'CEBRASPE/CESPE usa escala 0-10. Critérios: adequação ao tema, estrutura textual, desenvolvimento de ideias, coesão e coerência, gramática. Desclassifica se fuga ao tema.',
-          'FGV':'FGV avalia: conteúdo (0-5), estrutura (0-3), linguagem (0-2). Total 0-10. Penaliza erros graves de português.',
-          'VUNESP':'VUNESP avalia: tema e conteúdo (0-4), estrutura e coesão (0-3), norma culta (0-3). Total 0-10.',
-          'FCC':'FCC avalia: adequação ao tema (0-3), estrutura e coesão (0-3), norma culta e clareza (0-4). Total 0-10.',
-          'CESGRANRIO':'CESGRANRIO avalia: atendimento ao tema (0-4), estrutura e coesão (0-3), norma culta (0-3). Total 0-10.',
-          'IBFC':'IBFC avalia: conteúdo e tema (0-4), estrutura e coesão (0-3), linguagem e norma culta (0-3). Total 0-10.',
-          'OAB':'OAB avalia: correção jurídica, estrutura argumentativa, clareza e objetividade, norma culta. Total 0-10.',
-          'FUJB':'FUJB avalia: adequação ao tema, coesão/coerência, norma culta, criatividade. Total 0-10.',
-          'TJ/SP':'TJ/SP (VUNESP): tema e conteúdo (0-4), estrutura (0-3), norma culta (0-3).',
-          'TRT':'TRT (CEBRASPE/FCC): mesma banca organizadora. Avalia tema, estrutura, gramática.',
-          'MPU':'MPU (CEBRASPE): escala 0-10. Adequação ao tema, estrutura, desenvolvimento, coesão, gramática.',
-          'TRE':'TRE (CEBRASPE): escala 0-10. Mesmos critérios CEBRASPE.',
-          'TCU':'TCU (CEBRASPE): escala 0-10. Mesmos critérios CEBRASPE.',
-          'PF/PRF':'PF/PRF (CEBRASPE): escala 0-10. Mesmos critérios CEBRASPE.',
-          'ENEM (5 competências)':'ENEM usa 5 competências (0-200 cada, total 0-1000): C1 Domínio norma culta, C2 Compreensão proposta, C3 Seleção/relação/organização argumentos, C4 Coesão, C5 Proposta de intervenção. Cada erro exclui 50 pontos por competência.',
-          'FUVEST (dissertativa)':'FUVEST dissertativa escala 0-100. Critérios: conteúdo (0-50), estrutura (0-30), linguagem (0-20).',
-          'UNICAMP':'UNICAMP avalia: tema e desenvolvimento, coesão e coerência, gramática e léxico, atendimento à proposta. Escala 0-100.',
-          'UNIFESP':'UNIFESP dissertativa escala 0-100. Conteúdo, estrutura, linguagem.',
-          'USP':'USP dissertativa escala 0-100. Conteúdo, estrutura, expressão.',
-          'ENEM Med':'ENEM + peso 5x para medicina. Critérios ENEM mas com exigência máxima.',
-          'UECE Med':'UECE dissertativa escala 0-10. Conteúdo, estrutura, linguagem.',
-          'UERJ Med':'UERJ dissertativa escala 0-100. Conteúdo, organização, linguagem.',
-          'UNESP Med':'UNESP dissertativa escala 0-100. Conteúdo, estrutura, expressão.',
-          'ITA':'ITA dissertativa escala 0-100. Conteúdo técnico-científico, estrutura, expressão.',
-          'IME':'IME dissertativa técnica. Conteúdo, estrutura, expressão. Escala 0-100.',
-          'UFRGS':'UFRGS dissertativa escala 0-100. Conteúdo, estrutura, expressão.',
-          'UFPR':'UFPR dissertativa escala 0-100. Conteúdo, estrutura, expressão.',
-          'UFSC':'UFSC dissertativa escala 0-100. Conteúdo, estrutura, expressão.',
-          'UFRJ':'UFRJ dissertativa escala 0-100. Conteúdo, estrutura, expressão.',
-          'PUC-SP':'PUC-SP dissertativa escala 0-100. Conteúdo, estrutura, expressão.',
-          'MACKENZIE':'MACKENZIE dissertativa escala 0-100. Conteúdo, estrutura, expressão.',
-          'Outra':'Critérios gerais de concurso público brasileiro.'
-        };
-        const criterios=bancaInfo[banca]||bancaInfo['Outra'];
-        const prompt='Você é um corretor de redações experiente. Corrija esta redação de banca: '+banca+' ('+tipo+').\n\nCRITÉRIOS DESTA BANCA: '+criterios+'\n\nINSTRUÇÕES:\n1. Avalie cada critério da banca com nota parcial (0-10 ou 0-200 conforme ENEM).\n2. Dê uma NOTA GERAL final.\n3. Para cada parágrafo, identifique: (a) problemas de conteúdo, (b) problemas gramaticais com a regra violada, (c) problemas de estrutura/coesão.\n4. Cite o trecho exato do aluno, depois comente.\n5. Dê sugestões concretas de reescrita.\n6. Identifique o tipo de redação automaticamente se foi marcado errado.\n7. Comente sobre adequação ao tema, argumentação, coesão, coerência, norma culta.\n\nFORMATO Markdown com seções ## :\n- ## Nota Geral: X/10\n- ## Avaliação por Critério\n- ## Comentários por Parágrafo (com citação)\n- ## Pontos Fortes\n- ## Pontos Fracos\n- ## Sugestões de Melhoria\n- ## Versão Reescrita\n\nREDAÇÃO DO ALUNO ('+text.length+' caracteres, banca '+banca+', tipo declarado: '+tipo+'):\n\n'+text;
-        const resp=await callMeggy(prompt);
-        const scoreMatch=resp.match(/nota\s*geral\s*:?\s*(\d+[,.]?\d*)\s*(?:\/\s*(\d+))?/i)||resp.match(/nota\s*:?\s*(\d+[,.]?\d*)/i);
-        const score=scoreMatch?scoreMatch[1]:'—';
-        const correction={id:uid(),banca,tipo,date:Date.now(),text:text.slice(0,4000),correction:resp,score};
+        // ★ v2.15.75: a correcção passa a ser feita pelo WORKER
+        //   (POST /api/ai/redacao), que tem a grelha por banca — no
+        //   ENEM, as 5 competências do INEP (0–200 cada, total
+        //   /1000). Antes esta vista montava o prompt no cliente
+        //   (bancaInfo + formato genérico 0–10 p/ TODAS as bancas) e
+        //   a banca ENEM nunca corrigia como ENEM; o MD também passa
+        //   a ser gravado pelo worker (data.saved). O tema
+        //   (opcional) vai no payload e fica no histórico.
+        const temaEl=box.querySelector('#red-tema');
+        const tema=temaEl?temaEl.value.trim():'';
+        const r=await fetch('/api/ai/redacao',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,banca,tipo,tema})});
+        const data=await r.json().catch(()=>null);
+        if(!data||!data.ok)throw new Error((data&&data.error)||('HTTP '+r.status));
+        const resp=data.correction;
+        const score=(data.score!=null&&data.score!=='')?String(data.score):'—';
+        const correction={id:uid(),banca,tipo,tema,date:Date.now(),text:text.slice(0,4000),correction:resp,score};
         const corr=lsGet('gdi-essay-corrections-v1',[]);
         corr.push(correction);
         lsSet('gdi-essay-corrections-v1',corr);
-        try{
-          const md='---\n'+'banca: "'+banca+'"\n'+'tipo: "'+tipo+'"\n'+'data: '+new Date().toISOString()+'\n'+'score: '+score+'\n'+'---\n\n# Redação Corrigida\n\n## Redação Original\n\n'+text+'\n\n## Correção da Meggy\n\n'+resp+'\n';
-          if(window.gdiIsaPdf&&window.gdiIsaPdf.saveEssayMD){
-            await window.gdiIsaPdf.saveEssayMD(md,banca,tipo,score);
-            showToast('Redação corrigida! Nota: '+score+' · MD salvo no Drive');
-          }else{
-            showToast('Redação corrigida! Nota: '+score);
-          }
-        }catch(_){showToast('Redação corrigida! Nota: '+score);}
+        showToast('Redação corrigida! Nota: '+score+(data.saved?' · MD salvo no Drive':''));
         status.innerHTML='';
         result.innerHTML=`<div class="gdi-isa-summary-body" style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;padding:20px;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.8;margin-top:14px;">
           ${renderMd(resp)}
@@ -417,6 +390,7 @@
           box.querySelector('#red-banca').value=c.banca;
           if(c.tipo&&box.querySelector('#red-tipo'))box.querySelector('#red-tipo').value=c.tipo;
           box.querySelector('#red-text').value=c.text;
+          const _temaEl=box.querySelector('#red-tema'); if(_temaEl)_temaEl.value=c.tema||'';
           box.querySelector('#red-result').innerHTML=`<div class="gdi-isa-summary-body" style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;padding:20px;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.8;margin-top:14px;">${renderMd(c.correction)}</div>`;
         }
       };
