@@ -16,6 +16,7 @@ import android.view.animation.AnimationSet
 import android.view.animation.DecelerateInterpolator
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
@@ -197,6 +198,11 @@ class HomeActivity : AppCompatActivity() {
         if (TvUtils.isTv(this)) binding.bottomNav.visibility = View.GONE
 
         binding.topSair?.setOnClickListener { logout() }
+        // R22 UI: ícone de busca no cabeçalho (só existe no layout do
+        // celular) — abre a busca existente.
+        findViewById<View>(R.id.homeSearchBtn)?.setOnClickListener {
+            startActivity(Intent(this, SearchActivity::class.java))
+        }
 
         // ★ v2.0.2: Bottom navigation — NO finish() on tab switch.
         // Each nav activity is declared with launchMode="singleTask" in the
@@ -235,6 +241,8 @@ class HomeActivity : AppCompatActivity() {
         setupHero()
         setupContinueRail()
         setupDrivesRail()
+        // R22 UI: grelha "Meus cursos" do celular (no-op na TV).
+        setupMyCourses()
         setupTvFocusChains()
         applyTvAutoFit()
         fetchFeaturedCovers()
@@ -441,6 +449,9 @@ class HomeActivity : AppCompatActivity() {
         // o alvo antigo. A função já é segura de re-chamar (só
         // actualiza o id quando o adapter existe).
         setupDrivesRail()
+        // R22 UI: a grelha "Meus cursos" do celular refresca ao
+        // voltar (favoritos e progresso podem ter mudado no player).
+        setupMyCourses()
         // Ronda 10 Frente C — re-busca os drives do admin ao
         // voltar: o remover da Frente B faz o tile sumir sem
         // reiniciar o app.
@@ -494,6 +505,16 @@ class HomeActivity : AppCompatActivity() {
     // ──────────── v2.0.0: Hero rotativo ────────────
 
     private fun setupHero() {
+        if (!TvUtils.isTv(this)) {
+            // R22 UI (conceito "início celular"): no celular não há
+            // hero rotativo — os destaques são a lista "Destaques"
+            // por baixo dos cursos. O hero e o rotador ficam só na
+            // TV; heroRotator fica null e todos os usos existentes
+            // são null-safe (start/stop/refresh/currentItem).
+            binding.heroCard.visibility = View.GONE
+            setupDestaques()
+            return
+        }
         heroRotator = HeroRotator(binding, HeroItem.ALL) { hero ->
             val intent = Intent(this, BrowseActivity::class.java)
             intent.putExtra("drivePath", hero.drivePath)
@@ -790,12 +811,123 @@ class HomeActivity : AppCompatActivity() {
      * progresso e "12:34 de 48:20 · 12 min restantes". Só na TV
      * (no celular o rail "Continue assistindo" já cumpre o papel).
      */
-    private fun setupFeaturedContinue(recents: List<SessionManager.RecentItem>) {
-        val sm = SessionManager.get(this)
-        if (!TvUtils.isTv(this)) {
-            binding.featuredSection.visibility = View.GONE
+    // R22 UI (conceito "início celular") — adapters das secções novas
+    // da home do celular. Null na TV (as vistas não existem lá).
+    private var homeCoursesAdapter: HomeCourseGridAdapter? = null
+    private var destaquesAdapter: HomeFeaturedAdapter? = null
+
+    /**
+     * R22 UI — secção "Meus cursos" (grelha de 2 colunas): os cursos
+     * favoritos do aluno, a mesma fonte da Minha Lista, com o total
+     * real do unified e o progresso local. Sem favoritos, a secção
+     * fica escondida. Só no celular.
+     */
+    private fun setupMyCourses() {
+        if (TvUtils.isTv(this)) return
+        val label = findViewById<TextView>(R.id.labelMyCourses) ?: return
+        val grid = findViewById<RecyclerView>(R.id.gridMyCourses) ?: return
+        val courses = SessionManager.get(this).getFavoriteCourses()
+        if (courses.isEmpty()) {
+            label.visibility = View.GONE
+            grid.visibility = View.GONE
             return
         }
+        label.visibility = View.VISIBLE
+        grid.visibility = View.VISIBLE
+        if (grid.layoutManager == null) {
+            grid.layoutManager = GridLayoutManager(this, 2)
+        }
+        if (homeCoursesAdapter == null) {
+            homeCoursesAdapter = HomeCourseGridAdapter { course ->
+                val intent = Intent(this, DetailActivity::class.java)
+                intent.putExtra("drivePath", course.drivePath)
+                intent.putExtra("folderName", course.name)
+                startActivity(intent)
+            }
+            grid.adapter = homeCoursesAdapter
+        }
+        homeCoursesAdapter?.submitList(courses)
+        // Totais reais (cache de 5 min no ApiService) — best-effort:
+        // sem resposta, os cartões ficam sem a linha de progresso.
+        lifecycleScope.launch {
+            val totals = ApiService(this@HomeActivity).getUnifiedCourseTotals()
+            val adapter = homeCoursesAdapter ?: return@launch
+            if (totals != null && totals != adapter.courseTotals) {
+                adapter.courseTotals = totals
+                adapter.notifyDataSetChanged()
+            }
+        }
+    }
+
+    /**
+     * R22 UI — secção "Destaques" (cartões horizontais): primeiro os
+     * itens curados do hero (dados reais da app, abrem o drive como o
+     * hero sempre fez); quando a API de cursos em destaque responde,
+     * a lista passa a ser esses cursos (abrem o curso). Só no celular.
+     */
+    private fun setupDestaques() {
+        if (TvUtils.isTv(this)) return
+        val label = findViewById<TextView>(R.id.labelDestaques) ?: return
+        val list = findViewById<RecyclerView>(R.id.listDestaques) ?: return
+        if (list.layoutManager == null) {
+            list.layoutManager = LinearLayoutManager(this)
+        }
+        if (destaquesAdapter == null) {
+            destaquesAdapter = HomeFeaturedAdapter { item ->
+                if (item.openAsCourse) {
+                    val intent = Intent(this, DetailActivity::class.java)
+                    intent.putExtra("drivePath", item.path)
+                    intent.putExtra("folderName", item.folderName)
+                    startActivity(intent)
+                } else {
+                    val intent = Intent(this, BrowseActivity::class.java)
+                    intent.putExtra("drivePath", item.path)
+                    intent.putExtra("folderName", item.folderName)
+                    startActivity(intent)
+                }
+            }
+            list.adapter = destaquesAdapter
+        }
+        label.visibility = View.VISIBLE
+        list.visibility = View.VISIBLE
+        val fallback = HeroItem.ALL.map { hero ->
+            HomeFeaturedItem(
+                title = hero.title,
+                subtitle = hero.subtitle,
+                badge = hero.badge,
+                coverUrl = hero.coverUrl ?: featuredCoverByPath[hero.drivePath],
+                path = hero.drivePath,
+                folderName = hero.driveName,
+                openAsCourse = false
+            )
+        }
+        destaquesAdapter?.submitList(fallback)
+        lifecycleScope.launch {
+            val courses = api.getFeaturedCourses()
+            if (!courses.isNullOrEmpty()) {
+                val items = courses.map { course ->
+                    HomeFeaturedItem(
+                        title = course.courseName,
+                        subtitle = "",
+                        badge = null,
+                        coverUrl = course.coverUrl,
+                        path = course.coursePath,
+                        folderName = course.courseName,
+                        openAsCourse = true
+                    )
+                }
+                destaquesAdapter?.submitList(items)
+            }
+        }
+    }
+
+    private fun setupFeaturedContinue(recents: List<SessionManager.RecentItem>) {
+        val sm = SessionManager.get(this)
+        // R22 UI: o cartão largo "Continuar assistindo" passa a
+        // existir também no celular (conceito aprovado); na TV o
+        // comportamento é exactamente o anterior. As diferenças de
+        // apresentação ficam guardadas por isTvHere.
+        val isTvHere = TvUtils.isTv(this)
         val best = recents
             .filter { sm.hasResume(it.folderPath, it.videoName) }
             .maxByOrNull { sm.getResumeProgress(it.folderPath, it.videoName) }
@@ -812,7 +944,15 @@ class HomeActivity : AppCompatActivity() {
         binding.featuredSubtitle.setWordEllipsized(extractCourseName(best.folderPath))
         binding.featuredProgress.progress = progress
         binding.featuredProgressText.text = "$progress% concluído"
-        binding.featuredTimeText.text = Format.positionText(pos, dur)
+        // R22 UI: no celular o cartão mostra o que FALTA ("Faltam
+        // MM:SS", como no conceito); na TV mantém-se o texto completo
+        // de posição. Sem duração conhecida, cai no texto de posição.
+        binding.featuredTimeText.text =
+            if (!isTvHere && dur > pos && pos > 0) {
+                getString(R.string.home_remaining, Format.mmss(dur - pos))
+            } else {
+                Format.positionText(pos, dur)
+            }
         // v2.7.11 — sem monograma: arte-padrão do drive quando não há
         // thumb (o ícone do drive vem do path da pasta do vídeo).
         // v2.7.11 onda 2 — sem thumb do Drive, o destaque da TV
@@ -858,7 +998,11 @@ class HomeActivity : AppCompatActivity() {
         // R18B (Bug 1 #1): 1.00x na TV — o cartão tem 848dp
         // (largura total); qualquer escala é cortada nas laterais
         // e invade o overscan. Ficam anel 3dp + elevação 16dp.
-        FocusAnimator.attachCard(binding.featuredCard, true, scaleTv = FocusAnimator.SCALE_TV_NONE)
+        // R22 UI: no celular não há anel de foco D-pad — o attach é
+        // só da TV (o clique do cartão já ficou ligado acima).
+        if (isTvHere) {
+            FocusAnimator.attachCard(binding.featuredCard, true, scaleTv = FocusAnimator.SCALE_TV_NONE)
+        }
     }
 
     /**
