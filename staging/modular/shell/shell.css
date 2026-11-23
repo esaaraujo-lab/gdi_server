@@ -2813,6 +2813,49 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 [data-bs-theme="light"] .meggy-fc-grade-btn.easy { color: #1a7f37; }
 [data-bs-theme="light"] .meggy-fc-shortcuts { color: #59636e; }
 
+/* ★ v2.15.71: cores do deck de flashcards da aula e dos nomes do
+   banco de questões como VARIÁVEIS de tema. O deck pinta com estilos
+   inline (vencem o CSS) e a .70 escolhia a cor no momento do draw():
+   ao trocar de tema com o baralho aberto, os cartões já desenhados
+   ficavam com o texto do tema anterior sobre o fundo do novo
+   (1.0:1 — ilegível nos dois sentidos). Com var() nos inline, a
+   troca resolve pelo cascade, sem redesenhar. Valores = os EXACTOS
+   da .70 em cada tema. As mesmas definições são injectadas via
+   shell.js (#meggy-fc-vars-style), padrão da casa (drawer, .68),
+   p/ o caso de o shell.css ficar preso em cache no browser. */
+:root, [data-bs-theme="dark"] {
+  --meggy-fc-bg-front: linear-gradient(135deg, rgba(255,139,159,.14), rgba(192,38,211,.08));
+  --meggy-fc-bg-back: linear-gradient(135deg, rgba(93,222,218,.14), rgba(63,185,80,.08));
+  --meggy-fc-text-front: #f0f6fc;
+  --meggy-fc-text-back: #e6edf3;
+  --meggy-fc-label-front: #ff8b9f;
+  --meggy-fc-label-back: #5ddeda;
+  --meggy-fc-meta: #8b949e;
+  --meggy-fc-note: #9aa4b8;
+  --meggy-fc-title: #ff8b9f;
+  --meggy-fc-ok: #3fb950;
+  --meggy-fc-bad: #ff8b8b;
+  --meggy-fc-divider: rgba(255,255,255,.08);
+  --meggy-qb-name: #f0f6fc;
+  --meggy-qb-name-soft: #e6edf3;
+}
+[data-bs-theme="light"] {
+  --meggy-fc-bg-front: linear-gradient(135deg, rgba(255,139,159,.20), rgba(192,38,211,.12));
+  --meggy-fc-bg-back: linear-gradient(135deg, rgba(93,222,218,.20), rgba(63,185,80,.12));
+  --meggy-fc-text-front: #1f2328;
+  --meggy-fc-text-back: #1f2328;
+  --meggy-fc-label-front: #d6336c;
+  --meggy-fc-label-back: #0e7c86;
+  --meggy-fc-meta: #59636e;
+  --meggy-fc-note: #59636e;
+  --meggy-fc-title: #d6336c;
+  --meggy-fc-ok: #1a7f37;
+  --meggy-fc-bad: #cf222e;
+  --meggy-fc-divider: rgba(31,35,40,.12);
+  --meggy-qb-name: #1f2328;
+  --meggy-qb-name-soft: #1f2328;
+}
+
 .meggy-summary-body {
   padding: 22px 26px;
   font-size: 14px;
