@@ -242,17 +242,58 @@
                             android:textSize="@dimen/tv_chip_text" />
                     </LinearLayout>
 
+                    <!-- R22 UI (conceito "detalhe TV"): linha do curso
+                         "N aulas · Z% concluído" + barra grossa, lidas
+                         dos chips reais por syncTvCourseLine(). Só
+                         existem neste layout (TV). -->
+                    <TextView
+                        android:id="@+id/tvCourseLine"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_lg"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="@dimen/tv_body_lg"
+                        android:textStyle="bold"
+                        android:visibility="gone" />
+
+                    <ProgressBar
+                        android:id="@+id/tvCourseProgress"
+                        style="?android:attr/progressBarStyleHorizontal"
+                        android:layout_width="match_parent"
+                        android:layout_height="10dp"
+                        android:layout_marginTop="@dimen/spacing_sm"
+                        android:max="100"
+                        android:progressDrawable="@drawable/progress_horizontal"
+                        android:visibility="gone" />
+
                     <androidx.appcompat.widget.AppCompatButton
                         android:id="@+id/ctaContinue"
                         android:layout_width="match_parent"
                         android:layout_height="64dp"
                         android:layout_marginTop="@dimen/spacing_xl"
-                        android:background="@drawable/btn_primary_pill"
+                        android:background="@drawable/btn_cta_gradient"
                         android:focusable="true"
                         android:nextFocusLeft="@id/heroPlayFab"
-                        android:nextFocusDown="@id/tabResumo"
+                        android:nextFocusDown="@id/btnTvQuestions"
                         android:text="@string/cta_continue"
                         android:textColor="@color/md_on_primary"
+                        android:textSize="@dimen/tv_button_text"
+                        android:textStyle="bold" />
+
+                    <!-- R22 UI: segundo botão do painel — abre a aba
+                         de questões da disciplina (selectTab). -->
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnTvQuestions"
+                        android:layout_width="match_parent"
+                        android:layout_height="56dp"
+                        android:layout_marginTop="@dimen/spacing_md"
+                        android:background="@drawable/chip_outline"
+                        android:focusable="true"
+                        android:nextFocusLeft="@id/heroPlayFab"
+                        android:nextFocusUp="@id/ctaContinue"
+                        android:nextFocusDown="@id/tabResumo"
+                        android:text="@string/tv_questions_button"
+                        android:textColor="@color/md_on_surface"
                         android:textSize="@dimen/tv_button_text"
                         android:textStyle="bold" />
 
