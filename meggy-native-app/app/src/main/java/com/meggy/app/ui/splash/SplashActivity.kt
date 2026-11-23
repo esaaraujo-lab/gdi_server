@@ -6,6 +6,7 @@ import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.meggy.app.data.ApiService
+import com.meggy.app.data.SessionCheck
 import com.meggy.app.databinding.ActivitySplashBinding
 import com.meggy.app.ui.home.HomeActivity
 import com.meggy.app.ui.login.LoginActivity
@@ -57,11 +58,17 @@ class SplashActivity : AppCompatActivity() {
             // ★ v2.7.3: validate session server-side; auto re-login if expired
             // AND password is saved. Falls back to LoginActivity only when
             // re-login fails or there are no saved credentials.
-            val valid = if (session.isLoggedIn) {
-                withContext(Dispatchers.IO) { api.validateOrReLogin() }
-            } else false
+            // R21: validação TIPADA — uma falha transitória (sem rede,
+            // 5xx, quota D1 esgotada) devolve UNKNOWN e entra na Home na
+            // mesma: a sessão pode estar válida e as listagens mostram
+            // erro + retry (e fazem bounce depois, se for mesmo expiração).
+            // Antes, UNKNOWN era tratado como sessão inválida e o arranque
+            // sem rede/quota mandava o utilizador para o login à toa.
+            val check = if (session.isLoggedIn) {
+                withContext(Dispatchers.IO) { api.validateSession() }
+            } else SessionCheck.INVALID
 
-            val target = if (valid) {
+            val target = if (check != SessionCheck.INVALID) {
                 Intent(this@SplashActivity, HomeActivity::class.java)
             } else {
                 Intent(this@SplashActivity, LoginActivity::class.java)
