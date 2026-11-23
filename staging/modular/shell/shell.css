@@ -2800,6 +2800,18 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 [data-bs-theme="light"] .gdi-isa-summary-body td { border-color: #d0d7de; }
 [data-bs-theme="light"] .gdi-mat-isa-result { background: #f6f8fa; color: #1f2328; }
 [data-bs-theme="light"] .meggy-chain-badge { color: #1a7f37; }
+/* ★ v2.15.70: painel SRS do deck da aula (.meggy-fc-grade*) no tema
+   claro — as cores base (#e6edf3 sobre branco translúcido) foram
+   feitas p/ o fundo escuro e não tinham override claro: o painel
+   somia no tema claro, igual ao cartão. Só este componente. */
+[data-bs-theme="light"] .meggy-fc-grade { background: rgba(0, 0, 0, 0.03); border-color: rgba(0, 0, 0, 0.08); }
+[data-bs-theme="light"] .meggy-fc-grade p { color: #1f2328; }
+[data-bs-theme="light"] .meggy-fc-grade-btn { background: rgba(0, 0, 0, 0.03); border-color: rgba(0, 0, 0, 0.1); color: #1f2328; }
+[data-bs-theme="light"] .meggy-fc-grade-btn.again { color: #c92a2a; }
+[data-bs-theme="light"] .meggy-fc-grade-btn.hard { color: #b25e09; }
+[data-bs-theme="light"] .meggy-fc-grade-btn.good { color: #0e7c86; }
+[data-bs-theme="light"] .meggy-fc-grade-btn.easy { color: #1a7f37; }
+[data-bs-theme="light"] .meggy-fc-shortcuts { color: #59636e; }
 
 .meggy-summary-body {
   padding: 22px 26px;
