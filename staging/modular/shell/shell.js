@@ -6886,7 +6886,7 @@ el.scrollTop = 0;
         // ★ Chat-only (sem abas de Ações — gerar material só funciona na página de vídeo)
         drawer.innerHTML = `
         <div class="meggy-ai-drawer-header">
-          <div class="meggy-ai-drawer-title">🐩 Meggy AI</div>
+          <div class="meggy-ai-drawer-title"><img class="meggy-logo-img meggy-logo-img-light" src="https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/shell/meggy-fab.webp" alt="Meggy" style="height:30px;width:30px;border-radius:50%;vertical-align:-9px;margin-right:8px;"><img class="meggy-logo-img meggy-logo-img-dark" src="https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/shell/meggy-fab-dark.webp" alt="Meggy" style="height:30px;width:30px;border-radius:50%;vertical-align:-9px;margin-right:8px;">Meggy AI</div>
           <button class="meggy-ai-drawer-close" id="meggy-ai-close"><i class="bi bi-x"></i></button>
         </div>
         <div class="meggy-ai-drawer-body" id="meggy-ai-body"></div>
