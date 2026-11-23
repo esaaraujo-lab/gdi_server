@@ -70,6 +70,10 @@ class RailAdapter(
     private val onClick: (RailItem) -> Unit
 ) : RecyclerView.Adapter<RailAdapter.VH>() {
 
+    // R21 — maior posição já animada neste adapter (ver onBindViewHolder).
+    private var lastAnimatedPosition = -1
+
+
     /**
      * Ronda 17 Frente B — substitui os itens sem recriar o adapter:
      * sem mudanças, nem redesenha (a Home chama isto em cada
@@ -278,9 +282,16 @@ class RailAdapter(
             }
         }
 
-        val anim = AnimationUtils.loadAnimation(holder.itemView.context, R.anim.tile_appear)
-        anim.startOffset = (position % 12) * 40L
-        holder.binding.root.startAnimation(anim)
+        // R21: a animação de entrada corre só na PRIMEIRA aparição
+        // da posição — antes corria em TODOS os binds, incluindo a
+        // reciclagem ao rolar (replay constante = jank, sobretudo
+        // na TV). Ver lastAnimatedPosition no adapter.
+        if (position > lastAnimatedPosition) {
+            lastAnimatedPosition = position
+            val anim = AnimationUtils.loadAnimation(holder.itemView.context, R.anim.tile_appear)
+            anim.startOffset = (position % 12) * 40L
+            holder.binding.root.startAnimation(anim)
+        }
     }
 
     override fun getItemCount(): Int = items.size

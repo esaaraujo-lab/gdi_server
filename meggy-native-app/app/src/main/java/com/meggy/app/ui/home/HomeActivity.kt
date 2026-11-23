@@ -395,6 +395,20 @@ class HomeActivity : AppCompatActivity() {
         return super.dispatchTouchEvent(ev)
     }
 
+    // R21 — o HeroRotator só era parado no onDestroy: com a Home em
+    // onStop (ex.: player por cima) continuava a renderizar o hero e
+    // a disparar loads Coil invisíveis a cada 8 s. Pára no onStop e
+    // retoma no onStart (o start() é idempotente).
+    override fun onStart() {
+        super.onStart()
+        heroRotator?.start()
+    }
+
+    override fun onStop() {
+        heroRotator?.stop()
+        super.onStop()
+    }
+
     override fun onResume() {
         super.onResume()
         // Ronda 17 Frente B — o observador regista-se aqui (e não no
@@ -421,6 +435,12 @@ class HomeActivity : AppCompatActivity() {
         // em destaque pode ter aparecido entretanto.
         setupContinueRail()
         setupTvFocusChains()
+        // R21: o nextFocusUp dos tiles de drive era calculado só no
+        // onCreate (setupDrivesRail) — se o rail Continue aparece/
+        // desaparece entre visitas, o Cima dos drives apontava para
+        // o alvo antigo. A função já é segura de re-chamar (só
+        // actualiza o id quando o adapter existe).
+        setupDrivesRail()
         // Ronda 10 Frente C — re-busca os drives do admin ao
         // voltar: o remover da Frente B faz o tile sumir sem
         // reiniciar o app.
@@ -434,12 +454,16 @@ class HomeActivity : AppCompatActivity() {
         // hoje); regresso: foco + scrollY guardados.
         if (TvUtils.isTv(this)) {
             if (isFirstResume) {
-                binding.railContinue.post {
-                    binding.railContinue.findViewHolderForAdapterPosition(0)
-                        ?.itemView?.requestFocus()
-                }
-                binding.railDrives.post {
-                    binding.railDrives.findViewHolderForAdapterPosition(0)
+                // R21: UM só pedido de foco — antes havia dois posts
+                // (Continue e Drives) e o segundo ganhava sempre: o
+                // foco inicial caía em "Explorar drives" mesmo com
+                // "Continue assistindo" presente. Continue se tiver
+                // itens; senão, Drives.
+                val focusTarget =
+                    if ((continueAdapter?.itemCount ?: 0) > 0) binding.railContinue
+                    else binding.railDrives
+                focusTarget.post {
+                    focusTarget.findViewHolderForAdapterPosition(0)
                         ?.itemView?.requestFocus()
                 }
             } else {
@@ -509,7 +533,12 @@ class HomeActivity : AppCompatActivity() {
             render(animate = false)
         }
 
-        fun start() { handler.postDelayed(rotateRunnable, 8000L) }
+        // R21: removeCallbacks antes do post — start() chamado duas
+        // vezes (setupHero + onStart) não duplica a cadeia de rotação.
+        fun start() {
+            handler.removeCallbacks(rotateRunnable)
+            handler.postDelayed(rotateRunnable, 8000L)
+        }
 
         // Onda 2 (a) — destaque atual + re-render da arte quando as
         // capas do admin chegam (fetchFeaturedCovers).
