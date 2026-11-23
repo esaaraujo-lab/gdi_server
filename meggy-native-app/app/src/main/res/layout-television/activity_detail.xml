@@ -128,8 +128,8 @@
 
                         <TextView
                             android:id="@+id/heroPlayFab"
-                            android:layout_width="@dimen/tv_play_fab_size"
-                            android:layout_height="@dimen/tv_play_fab_size"
+                            android:layout_width="@dimen/play_fab_size"
+                            android:layout_height="@dimen/play_fab_size"
                             android:layout_gravity="center"
                             android:background="@drawable/btn_play_circle"
                             android:clickable="true"
@@ -596,6 +596,15 @@
                     android:text="@string/no_questions"
                     android:textColor="@color/md_on_surface_variant"
                     android:textSize="@dimen/tv_body" />
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/questoesGenerate"
+                    style="@style/Widget.Meggy.Button.Primary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_md"
+                    android:text="@string/materials_generate_questions"
+                    android:visibility="gone" />
             </LinearLayout>
 
             <!-- Painel: Flashcards -->
@@ -614,6 +623,15 @@
                     android:text="@string/no_flashcards"
                     android:textColor="@color/md_on_surface_variant"
                     android:textSize="@dimen/tv_body" />
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/flashcardsGenerate"
+                    style="@style/Widget.Meggy.Button.Primary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_md"
+                    android:text="@string/materials_generate_flashcards"
+                    android:visibility="gone" />
             </LinearLayout>
         </LinearLayout>
     </ScrollView>

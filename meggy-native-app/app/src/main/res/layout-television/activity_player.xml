@@ -108,7 +108,7 @@
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:textColor="@android:color/white"
-                android:textSize="@dimen/text_detail_course"
+                android:textSize="@dimen/tv_body_lg"
                 android:textStyle="bold" />
 
             <TextView
@@ -117,7 +117,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:textColor="@color/md_on_surface_variant"
-                android:textSize="@dimen/text_card_subtitle" />
+                android:textSize="@dimen/tv_body" />
         </LinearLayout>
 
 
@@ -198,7 +198,7 @@
                     android:shadowRadius="4"
                     android:singleLine="true"
                     android:textColor="@android:color/white"
-                    android:textSize="16sp"
+                    android:textSize="@dimen/tv_body_lg"
                     android:textStyle="bold" />
 
                 <com.google.android.material.button.MaterialButton
@@ -252,7 +252,7 @@
                 android:shadowDy="1"
                 android:shadowRadius="3"
                 android:textColor="@color/md_primary"
-                android:textSize="12sp"
+                android:textSize="@dimen/tv_chip_text"
                 android:textStyle="bold"
                 android:visibility="gone" />
         </LinearLayout>
@@ -288,11 +288,30 @@
                     android:layout_height="0dp"
                     android:layout_weight="1" />
 
+                <!-- 2.7.41 (P1-T1) — na TV não há secção de materiais (o
+                     info_scroll fica escondido no fullscreen): este botão
+                     volta ao detalhe na aba Resumo (ver PlayerActivity).
+                     Só existe no layout-television. -->
+                <TextView
+                    android:id="@+id/btn_materials_bar"
+                    android:contentDescription="@string/materials_title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="@dimen/button_height"
+                    android:layout_marginEnd="@dimen/spacing_sm"
+                    android:background="@drawable/player_chip_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:paddingHorizontal="@dimen/spacing_lg"
+                    android:text="@string/materials_title"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/tv_chip_text" />
+
                 <TextView
                     android:id="@+id/btn_rest_bar"
                     android:contentDescription="@string/cd_rest_mode"
                     android:layout_width="wrap_content"
-                    android:layout_height="40dp"
+                    android:layout_height="@dimen/button_height"
                     android:layout_marginEnd="@dimen/spacing_sm"
                     android:background="@drawable/player_chip_bg"
                     android:clickable="true"
@@ -301,14 +320,14 @@
                     android:paddingHorizontal="@dimen/spacing_lg"
                     android:text="🌙 Descanso"
                     android:textColor="@color/md_on_surface"
-                    android:textSize="@dimen/text_chip" />
+                    android:textSize="@dimen/tv_chip_text" />
 
                 
                 <TextView
                     android:id="@+id/btn_speed_bar"
                     android:contentDescription="@string/cd_speed"
                     android:layout_width="wrap_content"
-                    android:layout_height="40dp"
+                    android:layout_height="@dimen/button_height"
                     android:layout_marginEnd="@dimen/spacing_sm"
                     android:background="@drawable/player_chip_bg"
                     android:clickable="true"
@@ -317,7 +336,7 @@
                     android:paddingHorizontal="@dimen/spacing_lg"
                     android:text="1.0×"
                     android:textColor="@android:color/white"
-                    android:textSize="@dimen/text_chip"
+                    android:textSize="@dimen/tv_chip_text"
                     android:textStyle="bold" />
 
                 <TextView
@@ -435,7 +454,7 @@
                     android:gravity="center"
                     android:text="00:00 / 00:00"
                     android:textColor="@color/md_on_surface"
-                    android:textSize="@dimen/text_card_title"
+                    android:textSize="@dimen/tv_body"
                     android:textStyle="bold" />
 
                 <LinearLayout
@@ -449,7 +468,7 @@
                         android:id="@+id/btn_speed_info"
                         android:contentDescription="@string/cd_speed"
                         android:layout_width="wrap_content"
-                        android:layout_height="40dp"
+                        android:layout_height="@dimen/button_height"
                         android:background="@drawable/player_chip_bg"
                         android:clickable="true"
                         android:focusable="true"
@@ -457,7 +476,7 @@
                         android:paddingHorizontal="@dimen/spacing_lg"
                         android:text="1.0×"
                         android:textColor="@android:color/white"
-                        android:textSize="@dimen/text_chip"
+                        android:textSize="@dimen/tv_chip_text"
                         android:textStyle="bold" />
 
                     
@@ -465,7 +484,7 @@
                         android:id="@+id/btn_rest_info"
                         android:contentDescription="@string/cd_rest_mode"
                         android:layout_width="wrap_content"
-                        android:layout_height="40dp"
+                        android:layout_height="@dimen/button_height"
                         android:layout_marginStart="@dimen/spacing_sm"
                         android:background="@drawable/player_chip_bg"
                         android:clickable="true"
@@ -474,7 +493,7 @@
                         android:paddingHorizontal="@dimen/spacing_lg"
                         android:text="🌙 Descanso"
                         android:textColor="@color/md_on_surface"
-                        android:textSize="@dimen/text_chip"
+                        android:textSize="@dimen/tv_chip_text"
                         android:textStyle="bold" />
 
                     <TextView
@@ -482,7 +501,7 @@
                         android:contentDescription="@string/cd_fullscreen"
                         android:visibility="gone"
                         android:layout_width="48dp"
-                        android:layout_height="40dp"
+                        android:layout_height="@dimen/button_height"
                         android:layout_marginStart="@dimen/spacing_sm"
                         android:background="@drawable/player_chip_bg"
                         android:clickable="true"
@@ -510,7 +529,7 @@
                     android:layout_height="wrap_content"
                     android:text="Continuar de onde parou"
                     android:textColor="@color/md_on_surface"
-                    android:textSize="@dimen/text_card_title"
+                    android:textSize="@dimen/tv_title_md"
                     android:textStyle="bold" />
 
                 <TextView
@@ -519,7 +538,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
                     android:textColor="@color/md_primary"
-                    android:textSize="@dimen/text_card_subtitle" />
+                    android:textSize="@dimen/tv_body" />
             </LinearLayout>
 
             <!-- Título + curso -->
@@ -531,7 +550,7 @@
                 android:ellipsize="end"
                 android:maxLines="2"
                 android:textColor="@color/md_on_surface"
-                android:textSize="@dimen/text_detail_title"
+                android:textSize="@dimen/tv_title_md"
                 android:textStyle="bold" />
 
             <TextView
@@ -540,9 +559,15 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:textColor="@color/md_primary"
-                android:textSize="@dimen/text_detail_course" />
+                android:textSize="@dimen/tv_body_lg" />
 
-            <!-- Anterior / Próxima -->
+            <!-- Anterior / Próxima — R22 fix (Elton 2026-11-23
+                 19:54, igual ao celular): sentence case (o
+                 AppCompatButton põe textAllCaps=true por omissão e o
+                 rótulo em maiúsculas transbordava da pílula);
+                 maxLines=1 + ellipsize de rede de segurança. As
+                 larguras weight 1 e os fundos chip_outline da TV
+                 mantêm-se (o foco D-pad não muda). -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -557,8 +582,11 @@
                     android:layout_marginEnd="@dimen/spacing_sm"
                     android:layout_weight="1"
                     android:background="@drawable/chip_outline"
+                    android:ellipsize="end"
                     android:focusable="true"
+                    android:maxLines="1"
                     android:text="← Anterior"
+                    android:textAllCaps="false"
                     android:textColor="@color/md_on_surface"
                     android:textSize="@dimen/text_button" />
 
@@ -570,8 +598,11 @@
                     android:layout_marginStart="@dimen/spacing_sm"
                     android:layout_weight="1"
                     android:background="@drawable/chip_outline"
+                    android:ellipsize="end"
                     android:focusable="true"
+                    android:maxLines="1"
                     android:text="Próxima aula →"
+                    android:textAllCaps="false"
                     android:textColor="@color/md_on_surface"
                     android:textSize="@dimen/text_button" />
             </LinearLayout>
