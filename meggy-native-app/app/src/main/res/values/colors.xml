@@ -59,6 +59,17 @@
     <color name="md_error">#FFCF6679</color>
     <color name="md_on_error">#FF600014</color>
 
+    <!-- 2.7.41 — papéis de sucesso/erro (§5.2 da auditoria): substituem
+         os hex soltos das respostas certa/errada (#81C784/#E57373 no
+         detalhe, #256D2E/#8C2B2B no player). Contrastes medidos (§6):
+         #81C784 sobre a superfície 8,99:1; branco sobre #256D2E 6,35:1
+         e sobre #8C2B2B 8,42:1. md_on_success é texto escuro sobre
+         md_success (papel reservado, ainda sem uso). -->
+    <color name="md_success">#FF81C784</color>
+    <color name="md_on_success">#FF10230F</color>
+    <color name="md_success_container">#FF256D2E</color>
+    <color name="md_error_container">#FF8C2B2B</color>
+
     <!-- Status bar -->
     <color name="black_overlay">#AA000000</color>
     <color name="white_overlay">#66FFFFFF</color>

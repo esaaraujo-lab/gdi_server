@@ -110,6 +110,22 @@
     <string name="question_counter">Questão %1$d de %2$d</string>
     <string name="materials_summary_empty">Ainda não há resumo para esta aula.</string>
     <string name="materials_pills_empty">Ainda não há pílulas para esta aula.</string>
+    <!-- R22 — estados vazios com acção (Elton 2026-11-23 19:54): cada aba
+         vazia ganha um botão "Gerar …" que dispara o fluxo de geração
+         existente (LessonDescription.ensureDescription, o mesmo do detalhe).
+         Flashcards: gera o pacote (resumo + pílulas + questões), porque os
+         flashcards derivam dele — não há geração só de flashcards. -->
+    <string name="materials_generate_summary">Gerar resumo</string>
+    <string name="materials_generate_pills">Gerar pílulas</string>
+    <string name="materials_generate_questions">Gerar questões</string>
+    <string name="materials_generate_flashcards">Gerar flashcards</string>
+    <string name="materials_generating">A gerar…</string>
+    <string name="materials_generate_done">Materiais gerados ✓</string>
+    <string name="materials_generate_running">A Meggy está a gerar os materiais — volta a verificar daqui a pouco.</string>
+    <string name="materials_generate_failed">Não foi possível gerar agora. Tenta de novo.</string>
+    <string name="materials_generate_unavailable">A geração não está disponível neste servidor.</string>
+    <string name="materials_generate_no_material">Sem material legível nesta aula para gerar.</string>
+    <string name="materials_generate_not_lesson">A geração é por aula — abre uma aula para gerar.</string>
     <string name="question_correct">✓ Correto!</string>
     <string name="home_my_courses">Meus cursos</string>
     <string name="home_search">Buscar</string>
@@ -117,6 +133,12 @@
     <string name="home_remaining">Faltam %1$s</string>
     <string name="cta_continue_from_here">▶ Continuar de onde parei</string>
     <string name="tv_questions_button">Ver questões da disciplina</string>
+    <!-- 2.7.41 — estados de carregamento/erro da home (P1-13) e texto
+         de zero resultados da busca (P1-14). -->
+    <string name="home_loading">A carregar…</string>
+    <string name="home_error">Não foi possível carregar os destaques. Verifica a tua ligação e tenta de novo.</string>
+    <string name="search_no_results">Nada encontrado para a tua busca.</string>
+    <string name="search_resumos_empty">Ainda não há resumos para pesquisar aqui.</string>
     <!-- Ronda 10 Frente B — gerir drives (só admin) -->
     <string name="admin_drives_title">Gerir drives</string>
     <string name="admin_drives_row">Gerir drives (admin)</string>
