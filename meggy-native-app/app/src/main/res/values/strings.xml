@@ -104,6 +104,19 @@
     <string name="materials_files_title">📁 Ficheiros da pasta</string>
     <string name="materials_answer">✓ Resposta: %1$s</string>
     <string name="materials_close">Fechar</string>
+    <!-- R22 UI — conceitos aprovados (aula/início no celular, detalhe TV) -->
+    <string name="tab_pills">Pílulas</string>
+    <string name="lesson_progress_line">Aula %1$d de %2$d · %3$d%% do curso</string>
+    <string name="question_counter">Questão %1$d de %2$d</string>
+    <string name="materials_summary_empty">Ainda não há resumo para esta aula.</string>
+    <string name="materials_pills_empty">Ainda não há pílulas para esta aula.</string>
+    <string name="question_correct">✓ Correto!</string>
+    <string name="home_my_courses">Meus cursos</string>
+    <string name="home_search">Buscar</string>
+    <string name="home_highlights">Destaques</string>
+    <string name="home_remaining">Faltam %1$s</string>
+    <string name="cta_continue_from_here">▶ Continuar de onde parei</string>
+    <string name="tv_questions_button">Ver questões da disciplina</string>
     <!-- Ronda 10 Frente B — gerir drives (só admin) -->
     <string name="admin_drives_title">Gerir drives</string>
     <string name="admin_drives_row">Gerir drives (admin)</string>
