@@ -628,7 +628,7 @@
           Shell.openMeggyAIDrawer(); 
           // Mostrar mensagem na main pane
           const mainEl = document.getElementById('meggy-main');
-          if (mainEl) mainEl.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">🤖 Meggy AI</h1></div><div class="meggy-placeholder"><div class="meggy-placeholder-icon">🤖</div><div class="meggy-placeholder-title">Meggy AI aberta!</div><div class="meggy-placeholder-desc">O drawer está aberto à direita. Use as abas Ações e Chat.</div></div>';
+          if (mainEl) mainEl.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">🤖 Meggy AI</h1></div><div class="meggy-placeholder"><div class="meggy-placeholder-icon">🤖</div><div class="meggy-placeholder-title">Meggy AI aberta!</div><div class="meggy-placeholder-desc">O painel da Meggy está aberto à direita: conversa com ela no chat e, numa aula, usa os atalhos de acção por cima do campo de texto.</div></div>';
           break;
         case 'concursos': Shell.views.concursos(main); break;
         case 'config':    Shell._estudosView(main, 'config'); break;
@@ -657,7 +657,7 @@
           const history = d.history || [];
           const resume = d.resume || {};
           // Usar histórico (tem nome + path) — pegar últimos 6
-          const recent = Array.isArray(history) ? history.slice(-6).reverse() : [];
+          const recent = Array.isArray(history) ? history.slice(0, 6) : [];  // ★ v2.15.76: history é newest-first — slice(-6).reverse() mostrava os 6 MAIS ANTIGOS
           if (recent.length > 0) {
             continueHTML = '<div class="meggy-continue-section"><h2>▶ Continue assistindo</h2><div class="meggy-cards-grid">';
             for (const h of recent) {
@@ -667,8 +667,13 @@
               const course = (function(){ try { return decodeURIComponent(rawCourse); } catch (_) { return rawCourse; } })().replace(/\+/g, ' '); // ★ v2.15.49 (F7)
               // Pegar posição do resume (procurar por URL ou path)
               let pos = 0;
-              for (const [k, v] of Object.entries(resume)) {
-                if (k.includes(h.path) || h.path?.includes(k)) { pos = typeof v === 'number' ? v : (v?.pos || 0); break; }
+              // ★ v2.15.76: % REAL da forma web {t,d} (era v.pos,
+              //   inexistente → 0% sempre); escalar (segundos, sem
+              //   duração) não é % → 0. Chave exacta pelo path 1.º.
+              const _pct = (v) => (typeof v === 'number') ? 0 : (v && v.d > 0 && v.t) ? Math.round(v.t / v.d * 100) : (v?.pos || 0);
+              if (h.path && resume[h.path] !== undefined) pos = _pct(resume[h.path]);
+              else for (const [k, v] of Object.entries(resume)) {
+                if (h.path && (k.includes(h.path) || h.path.includes(k))) { pos = _pct(v); break; }
               }
               // ★ v2.15.18 (B — item 7): o nome do drive sai do caminho
               //   CANÓNICO — o histórico guarda o path cru (/11:/CURSOS
@@ -1642,6 +1647,19 @@
         const main = document.getElementById('meggy-main');
         if (!main) return;
         const videoUrl = link.startsWith('http') ? link : (window.location.origin + link);
+        // ★ v2.15.76: PATH CANÓNICO da aula — a chave certa do
+        //   progresso/histórico. O link de reprodução pode ser o
+        //   endpoint de download (a query perde-se e a chave-URL
+        //   fica órfã); o path sai do próprio link quando ele é um
+        //   caminho de drive, ou da pasta actual + nome do ficheiro.
+        const lessonPath = (function () {
+          try {
+            if (link && link.charAt(0) === '/' && link.indexOf(':/') > 0) return link;
+            const f = Shell.state.currentFolderPath || '';
+            if (f.indexOf(':/') > 0) return f.replace(/\/?$/, '/') + encodeURIComponent(name);
+          } catch (e) {}
+          return '';
+        })();
         const isAudio = name.endsWith('.mp3') || name.endsWith('.m4a') || name.endsWith('.wav') || name.endsWith('.ogg') || name.endsWith('.aac');
 
         let pl = playlist || [{ name: name, link: videoUrl, size: '', folder: '' }];
@@ -1655,9 +1673,12 @@
         let resumePos = 0;
         try {
           if (typeof GDIUser !== 'undefined' && GDIUser && GDIUser.state && GDIUser.state.resume) {
-            const saved = GDIUser.state.resume[videoUrl];
-            if (saved && typeof saved === 'number') resumePos = saved;
-            else if (saved && saved.pos) resumePos = saved.pos;
+            // ★ v2.15.76: 1.º pelo PATH da aula (chave canónica),
+            //   2.º pela chave-URL antiga (migração); aceita a forma
+            //   real {t,d,at} — a leitura antiga só aceitava número
+            //   ou .pos, e a forma gravada é {t,…} → nunca retomava.
+            const _pick = (v) => (typeof v === 'number') ? v : (v && typeof v.t === 'number') ? v.t : (v && v.pos) ? v.pos : 0;
+            resumePos = _pick(GDIUser.state.resume[lessonPath]) || _pick(GDIUser.state.resume[videoUrl]);
           }
         } catch (e) {}
 
@@ -1845,6 +1866,22 @@
           if (now - lastSave < 5000) return;
           lastSave = now;
           try { window.GDIUser?.setResume?.(videoUrl, video.currentTime, video.duration || 0); } catch (e) {}
+          // ★ v2.15.76: grava TAMBÉM pelo path canónico + empurra o
+          //   histórico com minutos — sem isto, NENHUM evento de
+          //   histórico nascia das aulas vistas na web (Continue
+          //   congelado, admin sem eventos de hoje, minutos a 0).
+          if (lessonPath && lessonPath !== videoUrl) {
+            try { window.GDIUser?.setResume?.(lessonPath, video.currentTime, video.duration || 0); } catch (e) {}
+            try { window.GDIUser?.pushHistory?.(lessonPath, name, Math.floor((video.currentTime || 0) / 60)); } catch (e) {}
+          }
+          // ★ v2.15.76: grava TAMBÉM pelo path canónico + empurra o
+          //   histórico com minutos — sem isto, NENHUM evento de
+          //   histórico nascia das aulas vistas na web (Continue
+          //   congelado, admin sem eventos de hoje, minutos a 0).
+          if (lessonPath && lessonPath !== videoUrl) {
+            try { window.GDIUser?.setResume?.(lessonPath, video.currentTime, video.duration || 0); } catch (e) {}
+            try { window.GDIUser?.pushHistory?.(lessonPath, name, Math.floor((video.currentTime || 0) / 60)); } catch (e) {}
+          }
         };
 
         function formatTime(s) {
@@ -1926,7 +1963,7 @@
           this.classList.toggle('done', !w);
           this.setAttribute('aria-pressed', String(!w));
           this.innerHTML = !w ? '<i class="bi bi-eye-fill"></i> Assistida ✓' : '<i class="bi bi-eye"></i> Assistido';
-          try { if (window.GDIUser?.setWatched) window.GDIUser.setWatched(videoUrl, !w); } catch (e) {}
+          try { const _wk = lessonPath || videoUrl; if (!w) window.GDIUser?.markWatched?.(_wk); else window.GDIUser?.unmarkWatched?.(_wk); } catch (e) {}  // ★ v2.15.76: setWatched NÃO existe em GDIUser (o clique era um no-op); marca pelo path da aula
         };
 
         document.getElementById('gdi-prev-btn').onclick = () => { if (idx > 0) switchTo(idx - 1); };
@@ -7616,7 +7653,22 @@ el.scrollTop = 0;
           const d = (typeof GDIUser !== 'undefined' && GDIUser && GDIUser.state) || {};
           const watched = d.watched ? Object.keys(d.watched).length : 0;
           const history = d.history ? d.history.length : 0;
-          el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">📊 Progresso</h1></div><div class="meggy-cards-grid"><div class="meggy-card" style="cursor:default;"><div class="meggy-card-icon">🎬</div><div class="meggy-card-title">' + watched + '</div><div class="meggy-card-meta">Aulas assistidas</div></div><div class="meggy-card" style="cursor:default;"><div class="meggy-card-icon">📺</div><div class="meggy-card-title">' + history + '</div><div class="meggy-card-meta">No histórico</div></div></div>';
+          el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">📊 Progresso</h1></div><div class="meggy-cards-grid"><div class="meggy-card" style="cursor:default;"><div class="meggy-card-icon">🎬</div><div class="meggy-card-title" id="gdi-prog-watched">' + watched + '</div><div class="meggy-card-meta">Aulas assistidas</div></div><div class="meggy-card" style="cursor:default;"><div class="meggy-card-icon">📺</div><div class="meggy-card-title" id="gdi-prog-history">' + history + '</div><div class="meggy-card-meta">No histórico</div></div></div>';
+          // ★ v2.15.76: fonte ÚNICA dos contadores — os mesmos números
+          //   das Estatísticas/Coach, de /api/analytics/summary
+          //   (composto no worker a partir do D1). O snapshot local
+          //   acima pode estar vazio/por carregar (GDIUser.state é
+          //   null até ao fetch de /userstate e a vista nunca se
+          //   re-renderizava) → mostrava 0/0 com 72 aulas no servidor.
+          try {
+            fetch('/api/analytics/summary', { cache: 'no-store', credentials: 'same-origin' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+              if (!j || !j.ok || !j.data) return;
+              var wEl = document.getElementById('gdi-prog-watched');
+              var hEl = document.getElementById('gdi-prog-history');
+              if (wEl && typeof j.data.watchedCount === 'number') wEl.textContent = j.data.watchedCount;
+              if (hEl && typeof j.data.historyCount === 'number') hEl.textContent = j.data.historyCount;
+            }).catch(function () {});
+          } catch (_) {}
           return;
         }
         if (feature === 'questoes' || feature === 'simulado' || feature === 'flashcards' || feature === 'resumos') {
