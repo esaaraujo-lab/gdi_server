@@ -136,7 +136,7 @@ object UpdateChecker {
         // §9 — lixo da atualização anterior: se o APK descarregado já
         // foi instalado, apaga-o da pasta Download (só depois de a
         // instalação ser confirmada). Corre sempre, mesmo dentro da
-        // janela de 24h do throttle — não é uma checagem de rede.
+        // janela de 1h do throttle — não é uma checagem de rede.
         deleteDownloadedApkIfInstalled(context)
         // 1) APK pendente primeiro — nunca atrasado pelo throttle. Se
         // instalou, retorna (o checkForUpdate faria a mesma instalação).
@@ -376,6 +376,15 @@ object UpdateChecker {
                 return
             } else if (!pendingFile.exists()) {
                 prefs.edit().remove(KEY_PENDING_APK).apply()
+            } else {
+                // R21: o APK já está baixado e só falta a permissão de
+                // instalar — NÃO cair para a checagem de rede (baixava a
+                // mesma versão outra vez). O fluxo do pendente (resume +
+                // pedido de permissão) é dono deste estado.
+                if (showFeedback) {
+                    showToast(context, "Atualização já baixada — aguardando permissão para instalar")
+                }
+                return
             }
         }
 
@@ -392,7 +401,9 @@ object UpdateChecker {
                     .header("Accept", "application/vnd.github+json")
                     .header("User-Agent", "MeggyNative-UpdateChecker")
                     .build()
-                val response = client.newCall(request).execute()
+                // R21: .use{} — nos erros (return@Thread) o corpo
+                // ficava por fechar; idem no download do APK abaixo.
+                client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
                     // R8A — falha: regista p/ tentar de novo em 15 min
                     // (não queima a janela de 1h, nem tenta em cada resume).
@@ -480,6 +491,7 @@ object UpdateChecker {
                 } else {
                     if (showFeedback) showToast(context, "Voce esta na versao mais recente (v$localVersion)")
                 }
+                }
             } catch (e: Exception) {
                 // R8A — falha de rede: tenta de novo em 15 min.
                 prefs.edit().putLong(KEY_LAST_FAILED_CHECK, System.currentTimeMillis()).apply()
@@ -537,6 +549,12 @@ object UpdateChecker {
         // download é invisível, só o toast discreto do chamador.
         if (!silent && context is Activity) {
             mainHandler.post {
+                // R21: a Activity pode ter morrido entre o clique e
+                // este post (a thread de download não tem ciclo de
+                // vida) — mostrar o diálogo numa janela morta lança
+                // BadTokenException. Sem Activity viva, o download
+                // continua em 2º plano sem diálogo.
+                if (context.isFinishing || context.isDestroyed) return@post
                 val bar = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
                     max = 100
                     isIndeterminate = expectedSize <= 0
@@ -582,7 +600,10 @@ object UpdateChecker {
                     .url(url)
                     .header("User-Agent", "MeggyNative-UpdateChecker")
                     .build()
-                val response = client.newCall(request).execute()
+                // R21: .use{} na resposta do download (antes o corpo
+                // só era fechado pelo byteStream().use interno; os
+                // caminhos de erro antes dele vazavam a ligação).
+                client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
                 val body = response.body ?: throw Exception("resposta vazia")
                 val total = body.contentLength().takeIf { it > 0 } ?: expectedSize
@@ -609,6 +630,7 @@ object UpdateChecker {
                 mainHandler.post { dialog?.dismiss() }
                 prefs.edit().putString(KEY_DOWNLOADED_VERSION, remoteVersion).apply()
                 installApk(context, target, remoteVersion)
+                }
             } catch (e: InterruptedException) {
                 mainHandler.post { dialog?.dismiss() }
                 deletePublicDownload(context, fileName)
@@ -652,24 +674,33 @@ object UpdateChecker {
             val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
             val downloadId = dm.enqueue(request)
 
+            // R21: registo no applicationContext (antes era no Context
+            // recebido — a Activity da Home/Settings — e só era
+            // desregistado quando o download completava COM o ficheiro
+            // presente: download falhado/cancelado = receiver + Activity
+            // retidos para sempre, acumulando um por tentativa).
+            val appContext = context.applicationContext
             val receiver = object : BroadcastReceiver() {
                 override fun onReceive(ctx: Context?, intent: Intent?) {
                     val id = intent?.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1) ?: -1
                     if (id == downloadId) {
+                        // ACTION_DOWNLOAD_COMPLETE é terminal (sucesso
+                        // OU falha): desregista sempre.
+                        try { appContext.unregisterReceiver(this) } catch (_: Exception) {}
                         val file = publicDownloadFile(fileName)
                         if (file.exists()) {
                             prefs.edit().putString(KEY_DOWNLOADED_VERSION, remoteVersion).apply()
                             installApk(context, file, remoteVersion)
                         }
-                        try { context.unregisterReceiver(this) } catch (_: Exception) {}
                     }
                 }
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                context.registerReceiver(receiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_NOT_EXPORTED)
+                appContext.registerReceiver(receiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_NOT_EXPORTED)
             } else {
-                context.registerReceiver(receiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
+                @Suppress("UnspecifiedRegisterReceiverFlag")
+                appContext.registerReceiver(receiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
             }
         } catch (e: Exception) {
             if (!silent) showToast(context, "Erro ao baixar: ${e.message}")
@@ -706,6 +737,9 @@ object UpdateChecker {
             if (System.currentTimeMillis() - declinedAt < PERMISSION_REPROMPT_MS) return
             Handler(Looper.getMainLooper()).post {
                 if (context is Activity) {
+                    // R21: Activity morta → sem diálogo (BadToken); o
+                    // APK fica pendente e a Home volta a oferecê-lo.
+                    if (context.isFinishing || context.isDestroyed) return@post
                     AlertDialog.Builder(context)
                         .setTitle("Permitir instalação")
                         .setMessage("Para atualizar, permita que o Meggy instale apps de fontes desconhecidas. Depois de ativar, volte ao app — a instalação começa sozinha.")

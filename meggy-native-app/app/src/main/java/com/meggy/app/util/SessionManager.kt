@@ -98,14 +98,18 @@ class SessionManager private constructor(context: Context) {
     }
 
     /**
-     * Clears only the session cookie + username, but PRESERVES the password
-     * so ApiService.validateOrReLogin() can auto re-login when the cookie
-     * expires. This is the version called by AuthHelper.bounceToLogin().
+     * Clears only the session cookie (+ flags de admin), but PRESERVES
+     * username and password so ApiService.reLoginWithSavedCredentials()
+     * can auto re-login when the cookie expires. This is the version
+     * called by AuthHelper.bounceToLogin().
+     *
+     * R21: o username deixou de ser apagado — a versão anterior removia
+     * KEY_USERNAME e mantinha só a senha, o que tornava o auto re-login
+     * impossível (ele exige username E senha) e contradizia este KDoc.
      */
     fun clearSession() {
         prefs.edit()
             .remove(KEY_SESSION)
-            .remove(KEY_USERNAME)
             .remove(KEY_IS_ADMIN)
             .remove(KEY_IS_ADMIN_USER)
             .apply()
@@ -286,6 +290,22 @@ class SessionManager private constructor(context: Context) {
     fun isWatched(folderPath: String, videoName: String): Boolean =
         prefs.getBoolean(watchedKey(folderPath, videoName), false)
 
+    /**
+     * R21 — nº de aulas marcadas como assistidas sob o prefixo de um
+     * curso (conta as chaves watched_<pasta>::<vídeo>). É o numerador
+     * da progressão dos cartões da Minha Lista; o denominador é o
+     * total real do /api/courses/unified (ApiService).
+     */
+    fun watchedCountUnder(coursePath: String): Int {
+        val prefix = migrateLegacyCoursePath(coursePath).trimEnd('/')
+        if (prefix.isBlank()) return 0
+        return prefs.all.keys.count { key ->
+            if (!key.startsWith("watched_")) return@count false
+            val folder = key.removePrefix("watched_").substringBefore("::")
+            folder == prefix || folder.startsWith("$prefix/")
+        }
+    }
+
     private fun watchedKey(folderPath: String, videoName: String): String =
         "watched_${migrateLegacyCoursePath(folderPath)}::$videoName"
 
@@ -316,7 +336,7 @@ class SessionManager private constructor(context: Context) {
         val arr = recentArray()
         // v2.7.6: preserva a thumb já salva quando a nova chamada não traz
         // uma (ex.: launchPlayer sem thumb apagava a thumb salva pelo player).
-        val oldThumb = (0 until arr.length()).map { arr.getJSONObject(it) }
+        val oldThumb = arr.objects()
             .firstOrNull {
                 migrateLegacyCoursePath(it.optString("folder")) == migrateLegacyCoursePath(folderPath) && it.optString("video") == videoName
             }?.optString("thumb").takeIf { !it.isNullOrBlank() }
@@ -324,13 +344,13 @@ class SessionManager private constructor(context: Context) {
         // Frente H — preserva o link já salvo quando a nova chamada não traz
         // um (o saveJob do player chama addRecent sem link); sem isto o
         // caminho rápido do "Continuar assistindo" perdia o link.
-        val oldLink = (0 until arr.length()).map { arr.getJSONObject(it) }
+        val oldLink = arr.objects()
             .firstOrNull {
                 migrateLegacyCoursePath(it.optString("folder")) == migrateLegacyCoursePath(folderPath) && it.optString("video") == videoName
             }?.optString("link").takeIf { !it.isNullOrBlank() }
         val savedLink = link.takeIf { !it.isNullOrBlank() } ?: oldLink
         // Remove any existing entry with the same (folder, video)
-        val filtered = (0 until arr.length()).map { arr.getJSONObject(it) }
+        val filtered = arr.objects()
             .filter {
                 !(migrateLegacyCoursePath(it.optString("folder")) == migrateLegacyCoursePath(folderPath) && it.optString("video") == videoName)
             }
@@ -361,7 +381,7 @@ class SessionManager private constructor(context: Context) {
     fun updateRecentThumb(folderPath: String, videoName: String, thumbnailLink: String) {
         if (thumbnailLink.isBlank()) return
         val arr = recentArray()
-        val list = (0 until arr.length()).map { arr.getJSONObject(it) }.toMutableList()
+        val list = arr.objects().toMutableList()
         val idx = list.indexOfFirst {
             migrateLegacyCoursePath(it.optString("folder")) == migrateLegacyCoursePath(folderPath) && it.optString("video") == videoName
         }
@@ -376,8 +396,7 @@ class SessionManager private constructor(context: Context) {
     fun getRecents(): List<RecentItem> {
         val arr = recentArray()
         val out = ArrayList<RecentItem>(arr.length())
-        for (i in 0 until arr.length()) {
-            val o = arr.getJSONObject(i)
+        for (o in arr.objects()) {
             out.add(RecentItem(
                 folderPath = migrateLegacyCoursePath(o.optString("folder")),
                 videoName = o.optString("video"),
@@ -389,6 +408,16 @@ class SessionManager private constructor(context: Context) {
         }
         return out
     }
+
+    /**
+     * R21 — elementos-objecto de um JSONArray, saltando os que não
+     * são objectos. Antes, `getJSONObject` por elemento não tinha
+     * guarda em addRecent/getRecents/getLessonDescription/etc.: um
+     * elemento corrompido nas prefs lançava JSONException e rebentava
+     * o chamador (o saveJob do player chama addRecent a cada 2 s).
+     */
+    private fun JSONArray.objects(): List<JSONObject> =
+        (0 until length()).mapNotNull { optJSONObject(it) }
 
     private fun recentArray(): JSONArray {
         val raw = prefs.getString(KEY_RECENTS, null) ?: return JSONArray()
@@ -408,8 +437,7 @@ class SessionManager private constructor(context: Context) {
     /** Descrição gerada guardada para a pasta da aula (ou null). */
     fun getLessonDescription(lessonPath: String): String? {
         val arr = descriptionArray()
-        for (i in 0 until arr.length()) {
-            val o = arr.getJSONObject(i)
+        for (o in arr.objects()) {
             if (o.optString("path") == lessonPath) return o.optString("text").takeIf { it.isNotBlank() }
         }
         return null
@@ -419,7 +447,7 @@ class SessionManager private constructor(context: Context) {
     fun saveLessonDescription(lessonPath: String, text: String) {
         if (text.isBlank()) return
         val arr = descriptionArray()
-        val filtered = (0 until arr.length()).map { arr.getJSONObject(it) }
+        val filtered = arr.objects()
             .filter { it.optString("path") != lessonPath }
         val newList = ArrayList(filtered)
         val entry = JSONObject()
@@ -458,8 +486,8 @@ class SessionManager private constructor(context: Context) {
         return try {
             val arr = JSONArray(raw)
             val out = ArrayList<FileItem>(arr.length())
-            for (i in 0 until arr.length()) {
-                val item = FileItem.fromJson(arr.getJSONObject(i))
+            for (obj in arr.objects()) {
+                val item = runCatching { FileItem.fromJson(obj) }.getOrNull() ?: continue
                 out.add(if (item.folderPath.isNullOrBlank()) item
                     else item.copy(folderPath = migrateLegacyCoursePath(item.folderPath)))
             }
@@ -508,8 +536,7 @@ class SessionManager private constructor(context: Context) {
         return try {
             val arr = JSONArray(raw)
             val out = ArrayList<FavCourse>(arr.length())
-            for (i in 0 until arr.length()) {
-                val o = arr.getJSONObject(i)
+            for (o in arr.objects()) {
                 val path = migrateLegacyCoursePath(o.optString("drivePath", ""))
                 val name = o.optString("name", "")
                 if (path.isNotBlank()) out.add(FavCourse(path, name.ifBlank { path }))
@@ -643,8 +670,7 @@ class SessionManager private constructor(context: Context) {
         val raw = prefs.getString(KEY_BOOKMARKS, null) ?: return emptyList()
         return try {
             val arr = JSONArray(raw)
-            (0 until arr.length()).map {
-                val o = arr.getJSONObject(it)
+            arr.objects().map { o ->
                 Bookmark(migrateLegacyCoursePath(o.optString("path")), o.optString("name"), o.optString("kind"))
             }
         } catch (_: Exception) { emptyList() }

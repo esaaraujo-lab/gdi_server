@@ -42,11 +42,14 @@ object FileDownloader {
                     if (!cookie.isNullOrBlank()) header("Cookie", "session=$cookie")
                 }
                 .build()
-            val response = MeggyApp.okHttpClient.newCall(request).execute()
-            if (!response.isSuccessful) return@withContext null
-            val body = response.body ?: return@withContext null
-            FileOutputStream(out).use { fos ->
-                body.byteStream().copyTo(fos)
+            // R21: .use{} — nos caminhos de erro o corpo nunca era
+            // fechado (fuga de ligações do pool sob falhas repetidas).
+            MeggyApp.okHttpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext null
+                val body = response.body ?: return@withContext null
+                FileOutputStream(out).use { fos ->
+                    body.byteStream().copyTo(fos)
+                }
             }
             if (out.length() == 0L) return@withContext null
             out
@@ -65,9 +68,10 @@ object FileDownloader {
                     if (!cookie.isNullOrBlank()) header("Cookie", "session=$cookie")
                 }
                 .build()
-            val response = MeggyApp.okHttpClient.newCall(request).execute()
-            if (!response.isSuccessful) return@withContext null
-            response.body?.string()
+            MeggyApp.okHttpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext null
+                response.body?.string()
+            }
         } catch (_: Exception) {
             null
         }

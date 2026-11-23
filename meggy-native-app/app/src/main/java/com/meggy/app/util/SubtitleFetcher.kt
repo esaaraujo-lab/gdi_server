@@ -15,14 +15,20 @@ import org.json.JSONObject
  * Fontes, nesta ordem:
  *  1. Sidecar na pasta da aula (.vtt/.srt com o mesmo nome do vídeo) —
  *     usado direto, sem rede extra.
- *  2. Endpoint do worker (ainda NÃO existe — o coordenador da v2.15.4
- *     está implementando): GET /api/ai/subtitles?lesson=<path codificado>
- *     &lang=pt-BR
+ *  2. Endpoint do worker (ainda NÃO existe em nenhum dos dois
+ *     workers — confirmado na varredura de clientes 2026-11-23,
+ *     item A5: "paridade de ausência"; quando existir, nasce no host
+ *     de IA como todas as outras rotas /api/ai/*):
+ *     GET /api/ai/subtitles?lesson=<path codificado>&lang=pt-BR
  *       200 text/vtt ......... VTT pronto (com timestamps do Whisper)
  *       202 {status:"generating"} ... Whisper gerando em 2º plano
  *       404 {status:"none"} ... não há legenda possível
  *     O VTT baixado é guardado no cache do app (por path da aula) e
  *     anexado ao MediaItem como SubtitleConfiguration.
+ *     R21: o pedido ia para BASE_URL (produção) — a única rota "de
+ *     IA" fora do AI_BASE_URL; corrigido para AI_BASE_URL, que é
+ *     onde a rota nascerá. Hoje o resultado é o mesmo (sem legenda),
+ *     mas sem a divergência de host.
  *
  *  3. Transcrição em texto puro (.md/.txt) NÃO vira legenda: não tem
  *     timestamps. O Whisper COM timestamps é obrigatório para a
@@ -67,11 +73,12 @@ object SubtitleFetcher {
             }
         }
 
-        // 2) Endpoint do worker.
+        // 2) Endpoint do worker (host de IA — ver cabeçalho).
         try {
             val lesson = URLEncoder.encode("$lessonPath$videoName", "UTF-8")
-            val url = "${MeggyApp.BASE_URL}/api/ai/subtitles?lesson=$lesson&lang=$LANG"
-            val cookie = SessionManager.get(context).sessionCookie
+            val url = "${MeggyApp.AI_BASE_URL}/api/ai/subtitles?lesson=$lesson&lang=$LANG"
+            val sm = SessionManager.get(context)
+            val cookie = sm.aiSessionCookie?.takeIf { it.isNotBlank() } ?: sm.sessionCookie
             val request = Request.Builder()
                 .url(url)
                 .header("User-Agent", "MeggyNative/2.7 (Android)")
@@ -79,7 +86,9 @@ object SubtitleFetcher {
                     if (!cookie.isNullOrBlank()) header("Cookie", "session=$cookie")
                 }
                 .build()
-            val response = MeggyApp.okHttpClient.newCall(request).execute()
+            // R21: .use{} fecha a resposta em TODOS os ramos do when
+            // (antes os retornos de erro deixavam o corpo por fechar).
+            MeggyApp.okHttpClient.newCall(request).execute().use { response ->
             when (response.code) {
                 200 -> {
                     val body = response.body?.string() ?: return@withContext Result.None
@@ -104,6 +113,7 @@ object SubtitleFetcher {
                     }
                 }
                 else -> Result.None
+            }
             }
         } catch (_: Exception) {
             Result.None

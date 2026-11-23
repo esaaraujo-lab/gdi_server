@@ -51,9 +51,11 @@ object AuthHelper {
      * 1. Corre o listFolder uma vez. Se não for SessionExpired,
      *    devolve-o tal como está (Ok OU Transient — transitória nunca
      *    faz bounce, o chamador mostra erro + retry).
-     * 2. Se for SessionExpired, tenta [ApiService.validateOrReLogin]
-     *    UMA vez (usa a senha guardada — [SessionManager.clearSession]
-     *    nunca a apaga, por isso o re-login continua possível).
+     * 2. Se for SessionExpired, tenta o re-login directo UMA vez
+     *    ([ApiService.reLoginWithSavedCredentials] — usa username+senha
+     *    guardados; [SessionManager.clearSession] preserva os dois, por
+     *    isso o re-login continua possível). R21: sem o probe redundante
+     *    do antigo validateOrReLogin — já sabemos que expirou.
      * 3. Se o re-login resultar, repete o listFolder UMA vez e devolve
      *    esse resultado (Ok na maioria dos casos — o destino nem pisca).
      * 4. Se o re-login falhar, devolve SessionExpired — aí sim o
@@ -69,7 +71,7 @@ object AuthHelper {
         val first = api.listFolder(path, maxPages)
         if (first !is FolderResult.SessionExpired) return first
         val relogged = try {
-            api.validateOrReLogin()
+            api.reLoginWithSavedCredentials()
         } catch (_: Exception) {
             false
         }

@@ -408,7 +408,9 @@ object LessonDescription {
                 )
             ) {
                 AiService.TriggerResult.UNAVAILABLE -> return Outcome.Unavailable
-                AiService.TriggerResult.FAILED -> return Outcome.Failed
+                AiService.TriggerResult.FAILED -> return directSummaryFallback(
+                    context, folderPath, folderName, source, materialNames
+                )
                 AiService.TriggerResult.ALREADY_DONE -> {
                     // Job já concluído: o resumo deve estar no cache.
                     val again = fetchGenerated(context, folderPath, materialNames, filePath)
@@ -438,6 +440,39 @@ object LessonDescription {
             }
         } catch (_: Exception) {
             Outcome.Failed
+        }
+    }
+
+    /**
+     * R21 — segundo endpoint antes de declarar falha (regra do Elton:
+     * nunca dar a IA por indisponível/falhada enquanto houver endpoint
+     * por tentar). O batalhão devolveu FAILED → tenta o POST /api/ai
+     * directo com o texto-fonte (o endpoint síncrono que o leitor de
+     * PDF já usa); se gerar, grava no cache ISA com a chave do material
+     * (a mesma que [fetchGenerated] lê) e devolve Ready. Qualquer
+     * falha aqui devolve [Outcome.Failed] — o comportamento anterior.
+     * Só no caminho do utilizador ([ensureDescription]); a pré-geração
+     * ([triggerOnly]) continua só com o batalhão, por ser em fundo.
+     */
+    private suspend fun directSummaryFallback(
+        context: Context,
+        folderPath: String,
+        folderName: String,
+        source: LessonSource,
+        materialNames: List<String>
+    ): Outcome {
+        val prompt = "És a Meggy, tutora de estudos. Escreve um resumo claro e " +
+            "estruturado em Markdown (em português) da aula \"$folderName\", a " +
+            "partir do material abaixo. Cobre os pontos principais e, quando " +
+            "existirem, exemplos e definições.\n\nMaterial:\n" +
+            source.text.take(MAX_TEXT_CHARS)
+        return when (val r = AiService.generatePdfSummary(context, prompt)) {
+            is AiService.PdfSummaryResult.Ok -> {
+                val keyName = materialNames.firstOrNull() ?: source.name
+                AiService.saveSummary(context, "$folderPath/$keyName", r.text, folderName)
+                Outcome.Ready(AiService.GeneratedBundle(r.text, null, null))
+            }
+            else -> Outcome.Failed
         }
     }
 
