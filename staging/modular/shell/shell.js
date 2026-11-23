@@ -6487,7 +6487,15 @@ el.scrollTop = 0;
           if (list) list.innerHTML = 'Buscando sugestões…';
           btn.disabled = true;
           try {
-            const d = await Shell.views._v215Api('/api/concursos/' + encodeURIComponent(concursoId) + '/suggest-folders?banca=' + encodeURIComponent(b));
+            // ★ v2.15.81: tecto de 45 s no cliente (AbortController) —
+            //   rede de segurança: um fetch que nunca resolve deixava
+            //   o botão desactivado e "Buscando sugestões…" eternos.
+            const _ctl81 = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+            const _tmr81 = _ctl81 ? setTimeout(() => { try { _ctl81.abort(); } catch (_) {} }, 45000) : null;
+            let d;
+            try {
+              d = await Shell.views._v215Api('/api/concursos/' + encodeURIComponent(concursoId) + '/suggest-folders?banca=' + encodeURIComponent(b), _ctl81 ? { signal: _ctl81.signal } : undefined);
+            } finally { if (_tmr81) clearTimeout(_tmr81); }
             const sug = d.suggestions || [];
             // ★ v2.15.2 (J): persistir por concurso (+ banca) — antes as
             //   sugestões viviam só em memória e sumiam após outras ações.
@@ -6495,7 +6503,8 @@ el.scrollTop = 0;
             if (!sug.length) { if (list) list.innerHTML = 'Nenhuma sugestão para esta banca — as pastas prováveis já estão anexadas ou não foram encontradas.'; return; }
             Shell.views._v215PaintSuggestions(list, sug, el, concursoId);
           } catch (e) {
-            if (list) list.innerHTML = 'Não foi possível buscar sugestões: ' + Shell.views._esc(e.message);
+            const _msg81 = (e && e.name === 'AbortError') ? 'a busca demorou demasiado tempo e foi interrompida — tenta de novo' : ((e && e.message) || 'erro');
+            if (list) list.innerHTML = 'Não foi possível buscar sugestões: ' + Shell.views._esc(_msg81);
           } finally { btn.disabled = false; }
         };
       },
