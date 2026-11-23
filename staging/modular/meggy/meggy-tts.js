@@ -15,7 +15,7 @@
 //   window.gdiTTS.play(textoMarkdown, {onEnd})   // resumo / ISA
 //   window.gdiTTS.playModuleSummary(nomeModulo, coursePath)
 //   window.gdiTTS.stop() / .pause() / .resume()
-//   window.gdiTTS.setVoice('francisca'|'antonio') / .setRate(0.75–1.5)
+//   window.gdiTTS.setVoice('thalita'|'francisca'|'antonio') / .setRate(0.75–1.5)
 // Voz e velocidade persistem em localStorage (gdi-tts-voice / gdi-tts-rate).
 // Exposto p/ testes: window.gdiTTS._internals = {sanitizeText, chunkText,
 //   estimateSeconds, cacheKey} (cacheKey é assíncrono — SHA-256).
@@ -96,7 +96,7 @@
 
   // ── Estado / persistência ──
   function loadVoice() {
-    try { var v = localStorage.getItem(LS_VOICE); return (v === 'antonio' || v === 'francisca') ? v : 'francisca'; } catch (_) { return 'francisca'; }
+    try { var v = localStorage.getItem(LS_VOICE); return (v === 'thalita' || v === 'antonio' || v === 'francisca') ? v : 'thalita'; } catch (_) { return 'thalita'; } // ★ v2.15.77: omissão = thalita; escolha guardada respeitada
   }
   function loadRate() {
     try { var r = parseFloat(localStorage.getItem(LS_RATE)); return (isFinite(r) && r >= 0.75 && r <= 1.5) ? r : 1; } catch (_) { return 1; }
@@ -179,7 +179,7 @@
         '<option value="0.75">0,75×</option><option value="1">1×</option><option value="1.25">1,25×</option><option value="1.5">1,5×</option>' +
       '</select>' +
       '<select data-act="voice" aria-label="Voz" style="background:#0d1117;color:#e6edf3;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:6px;cursor:pointer;">' +
-        '<option value="francisca">Francisca ♀</option><option value="antonio">Antonio ♂</option>' +
+        '<option value="thalita">Thalita ♀</option><option value="francisca">Francisca ♀</option><option value="antonio">Antonio ♂</option>' +
       '</select>' +
       '<span data-role="progress" style="color:#9aa4b8;white-space:nowrap;"></span>' +
       '<span data-role="badge" style="color:#5ddeda;white-space:nowrap;"></span>';
@@ -225,7 +225,7 @@
   function pickLocalVoice() {
     var vs = ptBrVoices();
     if (!vs.length) return null;
-    var fem = /luciana|francisca|maria|heloisa|vitoria|fernanda|google.*portugu/i;
+    var fem = /luciana|thalita|francisca|maria|heloisa|vitoria|fernanda|google.*portugu/i;
     var masc = /antonio|daniel|felipe|ricardo|google.*portugu/i;
     var pref = (state.voice === 'antonio') ? masc : fem;
     for (var i = 0; i < vs.length; i++) if (pref.test(vs[i].name || '')) return vs[i];
@@ -406,7 +406,7 @@
   }
 
   function setVoice(v) {
-    if (v !== 'francisca' && v !== 'antonio') return false;
+    if (v !== 'thalita' && v !== 'francisca' && v !== 'antonio') return false;
     state.voice = v;
     try { localStorage.setItem(LS_VOICE, v); } catch (_) {}
     emit();
