@@ -54,6 +54,19 @@
                     android:textSize="@dimen/text_topbar_title"
                     android:textStyle="bold" />
 
+                <ImageView
+                    android:id="@+id/homeSearchBtn"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginEnd="4dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:clickable="true"
+                    android:contentDescription="@string/home_search"
+                    android:focusable="true"
+                    android:padding="9dp"
+                    android:src="@drawable/ic_search"
+                    app:tint="@color/md_on_surface" />
+
                 <TextView
                     android:id="@+id/topSair"
                     android:layout_width="wrap_content"
@@ -161,7 +174,10 @@
                 </FrameLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- "Continuar de onde parou" — destaque (TV; oculto no celular) -->
+            <!-- R22 UI (conceito "início celular"): "Continuar assistindo"
+                 em cartão largo — capa, curso+aula, "faltam MM:SS", barra
+                 cheia e botão. Na TV o layout-television mantém a forma
+                 anterior; os ids são os mesmos nos dois recursos. -->
             <LinearLayout
                 android:id="@+id/featuredSection"
                 android:layout_width="match_parent"
@@ -173,7 +189,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/continue_from_where"
+                    android:text="@string/continue_watching"
                     android:textColor="@color/md_on_surface"
                     android:textSize="@dimen/text_section_title"
                     android:textStyle="bold" />
@@ -190,98 +206,112 @@
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal"
+                        android:orientation="vertical"
                         android:padding="@dimen/spacing_lg">
 
-                        <FrameLayout
-                            android:layout_width="200dp"
-                            android:layout_height="112dp">
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
 
-                            <View
-                                android:id="@+id/featuredBg"
-                                android:layout_width="match_parent"
-                                android:layout_height="match_parent"
-                                android:background="@drawable/hero_dark_gradient" />
+                            <FrameLayout
+                                android:layout_width="120dp"
+                                android:layout_height="68dp">
 
-                            <ImageView
-                                android:id="@+id/featuredThumb"
-                                android:layout_width="match_parent"
-                                android:layout_height="match_parent"
-                                android:scaleType="centerCrop"
-                                android:visibility="gone"
-                                android:contentDescription="@string/thumb_desc" />
+                                <View
+                                    android:id="@+id/featuredBg"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:background="@drawable/hero_dark_gradient" />
 
-                            <TextView
-                                android:id="@+id/featuredFallbackIcon"
-                                android:layout_width="match_parent"
-                                android:layout_height="match_parent"
-                                android:gravity="center"
-                                android:textColor="@color/tile_title"
-                                android:textSize="@dimen/text_monogram"
-                                android:textStyle="bold"
-                                android:alpha="0.95" />
-                        </FrameLayout>
+                                <ImageView
+                                    android:id="@+id/featuredThumb"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:scaleType="centerCrop"
+                                    android:visibility="gone"
+                                    android:contentDescription="@string/thumb_desc" />
+
+                                <TextView
+                                    android:id="@+id/featuredFallbackIcon"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:gravity="center"
+                                    android:textColor="@color/tile_title"
+                                    android:textSize="26sp"
+                                    android:textStyle="bold"
+                                    android:alpha="0.95" />
+                            </FrameLayout>
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="@dimen/spacing_md"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:id="@+id/featuredTitle"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:ellipsize="end"
+                                    android:maxLines="2"
+                                    android:textColor="@color/md_on_surface"
+                                    android:textSize="@dimen/text_card_title"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:id="@+id/featuredSubtitle"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:ellipsize="end"
+                                    android:maxLines="1"
+                                    android:textColor="@color/md_on_surface_variant"
+                                    android:textSize="@dimen/text_card_subtitle" />
+
+                                <TextView
+                                    android:id="@+id/featuredTimeText"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:textColor="@color/md_on_surface_variant"
+                                    android:textSize="@dimen/text_card_progress" />
+                            </LinearLayout>
+                        </LinearLayout>
+
+                        <ProgressBar
+                            android:id="@+id/featuredProgress"
+                            style="?android:attr/progressBarStyleHorizontal"
+                            android:layout_width="match_parent"
+                            android:layout_height="6dp"
+                            android:layout_marginTop="@dimen/spacing_md"
+                            android:max="100"
+                            android:progressDrawable="@drawable/progress_horizontal" />
 
                         <LinearLayout
-                            android:layout_width="0dp"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="@dimen/spacing_lg"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
-
-                            <TextView
-                                android:id="@+id/featuredTitle"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:ellipsize="end"
-                                android:maxLines="2"
-                                android:textColor="@color/md_on_surface"
-                                android:textSize="@dimen/text_card_title"
-                                android:textStyle="bold" />
-
-                            <TextView
-                                android:id="@+id/featuredSubtitle"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="2dp"
-                                android:ellipsize="end"
-                                android:maxLines="1"
-                                android:textColor="@color/md_on_surface_variant"
-                                android:textSize="@dimen/text_card_subtitle" />
-
-                            <ProgressBar
-                                android:id="@+id/featuredProgress"
-                                style="?android:attr/progressBarStyleHorizontal"
-                                android:layout_width="match_parent"
-                                android:layout_height="4dp"
-                                android:layout_marginTop="@dimen/spacing_sm"
-                                android:max="100"
-                                android:progressDrawable="@drawable/progress_horizontal" />
+                            android:layout_marginTop="@dimen/spacing_sm"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
 
                             <TextView
                                 android:id="@+id/featuredProgressText"
-                                android:layout_width="match_parent"
+                                android:layout_width="0dp"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
+                                android:layout_weight="1"
                                 android:textColor="@color/md_primary"
-                                android:textSize="@dimen/text_card_progress" />
-
-                            <TextView
-                                android:id="@+id/featuredTimeText"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="2dp"
-                                android:textColor="@color/md_on_surface_variant"
                                 android:textSize="@dimen/text_card_progress" />
 
                             <androidx.appcompat.widget.AppCompatButton
                                 android:id="@+id/featuredContinue"
                                 android:layout_width="wrap_content"
                                 android:layout_height="48dp"
-                                android:layout_marginTop="@dimen/spacing_md"
                                 android:background="@drawable/btn_primary_pill"
                                 android:paddingHorizontal="@dimen/spacing_xl"
-                                android:text="@string/cta_continue"
+                                android:text="@string/continue_watching"
                                 android:textColor="@color/md_on_primary"
                                 android:textSize="@dimen/text_button"
                                 android:textStyle="bold" />
@@ -312,6 +342,60 @@
                 android:paddingVertical="12dp"
                 android:clipChildren="false"
                 android:overScrollMode="never" />
+
+            <!-- R22 UI (conceito "início celular"): "Meus cursos" em
+                 grelha de 2 colunas — os cursos favoritos do aluno
+                 (mesma fonte da Minha Lista) com total real (unified)
+                 e progresso local. Só no celular: ids novos, lidos
+                 por findViewById com guarda de plataforma. -->
+            <TextView
+                android:id="@+id/labelMyCourses"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/content_margin"
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:text="@string/home_my_courses"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/text_section_title"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/gridMyCourses"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:clipToPadding="false"
+                android:nestedScrollingEnabled="false"
+                android:paddingStart="@dimen/content_margin"
+                android:paddingEnd="@dimen/content_margin"
+                android:visibility="gone" />
+
+            <!-- R22 UI: "Destaques" em cartões horizontais — cursos em
+                 destaque da API; sem resposta, os itens curados do
+                 hero. Só no celular. -->
+            <TextView
+                android:id="@+id/labelDestaques"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/content_margin"
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:text="@string/home_highlights"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/text_section_title"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/listDestaques"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:clipToPadding="false"
+                android:nestedScrollingEnabled="false"
+                android:paddingStart="@dimen/content_margin"
+                android:paddingEnd="@dimen/content_margin"
+                android:visibility="gone" />
 
             <!-- Explorar drives -->
             <TextView

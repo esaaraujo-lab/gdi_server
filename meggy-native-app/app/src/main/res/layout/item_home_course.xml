@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- R22 UI (conceito "início celular"): cartão da grelha "Meus cursos"
+     — capa, título, "N aulas", barra de progresso com %. Só usado no
+     layout do celular (a TV usa a Minha Lista e os carris actuais). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="6dp"
+    android:background="@drawable/card_surface_rounded"
+    android:clickable="true"
+    android:focusable="true"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="80dp">
+
+        <View
+            android:id="@+id/homeCourseBg"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <ImageView
+            android:id="@+id/homeCourseThumb"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/homeCourseMonogram"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:textColor="@color/md_on_primary"
+            android:textSize="30sp"
+            android:textStyle="bold" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/homeCourseTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:textColor="@color/md_on_surface"
+        android:textSize="@dimen/text_card_title"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/homeCourseMeta"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textColor="@color/md_on_surface_variant"
+        android:textSize="@dimen/text_card_subtitle"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/homeCourseProgressRow"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <ProgressBar
+            android:id="@+id/homeCourseProgress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="0dp"
+            android:layout_height="4dp"
+            android:layout_weight="1"
+            android:max="100"
+            android:progressDrawable="@drawable/progress_horizontal" />
+
+        <TextView
+            android:id="@+id/homeCoursePct"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:textColor="@color/md_primary"
+            android:textSize="@dimen/text_card_subtitle"
+            android:textStyle="bold" />
+    </LinearLayout>
+</LinearLayout>
