@@ -8279,22 +8279,34 @@ el.scrollTop = 0;
         flipped = false;
         const front = Shell._esc(String(c.f || '').slice(0, 300));
         const backHtml = Shell._esc(String(c.b || '').slice(0, 400)).replace(/\n/g, '<br>');
+        // ★ v2.15.70: cores do cartão por tema — as faces usam estilos
+        //   inline (vencem o CSS) e os valores eram só p/ fundo escuro;
+        //   no tema claro o contentor fica #f6f8fa e o texto quase-
+        //   branco somia (~1.1:1). No escuro, valores EXACTOS de sempre.
+        const _lt70 = (document.documentElement.getAttribute('data-bs-theme') || 'dark') === 'light';
+        const _fcBgF70 = _lt70 ? 'linear-gradient(135deg,rgba(255,139,159,.20),rgba(192,38,211,.12))' : 'linear-gradient(135deg,rgba(255,139,159,.14),rgba(192,38,211,.08))';
+        const _fcBgB70 = _lt70 ? 'linear-gradient(135deg,rgba(93,222,218,.20),rgba(63,185,80,.12))' : 'linear-gradient(135deg,rgba(93,222,218,.14),rgba(63,185,80,.08))';
+        const _fcTxF70 = _lt70 ? '#1f2328' : '#f0f6fc';
+        const _fcTxB70 = _lt70 ? '#1f2328' : '#e6edf3';
+        const _fcLbF70 = _lt70 ? '#d6336c' : '#ff8b9f';
+        const _fcLbB70 = _lt70 ? '#0e7c86' : '#5ddeda';
+        const _fcMeta70 = _lt70 ? '#59636e' : '#8b949e';
         bodyEl.innerHTML = '<div class="gdi-mat-isa-result" style="max-width:760px;margin:0 auto;">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">' +
-            '<span style="color:#8b949e;font-size:12px;">' + Shell._esc(lessonName) + ' · ' + (idx + 1) + '/' + cards.length + '</span>' +
-            '<span style="color:#8b949e;font-size:12px;">✓ ' + hits + ' ✗ ' + misses + '</span>' +
+            '<span style="color:' + _fcMeta70 + ';font-size:12px;">' + Shell._esc(lessonName) + ' · ' + (idx + 1) + '/' + cards.length + '</span>' +
+            '<span style="color:' + _fcMeta70 + ';font-size:12px;">✓ ' + hits + ' ✗ ' + misses + '</span>' +
           '</div>' +
           '<div style="position:relative;perspective:1500px;height:min(340px,52vh);height:min(340px,52dvh);max-width:560px;margin:0 auto;cursor:pointer;" id="meggy-fc-card">' +
             '<div style="position:absolute;inset:0;transform-style:preserve-3d;transition:transform .55s cubic-bezier(.4,0,.2,1);" id="meggy-fc-inner">' +
-              '<div class="meggy-flashcard-face meggy-flashcard-front" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:18px 16px;border-radius:12px;background:linear-gradient(135deg,rgba(255,139,159,.14),rgba(192,38,211,.08));border:1.5px solid rgba(255,139,159,.4);backface-visibility:hidden;">' +
-                '<div style="font-size:12px;font-weight:700;color:#ff8b9f;display:flex;align-items:center;gap:4px;"><i class="bi bi-question-circle"></i> Pergunta</div>' +
-                '<div style="font-size:16px;line-height:1.55;color:#f0f6fc;text-align:center;">' + front + '</div>' +
-                '<div style="font-size:12px;color:#8b949e;font-style:italic;"><i class="bi bi-arrow-repeat"></i> clique para virar</div>' +
+              '<div class="meggy-flashcard-face meggy-flashcard-front" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:18px 16px;border-radius:12px;background:' + _fcBgF70 + ';border:1.5px solid rgba(255,139,159,.4);backface-visibility:hidden;">' +
+                '<div style="font-size:12px;font-weight:700;color:' + _fcLbF70 + ';display:flex;align-items:center;gap:4px;"><i class="bi bi-question-circle"></i> Pergunta</div>' +
+                '<div style="font-size:16px;line-height:1.55;color:' + _fcTxF70 + ';text-align:center;">' + front + '</div>' +
+                '<div style="font-size:12px;color:' + _fcMeta70 + ';font-style:italic;"><i class="bi bi-arrow-repeat"></i> clique para virar</div>' +
               '</div>' +
-              '<div class="meggy-flashcard-face meggy-flashcard-back" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:18px 16px;border-radius:12px;background:linear-gradient(135deg,rgba(93,222,218,.14),rgba(63,185,80,.08));border:1.5px solid rgba(93,222,218,.4);transform:rotateY(180deg);backface-visibility:hidden;">' +
-                '<div style="font-size:12px;font-weight:700;color:#5ddeda;display:flex;align-items:center;gap:4px;"><i class="bi bi-check-circle"></i> Resposta</div>' +
-                '<div style="font-size:14px;line-height:1.55;color:#e6edf3;text-align:left;overflow-y:auto;max-height:240px;">' + backHtml + '</div>' +
-                '<div style="font-size:12px;color:#8b949e;font-style:italic;"><i class="bi bi-arrow-repeat"></i> clique para voltar</div>' +
+              '<div class="meggy-flashcard-face meggy-flashcard-back" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:18px 16px;border-radius:12px;background:' + _fcBgB70 + ';border:1.5px solid rgba(93,222,218,.4);transform:rotateY(180deg);backface-visibility:hidden;">' +
+                '<div style="font-size:12px;font-weight:700;color:' + _fcLbB70 + ';display:flex;align-items:center;gap:4px;"><i class="bi bi-check-circle"></i> Resposta</div>' +
+                '<div style="font-size:14px;line-height:1.55;color:' + _fcTxB70 + ';text-align:left;overflow-y:auto;max-height:240px;">' + backHtml + '</div>' +
+                '<div style="font-size:12px;color:' + _fcMeta70 + ';font-style:italic;"><i class="bi bi-arrow-repeat"></i> clique para voltar</div>' +
               '</div>' +
             '</div>' +
           '</div>' +
@@ -8361,11 +8373,15 @@ el.scrollTop = 0;
         if (bodyEl._fcKeyHandler) { document.removeEventListener('keydown', bodyEl._fcKeyHandler); bodyEl._fcKeyHandler = null; }
         const total = cards.length;
         const pct = total > 0 ? Math.round(hits / total * 100) : 0;
+        const _lt70r = (document.documentElement.getAttribute('data-bs-theme') || 'dark') === 'light';  // ★ v2.15.70: idem draw()
+        const _fcRsT70 = _lt70r ? '#1f2328' : '#e6edf3';
+        const _fcRsH70 = _lt70r ? '#d6336c' : '#ff8b9f';
+        const _fcRsM70 = _lt70r ? '#59636e' : '#8b949e';
         bodyEl.innerHTML = '<div class="gdi-mat-isa-result" style="max-width:760px;margin:0 auto;text-align:center;padding:40px 20px;">' +
           '<div style="font-size:48px;margin-bottom:12px;">' + (pct >= 60 ? '🎉' : '📚') + '</div>' +
-          '<h3 style="color:#ff8b9f;font-family:Poppins,sans-serif;">Sessão concluída!</h3>' +
-          '<p style="color:#e6edf3;font-size:16px;margin-top:8px;"><b style="color:' + (pct >= 60 ? '#3fb950' : '#ff8b8b') + ';">' + hits + '/' + total + '</b> · ' + pct + '% acerto</p>' +
-          '<p style="color:#8b949e;font-size:12px;">Matéria: ' + Shell._esc(lessonName) + '</p>' +
+          '<h3 style="color:' + _fcRsH70 + ';font-family:Poppins,sans-serif;">Sessão concluída!</h3>' +
+          '<p style="color:' + _fcRsT70 + ';font-size:16px;margin-top:8px;"><b style="color:' + (pct >= 60 ? '#3fb950' : '#ff8b8b') + ';">' + hits + '/' + total + '</b> · ' + pct + '% acerto</p>' +
+          '<p style="color:' + _fcRsM70 + ';font-size:12px;">Matéria: ' + Shell._esc(lessonName) + '</p>' +
           '<div style="display:flex;gap:8px;justify-content:center;margin-top:18px;flex-wrap:wrap;">' +
             '<button class="meggy-header-btn" onclick="Shell.state.playerPlaylist && Shell.views._playVideoInline(Shell.state.playerPlaylist[Shell.state.playerIndex].link, Shell.state.playerPlaylist[Shell.state.playerIndex].name, Shell.state.playerPlaylist, Shell.state.playerIndex)" style="background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-arrow-repeat"></i> Voltar ao player</button>' +
           '</div>' +
