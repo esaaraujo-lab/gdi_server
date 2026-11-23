@@ -110,16 +110,35 @@ object AiService {
      * Um retry explícito do utilizador limpa a flag antes de tentar
      * de novo (ver [clearBackendUnavailable]).
      */
-    @Volatile var backendUnavailable: Boolean = false
-        private set
+    /**
+     * R21: o latch passou a ter TTL (10 min). Antes era pegajoso até
+     * um retry explícito o limpar — e o único chamador de
+     * [clearBackendUnavailable] era o PdfReader: um 404 transitório
+     * ou mal-atribuído no Detail/Player desligava a IA para o resto
+     * da sessão do processo, sem forma de recuperar. Agora o latch
+     * expira sozinho passado o TTL (o getter devolve false) e volta
+     * a armar-se se um 404 genuíno voltar. Leituras e escritas
+     * existentes não mudam — só a semântica temporal.
+     */
+    @Volatile private var backendUnavailableAt: Long = 0L
+
+    var backendUnavailable: Boolean
+        get() = backendUnavailableAt != 0L &&
+            System.currentTimeMillis() - backendUnavailableAt < BACKEND_LATCH_TTL_MS
+        private set(value) {
+            backendUnavailableAt = if (value) System.currentTimeMillis() else 0L
+        }
+
+    /** TTL do latch [backendUnavailable] (R21). */
+    private const val BACKEND_LATCH_TTL_MS = 10L * 60L * 1000L
 
     /**
      * Frente R5A — saída do latch: um retry EXPLÍCITO do utilizador
      * (novo toque em "✨ Resumo" / "Gerar novamente") limpa a flag
      * antes de tentar de facto. A flag volta a armar-se sozinha se
-     * um 404 genuíno de rota de IA voltar (ver [runCall]). Não há
-     * limpeza em 2º plano (sem polling): fora de um gesto do
-     * utilizador, o latch continua a evitar loops.
+     * um 404 genuíno de rota de IA voltar (ver [runCall]). R21: além
+     * do gesto, o latch também expira sozinho ao fim do TTL (ver
+     * [backendUnavailable]) — continua sem polling.
      */
     fun clearBackendUnavailable() {
         backendUnavailable = false

@@ -42,6 +42,18 @@ sealed class FolderResult {
     fun orEmpty(): List<FileItem> = filesOrNull ?: emptyList()
 }
 
+/**
+ * R21 — resultado tipado da validação de sessão no arranque.
+ *
+ *  • [VALID] — a sessão responde, ou o re-login silencioso resultou.
+ *  • [INVALID] — sessão provada expirada E sem credenciais/re-login.
+ *  • [UNKNOWN] — falha transitória (rede/timeout/5xx/quota): NÃO se
+ *    sabe se a sessão é válida; nunca deve mandar o utilizador para o
+ *    login (era o defeito do Splash pré-R21: quota esgotada ou rede
+ *    caída no arranque = bounce para o login com a sessão boa).
+ */
+enum class SessionCheck { VALID, INVALID, UNKNOWN }
+
 class ApiService(private val context: Context) {
     
     private val sessionManager get() = SessionManager.get(context)
@@ -56,7 +68,9 @@ class ApiService(private val context: Context) {
             .build()
         
         return try {
-            val response = MeggyApp.okHttpClient.newCall(request).execute()
+            // R21: .use{} — a resposta (e o corpo por consumir nos
+            // caminhos de erro) passa a ser sempre fechada.
+            MeggyApp.okHttpClient.newCall(request).execute().use { response ->
             if (response.code == 302 || response.code == 200) {
                 val cookies = response.headers("Set-Cookie")
                 for (cookie in cookies) {
@@ -69,6 +83,7 @@ class ApiService(private val context: Context) {
                 }
             }
             false
+            }
         } catch (e: IOException) {
             false
         }
@@ -115,8 +130,13 @@ class ApiService(private val context: Context) {
                 .header("Cookie", "session=${sessionManager.sessionCookie ?: ""}")
                 .build()
 
-            val page: Pair<List<FileItem>, String?> = try {
-                val response = MeggyApp.okHttpClient.newCall(request).execute()
+            // R21: .use{} fecha a resposta em todos os caminhos
+            // (erros devolviam sem consumir o corpo — fuga de ligações
+            // do pool). Os `break` internos viram `return@use null`
+            // (break não é permitido dentro do lambda do use) e o
+            // chamador trata null como "parar a paginação".
+            val page: Pair<List<FileItem>, String?>? = try {
+                MeggyApp.okHttpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
                     // R19B (P1): 401/403 = sessão expirada;
                     // qualquer outro não-2xx (ex.: 5xx) = falha
@@ -128,20 +148,20 @@ class ApiService(private val context: Context) {
                             FolderResult.Transient
                         }
                     }
-                    break
+                    return@use null
                 }
                 val body = response.body?.string()
                 if (body == null) {
                     // R19B (P1): corpo nulo = falha transitória.
                     if (pageIndex == 0) return FolderResult.Transient
-                    break
+                    return@use null
                 }
 
                 // ★ v1.0.8: verificar se resposta é HTML (login redirect) em vez de JSON
                 if (body.trimStart().startsWith("<!DOCTYPE") || body.trimStart().startsWith("<html")) {
                     // R19B (P1): HTML de login = sessão expirada.
                     if (pageIndex == 0) return FolderResult.SessionExpired
-                    break
+                    return@use null
                 }
 
                 val json = JSONObject(body)
@@ -156,18 +176,24 @@ class ApiService(private val context: Context) {
                 val items = mutableListOf<FileItem>()
                 if (files != null) {
                     for (i in 0 until files.length()) {
-                        items.add(FileItem.fromJson(files.getJSONObject(i)))
+                        // R21: parse por elemento — um item malformado
+                        // já não deita fora a pasta inteira (Models.kt).
+                        files.optJSONObject(i)?.let { obj ->
+                            runCatching { FileItem.fromJson(obj) }.getOrNull()
+                        }?.let { items.add(it) }
                     }
                 }
                 val next = if (json.isNull("nextPageToken")) null
                     else json.optString("nextPageToken").takeIf { it.isNotBlank() }
                 items to next
+                }
             } catch (e: Exception) {
                 // R19B (P1): excepção de rede/timeout = falha
                 // transitória — nunca faz bounce.
                 if (pageIndex == 0) return FolderResult.Transient
                 break
             }
+            if (page == null) break
             result.addAll(page.first)
             val next = page.second
             if (next == null || next == pageToken) break
@@ -192,12 +218,60 @@ class ApiService(private val context: Context) {
             .header("Cookie", "session=${sessionManager.sessionCookie ?: ""}")
             .build()
         return try {
-            val response = MeggyApp.okHttpClient.newCall(request).execute()
-            if (!response.isSuccessful) return null
-            val body = response.body?.string() ?: return null
-            val json = JSONObject(body)
-            if (!json.optBoolean("ok", false)) return null
-            FeaturedCourse.parseList(json.optJSONArray("courses"))
+            // R21: .use{} — idem (corpo por fechar nos erros).
+            MeggyApp.okHttpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return null
+                val body = response.body?.string() ?: return null
+                val json = JSONObject(body)
+                if (!json.optBoolean("ok", false)) return null
+                FeaturedCourse.parseList(json.optJSONArray("courses"))
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * R21 — totais REAIS de aulas por curso: GET /api/courses/unified
+     * (a mesma fonte dos cartões da web desde a v2.15.44; o `total`
+     * de cada item kind='course' é o nº de pastas de aula do curso
+     * no D1/fallback do worker). Devolve mapa chave normalizada →
+     * total (> 0), ou null em qualquer falha (rede/auth/rota) — os
+     * chamadores mantêm a contagem local, nunca inventam números.
+     * Cache de processo de 5 min, partilhado por todas as instâncias
+     * (Home/Minha Lista/Detalhe chamam sem custo repetido).
+     */
+    suspend fun getUnifiedCourseTotals(): Map<String, Int>? {
+        val now = System.currentTimeMillis()
+        unifiedTotalsCache?.let { cached ->
+            if (now - unifiedTotalsAt < UNIFIED_TOTALS_TTL_MS) return cached
+        }
+        val request = Request.Builder()
+            .url("${MeggyApp.BASE_URL}/api/courses/unified")
+            .header("Cookie", "session=${sessionManager.sessionCookie ?: ""}")
+            .build()
+        return try {
+            val parsed = MeggyApp.okHttpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return null
+                val body = response.body?.string() ?: return null
+                val json = JSONObject(body)
+                if (!json.optBoolean("ok", false)) return null
+                val items = json.optJSONArray("items") ?: return null
+                val out = HashMap<String, Int>()
+                for (i in 0 until items.length()) {
+                    val item = items.optJSONObject(i) ?: continue
+                    if (item.optString("kind") != "course") continue
+                    val path = item.optString("coursePath")
+                    val total = item.optInt("total", 0)
+                    if (path.isNotBlank() && total > 0) {
+                        out[normalizeCourseKey(path)] = total
+                    }
+                }
+                out
+            }
+            unifiedTotalsCache = parsed
+            unifiedTotalsAt = now
+            parsed
         } catch (_: Exception) {
             null
         }
@@ -495,7 +569,11 @@ class ApiService(private val context: Context) {
             val items = mutableListOf<FileItem>()
             if (files != null) {
                 for (i in 0 until files.length()) {
-                    items.add(FileItem.fromJson(files.getJSONObject(i)))
+                    // R21: parse por elemento — um item malformado já não
+                    // deita fora a pasta inteira (padrão de Models.kt).
+                    files.optJSONObject(i)?.let { obj ->
+                        runCatching { FileItem.fromJson(obj) }.getOrNull()
+                    }?.let { items.add(it) }
                 }
             }
             val next = if (json.isNull("nextPageToken")) null
@@ -515,6 +593,32 @@ class ApiService(private val context: Context) {
          * ADMIN_USERS = ['elton@araujo.eu.org'].
          */
         const val ADMIN_FALLBACK_EMAIL = "elton@araujo.eu.org"
+
+        // R21 — cache dos totais do /api/courses/unified (processo).
+        @Volatile
+        private var unifiedTotalsCache: Map<String, Int>? = null
+        @Volatile
+        private var unifiedTotalsAt: Long = 0L
+        private const val UNIFIED_TOTALS_TTL_MS = 5 * 60 * 1000L
+
+        /**
+         * R21 — chave canónica de curso: minúsculas, URL descodificado
+         * e sem barra final, aplicada dos dois lados (parse e procura)
+         * para as grafias "%20"/espaço e com/sem "/" convergirem —
+         * o mesmo casamento por variantes que a web faz.
+         */
+        fun normalizeCourseKey(path: String): String {
+            val decoded = try {
+                java.net.URLDecoder.decode(path, "UTF-8")
+            } catch (_: Exception) {
+                path
+            }
+            return decoded.trim().lowercase().trimEnd('/')
+        }
+
+        /** R21 — total do unified para um path local (ou null). */
+        fun unifiedTotalFor(totals: Map<String, Int>, path: String): Int? =
+            totals[normalizeCourseKey(path)]
 
         /**
          * Ronda 13 Frente C — DECISAO DA BASE URL: as rotas de
@@ -579,36 +683,50 @@ class ApiService(private val context: Context) {
      * Called from SplashActivity so the user never has to re-enter
      * credentials just because the server cookie expired.
      */
-    suspend fun validateOrReLogin(): Boolean {
-        // 1) Probe with a lightweight listFolder call — listing the first
-        //    drive root is cheap (one round-trip, JSON-encoded folder list).
-        //    R19B (P1): listFolder devolve um FolderResult tipado —
-        //    SessionExpired (401/403 ou HTML de login) ou Transient
-        //    (rede/timeout, outro não-2xx, corpo nulo). Só Ok significa
-        //    sessão válida; o resto tenta o re-login abaixo.
-        //    v2.7.7: maxPages = 1 — o probe só precisa saber se a sessão
-        //    responde; não precisa listar a pasta inteira.
+    suspend fun validateOrReLogin(): Boolean =
+        validateSession() == SessionCheck.VALID
+
+    /**
+     * R21 — re-login directo com as credenciais guardadas, SEM o probe
+     * de listagem. Para chamadores que já sabem que a sessão expirou
+     * (ex.: AuthHelper.listFolderWithRelogin, que acabou de receber um
+     * SessionExpired): o probe antigo repetia uma ida à rede condenada
+     * antes de tentar o login. Devolve false sem credenciais guardadas.
+     */
+    suspend fun reLoginWithSavedCredentials(): Boolean {
+        val user = sessionManager.username
+        val pass = sessionManager.password
+        if (user.isNullOrEmpty() || pass.isNullOrEmpty()) return false
+        // login() persists the new cookie + username via SessionManager.
+        return try {
+            login(user, pass)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * R21 — validação tipada da sessão (ver [SessionCheck]).
+     *
+     * 1) Probe leve (listFolder da raiz, 1 página): Ok = VALID.
+     * 2) Transient (rede/timeout/5xx/quota) = UNKNOWN — NÃO tenta
+     *    re-login às cegas: sem rede ele falharia na mesma, e com a
+     *    quota esgotada só gastaria pedidos; a sessão pode estar boa.
+     * 3) SessionExpired = tenta o re-login silencioso uma vez:
+     *    resultou → VALID; falhou/sem credenciais → INVALID.
+     */
+    suspend fun validateSession(): SessionCheck {
         val probe = try {
             listFolder("0:", maxPages = 1)
         } catch (_: Exception) {
             FolderResult.Transient
         }
-        if (probe is FolderResult.Ok) return true  // session is valid
-
-        // 2) Session is invalid — see if we have saved credentials.
-        val user = sessionManager.username
-        val pass = sessionManager.password
-        if (user.isNullOrEmpty() || pass.isNullOrEmpty()) return false
-
-        // 3) Try a re-login. login() persists the new cookie + username via
-        //    SessionManager; we do NOT need to re-save the password (already
-        //    persisted) but we keep it current in case the user typed a new
-        //    one — though here we are using the saved one.
-        val ok = try {
-            login(user, pass)
-        } catch (_: Exception) {
-            false
+        return when (probe) {
+            is FolderResult.Ok -> SessionCheck.VALID
+            is FolderResult.Transient -> SessionCheck.UNKNOWN
+            is FolderResult.SessionExpired ->
+                if (reLoginWithSavedCredentials()) SessionCheck.VALID
+                else SessionCheck.INVALID
         }
-        return ok
     }
 }
