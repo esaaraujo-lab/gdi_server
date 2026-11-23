@@ -343,6 +343,41 @@
       document.getElementById('meggy-theme-icon').className = theme === 'dark' ? 'bi bi-moon-stars' : 'bi bi-sun';
 
       console.log('[Meggy Shell] ✓ shell mounted into #meggy-root');
+
+      // ★ v2.15.66 (FAB Meggy): botão flutuante com a carinha da Meggy
+      //   (retrato fiel, aprovado pelo Elton em 2026-11-23) — abre o chat
+      //   (drawer da Meggy AI). Some enquanto o drawer está aberto.
+      try {
+        if (!document.getElementById('meggy-fab')) {
+          const fab = document.createElement('button');
+          fab.id = 'meggy-fab';
+          fab.title = 'Falar com a Meggy';
+          fab.setAttribute('aria-label', 'Falar com a Meggy');
+          fab.style.cssText = 'position:fixed;right:18px;bottom:18px;width:62px;height:62px;border-radius:50%;border:none;padding:0;background:none;cursor:pointer;z-index:1040;box-shadow:0 6px 20px rgba(0,0,0,.35);overflow:hidden;';
+          const imgL = document.createElement('img');
+          imgL.src = 'https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/shell/meggy-fab.webp';
+          imgL.alt = 'Meggy';
+          imgL.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+          const imgD = document.createElement('img');
+          imgD.src = 'https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/shell/meggy-fab-dark.webp';
+          imgD.alt = 'Meggy';
+          imgD.style.cssText = 'width:100%;height:100%;object-fit:cover;display:none;';
+          fab.appendChild(imgL);
+          fab.appendChild(imgD);
+          const syncFab = () => {
+            const t = document.documentElement.getAttribute('data-bs-theme') || 'dark';
+            imgL.style.display = t === 'dark' ? 'none' : 'block';
+            imgD.style.display = t === 'dark' ? 'block' : 'none';
+            fab.style.display = Shell.meggyAIDrawerOpen ? 'none' : 'block';
+          };
+          fab.onclick = () => { Shell.openMeggyAIDrawer(); syncFab(); };
+          document.body.appendChild(fab);
+          new MutationObserver(syncFab).observe(document.documentElement, { attributes: true, attributeFilter: ['data-bs-theme'] });
+          setInterval(syncFab, 1500);
+          syncFab();
+          console.log('[Meggy Shell] ✓ FAB da Meggy montado');
+        }
+      } catch (e) { console.warn('[Meggy Shell] FAB falhou:', e); }
     },
 
     // ─── Lazy load full GDIndex (app.min.js + 24 modules) when needed ───
