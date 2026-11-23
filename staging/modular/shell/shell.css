@@ -3742,3 +3742,52 @@ select optgroup {
    desactivado — .meggy-header-btn já está tematizado no claro;
    o desvanecimento é o opacity:0.5 inline do botão */
 [data-bs-theme="light"] #v215-drives-add-selected:disabled { opacity: 0.8; }
+
+/* ★ 2026-11-23: a aba da Meggy segue o tema escolhido — no tema claro o
+   painel deixa de ficar escuro (as regras base do drawer são só escuras). */
+[data-bs-theme="light"] .meggy-ai-drawer {
+  background: rgba(244,245,251,0.98);
+  border-left-color: rgba(15,23,42,0.12);
+  box-shadow: -10px 0 40px -10px rgba(31,37,64,0.25);
+}
+[data-bs-theme="light"] .meggy-ai-drawer-header { border-bottom-color: rgba(15,23,42,0.1); }
+[data-bs-theme="light"] .meggy-ai-drawer-close { color: #5a6478; }
+[data-bs-theme="light"] .meggy-ai-drawer-close:hover { color: #d6336c; }
+[data-bs-theme="light"] .meggy-ai-drawer-tabs { border-bottom-color: rgba(15,23,42,0.1); }
+[data-bs-theme="light"] .meggy-ai-drawer-tab { color: #8a93a8; }
+[data-bs-theme="light"] .meggy-ai-drawer-tab:hover { color: #1f2540; }
+[data-bs-theme="light"] .meggy-ai-drawer-tab.active { color: #d6336c; border-bottom-color: #d6336c; }
+[data-bs-theme="light"] .meggy-ai-action-btn {
+  background: rgba(255,255,255,0.85);
+  border-color: rgba(15,23,42,0.1);
+  color: #5a6478;
+}
+[data-bs-theme="light"] .meggy-ai-action-btn:hover {
+  background: rgba(255,139,159,0.14);
+  border-color: rgba(255,139,159,0.4);
+  color: #d6336c;
+}
+[data-bs-theme="light"] .meggy-ai-msg.bot {
+  background: rgba(124,77,255,0.07);
+  border-color: rgba(124,77,255,0.22);
+  color: #1f2540;
+}
+[data-bs-theme="light"] .meggy-ai-msg.bot b,
+[data-bs-theme="light"] .meggy-ai-msg.bot h1,
+[data-bs-theme="light"] .meggy-ai-msg.bot h2 { color: #d6336c; }
+[data-bs-theme="light"] .meggy-ai-msg.bot h1 { border-bottom-color: rgba(214,51,108,0.3); }
+[data-bs-theme="light"] .meggy-ai-msg.bot h3,
+[data-bs-theme="light"] .meggy-ai-msg.bot strong { color: #0e7c86; }
+[data-bs-theme="light"] .meggy-ai-msg.bot code { background: rgba(15,23,42,0.07); }
+[data-bs-theme="light"] .meggy-ai-msg.bot pre { background: rgba(15,23,42,0.05); }
+[data-bs-theme="light"] .meggy-ai-msg.bot th,
+[data-bs-theme="light"] .meggy-ai-msg.bot td { border-color: #d0d7de; }
+[data-bs-theme="light"] .meggy-ai-msg.bot th { background: rgba(15,23,42,0.04); }
+[data-bs-theme="light"] .meggy-ai-msg.bot blockquote { color: #59636e; }
+[data-bs-theme="light"] .meggy-ai-msg.bot hr { border-top-color: rgba(15,23,42,0.12); }
+[data-bs-theme="light"] .meggy-ai-chat-input { border-top-color: rgba(15,23,42,0.1); }
+[data-bs-theme="light"] .meggy-ai-chat-input textarea {
+  background: rgba(255,255,255,0.9);
+  border-color: rgba(15,23,42,0.14);
+  color: #1f2540;
+}
