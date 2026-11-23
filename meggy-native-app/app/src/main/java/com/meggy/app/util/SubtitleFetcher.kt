@@ -18,7 +18,7 @@ import org.json.JSONObject
  *  2. Endpoint do worker (ainda NÃO existe em nenhum dos dois
  *     workers — confirmado na varredura de clientes 2026-11-23,
  *     item A5: "paridade de ausência"; quando existir, nasce no host
- *     de IA como todas as outras rotas /api/ai/*):
+ *     de IA como todas as outras rotas /api/ai/…):
  *     GET /api/ai/subtitles?lesson=<path codificado>&lang=pt-BR
  *       200 text/vtt ......... VTT pronto (com timestamps do Whisper)
  *       202 {status:"generating"} ... Whisper gerando em 2º plano
