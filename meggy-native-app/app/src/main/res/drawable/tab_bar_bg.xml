@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  R22 UI — fundo da barra de abas segmentadas dos materiais do
+  player (celular): contentor em pílula, superfície do tema.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="@dimen/radius_pill" />
+    <solid android:color="@color/md_surface_container" />
+</shape>

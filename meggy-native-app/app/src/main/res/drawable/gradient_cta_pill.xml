@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  R22 UI — pílula em gradiente da marca (rosa → violeta), usada no
+  botão "Próxima aula" do player (celular) e na aba seleccionada dos
+  materiais. Mesmo gradiente de gradient_meggy.xml, com cantos em
+  pílula. Recurso novo: nenhum layout antigo o referencia.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="@dimen/radius_pill" />
+    <gradient
+        android:type="linear"
+        android:angle="0"
+        android:startColor="@color/meggy_pink"
+        android:endColor="@color/meggy_purple" />
+</shape>

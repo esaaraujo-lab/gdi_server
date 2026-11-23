@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  R22 UI — CTA em gradiente p/ o detalhe de curso na TV (conceito
+  TV): normal = pílula em gradiente rosa→violeta; focado = mesmo
+  gradiente + anel branco 3dp (o "brilho" de foco do conceito).
+  Só o layout-television o referencia — o celular não muda.
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="@dimen/radius_pill" />
+            <gradient
+                android:type="linear"
+                android:angle="0"
+                android:startColor="@color/meggy_pink"
+                android:endColor="@color/meggy_purple" />
+            <stroke android:width="3dp" android:color="@android:color/white" />
+        </shape>
+    </item>
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="@dimen/radius_pill" />
+            <gradient
+                android:type="linear"
+                android:angle="0"
+                android:startColor="@color/meggy_pink"
+                android:endColor="@color/meggy_purple" />
+            <stroke android:width="2dp" android:color="@android:color/white" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="@dimen/radius_pill" />
+            <gradient
+                android:type="linear"
+                android:angle="0"
+                android:startColor="@color/meggy_pink"
+                android:endColor="@color/meggy_purple" />
+        </shape>
+    </item>
+</selector>
