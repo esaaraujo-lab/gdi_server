@@ -43,6 +43,10 @@ class FileAdapter(
     private val firstRowNextFocusUpId: Int = View.NO_ID
 ) : ListAdapter<FileItem, FileAdapter.VH>(DIFF) {
 
+    // R21 — maior posição já animada neste adapter (ver onBindViewHolder).
+    private var lastAnimatedPosition = -1
+
+
     private var resumedNames: Set<String> = emptySet()
     private var watchedNames: Set<String> = emptySet()
     private var currentFolderPath: String = "/"
@@ -192,9 +196,16 @@ class FileAdapter(
             }
         }
 
-        val anim = AnimationUtils.loadAnimation(holder.itemView.context, R.anim.tile_appear)
-        anim.startOffset = (position % 12) * 40L
-        holder.binding.root.startAnimation(anim)
+        // R21: a animação de entrada corre só na PRIMEIRA aparição
+        // da posição — antes corria em TODOS os binds, incluindo a
+        // reciclagem ao rolar (replay constante = jank, sobretudo
+        // na TV). Ver lastAnimatedPosition no adapter.
+        if (position > lastAnimatedPosition) {
+            lastAnimatedPosition = position
+            val anim = AnimationUtils.loadAnimation(holder.itemView.context, R.anim.tile_appear)
+            anim.startOffset = (position % 12) * 40L
+            holder.binding.root.startAnimation(anim)
+        }
     }
 
     companion object {
