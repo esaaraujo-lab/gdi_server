@@ -152,6 +152,10 @@ class DetailActivity : AppCompatActivity() {
     // vazio honesto fica.
     private var qfJob: Job? = null
     private var qfLoaded: Boolean = false
+    // 2.7.41 (P1-6) — a geração da descrição ainda corre no servidor
+    // (outcome Generating): o vazio de QF é "A carregar…", não "não há
+    // nada", e o botão Gerar fica escondido até ela parar.
+    private var descriptionGenerating: Boolean = false
     private var qfQuestions: List<DetailQuestion> = emptyList()
     private var qfFlashcards: List<DetailFlashcard> = emptyList()
     private var qfQuestionsList: LinearLayout? = null
@@ -232,6 +236,14 @@ class DetailActivity : AppCompatActivity() {
     }
 
     private enum class Tab { SUMMARY, LESSONS, QUESTIONS, FLASHCARDS }
+
+    companion object {
+        /** 2.7.41 (P1-T1) — o player da TV pede para voltar ao detalhe
+         * numa aba certa: o player escreve aqui antes do finish() e o
+         * onResume consome (uma só vez). */
+        const val RETURN_TAB_SUMMARY = "summary"
+        var openTabOnReturn: String? = null
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -315,6 +327,10 @@ class DetailActivity : AppCompatActivity() {
         binding.tabAulas.setOnClickListener { selectTab(Tab.LESSONS) }
         binding.tabQuestoes.setOnClickListener { selectTab(Tab.QUESTIONS) }
         binding.tabFlashcards.setOnClickListener { selectTab(Tab.FLASHCARDS) }
+        // 2.7.41 (P1-6) — "Gerar" nas abas Questões/Flashcards quando o
+        // vazio não é transitório (ver updateQfGenerateButtons).
+        binding.questoesGenerate.setOnClickListener { retryQfGeneration() }
+        binding.flashcardsGenerate.setOnClickListener { retryQfGeneration() }
         // Frente A (TV) — as abas, o play do hero, o "Salvar" e a
         // lupa não tinham NENHUM feedback de foco (fundos estáticos,
         // sem FocusAnimator): o D-pad chegava lá sem se ver onde
@@ -518,6 +534,12 @@ class DetailActivity : AppCompatActivity() {
         // reconstrói o dela em cada onResume). Reconstrói aqui também,
         // ANTES da lógica de foco que lê a visibilidade do rail.
         setupContinueRail()
+        // 2.7.41 (P1-T1) — regresso do player da TV com aba pedida
+        // (openTabOnReturn): abre a aba em vez de repor o foco guardado
+        // (que era da aba Aulas, agora escondida). Consome uma só vez.
+        val returnTabConsumed = openTabOnReturn == RETURN_TAB_SUMMARY
+        openTabOnReturn = null
+        if (returnTabConsumed) selectTab(Tab.SUMMARY)
         // Ronda 17 Frente B (gatilho D) — o CTA do topo NUNCA é focado
         // no onResume: voltar de uma subpasta punha a página no início.
         // 1.ª abertura: foco no 1.º card do rail quando há rail (como
@@ -525,7 +547,10 @@ class DetailActivity : AppCompatActivity() {
         // vista focável (todas têm anel desde a Frente A).
         // Regresso: repõe o foco real guardado + o scrollY.
         if (TvUtils.isTv(this)) {
-            if (isFirstResume) {
+            if (returnTabConsumed) {
+                // Aba pedida pelo player: foca a aba Resumo.
+                binding.tabResumo.post { binding.tabResumo.requestFocus() }
+            } else if (isFirstResume) {
                 if (binding.railContinue.visibility == View.VISIBLE) {
                     binding.railContinue.post {
                         binding.railContinue.findViewHolderForAdapterPosition(0)
@@ -935,6 +960,9 @@ class DetailActivity : AppCompatActivity() {
 
     private fun loadLessonDescription(files: List<FileItem>) {
         descriptionJob?.cancel()
+        // 2.7.41 (P1-6) — nova pasta, novo estado: a geração anterior
+        // não vale para esta aula (o outcome do poll repõe a flag).
+        descriptionGenerating = false
         val sm = SessionManager.get(this)
         // (a) Cache local — instantâneo ("abre na hora da próxima vez").
         val cached = sm.getLessonDescription(currentPath)
@@ -982,6 +1010,7 @@ class DetailActivity : AppCompatActivity() {
                 this@DetailActivity, currentPath, folderName, files
             )) {
                 is LessonDescription.Outcome.Ready -> {
+                    descriptionGenerating = false
                     sm.saveLessonDescription(currentPath, outcome.text)
                     // Frente K — grava resumo + pilulas + questoes na
                     // pasta de materiais (UM caminho: MaterialSaver).
@@ -1002,6 +1031,7 @@ class DetailActivity : AppCompatActivity() {
                 }
                 is LessonDescription.Outcome.Generating -> {
                     // Ainda gerando após 3 min: mantém o texto e avisa.
+                    descriptionGenerating = true
                     showDescriptionState(getString(R.string.summary_state_generating))
                     // R22 — mesmo sem resumo, questões/pílulas podem
                     // ter aterrado durante o poll (o fetchQuestionsBundle
@@ -1009,6 +1039,7 @@ class DetailActivity : AppCompatActivity() {
                     loadQuestionsFlashcards(files)
                 }
                 is LessonDescription.Outcome.NoMaterial -> {
+                    descriptionGenerating = false
                     // Sem material legível: branco COM o motivo (00:21 §4).
                     val reason = when (outcome.reason) {
                         LessonDescription.NoMaterialReason.SCANNED_PDF ->
@@ -1021,10 +1052,12 @@ class DetailActivity : AppCompatActivity() {
                     showDescription("", reason)
                 }
                 is LessonDescription.Outcome.Unavailable -> {
+                    descriptionGenerating = false
                     // Backend sem IA: mantém a provisória (ou o branco).
                     showDescriptionState(getString(R.string.summary_state_none))
                 }
                 is LessonDescription.Outcome.Failed -> {
+                    descriptionGenerating = false
                     // Falha transitória: mantém o que estava; a próxima
                     // abertura tenta de novo. Nada a mudar.
                 }
@@ -1325,6 +1358,7 @@ class DetailActivity : AppCompatActivity() {
     private fun loadQuestionsFlashcards(files: List<FileItem>) {
         qfJob?.cancel()
         qfLoaded = false
+        updateQfGenerateButtons()
         // Pasta de curso (só subpastas) não é uma aula: nada a
         // carregar — os textos de vazio (âmbito "esta aula") ficam.
         if (!LessonDescription.isLessonFolder(files)) return
@@ -1552,6 +1586,35 @@ class DetailActivity : AppCompatActivity() {
         renderFlashcardsList()
     }
 
+    /**
+     * 2.7.41 (P1-6) — visibilidade dos botões "Gerar" das abas
+     * Questões/Flashcards: só com a lista vazia E a geração parada
+     * (a gerar, o texto é "A carregar…" e o botão esconde-se) E numa
+     * pasta de aula (a pasta de curso não gera nada). A geração
+     * automática ao abrir não muda.
+     */
+    private fun updateQfGenerateButtons() {
+        val show = qfLoaded && !descriptionGenerating &&
+            LessonDescription.isLessonFolder(allFiles)
+        binding.questoesGenerate.visibility =
+            if (show && qfQuestions.isEmpty()) View.VISIBLE else View.GONE
+        binding.flashcardsGenerate.visibility =
+            if (show && qfFlashcards.isEmpty()) View.VISIBLE else View.GONE
+    }
+
+    /**
+     * 2.7.41 (P1-6) — "Gerar"/"Tentar de novo" nas abas Questões/
+     * Flashcards: repete o fluxo automático da abertura (geração da
+     * descrição + recarga das questões/flashcards), sem fluxo novo.
+     */
+    private fun retryQfGeneration() {
+        if (allFiles.isEmpty()) return
+        binding.questoesText.text = getString(R.string.qf_loading)
+        binding.flashcardsText.text = getString(R.string.qf_loading)
+        loadLessonDescription(allFiles)
+        loadQuestionsFlashcards(allFiles)
+    }
+
     private fun renderQuestionsList() {
         val list = qfQuestionsList ?: LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -1561,10 +1624,15 @@ class DetailActivity : AppCompatActivity() {
         list.removeAllViews()
         if (!qfLoaded) return
         if (qfQuestions.isEmpty()) {
-            binding.questoesText.text = getString(R.string.no_questions)
+            // 2.7.41 (P1-6) — "a gerar…" ≠ "não há nada".
+            binding.questoesText.text = getString(
+                if (descriptionGenerating) R.string.qf_loading else R.string.no_questions
+            )
+            updateQfGenerateButtons()
             return
         }
         binding.questoesText.text = getString(R.string.qf_questions_hint)
+        updateQfGenerateButtons()
         for ((idx, q) in qfQuestions.withIndex()) {
             list.addView(buildQuestionCard(q, idx))
         }
@@ -1579,10 +1647,15 @@ class DetailActivity : AppCompatActivity() {
         list.removeAllViews()
         if (!qfLoaded) return
         if (qfFlashcards.isEmpty()) {
-            binding.flashcardsText.text = getString(R.string.no_flashcards)
+            // 2.7.41 (P1-6) — "a gerar…" ≠ "não há nada".
+            binding.flashcardsText.text = getString(
+                if (descriptionGenerating) R.string.qf_loading else R.string.no_flashcards
+            )
+            updateQfGenerateButtons()
             return
         }
         binding.flashcardsText.text = getString(R.string.qf_flashcards_hint)
+        updateQfGenerateButtons()
         for (c in qfFlashcards) {
             list.addView(buildFlashcardCard(c))
         }
@@ -1611,8 +1684,8 @@ class DetailActivity : AppCompatActivity() {
         val pink = ContextCompat.getColor(this, R.color.md_primary)
         val onSurface = ContextCompat.getColor(this, R.color.md_on_surface)
         val muted = ContextCompat.getColor(this, R.color.md_on_surface_variant)
-        val green = android.graphics.Color.parseColor("#81C784")
-        val red = android.graphics.Color.parseColor("#E57373")
+        val green = ContextCompat.getColor(this, R.color.md_success)
+        val red = ContextCompat.getColor(this, R.color.md_error)
         // R21: resposta capturada em val local (o !! dentro do cartão
         // dependia deste guarda a ~60 linhas de distância).
         val answerText = q.answer?.takeIf { it.isNotBlank() }
