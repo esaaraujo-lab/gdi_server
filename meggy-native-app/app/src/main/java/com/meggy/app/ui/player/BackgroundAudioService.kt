@@ -188,6 +188,13 @@ class BackgroundAudioService : Service() {
         val controls = controls()
         if (controls == null) {
             // O player já não existe (Activity destruída): não ficar órfão.
+            // R21: ANTES de parar, cumprir a promessa do
+            // startForegroundService — parar sem nunca ter chamado
+            // startForeground() lança ForegroundServiceDidNotStartInTime-
+            // Exception no Android 12+ (corrida: start() no
+            // initialisePlayer + Activity destruída logo a seguir).
+            startForegroundCompat(buildPlaceholderNotification())
+            stopForeground(true)
             stopSelf()
             return START_NOT_STICKY
         }
@@ -196,6 +203,9 @@ class BackgroundAudioService : Service() {
             ACTION_REWIND -> controls.seekByMs(-SEEK_STEP_MS)
             ACTION_FORWARD -> controls.seekByMs(SEEK_STEP_MS)
             ACTION_STOP -> {
+                // R21: idem — se este comando for o que traz a promessa
+                // de foreground, ela cumpre-se antes de parar.
+                startForegroundCompat(buildNotification(this, controls))
                 controls.stopPlaybackFromNotification()
                 return START_NOT_STICKY
             }
@@ -208,6 +218,16 @@ class BackgroundAudioService : Service() {
         startForegroundCompat(buildNotification(this, controls))
         return START_NOT_STICKY
     }
+
+    /** R21 — notificação mínima para cumprir a promessa de foreground
+     *  quando já não há player (ver onStartCommand); some de imediato. */
+    private fun buildPlaceholderNotification(): Notification =
+        NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(getString(R.string.app_name))
+            .setContentText("A terminar reprodução…")
+            .setOngoing(false)
+            .build()
 
     private fun startForegroundCompat(notification: Notification) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

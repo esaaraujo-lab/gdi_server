@@ -285,15 +285,34 @@ class PlayerActivity : AppCompatActivity() {
                     // onde estava; o vídeo não pausa. Em retrato o
                     // controller nativo trata as teclas (isFullscreen =
                     // false → cai no super.dispatchKeyEvent).
+                    //
+                    // R21 — EXCEPÇÃO: com o foco num CONTROLO da barra
+                    // (chip/botão que não a SeekBar, nem o vídeo, nem o
+                    // disco central), ◀ ▶ NAVEGAM entre controlos (a
+                    // tecla cai no super, como o ENTER já fazia nesse
+                    // caso). A interceção total prendia o utilizador
+                    // ao único chip focado: da barra não havia
+                    // navegação horizontal (Descanso → Velocidade →
+                    // Sair inalcançável). O scrub continua a ganhar
+                    // com o foco no vídeo, na SeekBar, no disco ou em
+                    // lado nenhum — o gesto principal da Frente B fica.
                     if (isFullscreen) {
-                        val back = event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT
-                        // Repetições do sistema (repeatCount > 0): o
-                        // timer do scrub é quem manda — ignoram-se para
-                        // não haver dois seeks por tick.
-                        if (event.repeatCount == 0) {
-                            startRemoteScrub(if (back) -1 else 1)
+                        val f = currentFocus
+                        val focusOnBarControl = controlsVisible && f != null &&
+                            f != binding.playerView && f != binding.barSeekBar &&
+                            f != binding.centerPlayPause
+                        if (!focusOnBarControl) {
+                            val back = event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT
+                            // Repetições do sistema (repeatCount > 0): o
+                            // timer do scrub é quem manda — ignoram-se para
+                            // não haver dois seeks por tick.
+                            if (event.repeatCount == 0) {
+                                startRemoteScrub(if (back) -1 else 1)
+                            }
+                            return true
                         }
-                        return true
+                        // Foco num controlo da barra: cai no super
+                        // (navegação horizontal entre controlos).
                     }
                 }
                 KeyEvent.KEYCODE_BACK -> {
@@ -347,6 +366,13 @@ class PlayerActivity : AppCompatActivity() {
     private var controlsVisible = true
     private val CONTROLS_HIDE_DELAY = 4000L
     private val hideControlsRunnable = Runnable { hideControls() }
+    // R21: retry da legenda como Runnable NOMEADO (antes era um lambda
+    // anónimo postDelayed — não removível, retinha a Activity 30 s e
+    // podia disparar ensureSubtitles() depois do release/destroy).
+    private val subtitleRetryRunnable = Runnable {
+        subtitleState = SubtitleState.UNKNOWN
+        ensureSubtitles()
+    }
 
     private val speeds = floatArrayOf(0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
     private var speedIndex = 1
@@ -473,8 +499,11 @@ class PlayerActivity : AppCompatActivity() {
         }
         currentItem = item
         isAudio = item?.isAudio == true
-        openedResumeMs = if (item != null && !item.folderPath.isNullOrBlank()) {
-            SessionManager.get(this).getResume(item.folderPath!!, item.name)
+        // R21: folderPath capturado em val local (o !! dependia do
+        // guarda isNullOrBlank na mesma expressão — frágil a refactors).
+        val itemFolderPath = item?.folderPath
+        openedResumeMs = if (item != null && !itemFolderPath.isNullOrBlank()) {
+            SessionManager.get(this).getResume(itemFolderPath, item.name)
         } else 0L
 
         val defaultSpeed = SessionManager.get(this).defaultSpeed
@@ -1225,7 +1254,8 @@ class PlayerActivity : AppCompatActivity() {
                     if (subtitleRetryCount < 3) {
                         subtitleRetryCount++
                         Snackbar.make(binding.root, "Gerando legenda… tentando de novo em 30s", Snackbar.LENGTH_LONG).show()
-                        handler.postDelayed({ subtitleState = SubtitleState.UNKNOWN; ensureSubtitles() }, 30_000L)
+                        handler.removeCallbacks(subtitleRetryRunnable)
+                        handler.postDelayed(subtitleRetryRunnable, 30_000L)
                     }
                 }
                 is SubtitleFetcher.Result.None -> {
@@ -1529,9 +1559,12 @@ class PlayerActivity : AppCompatActivity() {
             this, MeggyApp.okHttpClient, writeToCache, requestProperties
         )
 
-        trackSelector = DefaultTrackSelector(this)
+        // R21: selector em val local (o !! logo após a atribuição ao
+        // campo era seguro mas frágil; o Builder recebe o val).
+        val selector = DefaultTrackSelector(this)
+        trackSelector = selector
         val exo = ExoPlayer.Builder(this)
-            .setTrackSelector(trackSelector!!)
+            .setTrackSelector(selector)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
             .build()
 
@@ -1582,7 +1615,10 @@ class PlayerActivity : AppCompatActivity() {
         exo.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_ENDED) {
-                    markEnded(item)
+                    // R21: marcar o item ACTUAL (currentItem) — o `item`
+                    // capturado na abertura era sempre a 1ª aula da
+                    // playlist; ver a nota na transição AUTO abaixo.
+                    markEnded(currentItem)
                     if (!exo.hasNextMediaItem()) {
                         Snackbar.make(binding.root, "Fim da playlist", Snackbar.LENGTH_LONG).show()
                     }
@@ -1598,6 +1634,18 @@ class PlayerActivity : AppCompatActivity() {
             override fun onPlayerError(error: PlaybackException) {
                 // Frente H — erro de playback: não deixar o "A carregar" preso.
                 binding.playerLoading.visibility = View.GONE
+                // R21: o erro deixou de ser silencioso (ecrã preto sem
+                // explicação nem saída) — mensagem + "Tentar de novo",
+                // que volta a preparar o item actual na posição guardada.
+                Snackbar.make(binding.root, "Erro ao reproduzir este vídeo.", Snackbar.LENGTH_LONG)
+                    .setAction("Tentar de novo") {
+                        val it = currentItem
+                        val resume = if (it != null) resumeFor(it, currentUrl ?: "") else 0L
+                        if (resume > 0L) exo.seekTo(resume)
+                        exo.prepare()
+                        exo.play()
+                    }
+                    .show()
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -1615,7 +1663,15 @@ class PlayerActivity : AppCompatActivity() {
                 val newIndex = exo.currentMediaItemIndex
                 if (newIndex != PlaylistManager.index()) {
                     if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
-                        markEnded(item)
+                        // R21: quem TERMINOU é o item que o
+                        // PlaylistManager ainda tem como actual (o
+                        // currentItem da activity também só muda
+                        // abaixo). O código antigo marcava o `item`
+                        // capturado em initialisePlayer() — para sempre
+                        // a 1ª aula: a partir da 2ª aula da playlist,
+                        // a primeira era marcada vezes sem conta e as
+                        // seguintes NUNCA ficavam "assistidas".
+                        markEnded(PlaylistManager.getCurrent())
                     }
                     PlaylistManager.setIndex(newIndex)
                     val newItem = PlaylistManager.getCurrent()
@@ -1778,6 +1834,7 @@ class PlayerActivity : AppCompatActivity() {
         timeJob = null
         subtitleFetchJob?.cancel()
         handler.removeCallbacks(hideControlsRunnable)
+        handler.removeCallbacks(subtitleRetryRunnable)
         val p = player ?: return
         try {
             val it = currentItem
@@ -1923,6 +1980,15 @@ class PlayerActivity : AppCompatActivity() {
         cancelRemoteScrub()
         // Frente R4 — cancela o carregamento dos materiais.
         materialsJob?.cancel()
+        // R21 (irmão da ronda 20, no player): o onDestroy NUNCA libertava
+        // o player. No caminho de áudio em 2º plano o onStop regressa
+        // cedo SEM libertar (por desenho); se a Activity for destruída
+        // a seguir, o ExoPlayer, o wake-lock e os jobs ficavam vivos
+        // até à morte do processo. releasePlayer() é idempotente
+        // (player == null → sai) e também pára o serviço de fundo.
+        handler.removeCallbacksAndMessages(null)
+        swipeHandler.removeCallbacksAndMessages(null)
+        releasePlayer()
         super.onDestroy()
         stopSleepTimer()
         // Frente R4C — retira os controlos e garante que o serviço
