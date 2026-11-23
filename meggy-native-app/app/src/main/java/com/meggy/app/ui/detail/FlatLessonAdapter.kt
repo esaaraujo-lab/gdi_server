@@ -89,7 +89,9 @@ class FlatLessonAdapter(
         submitList(rows)
     }
 
-    private fun fileAt(pos: Int): FileItem = (getItem(pos) as FlatRow.Item).file
+    // R21: cast seguro — posição/tipo obsoletos devolvem null em vez
+    // de rebentar (os chamadores tratam null como "ignora o clique").
+    private fun fileAt(pos: Int): FileItem? = (getItem(pos) as? FlatRow.Item)?.file
 
     override fun getItemViewType(position: Int): Int =
         if (getItem(position) is FlatRow.Header) TYPE_HEADER else TYPE_ITEM
@@ -119,7 +121,9 @@ class FlatLessonAdapter(
             TapFeedback.attachPress(binding.flatCardRoot, TvUtils.isTv(binding.root.context))
         }
 
-        private fun dispatch(item: FileItem) {
+        private fun dispatch(item: FileItem?) {
+            // R21: item nulo (posição obsoleta) = clique ignorado.
+            if (item == null) return
             when {
                 item.isVideo || item.isAudio -> onPlay(item)
                 item.isPdf -> onOpenPdf(item)

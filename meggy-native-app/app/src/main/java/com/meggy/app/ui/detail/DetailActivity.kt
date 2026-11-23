@@ -55,6 +55,9 @@ import com.meggy.app.util.MaterialDiscovery
 import com.meggy.app.util.FocusAnimator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -134,6 +137,13 @@ class DetailActivity : AppCompatActivity() {
     // nem na grade da TV. Job cancelado ao recarregar/sair.
     private var extraMaterials: List<FileItem> = emptyList()
     private var extraMaterialsJob: Job? = null
+    // R21 — prefetch dos filhos das aulas (lotes paralelos) + flag de
+    // conclusão p/ o chip de progresso distinguir "ainda a carregar"
+    // de "tecto atingido" (ver prefetchLessonChildren/updateProgressChip).
+    private var prefetchJob: Job? = null
+    private var prefetchDone: Boolean = false
+    private val PREFETCH_BATCH = 6
+    private val PREFETCH_MAX_GROUPS = 240
     // Ronda 9 Frente B — questões/flashcards da aula (ver
     // loadQuestionsFlashcards): carregados UMA vez por abertura, a
     // partir do pacote ISA + da pasta de materiais (.gdi-questoess/
@@ -299,6 +309,8 @@ class DetailActivity : AppCompatActivity() {
 
         // Abas
         binding.tabResumo.setOnClickListener { selectTab(Tab.SUMMARY) }
+        // R21: retry persistente do estado de erro (ver loadFolder).
+        binding.retryButton.setOnClickListener { loadFolder() }
         binding.tabAulas.setOnClickListener { selectTab(Tab.LESSONS) }
         binding.tabQuestoes.setOnClickListener { selectTab(Tab.QUESTIONS) }
         binding.tabFlashcards.setOnClickListener { selectTab(Tab.FLASHCARDS) }
@@ -491,6 +503,12 @@ class DetailActivity : AppCompatActivity() {
             val root = AdminDriveUi.adminDriveRootFromIntent(intent) ?: currentPath
             AdminDriveUi.setSubfolderCovers(root, drive.subfolderCovers)
         }
+        // R21: o rail "Continue" do detalhe era montado só no onCreate
+        // — ao voltar do player, o progresso/retoma mostrados ficavam
+        // os de antes da reprodução até reabrir o ecrã (a Home já
+        // reconstrói o dela em cada onResume). Reconstrói aqui também,
+        // ANTES da lógica de foco que lê a visibilidade do rail.
+        setupContinueRail()
         // Ronda 17 Frente B (gatilho D) — o CTA do topo NUNCA é focado
         // no onResume: voltar de uma subpasta punha a página no início.
         // 1.ª abertura: foco no 1.º card do rail quando há rail (como
@@ -540,6 +558,10 @@ class DetailActivity : AppCompatActivity() {
         LibraryCovers.removeOnReadyListener(libraryReadyListener)
         descriptionJob?.cancel()
         qfJob?.cancel()
+        // R21: o extraMaterialsJob também é cancelado (era o único dos
+        // três jobs do detalhe fora do onDestroy — sem crash, porque o
+        // lifecycleScope cancela tudo, mas inconsistente).
+        extraMaterialsJob?.cancel()
         super.onDestroy()
     }
 
@@ -709,6 +731,7 @@ class DetailActivity : AppCompatActivity() {
     private fun loadFolder() {
         binding.loadingView.visibility = View.VISIBLE
         binding.emptyState.visibility = View.GONE
+        binding.retryButton.visibility = View.GONE
 
         lifecycleScope.launch {
             // R19B (P1+P2): o listFolder agora distingue sessão
@@ -728,8 +751,12 @@ class DetailActivity : AppCompatActivity() {
             if (result is FolderResult.Transient) {
                 // Falha transitória: o destino FICA aberto, mostra o
                 // erro e oferece retry — nunca o bounce para o login.
+                // R21: além do Snackbar, o botão retryButton fica
+                // PERSISTENTE no estado de erro (o Snackbar some em
+                // segundos e o ecrã ficava sem saída).
                 binding.emptyState.text = "Não foi possível carregar esta pasta. Verifique a conexão e tente de novo."
                 binding.emptyState.visibility = View.VISIBLE
+                binding.retryButton.visibility = View.VISIBLE
                 Snackbar.make(binding.root, "Falha de rede — toque em \"Tentar de novo\".", Snackbar.LENGTH_LONG)
                     .setAction("Tentar de novo") { loadFolder() }
                     .show()
@@ -754,6 +781,24 @@ class DetailActivity : AppCompatActivity() {
                 videoCount > 0 -> "$videoCount aulas"
                 folderCount > 0 -> "$folderCount pastas"
                 else -> "${files.size} arquivos"
+            }
+            // R21: total REAL do curso (GET /api/courses/unified —
+            // a fonte dos cartões da web): numa raiz de curso, o chip
+            // local só via as subpastas ("N pastas") e nunca o total
+            // de aulas do curso. Com o total do servidor, o chip
+            // passa a "N aulas · M pastas". Best-effort e assíncrono
+            // (cache de 5 min no ApiService): sem total, ou total 0
+            // (ainda em indexação), fica a contagem local — nunca um
+            // número inventado.
+            lifecycleScope.launch {
+                val total = ApiService(this@DetailActivity).getUnifiedCourseTotals()
+                    ?.let { ApiService.unifiedTotalFor(it, currentPath) }
+                if (total != null && total > 0) {
+                    binding.chipCount.text = when {
+                        folderCount > 0 -> "$total aulas · $folderCount pastas"
+                        else -> "$total aulas"
+                    }
+                }
             }
             val sm = SessionManager.get(this@DetailActivity)
             if (folderCount == 0) {
@@ -1073,9 +1118,9 @@ class DetailActivity : AppCompatActivity() {
      * está incompleto e o chip mostra "a calcular…" — NUNCA
      * "0% concluído" com dados incompletos. O refreshLessonList()
      * volta a chamar isto quando o prefetch (ou um expandir) entrega
-     * filhos. Cursos com >20 grupos ficam em "a calcular…" (o
-     * prefetch pára nos 20): os cartões mostram o progresso real na
-     * mesma, via recents (B4).
+     * filhos. (R21: o prefetch deixou de parar nos 20 grupos —
+     * corre em lotes paralelos até ao tecto de 240; só além do
+     * tecto é que o chip mostra o % parcial rotulado "(parcial)".)
      *
      * Ronda 16 Frente B (opção (c) do diagnóstico): com 0 vídeos
      * terminados mas um resume na subárvore (recents por prefixo, o
@@ -1094,8 +1139,35 @@ class DetailActivity : AppCompatActivity() {
             binding.chipProgress.text = "$pct% concluído"
             return
         }
-        if (lessonGroups.isEmpty() || lessonGroups.any { it.children == null }) {
+        if (lessonGroups.isEmpty()) {
             binding.chipProgress.text = "a calcular…"
+            return
+        }
+        if (lessonGroups.any { it.children == null }) {
+            // R21: grupos por carregar. Enquanto o prefetch corre (ou
+            // ainda não correu), "a calcular…". Se o prefetch terminou
+            // no tecto e restam grupos, mostra o % HONESTO sobre os
+            // grupos conhecidos, rotulado "(parcial)" — nunca um %
+            // fechado com o denominador incompleto.
+            if (!prefetchDone) {
+                binding.chipProgress.text = "a calcular…"
+                return
+            }
+            var pTotal = 0
+            var pWatched = 0
+            for (group in lessonGroups) {
+                for (v in group.children.orEmpty()) {
+                    if (v.isVideo || v.isAudio) {
+                        pTotal++
+                        if (sm.isWatched(group.folderPath, v.name)) pWatched++
+                    }
+                }
+            }
+            binding.chipProgress.text = if (pTotal > 0) {
+                "${pWatched * 100 / pTotal}% (parcial)"
+            } else {
+                "a calcular…"
+            }
             return
         }
         var total = 0
@@ -1477,7 +1549,10 @@ class DetailActivity : AppCompatActivity() {
         val muted = ContextCompat.getColor(this, R.color.md_on_surface_variant)
         val green = android.graphics.Color.parseColor("#81C784")
         val red = android.graphics.Color.parseColor("#E57373")
-        val hasAnswer = !q.answer.isNullOrBlank()
+        // R21: resposta capturada em val local (o !! dentro do cartão
+        // dependia deste guarda a ~60 linhas de distância).
+        val answerText = q.answer?.takeIf { it.isNotBlank() }
+        val hasAnswer = answerText != null
         var answerShown = false
         var picked = -1
 
@@ -1542,7 +1617,7 @@ class DetailActivity : AppCompatActivity() {
         if (hasAnswer) {
             answerView = TextView(this).apply {
                 text = buildString {
-                    append(getString(R.string.materials_answer, q.answer!!))
+                    append(getString(R.string.materials_answer, answerText))
                     if (!q.explanation.isNullOrBlank()) append("\n\n💡 ${q.explanation}")
                     if (!q.legalText.isNullOrBlank()) append("\n\n⚖️ ${q.legalText}")
                 }
@@ -1677,23 +1752,48 @@ class DetailActivity : AppCompatActivity() {
         }
     }
 
-    /** Pré-carrega os filhos das aulas (máx. 20, em paralelo) para os
-     *  selos/progresso — sem isso, cada aula mostraria "0/5" até abrir. */
+    /** Pré-carrega os filhos das aulas para os selos/progresso —
+     *  sem isso, cada aula mostraria "0/5" até abrir.
+     *
+     *  R21: duas correcções ao desenho anterior.
+     *  (1) O "em paralelo" era sequencial: `toLoad.map { listFolder }`
+     *  dentro de um withContext(IO) corre um pedido de cada vez —
+     *  até 20 chamadas em série. Agora cada lote de 6 corre com
+     *  async/awaitAll de verdade.
+     *  (2) O tecto de 20 grupos deixava cursos grandes para sempre
+     *  em "a calcular…" no chip de progresso. Agora o prefetch corre
+     *  em lotes até carregar todos os grupos ou ao tecto de
+     *  PREFETCH_MAX_GROUPS; cada lote refresca os cartões e o chip,
+     *  e o guarda prefetchJob evita corridas duplicadas (o
+     *  refreshLessonList chama isto a cada tecla da busca). */
     private fun prefetchLessonChildren() {
-        lifecycleScope.launch {
-            val toLoad = lessonGroups.filter { it.children == null }.take(20)
-            val results = withContext(Dispatchers.IO) {
-                toLoad.map { group ->
-                    group to api.listFolder(group.folderPath).orEmpty()
+        if (prefetchJob?.isActive == true) return
+        prefetchDone = false
+        prefetchJob = lifecycleScope.launch {
+            var loaded = 0
+            while (loaded < PREFETCH_MAX_GROUPS) {
+                val toLoad = lessonGroups.filter { it.children == null }
+                    .take(PREFETCH_BATCH)
+                if (toLoad.isEmpty()) break
+                val results = withContext(Dispatchers.IO) {
+                    coroutineScope {
+                        toLoad.map { group ->
+                            async { group to api.listFolder(group.folderPath).orEmpty() }
+                        }.awaitAll()
+                    }
                 }
+                var changed = false
+                results.forEach { (group, children) ->
+                    group.children = children
+                    group.pdfFolderCount = children.count { it.isFolder }
+                    changed = true
+                }
+                loaded += toLoad.size
+                if (changed) refreshPrefetchedGroups(toLoad)
             }
-            var changed = false
-            results.forEach { (group, children) ->
-                group.children = children
-                group.pdfFolderCount = children.count { it.isFolder }
-                changed = true
-            }
-            if (changed) refreshPrefetchedGroups(toLoad)
+            prefetchDone = true
+            // Última palavra do chip: completo, ou "(parcial)" no tecto.
+            updateProgressChip(allFiles)
         }
     }
 
@@ -1866,7 +1966,8 @@ class DetailActivity : AppCompatActivity() {
             lifecycleScope.launch {
                 val children = withContext(Dispatchers.IO) { api.listFolder(group.folderPath).orEmpty() }
                 group.children = children
-                group.pdfFolderCount = group.children!!.count { it.isFolder }
+                // R21: sem !! — usa o val local acabado de atribuir.
+                group.pdfFolderCount = children.count { it.isFolder }
                 refreshLessonList()
             }
         } else {

@@ -4,6 +4,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.meggy.app.R
@@ -184,13 +185,56 @@ class LessonListAdapter(
     /** Linhas visíveis: header + filhos da aula expandida. */
     private val rows = mutableListOf<Any>()
 
+    // R21 — estado de expansão por grupo no último submit: os
+    // LessonGroup são objectos mutáveis partilhados, por isso o
+    // DiffUtil não pode comparar o grupo consigo próprio para saber
+    // se a expansão mudou — compara com este instantâneo.
+    private var lastExpanded: Map<String, Boolean> = emptyMap()
+
     fun submit(groups: List<LessonGroup>) {
-        rows.clear()
+        // R21: DiffUtil em vez de notifyDataSetChanged() total — o
+        // submit corre a CADA TECLA da busca de aulas (filterLessons)
+        // e o rebind total perdia o foco D-pad e re-ligava todas as
+        // capas. Identidade: grupo = folderPath; filho = folderPath
+        // + id do ficheiro (único no Drive). Conteúdo do grupo:
+        // expansão (instantâneo), referência dos filhos (muda quando
+        // o prefetch/entrega os atribui) e pdfFolderCount.
+        val newRows = mutableListOf<Any>()
         groups.forEach { g ->
-            rows.add(g)
-            if (g.expanded) g.children?.forEach { rows.add(LessonChild(g, it)) }
+            newRows.add(g)
+            if (g.expanded) g.children?.forEach { newRows.add(LessonChild(g, it)) }
         }
-        notifyDataSetChanged()
+        val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+            override fun getOldSize(): Int = rows.size
+            override fun getNewSize(): Int = newRows.size
+            override fun areItemsTheSame(oldPos: Int, newPos: Int): Boolean {
+                val o = rows[oldPos]
+                val n = newRows[newPos]
+                return when {
+                    o is LessonGroup && n is LessonGroup ->
+                        o.folderPath == n.folderPath
+                    o is LessonChild && n is LessonChild ->
+                        o.group.folderPath == n.group.folderPath && o.item.id == n.item.id
+                    else -> false
+                }
+            }
+            override fun areContentsTheSame(oldPos: Int, newPos: Int): Boolean {
+                val o = rows[oldPos]
+                val n = newRows[newPos]
+                return when {
+                    o is LessonGroup && n is LessonGroup ->
+                        lastExpanded[o.folderPath] == n.expanded &&
+                            o.children === n.children &&
+                            o.pdfFolderCount == n.pdfFolderCount
+                    o is LessonChild && n is LessonChild -> o.item == n.item
+                    else -> false
+                }
+            }
+        })
+        rows.clear()
+        rows.addAll(newRows)
+        lastExpanded = groups.associate { it.folderPath to it.expanded }
+        diff.dispatchUpdatesTo(this)
     }
 
     /**
@@ -215,7 +259,9 @@ class LessonListAdapter(
             binding.root.setOnClickListener {
                 val pos = bindingAdapterPosition
                 if (pos == RecyclerView.NO_POSITION) return@setOnClickListener
-                val group = rows[pos] as LessonGroup
+                // R21: cast seguro — um submit() entre o bind e o
+                // clique podia trocar o tipo da linha (crash evitado).
+                val group = rows.getOrNull(pos) as? LessonGroup ?: return@setOnClickListener
                 onToggleExpand(group, pos)
             }
             FocusAnimator.attach(binding.root, TvUtils.isTv(binding.root.context))
@@ -228,7 +274,7 @@ class LessonListAdapter(
             binding.root.setOnClickListener {
                 val pos = bindingAdapterPosition
                 if (pos == RecyclerView.NO_POSITION) return@setOnClickListener
-                val child = rows[pos] as LessonChild
+                val child = rows.getOrNull(pos) as? LessonChild ?: return@setOnClickListener
                 when {
                     child.item.isVideo || child.item.isAudio -> onPlayVideo(child.item, child.group.folderPath)
                     child.item.isPdf -> onOpenPdf(child.item, child.group.folderPath)
@@ -349,9 +395,20 @@ class LessonGridAdapter(
     private val groups = mutableListOf<LessonGroup>()
 
     fun submit(newGroups: List<LessonGroup>) {
+        // R21: DiffUtil (identidade = folderPath; conteúdo = filhos/
+        // pdfFolderCount por referência) em vez do rebind total.
+        val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+            override fun getOldSize(): Int = groups.size
+            override fun getNewSize(): Int = newGroups.size
+            override fun areItemsTheSame(oldPos: Int, newPos: Int): Boolean =
+                groups[oldPos].folderPath == newGroups[newPos].folderPath
+            override fun areContentsTheSame(oldPos: Int, newPos: Int): Boolean =
+                groups[oldPos].children === newGroups[newPos].children &&
+                    groups[oldPos].pdfFolderCount == newGroups[newPos].pdfFolderCount
+        })
         groups.clear()
         groups.addAll(newGroups)
-        notifyDataSetChanged()
+        diff.dispatchUpdatesTo(this)
     }
 
     /**
@@ -371,7 +428,9 @@ class LessonGridAdapter(
             binding.root.setOnClickListener {
                 val pos = bindingAdapterPosition
                 if (pos == RecyclerView.NO_POSITION) return@setOnClickListener
-                onPlayLesson(groups[pos])
+                // R21: getOrNull — posição obsoleta após um submit.
+                val group = groups.getOrNull(pos) ?: return@setOnClickListener
+                onPlayLesson(group)
             }
             // R18B (Bug 1 #4): 1.05x na TV — ±9,9dp < gap 12dp,
             // zero sobreposição; anel 3dp + elevação mantidos.
