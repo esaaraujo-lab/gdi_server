@@ -295,7 +295,7 @@ class PlayerActivity : AppCompatActivity() {
                     // (chip/botão que não a SeekBar, nem o vídeo, nem o
                     // disco central), ◀ ▶ NAVEGAM entre controlos (a
                     // tecla cai no super, como o ENTER já fazia nesse
-                    // caso). A interceção total prendia o utilizador
+                    // caso). A interceção total prendia o usuário
                     // ao único chip focado: da barra não havia
                     // navegação horizontal (Descanso → Velocidade →
                     // Sair inalcançável). O scrub continua a ganhar
@@ -437,7 +437,7 @@ class PlayerActivity : AppCompatActivity() {
     private var playerInForeground = false
     // Frente R4C — áudio em 2º plano (tela apagada): true enquanto o
     // player sobreviveu ao onStop com a tela apagada (o serviço está
-    // a correr e o onStart tem de religar a superfície em vez de
+    // a correr e o onStart precisa religar a superfície em vez de
     // recriar o player). false = comportamento antigo (libertar).
     private var backgroundAudioActive = false
     // Frente R4C — controlos do player para o serviço de áudio (o
@@ -463,12 +463,12 @@ class PlayerActivity : AppCompatActivity() {
 
     // R22 — UMA re-verificação diferida dos materiais por aula
     // (chave = folderPath já tentado): cobre a geração que termina
-    // com o ecrã aberto (o load inicial leu um pacote parcial).
+    // com a tela aberta (o load inicial leu um pacote parcial).
     private var materialsRetryJob: Job? = null
     private var materialsRetriedFor: String? = null
     private var materialsSummary: String? = null
 
-    // R22 — ficheiros da pasta da aula actual (para o botão "Gerar"
+    // R22 — arquivos da pasta da aula atual (para o botão "Gerar"
     // reutilizar o fluxo de geração sem relistar a pasta) + estado
     // da geração manual (botão "Gerar" das abas vazias) e a pasta
     // para a qual foi disparada (mudar de aula cancela-a).
@@ -493,10 +493,10 @@ class PlayerActivity : AppCompatActivity() {
         isTv = TvUtils.isTv(this)
         binding = ActivityPlayerBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        // Frente H — o overlay "A carregar" já nasce visível no XML;
+        // Frente H — o overlay "Carregando" já nasce visível no XML;
         // esconde-se no 1º STATE_READY (ver o listener em
-        // initialisePlayer) — o aluno vê o player a carregar em vez
-        // de um ecrã preto sem feedback.
+        // initialisePlayer) — o aluno vê o player carregando em vez
+        // de uma tela preta sem feedback.
         binding.playerLoading.visibility = View.VISIBLE
 
         PlaylistManager.loadPlaylist(this)
@@ -547,14 +547,6 @@ class PlayerActivity : AppCompatActivity() {
         binding.btnSpeedInfo.setOnClickListener { exitRestIfActive(); cycleSpeed() }
         binding.btnRestBar.setOnClickListener { toggleSleepMode() }
         binding.btnRestInfo.setOnClickListener { toggleSleepMode() }
-        // 2.7.41 (P1-T1) — "Ver materiais" da TV: na TV não há secção
-        // de materiais (o info_scroll fica escondido no fullscreen) —
-        // o botão volta ao detalhe na aba Resumo. Só existe no
-        // layout-television; no celular o binding é null.
-        binding.btnMaterialsBar?.setOnClickListener {
-            DetailActivity.openTabOnReturn = DetailActivity.RETURN_TAB_SUMMARY
-            finish()
-        }
         binding.btnFullscreen.setOnClickListener { enterFullscreen() }
         binding.btnExitFullscreen.setOnClickListener { exitFullscreen() }
         // Frente D — Anterior/Próxima NÃO saem do descanso: a troca de
@@ -580,7 +572,6 @@ class PlayerActivity : AppCompatActivity() {
             binding.btnPlayPauseBar, binding.btnRestBar,
             binding.btnSpeedBar, binding.btnExitFullscreen, binding.btnSpeedInfo,
             binding.btnRestInfo, binding.btnFullscreen,
-            binding.btnMaterialsBar,
             binding.centerPlayPause
         ).forEach { FocusAnimator.attach(it, isTv) }
         updateFavButton()
@@ -747,10 +738,10 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun displayTitle(item: FileItem?): String {
         if (item == null) return "Reproduzindo"
-        // R22 — regra do site p/ o nome da aula: nome de ficheiro
+        // R22 — regra do site p/ o nome da aula: nome de arquivo
         // genérico ("video.mp4", "001 - aula.mp4") NÃO é o nome da
         // aula — mostra-se o nome da pasta (folderLabel ou o último
-        // segmento do folderPath). Nome real: exactamente como
+        // segmento do folderPath). Nome real: exatamente como
         // estava (nome · pasta).
         val folder = item.folderLabel?.takeIf { it.isNotBlank() }
             ?: LessonDescription.folderNameFromPath(item.folderPath)
@@ -774,10 +765,10 @@ class PlayerActivity : AppCompatActivity() {
     /**
      * R22 UI (conceito "aula celular") — linha "Aula X de Y · Z% do
      * curso" + barra fina por baixo do vídeo. Dados REAIS: X/Y da
-     * playlist actual (PlaylistManager) e Z = % de itens da playlist
+     * playlist atual (PlaylistManager) e Z = % de itens da playlist
      * já marcados assistidos (estado local, o mesmo isWatched do
      * resto da app). Os ids só existem no layout de celular — na TV
-     * o mat() devolve null e a função não faz nada.
+     * o mat() retorna null e a função não faz nada.
      */
     private fun updateCourseProgressLine() {
         if (isTv) return
@@ -862,7 +853,7 @@ class PlayerActivity : AppCompatActivity() {
         val paused = p != null && !p.isPlaying && !sleepMode
         // Ronda 8 Frente B: o disco central e o UNICO play/pause
         // da TV — quando esta visivel (pausado) e o elemento
-        // focado; ao esconder (a reproduzir) devolve o foco ao
+        // focado; ao esconder (a reproduzir) retorna o foco ao
         // video, para o D-pad nao ficar sem foco (o OK no video
         // pausa/reproduz, ver dispatchKeyEvent).
         if (paused && controlsVisible) {
@@ -875,8 +866,8 @@ class PlayerActivity : AppCompatActivity() {
         // o emoji "⏸" renderizava como quadrado LARANJA na TV (foto 11:48).
         // Ronda 8 Frente B: o botao da barra so existe no layout
         // do celular (nullable no binding na TV) — o glifo dele
-        // continua a actualizar-se la; na TV nao ha botao nenhum
-        // para actualizar.
+        // continua a atualizar-se la; na TV nao ha botao nenhum
+        // para atualizar.
         binding.btnPlayPauseBar?.text = if (p?.isPlaying == true) "❚❚" else "▶"
     }
 
@@ -1206,7 +1197,7 @@ class PlayerActivity : AppCompatActivity() {
             // reproduzir o foco fica no video (o OK ai tambem
             // pausa/reproduz, ver dispatchKeyEvent). O
             // updateCenterPlayPause() no fim desta funcao
-            // actualiza a visibilidade do disco; chama-se ja
+            // atualiza a visibilidade do disco; chama-se ja
             // aqui para o foco o encontrar visivel quando pausado.
             if (isTv) {
                 val f = currentFocus
@@ -1413,7 +1404,7 @@ class PlayerActivity : AppCompatActivity() {
         enrichPlaylistInBackground()
         // Frente R4 — materiais da aula em baixo (retrato, celular):
         // carrega em 2º plano ao abrir; nunca atrasa o vídeo. Na TV
-        // não carrega (a secção não existe no layout-television).
+        // não carrega (a seção não existe no layout-television).
         loadMaterials()
     }
 
@@ -1428,7 +1419,7 @@ class PlayerActivity : AppCompatActivity() {
         // serviço já corre desde o início da reprodução (ver
         // initialisePlayer) e mantém o processo em 1º plano; o wake
         // lock de áudio do ExoPlayer (WAKE_MODE_LOCAL) mantém o CPU
-        // acordado. Se a aula estava pausada, ou se o utilizador
+        // acordado. Se a aula estava pausada, ou se o usuário
         // saiu (tela acesa / Voltar), o comportamento antigo
         // mantém-se: libertar (ver o releasePlayer() abaixo).
         if (!isFinishing && isScreenOff() && isPlaybackActive()) {
@@ -1505,8 +1496,8 @@ class PlayerActivity : AppCompatActivity() {
                                     )
                                 }
                             }
-                            // R22 — o pacote chegou com o ecrã aberto:
-                            // refresca a secção de materiais (antes só
+                            // R22 — o pacote chegou com a tela aberta:
+                            // refresca a seção de materiais (antes só
                             // actualizava ao reabrir a aula). Na TV é
                             // no-op (loadMaterials retorna logo).
                             loadMaterials()
@@ -1526,7 +1517,7 @@ class PlayerActivity : AppCompatActivity() {
      * bloquear o vídeo e sem nenhuma UI em caso de falha. O POST
      * vai para AiService.enqueueGeneration (a rota é da Frente
      * R14C — sem ela, falha silenciosa). O gatilho é o
-     * onIsPlayingChanged(true): a reprodução arrancou de facto
+     * onIsPlayingChanged(true): a reprodução arrancou de fato
      * (não o "okay" nem a abertura da aula). O avanço automático
      * para a aula seguinte também passa por aqui: o Media3 volta
      * a disparar onIsPlayingChanged(true) quando a aula seguinte
@@ -1565,7 +1556,7 @@ class PlayerActivity : AppCompatActivity() {
      * montagem interfolder (CrossFolderPlaylist: 1 listFolder ao pai +
      * 1 por cada pasta-irmã, em lotes de 6) corria ANTES da navegação
      * e deixava o toque sem resposta durante segundos. Agora corre
-     * aqui, com o player já visível a mostrar "A carregar", e os
+     * aqui, com o player já visível a mostrar "Carregando", e os
      * itens novos entram na fila do ExoPlayer sem interromper a
      * reprodução (addMediaItems): os anteriores ao vídeo atual vão
      * para o início (o atual passa ao índice startIndex) e os
@@ -1617,7 +1608,7 @@ class PlayerActivity : AppCompatActivity() {
         val url = if (!link.isNullOrEmpty()) linkBaseUrl() + link else intent.getStringExtra(EXTRA_URL)
         if (url.isNullOrBlank()) {
             // R19B (P4): URL em branco NÃO fecha o Player em
-            // silêncio — o finish() aqui devolvia o utilizador à
+            // silêncio — o finish() aqui devolvia o usuário à
             // Home sem explicar nada (o mesmo sintoma do bounce).
             // Mostra o erro e fica no Player; sair é pelo BACK.
             binding.playerLoading.visibility = View.GONE
@@ -1690,7 +1681,7 @@ class PlayerActivity : AppCompatActivity() {
         exo.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_ENDED) {
-                    // R21: marcar o item ACTUAL (currentItem) — o `item`
+                    // R21: marcar o item ATUAL (currentItem) — o `item`
                     // capturado na abertura era sempre a 1ª aula da
                     // playlist; ver a nota na transição AUTO abaixo.
                     markEnded(currentItem)
@@ -1699,7 +1690,7 @@ class PlayerActivity : AppCompatActivity() {
                     }
                 }
                 if (state == Player.STATE_READY) {
-                    // Frente H — 1º frame pronto: esconde o "A carregar".
+                    // Frente H — 1º frame pronto: esconde o "Carregando".
                     binding.playerLoading.visibility = View.GONE
                     applyVideoQuality()
                     applySubtitlesEnabled()
@@ -1707,11 +1698,11 @@ class PlayerActivity : AppCompatActivity() {
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                // Frente H — erro de playback: não deixar o "A carregar" preso.
+                // Frente H — erro de playback: não deixar o "Carregando" preso.
                 binding.playerLoading.visibility = View.GONE
-                // R21: o erro deixou de ser silencioso (ecrã preto sem
+                // R21: o erro deixou de ser silencioso (tela preta sem
                 // explicação nem saída) — mensagem + "Tentar de novo",
-                // que volta a preparar o item actual na posição guardada.
+                // que volta a preparar o item atual na posição salva.
                 Snackbar.make(binding.root, "Erro ao reproduzir este vídeo.", Snackbar.LENGTH_LONG)
                     .setAction("Tentar de novo") {
                         val it = currentItem
@@ -1739,7 +1730,7 @@ class PlayerActivity : AppCompatActivity() {
                 if (newIndex != PlaylistManager.index()) {
                     if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
                         // R21: quem TERMINOU é o item que o
-                        // PlaylistManager ainda tem como actual (o
+                        // PlaylistManager ainda tem como atual (o
                         // currentItem da activity também só muda
                         // abaixo). O código antigo marcava o `item`
                         // capturado em initialisePlayer() — para sempre
@@ -1945,7 +1936,7 @@ class PlayerActivity : AppCompatActivity() {
      * garante-o), repõe os atualizadores e desliga o serviço (a
      * notificação some porque a Activity voltou a estar visível).
      * NÃO recria a aula nem faz seek: a posição é a que o player
-     * tem (o ciclo de guardar a posição continuou a correr com a
+     * tem (o ciclo de salvar a posição continuou a correr com a
      * tela apagada). O modo Descanso sobrevive (o overlay volta a
      * ficar visível; nada aqui chama exitSleepMode).
      */
@@ -1958,7 +1949,7 @@ class PlayerActivity : AppCompatActivity() {
         updatePrevNextButtons()
         startTimeUpdater()
         // O saveJob NÃO foi cancelado (não houve releasePlayer), por
-        // isso não se reinicia: o ciclo de 2s continuou a guardar a
+        // isso não se reinicia: o ciclo de 2s continuou a salvar a
         // posição com a tela apagada.
         BackgroundAudioService.stop(this)
         if (sleepMode) {
@@ -1970,7 +1961,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /**
-     * Frente R4C — ação ⏹ da notificação: pausa, guarda a posição
+     * Frente R4C — ação ⏹ da notificação: pausa, salva a posição
      * (releasePlayer), para o serviço e fecha o player. Não retoma
      * sozinha: se a aula estava pausada antes de a tela apagar, o
      * serviço nem sequer fica com a notificação em pausa — o player
@@ -2059,7 +2050,7 @@ class PlayerActivity : AppCompatActivity() {
         // o player. No caminho de áudio em 2º plano o onStop regressa
         // cedo SEM libertar (por desenho); se a Activity for destruída
         // a seguir, o ExoPlayer, o wake-lock e os jobs ficavam vivos
-        // até à morte do processo. releasePlayer() é idempotente
+        // até a morte do processo. releasePlayer() é idempotente
         // (player == null → sai) e também pára o serviço de fundo.
         handler.removeCallbacksAndMessages(null)
         swipeHandler.removeCallbacksAndMessages(null)
@@ -2074,9 +2065,9 @@ class PlayerActivity : AppCompatActivity() {
 
     // ──────────── Frente R4 — Materiais da aula (retrato) ────────────
     //
-    // Secção "📚 Materiais" por baixo do botão "Próxima aula" (só no
+    // Seção "📚 Materiais" por baixo do botão "Próxima aula" (só no
     // layout de retrato — res/layout/activity_player.xml; a TV NÃO tem
-    // a secção e NÃO carrega nada: loadMaterials() retorna logo se
+    // a seção e NÃO carrega nada: loadMaterials() retorna logo se
     // isTv). Carrega AUTOMATICAMENTE ao abrir a aula, em 2º plano:
     // o vídeo arranca em onStart/initialisePlayer sem esperar por isto.
     //
@@ -2089,25 +2080,25 @@ class PlayerActivity : AppCompatActivity() {
     //     e (..., "questoes") (pastas .gdi-flashcards/ e .gdi-questoess/);
     //   resumo em falta — cache local (SessionManager.getLessonDescription,
     //     o mesmo que a aba Resumo do detalhe mostra);
-    //   ficheiros da pasta — ApiService.listFolder(folderPath) (a MESMA
+    //   arquivos da pasta — ApiService.listFolder(folderPath) (a MESMA
     //     chamada que ensureSubtitles() já faz aqui); PDF → leitor da
     //     ronda 2 (PdfReaderActivity), .md → MdReaderActivity, outros →
     //     app externa (o mesmo comportamento do openFile do detalhe).
-    // A secção só existe no layout do telemóvel: os ids são lidos por
+    // A seção só existe no layout do celular: os ids são lidos por
     // findViewById (nullable) e NUNCA pelo binding — o binding gerado
     // exige os ids em TODAS as variantes do layout e a TV não os tem
     // (crash no inflate da TV); com findViewById a TV simplesmente
     // não os encontra e nada acontece.
     //
-    // Estados: a carregar (spinner + texto, sem bloquear o vídeo);
+    // Estados: carregando (spinner + texto, sem bloquear o vídeo);
     // vazio (uma linha discreta, sem espaço gigante); erro (texto
     // curto + "Tentar de novo" — sem crash, sem bounce para o login:
-    // o vídeo está a tocar e um bounce matava a reprodução).
+    // o vídeo está tocando e um bounce matava a reprodução).
     // Recarrega a cada troca de aula (Anterior/Próxima/autoplay).
     // Frente R14A — os materiais podem estar na mesma pasta do vídeo
     // OU numa pasta ao lado (ver MaterialDiscovery): quando a pasta
     // da aula não tem materiais, procuram-se as subpastas, a pasta
-    // pai e as pastas-irmãs; na TV nada muda (a secção nem existe).
+    // pai e as pastas-irmãs; na TV nada muda (a seção nem existe).
 
     /** Uma questão do pacote gerado (formato do batalhão, worker.js:7760).
      * R22 UI: correctIndex/explanation vêm do mesmo JSON (os campos que
@@ -2132,7 +2123,7 @@ class PlayerActivity : AppCompatActivity() {
         val files: List<FileItem>
     )
 
-    /** Atalho findViewById nullable (ver nota no topo da secção). */
+    /** Atalho findViewById nullable (ver nota no topo da seção). */
     private fun <T : View> mat(id: Int): T? = findViewById(id)
 
     private fun materialsFolderPath(): String? =
@@ -2167,7 +2158,7 @@ class PlayerActivity : AppCompatActivity() {
         mat<View>(R.id.materials_empty)?.visibility = View.GONE
         mat<View>(R.id.materials_error)?.visibility = View.GONE
         mat<View>(R.id.materials_content)?.visibility = View.GONE
-        // 2.7.41 (P1-2) — o botão da secção vazia é irmão do conteúdo
+        // 2.7.41 (P1-2) — o botão da seção vazia é irmão do conteúdo
         // (não está dentro dele): esconde-se aqui e no erro.
         mat<View>(R.id.materials_empty_generate)?.visibility = View.GONE
         materialsJob = lifecycleScope.launch {
@@ -2191,7 +2182,7 @@ class PlayerActivity : AppCompatActivity() {
                 }
                 val allFiles = (files + extraMaterials)
                     .distinctBy { it.name.lowercase() }
-                // R22 — guarda os ficheiros para o botão "Gerar"
+                // R22 — salva os arquivos para o botão "Gerar"
                 // (generateMaterials) não ter de relistar a pasta.
                 materialsFiles = allFiles
                 val materialNames = allFiles.filter { it.isPdf || it.isMarkdown }.map { it.name }
@@ -2210,7 +2201,8 @@ class PlayerActivity : AppCompatActivity() {
                     // no banco nunca eram lidas). Só questões.
                     ?: LessonDescription.fetchBankQuestions(
                         this@PlayerActivity, folderPath,
-                        folderPath.trimEnd('/').substringAfterLast('/'), materialNames
+                        folderPath.trimEnd('/').substringAfterLast('/'), materialNames,
+                        lessonFile?.substringAfterLast('/')
                     )
                 MaterialsData(
                     summary = summary?.takeIf { it.isNotBlank() },
@@ -2235,8 +2227,8 @@ class PlayerActivity : AppCompatActivity() {
         mat<View>(R.id.materials_empty)?.visibility = View.VISIBLE
         mat<View>(R.id.materials_error)?.visibility = View.GONE
         mat<View>(R.id.materials_content)?.visibility = View.GONE
-        // 2.7.41 (P1-2) — a secção vazia ganha acção quando a pasta tem
-        // ficheiros legíveis (PDF/MD); sem eles, fica só o texto.
+        // 2.7.41 (P1-2) — a seção vazia ganha ação quando a pasta tem
+        // arquivos legíveis (PDF/MD); sem eles, fica só o texto.
         mat<View>(R.id.materials_empty_generate)?.visibility =
             if (materialsFiles.any { it.isPdf || it.isMarkdown }) View.VISIBLE else View.GONE
     }
@@ -2294,7 +2286,7 @@ class PlayerActivity : AppCompatActivity() {
         // Flashcards); os painéis sem conteúdo mostram a linha de
         // vazio honesto dentro da própria aba.
         wireMaterialsTabs()
-        // R22 — estados vazios com acção (Elton 2026-11-23 19:54):
+        // R22 — estados vazios com ação (Elton 2026-11-23 19:54):
         // cada aba vazia ganha o seu botão "Gerar …".
         wireMaterialsGenerateButtons()
         selectMaterialsTab(
@@ -2308,10 +2300,10 @@ class PlayerActivity : AppCompatActivity() {
         )
         // R22 — pacote PARCIAL (resumo existe, pílulas/questões
         // ainda não): a geração pode estar a produzir o resto com
-        // o ecrã aberto. UMA re-verificação 45 s depois, por aula,
+        // a tela aberta. UMA re-verificação 45 s depois, por aula,
         // sem loop — o site faz o mesmo com poll limitado na
         // descrição da aula (v2.15.26-B). Se continuar parcial,
-        // fica como está até à próxima abertura (onStart recarrega).
+        // fica como está até a próxima abertura (onStart recarrega).
         if (data.summary != null && data.pills.isEmpty() && data.questions.isEmpty()) {
             val folder = materialsFolderPath()
             if (folder != null && materialsRetriedFor != folder) {
@@ -2334,9 +2326,9 @@ class PlayerActivity : AppCompatActivity() {
             .map { it.trim() }
             .filter { it.isNotEmpty() && !it.startsWith("#") }
             .map { it.removePrefix("- ").removePrefix("* ").removePrefix("• ").trim() }
-            // R22 — nunca renderizar o literal "null": ficheiros
+            // R22 — nunca renderizar o literal "null": arquivos
             // .gdi-flashcards gravados por versões antigas podem
-            // conter exactamente isso (o mindmap nulo serializado);
+            // conter exatamente isso (o mindmap nulo serializado);
             // item "null" é ausência, não é uma pílula.
             .filter { it.isNotEmpty() && !it.equals("null", ignoreCase = true) }
             .take(20)
@@ -2355,7 +2347,7 @@ class PlayerActivity : AppCompatActivity() {
             val out = ArrayList<MaterialsQuestion>()
             for (i in 0 until minOf(arr.length(), 10)) {
                 val o = arr.optJSONObject(i) ?: continue
-                // R22 — optString no Android devolve a string "null"
+                // R22 — optString no Android retorna a string "null"
                 // p/ campos com null JSON: um enunciado "null" não é
                 // uma questão (ver AiService.optText).
                 val statement = o.optString("statement").takeIf { it.isNotBlank() && !it.equals("null", true) }
@@ -2387,7 +2379,7 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    /** Ficheiros a mostrar: PDFs, MDs e outros — sem vídeos/áudios
+    /** Arquivos a mostrar: PDFs, MDs e outros — sem vídeos/áudios
      * (são aulas), sem pastas e sem legendas .vtt/.srt. */
     private fun materialsLessonFiles(files: List<FileItem>): List<FileItem> =
         files.filter { f -> !f.isFolder && !f.isVideo && !f.isAudio && !f.isSubtitle }
@@ -2410,7 +2402,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /**
-     * R22 — estados vazios com acção (Elton 2026-11-23 19:54): cada
+     * R22 — estados vazios com ação (Elton 2026-11-23 19:54): cada
      * aba vazia ganha um botão "Gerar …" que liga ao fluxo de
      * geração que JÁ EXISTE — LessonDescription.ensureDescription
      * (o mesmo que o detalhe dispara ao abrir a pasta da aula:
@@ -2425,11 +2417,11 @@ class PlayerActivity : AppCompatActivity() {
         mat<View>(R.id.materials_pills_generate)?.setOnClickListener { generateMaterials() }
         mat<View>(R.id.materials_questions_generate)?.setOnClickListener { generateMaterials() }
         mat<View>(R.id.materials_flashcards_generate)?.setOnClickListener { generateMaterials() }
-        // 2.7.41 (P1-2) — o botão da secção vazia (fora das abas).
+        // 2.7.41 (P1-2) — o botão da seção vazia (fora das abas).
         mat<View>(R.id.materials_empty_generate)?.setOnClickListener { generateMaterials() }
     }
 
-    /** Liga/desliga os botões "Gerar" + texto "A gerar…" em curso. */
+    /** Liga/desliga os botões "Gerar" + texto "Gerando…" em curso. */
     private fun setMaterialsGenerating(generating: Boolean) {
         materialsGenerating = generating
         val labels = listOf(
@@ -2456,7 +2448,7 @@ class PlayerActivity : AppCompatActivity() {
      * batalhão continua no servidor); NoMaterial/Unavailable/
      * Failed → motivo honesto em Snackbar, sem crash e sem loop.
      * A geração demora até 3 min (poll do ensureDescription); o
-     * botão fica "A gerar…" e os 4 botões desactivados entretanto.
+     * botão fica "Gerando…" e os 4 botões desativados entretanto.
      */
     private fun generateMaterials() {
         if (materialsGenerating) return
@@ -2660,7 +2652,7 @@ class PlayerActivity : AppCompatActivity() {
      * fica verde, a escolha errada vermelha — e a explicação/resposta
      * aparece por baixo. A interactividade é a mesma do detalhe
      * (ronda 9): sem índice correcto no pacote (pacotes antigos), o
-     * cartão mostra a resposta directa, como antes das abas.
+     * cartão mostra a resposta direta, como antes das abas.
      */
     private fun buildMaterialsQuestionCard(
         q: MaterialsQuestion, index: Int, total: Int
@@ -2773,7 +2765,7 @@ class PlayerActivity : AppCompatActivity() {
         }
         card.addView(feedback)
         // Sem índice correcto (pacote antigo/texto corrido): a
-        // resposta aparece directa em rosa — o comportamento que
+        // resposta aparece direta em rosa — o comportamento que
         // existia antes das abas, sem interacção inventada.
         if (q.correctIndex < 0 && !q.answer.isNullOrBlank()) {
             feedback.text = getString(R.string.materials_answer, q.answer)
@@ -2785,7 +2777,7 @@ class PlayerActivity : AppCompatActivity() {
     /**
      * Flashcards DESTA aula, das mesmas fontes do detalhe (ronda 9):
      * havendo pílulas, cada pílula é um cartão (frente "💡 Pílula N",
-     * verso = o facto); sem pílulas, derivam-se das questões (frente
+     * verso = o fato); sem pílulas, derivam-se das questões (frente
      * = enunciado, verso = resposta + explicação). Nada de outra aula.
      */
     private fun deriveMaterialsFlashcards(data: MaterialsData): List<Pair<String, String>> =
@@ -2925,7 +2917,7 @@ class PlayerActivity : AppCompatActivity() {
             .show()
     }
 
-    /** Abre um ficheiro da pasta: PDF → leitor (ronda 2), .md → leitor
+    /** Abre um arquivo da pasta: PDF → leitor (ronda 2), .md → leitor
      * de MD, outros → app externa (igual ao openFile do detalhe). */
     private fun openMaterialFile(file: FileItem, folderPath: String) {
         when {
@@ -2958,7 +2950,7 @@ class PlayerActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
-    /** Path completo ".../Aula/ficheiro" (a pasta pode vir sem "/"). */
+    /** Path completo ".../Aula/arquivo" (a pasta pode vir sem "/"). */
     private fun materialFilePath(folderPath: String, fileName: String): String {
         val base = if (folderPath.endsWith("/")) folderPath else "$folderPath/"
         return "$base$fileName"

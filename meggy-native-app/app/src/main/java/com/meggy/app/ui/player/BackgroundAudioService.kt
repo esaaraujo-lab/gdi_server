@@ -43,7 +43,7 @@ import com.meggy.app.R
  *
  * POST_NOTIFICATIONS (Android 13+): a notificação de um foreground
  * service NÃO exige a permissão em runtime para o serviço arrancar;
- * se o utilizador a negar, a notificação não aparece na gaveta (só
+ * se o usuário a negar, a notificação não aparece na gaveta (só
  * no Gestor de tarefas) mas o serviço e o áudio continuam.
  */
 class BackgroundAudioService : Service() {
@@ -109,7 +109,7 @@ class BackgroundAudioService : Service() {
         /**
          * Reconstrói a notificação com o estado atual (play/pausa e
          * título da aula). Sem efeito se o serviço não estiver a
-         * correr — a PlayerActivity chama-o sem guardar estado.
+         * correr — a PlayerActivity chama-o sem salvar estado.
          */
         fun refresh(context: Context) {
             if (!running) return
