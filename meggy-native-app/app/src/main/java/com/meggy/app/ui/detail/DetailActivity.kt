@@ -114,12 +114,12 @@ class DetailActivity : AppCompatActivity() {
     private var adminDrive: AdminDrive? = null
 
     /**
-     * Ronda 13 Frente C — base de ficheiros deste detalhe: os links
+     * Ronda 13 Frente C — base de arquivos deste detalhe: os links
      * (/download.aspx?...) sao cunhados com as chaves do worker que
      * listou a pasta — os do sandbox SO o sandbox os serve (a
      * producao nao os decifra). Em modo por ID (caminho
      * "by-id:<folderId>") a base e o sandbox; nos drives fixos, a
-     * producao. [path] e o caminho da pasta do ficheiro (currentPath
+     * producao. [path] e o caminho da pasta do arquivo (currentPath
      * ou o folderPath do grupo/pai).
      */
     private fun fileBaseUrl(path: String): String =
@@ -133,14 +133,14 @@ class DetailActivity : AppCompatActivity() {
     private var flatFilter: FlatFilter = FlatFilter.ALL
     private var isFlatMode: Boolean = false
     // Frente R14A — materiais vindos da pasta ao lado (ver
-    // MaterialDiscovery): só entram na secção Materiais da lista
-    // plana do telemóvel; nunca na contagem, no hero, na playlist
+    // MaterialDiscovery): só entram na seção Materiais da lista
+    // plana do celular; nunca na contagem, no hero, na playlist
     // nem na grade da TV. Job cancelado ao recarregar/sair.
     private var extraMaterials: List<FileItem> = emptyList()
     private var extraMaterialsJob: Job? = null
     // R21 — prefetch dos filhos das aulas (lotes paralelos) + flag de
-    // conclusão p/ o chip de progresso distinguir "ainda a carregar"
-    // de "tecto atingido" (ver prefetchLessonChildren/updateProgressChip).
+    // conclusão p/ o chip de progresso distinguir "ainda carregando"
+    // de "teto atingido" (ver prefetchLessonChildren/updateProgressChip).
     private var prefetchJob: Job? = null
     private var prefetchDone: Boolean = false
     private val PREFETCH_BATCH = 6
@@ -153,7 +153,7 @@ class DetailActivity : AppCompatActivity() {
     private var qfJob: Job? = null
     private var qfLoaded: Boolean = false
     // 2.7.41 (P1-6) — a geração da descrição ainda corre no servidor
-    // (outcome Generating): o vazio de QF é "A carregar…", não "não há
+    // (outcome Generating): o vazio de QF é "Carregando…", não "não há
     // nada", e o botão Gerar fica escondido até ela parar.
     private var descriptionGenerating: Boolean = false
     private var qfQuestions: List<DetailQuestion> = emptyList()
@@ -178,14 +178,14 @@ class DetailActivity : AppCompatActivity() {
     private var lastFocusedContinuePos = -1
     // Ronda 17 Frente B — posição real do foco (D-pad) na grade/lista
     // de aulas (-1 = nenhuma) + alvo do restauro (0 = nenhum, 1 =
-    // grade/lista, 2 = rail) + scrollY guardado para restauro após
+    // grade/lista, 2 = rail) + scrollY salvo para restauro após
     // morte do processo (onSaveInstanceState). Ver o observador
     // global de foco (globalFocusListener, registado no onResume).
     private var lastFocusedLessonPos = -1
     private var lastFocusedTarget = 0
     // Ronda 18 Frente C (F3) — geração do restauro de foco/rolagem
     // (o mesmo mecanismo da Home): os post{} de restoreDetailFocus
-    // só actuam se a geração ainda for a actual.
+    // só actuam se a geração ainda for a atual.
     private var focusRestoreGeneration = 0
     private var pendingDetailRestore: DetailFocusSnapshot? = null
     private var savedScrollY = 0
@@ -215,7 +215,7 @@ class DetailActivity : AppCompatActivity() {
     /**
      * Ronda 18 Frente C (F3) — idem HomeActivity
      * (invalidateStaleFocusRestore): um restauro pendente só vale
-     * enquanto o foco não saiu do sítio para onde ele ia repor.
+     * enquanto o foco não saiu do lugar para onde ele ia repor.
      */
     private fun invalidateStaleDetailRestore(target: Int, pos: Int) {
         val pending = pendingDetailRestore ?: return
@@ -263,7 +263,7 @@ class DetailActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         api = ApiService(this)
-        // Ronda 17 Frente B — repõe o foco/rolagem guardados se a
+        // Ronda 17 Frente B — repõe o foco/rolagem salvos se a
         // activity foi recriada (morte do processo): o 1.º onResume
         // toma o caminho de restauro, não o da 1.ª abertura.
         savedInstanceState?.let {
@@ -272,12 +272,12 @@ class DetailActivity : AppCompatActivity() {
             savedScrollY = it.getInt("r17b_scroll_y", 0)
             isFirstResume = false
         }
-        // Ronda 12 — migração de caminhos guardados: um drivePath
-        // guardado na organização antiga ("/11:/CURSOS 2026/…") já
+        // Ronda 12 — migração de caminhos salvos: um drivePath
+        // salvo na organização antiga ("/11:/CURSOS 2026/…") já
         // não existe no drive 11; normalizar aqui cobre TODAS as
         // entradas (Minha Lista, favoritos, recents, bookmarks,
         // busca, fallback do "Continuar") sem reescrever o que
-        // está guardado. Ver SessionManager.migrateLegacyCoursePath.
+        // está salvo. Ver SessionManager.migrateLegacyCoursePath.
         currentPath = SessionManager.migrateLegacyCoursePath(
             intent.getStringExtra("drivePath") ?: "/"
         )
@@ -290,7 +290,7 @@ class DetailActivity : AppCompatActivity() {
             AdminDriveUi.setSubfolderCovers(root, drive.subfolderCovers)
         }
         // v2.7.11 camada (3) — manifesto em 2º plano (o warmUp é
-        // guardado: se a home já buscou, não busca de novo).
+        // salvo: se a home já buscou, não busca de novo).
         LibraryCovers.warmUp(this)
         LibraryCovers.addOnReadyListener(libraryReadyListener)
 
@@ -378,7 +378,7 @@ class DetailActivity : AppCompatActivity() {
         })
 
         // Frente R4B — chips Todos / Vídeos / Materiais da lista plana
-        // (só o layout do celular os tem; na TV o findViewById devolve
+        // (só o layout do celular os tem; na TV o findViewById retorna
         // null e nada acontece — ver setupFlatFilterChips).
         setupFlatFilterChips()
 
@@ -410,7 +410,7 @@ class DetailActivity : AppCompatActivity() {
 
     // ──────────── Ronda 17 Frente B — foco + rolagem ────────────
     //
-    // O foco REAL (D-pad) guarda-se com um observador GLOBAL de foco
+    // O foco REAL (D-pad) salva-se com um observador GLOBAL de foco
     // (OnGlobalFocusChangeListener), não com setOnFocusChangeListener
     // na vista: o FocusAnimator é dono desse listener em cada card
     // (attach/attachCard) e sobrepô-lo matava o anel/escala de foco.
@@ -423,7 +423,7 @@ class DetailActivity : AppCompatActivity() {
 
     /** Posição do adapter do item que contém a vista focada (o foco
      *  pode estar num filho do card, ex.: o botão "Continuar" do
-     *  cabeçalho): sobe-se até ao filho directo do RecyclerView.
+     *  cabeçalho): sobe-se até o filho direto do RecyclerView.
      *  null = o foco não está neste RecyclerView. */
     private fun adapterPositionIn(recyclerView: RecyclerView, focused: View): Int? {
         var v: View? = focused
@@ -447,12 +447,12 @@ class DetailActivity : AppCompatActivity() {
         }
     }
 
-    /** Repõe foco + rolagem guardados (depois do re-bind, no próximo layout). */
+    /** Repõe foco + rolagem salvos (depois do re-bind, no próximo layout). */
     private fun restoreDetailFocus(snap: DetailFocusSnapshot) {
         if (snap.target == 0 && snap.scrollY <= 0) return
         // Ronda 18 Frente C (F3) — carimba a geração do restauro (ver
         // HomeActivity.restoreHomeFocus): os post{} só actuam se a
-        // geração ainda for a actual.
+        // geração ainda for a atual.
         focusRestoreGeneration++
         pendingDetailRestore = snap
         val gen = focusRestoreGeneration
@@ -483,7 +483,7 @@ class DetailActivity : AppCompatActivity() {
         }
     }
 
-    /** Restauro do onResume: usa as posições guardadas (não o foco vivo). */
+    /** Restauro do onResume: usa as posições salvas (não o foco vivo). */
     private fun restoreDetailFocusOnResume() {
         val y = binding.detailScroll.scrollY.takeIf { it > 0 } ?: savedScrollY
         val snap = when (lastFocusedTarget) {
@@ -496,7 +496,7 @@ class DetailActivity : AppCompatActivity() {
 
     /**
      * Redesenha só os itens visíveis do RecyclerView (ex.: chegada
-     * do manifesto de capas). Os itens fora do ecrã resolvem a capa
+     * do manifesto de capas). Os itens fora da tela resolvem a capa
      * no próximo bind — sem re-bind total, sem perda de foco.
      */
     private fun refreshVisibleItems(recyclerView: RecyclerView) {
@@ -507,7 +507,7 @@ class DetailActivity : AppCompatActivity() {
         for (pos in first..last) recyclerView.adapter?.notifyItemChanged(pos)
     }
 
-    /** Grupos visíveis com a busca actual aplicada (a mesma do submit). */
+    /** Grupos visíveis com a busca atual aplicada (a mesma do submit). */
     private fun filteredLessonGroups(): List<LessonGroup> {
         val query = binding.lessonSearch.text?.toString().orEmpty()
         return if (query.isBlank()) lessonGroups
@@ -534,7 +534,7 @@ class DetailActivity : AppCompatActivity() {
         }
         // Ronda 10 Frente C — re-activa as capas de sub-pasta
         // do drive do admin (um detalhe-filho destruído limpa
-        // o registo ao sair; ao voltar, este detalhe volta a
+        // o registro ao sair; ao voltar, este detalhe volta a
         // valer).
         adminDrive?.let { drive ->
             val root = AdminDriveUi.adminDriveRootFromIntent(intent) ?: currentPath
@@ -542,12 +542,12 @@ class DetailActivity : AppCompatActivity() {
         }
         // R21: o rail "Continue" do detalhe era montado só no onCreate
         // — ao voltar do player, o progresso/retoma mostrados ficavam
-        // os de antes da reprodução até reabrir o ecrã (a Home já
+        // os de antes da reprodução até reabrir a tela (a Home já
         // reconstrói o dela em cada onResume). Reconstrói aqui também,
         // ANTES da lógica de foco que lê a visibilidade do rail.
         setupContinueRail()
         // 2.7.41 (P1-T1) — regresso do player da TV com aba pedida
-        // (openTabOnReturn): abre a aba em vez de repor o foco guardado
+        // (openTabOnReturn): abre a aba em vez de repor o foco salvo
         // (que era da aba Aulas, agora escondida). Consome uma só vez.
         val returnTabConsumed = openTabOnReturn == RETURN_TAB_SUMMARY
         openTabOnReturn = null
@@ -557,7 +557,7 @@ class DetailActivity : AppCompatActivity() {
         // 1.ª abertura: foco no 1.º card do rail quando há rail (como
         // hoje); sem rail, não se foca nada — o 1.º D-pad cai na 1.ª
         // vista focável (todas têm anel desde a Frente A).
-        // Regresso: repõe o foco real guardado + o scrollY.
+        // Regresso: repõe o foco real salvo + o scrollY.
         if (TvUtils.isTv(this)) {
             if (returnTabConsumed) {
                 // Aba pedida pelo player: foca a aba Resumo.
@@ -573,8 +573,8 @@ class DetailActivity : AppCompatActivity() {
                 restoreDetailFocusOnResume()
             }
         } else if (!isFirstResume && savedScrollY > 0) {
-            // Ronda 18 Frente C (F4) — idem HomeActivity: no telemóvel
-            // o onResume nunca repunha o scrollY guardado; depois de
+            // Ronda 18 Frente C (F4) — idem HomeActivity: no celular
+            // o onResume nunca repunha o scrollY salvo; depois de
             // a activity ser recriada a página voltava ao topo.
             // Repõe-se uma só vez (o valor é consumido).
             val y = savedScrollY
@@ -583,11 +583,11 @@ class DetailActivity : AppCompatActivity() {
         }
         // R23 — recheck limitado depois de Generating: a geração
         // ficou a correr quando o poll de 3 min esgotou e o
-        // utilizador voltou ao 1.º plano — uma re-verificação LEVE
+        // usuário voltou ao 1.º plano — uma re-verificação LEVE
         // (só leitura do pacote + status, sem re-disparar o
         // batalhão), no máx. 3× por aula e com ≥30 s entre elas.
         // Sem loop: gerações lentas aparecem sem reabrir a aula;
-        // esgotado o orçamento, fica como está até à próxima
+        // esgotado o orçamento, fica como está até a próxima
         // abertura (que relança o fluxo completo).
         if (descriptionGenerating && descriptionRecheckCount < 3 &&
             System.currentTimeMillis() - descriptionRecheckLastMs >= 30_000L
@@ -604,7 +604,7 @@ class DetailActivity : AppCompatActivity() {
      * lê o pacote gerado; se chegou completo, mostra o resumo e
      * recarrega as abas; se chegou parcial E o job terminou, aplica
      * o estado Partial (resumo + motivo por parte); se o job ainda
-     * corre (ou nada chegou), mantém o estado "a gerar" sem tocar
+     * corre (ou nada chegou), mantém o estado "gerando" sem tocar
      * em nada. Nunca dispara o batalhão nem lança exceção.
      */
     private suspend fun recheckDescription() {
@@ -641,8 +641,8 @@ class DetailActivity : AppCompatActivity() {
         // Ronda 10 Frente C — desactiva as capas de sub-pasta
         // do drive do admin.
         AdminDriveUi.clearSubfolderCovers()
-        // Ronda 20 — nunca remover com o observer guardado: quando a vista já
-        // foi desligada da janela, o observer guardado está morto e o remove
+        // Ronda 20 — nunca remover com o observer salvo: quando a vista já
+        // foi desligada da janela, o observer salvo está morto e o remove
         // lança IllegalStateException ("This ViewTreeObserver is not alive").
         // Um observer fresco obtido aqui é sempre seguro: vista ligada → o
         // observer vivo da janela (o remove funciona); vista desligada → o
@@ -732,7 +732,7 @@ class DetailActivity : AppCompatActivity() {
         ) { item ->
             lastFocusedContinuePos = railItems.indexOf(item)
             // Ronda 18 Frente C (F1) — como na Home: os recents
-            // lêem-se no momento do toque (não os da construção do
+            // leem-se no momento do toque (não os da construção do
             // adapter) e o casamento é por (pasta, vídeo) — o nome só
             // é o fallback (o mesmo "video.mp4" existe em várias
             // subpastas do mesmo drive).
@@ -746,7 +746,7 @@ class DetailActivity : AppCompatActivity() {
     }
 
     private fun continueWatching(folderPath: String, videoName: String, shortFolder: String) {
-        // Frente H — caminho rápido: o recent já guarda o link de
+        // Frente H — caminho rápido: o recent já salva o link de
         // playback (SessionManager.addRecent, parâmetro link), por isso
         // o "Continuar assistindo" navega IMEDIATAMENTE para o player,
         // sem o listFolder prévio. A playlist interfolder é enriquecida
@@ -852,7 +852,7 @@ class DetailActivity : AppCompatActivity() {
                 // erro e oferece retry — nunca o bounce para o login.
                 // R21: além do Snackbar, o botão retryButton fica
                 // PERSISTENTE no estado de erro (o Snackbar some em
-                // segundos e o ecrã ficava sem saída).
+                // segundos e a tela ficava sem saída).
                 binding.emptyState.text = "Não foi possível carregar esta pasta. Verifique a conexão e tente de novo."
                 binding.emptyState.visibility = View.VISIBLE
                 binding.retryButton.visibility = View.VISIBLE
@@ -942,7 +942,7 @@ class DetailActivity : AppCompatActivity() {
                 // escolher aulas). PDFs/MD da pasta abrem os leitores.
                 isFlatMode = true
                 // Frente R4B — a contagem "N vídeos" conta SÓ .mp4 (a
-                // secção Vídeos); o resto fica em Materiais e as
+                // seção Vídeos); o resto fica em Materiais e as
                 // legendas .srt/.vtt nem aparecem na lista.
                 val mp4Count = files.count { it.name.endsWith(".mp4", true) }
                 val watchedMp4Count = files.count {
@@ -982,13 +982,13 @@ class DetailActivity : AppCompatActivity() {
                     flatAdapter = adapter
                     binding.recycler.layoutManager = LinearLayoutManager(this@DetailActivity)
                     binding.recycler.adapter = adapter
-                    // Frente R4B — a lista chega já partida em secções
+                    // Frente R4B — a lista chega já partida em seções
                     // (Vídeos .mp4 / Materiais), sem as legendas.
                     refreshFlatList()
                     // Frente R14A — materiais da pasta ao lado: corre
                     // em 2º plano (nunca atrasa a tela); quando chega,
-                    // só a secção Materiais ganha os ficheiros novos
-                    // (a TV nem corre isto — está no ramo do telemóvel).
+                    // só a seção Materiais ganha os arquivos novos
+                    // (a TV nem corre isto — está no ramo do celular).
                     loadExtraMaterials(files)
                 }
             }
@@ -999,7 +999,7 @@ class DetailActivity : AppCompatActivity() {
      * v2.7.6 — Descrição da aula (aba Resumo, Elton 00:21).
      *
      * Cadeia de fallback (ordem exata):
-     *   (a) descrição gerada guardada (cache local → servidor) → mostra ela;
+     *   (a) descrição gerada salva (cache local → servidor) → mostra ela;
      *   (b) senão, nome real de aula (NOME DO ARQUIVO do vídeo; sem
      *       ele, NOME DA PASTA quando a pasta tem só uma aula — R14B)
      *       → provisória até a Meggy gerar a de verdade;
@@ -1040,7 +1040,7 @@ class DetailActivity : AppCompatActivity() {
             showDescription(cached, getString(R.string.summary_state_generated), generated = true)
             // Frente K — o resumo ja estava no cache local, mas as
             // pilulas/questoes podem nunca ter ido para a pasta de
-            // materiais (o cache local so guarda o resumo). Em 2o
+            // materiais (o cache local so salva o resumo). Em 2o
             // plano, sem tocar na UI: le o pacote gerado no servidor
             // e grava o que faltar (best-effort, idempotente).
             lifecycleScope.launch {
@@ -1153,7 +1153,7 @@ class DetailActivity : AppCompatActivity() {
         showDescription(bundle.summary.orEmpty(), getString(R.string.summary_state_generated), generated = true)
         // R22 — as questões/pílulas foram carregadas UMA vez na
         // abertura (antes da geração terminar) e nunca mais: o
-        // pacote que acabou de chegar tem de entrar nas abas sem
+        // pacote que acabou de chegar precisa entrar nas abas sem
         // reabrir a aula.
         loadQuestionsFlashcards(files, jobError = jobError)
     }
@@ -1162,7 +1162,7 @@ class DetailActivity : AppCompatActivity() {
      * Ronda 9 Frente A — o texto do resumo GERADO é Markdown e é
      * exibido FORMATADO (MarkdownRenderer, mesma config do
      * MdReaderActivity); o gancho sorteado (LessonDescription.
-     * withHook) deixa de ser colado — o resumo guardado (cache
+     * withHook) deixa de ser colado — o resumo salvo (cache
      * local / servidor) É o conteúdo. A provisória (nome da
      * aula) e os estados (gerando / sem material) continuam
      * texto simples.
@@ -1195,7 +1195,7 @@ class DetailActivity : AppCompatActivity() {
         // sem ela, a sub-capa GENÉRICA = imagem 'geral' do manifesto
         // (AdminDriveUi.generalCoverUrl — resolve NÃO-estrito sem
         // nomes; null sem manifesto). Sem sub-capa nem 'geral', cai
-        // na hierarquia actual (thumb/biblioteca/gerada) — nunca fica
+        // na hierarquia atual (thumb/biblioteca/gerada) — nunca fica
         // sem capa. O listener onReady volta a chamar isto quando o
         // manifesto chega.
         adminDrive?.let { admin ->
@@ -1243,7 +1243,7 @@ class DetailActivity : AppCompatActivity() {
                 binding.heroTime.text = "${Format.mmss(pos)} / ${Format.mmss(dur)}"
                 binding.ctaContinue.text = getString(R.string.cta_continue)
                 // R22 UI: na TV o botão diz "Continuar de onde parei"
-                // (conceito aprovado); no celular fica o texto actual.
+                // (conceito aprovado); no celular fica o texto atual.
                 if (TvUtils.isTv(this)) {
                     binding.ctaContinue.text = getString(R.string.cta_continue_from_here)
                 }
@@ -1259,29 +1259,29 @@ class DetailActivity : AppCompatActivity() {
 
     /**
      * Ronda 15 Frente B (B3) — chip "X% concluído" sobre os vídeos da
-     * SUBÁRVORE, não sobre os filhos directos.
+     * SUBÁRVORE, não sobre os filhos diretos.
      *
      * Modo plano (pasta sem subpastas): os vídeos são os filhos
-     * directos e o listFolder já os trouxe — dados completos, o %
+     * diretos e o listFolder já os trouxe — dados completos, o %
      * calcula-se logo.
      *
-     * Modo interfolder (pasta de curso): os filhos directos são
+     * Modo interfolder (pasta de curso): os filhos diretos são
      * pastas; o % conta os vídeos dos grupos (filhos prefetched).
      * Enquanto houver um grupo sem filhos carregados, o denominador
      * está incompleto e o chip mostra "a calcular…" — NUNCA
      * "0% concluído" com dados incompletos. O refreshLessonList()
      * volta a chamar isto quando o prefetch (ou um expandir) entrega
      * filhos. (R21: o prefetch deixou de parar nos 20 grupos —
-     * corre em lotes paralelos até ao tecto de 240; só além do
-     * tecto é que o chip mostra o % parcial rotulado "(parcial)".)
+     * corre em lotes paralelos até o teto de 240; só além do
+     * teto é que o chip mostra o % parcial rotulado "(parcial)".)
      *
      * Ronda 16 Frente B (opção (c) do diagnóstico): com 0 vídeos
      * terminados mas um resume na subárvore (recents por prefixo, o
      * mesmo filtro do herói), o chip mostra "Em curso · N%" com o
      * melhor progresso parcial — nunca "0% concluído" com progresso
-     * real. Sem resume na subárvore, o comportamento é o actual.
+     * real. Sem resume na subárvore, o comportamento é o atual.
      * Limite honesto: o denominador continua a não conhecer vídeos
-     * a ≥2 níveis — o chip não inventa um % exacto da subárvore.
+     * a ≥2 níveis — o chip não inventa um % exato da subárvore.
      */
     private fun updateProgressChip(files: List<FileItem>) {
         val sm = SessionManager.get(this)
@@ -1299,7 +1299,7 @@ class DetailActivity : AppCompatActivity() {
         if (lessonGroups.any { it.children == null }) {
             // R21: grupos por carregar. Enquanto o prefetch corre (ou
             // ainda não correu), "a calcular…". Se o prefetch terminou
-            // no tecto e restam grupos, mostra o % HONESTO sobre os
+            // no teto e restam grupos, mostra o % HONESTO sobre os
             // grupos conhecidos, rotulado "(parcial)" — nunca um %
             // fechado com o denominador incompleto.
             if (!prefetchDone) {
@@ -1342,7 +1342,7 @@ class DetailActivity : AppCompatActivity() {
         // na subárvore (recents por prefixo, o mesmo filtro do herói)
         // — o chip mostra o melhor progresso parcial conhecido, nunca
         // "0% concluído" com progresso real. Sem resume, cai no
-        // comportamento actual. Se o resume não tem duração (posição
+        // comportamento atual. Se o resume não tem duração (posição
         // migrada), o % é desconhecido e o chip diz só "Em curso".
         val subtreeRecents = sm.getRecents().filter { it.folderPath.startsWith(currentPath) }
         val subtreeBest = subtreeRecents.maxOfOrNull { sm.getResumeProgress(it.folderPath, it.videoName) } ?: 0
@@ -1356,7 +1356,7 @@ class DetailActivity : AppCompatActivity() {
     /**
      * R22 UI (conceito "detalhe TV") — linha do curso e barra grossa
      * do painel esquerdo da TV: "N aulas · Z% concluído". As vistas
-     * só existem no layout-television (findViewById devolve null no
+     * só existem no layout-television (findViewById retorna null no
      * celular = no-op). A fonte são os textos REAIS dos chips
      * (contagem local/total unified + chip de progresso): a barra só
      * recebe % quando o chip diz "concluído" ou "(parcial)" — "Em
@@ -1400,12 +1400,12 @@ class DetailActivity : AppCompatActivity() {
     //      na mesma run — worker: battalionGenSummary/Pills/Questions);
     //      fetchQuestionsBundle() lê o pacote DIRETO quando ele tem
     //      questões/pílulas mas NÃO tem resumo (o fetchGenerated só
-    //      devolve pacotes COM resumo);
+    //      retorna pacotes COM resumo);
     //   2. pasta de materiais da aula — AiService.loadFromFolder(...,
-    //      "questoes") e (..., "flashcard") (discovery: o ficheiro
+    //      "questoes") e (..., "flashcard") (discovery: o arquivo
     //      mais recente de .gdi-questoess/ e .gdi-flashcards/; o
     //      MaterialSaver grava-os com os mesmos tipos);
-    //   3. flashcards sem ficheiro próprio: derivados DAS QUESTÕES
+    //   3. flashcards sem arquivo próprio: derivados DAS QUESTÕES
     //      desta aula (frente = enunciado, verso = resposta +
     //      explicação + base legal) — a MESMA transformação que o
     //      batalhão faz no servidor (worker: battalionGenQuestions
@@ -1450,9 +1450,9 @@ class DetailActivity : AppCompatActivity() {
      */
     /**
      * R23 — `jobError` = o erro terminal do job do batalhão (texto
-     * do servidor), vindo do Outcome.Partial: fica guardado p/ o
+     * do servidor), vindo do Outcome.Partial: fica salvo p/ o
      * vazio das abas mostrar o motivo real. Null = manter o valor
-     * actual (as outras chamadas não sabem o motivo; só o Partial
+     * atual (as outras chamadas não sabem o motivo; só o Partial
      * o traz — nunca se limpa aqui um motivo já conhecido).
      */
     private fun loadQuestionsFlashcards(files: List<FileItem>, jobError: String? = null) {
@@ -1506,7 +1506,8 @@ class DetailActivity : AppCompatActivity() {
                 // Sem nada no banco, fica o vazio honesto.
                 if (questionsText.isNullOrBlank()) {
                     questionsText = LessonDescription.fetchBankQuestions(
-                        this@DetailActivity, currentPath, folderName, materialNames
+                        this@DetailActivity, currentPath, folderName, materialNames,
+                        lessonFile?.substringAfterLast('/')
                     )
                 }
                 qfQuestionsOutdated = questionsOutdated
@@ -1527,7 +1528,7 @@ class DetailActivity : AppCompatActivity() {
 
     /**
      * Lê o pacote ISA aceitando-o quando tem questões OU pílulas,
-     * mesmo sem resumo (o fetchGenerated só devolve pacotes COM
+     * mesmo sem resumo (o fetchGenerated só retorna pacotes COM
      * resumo — uma run em que só as questões saíram ficaria
      * invisível aqui). Mesmas chaves do fetchGenerated: pasta atual
      * e pasta pai × nomes dos PDFs/MDs da aula.
@@ -1571,7 +1572,7 @@ class DetailActivity : AppCompatActivity() {
             val out = ArrayList<DetailQuestion>()
             for (i in 0 until minOf(arr.length(), 10)) {
                 val o = arr.optJSONObject(i) ?: continue
-                // R22 — optString no Android devolve a string "null"
+                // R22 — optString no Android retorna a string "null"
                 // p/ campos com null JSON: "null" nunca é conteúdo
                 // (ver AiService.optText).
                 val statement = o.optString("statement").takeIf { it.isNotBlank() && !it.equals("null", true) }
@@ -1609,7 +1610,7 @@ class DetailActivity : AppCompatActivity() {
      * {flashcards:[...]}/{cards:[...]}); ou pílulas em Markdown
      * (bullets — o formato que o MaterialSaver grava como
      * 'flashcard'): cada pílula vira um card (frente = "Pílula N",
-     * verso = o facto). Máx. 20.
+     * verso = o fato). Máx. 20.
      */
     private fun parseDetailFlashcards(text: String?): List<DetailFlashcard> {
         if (text.isNullOrBlank()) return emptyList()
@@ -1661,7 +1662,7 @@ class DetailActivity : AppCompatActivity() {
             .filter { it.isNotEmpty() && !it.startsWith("#") }
             .map { it.removePrefix("- ").removePrefix("* ").removePrefix("• ").trim() }
             .map { it.replace(Regex("^\\d+[.)]\\s+"), "").trim() }
-            // R22 — item "null" é ausência (ficheiros antigos /
+            // R22 — item "null" é ausência (arquivos antigos /
             // mindmap nulo serializado), nunca uma pílula.
             .filter { it.isNotEmpty() && !it.equals("null", ignoreCase = true) }
             .take(20)
@@ -1669,7 +1670,7 @@ class DetailActivity : AppCompatActivity() {
 
     /**
      * Flashcards derivados DAS QUESTÕES desta aula (só quando não há
-     * ficheiro de flashcards nem pílulas): a mesma transformação que
+     * arquivo de flashcards nem pílulas): a mesma transformação que
      * o batalhão faz no servidor (frente = enunciado, verso =
      * resposta + explicação + base legal). Nada inventado: o verso
      * usa só campos da própria questão.
@@ -1707,7 +1708,7 @@ class DetailActivity : AppCompatActivity() {
     /**
      * 2.7.41 (P1-6) — visibilidade dos botões "Gerar" das abas
      * Questões/Flashcards: só com a lista vazia E a geração parada
-     * (a gerar, o texto é "A carregar…" e o botão esconde-se) E numa
+     * (gerando, o texto é "Carregando…" e o botão esconde-se) E numa
      * pasta de aula (a pasta de curso não gera nada). A geração
      * automática ao abrir não muda.
      */
@@ -1742,7 +1743,7 @@ class DetailActivity : AppCompatActivity() {
         list.removeAllViews()
         if (!qfLoaded) return
         if (qfQuestions.isEmpty()) {
-            // 2.7.41 (P1-6) — "a gerar…" ≠ "não há nada".
+            // 2.7.41 (P1-6) — "gerando…" ≠ "não há nada".
             // R23 — com motivo real conhecido, mostra-se o motivo
             // (o skip de questões por lei revogada mantém-se, mas
             // passa a ser VISÍVEL); sem motivo, o vazio genérico.
@@ -1771,7 +1772,7 @@ class DetailActivity : AppCompatActivity() {
         list.removeAllViews()
         if (!qfLoaded) return
         if (qfFlashcards.isEmpty()) {
-            // 2.7.41 (P1-6) — "a gerar…" ≠ "não há nada".
+            // 2.7.41 (P1-6) — "gerando…" ≠ "não há nada".
             // R23 — os flashcards derivam das pílulas ou das questões:
             // sem nenhuma das duas E com o motivo das questões
             // conhecido, o motivo vale aqui também (não há de onde
@@ -2028,9 +2029,9 @@ class DetailActivity : AppCompatActivity() {
      *  dentro de um withContext(IO) corre um pedido de cada vez —
      *  até 20 chamadas em série. Agora cada lote de 6 corre com
      *  async/awaitAll de verdade.
-     *  (2) O tecto de 20 grupos deixava cursos grandes para sempre
+     *  (2) O teto de 20 grupos deixava cursos grandes para sempre
      *  em "a calcular…" no chip de progresso. Agora o prefetch corre
-     *  em lotes até carregar todos os grupos ou ao tecto de
+     *  em lotes até carregar todos os grupos ou ao teto de
      *  PREFETCH_MAX_GROUPS; cada lote refresca os cartões e o chip,
      *  e o guarda prefetchJob evita corridas duplicadas (o
      *  refreshLessonList chama isto a cada tecla da busca). */
@@ -2060,7 +2061,7 @@ class DetailActivity : AppCompatActivity() {
                 if (changed) refreshPrefetchedGroups(toLoad)
             }
             prefetchDone = true
-            // Última palavra do chip: completo, ou "(parcial)" no tecto.
+            // Última palavra do chip: completo, ou "(parcial)" no teto.
             updateProgressChip(allFiles)
             syncTvCourseLine()
         }
@@ -2069,7 +2070,7 @@ class DetailActivity : AppCompatActivity() {
     private fun refreshLessonList() {
         val filtered = filteredLessonGroups()
         // Ronda 17 Frente B — o submit total desanexa o item focado;
-        // guarda-se o foco/rolagem e repõe-se depois do re-bind.
+        // salva-se o foco/rolagem e repõe-se depois do re-bind.
         val snap = captureDetailFocus()
         lessonListAdapter?.submit(filtered)
         lessonGridAdapter?.submit(filtered)
@@ -2081,11 +2082,11 @@ class DetailActivity : AppCompatActivity() {
     }
 
     /**
-     * Ronda 17 Frente B (gatilho B) — o prefetch actualiza SÓ os
+     * Ronda 17 Frente B (gatilho B) — o prefetch atualiza SÓ os
      * grupos que ganharam filhos (notifyItemChanged), em vez do
      * submit() total que saltava a página para o topo a meio da
      * navegação. O foco/rolagem repõem-se na mesma (o card focado
-     * pode ser um dos actualizados).
+     * pode ser um dos atualizados).
      */
     private fun refreshPrefetchedGroups(changed: List<LessonGroup>) {
         val snap = captureDetailFocus()
@@ -2109,7 +2110,7 @@ class DetailActivity : AppCompatActivity() {
 
     // Frente R4B — chips Todos / Vídeos / Materiais (lista plana,
     // celular). Os ids só existem no layout do celular: na TV (e no
-    // layout-television) o findViewById devolve null e a função sai
+    // layout-television) o findViewById retorna null e a função sai
     // sem fazer nada. Os ids NUNCA são lidos pelo binding: o binding
     // gerado exige-os em todas as variantes do layout e a TV não os
     // tem (mesma decisão da frente R4, §4). O toque muda o filtro e
@@ -2148,12 +2149,12 @@ class DetailActivity : AppCompatActivity() {
         paint(R.id.chipFilterMaterials, flatFilter == FlatFilter.MATERIALS)
     }
 
-    // Frente R4B — (re)monta a lista plana em secções a partir de
+    // Frente R4B — (re)monta a lista plana em seções a partir de
     // [allFiles], com a busca e o filtro dos chips aplicados:
     //   Vídeos — só .mp4, por ordem, com progresso como hoje;
-    //   Materiais — PDFs, .md, áudios e outros ficheiros da pasta.
+    //   Materiais — PDFs, .md, áudios e outros arquivos da pasta.
     // Legendas .srt/.vtt (FileItem.isSubtitle) NUNCA entram na lista:
-    // continuam a carregar no player — o SubtitleFetcher lê o
+    // continuam carregando no player — o SubtitleFetcher lê o
     // listFolder completo (PlayerActivity.ensureSubtitles), não a
     // lista do adapter. Pastas não existem aqui (modo plano =
     // folderCount == 0), mas são excluídas na mesma, por defesa.
@@ -2189,8 +2190,8 @@ class DetailActivity : AppCompatActivity() {
     }
 
     // Frente R14A — busca os materiais da pasta ao lado (ver
-    // MaterialDiscovery) e funde-os na secção Materiais da lista
-    // plana. Só corre no telemóvel (o ramo plano do telemóvel é quem
+    // MaterialDiscovery) e funde-os na seção Materiais da lista
+    // plana. Só corre no celular (o ramo plano do celular é quem
     // chama); a TV usa a grade e nunca chama isto. Best-effort:
     // falha de rede deixa a lista como estava — nunca crash, nunca
     // bounce para o login com a tela aberta.
@@ -2218,12 +2219,12 @@ class DetailActivity : AppCompatActivity() {
     private fun filterLessons(query: String) {
         if (isFlatMode) {
             if (isWide()) {
-                // TV/tablet largo: grade sem secções (comportamento atual).
+                // TV/tablet largo: grade sem seções (comportamento atual).
                 val filtered = if (query.isBlank()) allFiles
                     else allFiles.filter { it.name.contains(query, ignoreCase = true) }
                 fileAdapter?.submitList(filtered)
             } else {
-                // Celular: a busca re-aplica-se dentro das secções.
+                // Celular: a busca re-aplica-se dentro das seções.
                 refreshFlatList()
             }
         } else {
@@ -2270,7 +2271,7 @@ class DetailActivity : AppCompatActivity() {
      * ("/11:/jornada-mpu/jornada-mpu/") e a pasta vinha vazia.
      * openFolderInLesson continua a existir, intacta, para os filhos
      * reais (lista expansível e ramo isFolder de openFileInFolder),
-     * onde o ficheiro é de facto um filho do caminho passado.
+     * onde o arquivo é de fato um filho do caminho passado.
      * Grupo sintético "Arquivos avulsos" (id "__loose__"): não é
      * uma pasta real no Drive — folderPath é o currentPath da tela
      * e os filhos já estão pré-carregados; navegar daria
@@ -2291,7 +2292,7 @@ class DetailActivity : AppCompatActivity() {
 
     private fun openFolderInLesson(file: FileItem, folderPath: String) {
         // Ronda 13 Frente C — modo por ID: a sub-pasta navega pelo
-        // ID do ficheiro (o pai "by-id:<id>" nao tem nome p/ anexar).
+        // ID do arquivo (o pai "by-id:<id>" nao tem nome p/ anexar).
         val newPath = if (ApiService.isByIdPath(folderPath)) ApiService.byIdPath(file.id)
             else if (folderPath.endsWith("/")) "$folderPath${file.name}/" else "$folderPath/${file.name}/"
         val intent = Intent(this, DetailActivity::class.java)
@@ -2359,7 +2360,7 @@ class DetailActivity : AppCompatActivity() {
                 // pasta-irmã, em lotes de 6) corria ANTES da navegação e
                 // deixava o toque sem resposta durante segundos; agora
                 // corre em 2º plano dentro do PlayerActivity, depois de
-                // o player já estar visível a mostrar "A carregar".
+                // o player já estar visível a mostrar "Carregando".
                 val group = lessonGroups.find { it.folderPath == folderPath }
                 val siblings = group?.children
                     ?.filter { (it.isVideo || it.isAudio) && !it.link.isNullOrEmpty() }
@@ -2446,7 +2447,7 @@ class DetailActivity : AppCompatActivity() {
         if (!TapFeedback.tryNavigate(url)) return
         val sm = SessionManager.get(this)
         sm.saveLastWatched(folderPath, title)
-        // Frente H — guarda o link de playback no recent (além da thumb):
+        // Frente H — salva o link de playback no recent (além da thumb):
         // o "Continuar assistindo" passa a navegar sem listFolder prévio.
         sm.addRecent(folderPath, title, thumbnailLink, ApiService.linkFromPlaybackUrl(url))
         val intent = Intent(this, PlayerActivity::class.java)

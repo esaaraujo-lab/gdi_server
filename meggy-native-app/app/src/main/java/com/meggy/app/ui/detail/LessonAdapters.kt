@@ -56,11 +56,11 @@ data class LessonGroup(
  * combinado com o melhor progresso dos recents em memória para o
  * mesmo folderPath. Isto resolve o caso children == null (o prefetch
  * pára nos 20 grupos): o grupo pode ter progresso real mesmo sem os
- * filhos carregados, porque o recent guarda o (folderPath, videoName)
+ * filhos carregados, porque o recent salva o (folderPath, videoName)
  * certo — sem listFolder nenhum, sem rede extra.
  *
  * Ronda 16 Frente B — os recents passam a casar por PREFIXO (a
- * subárvore inteira), não só por igualdade exacta: um vídeo visto
+ * subárvore inteira), não só por igualdade exata: um vídeo visto
  * numa subpasta marca a pasta-mãe como iniciada ("Continuar" ou
  * "N% concluída", nunca "não iniciada" falso). O prefixo é
  * normalizado com "/" final para não casar com irmãs de nome mais
@@ -70,29 +70,29 @@ data class LessonGroup(
  *
  * Ronda 17 Frente B — a % passa a ser uma FRAÇÃO (terminados /
  * total): 100% SÓ quando TODOS os vídeos conhecidos terminaram. O
- * numerador conta os vídeos directos (filhos carregados) + os
- * recents da subárvore que não são directos (dedup por (pasta,
+ * numerador conta os vídeos diretos (filhos carregados) + os
+ * recents da subárvore que não são diretos (dedup por (pasta,
  * vídeo)); o denominador é a soma dos dois. Só vídeos/áudios —
  * PDFs e pastas ficam FORA (um PDF não tem watched nem %; se
  * contasse, uma pasta com PDFs nunca chegaria a 100%). O grupo
  * "Arquivos avulsos" (__loose__, folderPath = currentPath) casa
- * recents SÓ por igualdade exacta: o prefixo seria a pasta inteira
+ * recents SÓ por igualdade exata: o prefixo seria a pasta inteira
  * e os vídeos das subpastas (grupos próprios) seriam contados
  * aqui também. Limites honestos ("dos conhecidos"): os recents
  * são só os últimos 8 — um vídeo terminado fora dos recents e fora
- * dos filhos directos é invisível (o % fica por defeito, nunca um
+ * dos filhos diretos é invisível (o % fica por defeito, nunca um
  * 100% falso); em modo por ID o prefixo nunca casa com
  * descendentes (ids opacos); vídeos a ≥2 níveis nunca abertos não
  * entram no denominador — o mesmo limite do chip. E 100% exige
  * filhos carregados (children != null): sem eles o denominador
- * directo é desconhecido e o cartão diz "Em curso", nunca 100%.
+ * direto é desconhecido e o cartão diz "Em curso", nunca 100%.
  *
- * [hasResume] cobre o caso migrado (B2) em que há posição guardada
+ * [hasResume] cobre o caso migrado (B2) em que há posição salva
  * mas ainda não há duração: o % é desconhecido mas o vídeo pode ser
  * retomado — o cartão mostra "Continuar", não "não iniciada".
  * [known] é falso só quando não há NENHUMA fonte de progresso
  * (sem filhos carregados E sem recents): aí o cartão NÃO pode afirmar
- * "não iniciada" — fica no estado neutro "a carregar…".
+ * "não iniciada" — fica no estado neutro "carregando…".
  */
 private data class GroupProgress(
     /** Melhor progresso parcial conhecido (0..100), para "Em curso". */
@@ -103,23 +103,23 @@ private data class GroupProgress(
     val totalCount: Int,
     val hasResume: Boolean,
     val known: Boolean,
-    /** Filhos carregados (children != null): sem eles o denominador directo é desconhecido. */
+    /** Filhos carregados (children != null): sem eles o denominador direto é desconhecido. */
     val childrenLoaded: Boolean
 ) {
     /** % de conclusão da pasta: terminados/total ("dos conhecidos"). */
     val pct: Int get() = if (totalCount > 0) watchedCount * 100 / totalCount else 0
     /**
      * Completa só quando há vídeos conhecidos, todos terminaram E os
-     * filhos estão carregados: sem children o denominador directo é
+     * filhos estão carregados: sem children o denominador direto é
      * desconhecido (ex.: grupos além dos 20 do prefetch) e um 100%
-     * por recents seria o mesmo bug de antes, noutra forma.
+     * por recents seria o mesmo bug de antes, em outra forma.
      */
     val isComplete: Boolean
         get() = totalCount > 0 && watchedCount >= totalCount && childrenLoaded
 }
 
 private fun groupProgress(sm: SessionManager, group: LessonGroup): GroupProgress {
-    // Vídeos directos conhecidos: os filhos carregados. PDFs e pastas
+    // Vídeos diretos conhecidos: os filhos carregados. PDFs e pastas
     // ficam FORA do denominador (ver o KDoc acima).
     val directVideos = group.children?.filter { it.isVideo || it.isAudio }.orEmpty()
     val directWatched = directVideos.count { sm.isWatched(group.folderPath, it.name) }
@@ -134,24 +134,24 @@ private fun groupProgress(sm: SessionManager, group: LessonGroup): GroupProgress
     // ("by-id:abc" casaria "by-id:abcd"). Em modo por ID os ids são
     // opacos — a hierarquia não está no caminho — por isso o prefixo
     // nunca casa com descendentes aí (limite, ver NOTES.md): vale a
-    // igualdade exacta para a pasta imediata, como antes.
+    // igualdade exata para a pasta imediata, como antes.
     // Ronda 17 Frente B — o grupo sintético "Arquivos avulsos"
     // (id "__loose__", folderPath = currentPath) casa recents SÓ por
-    // igualdade exacta: o prefixo seria a pasta inteira e os vídeos
+    // igualdade exata: o prefixo seria a pasta inteira e os vídeos
     // das subpastas (grupos próprios) seriam contados aqui também.
     // Os filhos soltos já estão pré-carregados em children — o
-    // denominador directo cobre-os; os recents só confirmam.
+    // denominador direto cobre-os; os recents só confirmam.
     val folderPrefix = if (group.folderPath.endsWith("/")) group.folderPath else group.folderPath + "/"
     val recents = if (group.folder.id == "__loose__") {
         sm.getRecents().filter { it.folderPath == group.folderPath }
     } else {
         sm.getRecents().filter { it.folderPath == group.folderPath || it.folderPath.startsWith(folderPrefix) }
     }
-    // Recents que NÃO são vídeos directos: vídeos de subpastas (≥2
+    // Recents que NÃO são vídeos diretos: vídeos de subpastas (≥2
     // níveis) ou de pastas cujos filhos ainda não carregaram. Dedup
-    // por (pasta, vídeo) — um recent do vídeo directo não conta duas
+    // por (pasta, vídeo) — um recent do vídeo direto não conta duas
     // vezes. Os recents são só os últimos 8: um vídeo terminado fora
-    // dos recents e fora dos filhos directos é invisível — o % fica
+    // dos recents e fora dos filhos diretos é invisível — o % fica
     // por defeito (nunca um 100% falso; ver o KDoc acima).
     val directKeys = directVideos.map { group.folderPath to it.name }.toSet()
     val extraRecents = recents
@@ -197,7 +197,7 @@ class LessonListAdapter(
         // submit corre a CADA TECLA da busca de aulas (filterLessons)
         // e o rebind total perdia o foco D-pad e re-ligava todas as
         // capas. Identidade: grupo = folderPath; filho = folderPath
-        // + id do ficheiro (único no Drive). Conteúdo do grupo:
+        // + id do arquivo (único no Drive). Conteúdo do grupo:
         // expansão (instantâneo), referência dos filhos (muda quando
         // o prefetch/entrega os atribui) e pdfFolderCount.
         val newRows = mutableListOf<Any>()
@@ -239,7 +239,7 @@ class LessonListAdapter(
     }
 
     /**
-     * Ronda 17 Frente B — actualiza SÓ os cabeçalhos dos grupos
+     * Ronda 17 Frente B — atualiza SÓ os cabeçalhos dos grupos
      * indicados (ex.: o prefetch entregou-lhes os filhos). Sem
      * re-bind total: o foco D-pad sobrevive. Os filhos expandidos
      * não são recriados aqui — um grupo expandido com children a
@@ -329,7 +329,7 @@ class LessonListAdapter(
                     watchedCount > 0 -> "Em curso"
                     progress > 0 -> "Em curso · $progress%"
                     hasResume -> "Continuar"
-                    !known -> "a carregar…"
+                    !known -> "carregando…"
                     else -> "não iniciado"
                 }
                 b.lessonBadge.visibility = if (complete) View.VISIBLE else View.GONE
@@ -360,7 +360,7 @@ class LessonListAdapter(
                     item.isFolder -> "📁"
                     else -> "•"
                 }
-                // R22 — regra do site p/ o nome da aula: ficheiro
+                // R22 — regra do site p/ o nome da aula: arquivo
                 // genérico ("video.mp4") mostra o nome da pasta do
                 // grupo; nome real fica intacto.
                 b.childTitle.text = LessonDescription.displayNameForLesson(
@@ -450,7 +450,7 @@ class LessonGridAdapter(
     }
 
     /**
-     * Ronda 17 Frente B — actualiza SÓ as posições indicadas (ex.:
+     * Ronda 17 Frente B — atualiza SÓ as posições indicadas (ex.:
      * o prefetch entregou-lhes os filhos). Sem re-bind total: o
      * foco D-pad sobrevive. As posições são as da lista filtrada
      * que o adapter detém (ver DetailActivity.refreshPrefetchedGroups).
@@ -562,7 +562,7 @@ class LessonGridAdapter(
                 watchedCount > 0 -> "Em curso"
                 progress > 0 -> "Em curso · $progress%"
                 hasResume -> "Continuar"
-                !known -> "a carregar…"
+                !known -> "carregando…"
                 else -> "não iniciada"
             }
         }

@@ -23,9 +23,9 @@ import com.meggy.app.util.LibraryCovers
 import com.meggy.app.util.TvUtils
 
 /**
- * Frente R4B — linhas da lista plana: cabeçalho de secção ou item.
- * O cabeçalho guarda o recurso do título ("Vídeos"/"Materiais") e a
- * contagem da secção; o item guarda o ficheiro.
+ * Frente R4B — linhas da lista plana: cabeçalho de seção ou item.
+ * O cabeçalho salva o recurso do título ("Vídeos"/"Materiais") e a
+ * contagem da seção; o item salva o arquivo.
  */
 sealed interface FlatRow {
     data class Header(val titleRes: Int, val count: Int) : FlatRow
@@ -49,10 +49,10 @@ enum class FlatFilter { ALL, VIDEOS, MATERIALS }
  * pasta aparecem como linhas (sem progresso) e abrem os leitores
  * embutidos — nada fica inalcançável.
  *
- * Frente R4B — lista partida em secções: Vídeos (só .mp4, por ordem,
+ * Frente R4B — lista partida em seções: Vídeos (só .mp4, por ordem,
  * com progresso) primeiro e Materiais (PDFs, .md, áudios e outros) a
- * seguir; cada secção tem cabeçalho com a contagem. Legendas .srt/.vtt
- * (FileItem.isSubtitle) nunca entram na lista — continuam a carregar
+ * seguir; cada seção tem cabeçalho com a contagem. Legendas .srt/.vtt
+ * (FileItem.isSubtitle) nunca entram na lista — continuam carregando
  * no player via SubtitleFetcher, que lê o listFolder completo.
  */
 class FlatLessonAdapter(
@@ -63,16 +63,16 @@ class FlatLessonAdapter(
     private val onOpenOther: (FileItem) -> Unit
 ) : ListAdapter<FlatRow, RecyclerView.ViewHolder>(DIFF) {
 
-    // Frente R4B — secções da lista plana + filtro dos chips.
+    // Frente R4B — seções da lista plana + filtro dos chips.
     private var videos: List<FileItem> = emptyList()
     private var materials: List<FileItem> = emptyList()
     private var filter: FlatFilter = FlatFilter.ALL
 
     /**
-     * Recebe as duas secções já partidas (Vídeos .mp4 / Materiais, sem
+     * Recebe as duas seções já partidas (Vídeos .mp4 / Materiais, sem
      * legendas — ver DetailActivity.refreshFlatList) e o filtro ativo,
-     * e reconstrói as linhas: cabeçalho + itens por secção não vazia.
-     * Secção vazia não aparece (nem o cabeçalho).
+     * e reconstrói as linhas: cabeçalho + itens por seção não vazia.
+     * Seção vazia não aparece (nem o cabeçalho).
      */
     fun submitSections(videos: List<FileItem>, materials: List<FileItem>, filter: FlatFilter) {
         this.videos = videos
@@ -90,14 +90,14 @@ class FlatLessonAdapter(
         submitList(rows)
     }
 
-    // R21: cast seguro — posição/tipo obsoletos devolvem null em vez
+    // R21: cast seguro — posição/tipo obsoletos retornam null em vez
     // de rebentar (os chamadores tratam null como "ignora o clique").
     private fun fileAt(pos: Int): FileItem? = (getItem(pos) as? FlatRow.Item)?.file
 
     override fun getItemViewType(position: Int): Int =
         if (getItem(position) is FlatRow.Header) TYPE_HEADER else TYPE_ITEM
 
-    /** Frente R4B — cabeçalho de secção ("Vídeos · 13" / "Materiais · 5"). */
+    /** Frente R4B — cabeçalho de seção ("Vídeos · 13" / "Materiais · 5"). */
     inner class HeaderVH(val binding: ItemSectionHeaderBinding) :
         RecyclerView.ViewHolder(binding.root) {
         fun bind(row: FlatRow.Header) {
@@ -156,7 +156,7 @@ class FlatLessonAdapter(
         val sm = SessionManager.get(ctx)
 
         with(vh.binding) {
-            // R22 — regra do site p/ o nome da aula: ficheiro
+            // R22 — regra do site p/ o nome da aula: arquivo
             // genérico ("video.mp4") mostra o nome da pasta da aula;
             // nome real fica intacto.
             flatTitle.text = LessonDescription.displayNameForLesson(
