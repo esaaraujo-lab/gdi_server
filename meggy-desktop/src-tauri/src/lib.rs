@@ -7,6 +7,7 @@ mod api;
 mod auth;
 mod db;
 mod llama;
+mod mpv;
 mod scanner;
 
 use tauri::{Emitter, Manager};
@@ -17,6 +18,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(api::AppState::default())
         .manage(llama::LlamaState::default())
+        .manage(mpv::MpvState::default())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(
@@ -107,6 +109,11 @@ pub fn run() {
             llama::llama_stop,
             llama::llama_chat,
             llama::llama_list_models,
+            // Leitor alternativo (AVI/formatos legados) — sidecar mpv
+            mpv::mpv_start,
+            mpv::mpv_status,
+            mpv::mpv_command,
+            mpv::mpv_stop,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Meggy Desktop");

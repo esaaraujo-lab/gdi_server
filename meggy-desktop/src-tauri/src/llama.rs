@@ -1,7 +1,9 @@
 // ═══════════════════════════════════════════════════════════════
 // Meggy Desktop — llama.cpp Integration (v1.8.0)
 // Manages llama-server subprocess for local AI with CPU/GPU offloading.
-// Supports: Windows (CUDA/OpenCL), Linux (Vulkan/CPU), macOS (Metal).
+// Supports: Windows (Vulkan/CUDA), Linux (Vulkan/CPU), macOS (Metal).
+// RX470 fix (1.9.10): Windows usa o build Vulkan — o build win-opencl-x64 NAO
+// existe na release b5960 (404) e o ROCm/HIP nao suporta Polaris (gfx803).
 // ═══════════════════════════════════════════════════════════════
 
 use serde::{Deserialize, Serialize};
@@ -82,13 +84,16 @@ pub async fn llama_binary_info() -> Result<LlamaBinaryInfo, String> {
 
     let (url, filename, extract_cmd, backend) = match (os, arch) {
         ("windows", "x86_64") => {
-            // AMD GPUs (RX470) → OpenCL build; NVIDIA → CUDA build
-            // Default to OpenCL for broad AMD compatibility
+            // RX470 fix (1.9.10): build Vulkan — o win-opencl-x64 NAO existe na
+            // release b5960 (404 verificado) e o HIP/ROCm nao suporta Polaris
+            // (gfx803). O driver Vulkan da AMD suporta a RX470 (Vulkan 1.3).
+            // extract_cmd aqui e o comando INTERNO (sem "powershell -Command"):
+            // llama_download_binary invoca o powershell directamente no Windows.
             (
-                format!("https://github.com/ggml-org/llama.cpp/releases/download/{}/llama-{}-bin-win-opencl-x64.zip", release_tag, release_tag),
+                format!("https://github.com/ggml-org/llama.cpp/releases/download/{}/llama-{}-bin-win-vulkan-x64.zip", release_tag, release_tag),
                 "llama-server.exe".to_string(),
-                "powershell -Command \"Expand-Archive -Path {zip} -DestinationPath {dest} -Force\"".to_string(),
-                "OpenCL (AMD/NVIDIA)".to_string(),
+                "Expand-Archive -Path {zip} -DestinationPath {dest} -Force".to_string(),
+                "Vulkan (AMD/NVIDIA/Intel)".to_string(),
             )
         }
         ("linux", "x86_64") => {
@@ -142,8 +147,10 @@ pub async fn llama_download_binary(app: tauri::AppHandle) -> Result<String, Stri
     let zip_path = llama_dir.join("llama-server.zip");
 
     // Download via curl (available on all platforms in Tauri)
+    // RX470 fix: -f faz o curl falhar no HTTP 404 (antes gravava a pagina de
+    // erro dentro do zip e a extracao falhava sem explicar).
     let status = Command::new("curl")
-        .args(&["-L", "-o", zip_path.to_str().unwrap(), &info.url])
+        .args(&["-f", "-L", "-o", zip_path.to_str().unwrap(), &info.url])
         .status()
         .await
         .map_err(|e| format!("curl failed: {}", e))?;
@@ -153,18 +160,40 @@ pub async fn llama_download_binary(app: tauri::AppHandle) -> Result<String, Stri
     }
 
     // Extract
+    // RX470 fix: no Windows nao existe `sh` (stock) — invocar o powershell
+    // directamente; `sh -c` so no Unix. O extract_cmd do Windows ja e o
+    // comando interno (Expand-Archive ...), sem o prefixo "powershell -Command".
     let extract = info.extract_cmd
         .replace("{zip}", zip_path.to_str().unwrap())
         .replace("{dest}", llama_dir.to_str().unwrap());
 
-    let extract_status = Command::new("sh")
-        .args(&["-c", &extract])
-        .status()
-        .await
-        .map_err(|e| format!("Extract failed: {}", e))?;
+    let extract_status = if std::env::consts::OS == "windows" {
+        Command::new("powershell")
+            .args(&["-NoProfile", "-Command", &extract])
+            .status()
+            .await
+            .map_err(|e| format!("Extract failed: {}", e))?
+    } else {
+        Command::new("sh")
+            .args(&["-c", &extract])
+            .status()
+            .await
+            .map_err(|e| format!("Extract failed: {}", e))?
+    };
 
     if !extract_status.success() {
         return Err(format!("Extract failed: {}", extract_status));
+    }
+
+    // RX470 fix: confirmar que o binario existe depois da extracao (o zip
+    // pode ter outra estrutura interna noutra release).
+    let bin_path = llama_dir.join(&info.filename);
+    if !bin_path.exists() {
+        return Err(format!(
+            "Extração concluída mas {} não foi encontrado em {}.",
+            info.filename,
+            llama_dir.to_string_lossy()
+        ));
     }
 
     // Cleanup zip
@@ -304,6 +333,11 @@ pub async fn llama_start(
     // --port: localhost port
     // --host: 127.0.0.1 (security — only local access)
     // --ctx-size: context window (4096 is good for chat)
+    // RX470 fix: stderr vai para llama-server.log (antes era descartado, e um
+    // arranque falhado — ex. vulkan-1.dll em falta — so dava o timeout generico).
+    let log_path = app_dir.join("llama").join("llama-server.log");
+    let log_file = std::fs::File::create(&log_path).map_err(|e| e.to_string())?;
+    let err_file = log_file.try_clone().map_err(|e| e.to_string())?;
     let child = Command::new(&binary_path)
         .args(&[
             "--model", &model_path,
@@ -315,7 +349,7 @@ pub async fn llama_start(
             "--top-p", "0.9",
         ])
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+        .stderr(std::process::Stdio::from(err_file))
         .spawn()
         .map_err(|e| format!("Failed to start llama-server: {}", e))?;
 
@@ -336,7 +370,15 @@ pub async fn llama_start(
     }
 
     if !ready {
-        let err = "llama-server iniciado mas não respondeu em 15s. Pode estar carregando o modelo.".to_string();
+        // RX470 fix: incluir a cauda do log no erro (ex. "vulkan-1.dll nao
+        // encontrada" ou "no Vulkan device found") em vez da mensagem generica.
+        let tail = std::fs::read_to_string(&log_path).unwrap_or_default();
+        let tail: String = tail.chars().rev().take(500).collect::<String>().chars().rev().collect();
+        let err = format!(
+            "llama-server iniciado mas não respondeu em 15s. Pode estar carregando o modelo. Log ({}): {}",
+            log_path.display(),
+            tail
+        );
         // Don't kill — it might still be loading. Let the user retry.
         return Err(err);
     }

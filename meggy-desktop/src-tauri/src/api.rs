@@ -63,6 +63,16 @@ pub async fn login(
         }
     }
 
+    // ★ v1.9.10 (auditoria de rotas): o worker devolve 429 JSON quando o
+    // login bate no rate-limit (10 falhas/15min por user+IP) — não é
+    // "senha inválida"; diz para aguardar.
+    if status == 429 {
+        return Ok(LoginResult {
+            ok: false,
+            error: Some("Muitas tentativas falhadas. Aguarde alguns minutos e tente novamente.".to_string()),
+        });
+    }
+
     Ok(LoginResult {
         ok: false,
         error: Some("Usuário ou senha inválidos".to_string()),
@@ -166,6 +176,11 @@ pub async fn list_folder(
         .await
         .map_err(|e| e.to_string())?;
 
+    // ★ v1.9.10 (auditoria de rotas): o gate .93 devolve 401 JSON em POST
+    // com sessão expirada — o frontend volta p/ o login (isAuthError).
+    if resp.status().as_u16() == 401 {
+        return Err("AUTH:401".to_string());
+    }
     if !resp.status().is_success() {
         return Err(format!("HTTP {}", resp.status()));
     }
@@ -349,6 +364,11 @@ pub async fn save_user_state(
 
     let status = resp.status();
     eprintln!("[save_user_state] HTTP {}", status);
+    // ★ v1.9.10: 401 = sessão expirada — o chamador volta p/ o login
+    // (antes, qualquer falha devolvia false e o app seguia cego).
+    if status.as_u16() == 401 {
+        return Err("AUTH:401".to_string());
+    }
     Ok(status.is_success())
 }
 
@@ -377,8 +397,14 @@ pub async fn get_user_state(state: State<'_, AppState>) -> Result<serde_json::Va
 
     eprintln!("[get_user_state] HTTP {} | body len: {}", status, text.len());
 
+    // ★ v1.9.10: 401 = sessão expirada (nunca devolver {} como se o aluno
+    // nunca tivesse visto nada); outro erro também rejeita — o frontend
+    // mantém o estado anterior em vez de apagar a seção.
+    if status.as_u16() == 401 {
+        return Err("AUTH:401".to_string());
+    }
     if !status.is_success() {
-        return Ok(serde_json::json!({})); // Return empty object instead of error
+        return Err(format!("HTTP:{}", status.as_u16()));
     }
 
     if text.is_empty() {
@@ -492,6 +518,10 @@ pub async fn ai_generate(
 
         match resp {
             Ok(r) => {
+                if r.status().as_u16() == 401 {
+                    // ★ v1.9.10: sessão expirada — não adianta retentar 3x
+                    return Err("AUTH:401".to_string());
+                }
                 if !r.status().is_success() {
                     last_err = format!("HTTP {}", r.status());
                     if attempt < 3 {
