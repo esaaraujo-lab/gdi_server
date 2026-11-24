@@ -170,6 +170,19 @@ object LessonDescription {
     }
 
     /**
+     * Port R28 da Meggy — nome da pasta da aula a partir do caminho
+     * (último segmento, decodificado): é o NOME DO TEMA da aula e o
+     * título do card "Continuar" (o nome cru do arquivo some quando é
+     * genérico, ex. "Videoaula"). Null sem segmento válido.
+     */
+    fun folderNameFromPath(path: String?): String? {
+        val seg = (path ?: "").split('/').filter { it.isNotBlank() }.lastOrNull()
+            ?: return null
+        val decoded = runCatching { android.net.Uri.decode(seg) }.getOrDefault(seg)
+        return decoded.trim().takeIf { it.isNotEmpty() }
+    }
+
+    /**
      * Descrição provisória (b) — R14B (Elton 2026-11-15 21:48):
      * tenta o NOME DO ARQUIVO do vídeo primeiro; sem tema no
      * arquivo, tenta o NOME DA PASTA — SÓ quando a pasta tem uma
