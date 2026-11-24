@@ -122,7 +122,11 @@
         </FrameLayout>
 
         <!-- Conteúdo abaixo da imagem -->
+        <!-- Ronda 28 — id p/ o fundo com cor fixa da área do nome
+             (igual ao celular; sem ele o binding deixa cardBody
+             anulável e a cor não aplica na TV — ver FIX CI #102). -->
         <LinearLayout
+            android:id="@+id/card_body"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
