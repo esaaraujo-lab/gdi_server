@@ -765,12 +765,28 @@ class HomeActivity : AppCompatActivity() {
         val railItems = recents.map { r ->
             val courseName = extractCourseName(r.folderPath)
             val displayTitle = Format.lessonDisplayTitle(r.videoName, courseName)
+            // R26 — distinguibilidade (Achado A): duas aulas da mesma
+            // disciplina mostravam o mesmo título cortado ("Direito…")
+            // e a mesma capa. Quando o título é comprido demais para
+            // caber no cartão (2 linhas a 16sp ≈ 36 caracteres no
+            // celular; ≈ 56 na TV), o número da aula vai para o
+            // subtítulo — primeiro, para sobreviver ao corte. O
+            // limite é aproximado (depende da fonte); no pior caso o
+            // cartão fica como hoje. Títulos curtos não mudam.
+            val numLabel = Format.lessonNumberLabel(r.videoName)
+            val cutThreshold = if (TvUtils.isTv(this)) 56 else 36
+            val subtitle = when {
+                numLabel != null && displayTitle.length > cutThreshold ->
+                    if (courseName.isNotBlank()) "$numLabel · $courseName" else numLabel
+                displayTitle.startsWith(courseName) -> ""
+                else -> courseName
+            }
             RailItem(
                 title = r.videoName,
                 displayTitle = displayTitle,
                 // O título já traz o curso ("Curso — Aula 01") → o
                 // subtítulo some (o adapter esconde subtítulo vazio).
-                subtitle = if (displayTitle.startsWith(courseName)) "" else courseName,
+                subtitle = subtitle,
                 icon = "🎥",
                 hasProgress = sm.hasResume(r.folderPath, r.videoName),
                 progress = sm.getResumeProgress(r.folderPath, r.videoName),
@@ -938,7 +954,18 @@ class HomeActivity : AppCompatActivity() {
         val label = findViewById<TextView>(R.id.labelDestaques) ?: return
         val list = findViewById<RecyclerView>(R.id.listDestaques) ?: return
         if (list.layoutManager == null) {
-            list.layoutManager = LinearLayoutManager(this)
+            // R26 — rail HORIZONTAL como os outros rails da home
+            // (railContinue, railDrives): o RecyclerView VERTICAL com
+            // wrap_content + nestedScrollingEnabled=false dentro do
+            // ScrollView media altura para um só item (6 submetidos,
+            // 1 visível, sem acesso aos outros). Na horizontal a
+            // altura vem do cartão (fixa) e todos os cartões ficam
+            // alcançáveis por rolagem; o próximo cartão espreita
+            // pela largura fixa do item (@dimen/featured_card_width).
+            // Sem SnapHelper e sem dots: os outros rails também não
+            // têm (rolagem livre) — consistência da página.
+            list.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+            list.addItemDecoration(RailGutterDecoration(tvAutoFit?.gutterDp(320f) ?: 8))
         }
         if (destaquesAdapter == null) {
             destaquesAdapter = HomeFeaturedAdapter { item ->

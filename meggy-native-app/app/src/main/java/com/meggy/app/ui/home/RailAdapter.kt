@@ -148,6 +148,17 @@ class RailAdapter(
                 val pos = bindingAdapterPosition
                 if (pos != RecyclerView.NO_POSITION) onClick(items[pos])
             }
+            // R26 — título completo ao tocar e segurar: duas aulas
+            // da mesma disciplina podem mostrar o mesmo título
+            // cortado ("Direito…"); o toque longo mostra o título
+            // inteiro. Não muda o toque normal (abre a aula).
+            binding.root.setOnLongClickListener {
+                val pos = bindingAdapterPosition
+                if (pos == RecyclerView.NO_POSITION) return@setOnLongClickListener false
+                val full = items[pos].displayTitle ?: items[pos].title
+                Toast.makeText(binding.root.context, full, Toast.LENGTH_LONG).show()
+                true
+            }
             FocusAnimator.attachCard(binding.cardRoot, TvUtils.isTv(binding.root.context))
             TapFeedback.attachPress(binding.cardRoot, TvUtils.isTv(binding.root.context))
             // Ronda 7 Frente B — auto-ajuste TV (TvAutoFit): o card e a imagem
