@@ -85,7 +85,7 @@ import com.meggy.app.databinding.ItemPdfPageBinding
  * pela Meggy no servidor (POST /api/ai, kind "resumo") a partir
  * do texto que o leitor já extrai (pdfbox); sem camada de texto,
  * lê até 4 páginas por OCR (POST /api/ai/ocr). O resumo aparece
- * num diálogo e é guardado no cache ISA + na pasta de materiais
+ * num diálogo e é salvo no cache ISA + na pasta de materiais
  * (reutiliza AiService.saveSummary/saveToFolder; a Frente K é
  * dona da UX da pasta de materiais).
  */
@@ -110,7 +110,7 @@ class PdfReaderActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityPdfReaderBinding
     private var renderer: PdfRenderer? = null
-    // R21: o PFD que alimenta o renderer fica guardado e é fechado no
+    // R21: o PFD que alimenta o renderer fica salvo e é fechado no
     // onDestroy (antes vazava 1 FD por PDF aberto — o close() do
     // renderer não fecha o FD do chamador).
     private var pdfPfd: ParcelFileDescriptor? = null
@@ -161,7 +161,7 @@ class PdfReaderActivity : AppCompatActivity() {
 
         binding.toolbar.title = docName
         binding.toolbar.setNavigationOnClickListener { finish() }
-        // Frente R5B — guarda p/ o auto-hide (só no celular).
+        // Frente R5B — salva p/ o auto-hide (só no celular).
         isTvReader = TvUtils.isTv(this)
         if (isTvReader) {
             binding.bottomNav.visibility = View.GONE
@@ -353,7 +353,7 @@ class PdfReaderActivity : AppCompatActivity() {
      * + a margem inferior + o alpha, em CHROME_ANIM_MS. Animações em
      * curso na mesma vista são canceladas antes (toques rápidos não
      * acumulam animações). A altura original (56dp em px na toolbar,
-     * WRAP_CONTENT nas outras) e a margem original são guardadas à
+     * WRAP_CONTENT nas outras) e a margem original são salvas à
      * 1ª chamada e repostas no fim, para a próxima medição ser certa.
      */
     private fun animateChromeBar(view: View, show: Boolean) {
@@ -539,7 +539,7 @@ class PdfReaderActivity : AppCompatActivity() {
             setText((currentPage + 1).toString())
             setSelection(text.length)
         }
-        // Frente R5B — guarda a referência: enquanto estiver aberto o
+        // Frente R5B — salva a referência: enquanto estiver aberto o
         // auto-hide fica suprimido (ver isChromeSuppressed); ao fechar
         // rearma o temporizador.
         goToPageDialog = AlertDialog.Builder(this)
@@ -609,10 +609,10 @@ class PdfReaderActivity : AppCompatActivity() {
     // `docPath` e o path COMPLETO do PDF (ex. "/11:/Curso/Aula 01/
     // Aula 01.pdf"): o worker resolve a pasta PAI como a pasta da
     // aula. `questionsJson` e o JSON das questoes (array, como o
-    // cache ISA as devolve); se a J tiver so texto, passa o texto.
-    // Best-effort e silencioso: devolve o que foi gravado; a UI da
+    // cache ISA as retorna); se a J tiver so texto, passa o texto.
+    // Best-effort e silencioso: retorna o que foi gravado; a UI da
     // J decide o que mostrar. NAO chamar antes de a J gerar — sem
-    // conteudo nao ha nada a guardar.
+    // conteudo nao ha nada a salvar.
     suspend fun saveGeneratedMaterials(
         summary: String?,
         pills: String?,
@@ -718,7 +718,7 @@ class PdfReaderActivity : AppCompatActivity() {
             }
         }
 
-        /** Largura do item em px: largura útil do ecrã × zoom. */
+        /** Largura do item em px: largura útil da tela × zoom. */
         private fun targetViewWidthPx(): Int {
             val marginPx = (16 * resources.displayMetrics.density).toInt()
             val avail = (resources.displayMetrics.widthPixels - marginPx).coerceAtLeast(1)
@@ -773,7 +773,7 @@ class PdfReaderActivity : AppCompatActivity() {
          * R21 — corre [block] sob o MESMO mutex dos renders de página.
          * O OCR do resumo (PdfReaderActivity) usa o PdfRenderer fora
          * do adapter; o PdfRenderer não é thread-safe, por isso esse
-         * uso tem de ser serializado com os renders do scroll.
+         * uso precisa ser serializado com os renders do scroll.
          */
         suspend fun <T> withRenderLock(block: suspend () -> T): T =
             renderMutex.withLock { block() }
@@ -818,8 +818,8 @@ class PdfReaderActivity : AppCompatActivity() {
     // ───────── Frente J — resumo do PDF pela Meggy ─────────
     //
     // Fluxo (tudo em endpoints que JÁ existem no worker — nada
-    // inventado; ver AiService, secção "Frente J"):
-    //   1. resumo guardado? cache ISA (GET /api/ai/summaries, chave
+    // inventado; ver AiService, seção "Frente J"):
+    //   1. resumo salvo? cache ISA (GET /api/ai/summaries, chave
     //      "<pastaDaAula>/<nomeDoPdf>") e pasta de materiais
     //      (GET /api/materials/load-from-folder) — se há, mostra sem
     //      gerar de novo;
@@ -829,7 +829,7 @@ class PdfReaderActivity : AppCompatActivity() {
     //   3. POST /api/ai {kind:"resumo"} com o prompt rico da web
     //      (PROMPTS_RESUMO nível 7, gdi-meggy.js:1218) + até 20.000
     //      chars do texto — resposta síncrona com o resumo;
-    //   4. guarda best-effort: cache ISA (POST /api/ai/summaries,
+    //   4. salva best-effort: cache ISA (POST /api/ai/summaries,
     //      mesma chave do passo 1) + pasta `.gdi-resumos/` da aula
     //      (POST /api/materials/save-in-folder, via
     //      AiService.saveToFolder). PONTO DE ENTREGA p/ a Frente K:
@@ -837,12 +837,12 @@ class PdfReaderActivity : AppCompatActivity() {
     //      dona de a listar/mostrar — NÃO duplicar a gravação.
     // A navegação do leitor (Frente I) NÃO é tocada: o único toque
     // no layout é o botão btnSummary na toolbar; o diálogo do resumo
-    // é construído em código (sem novo layout). Se o utilizador
+    // é construído em código (sem novo layout). Se o usuário
     // fechar o diálogo a meio da geração, o job continua em segundo
     // plano e o resultado fica em pdfSummary (mostrado no próximo
     // toque no botão) — o cancelamento só acontece no onDestroy.
 
-    /** Pasta da aula = pasta-mãe do PDF (o docPath é ".../Aula/ficheiro.pdf"). */
+    /** Pasta da aula = pasta-mãe do PDF (o docPath é ".../Aula/arquivo.pdf"). */
     private fun lessonFolderPath(): String = LessonDescription.parentPath(docPath)
 
     /** Nome da pasta da aula (último segmento da pasta-mãe). */
@@ -864,18 +864,18 @@ class PdfReaderActivity : AppCompatActivity() {
         setSummaryLoading(getString(R.string.pdf_summary_searching_saved))
         summaryJob?.cancel()
         summaryJob = lifecycleScope.launch {
-            // Frente R5A — retry explícito do utilizador: este toque
+            // Frente R5A — retry explícito do usuário: este toque
             // em "✨ Resumo" (ou "Gerar novamente") limpa o latch
-            // ANTES de procurar o resumo guardado, para a procura e
-            // a geração voltarem a tentar de facto. Sem isto, um 404
-            // de `load-from-folder` (ficheiro em falta) de uma
+            // ANTES de procurar o resumo salvo, para a procura e
+            // a geração voltarem a tentar de fato. Sem isto, um 404
+            // de `load-from-folder` (arquivo em falta) de uma
             // tentativa anterior deixava a flag armada e o POST
             // /api/ai nunca era tentado nesta sessão. A flag volta a
             // armar-se se um 404 genuíno de rota de IA voltar — o
             // cheque abaixo continua a mostrar "indisponível" nesse
             // caso, sem loop (uma tentativa por toque).
             AiService.clearBackendUnavailable()
-            // 1) Resumo já guardado? (cache ISA + pasta de materiais)
+            // 1) Resumo já salvo? (cache ISA + pasta de materiais)
             val cached = findSavedSummary()
             if (cached != null) {
                 pdfSummary = cached
@@ -923,7 +923,7 @@ class PdfReaderActivity : AppCompatActivity() {
         }
     }
 
-    /** Procura um resumo já guardado (ISA + pasta de materiais). */
+    /** Procura um resumo já salvo (ISA + pasta de materiais). */
     private suspend fun findSavedSummary(): String? {
         val folder = lessonFolderPath().trimEnd('/')
         val keys = listOf(
@@ -974,7 +974,7 @@ class PdfReaderActivity : AppCompatActivity() {
                 }
                 return PdfSummarySource(source.name, source.text)
             }
-            // Sem fonte (PDF escaneado / sem ficheiros) → OCR abaixo.
+            // Sem fonte (PDF escaneado / sem arquivos) → OCR abaixo.
         }
         // 2) Texto do próprio PDF (extraído em 2º plano; espera até 10 s).
         var waited = 0
@@ -1017,8 +1017,8 @@ class PdfReaderActivity : AppCompatActivity() {
      * Geração de recurso via batalhão (POST /api/ai/battalion) com o
      * mesmo texto-fonte do primário + poll limitado do cache ISA
      * (mesmos limites do detalhe da aula). O job continua no servidor
-     * mesmo que o utilizador feche o diálogo — o próximo toque lê o
-     * resumo guardado (findSavedSummary).
+     * mesmo que o usuário feche o diálogo — o próximo toque lê o
+     * resumo salvo (findSavedSummary).
      */
     private suspend fun generateViaBattalion(source: PdfSummarySource): AiService.PdfSummaryResult {
         val key = summaryCacheKey()
