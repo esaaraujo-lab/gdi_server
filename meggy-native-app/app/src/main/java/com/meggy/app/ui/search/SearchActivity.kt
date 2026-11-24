@@ -265,7 +265,7 @@ class SearchActivity : AppCompatActivity() {
         // Frente H — guarda contra duplo toque (um toque = uma navegação).
         if (!TapFeedback.tryNavigate(fullUrl)) return
         SessionManager.get(this).saveLastWatched(file.folderPath ?: "/", file.name)
-        // Frente H — guarda o link no recent (ver DetailActivity).
+        // Frente H — salva o link no recent (ver DetailActivity).
         SessionManager.get(this).addRecent(file.folderPath ?: "/", file.name, file.thumbnailLink, link)
         // Frente G: a Search NÃO monta playlist — sem isto o
         // PlayerActivity carregava a playlist persistida de uma
