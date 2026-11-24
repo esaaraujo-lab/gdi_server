@@ -163,7 +163,7 @@ class BrowseActivity : AppCompatActivity() {
             // Frente A (TV) — a Browse não definia foco inicial
             // nenhum: o 1º D-pad caía na seta "voltar" da toolbar.
             // Com a grade carregada, o foco vai para o 1º card
-            // (só TV; sem itens, findViewHolder devolve null e nada
+            // (só TV; sem itens, findViewHolder retorna null e nada
             // acontece).
             if (TvUtils.isTv(this@BrowseActivity)) {
                 binding.recycler.post {
@@ -231,7 +231,7 @@ class BrowseActivity : AppCompatActivity() {
             try {
                 startActivity(intent)
             } catch (_: Exception) {
-                // Frente G: antes o toque num ficheiro sem app
+                // Frente G: antes o toque num arquivo sem app
                 // associada não fazia nada nem avisava.
                 Toast.makeText(this, "Não foi possível abrir este arquivo", Toast.LENGTH_SHORT).show()
             }
@@ -243,7 +243,7 @@ class BrowseActivity : AppCompatActivity() {
         if (!TapFeedback.tryNavigate(url)) return
         val sm = SessionManager.get(this)
         sm.saveLastWatched(folderPath, title)
-        // Frente H — guarda o link no recent: o "Continuar assistindo"
+        // Frente H — salva o link no recent: o "Continuar assistindo"
         // passa a navegar sem listFolder prévio (o saveJob do player já
         // criava o recent, mas sem o link).
         sm.addRecent(folderPath, title, null, url.removePrefix(MeggyApp.BASE_URL).takeIf { it != url })
