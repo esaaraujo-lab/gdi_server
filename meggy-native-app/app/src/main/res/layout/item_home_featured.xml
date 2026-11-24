@@ -3,9 +3,8 @@
      "Destaques" — capa à esquerda, título, subtítulo e selo quando o
      dado real o traz (itens curados do hero). Só no celular. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
+    android:layout_width="@dimen/featured_card_width"
     android:layout_height="wrap_content"
-    android:layout_marginTop="10dp"
     android:background="@drawable/card_surface_rounded"
     android:clickable="true"
     android:focusable="true"

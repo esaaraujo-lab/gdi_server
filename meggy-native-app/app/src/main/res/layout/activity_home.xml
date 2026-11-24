@@ -459,9 +459,9 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_sm"
                 android:clipToPadding="false"
-                android:nestedScrollingEnabled="false"
                 android:paddingStart="@dimen/content_margin"
                 android:paddingEnd="@dimen/content_margin"
+                android:overScrollMode="never"
                 android:visibility="gone" />
 
             <!-- Explorar drives -->
