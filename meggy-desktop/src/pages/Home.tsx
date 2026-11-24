@@ -6,7 +6,8 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { aiCacheGet, aiCacheSave, aiGenerate, fetchText, extractPdfText, downloadToTemp, saveUserState, getUserState } from "../lib/api";
+import type { Update } from "@tauri-apps/plugin-updater";
+import { aiCacheGet, aiCacheSave, aiGenerate, fetchText, extractPdfText, downloadToTemp, saveUserState, getUserState, listFolder } from "../lib/api";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import {
   hasLocalAIConfigured,
@@ -26,6 +27,71 @@ interface Drive { index: number; name: string; }
 interface FileItem { name: string; mime_type: string; id: string; link: string | null; size: number; }
 
 const BASE_URL = "https://educa.eu.org";
+
+// ★ v1.9.10: sessão expirada — o Rust devolve "AUTH:401" (api.rs); qualquer
+// chamada que o vir volta p/ a tela de login (uma única vez por sessão).
+let sessionExpiredHandled = false;
+function isAuthError(e: unknown): boolean {
+  return String(e || "").includes("AUTH:401");
+}
+// ★ v1.9.10: normaliza o resume do servidor: número (escalar) ou {t} (web).
+function resumeSeconds(v: unknown): number {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (v && typeof v === "object") {
+    const t = (v as Record<string, unknown>).t;
+    if (typeof t === "number" && Number.isFinite(t)) return t;
+  }
+  return 0;
+}
+function isWatchedValue(v: unknown): boolean {
+  return v === true || (v !== null && typeof v === "object");
+}
+// ★ v1.9.10: caminho estável da aula (o servidor filtra chaves-URL do
+// watched; o link de playback muda — o caminho não).
+function lessonPathOf(file: { name: string } | null | undefined, currentFolderPath: string): string {
+  if (!file) return "";
+  const parts = currentFolderPath.split("/").filter(Boolean);
+  return "/" + [...parts, file.name].join("/");
+}
+// ★ v1.9.10: nome do curso pela heurística do mobile (v2.5.1): o segmento
+// mais fundo que não é módulo/aula/parte/número.
+function extractCourseName(path: string): string {
+  const parts = path.split("/").filter(Boolean).slice(1); // tira o "N:"
+  const isModuleOrLesson = (s: string) =>
+    /m[oó]dulo/i.test(s) || /^aula/i.test(s) || /parte/i.test(s) ||
+    /^\d+\s*[-–_.]/.test(s) || /^\d+$/.test(s);
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const seg = decodeURIComponent(parts[i]).replace(/\+/g, " ");
+    if (seg.length < 3) continue;
+    if (isModuleOrLesson(seg)) continue;
+    return seg;
+  }
+  return parts.length ? decodeURIComponent(parts[parts.length - 1]).replace(/\+/g, " ") : "";
+}
+// ★ v1.9.10: título da aula = nome do TEMA (pasta), nunca "Videoaula"
+// (regra do cartão Continuar do mobile, R29).
+function lessonThemeName(h: { name?: string; path?: string }): string {
+  const raw = h.name || h.path?.split("/").pop()?.replace(/\.\w+$/, "") || "Aula";
+  const base = decodeURIComponent(raw).replace(/\+/g, " ").trim();
+  if (/^(videoaula|video)$/i.test(base) || /^\d+\s*[-–_.]?\s*(videoaula|video)$/i.test(base)) {
+    const parts = (h.path || "").split("/").filter(Boolean);
+    if (parts.length >= 2) return decodeURIComponent(parts[parts.length - 2]).replace(/\+/g, " ");
+  }
+  return base;
+}
+type HistoryEntry = { name?: string; path?: string; link?: string; at?: number; course_path?: string };
+// ★ v1.9.10: agrupa o histórico por curso/drive e fica só com a aula mais
+// recente de cada um. Chave: course_path do servidor quando há; senão
+// drive + nome do curso (heurística).
+function groupHistoryByCourse(hist: HistoryEntry[]): HistoryEntry[] {
+  const ordered = [...hist].filter((h) => h.path).sort((a, b) => (b.at || 0) - (a.at || 0));
+  const seen = new Map<string, HistoryEntry>();
+  for (const h of ordered) {
+    const key = h.course_path || ("/" + (h.path || "").split("/").filter(Boolean)[0] + ":" + extractCourseName(h.path || ""));
+    if (!seen.has(key)) seen.set(key, h);
+  }
+  return [...seen.values()];
+}
 
 // ─── Markdown → HTML (v1.6.9: fixed HTML entity bug — don't double-escape &entities;) ───
 function mdToHtml(md: string): string {
@@ -187,6 +253,15 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
   const [playerIndex, setPlayerIndex] = useState(0);
   const [userState, setUserState] = useState<Record<string, unknown>>({});
   const [updateAvailable, setUpdateAvailable] = useState<string | null>(null);
+  // ★ Auto-update (plugin updater): objecto Update guardado p/ instalar
+  // DENTRO da app; progresso do download 0..100; flag de instalação.
+  const [updateObj, setUpdateObj] = useState<Update | null>(null);
+  const [updateProgress, setUpdateProgress] = useState<number | null>(null);
+  const [installingUpdate, setInstallingUpdate] = useState(false);
+  // ★ v1.9.10: URL de download da release Windows (vem de /api/apps/latest)
+  const [updateDownloadUrl, setUpdateDownloadUrl] = useState<string | null>(null);
+  // ★ v1.9.10: guarda p/ a migração de chaves correr uma só vez por sessão.
+  const keysMigratedRef = useRef(false);
 
   // ─── v1.5.0 — Local AI state ───
   // ★ v1.8.0: aiMode now has 3 options: "cloud" (worker), "local" (WebLLM), "llama" (llama.cpp)
@@ -228,6 +303,13 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
     setShowAIPopup(false);
   }
 
+  // RX470 fix (1.9.10): abrir o LlamaManager a partir do popup de IA Local
+  // (quando o WebLLM nao carrega na placa, ex.: RX470).
+  function handleOpenLlamaFromPopup() {
+    setShowAIPopup(false);
+    setShowLlamaManager(true);
+  }
+
   function handleToggleAI() {
     // ★ v1.8.0: Cycle through 3 modes: cloud → local (WebLLM) → llama (llama.cpp) → cloud
     if (aiMode === "cloud") {
@@ -265,7 +347,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
     console.log("Llama ready:", modelLabel);
   }
 
-  useEffect(() => { loadDrives(); loadUserState(); checkForUpdates(); }, []);
+  useEffect(() => { loadDrives(); loadUserState(); checkForUpdates(); checkPluginUpdate(); }, []);
 
   async function loadDrives() {
     try {
@@ -277,49 +359,157 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
     }
   }
 
+  // ★ v1.9.10: 401 = sessão expirada (cookie de 7 dias). Nunca mostrar
+  // "lista vazia": volta p/ a tela de login (uma vez por sessão).
+  async function handleSessionExpired() {
+    if (sessionExpiredHandled) return;
+    sessionExpiredHandled = true;
+    console.warn("[session] expirada — voltar p/ o login");
+    try { await logout(); } catch (_) { /* ignore */ }
+  }
+
   // ★ v1.6.0: Load user state (history, resume, watched) for "Continue Assistindo"
+  // ★ v1.9.10: 401 → login; outro erro → mantém o estado anterior. Migra as
+  // chaves link→path (uma vez) p/ o resume/watched deixarem de ser URLs.
   async function loadUserState() {
     try {
       const state = await getUserState();
       console.log("[loadUserState] state keys:", Object.keys(state || {}));
-      console.log("[loadUserState] history:", (state as Record<string, unknown>)?.history);
-      console.log("[loadUserState] resume:", (state as Record<string, unknown>)?.resume);
       setUserState(state as Record<string, unknown>);
+      migrateStateKeys(state as Record<string, unknown>);
     } catch (e) {
-      console.error("[loadUserState] ERROR:", e);
+      if (isAuthError(e)) { handleSessionExpired(); return; }
+      console.error("[loadUserState] ERROR (mantém o estado anterior):", e);
     }
   }
 
-  // ★ v1.6.3: Check for app updates from GitHub releases (uses dynamic __APP_VERSION__)
+  // ★ v1.9.10: traduz watched/resume com chave = link de playback p/ chave =
+  // caminho da aula, usando o histórico (que tem path + link). As chaves
+  // antigas ficam no blob (inertes — o servidor filtra URLs do watched);
+  // as novas gravações já usam caminho (markWatched/saveResumePosition).
+  function migrateStateKeys(state: Record<string, unknown>) {
+    if (keysMigratedRef.current) return;
+    keysMigratedRef.current = true;
+    try {
+      if ((state as Record<string, unknown>).keysMigrated) return;
+      const history = (state.history as HistoryEntry[]) || [];
+      const linkToPath = new Map<string, string>();
+      for (const h of history) if (h.link && h.path) linkToPath.set(h.link, h.path);
+      if (!linkToPath.size) return;
+      const remap = (m: Record<string, unknown> | undefined): Record<string, unknown> | null => {
+        if (!m || typeof m !== "object") return null;
+        let changed = false;
+        const out: Record<string, unknown> = {};
+        for (const k of Object.keys(m)) {
+          const p = linkToPath.get(k);
+          if (p && p !== k) { out[p] = m[k]; changed = true; } else out[k] = m[k];
+        }
+        return changed ? out : null;
+      };
+      const watched = remap(state.watched as Record<string, unknown>);
+      const resume = remap(state.resume as Record<string, unknown>);
+      const durations = remap(state.durations as Record<string, unknown>);
+      if (!watched && !resume && !durations) return;
+      const patch: Record<string, unknown> = { ...state, keysMigrated: true };
+      if (watched) patch.watched = watched;
+      if (resume) patch.resume = resume;
+      if (durations) patch.durations = durations;
+      saveUserState(patch).catch(() => { /* ignore */ });
+    } catch (_) { /* best-effort */ }
+  }
+
+  // ★ v1.9.10: Check for app updates NO endpoint da plataforma — a release
+  // mais recente do repo é do Android (native-v2.7.47) e o banner antigo lia
+  // a tag sem filtro de plataforma (404 em desktop-v2.7.47). Nunca mais
+  // consultar .../releases (nem o latest.json partilhado — ver tauri.conf.json).
+  // ★ v1.9.10 gambiarra (ordem do Elton 2026-11-24): se o endpoint não
+  // devolver a tag nova, o app mostra o instalador da TAG ANTIGA
+  // (desktop-v1.9.9) em vez de ficar sem link (era o 404/302). Nunca oferece
+  // downgrade: só vale p/ quem está na 1.9.9 ou abaixo.
+  function fallbackToOldTag() {
+    const currentVersion: string = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
+    if (compareVersions("1.9.9", currentVersion) < 0) return;
+    setUpdateAvailable("1.9.9");
+    setUpdateDownloadUrl("https://github.com/esaaraujo-lab/gdi_server/releases/download/desktop-v1.9.9/Meggy_1.9.9_x64_en-US.msi");
+  }
   async function checkForUpdates() {
     try {
-      const resp = await fetch("https://api.github.com/repos/esaaraujo-lab/gdi_server/releases?per_page=1");
-      const releases = await resp.json();
-      if (releases && releases[0] && !releases[0].draft && !releases[0].prerelease) {
-        const tag = releases[0].tag_name || "";
-        const versionMatch = tag.match(/v?([\d.]+)/);
-        if (versionMatch) {
-          const latestVersion = versionMatch[1];
-          const currentVersion: string = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
-          // Semantic comparison: only show update if latest > current
-          const cmp = compareVersions(latestVersion, currentVersion);
-          if (cmp > 0) {
-            setUpdateAvailable(latestVersion);
-          }
-        }
+      const resp = await fetch(`${BASE_URL}/api/apps/latest?platform=windows`);
+      const data = await resp.json();
+      if (!data || !data.ok || !data.version) { fallbackToOldTag(); return; }
+      const latestVersion: string = String(data.version);
+      const currentVersion: string = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
+      // Semantic comparison: only show update if latest > current
+      const cmp = compareVersions(latestVersion, currentVersion);
+      if (cmp > 0) {
+        setUpdateAvailable(latestVersion);
+        if (data.download_url) setUpdateDownloadUrl(String(data.download_url));
       }
-    } catch (_) { /* ignore */ }
+    } catch (_) { fallbackToOldTag(); }
+  }
+
+  // ★ Auto-update (plugin Tauri updater): verifica o latest.json assinado
+  // no endpoint configurado (plugins.updater). v1.9.10: o endpoint partilhado
+  // .../releases/latest/download/latest.json foi REMOVIDO do tauri.conf.json
+  // (302 → 404 sempre que a release mais recente é do Android) — o plugin
+  // fica dormente até existir um latest.json só do desktop (pendência).
+  // Falha = silencioso: fica o aviso clássico acima (agora pelo endpoint).
+  async function checkPluginUpdate() {
+    try {
+      const { check } = await import("@tauri-apps/plugin-updater");
+      const update = await check();
+      if (update) {
+        setUpdateObj(update);
+        setUpdateAvailable(update.version);
+      }
+    } catch (e) {
+      console.log("[updater] check do plugin falhou (fica o aviso GitHub):", e);
+    }
   }
 
   // ★ v1.6.0: Download and install update
+  // Agora instala DENTRO da app via plugin updater: download com progresso,
+  // verificação de assinatura, instalação e relaunch. Se o plugin não tiver
+  // update guardado ou falhar, recai p/ o comportamento antigo (abrir a
+  // página da release no browser).
   async function downloadUpdate() {
     if (!updateAvailable) return;
-    // Open the releases page in the default browser
+    if (updateObj) {
+      try {
+        setInstallingUpdate(true);
+        let downloaded = 0;
+        let contentLength = 0;
+        await updateObj.downloadAndInstall((event) => {
+          if (event.event === "Started") {
+            contentLength = event.data.contentLength ?? 0;
+            setUpdateProgress(0);
+          } else if (event.event === "Progress") {
+            downloaded += event.data.chunkLength;
+            if (contentLength > 0) {
+              setUpdateProgress(Math.min(100, Math.round((downloaded / contentLength) * 100)));
+            }
+          } else if (event.event === "Finished") {
+            setUpdateProgress(100);
+          }
+        });
+        const { relaunch } = await import("@tauri-apps/plugin-process");
+        await relaunch();
+        return;
+      } catch (e) {
+        console.error("[updater] download/instalação falhou — fallback p/ página da release:", e);
+        setInstallingUpdate(false);
+        setUpdateProgress(null);
+        setUpdateObj(null);
+      }
+    }
+    // Fallback clássico: baixar o MSI direto do endpoint (nunca montar
+    // desktop-v${versão} a partir de uma tag lida sem filtro — era o 404).
+    const url = updateDownloadUrl || `https://github.com/esaaraujo-lab/gdi_server/releases/tag/desktop-v${updateAvailable}`;
     try {
       const { open } = await import("@tauri-apps/plugin-shell");
-      await open(`https://github.com/esaaraujo-lab/gdi_server/releases/tag/desktop-v${updateAvailable}`);
+      await open(url);
     } catch (_) {
-      window.open(`https://github.com/esaaraujo-lab/gdi_server/releases/tag/desktop-v${updateAvailable}`, "_blank");
+      window.open(url, "_blank");
     }
   }
 
@@ -334,6 +524,8 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
       setFiles(result);
       if (result.length === 0) setError("Pasta vazia.");
     } catch (e) {
+      // ★ v1.9.10 (auditoria de rotas): 401 = sessão expirada → login.
+      if (isAuthError(e)) { setLoading(false); handleSessionExpired(); return; }
       console.error("loadFolder", e);
       setError(String(e));
       setFiles([]);
@@ -565,6 +757,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
             onClose={handleClosePopup}
             onChooseLocal={handleChooseLocal}
             onChooseCloud={handleChooseCloud}
+            onOpenLlama={handleOpenLlamaFromPopup}
           />
         )}
         {showLlamaManager && (
@@ -640,6 +833,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
             onClose={handleClosePopup}
             onChooseLocal={handleChooseLocal}
             onChooseCloud={handleChooseCloud}
+            onOpenLlama={handleOpenLlamaFromPopup}
           />
         )}
       </>
@@ -648,11 +842,14 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
 
   // ─── Home view (Área do Aluno — rich staging-style) ───
   if (view === "home") {
-    const history = (userState.history as Array<{ name?: string; path?: string; link?: string }>) || [];
-    const watched = (userState.watched as Record<string, boolean>) || {};
-    const resume = (userState.resume as Record<string, number>) || {};
+    const history = (userState.history as HistoryEntry[]) || [];
+    const watched = (userState.watched as Record<string, unknown>) || {};
+    const resume = (userState.resume as Record<string, unknown>) || {};
+    const durations = (userState.durations as Record<string, number>) || {};
     const watchedCount = Object.keys(watched).length;
-    const recentHistory = history.slice(-8).reverse();
+    // ★ v1.9.10: "Continuar" POR CURSO/DRIVE — a última aula de cada um
+    // (o histórico do servidor tem até 500 eventos, com course_path).
+    const continuePerCourse = groupHistoryByCourse(history).slice(0, 12);
     const appVersion: string = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.6.3";
     const hour = new Date().getHours();
     const greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
@@ -664,7 +861,10 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
         const parts = path.split("/").filter(Boolean);
         const driveIdx = parts[0] ? parseInt(parts[0].replace(":", ""), 10) : -1;
         const driveName = driveIdx >= 0 ? (drives.find((d) => d.index === driveIdx)?.name || "") : "";
-        const courseName = parts[2] ? decodeURIComponent(parts[2]).replace(/\+/g, " ") : "";
+        // ★ v1.9.10: nome do curso pela heurística do mobile (antes, parts[2]
+        // era um palpite — p/ "/9:/CURSOS 2026/..." o curso é parts[2],
+        // p/ "/0:/PF - Agente/..." é parts[1]).
+        const courseName = extractCourseName(path);
         return { driveName, courseName };
       } catch (_) { return { driveName: "", courseName: "" }; }
     }
@@ -695,8 +895,10 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
                   <span style={{ color: "#3fb950", fontWeight: 700, fontSize: "14px" }}>🔄 Atualização disponível!</span>
                   <span style={{ color: "var(--text-muted)", fontSize: "13px", marginLeft: "8px" }}>v{updateAvailable}</span>
                 </div>
-                <button onClick={downloadUpdate} style={{ ...btnStyle, background: "rgba(63,185,80,0.2)", borderColor: "rgba(63,185,80,0.4)", color: "#3fb950" }}>
-                  ⬇ Baixar e instalar
+                <button onClick={downloadUpdate} disabled={installingUpdate} style={{ ...btnStyle, background: "rgba(63,185,80,0.2)", borderColor: "rgba(63,185,80,0.4)", color: "#3fb950", opacity: installingUpdate ? 0.75 : 1 }}>
+                  {installingUpdate
+                    ? (updateProgress !== null && updateProgress < 100 ? `⬇ A descarregar… ${updateProgress}%` : "⬇ A instalar…")
+                    : "⬇ Baixar e instalar"}
                 </button>
               </div>
             )}
@@ -729,24 +931,27 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
               <img src="/meggy.png" alt="Meggy" style={{ width: "80px", height: "80px", borderRadius: "16px", flexShrink: 0 }} />
             </div>
 
-            {/* ── Continue Assistindo (rich cards with progress bars) ── */}
-            {recentHistory.length > 0 && (
+            {/* ── Continue Assistindo — última aula de CADA curso/drive ── */}
+            {continuePerCourse.length > 0 && (
               <div style={{ marginBottom: "32px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
                   <span style={{ fontSize: "20px" }}>▶</span>
                   <h2 style={{ color: "var(--text)", fontSize: "18px", fontWeight: 700, margin: 0 }}>Continue assistindo</h2>
+                  <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>{continuePerCourse.length} {continuePerCourse.length === 1 ? "curso" : "cursos"}</span>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "14px" }}>
-                  {recentHistory.map((h, i) => {
-                    const rawName = h.name || h.path?.split("/").pop()?.replace(/\.\w+$/, "") || "Aula";
-                    const name = decodeURIComponent(rawName).replace(/\+/g, " ");
+                  {continuePerCourse.map((h, i) => {
+                    const name = lessonThemeName(h);
                     const link = h.link || "";
-                    const resumePos = resume[link] || 0;
+                    const path = h.path || "";
+                    const resumePos = resumeSeconds(resume[path] ?? resume[link]);
+                    const dur = durations[path] ?? durations[link] ?? 0;
                     const resumeStr = resumePos > 60 ? `${Math.floor(resumePos / 60)}:${String(Math.floor(resumePos % 60)).padStart(2, "0")}` : "";
-                    const isWatched = watched[link];
+                    const isWatched = isWatchedValue(watched[path] ?? watched[link]);
                     const { driveName, courseName } = parsePath(h.path);
-                    // Progress: watched=100%, has resume=~50% (visual), else 0%
-                    const progressPct = isWatched ? 100 : resumePos > 0 ? 45 : 0;
+                    // ★ v1.9.10: % REAL (posição/duração); sem duração conhecida,
+                    // mostra "Em andamento" sem % — nunca mais o 45% fixo.
+                    const progressPct = isWatched ? 100 : (resumePos > 0 && dur > 0 ? Math.min(100, Math.round((resumePos / dur) * 100)) : 0);
                     const progressColor = isWatched ? "#3fb950" : resumePos > 0 ? "#ffd43b" : "#ff8b9f";
                     return (
                       <div
@@ -758,19 +963,33 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
                           const driveIdx = parseInt(pathParts[0].replace(":", "")) || 0;
                           const drive = drives.find((d) => d.index === driveIdx);
                           if (!drive) return;
-                          setCurrentDrive(drive);
                           const folderPath = "/" + pathParts.slice(0, -1).join("/") + "/";
+                          const fileItem: FileItem = {
+                            name: h.name || (name + ".mp4"),
+                            mime_type: "video/mp4",
+                            id: h.link || "",
+                            link: h.link || null,
+                            size: 0,
+                          };
+                          // ★ v1.9.10: pasta movida/renomeada → toca direto pelo
+                          // link guardado (o ficheiro continua a existir).
+                          try {
+                            const items = await listFolder(driveIdx, folderPath);
+                            const found = items.some((f) => f.name === h.name || (f.link && h.link && f.link === h.link));
+                            if (!found && h.link) {
+                              setCurrentDrive(drive);
+                              setCurrentPath(folderPath);
+                              setFiles([fileItem]);
+                              setView("browse");
+                              setTimeout(() => openPlayer(fileItem), 500);
+                              return;
+                            }
+                          } catch (_) { /* cai no caminho normal */ }
+                          setCurrentDrive(drive);
                           setCurrentPath(folderPath);
                           setView("browse");
                           await loadFolder(drive, folderPath);
                           setTimeout(() => {
-                            const fileItem: FileItem = {
-                              name: name + (h.name?.endsWith(".mp4") ? "" : ".mp4"),
-                              mime_type: "video/mp4",
-                              id: h.link || "",
-                              link: h.link || null,
-                              size: 0,
-                            };
                             openPlayer(fileItem);
                           }, 500);
                         }}
@@ -801,7 +1020,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
                         </div>
                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--text-muted)" }}>
                           <span>{resumeStr ? `⏱ ${resumeStr}` : (resumePos > 0 ? "Em andamento" : "Não iniciado")}</span>
-                          <span>{isWatched ? "✓ Assistido" : `${progressPct}%`}</span>
+                          <span>{isWatched ? "✓ Assistido" : progressPct > 0 ? `${progressPct}%` : resumePos > 0 ? "Em andamento" : "Não iniciado"}</span>
                         </div>
                       </div>
                     );
@@ -866,8 +1085,8 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
                 </div>
                 <div style={{ background: "var(--surface)", borderRadius: "14px", padding: "20px", border: "1px solid rgba(255,255,255,0.08)" }}>
                   <div style={{ width: "44px", height: "44px", borderRadius: "10px", background: "rgba(255,139,159,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px", marginBottom: "12px" }}>▶</div>
-                  <div style={{ color: "var(--text)", fontWeight: 800, fontSize: "24px" }}>{recentHistory.length}</div>
-                  <div style={{ color: "var(--text-muted)", fontSize: "12px" }}>Recentes</div>
+                  <div style={{ color: "var(--text)", fontWeight: 800, fontSize: "24px" }}>{history.length}</div>
+                  <div style={{ color: "var(--text-muted)", fontSize: "12px" }}>No histórico</div>
                 </div>
                 <div
                   onClick={() => setView("drives")}
@@ -912,6 +1131,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
             onClose={handleClosePopup}
             onChooseLocal={handleChooseLocal}
             onChooseCloud={handleChooseCloud}
+            onOpenLlama={handleOpenLlamaFromPopup}
           />
         )}
         {showLlamaManager && (
@@ -959,6 +1179,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
           onClose={handleClosePopup}
           onChooseLocal={handleChooseLocal}
           onChooseCloud={handleChooseCloud}
+          onOpenLlama={handleOpenLlamaFromPopup}
         />
       )}
       {showLlamaManager && (
@@ -1025,6 +1246,8 @@ function PlayerView({
   const [aiSource, setAiSource] = useState<"local" | "cloud" | "llama" | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // ★ v1.9.10: duração da aula atual (p/ a % real do Continuar).
+  const durationRef = useRef<number>(0);
   const isaGenRef = useRef<string>("");
   // ★ v1.6.9: Race-condition guard for loadMaterials — only the latest call's result is applied
   const loadMaterialsReqIdRef = useRef<number>(0);
@@ -1034,6 +1257,18 @@ function PlayerView({
   const isAudio = currentFile
     ? (currentFile.mime_type.startsWith("audio/") || currentFile.name.endsWith(".mp3") || currentFile.name.endsWith(".m4a"))
     : false;
+
+  // ★ Leitor alternativo (mpv, sidecar): o <video> do WebView/Chromium não
+  // lê AVI (DivX/Xvid + MP3/AC3) e falha também em MP4/MKV com codecs fora
+  // do standard (áudio AC3, HEVC, …). O motor alternativo SÓ entra por
+  // extensão legada (.avi/.divx) ou por erro REAL do <video> (onError) —
+  // tudo o que hoje reproduz fica exactamente no caminho actual.
+  const isLegacyVideo = !!currentFile && /\.(avi|divx)$/i.test(currentFile.name || "");
+  const [nativeFailed, setNativeFailed] = useState(false);
+  const [altStatus, setAltStatus] = useState<{ timePos: number; duration: number; paused: boolean; eof: boolean } | null>(null);
+  const useAltPlayer = !isAudio && (isLegacyVideo || nativeFailed);
+  const useAltRef = useRef(false);
+  useAltRef.current = useAltPlayer;
 
   // ─── Load materials ───
   const loadMaterials = useCallback(async () => {
@@ -1111,15 +1346,27 @@ function PlayerView({
   // ★ v1.6.9: idx sync is now handled by derived state pattern (above, during render).
   // No more useEffect([desiredIndex]) — that fired AFTER commit and caused video restart.
 
+  // ★ v1.9.10: 401 = sessão expirada → login (uma vez por sessão).
+  async function handleSessionExpired() {
+    if (sessionExpiredHandled) return;
+    sessionExpiredHandled = true;
+    console.warn("[session] expirada — voltar p/ o login");
+    try { await invoke("logout"); } catch (_) { /* ignore */ }
+    onLogout();
+  }
+
   // ★ v1.5.5: Load watched state from server on mount
+  // ★ v1.9.10: as chaves do watched são caminhos desde a migração — o
+  // conjunto local precisa dos LINKS tbm (a playlist marca por link).
   useEffect(() => {
     getUserState().then((state) => {
-      const watched = (state as Record<string, unknown>)?.watched;
-      if (watched && typeof watched === "object") {
-        const ids = Object.keys(watched);
-        setWatchedSet(new Set(ids));
-      }
-    }).catch(() => { /* ignore */ });
+      const s = (state as Record<string, unknown>) || {};
+      const watched = (s.watched as Record<string, unknown>) || {};
+      const history = (s.history as HistoryEntry[]) || [];
+      const ids = new Set<string>(Object.keys(watched));
+      for (const h of history) if (h.path && h.link && ids.has(h.path)) ids.add(h.link);
+      setWatchedSet(ids);
+    }).catch((e) => { if (isAuthError(e)) handleSessionExpired(); });
   }, []);
 
   // ★ v1.9.5: Save user state with CLIENT-SIDE MERGE — reads existing state, merges, sends full
@@ -1143,23 +1390,27 @@ function PlayerView({
       console.log("[saveUserStateMerged] merged keys:", Object.keys(merged));
       await saveUserState(merged);
     } catch (e) {
+      if (isAuthError(e)) { handleSessionExpired(); return; }
       console.error("[saveUserStateMerged] ERROR:", e);
     }
   }
 
   // ★ v1.5.5: Mark video as watched when played >50% or on ended
+  // ★ v1.9.10: grava por CAMINHO (não por link) — ver lessonPathOf.
   function markWatched() {
     if (!currentFile) return;
     const link = currentFile.link || "";
-    if (!link || watchedSet.has(link)) return;
+    const path = lessonPathOf(currentFile, currentFolderPath);
+    if (!link || !path || watchedSet.has(link)) return;
     const newSet = new Set(watchedSet);
     newSet.add(link);
     setWatchedSet(newSet);
     // ★ v1.9.5: Use merged save to preserve history & resume
-    saveUserStateMerged({ watched: { [link]: true } }).catch(() => { /* ignore */ });
+    saveUserStateMerged({ watched: { [path]: true } }).catch(() => { /* ignore */ });
   }
 
   // ★ v1.9.0: Save resume position to server (throttled — every 10s)
+  // ★ v1.9.10: grava por CAMINHO + a duração (p/ a % real do Continuar).
   const lastResumeSaveRef = useRef<number>(0);
   function saveResumePosition(position: number) {
     if (!currentFile || !currentFile.link) return;
@@ -1167,9 +1418,13 @@ function PlayerView({
     // Throttle: only save every 10 seconds
     if (now - lastResumeSaveRef.current < 10000) return;
     lastResumeSaveRef.current = now;
-    const link = currentFile.link;
+    const path = lessonPathOf(currentFile, currentFolderPath);
+    if (!path) return;
+    const patch: Record<string, unknown> = { resume: { [path]: Math.floor(position) } };
+    const dur = durationRef.current;
+    if (dur > 0) patch.durations = { [path]: Math.floor(dur) };
     // ★ v1.9.5: Use merged save to preserve history & watched
-    saveUserStateMerged({ resume: { [link]: Math.floor(position) } }).catch(() => { /* ignore */ });
+    saveUserStateMerged(patch).catch(() => { /* ignore */ });
   }
 
   // ★ v1.6.9: Save lesson to history (last 8) when video changes — for "Continue Assistindo"
@@ -1181,10 +1436,12 @@ function PlayerView({
     // ★ v1.9.5: Use merged save to preserve resume & watched
     getUserState().then((state) => {
       const s = (state as Record<string, unknown>) || {};
-      const history = (s.history as Array<{ name?: string; path?: string; link?: string }>) || [];
+      const history = (s.history as HistoryEntry[]) || [];
       // Don't add if it's already the most recent
       if (history.length > 0 && history[history.length - 1]?.link === currentFile.link) return;
-      const entry = { name: currentFile.name, path: fullPath, link: currentFile.link || "" };
+      // ★ v1.9.10: `at` estável por entrada — o servidor dedup eventos por
+      // (path, at); sem ele, cada reenvio do array criava eventos duplicados.
+      const entry = { name: currentFile.name, path: fullPath, link: currentFile.link || "", at: Date.now() };
       const newHistory = [...history, entry].slice(-8); // ★ v1.9.5: keep last 8 (was 4)
       saveUserStateMerged({ history: newHistory }).catch(() => { /* ignore */ });
     }).catch(() => { /* ignore */ });
@@ -1196,6 +1453,8 @@ function PlayerView({
     setIsaError(null);
     setIsaLoadingMsg(null);
     setAiSource(null);
+    setNativeFailed(false);
+    setAltStatus(null);
     isaGenRef.current = videoSrc;
 
     // ★ v1.5.4: Update currentFolderPath when video changes (interfolder playlists)
@@ -1219,7 +1478,114 @@ function PlayerView({
     }
   }, [videoSrc]);
 
+  // ★ Motor alternativo (mpv): arranca com a posição guardada e faz poll
+  // do progresso (2s), gravando pelas MESMAS rotas do <video> —
+  // saveResumePosition (throttle 10s → /userstate) e markWatched (>50% /
+  // fim). Ao trocar de aula ou sair do player, o cleanup pára o mpv.
+  useEffect(() => {
+    if (!useAltPlayer || !videoSrc || !currentFile?.link) return;
+    let cancelled = false;
+    let timer: number | undefined;
+    (async () => {
+      let start = 0;
+      try {
+        const state = await getUserState();
+        const resume = ((state as Record<string, unknown>)?.resume as Record<string, number>) || {};
+        start = resume[currentFile.link!] || 0;
+        if (start <= 5) start = 0;
+      } catch (_) { /* sem posição guardada — começa do início */ }
+      if (cancelled) return;
+      try {
+        await invoke("mpv_start", { url: videoSrc, startSecs: start, speed: 1.0, title: currentFile.name });
+      } catch (e) {
+        console.error("mpv_start", e);
+        return;
+      }
+      if (cancelled) {
+        invoke("mpv_stop").catch(() => {});
+        return;
+      }
+      timer = window.setInterval(async () => {
+        try {
+          const st = await invoke<{ running: boolean; timePos: number | null; duration: number | null; paused: boolean; eof: boolean }>("mpv_status");
+          if (cancelled) return;
+          if (!st.running) {
+            window.clearInterval(timer);
+            return;
+          }
+          const t = st.timePos || 0;
+          const d = st.duration || 0;
+          setAltStatus({ timePos: t, duration: d, paused: st.paused, eof: st.eof });
+          setCurrentTime(t);
+          if (d > 0 && t / d > 0.5) markWatched();
+          saveResumePosition(t);
+          if (st.eof) {
+            window.clearInterval(timer);
+            markWatched();
+            invoke("mpv_stop").catch(() => {});
+            if (idx < playlist.length - 1) switchTo(idx + 1);
+          }
+        } catch (_) { /* mpv a arrancar/fechar — o próximo poll decide */ }
+      }, 2000);
+    })();
+    return () => {
+      cancelled = true;
+      if (timer) window.clearInterval(timer);
+      invoke("mpv_stop").catch(() => {});
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [useAltPlayer, videoSrc]);
+
   // Load notes from localStorage on video change
+
+  // ★ v1.9.10 (AAC/moov no fim) — NATIVE_STALL_WATCHDOG: cão de guarda do
+  // <video> nativo. Alguns MP4 (moov no fim do ficheiro, AAC fora do início)
+  // fazem o Chromium ficar à espera dos metadados sem nunca disparar
+  // onError — o ecrã fica preto/a carregar para sempre e o fallback p/ o
+  // mpv nunca entra. Este efeito só observa: se o vídeo nativo não fizer
+  // NENHUM progresso em 30 s (sem metadados) ou ficar 15 s com metadados
+  // mas sem avançar um único frame, marca nativeFailed e o mpv assume — o
+  // mesmo caminho do onError. Tudo o que hoje toca nunca chega aqui:
+  // qualquer progresso (timeupdate/progress/canplay/playing) reinicia o
+  // relógio. Só dispara com o vídeo a tentar tocar (pausado não conta).
+  useEffect(() => {
+    if (!videoSrc || isAudio || useAltPlayer) return;
+    const v = videoRef.current;
+    if (!v) return;
+    const startedAt = Date.now();
+    let lastAdvance = Date.now();
+    let fired = false;
+    const poke = () => { lastAdvance = Date.now(); };
+    v.addEventListener("timeupdate", poke);
+    v.addEventListener("progress", poke);
+    v.addEventListener("canplay", poke);
+    v.addEventListener("playing", poke);
+    const timer = window.setInterval(() => {
+      if (fired || v.ended) return;
+      const now = Date.now();
+      // Fase 1 — sem metadados: o moov nunca chegou (moov no fim + fetch da
+      // cauda preso). 30 s é generoso: o moov tem KBs.
+      if (v.readyState === 0 && now - startedAt > 30000) {
+        fired = true;
+        setNativeFailed(true);
+        return;
+      }
+      // Fase 2 — metadados OK mas zero progresso com o vídeo a tocar.
+      if (v.readyState >= 1 && !v.paused && v.currentTime === 0 && now - lastAdvance > 15000) {
+        fired = true;
+        setNativeFailed(true);
+      }
+    }, 2000);
+    return () => {
+      window.clearInterval(timer);
+      v.removeEventListener("timeupdate", poke);
+      v.removeEventListener("progress", poke);
+      v.removeEventListener("canplay", poke);
+      v.removeEventListener("playing", poke);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videoSrc, useAltPlayer]);
+
   useEffect(() => {
     if (!videoSrc) return;
     try {
@@ -1255,18 +1621,43 @@ function PlayerView({
 
   function seekToTime() {
     const t = prompt("Ir para (segundos):", "0");
-    const media = videoRef.current || audioRef.current;
-    if (t && media) {
-      const num = parseFloat(t);
-      if (!isNaN(num)) media.currentTime = num;
+    if (!t) return;
+    const num = parseFloat(t);
+    if (isNaN(num)) return;
+    // ★ Motor alternativo activo: o seek vai por IPC para o mpv.
+    if (useAltRef.current) {
+      invoke("mpv_command", { args: ["seek", num, "absolute"] }).catch(() => {});
+      return;
     }
+    const media = videoRef.current || audioRef.current;
+    if (media) media.currentTime = num;
   }
 
   // Keyboard shortcuts
   useEffect(() => {
+    const isTextField = (t: EventTarget | null) => {
+      const el = t as HTMLElement | null;
+      if (!el || !el.tagName) return false;
+      return ["INPUT", "SELECT", "TEXTAREA"].includes(el.tagName) || el.isContentEditable;
+    };
     const handler = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
+      if (isTextField(e.target)) return;
+      // ★ Motor alternativo activo: as teclas vão por IPC para o mpv
+      // (a janela do mpv também responde às suas próprias teclas; isto
+      // cobre o caso de o foco estar na janela da app).
+      if (useAltRef.current) {
+        const cmd = (args: unknown[]) => { invoke("mpv_command", { args }).catch(() => {}); };
+        switch (e.key) {
+          case " ": e.preventDefault(); cmd(["cycle", "pause"]); break;
+          case "ArrowRight": cmd(["seek", 10, "relative"]); break;
+          case "ArrowLeft": cmd(["seek", -10, "relative"]); break;
+          case "ArrowUp": e.preventDefault(); cmd(["add", "volume", 5]); break;
+          case "ArrowDown": e.preventDefault(); cmd(["add", "volume", -5]); break;
+          case "n": case "N": if (idx < playlist.length - 1) switchTo(idx + 1); break;
+          case "p": case "P": if (idx > 0) switchTo(idx - 1); break;
+        }
+        return;
+      }
       const media = videoRef.current || audioRef.current;
       if (!media) return;
       switch (e.key) {
@@ -1279,64 +1670,41 @@ function PlayerView({
         case "p": case "P": if (idx > 0) switchTo(idx - 1); break;
       }
     };
+    // ★ Fix Space play/pause: os controlos nativos do <video controls> (e
+    // qualquer botão focado) activam no KEYUP — sem cancelar o keyup, cada
+    // Space alternava DUAS vezes (keydown nosso + keyup nativo) e o efeito
+    // líquido era zero: a barra de espaço não pausava nem despausava.
+    // Aqui só se cancela a activação do keyup; o toggle acontece uma única
+    // vez, no keydown acima. Campos de texto ficam de fora (espaço escreve).
+    const keyupHandler = (e: KeyboardEvent) => {
+      if (e.key !== " ") return;
+      if (isTextField(e.target)) return;
+      // ★ Motor alternativo: sem <video>, um botão focado activaria no
+      // keyup e duplicaria o toggle — cancela como no caminho nativo.
+      if (useAltRef.current) {
+        e.preventDefault();
+        return;
+      }
+      const media = videoRef.current || audioRef.current;
+      if (!media) return;
+      e.preventDefault();
+    };
     document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
+    document.addEventListener("keyup", keyupHandler);
+    return () => {
+      document.removeEventListener("keydown", handler);
+      document.removeEventListener("keyup", keyupHandler);
+    };
   }, [idx, playlist.length]);
 
   // ─── Show ISA panel (cache check + parallel generate) ───
-  // ★ v1.9.9: Save generated ISA content as MD files to the lesson's folder on Drive
-  // Uses the /copy worker endpoint to create .md files in the lesson folder
-  async function saveIsaToFolder(gen: Record<string, unknown>, folderPath: string) {
-    if (!folderPath) return;
-    const lessonName = (gen.lessonName as string) || "Aula";
-    const baseName = lessonName.replace(/\.[^/.]+$/, ""); // remove extension
-
-    // Helper: POST to /copy to create a file in the lesson folder
-    async function saveMdFile(fileName: string, content: string) {
-      if (!content || content.length < 50) return; // skip empty/short
-      try {
-        const resp = await fetch(`${BASE_URL}/copy`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            path: folderPath,
-            fileName: fileName,
-            content: content,
-          }),
-        });
-        console.log(`[saveIsaToFolder] ${fileName}: HTTP ${resp.status}`);
-      } catch (e) {
-        console.warn(`[saveIsaToFolder] ${fileName} failed:`, e);
-      }
-    }
-
-    // Save summary as MD
-    if (gen.summary) {
-      await saveMdFile(`Resumo - ${baseName}.md`, gen.summary as string);
-    }
-    // Save pills as MD
-    if (gen.mindmap) {
-      await saveMdFile(`Pilulas - ${baseName}.md`, gen.mindmap as string);
-    }
-    // Save questions as MD
-    if (gen.questions) {
-      const qs = gen.questions as QuizQuestion[];
-      let md = `# Questões - ${baseName}\n\n`;
-      qs.forEach((q, i) => {
-        md += `## Questão ${i + 1}\n`;
-        md += `**${q.statement}**\n\n`;
-        q.options.forEach((opt, j) => {
-          const marker = q.correct === j ? "✓" : " ";
-          md += `${marker} ${String.fromCharCode(65 + j)}) ${opt}\n`;
-        });
-        md += `\n**Resposta:** ${q.correct}\n`;
-        if (q.explanation) md += `**Explicação:** ${q.explanation}\n`;
-        if (q.legalText) md += `**Base legal:** ${q.legalText}\n`;
-        md += `\n---\n\n`;
-      });
-      await saveMdFile(`Questoes - ${baseName}.md`, md);
-    }
-  }
+  // ★ v1.9.10 (auditoria de rotas): o save de MD na pasta da aula via
+  // POST /copy foi REMOVIDO — o /copy do worker só COPIA um arquivo do
+  // Drive (form id+root_id, Drive files.copy); nunca criou .md a partir
+  // de conteúdo, e cada save devolvia 400 em silêncio. O conteúdo gerado
+  // continua guardado no cache ISA (/api/ai/cache) e nos partilhados (D1).
+  // Follow-up: mandar `lesson` no POST /api/ai para o worker guardar o
+  // .md em .gdi-resumos/ — exige decisão (muda a geração das pílulas).
 
   async function showISA(type: "summary" | "questions" | "mindmap" | "flashcards") {
     setActiveTab({ kind: "isa", id: type });
@@ -1522,7 +1890,12 @@ function PlayerView({
 
       const callIsa = async (prompt: string, kind: string): Promise<AiResult> => {
         try { return await callAiWithFallback(prompt, kind); }
-        catch (e) { console.warn("callIsa", kind, e); return { text: "", source: "cloud" }; }
+        catch (e) {
+          // ★ v1.9.10: 401 = sessão expirada → login (nunca painel vazio)
+          if (isAuthError(e)) { handleSessionExpired(); throw e; }
+          console.warn("callIsa", kind, e);
+          return { text: "", source: "cloud" };
+        }
       };
 
       const [summaryRes, mindmapRes, questionsRes] = await Promise.all([
@@ -1536,6 +1909,12 @@ function PlayerView({
         callIsa(PILULAS_PROMPT, "mindmap"),
         callIsa(QUESTOES_PROMPT, "questoes"),
       ]);
+
+      // ★ v1.9.10: geração falhou nas 3 — mostrar o erro em vez de um painel
+      // vazio (a causa mais comum é a sessão expirada, já tratada acima).
+      if (!summaryRes.text && !mindmapRes.text && !questionsRes.text) {
+        setIsaError("Não foi possível gerar o conteúdo. Verifique a ligação e tente novamente — se acabou de entrar, saia e entre de novo.");
+      }
 
       const summaryR = stripAiReasoning(summaryRes.text);
       const mindmapR = stripAiReasoning(mindmapRes.text);
@@ -1577,8 +1956,9 @@ function PlayerView({
         lessonName: (gen.lessonName as string) || "",
       }).catch(() => { /* ignore */ });
 
-      // ★ v1.9.9: Save generated content as MD files to the lesson's folder on Drive
-      saveIsaToFolder(gen, currentFolderPath).catch(() => { /* ignore */ });
+      // ★ v1.9.10 (auditoria de rotas): save de MD via POST /copy removido
+      // (o /copy só copia arquivos do Drive — ver o comentário acima de
+      // showISA). O cache ISA + D1 partilhado continuam a guardar o conteúdo.
 
       setIsaCache(gen);
       setIsaLoadingMsg(null);
@@ -1745,8 +2125,43 @@ function PlayerView({
                   controls
                   autoPlay
                   style={{ width: "100%" }}
-                  onTimeUpdate={(e) => setCurrentTime((e.target as HTMLAudioElement).currentTime)}
+                  onLoadedMetadata={(e) => {
+                    const media = e.target as HTMLAudioElement;
+                    if (media.duration && Number.isFinite(media.duration)) durationRef.current = media.duration;
+                    // ★ v1.9.10: áudio tbm retoma de onde parou (antes, só setCurrentTime).
+                    if (currentFile?.link) {
+                      getUserState().then((state) => {
+                        const s = (state as Record<string, unknown>) || {};
+                        const resume = (s.resume as Record<string, unknown>) || {};
+                        const raw = resume[lessonPathOf(currentFile, currentFolderPath)] ?? resume[currentFile.link!];
+                        const pos = resumeSeconds(raw);
+                        if (pos > 5) media.currentTime = pos;
+                      }).catch(() => { /* ignore */ });
+                    }
+                  }}
+                  onTimeUpdate={(e) => {
+                    const a = e.target as HTMLAudioElement;
+                    setCurrentTime(a.currentTime);
+                    if (a.duration && Number.isFinite(a.duration)) durationRef.current = a.duration;
+                    if (a.duration > 0 && a.currentTime / a.duration > 0.5) markWatched();
+                    saveResumePosition(a.currentTime);
+                  }}
                 />
+              </div>
+            ) : useAltPlayer ? (
+              <div style={{ padding: "28px 20px", textAlign: "center", color: "#fff" }}>
+                <div style={{ fontSize: "44px", marginBottom: "10px" }}>🎞️</div>
+                <div style={{ fontSize: "14px", fontWeight: 600, marginBottom: "6px" }}>Leitor avançado (formato que o leitor normal não lê)</div>
+                <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.65)", marginBottom: "14px" }}>
+                  {altStatus
+                    ? `${altStatus.paused ? "⏸ Em pausa" : "▶ A reproduzir"} · ${fmtTime(altStatus.timePos)} / ${fmtTime(altStatus.duration)} — o vídeo está a tocar na janela do leitor avançado; o progresso é guardado como sempre.`
+                    : "A abrir o leitor avançado… Se ele não aparecer, usa ⬇ Baixar e abre o ficheiro no leitor do computador."}
+                </div>
+                <div style={{ display: "flex", gap: "8px", justifyContent: "center", flexWrap: "wrap" }}>
+                  <button onClick={() => invoke("mpv_command", { args: ["cycle", "pause"] }).catch(() => {})} style={modeBtnStyle}>{altStatus?.paused ? "▶ Reproduzir" : "⏸ Pausar"}</button>
+                  <button onClick={() => invoke("mpv_command", { args: ["seek", -10, "relative"] }).catch(() => {})} style={modeBtnStyle}>⏪ 10s</button>
+                  <button onClick={() => invoke("mpv_command", { args: ["seek", 10, "relative"] }).catch(() => {})} style={modeBtnStyle}>10s ⏩</button>
+                </div>
               </div>
             ) : (
               <video
@@ -1756,18 +2171,21 @@ function PlayerView({
                 controls
                 autoPlay
                 playsInline
+                onError={() => setNativeFailed(true)}
                 style={{ display: "block", width: "100%", maxHeight: "60vh", background: "#000" }}
                 onLoadedMetadata={(e) => {
+                  const media = e.target as HTMLVideoElement;
+                  if (media.duration && Number.isFinite(media.duration)) durationRef.current = media.duration;
                   // ★ v1.9.0: Seek to saved resume position when video loads
+                  // ★ v1.9.10: lê por caminho (novo) ou link (legado) e aceita
+                  // a forma-objeto do servidor ({t}).
                   if (currentFile?.link) {
                     getUserState().then((state) => {
                       const s = (state as Record<string, unknown>) || {};
-                      const resume = (s.resume as Record<string, number>) || {};
-                      const pos = resume[currentFile.link!] || 0;
-                      if (pos > 5) {
-                        const media = e.target as HTMLVideoElement;
-                        media.currentTime = pos;
-                      }
+                      const resume = (s.resume as Record<string, unknown>) || {};
+                      const raw = resume[lessonPathOf(currentFile, currentFolderPath)] ?? resume[currentFile.link!];
+                      const pos = resumeSeconds(raw);
+                      if (pos > 5) media.currentTime = pos;
                     }).catch(() => { /* ignore */ });
                   }
                 }}
