@@ -20,11 +20,12 @@ jobs:
           - platform: ubuntu-22.04
             args: ''
             label: linux
-          # macOS disabled until we get an Apple Developer cert for codesign.
-          # To re-enable: add back the macos-latest entry with --target universal-apple-darwin.
-          # - platform: macos-latest
-          #   args: '--target universal-apple-darwin'
-          #   label: macos
+          # macOS universal (Intel + Apple Silicon in one .dmg), unsigned /
+          # ad-hoc signed — we don't have an Apple Developer cert, so no
+          # notarization. Users open it the first time with right-click → Open.
+          - platform: macos-latest
+            args: '--target universal-apple-darwin'
+            label: macos
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -66,14 +67,97 @@ jobs:
         working-directory: meggy-desktop
         run: npm install
 
+      # Auto-update (Tauri updater): a chave privada vem do secret do repo
+      # (TAURI_SIGNING_PRIVATE_KEY — ver DESKTOP_AUTOUPDATE_NOTES.md). Sem o
+      # secret, desliga createUpdaterArtifacts SÓ nesta build: a release de
+      # instaladores não falha, mas o auto-update fica inactivo nela.
+      - name: Prepare updater signing
+        id: updater_signing
+        working-directory: meggy-desktop
+        shell: bash
+        env:
+          TAURI_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$TAURI_KEY" ]; then
+            {
+              echo 'TAURI_SIGNING_PRIVATE_KEY<<__EOF__'
+              echo "$TAURI_KEY"
+              echo '__EOF__'
+              echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$TAURI_KEY_PASSWORD"
+            } >> "$GITHUB_ENV"
+            echo "extra_args=" >> "$GITHUB_OUTPUT"
+            echo "Updater signing: ON — artefactos do updater assinados."
+          else
+            printf '{ "bundle": { "createUpdaterArtifacts": false } }' > ci-no-updater.json
+            echo "extra_args=--config ci-no-updater.json" >> "$GITHUB_OUTPUT"
+            echo "::warning::Secret TAURI_SIGNING_PRIVATE_KEY não definido — build SEM artefactos do updater (auto-update inactivo nesta release)."
+          fi
+
+      # Leitor alternativo (AVI/formatos que o WebView não lê): sidecar mpv
+      # (bundle.externalBin = binaries/mpv). Windows: build oficial da
+      # comunidade (shinchiro) via API do GitHub, sem fixar nome de ficheiro.
+      # macOS: tarball do stolendata (mpv.app) descoberto pela listagem do
+      # directório. Linux: sem sidecar empacotado (o mpv do apt é ligado ao
+      # sistema) — a app usa o mpv do PATH se existir. Se a plataforma ficar
+      # sem sidecar, o build NÃO falha: gera um overlay que esvazia o
+      # externalBin só nessa build (mesmo truque do ci-no-updater.json) e
+      # deixa um ::warning:: bem visível. PRIMEIRA RUN: confirmar os
+      # downloads/asset names (§10) — ver AVI_MPV_NOTES.md.
+      - name: Fetch mpv sidecar (alternative player)
+        id: mpv_sidecar
+        working-directory: meggy-desktop/src-tauri
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p binaries
+          ok=""
+          case "${{ matrix.platform }}" in
+            windows-latest)
+              url=$(gh api repos/shinchiro/mpv-winbuild-cmake/releases/latest \
+                --jq '.assets[].browser_download_url' | grep -E 'mpv-x86_64-[^"]*\.7z$' | head -1 || true)
+              if [ -n "$url" ]; then
+                curl -fL "$url" -o mpv.7z
+                7z x -y mpv.7z >/dev/null
+                exe=$(find . -name 'mpv.exe' -not -path './target/*' | head -1)
+                if [ -n "$exe" ]; then cp "$exe" binaries/mpv-x86_64-pc-windows-msvc.exe && ok=1; fi
+              fi
+              ;;
+            macos-latest)
+              latest=$(curl -fsL 'https://laboratory.stolendata.net/~djinn/mpv_osx/' \
+                | grep -oE 'mpv-[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz' | sort -Vu | tail -1 || true)
+              if [ -n "$latest" ]; then
+                curl -fL "https://laboratory.stolendata.net/~djinn/mpv_osx/$latest" -o mpv-mac.tar.gz
+                tar xzf mpv-mac.tar.gz
+                bin=$(find . -path '*mpv.app/Contents/MacOS/mpv' | head -1)
+                if [ -n "$bin" ]; then cp "$bin" binaries/mpv-universal-apple-darwin && chmod +x binaries/mpv-universal-apple-darwin && ok=1; fi
+              fi
+              ;;
+            *)
+              echo "Linux: sem sidecar empacotado — a app cai para o mpv do PATH."
+              ;;
+          esac
+          ls -la binaries/ || true
+          if [ -n "$ok" ]; then
+            echo "extra_args=" >> "$GITHUB_OUTPUT"
+            echo "mpv sidecar: OK nesta plataforma."
+          else
+            printf '{ "bundle": { "externalBin": [] } }' > ../ci-no-mpv.json
+            echo "extra_args=--config ci-no-mpv.json" >> "$GITHUB_OUTPUT"
+            echo "::warning::mpv sidecar NÃO incluído nesta build (${{ matrix.platform }}) — AVI/formatos legados só via mpv do sistema (PATH)."
+          fi
+
       - name: Build Tauri app
         working-directory: meggy-desktop
-        run: npx @tauri-apps/cli@2 build ${{ matrix.args }}
+        run: npx @tauri-apps/cli@2 build ${{ matrix.args }} ${{ steps.updater_signing.outputs.extra_args }} ${{ steps.mpv_sidecar.outputs.extra_args }}
         env:
-          # Disable macOS codesign — we don't have an Apple Developer cert.
-          # The app will be unsigned (users need to right-click → Open on first launch).
+          # macOS codesign: we don't have an Apple Developer cert, so the
+          # macOS job ad-hoc signs ('-') — the minimum for Apple Silicon to
+          # run the app at all. Still unnotarized: first launch needs
+          # right-click → Open. On Windows/Linux these vars are ignored.
           CODESIGN_IDENTITY: ''
-          APPLE_SIGNING_IDENTITY: ''
+          APPLE_SIGNING_IDENTITY: ${{ matrix.platform == 'macos-latest' && '-' || '' }}
           APPLE_ID: ''
           APPLE_PASSWORD: ''
           APPLE_TEAM_ID: ''
@@ -88,8 +172,9 @@ jobs:
           # - Windows: *-setup.exe (NSIS) + *.msi
           # - macOS: *.dmg
           # - Linux: *.AppImage + *.deb
+          # - Updater: *.app.tar.gz (macOS) + o *.sig de cada artefacto assinado
           find meggy-desktop/src-tauri/target -type f \
-            \( -name "*-setup.exe" -o -name "*.msi" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" \) \
+            \( -name "*-setup.exe" -o -name "*.msi" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.tar.gz" -o -name "*.sig" \) \
             -exec cp {} artifacts/ \; 2>/dev/null || true
           echo "=== Final artifacts ==="
           ls -la artifacts/ || true
@@ -114,6 +199,7 @@ jobs:
             ### Downloads
             - **Windows:** `Meggy_1.0.0_x64-setup.exe` (instalador NSIS)
             - **Linux:** `Meggy_1.0.0_amd64.AppImage` + `.deb`
+            - **macOS:** `Meggy_1.0.0_universal.dmg` (universal — Intel e Apple Silicon no mesmo ficheiro)
 
             ### Como instalar
             #### Windows
@@ -121,5 +207,93 @@ jobs:
 
             #### Linux
             Baixe o `.AppImage`, dê permissão de execução (`chmod +x Meggy_1.0.0_amd64.AppImage`), dê duplo-clique.
+
+            #### macOS
+            Baixe o `.dmg`, abra e arraste a Meggy para Aplicações. A app não é
+            notarizada (sem conta Apple Developer paga), por isso na primeira
+            abertura use **botão direito → Abrir** (ou, no Terminal:
+            `xattr -dr com.apple.quarantine /Applications/Meggy.app`).
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ─── Auto-update: gera o latest.json a partir dos artefactos assinados ───
+  # Corre depois da matrix (precisa dos artefactos dos 3 SO juntos) e só em
+  # tags. O endpoint configurado na app (plugins.updater) é
+  # releases/latest/download/latest.json — este job anexa o ficheiro à
+  # release da tag. Sem artefactos assinados (secret em falta), avisa e não
+  # publica manifesto nenhum.
+  updater-manifest:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: updater-assets
+          pattern: meggy-*
+          merge-multiple: true
+
+      - name: Generate latest.json
+        id: manifest
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'PYEOF'
+          import glob, json, os, sys
+          from datetime import datetime, timezone
+
+          tag = os.environ["RELEASE_TAG"]
+          version = tag[len("desktop-v"):] if tag.startswith("desktop-v") else tag.lstrip("v")
+          base = "https://github.com/" + os.environ["REPO"] + "/releases/download/" + tag
+          assets = "updater-assets"
+
+          def pick(pattern):
+              hits = sorted(glob.glob(os.path.join(assets, pattern)))
+              return hits[0] if hits else None
+
+          def entry(fname):
+              if fname is None or not os.path.exists(fname + ".sig"):
+                  return None
+              with open(fname + ".sig") as f:
+                  signature = f.read().strip()
+              return {"signature": signature, "url": base + "/" + os.path.basename(fname)}
+
+          platforms = {}
+          e = entry(pick("*-setup.exe"))
+          if e: platforms["windows-x86_64"] = e
+          e = entry(pick("*.AppImage"))
+          if e: platforms["linux-x86_64"] = e
+          e = entry(pick("*.app.tar.gz"))
+          if e:
+              # build universal: o mesmo .app.tar.gz serve Intel e Apple Silicon
+              platforms["darwin-x86_64"] = e
+              platforms["darwin-aarch64"] = e
+
+          if not platforms:
+              print("::warning::Nenhum artefacto assinado encontrado — latest.json NAO gerado (auto-update inactivo nesta release).")
+              with open(os.environ["GITHUB_OUTPUT"], "a") as f: f.write("created=false\n")
+              sys.exit(0)
+
+          manifest = {
+              "version": version,
+              "notes": "Meggy Desktop " + tag,
+              "pub_date": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "platforms": platforms,
+          }
+          with open("latest.json", "w") as f:
+              json.dump(manifest, f, indent=2)
+          print("latest.json gerado para: " + ", ".join(platforms))
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f: f.write("created=true\n")
+          PYEOF
+
+      - name: Publish latest.json to the release
+        if: steps.manifest.outputs.created == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: latest.json
+          tag_name: ${{ github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
