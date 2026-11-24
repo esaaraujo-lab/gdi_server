@@ -206,7 +206,7 @@ class FileAdapter(
             // imagem fica; o título já é branco; o subtítulo e o
             // texto do progresso passam a branco (o cinza dá 4,3:1
             // e o rosa 3,6–4,5:1 sobre a paleta; o branco dá 8,0–9,9:1).
-            cardBody?.setBackgroundColor(tileColors[position]) // FIX CI #102 — o layout-television de item_rail_card não tem card_body; chamada segura: sem a vista salta a cor mas o bind continua (título/subtítulo/progresso)
+            cardBody?.setBackgroundColor(tileColors[position]) // R28 — o layout-television GANHOU card_body (antes não tinha — ver FIX CI #102); chamada segura por defesa: sem a vista salta a cor mas o bind continua (título/subtítulo/progresso)
             val white = ContextCompat.getColor(ctx, R.color.tile_title)
             cardSubtitle.setTextColor(white)
             cardProgressText.setTextColor(white)
