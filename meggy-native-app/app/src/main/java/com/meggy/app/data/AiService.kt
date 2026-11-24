@@ -81,6 +81,11 @@ object AiService {
     data class BattalionJob(
         val jobId: String,
         val done: Boolean,
+        /** R23 — o job TERMINOU (v2.15.6 P9): o poll pára aqui, mesmo
+         *  com 0 processados. `done` só é true com processed>0, por
+         *  isso um job terminado sem nada gerado nunca o punha a
+         *  true e o poll girava até ao teto. */
+        val finished: Boolean,
         val processed: Int,
         val total: Int,
         val skipped: List<BattalionSkipped>,
@@ -307,7 +312,18 @@ object AiService {
     data class GeneratedBundle(
         val summary: String?,
         val mindmap: String?,
-        val questionsJson: String?
+        val questionsJson: String?,
+        /**
+         * R23 — o servidor marca o pacote como desatualizado
+         * (battalionGenSummary: `outdated` no cache ISA, quando o
+         * resumo detecta lei revogada/desatualizada). É o MESMO
+         * sinal que faz o batalhão PULAR as questões
+         * (battalionGenQuestions: isOutdatedLocal, mesmo padrão) —
+         * por isso, com resumo-só + outdated=true, o motivo real
+         * das questões em falta é este, e não um palpite do cliente.
+         * Default false: pacotes antigos sem o campo não mudam.
+         */
+        val outdated: Boolean = false
     )
 
     /**
@@ -337,7 +353,7 @@ object AiService {
                 null
             }
             if (summary == null && mindmap == null && questionsJson == null) return null
-            GeneratedBundle(summary, mindmap, questionsJson)
+            GeneratedBundle(summary, mindmap, questionsJson, cached.optBoolean("outdated", false))
         } catch (_: Exception) {
             null
         }
@@ -374,10 +390,14 @@ object AiService {
                 BattalionJob(
                     jobId = it.optString("jobId"),
                     done = it.optBoolean("done", false),
+                    finished = it.optBoolean("finished", false),
                     processed = it.optInt("processed", 0),
                     total = it.optInt("total", 0),
                     skipped = skipped,
-                    error = it.optString("error").takeIf { s -> s.isNotBlank() },
+                    // R23 — optText, não optString: um `error` com
+                    // null JSON virava a string "null" (mesmo bug
+                    // da R22) e o motivo mostrado seria literal.
+                    error = it.optText("error"),
                     updatedAt = it.optLong("updatedAt", 0L)
                 )
             }
@@ -387,6 +407,51 @@ object AiService {
                 hasQuestions = json.optBoolean("hasQuestions", false),
                 job = job
             )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * R23 — 4.ª fonte de questões: o banco unificado por aula.
+     * GET /api/ai/question-bank/by-lesson?coursePath=&lessonName=
+     * (item de worker especificado na R22 §2: devolve as questões
+     * do banco cuja proveniência — coursePath + lessonName,
+     * gravada no upsert — casa com a aula, no formato do
+     * batalhão). A resposta pode vir como array nu `[...]` ou
+     * como objeto `{ok:true, questions:[...]}`; devolve-se a
+     * string do array, que os parsers actuais lêem sem mudança.
+     * latchOn404=false: a rota pode ainda não existir no worker
+     * (404 = "rota por construir", não "backend sem IA") — um
+     * 404 aqui NUNCA arma [backendUnavailable]. Null = sem
+     * questões no banco p/ esta aula (ou rota ausente/erro).
+     * Nunca lança exceção.
+     */
+    suspend fun getQuestionsByLesson(
+        context: Context,
+        coursePath: String,
+        lessonName: String
+    ): String? {
+        if (coursePath.isBlank() || lessonName.isBlank()) return null
+        val path = "/api/ai/question-bank/by-lesson" +
+            "?coursePath=${URLEncoder.encode(coursePath, "UTF-8")}" +
+            "&lessonName=${URLEncoder.encode(lessonName, "UTF-8")}"
+        val res = get(context, path, latchOn404 = false)
+        if (res.code != 200) return null
+        return try {
+            val trimmed = (res.body ?: return null).trim()
+            if (trimmed.isEmpty()) return null
+            val arr = when {
+                trimmed.startsWith("[") -> JSONArray(trimmed)
+                trimmed.startsWith("{") -> {
+                    val obj = JSONObject(trimmed)
+                    if (!obj.optBoolean("ok", true)) return null
+                    obj.optJSONArray("questions") ?: return null
+                }
+                else -> return null
+            }
+            if (arr.length() == 0) return null
+            arr.toString()
         } catch (_: Exception) {
             null
         }
