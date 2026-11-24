@@ -38,7 +38,7 @@
     <string name="settings_title">Ajustes</string>
     <string name="tab_summary">Resumo</string>
     <string name="tab_lessons">Aulas</string>
-    <!-- Frente R4B — filtro e secções da lista plana. -->
+    <!-- Frente R4B — filtro e seções da lista plana. -->
     <string name="flat_filter_all">Todos</string>
     <string name="flat_filter_videos">Vídeos</string>
     <string name="flat_filter_materials">Materiais</string>
@@ -61,7 +61,7 @@
     <string name="no_questions">Ainda não há questões geradas para esta aula.</string>
     <string name="no_flashcards">Ainda não há flashcards gerados para esta aula.</string>
     <!-- Ronda 9 Frente B — questões/flashcards da aula. -->
-    <string name="qf_loading">A carregar…</string>
+    <string name="qf_loading">Carregando…</string>
     <string name="qf_questions_hint">Toque numa questão para ver a resposta.</string>
     <string name="qf_flashcards_hint">Toque num card para virar.</string>
     <string name="qf_show_answer">Ver resposta ▸</string>
@@ -78,21 +78,21 @@
     <string name="pdf_summary_title">✨ Resumo da Meggy</string>
     <string name="pdf_summary_close">Fechar</string>
     <string name="pdf_summary_regenerate">Gerar novamente</string>
-    <string name="pdf_summary_cached">Resumo guardado anteriormente — toque em "Gerar novamente" para refazer.</string>
-    <string name="pdf_summary_saved">Guardado na pasta de materiais e no cache da Meggy.</string>
-    <string name="pdf_summary_save_failed">Resumo gerado, mas não foi possível guardá-lo na pasta de materiais.</string>
-    <string name="pdf_summary_searching_saved">A procurar um resumo já guardado…</string>
-    <string name="pdf_summary_extracting">A extrair o texto do PDF…</string>
-    <string name="pdf_summary_ocr">A ler a página %1$d de %2$d (OCR)…</string>
-    <string name="pdf_summary_generating">A gerar o resumo com a Meggy…</string>
-    <string name="pdf_summary_generating_fallback">O primeiro caminho falhou — a gerar o resumo por outro caminho…</string>
+    <string name="pdf_summary_cached">Resumo salvo anteriormente — toque em "Gerar novamente" para refazer.</string>
+    <string name="pdf_summary_saved">Salvo na pasta de materiais e no cache da Meggy.</string>
+    <string name="pdf_summary_save_failed">Resumo gerado, mas não foi possível salvá-lo na pasta de materiais.</string>
+    <string name="pdf_summary_searching_saved">Procurando um resumo já salvo…</string>
+    <string name="pdf_summary_extracting">Extraindo o texto do PDF…</string>
+    <string name="pdf_summary_ocr">Lendo a página %1$d de %2$d (OCR)…</string>
+    <string name="pdf_summary_generating">Gerando o resumo com a Meggy…</string>
+    <string name="pdf_summary_generating_fallback">O primeiro caminho falhou — gerando o resumo por outro caminho…</string>
     <string name="pdf_summary_no_text">Este PDF não tem texto legível — parece escaneado e a Meggy não conseguiu lê-lo por OCR.</string>
     <string name="pdf_summary_unavailable">A IA da Meggy não está disponível neste servidor.</string>
     <string name="pdf_summary_rate_limited">Limite de mensagens da Meggy por hora atingido. Tente novamente mais tarde.</string>
     <string name="pdf_summary_failed">Não foi possível gerar o resumo. Verifique a conexão e tente novamente.</string>
     <!-- Frente R4 — Materiais da aula no player (retrato) -->
     <string name="materials_title">📚 Materiais</string>
-    <string name="materials_loading">A carregar materiais…</string>
+    <string name="materials_loading">Carregando materiais…</string>
     <string name="materials_empty">Ainda sem materiais para esta aula.</string>
     <string name="materials_error">Não foi possível carregar os materiais.</string>
     <string name="materials_retry">Tentar de novo</string>
@@ -101,7 +101,7 @@
     <string name="materials_summary_full_title">✨ Resumo da aula</string>
     <string name="materials_pills_title">💡 Pílulas</string>
     <string name="materials_questions_title">❓ Questões</string>
-    <string name="materials_files_title">📁 Ficheiros da pasta</string>
+    <string name="materials_files_title">📁 Arquivos da pasta</string>
     <string name="materials_answer">✓ Resposta: %1$s</string>
     <string name="materials_close">Fechar</string>
     <!-- R22 UI — conceitos aprovados (aula/início no celular, detalhe TV) -->
@@ -110,7 +110,7 @@
     <string name="question_counter">Questão %1$d de %2$d</string>
     <string name="materials_summary_empty">Ainda não há resumo para esta aula.</string>
     <string name="materials_pills_empty">Ainda não há pílulas para esta aula.</string>
-    <!-- R22 — estados vazios com acção (Elton 2026-11-23 19:54): cada aba
+    <!-- R22 — estados vazios com ação (Elton 2026-11-23 19:54): cada aba
          vazia ganha um botão "Gerar …" que dispara o fluxo de geração
          existente (LessonDescription.ensureDescription, o mesmo do detalhe).
          Flashcards: gera o pacote (resumo + pílulas + questões), porque os
@@ -119,21 +119,21 @@
     <string name="materials_generate_pills">Gerar pílulas</string>
     <string name="materials_generate_questions">Gerar questões</string>
     <string name="materials_generate_flashcards">Gerar flashcards</string>
-    <string name="materials_generating">A gerar…</string>
+    <string name="materials_generating">Gerando…</string>
     <string name="materials_generate_done">Materiais gerados ✓</string>
-    <string name="materials_generate_running">A Meggy está a gerar os materiais — volta a verificar daqui a pouco.</string>
+    <string name="materials_generate_running">A Meggy está gerando os materiais — verifique novamente daqui a pouco.</string>
     <!-- R23 — motivo real por parte (o servidor marcou o pacote como
          desatualizado; o batalhão pula as questões quando o material
          cita lei revogada). Sem este sinal, o vazio continua genérico. -->
     <string name="qf_questions_outdated">Questões não geradas: o material cita lei revogada ou desatualizada.</string>
     <string name="materials_generate_partial">Resumo pronto — faltam pílulas ou questões nesta aula.</string>
     <!-- R23 — a release mais nova existe mas ainda não tem APK (o
-         workflow ainda está a publicá-la): não mentir que não há update. -->
-    <string name="update_publishing">A nova versão (v%1$s) ainda está a ser publicada — tenta de novo daqui a pouco.</string>
-    <string name="materials_generate_failed">Não foi possível gerar agora. Tenta de novo.</string>
+         workflow ainda está publicando-a): não mentir que não há update. -->
+    <string name="update_publishing">A nova versão (v%1$s) ainda está sendo publicada — tente de novo daqui a pouco.</string>
+    <string name="materials_generate_failed">Não foi possível gerar agora. Tente de novo.</string>
     <string name="materials_generate_unavailable">A geração não está disponível neste servidor.</string>
     <string name="materials_generate_no_material">Sem material legível nesta aula para gerar.</string>
-    <string name="materials_generate_not_lesson">A geração é por aula — abre uma aula para gerar.</string>
+    <string name="materials_generate_not_lesson">A geração é por aula — abra uma aula para gerar.</string>
     <string name="question_correct">✓ Correto!</string>
     <string name="home_my_courses">Meus cursos</string>
     <string name="home_search">Buscar</string>
@@ -143,15 +143,15 @@
     <string name="tv_questions_button">Ver questões da disciplina</string>
     <!-- 2.7.41 — estados de carregamento/erro da home (P1-13) e texto
          de zero resultados da busca (P1-14). -->
-    <string name="home_loading">A carregar…</string>
-    <string name="home_error">Não foi possível carregar os destaques. Verifica a tua ligação e tenta de novo.</string>
-    <string name="search_no_results">Nada encontrado para a tua busca.</string>
+    <string name="home_loading">Carregando…</string>
+    <string name="home_error">Não foi possível carregar os destaques. Verifique sua conexão e tente de novo.</string>
+    <string name="search_no_results">Nada encontrado para a sua busca.</string>
     <string name="search_resumos_empty">Ainda não há resumos para pesquisar aqui.</string>
-    <!-- Ronda 10 Frente B — gerir drives (só admin) -->
-    <string name="admin_drives_title">Gerir drives</string>
-    <string name="admin_drives_row">Gerir drives (admin)</string>
+    <!-- Ronda 10 Frente B — gerenciar drives (só admin) -->
+    <string name="admin_drives_title">Gerenciar drives</string>
+    <string name="admin_drives_row">Gerenciar drives (admin)</string>
     <string name="admin_drives_row_sub">Adicionar, editar ou remover drives por ID</string>
-    <string name="admin_drives_loading">A carregar os drives do admin…</string>
+    <string name="admin_drives_loading">Carregando os drives do admin…</string>
     <string name="admin_drives_unavailable">Função indisponível: o servidor não respondeu (ou não há conexão). Tente novamente mais tarde.</string>
     <string name="admin_drives_empty">Ainda não há drives do admin.</string>
     <string name="admin_drives_form_title">ADICIONAR DRIVE</string>
@@ -164,21 +164,21 @@
     <string name="admin_drives_add_subfolder">＋ Adicionar capa de sub-pasta</string>
     <string name="admin_drives_subpath_hint">Caminho da sub-pasta</string>
     <string name="admin_drives_suburl_hint">Link da capa</string>
-    <string name="admin_drives_save">Guardar drive</string>
+    <string name="admin_drives_save">Salvar drive</string>
     <string name="admin_drives_list_title">DRIVES DO ADMIN</string>
     <string name="admin_drives_remove">Remover</string>
     <string name="admin_drives_remove_title">Remover drive?</string>
-    <string name="admin_drives_remove_confirm">Remover \"%1$s\" dos APKs? A pasta no Drive não é apagada — só o registo do drive.</string>
+    <string name="admin_drives_remove_confirm">Remover \"%1$s\" dos APKs? A pasta no Drive não é apagada — só o registro do drive.</string>
     <string name="admin_drives_saved">Drive adicionado.</string>
     <string name="admin_drives_edit">Editar</string>
-    <string name="admin_drives_save_edit">Guardar alterações</string>
+    <string name="admin_drives_save_edit">Salvar alterações</string>
     <string name="admin_drives_updated">Drive atualizado.</string>
     <string name="admin_drives_removed">Drive removido.</string>
-    <string name="admin_drives_not_admin">Só o administrador pode gerir drives.</string>
+    <string name="admin_drives_not_admin">Só o administrador pode gerenciar drives.</string>
     <string name="admin_drives_error_drive_id">Indique o ID da pasta no Drive.</string>
     <string name="admin_drives_error_name">Indique o nome do drive.</string>
     <string name="admin_drives_error_targets">Escolha pelo menos um APK (Meggy, BiBi ou Vovó).</string>
-    <string name="admin_drives_error_url">O link tem de começar por http:// ou https://</string>
+    <string name="admin_drives_error_url">O link precisa começar com http:// ou https://</string>
     <string name="admin_drives_error_subfolder_pair">Cada capa de sub-pasta precisa do caminho e do link.</string>
     <string name="admin_drives_error_generic">Não foi possível concluir. Verifique a conexão e tente novamente.</string>
     <!-- Ronda 10 Frente C — drives do admin na Home -->
