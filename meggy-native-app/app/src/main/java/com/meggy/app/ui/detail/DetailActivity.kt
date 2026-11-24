@@ -128,6 +128,8 @@ class DetailActivity : AppCompatActivity() {
     private var fileAdapter: com.meggy.app.ui.browse.FileAdapter? = null
     private var lessonListAdapter: LessonListAdapter? = null
     private var lessonGridAdapter: LessonGridAdapter? = null
+    // Ronda 27 — grade de Tiles da aba Aulas no celular (3 colunas).
+    private var aulasFileAdapter: com.meggy.app.ui.browse.FileAdapter? = null
     private var flatAdapter: FlatLessonAdapter? = null
     // Frente R4B — filtro da lista plana (Todos / Vídeos / Materiais).
     private var flatFilter: FlatFilter = FlatFilter.ALL
@@ -818,7 +820,9 @@ class DetailActivity : AppCompatActivity() {
     private fun calculateSpanCount(): Int {
         val displayMetrics = resources.displayMetrics
         val screenWidthDp = displayMetrics.widthPixels / displayMetrics.density
-        return if (screenWidthDp >= 900) 5 else if (screenWidthDp >= 600) 4 else 2
+        // Ronda 27 — celular: 3 colunas (Tiles ~30% menores), igual
+        // ao BrowseActivity; a TV e o tablet largo ficam como estavam.
+        return if (screenWidthDp >= 900) 5 else if (screenWidthDp >= 600) 4 else 3
     }
 
     /** Largura ≥ 600dp (tablet/TV): grade 2 colunas de aulas. */
@@ -1994,6 +1998,13 @@ class DetailActivity : AppCompatActivity() {
             groups.add(LessonGroup(folder = looseFolder, folderPath = currentPath, children = loose, expanded = false))
         }
         lessonGroups = groups
+        // Ronda 27 — o loadFolder() pode correr mais que uma vez
+        // (retry): sem isto, cada corrida somava outra
+        // GridGutterDecoration e os gutters duplicavam. Limpa-se
+        // antes de pôr a decoração da grade (a TV já somava em 2.7.44).
+        while (binding.recycler.itemDecorationCount > 0) {
+            binding.recycler.removeItemDecorationAt(0)
+        }
         if (isWide()) {
             val adapter = LessonGridAdapter(
                 onPlayLesson = { group -> playLessonGroup(group) },
@@ -2006,19 +2017,54 @@ class DetailActivity : AppCompatActivity() {
             adapter.submit(lessonGroups)
             prefetchLessonChildren()
         } else {
-            val adapter = LessonListAdapter(
-                onPlayVideo = { file, folderPath -> openFileInFolder(file, folderPath) },
-                onOpenPdf = { file, folderPath -> openPdf(file, folderPath) },
-                onOpenMd = { file, folderPath -> openMd(file, folderPath) },
-                onOpenFolder = { file, folderPath -> openFolderInLesson(file, folderPath) },
-                onToggleExpand = { group, _ -> toggleLessonGroup(group) }
+            // Ronda 27 — celular: grade de Tiles 3 colunas (FileAdapter
+            // + item_rail_card, o mesmo padrão da tela ALFACON 2026)
+            // em vez da lista expansível com chevron. Um toque no Tile
+            // abre a pasta; sem dropdown. Os cartões de progresso do
+            // topo (hero) ficam como cabeçalho. A grade da TV (2
+            // colunas grandes, LessonGridAdapter) não muda.
+            val adapter = com.meggy.app.ui.browse.FileAdapter(
+                onFolder = { file ->
+                    val group = lessonGroups.firstOrNull { it.folderPath == file.folderPath }
+                    if (group != null) openAulasTile(group)
+                },
+                onFile = { file -> openFile(file) },
+                // Frente A (TV): UP da 1ª linha -> aba Aulas.
+                firstRowNextFocusUpId = R.id.tabAulas
             )
-            lessonListAdapter = adapter
-            binding.recycler.layoutManager = LinearLayoutManager(this)
+            aulasFileAdapter = adapter
+            adapter.setFolderPath(currentPath)
+            binding.recycler.layoutManager = GridLayoutManager(this, 3)
+            binding.recycler.addItemDecoration(GridGutterDecoration(10))
             binding.recycler.adapter = adapter
-            adapter.submit(lessonGroups)
+            submitAulasTiles(lessonGroups)
             prefetchLessonChildren()
         }
+    }
+
+    /**
+     * Ronda 27 — (re)envia os grupos filtrados p/ a grade de Tiles
+     * do celular: o Tile é a pasta do grupo (folderPath próprio, p/
+     * a cor fixa e o progresso) e o mapa de progresso da pasta.
+     */
+    private fun submitAulasTiles(groups: List<LessonGroup>) {
+        val adapter = aulasFileAdapter ?: return
+        adapter.submitList(groups.map { it.folder.copy(folderPath = it.folderPath) })
+        val sm = SessionManager.get(this)
+        adapter.setFolderProgress(groups.associate { it.folderPath to folderTileProgress(sm, it) })
+    }
+
+    /**
+     * Ronda 27 — toque no Tile da grade de Aulas (celular): abre a
+     * pasta (um gesto só). "Arquivos avulsos" não é pasta: toca o
+     * 1º vídeo do grupo, como a grade da TV (playLessonGroup).
+     */
+    private fun openAulasTile(group: LessonGroup) {
+        if (group.folder.id == "__loose__") {
+            playLessonGroup(group)
+            return
+        }
+        openLessonGroupDetail(group)
     }
 
     /** Pré-carrega os filhos das aulas para os selos/progresso —
@@ -2074,6 +2120,9 @@ class DetailActivity : AppCompatActivity() {
         val snap = captureDetailFocus()
         lessonListAdapter?.submit(filtered)
         lessonGridAdapter?.submit(filtered)
+        // Ronda 27 — a grade de Tiles do celular reenvia os grupos
+        // filtrados (pastas + progresso).
+        submitAulasTiles(filtered)
         // Ronda 15 Frente B (B3): o prefetch (ou um expandir) entregou
         // filhos — o chip do hero pode sair de "a calcular…".
         updateProgressChip(allFiles)
@@ -2097,6 +2146,9 @@ class DetailActivity : AppCompatActivity() {
         if (positions.isNotEmpty()) {
             lessonGridAdapter?.refreshPositions(positions)
             lessonListAdapter?.refreshGroups(changed.filter { g -> visible.any { it === g } })
+            // Ronda 27 — o prefetch entregou filhos: o progresso das
+            // pastas muda — reenvia-se o mapa p/ os Tiles do celular.
+            submitAulasTiles(visible)
         }
         // Ronda 15 Frente B (B3): o prefetch entregou filhos — o chip
         // do hero pode sair de "a calcular…".

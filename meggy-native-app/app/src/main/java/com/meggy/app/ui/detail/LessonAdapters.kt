@@ -4,6 +4,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
@@ -20,6 +21,7 @@ import com.meggy.app.util.Format
 import com.meggy.app.util.LessonDescription
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.ThumbArt
+import com.meggy.app.util.TileColors
 import com.meggy.app.util.LibraryCovers
 import com.meggy.app.util.TvUtils
 
@@ -30,10 +32,10 @@ import com.meggy.app.util.TvUtils
  * da aula; dentro, vídeo + PDF ou pasta de PDFs (+ .md/transcrição).
  * NÃO achatar numa lista só de vídeos.
  *
- * - Celular: [LessonListAdapter] — linha expansível por aula; ao abrir,
- *   os filhos são listados (um `listFolder`, cache em memória) e
- *   aparecem embutidos: vídeo (▶ Vídeo — MM:SS), PDF (nome + tamanho),
- *   pasta de PDFs (N arquivos), .md/transcrição (leitor de MD).
+ * - Celular: grade de Tiles 3 colunas (FileAdapter + item_rail_card,
+ *   em DetailActivity — Ronda 27, 2.7.45); antes era [LessonListAdapter]
+ *   (linha expansível por aula), que fica sem uso nesta versão —
+ *   candidato a remoção numa ronda de limpeza, não apagado aqui.
  * - TV/tablet largo: [LessonGridAdapter] — grade 2 colunas de cards.
  *
  * Progresso por aula: % (do vídeo principal, quando há resume),
@@ -167,6 +169,53 @@ private fun groupProgress(sm: SessionManager, group: LessonGroup): GroupProgress
         hasResume = directHasResume || extraHasResume,
         known = group.children != null || recents.isNotEmpty(),
         childrenLoaded = group.children != null
+    )
+}
+
+/**
+ * Ronda 27 — progresso de um grupo pronto para o Tile (barra +
+ * texto + selo "Continuar"): as MESMAS regras do cabeçalho da
+ * lista (ver o bind abaixo), numa só função — o cabeçalho e o Tile
+ * do celular mostram sempre o mesmo progresso.
+ */
+data class FolderTileProgress(
+    /** Barra 0..100 (100 só quando completa). */
+    val barProgress: Int,
+    /** Texto ("100% concluído", "N% concluído", "Em curso · N%", …). */
+    val text: String,
+    /** A linha de progresso mostra-se (completa, parcial ou a carregar). */
+    val showProgress: Boolean,
+    /** O selo "Continuar" mostra-se (em curso, não completa). */
+    val showContinue: Boolean,
+    val complete: Boolean
+)
+
+fun folderTileProgress(sm: SessionManager, group: LessonGroup): FolderTileProgress {
+    val gp = groupProgress(sm, group)
+    val progress = gp.progress
+    val watchedCount = gp.watchedCount
+    val pct = gp.pct
+    val complete = gp.isComplete
+    val hasResume = gp.hasResume
+    val known = gp.known
+    // Barra: 100 só quando completa; com terminados, a fração;
+    // senão, o melhor parcial (nunca o máximo como "% concluído").
+    val barProgress = if (complete) 100 else if (watchedCount > 0) pct else progress
+    val text = when {
+        complete -> "100% concluído"
+        watchedCount > 0 && pct < 100 -> "$pct% concluído"
+        watchedCount > 0 -> "Em curso"
+        progress > 0 -> "Em curso · $progress%"
+        hasResume -> "Continuar"
+        !known -> "carregando…"
+        else -> "não iniciado"
+    }
+    return FolderTileProgress(
+        barProgress = barProgress,
+        text = text,
+        showProgress = complete || watchedCount > 0 || progress > 0 || hasResume || !known,
+        showContinue = (progress > 0 || hasResume) && !complete,
+        complete = complete
     )
 }
 
@@ -311,34 +360,18 @@ class LessonListAdapter(
                 // uma FRAÇÃO (terminados/total): 100% só com tudo
                 // terminado; parcial sem nenhum terminado é "Em curso".
                 val video = row.children?.firstOrNull { it.isVideo || it.isAudio }
-                val gp = groupProgress(sm, row)
-                val progress = gp.progress
-                val watchedCount = gp.watchedCount
-                val pct = gp.pct
-                val complete = gp.isComplete
-                val hasResume = gp.hasResume
-                val known = gp.known
-                // Barra: 100 só quando completa; com terminados, a
-                // fração; senão, o melhor parcial (nunca o máximo
-                // como "% concluído" — ver o texto abaixo).
-                val barProgress = if (complete) 100 else if (watchedCount > 0) pct else progress
-                b.lessonProgress.progress = barProgress
-                b.lessonProgressText.text = when {
-                    complete -> "100% concluído"
-                    watchedCount > 0 && pct < 100 -> "$pct% concluído"
-                    watchedCount > 0 -> "Em curso"
-                    progress > 0 -> "Em curso · $progress%"
-                    hasResume -> "Continuar"
-                    !known -> "carregando…"
-                    else -> "não iniciado"
-                }
-                b.lessonBadge.visibility = if (complete) View.VISIBLE else View.GONE
-                b.lessonContinue.visibility = if ((progress > 0 || hasResume) && !complete) View.VISIBLE else View.GONE
+                // Ronda 27 — o cálculo vive em folderTileProgress (o
+                // Tile do celular usa os mesmos valores).
+                val ftp = folderTileProgress(sm, row)
+                b.lessonProgress.progress = ftp.barProgress
+                b.lessonProgressText.text = ftp.text
+                b.lessonBadge.visibility = if (ftp.complete) View.VISIBLE else View.GONE
+                b.lessonContinue.visibility = if (ftp.showContinue) View.VISIBLE else View.GONE
                 b.lessonContinue.setOnClickListener {
                     if (video != null) onPlayVideo(video, row.folderPath)
                 }
                 b.lessonProgressRow.visibility =
-                    if (complete || watchedCount > 0 || progress > 0 || hasResume || !known) View.VISIBLE else View.GONE
+                    if (ftp.showProgress) View.VISIBLE else View.GONE
                 val meta = buildList {
                     video?.let { add(if (it.isAudio) "áudio" else "vídeo") }
                     val pdfs = row.children?.count { it.isPdf } ?: 0
@@ -432,6 +465,11 @@ class LessonGridAdapter(
 
     private val groups = mutableListOf<LessonGroup>()
 
+    // Ronda 27 — cor fixa da área do nome (TileColors; span 2 fixo
+    // no DetailActivity). Recalculada a cada submit, na ordem da
+    // lista filtrada — vizinhos (lado e abaixo) sempre diferentes.
+    private var tileColors: List<Int> = emptyList()
+
     fun submit(newGroups: List<LessonGroup>) {
         // R21: DiffUtil (identidade = folderPath; conteúdo = filhos/
         // pdfFolderCount por referência) em vez do rebind total.
@@ -446,6 +484,8 @@ class LessonGridAdapter(
         })
         groups.clear()
         groups.addAll(newGroups)
+        // Ronda 27 — cores da lista nova (ordem filtrada; span 2).
+        tileColors = TileColors.assign(groups.map { it.folderPath }, 2)
         diff.dispatchUpdatesTo(this)
     }
 
@@ -472,7 +512,16 @@ class LessonGridAdapter(
             }
             // R18B (Bug 1 #4): 1.05x na TV — ±9,9dp < gap 12dp,
             // zero sobreposição; anel 3dp + elevação mantidos.
-            FocusAnimator.attachCard(binding.lessonCardRoot, TvUtils.isTv(binding.root.context), scaleTv = FocusAnimator.SCALE_TV_DENSE)
+            // Ronda 27 — anel BRANCO e grosso (4dp): o rosa dá
+            // 3,6–4,5:1 sobre as cores fixas dos Tiles; o branco dá
+            // 8,0–10,8:1 e o foco continua visível em qualquer cor.
+            FocusAnimator.attachCard(
+                binding.lessonCardRoot,
+                TvUtils.isTv(binding.root.context),
+                scaleTv = FocusAnimator.SCALE_TV_DENSE,
+                ringColorRes = R.color.tile_focus_ring_white,
+                ringWidthDp = 4f
+            )
             TapFeedback.attachPress(binding.lessonCardRoot, TvUtils.isTv(binding.root.context))
         }
     }
@@ -501,6 +550,11 @@ class LessonGridAdapter(
         val res = holder.itemView.resources
         val ctx = holder.itemView.context
         val sm = SessionManager.get(ctx)
+        // Ronda 27 — rede de segurança: o submit() já calcula as
+        // cores; se a lista mudou sem passar por ele, recalcula.
+        if (tileColors.size != groups.size) {
+            tileColors = TileColors.assign(groups.map { it.folderPath }, 2)
+        }
         val video = group.children?.firstOrNull { it.isVideo || it.isAudio }
         // Ronda 17 Frente B — ver groupProgress: fração
         // (terminados/total); 100% só com tudo terminado.
@@ -565,6 +619,15 @@ class LessonGridAdapter(
                 !known -> "carregando…"
                 else -> "não iniciada"
             }
+            // Ronda 27 — cor fixa da área do nome (TileColors): a
+            // imagem fica; o título já é branco (tile_title); o chip
+            // de vídeo e o texto do progresso passam a branco (o rosa
+            // dá 3,6–4,5:1 sobre a paleta; o branco dá 8,0–9,9:1). O
+            // chip de PDF já era branco (md_on_surface).
+            lessonCardBody.setBackgroundColor(tileColors[position])
+            val white = ContextCompat.getColor(ctx, R.color.tile_title)
+            lessonCardChipVideo.setTextColor(white)
+            lessonCardProgressText.setTextColor(white)
         }
     }
 
