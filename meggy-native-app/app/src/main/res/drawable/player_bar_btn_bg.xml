@@ -3,7 +3,7 @@
      SO-ICONE, sem disco/circulo (Plyr: botoes da barra sao so o icone,
      fundo transparente; plyr-control-icon-size 18px, padding 7px,
      radius 3px). Normal = transparente. Foco D-pad (TV) e pressionado:
-     state layer branco + anel 3dp na cor da marca — o foco TEM de se ver
+     state layer branco + anel 3dp na cor da marca — o foco precisa ser visto
      (FocusAnimator soma escala 1.10x na TV). Mesmo padrao do
      player_chip_bg (radius 16dp la; aqui 3dp, o radius do Plyr). -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
