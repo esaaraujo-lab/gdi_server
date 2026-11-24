@@ -18,7 +18,7 @@ import com.meggy.app.util.TvUtils
 import kotlinx.coroutines.launch
 
 /**
- * Ronda 10 Frente B — "Gerir drives" (só admin; abre a partir de
+ * Ronda 10 Frente B — "Gerenciar drives" (só admin; abre a partir de
  * Ajustes quando checkAdmin() diz admin).
  *
  * O admin coloca o ID de uma pasta do Drive e escolhe para que APKs
@@ -26,12 +26,12 @@ import kotlinx.coroutines.launch
  * sub-capa (vazios → capa do admin + sub-capa genérica, tratadas pela
  * Frente C) e capas por sub-pasta (linhas caminho → link). Os drives
  * do admin podem ser removidos (confirmação; a pasta no Drive NÃO é
- * apagada — só o registo).
+ * apagada — só o registro).
  *
  * Servidor (Frente A da ronda 13, DEPLOYADO no sandbox): tabela D1
  * admin_drives + GET /api/admin-drives, POST
  * /api/admin/admin-drives/add|update|delete e GET /api/me. Sem endpoint, o
- * ecrã mostra "função indisponível até o servidor a ativar" (nunca
+ * a tela mostra "função indisponível até o servidor a ativar" (nunca
  * uma lista vazia enganadora, nunca crash). O admin vê TODOS os
  * drives que criou, em qualquer APK (o filtro por targetApps é da
  * Frente C, na Home).
@@ -55,7 +55,7 @@ class AdminDrivesActivity : AppCompatActivity() {
 
         binding.toolbar.setNavigationOnClickListener { finish() }
 
-        // Pré-marcar o APK actual como destino (o admin pode mudar).
+        // Pré-marcar o APK atual como destino (o admin pode mudar).
         when (AdminDrive.targetForPackage(packageName)) {
             AdminDrive.TARGET_MEGGY -> binding.checkMeggy.isChecked = true
             AdminDrive.TARGET_BIBI -> binding.checkBibi.isChecked = true
@@ -74,7 +74,7 @@ class AdminDrivesActivity : AppCompatActivity() {
         }
 
         // Defesa em profundidade: a entrada em Ajustes já só aparece
-        // para admin, mas um arranque directo sem papel fecha o ecrã.
+        // para admin, mas um arranque direto sem papel fecha a tela.
         lifecycleScope.launch {
             val admin = try { api.checkAdmin() } catch (_: Exception) { false }
             if (!admin) {
@@ -139,10 +139,10 @@ class AdminDrivesActivity : AppCompatActivity() {
 
     /**
      * Ronda 13 Frente C — edicao (POST /api/admin/admin-drives/
-     * update): carrega o drive no formulario e troca o Guardar p/
+     * update): carrega o drive no formulario e troca o Salvar p/
      * atualizar. O ID da pasta NAO muda (o update identifica pela
      * chave `id`); o campo fica desligado p/ nao sugerir o contrario.
-     * Os campos vazios de capa/sub-capa no Guardar limpam-nas no
+     * Os campos vazios de capa/sub-capa no Salvar limpam-nas no
      * servidor (null JSON — ver ApiService.updateAdminDrive).
      */
     private fun startEdit(drive: AdminDrive) {
@@ -161,7 +161,7 @@ class AdminDrivesActivity : AppCompatActivity() {
         binding.inputDriveName.requestFocus()
     }
 
-    /** Volta o formulario ao modo "adicionar" (apos guardar). */
+    /** Volta o formulario ao modo "adicionar" (apos salvar). */
     private fun resetEditMode() {
         editingId = null
         binding.inputDriveId.isEnabled = true

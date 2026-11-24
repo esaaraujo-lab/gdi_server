@@ -198,8 +198,8 @@ class SettingsActivity : AppCompatActivity() {
 
         binding.btnLogout.setOnClickListener { logout() }
 
-        // Ronda 10 Frente B — entrada "Gerir drives", SÓ para admin.
-        // O valor em cache (SessionManager, do username actual) decide
+        // Ronda 10 Frente B — entrada "Gerenciar drives", SÓ para admin.
+        // O valor em cache (SessionManager, do username atual) decide
         // de imediato; checkAdmin() revalida em 2.º plano (GET /api/me
         // ou fallback provisório) e corrige a visibilidade.
         binding.rowAdminDrives.setOnClickListener {
@@ -251,8 +251,8 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     /**
-     * Ronda 10 Frente B — mostra a linha "Gerir drives (admin)" só
-     * quando o utilizador é admin. Aplica o cache de imediato (sem
+     * Ronda 10 Frente B — mostra a linha "Gerenciar drives (admin)" só
+     * quando o usuário é admin. Aplica o cache de imediato (sem
      * flicker) e revalida em 2.º plano; nunca mostra a linha a
      * não-admins nem rebenta se a rede falhar.
      */
