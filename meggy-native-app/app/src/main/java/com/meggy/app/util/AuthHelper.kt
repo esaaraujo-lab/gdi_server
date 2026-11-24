@@ -81,7 +81,8 @@ object AuthHelper {
 
     /**
      * True quando o resultado tipado de [ApiService.listFolder] diz
-     * sessão expirada (HTTP 401/403 ou corpo HTML de login). R19B: o
+     * sessão expirada (HTTP 401/403, corpo HTML de login, ou 200 com
+     * corpo de texto "Session Expired" / "Invalid User", R29). R19B: o
      * null único morreu — a distinção é [FolderResult.SessionExpired]
      * vs [FolderResult.Transient].
      */
