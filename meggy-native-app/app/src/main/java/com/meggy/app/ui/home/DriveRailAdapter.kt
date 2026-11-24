@@ -73,7 +73,7 @@ class DriveRailAdapter(
     }
 
     /**
-     * Ronda 17 Frente B — guarda os ids de foco D-pad; o onBind
+     * Ronda 17 Frente B — salva os ids de foco D-pad; o onBind
      * aplica-os aos holders (ver RailAdapter.updateFocusIds).
      */
     fun updateFocusIds(upId: Int) {
@@ -95,7 +95,7 @@ class DriveRailAdapter(
         featuredCovers = covers
         // Ronda 18 Frente C (F2) — só os tiles cuja capa mudou são
         // re-ligados (a capa só afecta os fixos, por "/N:/"); os do
-        // admin usam a coverUrl do registo, nunca este mapa.
+        // admin usam a coverUrl do registro, nunca este mapa.
         var changed = false
         items.forEachIndexed { index, item ->
             if (item is DriveRailItem.Fixed) {
@@ -182,7 +182,7 @@ class DriveRailAdapter(
 
     override fun onBindViewHolder(holder: VH, position: Int) {
         // Ronda 17 Frente B — os ids de foco D-pad re-aplicam-se a
-        // cada bind (o updateFocusIds da Home só os guarda).
+        // cada bind (o updateFocusIds da Home só os salva).
         if (nextFocusUpId != View.NO_ID) holder.itemView.nextFocusUpId = nextFocusUpId
         if (nextFocusDownId != View.NO_ID) holder.itemView.nextFocusDownId = nextFocusDownId
         // Ronda 10 Frente C — o tile fixo e o tile do admin
@@ -270,7 +270,7 @@ class DriveRailAdapter(
      * genérica (o admin não tem índice de drive — coverResForDrive
      * não se aplica; -1 cai na genérica de estudo). A estrela de
      * favorito EXISTE aqui: o drive do admin agora tem caminho
-     * ("by-id:<id>"), guardado como favorito e reaberto por ID.
+     * ("by-id:<id>"), salvo como favorito e reaberto por ID.
      */
     private fun bindAdmin(holder: VH, adminDrive: AdminDrive) {
         with(holder.binding) {
@@ -303,7 +303,7 @@ class DriveRailAdapter(
 
             // Ronda 13 Frente C — o drive do admin agora TEM caminho
             // ("by-id:<id>"): a estrela favorita como nos fixos; o
-            // favorito guarda o path por ID e a Minha Lista reabre-o
+            // favorito salva o path por ID e a Minha Lista reabre-o
             // pelo DetailActivity (o listFolder despacha p/ by-id).
             // (Tambem corrige um vazamento da Ronda 10: o GONE aqui
             // ficava no view-holder reciclado e escondia a estrela

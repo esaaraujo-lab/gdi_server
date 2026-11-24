@@ -20,7 +20,7 @@ import com.meggy.app.util.ThumbArt
  * R22 UI (conceito "início celular") — grelha "Meus cursos" da home:
  * os cursos favoritos do aluno (a mesma fonte da Minha Lista), com
  * capa da biblioteca, total REAL de aulas (GET /api/courses/unified,
- * via [courseTotals]) e progresso das aulas assistidas guardadas
+ * via [courseTotals]) e progresso das aulas assistidas salvas
  * localmente. Sem total conhecido, a meta e a barra ficam escondidas
  * — nunca um número inventado. Só é usado no celular.
  */

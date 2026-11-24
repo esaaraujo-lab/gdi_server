@@ -104,14 +104,14 @@ class HomeActivity : AppCompatActivity() {
     private var lastFocusDrives = -1
     // Ronda 18 Frente C (F3) — geração do restauro de foco/rolagem:
     // cada restoreHomeFocus() carimba a sua geração e os post{} só
-    // actuam se ainda for a actual. O foco (D-pad) ou um toque depois
-    // do snapshot invalida o restauro pendente — o utilizador já
+    // actuam se ainda for a atual. O foco (D-pad) ou um toque depois
+    // do snapshot invalida o restauro pendente — o usuário já
     // navegou, não se repõe nada por cima dele.
     private var focusRestoreGeneration = 0
     private var pendingFocusRestore: HomeFocusSnapshot? = null
     // Ronda 17 Frente B — rail "Continue assistindo" criado UMA só
-    // vez (o onResume só actualiza os dados); último rail focado
-    // (0 = nenhum, 1 = Continue, 2 = Drives) + scrollY guardado
+    // vez (o onResume só atualiza os dados); último rail focado
+    // (0 = nenhum, 1 = Continue, 2 = Drives) + scrollY salvo
     // para restauro após morte do processo (onSaveInstanceState).
     // Ver o observador global de foco (globalFocusListener).
     private var continueAdapter: RailAdapter? = null
@@ -145,8 +145,8 @@ class HomeActivity : AppCompatActivity() {
 
     /**
      * Ronda 18 Frente C (F3) — um restauro de foco/rolagem pendente só
-     * vale enquanto o foco não saiu do sítio para onde ele ia repor:
-     * se o utilizador já navegou para outro alvo, o restauro é
+     * vale enquanto o foco não saiu do lugar para onde ele ia repor:
+     * se o usuário já navegou para outro alvo, o restauro é
      * cancelado (a geração avança e os post{} agendados ignoram-se
      * quando correm). O restauro que repõe o próprio alvo não se
      * cancela a si mesmo.
@@ -181,7 +181,7 @@ class HomeActivity : AppCompatActivity() {
         }
 
         api = ApiService(this)
-        // Ronda 17 Frente B — repõe o foco/rolagem guardados se a
+        // Ronda 17 Frente B — repõe o foco/rolagem salvos se a
         // activity foi recriada (morte do processo): o 1.º onResume
         // toma o caminho de restauro, não o da 1.ª abertura.
         savedInstanceState?.let {
@@ -208,7 +208,7 @@ class HomeActivity : AppCompatActivity() {
         }
         // 2.7.41 (P0-2/P0-3) — atalhos de navegação no cabeçalho da home
         // TV (só existem no layout-television; no celular o
-        // findViewById devolve null e nada acontece).
+        // findViewById retorna null e nada acontece).
         findViewById<View>(R.id.tvNavSearch)?.setOnClickListener {
             startActivity(Intent(this, SearchActivity::class.java))
         }
@@ -286,7 +286,7 @@ class HomeActivity : AppCompatActivity() {
      * 2.7.41 (P1-13) — estados da home. O conteúdo é local e monta
      * depressa, por isso o carregamento só cobre o 1.º desenho; o erro
      * só aparece quando não há nada local (sem recentes nem favoritos)
-     * E os destaques falharam. A lógica de esconder secções vazias com
+     * E os destaques falharam. A lógica de esconder seções vazias com
      * dados não muda.
      */
     private fun updateHomeStateViews() {
@@ -307,7 +307,7 @@ class HomeActivity : AppCompatActivity() {
         binding.homeLoading.visibility = View.VISIBLE
         // Sem setupHero(): na TV ele criaria um SEGUNDO HeroRotator e o
         // antigo continuaria a rodar por cima; o hero já corre e o
-        // retry só precisa das secções (setupDestaques é no-op na TV).
+        // retry só precisa das seções (setupDestaques é no-op na TV).
         setupDestaques()
         setupContinueRail()
         setupDrivesRail()
@@ -365,7 +365,7 @@ class HomeActivity : AppCompatActivity() {
 
     // ──────────── Ronda 17 Frente B — foco + rolagem ────────────
     //
-    // O foco REAL (D-pad) guarda-se com um observador GLOBAL de foco
+    // O foco REAL (D-pad) salva-se com um observador GLOBAL de foco
     // (OnGlobalFocusChangeListener), não com setOnFocusChangeListener
     // na vista: o FocusAnimator é dono desse listener em cada card
     // (attach/attachCard) e sobrepô-lo matava o anel/escala de foco.
@@ -377,7 +377,7 @@ class HomeActivity : AppCompatActivity() {
     private data class HomeFocusSnapshot(val target: Int, val pos: Int, val scrollY: Int)
 
     /** Posição do adapter do item que contém a vista focada (o foco
-     *  pode estar num filho do card): sobe-se até ao filho directo
+     *  pode estar num filho do card): sobe-se até o filho direto
      *  do RecyclerView. null = o foco não está neste RecyclerView. */
     private fun adapterPositionIn(recyclerView: RecyclerView, focused: View): Int? {
         var v: View? = focused
@@ -401,14 +401,14 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 
-    /** Repõe foco + rolagem guardados (depois do re-bind, no próximo layout). */
+    /** Repõe foco + rolagem salvos (depois do re-bind, no próximo layout). */
     private fun restoreHomeFocus(snap: HomeFocusSnapshot) {
         if (snap.target == 0 && snap.scrollY <= 0) return
         // Ronda 18 Frente C (F3) — carimba a geração do restauro: os
-        // post{} abaixo só actuam se a geração ainda for a actual. Um
+        // post{} abaixo só actuam se a geração ainda for a atual. Um
         // foco ou toque posterior invalida o restauro pendente (ver
         // invalidateStaleFocusRestore / dispatchTouchEvent) — o
-        // utilizador já navegou, não se repõe nada por cima dele.
+        // usuário já navegou, não se repõe nada por cima dele.
         focusRestoreGeneration++
         pendingFocusRestore = snap
         val gen = focusRestoreGeneration
@@ -439,7 +439,7 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 
-    /** Restauro do onResume: usa o último rail focado + a posição guardada. */
+    /** Restauro do onResume: usa o último rail focado + a posição salva. */
     private fun restoreHomeFocusOnResume() {
         val y = binding.homeScroll.scrollY.takeIf { it > 0 } ?: savedScrollY
         val snap = when (lastFocusedRail) {
@@ -452,7 +452,7 @@ class HomeActivity : AppCompatActivity() {
 
     /**
      * Redesenha só os itens visíveis do RecyclerView (ex.: chegada
-     * do manifesto de capas). Os itens fora do ecrã resolvem a capa
+     * do manifesto de capas). Os itens fora da tela resolvem a capa
      * no próximo bind — sem re-bind total, sem perda de foco.
      */
     private fun refreshVisibleItems(recyclerView: RecyclerView) {
@@ -464,7 +464,7 @@ class HomeActivity : AppCompatActivity() {
     }
 
     // Ronda 18 Frente C (F3) — um toque a meio de um restauro
-    // pendente cancela-o: o utilizador tomou conta da página e o
+    // pendente cancela-o: o usuário tomou conta da página e o
     // post{} já não deve puxar o foco/rolagem para o snapshot velho.
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         if (ev.action == MotionEvent.ACTION_DOWN) invalidatePendingFocusRestore()
@@ -506,8 +506,8 @@ class HomeActivity : AppCompatActivity() {
         // Frente G: reconstruir o rail "Continue assistindo" ao
         // voltar (o player grava recents/resume; sem isto a home
         // só mostrava o vídeo visto depois de reiniciar o app).
-        // Local, sem rede (só o backfill de thumbs, já guardado).
-        // As cadeias de foco da TV são refeitas porque a secção
+        // Local, sem rede (só o backfill de thumbs, já salvo).
+        // As cadeias de foco da TV são refeitas porque a seção
         // em destaque pode ter aparecido entretanto.
         setupContinueRail()
         setupTvFocusChains()
@@ -515,7 +515,7 @@ class HomeActivity : AppCompatActivity() {
         // onCreate (setupDrivesRail) — se o rail Continue aparece/
         // desaparece entre visitas, o Cima dos drives apontava para
         // o alvo antigo. A função já é segura de re-chamar (só
-        // actualiza o id quando o adapter existe).
+        // atualiza o id quando o adapter existe).
         setupDrivesRail()
         // R22 UI: a grelha "Meus cursos" do celular refresca ao
         // voltar (favoritos e progresso podem ter mudado no player).
@@ -530,7 +530,7 @@ class HomeActivity : AppCompatActivity() {
         // Ronda 17 Frente B (gatilho A) — o restauro foca a posição
         // REAL (observador global de foco), não a posição 0: D-pad sem
         // clique já não perde o lugar. 1.ª abertura: posição 0 (como
-        // hoje); regresso: foco + scrollY guardados.
+        // hoje); regresso: foco + scrollY salvos.
         if (TvUtils.isTv(this)) {
             if (isFirstResume) {
                 // R21: UM só pedido de foco — antes havia dois posts
@@ -549,12 +549,12 @@ class HomeActivity : AppCompatActivity() {
                 restoreHomeFocusOnResume()
             }
         } else if (!isFirstResume && savedScrollY > 0) {
-            // Ronda 18 Frente C (F4) — no telemóvel o onResume nunca
-            // repunha o scrollY guardado (só a TV o fazia): depois de
+            // Ronda 18 Frente C (F4) — no celular o onResume nunca
+            // repunha o scrollY salvo (só a TV o fazia): depois de
             // a activity ser recriada (morte do processo) a página
             // voltava ao topo. Repõe-se uma só vez (o valor é
             // consumido) e só quando houve recriação — num regresso
-            // normal o ScrollView já guardou a posição sozinho.
+            // normal o ScrollView já salvou a posição sozinho.
             val y = savedScrollY
             savedScrollY = 0
             binding.homeScroll.post { binding.homeScroll.scrollTo(0, y) }
@@ -751,7 +751,7 @@ class HomeActivity : AppCompatActivity() {
         // adapter criados UMA só vez: recriá-los no onResume apagava
         // a rolagem do rail e repunha a posição em 0 (e as decorações
         // acumulavam-se a cada onResume). Depois da 1.ª vez, só os
-        // DADOS são actualizados (updateItems, abaixo).
+        // DADOS são atualizados (updateItems, abaixo).
         val firstBuild = continueAdapter == null
         if (binding.railContinue.layoutManager == null) {
             binding.railContinue.layoutManager =
@@ -802,10 +802,10 @@ class HomeActivity : AppCompatActivity() {
                 // (firstBuild) mas os recents mudam a cada vídeo visto:
                 // fechar sobre os `recents` da 1.ª construção deixava
                 // o tile morto (find -> null -> return) e podia casar o
-                // vídeo errado (mesmo nome noutra pasta). Lêem-se os
+                // vídeo errado (mesmo nome em outra pasta). Leem-se os
                 // recents ACTUAIS no momento do toque; o casamento é
                 // por (pasta, vídeo) — o nome só é o fallback. A
-                // posição do foco lê-se do adapter actual (não da
+                // posição do foco lê-se do adapter atual (não da
                 // lista da 1.ª construção).
                 val currentRecents = SessionManager.get(this).getRecents()
                 val match = currentRecents.find {
@@ -879,15 +879,15 @@ class HomeActivity : AppCompatActivity() {
      * progresso e "12:34 de 48:20 · 12 min restantes". Só na TV
      * (no celular o rail "Continue assistindo" já cumpre o papel).
      */
-    // R22 UI (conceito "início celular") — adapters das secções novas
+    // R22 UI (conceito "início celular") — adapters das seções novas
     // da home do celular. Null na TV (as vistas não existem lá).
     private var homeCoursesAdapter: HomeCourseGridAdapter? = null
     private var destaquesAdapter: HomeFeaturedAdapter? = null
 
     /**
-     * R22 UI — secção "Meus cursos" (grelha de 2 colunas): os cursos
+     * R22 UI — seção "Meus cursos" (grelha de 2 colunas): os cursos
      * favoritos do aluno, a mesma fonte da Minha Lista, com o total
-     * real do unified e o progresso local. Sem favoritos, a secção
+     * real do unified e o progresso local. Sem favoritos, a seção
      * fica escondida. Só no celular.
      */
     private fun setupMyCourses() {
@@ -928,7 +928,7 @@ class HomeActivity : AppCompatActivity() {
     }
 
     /**
-     * R22 UI — secção "Destaques" (cartões horizontais): primeiro os
+     * R22 UI — seção "Destaques" (cartões horizontais): primeiro os
      * itens curados do hero (dados reais da app, abrem o drive como o
      * hero sempre fez); quando a API de cursos em destaque responde,
      * a lista passa a ser esses cursos (abrem o curso). Só no celular.
@@ -993,8 +993,8 @@ class HomeActivity : AppCompatActivity() {
         val sm = SessionManager.get(this)
         // R22 UI: o cartão largo "Continuar assistindo" passa a
         // existir também no celular (conceito aprovado); na TV o
-        // comportamento é exactamente o anterior. As diferenças de
-        // apresentação ficam guardadas por isTvHere.
+        // comportamento é exatamente o anterior. As diferenças de
+        // apresentação ficam salvas por isTvHere.
         val isTvHere = TvUtils.isTv(this)
         val best = recents
             .filter { sm.hasResume(it.folderPath, it.videoName) }
@@ -1176,7 +1176,7 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun continueWatching(folderPath: String, videoName: String, shortFolder: String) {
-        // Frente H — caminho rápido: o recent já guarda o link de
+        // Frente H — caminho rápido: o recent já salva o link de
         // playback (SessionManager.addRecent, parâmetro link), por isso
         // o "Continuar assistindo" navega IMEDIATAMENTE para o player,
         // sem o listFolder prévio. A playlist interfolder é enriquecida
@@ -1267,7 +1267,7 @@ class HomeActivity : AppCompatActivity() {
         if (!TapFeedback.tryNavigate(url)) return
         val sm = SessionManager.get(this)
         sm.saveLastWatched(folderPath, title)
-        // Frente H — guarda o link de playback no recent (além da thumb):
+        // Frente H — salva o link de playback no recent (além da thumb):
         // o "Continuar assistindo" passa a navegar sem listFolder prévio.
         sm.addRecent(folderPath, title, thumbnailLink, url.removePrefix(MeggyApp.BASE_URL).takeIf { it != url })
         val intent = Intent(this, PlayerActivity::class.java)
@@ -1283,7 +1283,7 @@ class HomeActivity : AppCompatActivity() {
      * Do hero: DOWN vai ao destaque quando existe, senão ao rail
      * visível de cima; do destaque: UP volta ao hero, DOWN vai ao
      * rail visível de cima. Sem isto, o FocusFinder decide sozinho
-     * entre secções que estão fora do viewport do ScrollView.
+     * entre seções que estão fora do viewport do ScrollView.
      */
     private fun setupTvFocusChains() {
         if (!TvUtils.isTv(this)) return
@@ -1309,8 +1309,8 @@ class HomeActivity : AppCompatActivity() {
      *
      * Tudo o que aqui se toca e GEOMETRIA DA HOME NA TV: margens de overscan
      * (laterais 56dp, topo/fundo >=48dp), altura do hero, textos do hero /
-     * destaque / seccoes e thumb do destaque (16:9). O XML continua a ser a
-     * baseline da 32" (escala 1.0): a escala 1.0 devolve exactamente os
+     * destaque / secoes e thumb do destaque (16:9). O XML continua a ser a
+     * baseline da 32" (escala 1.0): a escala 1.0 retorna exatamente os
      * valores do XML, por isso na 32" nada muda — excepto o topo/fundo, que
      * passam de 40dp para 48dp (piso da skill; ver TvAutoFit.topMarginPx).
      * O celular nao passa por aqui (tvAutoFit e nulo fora da TV).
@@ -1346,7 +1346,7 @@ class HomeActivity : AppCompatActivity() {
         binding.heroTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(30f))
         binding.heroSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(14f))
         binding.heroPlay.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(15f))
-        // Destaque: titulo da seccao (1o filho, sem id) + thumb 16:9.
+        // Destaque: titulo da secao (1o filho, sem id) + thumb 16:9.
         (binding.featuredSection.getChildAt(0) as? TextView)?.setTextSize(
             TypedValue.COMPLEX_UNIT_SP, fit.textSp(18f))
         val thumbWidthPx = fit.layoutPx(320f)
@@ -1361,7 +1361,7 @@ class HomeActivity : AppCompatActivity() {
         binding.featuredTimeText.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
         binding.featuredContinue.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(15f))
         binding.featuredFallbackIcon.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(56f))
-        // Seccoes + rodape.
+        // Secoes + rodape.
         binding.labelContinue.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(18f))
         binding.labelDrives.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(18f))
         binding.footerVersion.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
@@ -1386,7 +1386,7 @@ class HomeActivity : AppCompatActivity() {
         // Ronda 17 Frente B — LayoutManager, decoração e adapter
         // criados UMA só vez (como o rail Continue): hoje corriam em
         // cada chamada e as decorações acumulavam-se. Depois da 1.ª
-        // vez, só o id de foco UP é actualizado (o conteúdo vem por
+        // vez, só o id de foco UP é atualizado (o conteúdo vem por
         // updateItems, no fetchAdminDrives).
         if (drivesAdapter == null) {
             binding.railDrives.layoutManager =
@@ -1412,14 +1412,14 @@ class HomeActivity : AppCompatActivity() {
      * Ronda 13 Frente C — itens do rail de drives. FONTE DE VERDADE:
      * quando o servidor respondeu (serverDrives != null), a lista do
      * servidor SUBSTITUI DriveItem.ALL (nao funde): os 16 fixos vem
-     * do servidor como registos geridos (source='hardcoded',
+     * do servidor como registros gerenciados (source='hardcoded',
      * rootIndex) e os do admin a seguir — sem duplicados (dedupe por
      * driveId e por rootIndex). Um fixo REMOVIDO no admin nao volta a
      * aparecer: o seed do servidor so corre com a tabela vazia, e o
      * app nao o repoe a partir de DriveItem.ALL quando o servidor
      * respondeu. Offline/falha (serverDrives == null) -> fallback
      * DriveItem.ALL + admin (comportamento da Ronda 10).
-     * Um registo gerido casa com o DriveItem fixo do mesmo rootIndex
+     * Um registro gerenciado casa com o DriveItem fixo do mesmo rootIndex
      * (icone/tagline/capa gerada do codigo; nome e capa do servidor)
      * e abre pela producao ("/N:/"); sem casa, e um drive do admin
      * e abre por ID (POST /api/drive/by-id).
@@ -1461,7 +1461,7 @@ class HomeActivity : AppCompatActivity() {
      * /api/admin-drives, SANDBOX). Best-effort e silencioso:
      * null/falha → serverDrives fica null e a Home usa o fallback
      * (DriveItem.ALL), sem crash, sem toast. Filtra por targetApps
-     * p/ o APK actual (o admin vê TODOS no ecrã "Gerir drives"; na
+     * p/ o APK atual (o admin vê TODOS na tela "Gerenciar drives"; na
      * Home cada APK só mostra os seus). Chamado no onCreate e no
      * onResume — o remover/editar da Frente B faz o tile sumir/mudar
      * sem reiniciar o app. Quando o servidor responde, a lista dele
@@ -1479,7 +1479,7 @@ class HomeActivity : AppCompatActivity() {
             // mudanças, o updateItems nem redesenha (early-return).
             val snap = captureHomeFocus()
             // Ronda 18 Frente C (F3) — a lista só se repõe quando
-            // mudou de facto (o updateItems já nem redesenha sem
+            // mudou de fato (o updateItems já nem redesenha sem
             // mudança) E o snapshot tem algo a repor: nada focado +
             // scroll 0 = nada a fazer, não se agenda post{} nenhum.
             val changed = drivesAdapter?.updateItems(buildDriveRailItems()) ?: false
@@ -1536,8 +1536,8 @@ class HomeActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         LibraryCovers.removeOnReadyListener(libraryReadyListener)
-        // Ronda 20 — nunca remover com o observer guardado: quando a vista já
-        // foi desligada da janela, o observer guardado está morto e o remove
+        // Ronda 20 — nunca remover com o observer salvo: quando a vista já
+        // foi desligada da janela, o observer salvo está morto e o remove
         // lança IllegalStateException ("This ViewTreeObserver is not alive").
         // Um observer fresco obtido aqui é sempre seguro: vista ligada → o
         // observer vivo da janela (o remove funciona); vista desligada → o

@@ -15,7 +15,7 @@ import com.meggy.app.util.LibraryCovers
 import com.meggy.app.util.ThumbArt
 
 /**
- * R22 UI (conceito "início celular") — item da secção "Destaques" da
+ * R22 UI (conceito "início celular") — item da seção "Destaques" da
  * home. Junta as duas fontes REAIS da plataforma num só cartão:
  * cursos em destaque da API (abrem o curso) e, sem resposta da API,
  * os itens curados do hero (abrem o drive, como o hero sempre fez).

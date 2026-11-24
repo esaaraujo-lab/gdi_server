@@ -77,9 +77,9 @@ class RailAdapter(
     /**
      * Ronda 17 Frente B — substitui os itens sem recriar o adapter:
      * sem mudanças, nem redesenha (a Home chama isto em cada
-     * onResume — re-desenhar sempre era o gatilho A). Devolve true
+     * onResume — re-desenhar sempre era o gatilho A). Retorna true
      * quando houve mudança real (a Home repõe o foco nesse caso).
-     * [updateFocusIds] só guarda os ids — o onBind aplica-os aos
+     * [updateFocusIds] só salva os ids — o onBind aplica-os aos
      * holders (os já criados apanham-nos no próximo bind, que o
      * updateItems provoca quando há mudança; sem mudança nos dados
      * os ids também não mudam, porque derivam dos mesmos recents).
@@ -139,7 +139,7 @@ class RailAdapter(
         }
     }
 
-    /** Posição actual do item nos dados do adapter (-1 se já não existir). */
+    /** Posição atual do item nos dados do adapter (-1 se já não existir). */
     fun indexOf(item: RailItem): Int = items.indexOf(item)
 
     inner class VH(val binding: ItemRailCardBinding) : RecyclerView.ViewHolder(binding.root) {
@@ -198,7 +198,7 @@ class RailAdapter(
     override fun onBindViewHolder(holder: VH, position: Int) {
         val item = items[position]
         // Ronda 17 Frente B — os ids de foco D-pad re-aplicam-se a
-        // cada bind (o updateFocusIds da Home só os guarda).
+        // cada bind (o updateFocusIds da Home só os salva).
         if (nextFocusUpId != View.NO_ID) holder.itemView.nextFocusUpId = nextFocusUpId
         if (nextFocusDownId != View.NO_ID) holder.itemView.nextFocusDownId = nextFocusDownId
         val res = holder.itemView.resources
