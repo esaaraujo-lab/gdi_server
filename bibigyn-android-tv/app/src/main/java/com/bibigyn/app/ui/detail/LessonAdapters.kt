@@ -4,6 +4,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.bibigyn.app.R
@@ -19,6 +20,7 @@ import com.bibigyn.app.util.FocusAnimator
 import com.bibigyn.app.util.TapFeedback
 import com.bibigyn.app.util.Format
 import com.bibigyn.app.util.SessionManager
+import com.bibigyn.app.util.TileColors
 import com.bibigyn.app.util.TvUtils
 
 /**
@@ -165,6 +167,53 @@ private fun groupProgress(sm: SessionManager, group: LessonGroup): GroupProgress
         hasResume = directHasResume || extraHasResume,
         known = group.children != null || recents.isNotEmpty(),
         childrenLoaded = group.children != null
+    )
+}
+
+/**
+ * Port R27 da Meggy — progresso de um grupo pronto para o Tile (barra +
+ * texto + selo "Continuar"): as MESMAS regras do cabeçalho da
+ * lista (ver o bind abaixo), numa só função — o cabeçalho e o Tile
+ * mostram sempre o mesmo progresso.
+ */
+data class FolderTileProgress(
+    /** Barra 0..100 (100 só quando completa). */
+    val barProgress: Int,
+    /** Texto ("100% concluído", "N% concluído", "Em curso · N%", …). */
+    val text: String,
+    /** A linha de progresso mostra-se (completa, parcial ou a carregar). */
+    val showProgress: Boolean,
+    /** O selo "Continuar" mostra-se (em curso, não completa). */
+    val showContinue: Boolean,
+    val complete: Boolean
+)
+
+fun folderTileProgress(sm: SessionManager, group: LessonGroup): FolderTileProgress {
+    val gp = groupProgress(sm, group)
+    val progress = gp.progress
+    val watchedCount = gp.watchedCount
+    val pct = gp.pct
+    val complete = gp.isComplete
+    val hasResume = gp.hasResume
+    val known = gp.known
+    // Barra: 100 só quando completa; com terminados, a fração;
+    // senão, o melhor parcial (nunca o máximo como "% concluído").
+    val barProgress = if (complete) 100 else if (watchedCount > 0) pct else progress
+    val text = when {
+        complete -> "100% concluído"
+        watchedCount > 0 && pct < 100 -> "$pct% concluído"
+        watchedCount > 0 -> "Em curso"
+        progress > 0 -> "Em curso · $progress%"
+        hasResume -> "Continuar"
+        !known -> "carregando…"
+        else -> "não iniciado"
+    }
+    return FolderTileProgress(
+        barProgress = barProgress,
+        text = text,
+        showProgress = complete || watchedCount > 0 || progress > 0 || hasResume || !known,
+        showContinue = (progress > 0 || hasResume) && !complete,
+        complete = complete
     )
 }
 
@@ -348,9 +397,16 @@ class LessonGridAdapter(
 
     private val groups = mutableListOf<LessonGroup>()
 
+    // Port R27 da Meggy — cor fixa da área do nome (TileColors; span 2
+    // fixo no DetailActivity). Recalculada a cada submit, na ordem da
+    // lista filtrada — vizinhos (lado e abaixo) sempre diferentes.
+    private var tileColors: List<Int> = emptyList()
+
     fun submit(newGroups: List<LessonGroup>) {
         groups.clear()
         groups.addAll(newGroups)
+        // Port R27 — cores da lista nova (ordem filtrada; span 2).
+        tileColors = TileColors.assign(groups.map { it.folderPath }, 2)
         notifyDataSetChanged()
     }
 
@@ -375,7 +431,17 @@ class LessonGridAdapter(
             }
             // R18B (Bug 1 #4): 1.05x na TV — ±9,9dp < gap 12dp,
             // zero sobreposição; anel 3dp + elevação mantidos.
-            FocusAnimator.attachCard(binding.lessonCardRoot, TvUtils.isTv(binding.root.context), scaleTv = FocusAnimator.SCALE_TV_DENSE)
+            // Port R27 da Meggy — anel BRANCO e grosso (4dp): o anel
+            // da marca é fraco sobre as cores fixas dos Tiles; o
+            // branco dá 8,0–9,9:1 e o foco continua visível em
+            // qualquer cor.
+            FocusAnimator.attachCard(
+                binding.lessonCardRoot,
+                TvUtils.isTv(binding.root.context),
+                scaleTv = FocusAnimator.SCALE_TV_DENSE,
+                ringColorRes = R.color.tile_focus_ring_white,
+                ringWidthDp = 4f
+            )
             TapFeedback.attachPress(binding.lessonCardRoot, TvUtils.isTv(binding.root.context))
         }
     }
@@ -404,6 +470,11 @@ class LessonGridAdapter(
         val res = holder.itemView.resources
         val ctx = holder.itemView.context
         val sm = SessionManager.get(ctx)
+        // Port R27 — rede de segurança: o submit() já calcula as
+        // cores; se a lista mudou sem passar por ele, recalcula.
+        if (tileColors.size != groups.size) {
+            tileColors = TileColors.assign(groups.map { it.folderPath }, 2)
+        }
         val video = group.children?.firstOrNull { it.isVideo || it.isAudio }
         // Ronda 17 Frente B — ver groupProgress: fração
         // (terminados/total); 100% só com tudo terminado.
@@ -484,6 +555,15 @@ class LessonGridAdapter(
                 !known -> "a carregar…"
                 else -> "não iniciada"
             }
+            // Port R27 — cor fixa da área do nome (TileColors): a
+            // imagem fica; o título já é branco (tile_title); o chip
+            // de vídeo e o texto do progresso passam a branco (a cor
+            // da marca dá pouco contraste sobre a paleta; o branco dá
+            // 8,0–9,9:1). O chip de PDF já era branco (md_on_surface).
+            lessonCardBody.setBackgroundColor(tileColors[position])
+            val white = ContextCompat.getColor(ctx, R.color.tile_title)
+            lessonCardChipVideo.setTextColor(white)
+            lessonCardProgressText.setTextColor(white)
         }
     }
 
