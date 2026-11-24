@@ -52,7 +52,7 @@ class SessionManager private constructor(context: Context) {
      * pode valer no staging-c (KV ENV compartilhado com a produção —
      * não garantido). O AiService tenta primeiro este cookie, depois
      * o principal, e por fim faz login no host de IA com as
-     * credenciais guardadas (username/password) e grava aqui.
+     * credenciais salvas (username/password) e grava aqui.
      * O fullLogout() também a remove (logout completo limpa tudo).
      */
     var aiSessionCookie: String?
@@ -66,10 +66,10 @@ class SessionManager private constructor(context: Context) {
     // O app não tem endpoint de papel até o servidor ganhar GET /api/me
     // (dependência v2.15.x); ApiService.checkAdmin() resolve o papel
     // (servidor, ou fallback provisório username == ADMIN_USERS) e
-    // guarda-o aqui JUNTO com o username a que diz respeito — se o
+    // salva-o aqui JUNTO com o username a que diz respeito — se o
     // username mudar, o cache deixa de valer e é revalidado.
     // clearSession()/fullLogout() limpam-no. O cache só decide o que a
-    // UI MOSTRA (a linha "Gerir drives"); o servidor continua a ser o
+    // UI MOSTRA (a linha "Gerenciar drives"); o servidor continua a ser o
     // executor (POSTs admin dão 403 a não-admins).
 
     /** Papel de admin em cache (último valor resolvido). */
@@ -82,7 +82,7 @@ class SessionManager private constructor(context: Context) {
         get() = prefs.getString(KEY_IS_ADMIN_USER, null)
         set(value) = prefs.edit().putString(KEY_IS_ADMIN_USER, value).apply()
 
-    /** isAdmin em cache, mas SÓ se for do username actual; null = sem cache válido. */
+    /** isAdmin em cache, mas SÓ se for do username atual; null = sem cache válido. */
     fun cachedIsAdmin(username: String?): Boolean? {
         if (username.isNullOrBlank()) return null
         return if (isAdminForUser == username) isAdmin else null
@@ -151,7 +151,7 @@ class SessionManager private constructor(context: Context) {
     // ───────── Ronda 15 Frente B (B2): migração 1× loja legada ─────────
     //
     // O progresso já visto antes do fix vive em `pos_<url>` (loja legada
-    // por URL de playback), que nenhuma UI lê. Os recents_v1 guardam o
+    // por URL de playback), que nenhuma UI lê. Os recents_v1 salvam o
     // (folderPath, videoName, link) certo — por isso, uma única vez após
     // o update, cada posição legada é reposta na loja por (pasta, vídeo).
     //
@@ -164,13 +164,13 @@ class SessionManager private constructor(context: Context) {
     //    vídeo terminar pós-fix.
     //  • recents sem link (anteriores à Frente H) não dão para migrar:
     //    sem o link não se reconstrói a URL legada — são ignorados.
-    //  • nunca sobrescreve uma posição já guardada na loja certa.
+    //  • nunca sobrescreve uma posição já salva na loja certa.
     //  • as chaves legadas pos_ NÃO são apagadas (a loja nova tem
     //    precedência no player; apagar seria perder o fallback).
     //  • a base da URL legada depende do caminho: pastas por ID
     //    ("by-id:", == ApiService.BY_ID_PREFIX) usam o host do sandbox;
     //    drives fixos usam BASE_URL. Recents do Browse em pastas por ID
-    //    guardam o link já como URL completa — detectam-se pelo prefixo
+    //    salvam o link já como URL completa — detectam-se pelo prefixo
     //    http(s) e usam-se como estão.
     // Guarda 1×: KEY_LEGACY_RESUME_MIGRATED. Idempotente (o salto por
     // resume_ já existente torna um 2.º arranque inofensivo).
@@ -224,7 +224,7 @@ class SessionManager private constructor(context: Context) {
         val pos = prefs.getLong(resumeKey(folderPath, videoName), 0L)
         // v2.7.11 ECOSSISTEMA (PENDENTE, endpoint v2.15.6): sem resume
         // local, o servidor seria consultado aqui (ver ProgressSync) —
-        // enquanto SERVER_RESUME_ENABLED == false, devolve 0 como antes.
+        // enquanto SERVER_RESUME_ENABLED == false, retorna 0 como antes.
         if (pos <= 0L) return ProgressSync.resolveResume(folderPath, videoName, 0L)
         val dur = prefs.getLong(durKey(folderPath, videoName), 0L)
         // If we know the duration and the position is within 10s of the end,
@@ -412,7 +412,7 @@ class SessionManager private constructor(context: Context) {
     /**
      * R21 — elementos-objecto de um JSONArray, saltando os que não
      * são objectos. Antes, `getJSONObject` por elemento não tinha
-     * guarda em addRecent/getRecents/getLessonDescription/etc.: um
+     * salva em addRecent/getRecents/getLessonDescription/etc.: um
      * elemento corrompido nas prefs lançava JSONException e rebentava
      * o chamador (o saveJob do player chama addRecent a cada 2 s).
      */
@@ -431,10 +431,10 @@ class SessionManager private constructor(context: Context) {
     // objetos {path, text, at}, mais recente primeiro, teto de 200).
     // A fonte da verdade é o servidor (cache ISA + pasta .gdi-resumos);
     // isto só evita baixar de novo o que já foi lido — a próxima
-    // abertura da aula é instantânea, como no diagrama ("Guardado —
+    // abertura da aula é instantânea, como no diagrama ("Salvo —
     // abre na hora da próxima vez").
 
-    /** Descrição gerada guardada para a pasta da aula (ou null). */
+    /** Descrição gerada salva para a pasta da aula (ou null). */
     fun getLessonDescription(lessonPath: String): String? {
         val arr = descriptionArray()
         for (o in arr.objects()) {
@@ -524,7 +524,7 @@ class SessionManager private constructor(context: Context) {
     // ───────── v2.7.4: Favorite COURSES ("Minha lista" — cursos/pastas) ─────────
     //
     // Um curso é uma pasta do Drive (drive raiz "/3:/" ou subpasta
-    // "/9:/Tribunais/..."). Guardado como JSON [{drivePath, name}].
+    // "/9:/Tribunais/..."). Salvo como JSON [{drivePath, name}].
     // Separado dos favoritos de arquivo (favorites_v1) porque um curso
     // não é um FileItem.
 
@@ -723,24 +723,24 @@ class SessionManager private constructor(context: Context) {
         private const val KEY_LESSON_DESCRIPTIONS = "lesson_descriptions_v1"
         private const val MAX_LESSON_DESCRIPTIONS = 200
 
-        // ───────── Ronda 12: migração de caminhos guardados ─────────
+        // ───────── Ronda 12: migração de caminhos salvos ─────────
         //
         // A organização antiga do drive 11 punha os cursos sob
         // "/11:/CURSOS 2026/…" — esse prefixo já não existe no
         // drive 11 (a organização vive hoje no drive 9, e os cursos
-        // do 11 estão directamente na raiz). Os caminhos guardados
-        // (favoritos de curso, favoritos de ficheiro, recents,
-        // bookmarks) guardam o drivePath LITERAL da altura em que
+        // do 11 estão directamente na raiz). Os caminhos salvos
+        // (favoritos de curso, favoritos de arquivo, recents,
+        // bookmarks) salvam o drivePath LITERAL da altura em que
         // foram marcados, por isso um favorito antigo continua a
         // pedir um caminho inexistente (produção: 200 + files:[])
         // mesmo depois de a navegação estar certa. Normalizar na
-        // LEITURA (o JSON guardado não é reescrito): "/11:/CURSOS
+        // LEITURA (o JSON salvo não é reescrito): "/11:/CURSOS
         // 2026/<resto>" e a variante codificada "/11:/CURSOS%202026/
         // <resto>" passam a "/11:/<resto>". ÂMBITO ESTRITO: só o
         // prefixo /11:/ — o "/9:/CURSOS 2026/" existe e NÃO se toca.
-        // Forma guardada no app: espaço cru ("CURSOS 2026"), porque
-        // os caminhos guardados vêm do currentPath, construído com
-        // os nomes crus devolvidos pelo servidor; a variante %20 é
+        // Forma salva no app: espaço cru ("CURSOS 2026"), porque
+        // os caminhos salvos vêm do currentPath, construído com
+        // os nomes crus retornados pelo servidor; a variante %20 é
         // aceite por defesa (ex.: caminho vindo do D1).
         fun migrateLegacyCoursePath(path: String): String {
             for (legacy in listOf("/11:/CURSOS 2026", "/11:/CURSOS%202026")) {

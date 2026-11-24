@@ -4,11 +4,11 @@ import com.meggy.app.data.ApiService
 import com.meggy.app.data.FileItem
 
 /**
- * Frente R14A — materiais nos DOIS sitios (Elton 2026-11-15 21:34).
+ * Frente R14A — materiais nos DOIS lugares (Elton 2026-11-15 21:34).
  *
  * O site (staging/modular/gdi-core.js, modulo M9, funcao build) descobre
- * os materiais da aula em tres passos: (1) ficheiros na pasta do video,
- * (2) subpastas dessa pasta, (3) ficheiros diretamente na pasta pai.
+ * os materiais da aula em tres passos: (1) arquivos na pasta do video,
+ * (2) subpastas dessa pasta, (3) arquivos diretamente na pasta pai.
  * O APK so fazia o passo 1 (um unico ApiService.listFolder da pasta da
  * aula) — por isso o player mostrava "Ainda sem materiais para esta
  * aula" quando os materiais viviam ao lado do video. Esta frente porta
@@ -19,15 +19,15 @@ import com.meggy.app.data.FileItem
  * Ordem e paridade com o site (fallthrough): so se procura fora da
  * pasta da aula quando ela NAO tem materiais proprios. No caso comum
  * (materiais na pasta) nao ha nenhuma chamada extra. Havendo materiais
- * fora, procura-se por ordem — subpastas da aula, ficheiros do pai,
+ * fora, procura-se por ordem — subpastas da aula, arquivos do pai,
  * pastas-irmas — e para-se na primeira fonte com materiais (o site
  * faz o mesmo nas subpastas). Tudo em 2o plano, sem bloquear o play;
- * falha de rede devolve lista vazia, nunca excecao.
+ * falha de rede retorna lista vazia, nunca excecao.
  *
  * Limites honestos (ver NOTES.md da frente): caminho por ID
  * ("by-id:...") nao tem pai conhecido — os passos 3 e 4 ficam de fora
  * e so as subpastas (por ID) valem; a lista extra corta em 12
- * ficheiros, como o site.
+ * arquivos, como o site.
  */
 object MaterialDiscovery {
 
@@ -39,15 +39,15 @@ object MaterialDiscovery {
     // Maximo de pastas-irmas tentadas (mesma razao do teto acima).
     private const val MAX_SIBLINGS_TRIED = 5
 
-    // Teto de ficheiros extra (o site corta em 12 — M9, pdfs.slice).
+    // Teto de arquivos extra (o site corta em 12 — M9, pdfs.slice).
     private const val MAX_EXTRA_FILES = 12
 
     /**
-     * Um ficheiro conta como material quando e PDF, Markdown (.md,
+     * Um arquivo conta como material quando e PDF, Markdown (.md,
      * .markdown, .txt — o mesmo FileItem.isMarkdown) ou HTML — os
      * mesmos tipos que o site aceita (M9 isMaterial: pdf, md, txt,
      * html). Legendas .vtt/.srt NUNCA sao materiais: continuam
-     * escondidas da lista (regra existente) e a carregar no player
+     * escondidas da lista (regra existente) e carregando no player
      * pelo SubtitleFetcher.
      */
     fun isMaterialFile(file: FileItem): Boolean {
@@ -60,10 +60,10 @@ object MaterialDiscovery {
     /**
      * Procura materiais fora da pasta da aula ([folderPath]), com a
      * listagem da pasta ([sameFolderFiles]) ja feita pelo chamador.
-     * Devolve os ficheiros com folderPath carimbado (a pasta onde
+     * Retorna os arquivos com folderPath carimbado (a pasta onde
      * cada um vive, com barra final) e folderLabel com o nome dessa
      * pasta — sem isso os leitores nao saberiam onde abrir o
-     * ficheiro. Lista vazia quando nao ha nada ou quando a procura
+     * arquivo. Lista vazia quando nao ha nada ou quando a procura
      * nao se aplica (pasta sem video, caminho por ID sem pai).
      */
     suspend fun discoverExtraMaterials(
@@ -74,8 +74,8 @@ object MaterialDiscovery {
         // So pastas de aula (com video ou audio) tem materiais ao lado.
         if (!LessonDescription.isLessonFolder(sameFolderFiles)) return emptyList()
         // Paridade com o site: havendo materiais na propria pasta,
-        // nao se procura noutro sitio (zero chamadas extra no caso
-        // comum). Sem materiais, procuram-se os dois sitios.
+        // nao se procura em outro lugar (zero chamadas extra no caso
+        // comum). Sem materiais, procuram-se os dois lugares.
         if (sameFolderFiles.any { isMaterialFile(it) }) return emptyList()
         val found = ArrayList<FileItem>()
         val seen = HashSet<String>()
@@ -104,7 +104,7 @@ object MaterialDiscovery {
             val subPath = if (byId) ApiService.byIdPath(sub.id)
                 else joinPath(folderPath, sub.name)
             // R19B (P1): FolderResult — best-effort: falha vale
-            // como sem ficheiros (continua sem os extras).
+            // como sem arquivos (continua sem os extras).
             val files = api.listFolder(subPath).filesOrNull ?: continue
             if (add(files, withTrailingSlash(subPath))) break
             if (found.size >= MAX_EXTRA_FILES) break
@@ -117,7 +117,7 @@ object MaterialDiscovery {
         val parent = LessonDescription.parentPath(folderPath)
         if (parent == "/" || isDriveRoot(parent)) return found
         val parentFiles = api.listFolder(parent).filesOrNull ?: return found
-        // Passo 2 — ficheiros de material DIRETAMENTE na pasta pai
+        // Passo 2 — arquivos de material DIRETAMENTE na pasta pai
         // (o site, M9: gdiListAllFiles da pasta pai).
         add(parentFiles, withTrailingSlash(parent))
         if (found.isNotEmpty()) return found

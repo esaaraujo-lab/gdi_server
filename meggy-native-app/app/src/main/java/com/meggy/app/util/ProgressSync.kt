@@ -25,7 +25,7 @@ package com.meggy.app.util
  * Os pontos de chamada JÁ EXISTEM e são inertes enquanto a flag é
  * false: SessionManager.getResume() (leitura) e
  * SessionManager.saveResume() (escrita) chamam [resolveResume] e
- * [noteResumeSaved] — que hoje devolvem o valor local / não fazem
+ * [noteResumeSaved] — que hoje retornam o valor local / não fazem
  * nada. Nenhum outro arquivo precisa mudar para ligar.
  *
  * O MESMO valeria para o resto do estado local (ver auditoria abaixo):
@@ -106,18 +106,18 @@ object ProgressSync {
      * 404 com sessão válida é o sinal de "rota inexistente" (ver
      * AiService.backendUnavailable) e não deve virar loop. Quando existir,
      * preencher com o path real confirmado no worker. Contrato esperado:
-     * GET com sessão devolve a posição salva do usuário p/
+     * GET com sessão retorna a posição salva do usuário p/
      * (folderPath, videoName); POST grava posição + duração + assistido.
      */
     val RESUME_ENDPOINT_PATH: String? = null
 
     /**
      * Resolve a posição de resume p/ (pasta, vídeo).
-     * Hoje: devolve [localMs] SEMPRE (flag desligada — o servidor não
+     * Hoje: retorna [localMs] SEMPRE (flag desligada — o servidor não
      * é consultado). Quando o endpoint existir e a flag ligar: se
      * [localMs] for 0 (sem resume neste aparelho), busca a posição no
-     * servidor e devolve a dele quando válida; se houver resume local,
-     * o local vence (é o aparelho que está a tocar). Chamado por
+     * servidor e retorna a dele quando válida; se houver resume local,
+     * o local vence (é o aparelho que está tocando). Chamado por
      * SessionManager.getResume() — nenhum outro chamador.
      */
     fun resolveResume(folderPath: String, videoName: String, localMs: Long): Long {

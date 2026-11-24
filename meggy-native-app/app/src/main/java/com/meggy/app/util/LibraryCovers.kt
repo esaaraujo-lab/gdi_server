@@ -38,17 +38,17 @@ import java.util.concurrent.TimeUnit
  * [parseManifest]. O app NÃO gera imagens.
  *
  * Comportamento: o manifesto é buscado em 2º plano ([warmUp]), nunca
- * bloqueia a UI; guardado em cache (memória + SharedPreferences, TTL
+ * bloqueia a UI; salvo em cache (memória + SharedPreferences, TTL
  * 24 h). Sem rede ou fetch falhando (jsDelivr + raw), a camada (3) é
  * pulada EM SILÊNCIO (sem toast, sem travar a tela) e a cadeia cai
  * na (4). Com o manifesto carregado e SEM match p/ o nome, a camada
- * (3) devolve a imagem `geral` (fallback explícito do manifesto —
+ * (3) retorna a imagem `geral` (fallback explícito do manifesto —
  * ver [resolve]); só SEM manifesto carregado o chamador cai na (4).
  * As telas re-aplicam as capas quando o manifesto chega
  * ([addOnReadyListener]).
  *
  * (2.7.13) TODAS as superfícies usam a variante ESTRITA ([resolveStrict] /
- * [remoteCoverStrict]): sem match, a camada (3) devolve null e o chamador
+ * [remoteCoverStrict]): sem match, a camada (3) retorna null e o chamador
  * cai na (4) — a capa gerada do drive (ThumbArt). O livro `geral` não é
  * a imagem de nenhum curso/pasta (Elton 2026-11-14 22:39 — imagem correta
  * em cada curso, nos 3 APKs). O [resolve] não-estrito fica só como
@@ -179,7 +179,7 @@ object LibraryCovers {
      *   chave vira a keyword; o id é a chave normalizada com `-`;
      *   a chave `version`, se houver, é ignorada).
      * Entradas sem URL http(s) ou sem keyword são descartadas; JSON
-     * inválido devolve lista vazia (nunca exception p/ fora).
+     * inválido retorna lista vazia (nunca exception p/ fora).
      */
     fun parseManifest(json: String): List<LibraryImage> {
         val out = ArrayList<LibraryImage>()
@@ -272,19 +272,19 @@ object LibraryCovers {
      *      e só uma keyword ESTRITAMENTE mais longa destrona a atual;
      *   4. keywords com menos de 3 caracteres são IGNORADAS
      *      ([MIN_KEYWORD_LENGTH]) — `pf` sozinho nunca casa;
-     *   5. sem match nenhum, devolve a imagem `geral` (fallback
+     *   5. sem match nenhum, retorna a imagem `geral` (fallback
      *      explícito da camada (3) — [FALLBACK_IMAGE_ID]).
      *
-     * Devolve null SÓ sem manifesto carregado (ou sem nenhum nome
+     * Retorna null SÓ sem manifesto carregado (ou sem nenhum nome
      * válido e sem `geral` no manifesto): nesse caso o chamador cai
-     * na capa gerada (4). A variante ESTRITA ([resolveStrict]) devolve
+     * na capa gerada (4). A variante ESTRITA ([resolveStrict]) retorna
      * null sem match — é a que TODAS as superfícies usam (2.7.13).
      */
     fun resolve(vararg names: String?): String? = resolveInternal(names, allowGeneral = true)
 
     /**
      * Resolve ESTRITO (2.7.13): igual a [resolve], mas SEM o fallback
-     * 'geral'. Sem match, devolve null e o chamador cai na camada (4)
+     * 'geral'. Sem match, retorna null e o chamador cai na camada (4)
      * — a capa gerada do drive (ThumbArt). Usar em TODAS as
      * superfícies: o livro 'geral' não é a imagem de nenhum
      * curso/pasta (Elton 2026-11-14 22:39).
@@ -419,7 +419,7 @@ object LibraryCovers {
      * Busca o manifesto: jsDelivr ([LIBRARY_MANIFEST_URL]) e, se ele
      * falhar (rede, HTTP não-2xx, corpo vazio ou JSON que não parseia
      * nenhuma entrada — ex. página de erro 403 do jsDelivr), o raw
-     * ([LIBRARY_MANIFEST_FALLBACK_URL]). Devolve o corpo do PRIMEIRO
+     * ([LIBRARY_MANIFEST_FALLBACK_URL]). Retorna o corpo do PRIMEIRO
      * que responder com um manifesto válido, ou null se nenhum
      * responder. Nunca exception p/ fora; nunca toast.
      */

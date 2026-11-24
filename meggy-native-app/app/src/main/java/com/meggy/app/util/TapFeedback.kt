@@ -55,7 +55,7 @@ object TapFeedback {
     private var lastNavAtMs: Long = 0L
 
     /**
-     * Guarda de navegação: devolve true só para o 1º toque numa chave
+     * Guarda de navegação: retorna true só para o 1º toque numa chave
      * dentro da janela. A chave é o URL de playback (único por vídeo).
      * Sincronizado: dois toques na mesma frame não passam os dois.
      */
@@ -72,7 +72,7 @@ object TapFeedback {
      * Feedback premido imediato num card/linha. No-op na TV (o foco
      * D-pad já dá o feedback). No celular desliga o
      * focusableInTouchMode (1º toque = clique) e anima a escala no
-     * ACTION_DOWN. O listener NUNCA consome o toque (devolve false):
+     * ACTION_DOWN. O listener NUNCA consome o toque (retorna false):
      * o clique continua a disparar normalmente.
      */
     fun attachPress(view: View, isTv: Boolean) {

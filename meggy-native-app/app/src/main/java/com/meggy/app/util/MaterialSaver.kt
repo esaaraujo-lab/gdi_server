@@ -7,7 +7,7 @@ import com.meggy.app.data.AiService
  * Frente K (ronda APK) — caminho UNICO de gravacao dos materiais
  * gerados pela Meggy na pasta de materiais da aula.
  *
- * O QUE E GUARDADO (os tres, quando existirem):
+ * O QUE E SALVO (os tres, quando existirem):
  *   resumo    — POST /api/materials/save-in-folder, materialType
  *               'resumo'    -> `.gdi-resumos/<user>_<Aula>.md`
  *   pilulas   — materialType 'flashcard' -> `.gdi-flashcards/<user>_<Aula>.md`
@@ -22,18 +22,18 @@ import com.meggy.app.data.AiService
  * (o worker resolve-a; por isso passa-se SEMPRE o path completo
  * de um arquivo dentro da pasta da aula — video ou PDF — e nunca
  * so a pasta). E o MESMO caminho partilhado dos videos e da web:
- * servidor/Drive, nunca so local — o resumo guardado tambem no
+ * servidor/Drive, nunca so local — o resumo salvo tambem no
  * cache local (SessionManager) e so um atalho de leitura, nao a
- * fonte. Quem abre a aula noutro aparelho le do servidor.
+ * fonte. Quem abre a aula em outro aparelho le do servidor.
  *
  * QUEM CHAMA (um so caminho — nao duplicar a logica de gravacao):
  *   - DetailActivity (pagina do video): no Outcome.Ready e no
  *     retorno do cache local (2o plano, para repor pilulas/
- *     questoes que uma versao antiga nunca guardou);
+ *     questoes que uma versao antiga nunca salvou);
  *   - DescriptionPregenerator (proximas aulas, em 2o plano);
  *   - PlayerActivity (aula atual, quando o gerado ja existe);
  *   - PdfReaderActivity.saveGeneratedMaterials(...) — PONTO DE
- *     ENTREGA da Frente J (ver la): a J gera, a K guarda.
+ *     ENTREGA da Frente J (ver la): a J gera, a K salva.
  *
  * Best-effort por desenho: cada tipo e tentado sozinho (a falha
  * de um nao impede os outros) e nada lanca excecao — um material
@@ -58,7 +58,7 @@ object MaterialSaver {
      * `lessonName` = nome da aula (a pasta da aula; ou o nome do
      * PDF sem extensao, quando a aula E o PDF — ver o ponto de
      * entrega no PdfReaderActivity). Cada tipo nao-blank e
-     * gravado; null/blank = nao gerado (ou ainda a gerar) e e
+     * gravado; null/blank = nao gerado (ou ainda gerando) e e
      * saltado em silencio. Nunca lanca excecao.
      */
     suspend fun saveGenerated(

@@ -27,7 +27,7 @@ import kotlin.math.roundToInt
  * xhdpi (960x540dp), a referencia e uma BANDA (960-1443dp de largura), nao
  * um ponto: dentro da banda a escala e 1.0 e a 32" fica pixel a pixel igual
  * a hoje, qualquer que seja o seu bucket. (Os tectos 1443/812dp sao os
- * valores exactos 1442.25/811.27dp arredondados para cima, para o viewport
+ * valores exatos 1442.25/811.27dp arredondados para cima, para o viewport
  * tvdpi cair dentro da banda e nao 0,02% acima dela.)
  *
  * Tres fontes (precedencia nesta ordem):
@@ -58,18 +58,18 @@ import kotlin.math.roundToInt
  * (gapHalfPx / gutterDp). Sem isto, subir o gap para 20dp na 32" tirava um
  * cartao por linha no viewport xhdpi (4 -> 3).
  *
- * Tipos: os valores deste ficheiro NAO sobem para os pisos da skill
- * (48/28/24sp) — o Elton aprovou o aspeto actual na 32"; o texto escala
+ * Tipos: os valores deste arquivo NAO sobem para os pisos da skill
+ * (48/28/24sp) — o Elton aprovou o aspecto atual na 32"; o texto escala
  * a partir dos valores actuais (titulo 30sp, secao 18sp, card 13sp).
  *
- * Uso: so na TV (os call sites guardam com TvUtils.isTv). O celular nao
+ * Uso: so na TV (os call sites salvam com TvUtils.isTv). O celular nao
  * chama nada disto e fica exatamente como esta.
  */
 object TvAutoFit {
 
-    /** Largura do viewport da 32" tvdpi — tecto da banda de referencia. */
+    /** Largura do viewport da 32" tvdpi — teto da banda de referencia. */
     const val REFERENCE_WIDTH_DP = 1443f
-    /** Altura do viewport da 32" tvdpi — tecto da banda (hero). */
+    /** Altura do viewport da 32" tvdpi — teto da banda (hero). */
     const val REFERENCE_HEIGHT_DP = 812f
     /** Largura fisica da 32" 16:9 (70,8 cm). */
     const val REFERENCE_PHYSICAL_WIDTH_IN = 27.9f
@@ -103,7 +103,7 @@ object TvAutoFit {
         val scale: Float,
         /** Escala da altura do hero (derivada da altura do viewport). */
         val heroScale: Float,
-        /** Escala do texto (mesmo factor, com tecto proprio). */
+        /** Escala do texto (mesmo factor, com teto proprio). */
         val textScale: Float,
         /** Escala das margens/espacamentos (metade do ritmo). */
         val marginScale: Float,
@@ -208,7 +208,7 @@ object TvAutoFit {
     /**
      * Matematica pura da escala (testavel sem Android — ver verify-B.py).
      * `density` e o factor dp->px; `xdpi`/`ydpi` sao os dpi fisicos
-     * reportados (muitas TVs devolvem o bucket em vez do valor fisico —
+     * reportados (muitas TVs retornam o bucket em vez do valor fisico —
      * o filtro da diagonal rejeita esses casos).
      */
     fun compute(
@@ -224,7 +224,7 @@ object TvAutoFit {
         val widthDp = widthPx / safeDensity
         val heightDp = heightPx / safeDensity
         // Largura fisica, so quando o xdpi/ydpi e de fianca: a diagonal
-        // calculada tem de ser a de uma TV (20"-90"). xdpi = bucket
+        // calculada precisa ser a de uma TV (20"-90"). xdpi = bucket
         // (213/320) da uma diagonal de ~10" e e rejeitado.
         val physicalWidthIn: Float? = if (xdpi > 0f && ydpi > 0f) {
             val wIn = widthPx / xdpi

@@ -18,18 +18,18 @@ import kotlinx.coroutines.withContext
  * O texto da aba Resumo é o resumo gerado pela Meggy: o batalhão
  * (POST /api/ai/battalion, job em KV) lê o conteúdo real da aula
  * (transcrição primeiro; sem ela, o texto dos PDFs), a IA escreve o
- * texto explicativo + flashcards + questões e fica guardado
+ * texto explicativo + flashcards + questões e fica salvo
  * (cache ISA + pasta `.gdi-resumos/` da aula) — gera uma vez em
  * segundo plano (minutos), depois é instantâneo. Diagrama:
  * "Como nasce o texto explicativo da aula" (1. pasta → 2. Meggy lê
- * → 3. IA escreve → 4. aparece na aba Resumo, guardado).
+ * → 3. IA escreve → 4. aparece na aba Resumo, salvo).
  *
  * CADEIA DE FALLBACK (ordem exata, decisão do Elton 00:21;
  *   R14B 2026-11-15 21:48: a provisória passa a ser o NOME DO
  *   ARQUIVO do vídeo; o nome da pasta só vale quando a pasta tem
  *   uma só aula — o nome da pasta de um curso com várias aulas
  *   não descreve nenhuma delas):
- *   (a) descrição gerada guardada → mostra ela;
+ *   (a) descrição gerada salva → mostra ela;
  *   (b) senão, nome real de aula (NOME DO ARQUIVO do vídeo; sem
  *       ele, NOME DA PASTA quando a pasta tem só uma aula) → usa
  *       o NOME como descrição PROVISÓRIA até a Meggy gerar a de
@@ -45,7 +45,7 @@ import kotlinx.coroutines.withContext
  *   1. MD (transcrição/resumo em MD);
  *   2. texto extraído do PDF (resumo de IA em PDF);
  *   3. PÍLULA já salva (arquivo menor — via cache ISA / pasta
- *      `.gdi-resumos/`, que é onde o batalhão e a web guardam).
+ *      `.gdi-resumos/`, que é onde o batalhão e a web salvam).
  *   Sem material legível → branco com o motivo (o OCR, v2.15.4 sem
  *   limites, é a saída — POST /api/ai/ocr existe no worker v2.15.4,
  *   mas o encadeamento OCR→batalhão NÃO está nesta versão; ver
@@ -94,7 +94,7 @@ object LessonDescription {
     //        arquivo, sem dizer nada do conteúdo.
     //      "Introdução", "Revisão", "Simulado" NÃO são genéricas: são
     //      tema (a aula é uma introdução / revisão / simulado).
-    //   5. ACEITA → devolve o tema com a capitalização original.
+    //   5. ACEITA → retorna o tema com a capitalização original.
     //
     // Exemplos (tabela de teste em REDESIGN_NOTES.md):
     //   "Aula 01 - História do Direito Penal e Fontes" → "História do Direito Penal e Fontes"
@@ -119,13 +119,13 @@ object LessonDescription {
     // ───────── R22 — nome de exibição da aula (paridade com o site) ─────────
     //
     // Regra do site (shell.js, _v215LessonNameIsGeneric +
-    // updateLessonDescription): quando o nome do FICHEIRO é genérico
+    // updateLessonDescription): quando o nome do ARQUIVO é genérico
     // ("video.mp4", "001 - aula.mp4", "Aula 03"), o nome apresentado
     // da aula é o nome da PASTA; o nome da pasta usa-se tal e qual
-    // (só descodificado). A app mostrava o nome cru do ficheiro no
+    // (só descodificado). A app mostrava o nome cru do arquivo no
     // cabeçalho do player e nas listas ("video.mp4" no print do
     // Elton, 2026-11-23 18:46) — passa a aplicar a MESMA regra.
-    // Nomes de ficheiro reais NÃO são tocados (nem limpos): a regra
+    // Nomes de arquivo reais NÃO são tocados (nem limpos): a regra
     // só troca o nome quando ele é genérico, como no site.
 
     private val SITE_GENERIC_NUMBER_ONLY = Regex("^\\d+$")
@@ -138,7 +138,7 @@ object LessonDescription {
     private val ANY_EXTENSION_REGEX = Regex("\\.[A-Za-z0-9]+$")
 
     /**
-     * Teste de nome genérico EXACTAMENTE como o do site
+     * Teste de nome genérico EXATAMENTE como o do site
      * (_v215LessonNameIsGeneric): sem extensão, minúsculas, sem
      * acentos; genérico = vazio, só dígitos, "001"/"001 - aula" ou
      * palavra-rotulo sozinha (aula/video/lesson/capitulo/parte/
@@ -165,9 +165,9 @@ object LessonDescription {
     }
 
     /**
-     * Nome de exibição da aula: o nome do ficheiro quando é real;
+     * Nome de exibição da aula: o nome do arquivo quando é real;
      * quando é genérico, o nome da pasta (regra do site). Sem pasta
-     * conhecida, fica o nome do ficheiro (comportamento anterior).
+     * conhecida, fica o nome do arquivo (comportamento anterior).
      */
     fun displayNameForLesson(fileName: String?, folderName: String?): String? {
         val fn = fileName?.trim()?.takeIf { it.isNotEmpty() }
@@ -205,7 +205,7 @@ object LessonDescription {
     // sorteado A CADA EXIBIÇÃO (não por aula — o mesmo resumo pode
     // abrir com um gancho diferente), combinado com o resumo da
     // Meggy. O gancho é só de exibição (DetailActivity.showDescription):
-    // nunca é guardado no cache nem enviado ao servidor, e nunca é
+    // nunca é salvo no cache nem enviado ao servidor, e nunca é
     // inventado conteúdo: sem resumo, não há gancho (o texto fica a
     // provisória / em branco, como antes).
     val DESCRIPTION_HOOKS = listOf(
@@ -348,10 +348,10 @@ object LessonDescription {
      *   2. pasta de materiais (GET /api/materials/load-from-folder,
      *      discovery — o arquivo mais recente de `.gdi-resumos/`).
      * `materialNames` = nomes dos PDFs/MDs da pasta (PDFs primeiro).
-     * Frente K — devolve o PACOTE gerado (resumo + pilulas +
+     * Frente K — retorna o PACOTE gerado (resumo + pilulas +
      * questoes), nao so o texto: o resumo continua a decidir
      * "pronto", mas as pilulas/questoes viajam junto para serem
-     * guardadas na pasta de materiais ([MaterialSaver]). O passo 2
+     * salvas na pasta de materiais ([MaterialSaver]). O passo 2
      * (pasta de materiais) so tem o resumo — pilulas/questoes de
      * la vem null e sao repostas pela gravacao desta frente.
      * `lessonFilePath` = path COMPLETO de um arquivo dentro da pasta
@@ -404,7 +404,7 @@ object LessonDescription {
             bundle.questionsJson.isNullOrBlank()
     }
 
-    /** R23 — o job terminou e não volta a gerar por este job. */
+    /** R23 — o job terminou e não gera de novo por este job. */
     fun isJobOver(status: AiService.BattalionStatus?): Boolean {
         val job = status?.job ?: return false
         return job.finished || job.done
@@ -429,6 +429,9 @@ object LessonDescription {
      * (coursePath + lessonName) varia com quem gerou: a app usa
      * a pasta DA AULA como coursePath e o nome da pasta como
      * lessonName; a web, o caminho do CURSO e o nome do material.
+     * R25-A — a variante do NOME DO ARQUIVO DE VÍDEO vem
+     * PRIMEIRO (casa exato com o lesson gravado); as antigas
+     * mantêm-se como rede (o worker .91 aceita também prefixo).
      * A primeira variante com questões ganha; sem nenhuma, null
      * (o banco não tem nada p/ esta aula — ou a rota ainda não
      * existe no worker). Só questões: o banco não tem pílulas.
@@ -437,10 +440,18 @@ object LessonDescription {
         context: Context,
         folderPath: String,
         folderName: String,
-        materialNames: List<String>
+        materialNames: List<String>,
+        videoFileName: String? = null
     ): String? {
         val materialName = materialNames.firstOrNull()
-        val variants = listOf(
+        // ★ v2.7.43 (Ronda 25-A): a variante do nome do arquivo de
+        //   video vem PRIMEIRO — e a mais precisa (casa exato com o
+        //   lesson gravado no upsert, ex. "001 - PODERES DA
+        //   ADMINISTRACAO - video.mp4"). As antigas mantem-se como
+        //   rede (o worker .91 tambem aceita prefixo), na mesma ordem.
+        val variants = listOfNotNull(
+            videoFileName?.takeIf { it.isNotBlank() }?.let { folderPath to it },
+            videoFileName?.takeIf { it.isNotBlank() }?.let { parentPath(folderPath) to it },
             folderPath to folderName,
             parentPath(folderPath) to folderName,
             parentPath(folderPath) to (materialName ?: ""),
@@ -597,8 +608,8 @@ object LessonDescription {
      * loop, agora partilhado pelo caminho "já existe resumo-só" e
      * pelo caminho "disparou agora"). Pára quando o job TERMINOU
      * (`job.finished==true`, ou o `done` antigo): terminado com
-     * pacote resumo-só devolve [Outcome.Partial] (não Ready nem
-     * Failed); terminado sem nada devolve [Outcome.Failed].
+     * pacote resumo-só retorna [Outcome.Partial] (não Ready nem
+     * Failed); terminado sem nada retorna [Outcome.Failed].
      * Enquanto o job corre, continua a esperar. Esgotado o teto
      * sem o job terminar → [Outcome.Generating].
      */
@@ -642,11 +653,11 @@ object LessonDescription {
      * R21 — segundo endpoint antes de declarar falha (regra do Elton:
      * nunca dar a IA por indisponível/falhada enquanto houver endpoint
      * por tentar). O batalhão devolveu FAILED → tenta o POST /api/ai
-     * directo com o texto-fonte (o endpoint síncrono que o leitor de
+     * direto com o texto-fonte (o endpoint síncrono que o leitor de
      * PDF já usa); se gerar, grava no cache ISA com a chave do material
-     * (a mesma que [fetchGenerated] lê) e devolve Ready. Qualquer
-     * falha aqui devolve [Outcome.Failed] — o comportamento anterior.
-     * Só no caminho do utilizador ([ensureDescription]); a pré-geração
+     * (a mesma que [fetchGenerated] lê) e retorna Ready. Qualquer
+     * falha aqui retorna [Outcome.Failed] — o comportamento anterior.
+     * Só no caminho do usuário ([ensureDescription]); a pré-geração
      * ([triggerOnly]) continua só com o batalhão, por ser em fundo.
      */
     private suspend fun directSummaryFallback(
@@ -656,8 +667,8 @@ object LessonDescription {
         source: LessonSource,
         materialNames: List<String>
     ): Outcome {
-        val prompt = "És a Meggy, tutora de estudos. Escreve um resumo claro e " +
-            "estruturado em Markdown (em português) da aula \"$folderName\", a " +
+        val prompt = "Você é a Meggy, tutora de estudos. Escreva um resumo claro e " +
+            "estruturado em Markdown (em português do Brasil) da aula \"$folderName\", a " +
             "partir do material abaixo. Cobre os pontos principais e, quando " +
             "existirem, exemplos e definições.\n\nMaterial:\n" +
             source.text.take(MAX_TEXT_CHARS)
@@ -665,7 +676,7 @@ object LessonDescription {
             is AiService.PdfSummaryResult.Ok -> {
                 val keyName = materialNames.firstOrNull() ?: source.name
                 AiService.saveSummary(context, "$folderPath/$keyName", r.text, folderName)
-                // R23 — o fallback directo só gera o RESUMO: é um
+                // R23 — o fallback direto só gera o RESUMO: é um
                 // pacote parcial por construção, nunca Ready (sem
                 // motivo conhecido p/ as partes em falta).
                 Outcome.Partial(AiService.GeneratedBundle(r.text, null, null), false, null)
@@ -676,7 +687,7 @@ object LessonDescription {
 
     /**
      * Atalho para a pré-geração: dispara o batalhão para a aula e
-     * devolve o texto se já estiver pronto (sem poll longo — a fila
+     * retorna o texto se já estiver pronto (sem poll longo — a fila
      * não espera a geração terminar; a próxima abertura lê do cache).
      * R23 — o Ready resumo-só MANTÉM-SE aqui, de propósito: isto é
      * pré-geração em fundo, não o sinal de "geração completa" — o

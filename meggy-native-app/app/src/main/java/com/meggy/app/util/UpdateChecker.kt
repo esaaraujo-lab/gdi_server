@@ -41,7 +41,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  *    continua como fallback se o download in-app falhar.
  *  - Permissão de instalar de fontes desconhecidas: antes de instalar,
  *    verifica packageManager.canRequestPackageInstalls(). Se não concedida,
- *    abre a tela do sistema (ACTION_MANAGE_UNKNOWN_APP_SOURCES) e guarda
+ *    abre a tela do sistema (ACTION_MANAGE_UNKNOWN_APP_SOURCES) e salva
  *    o APK como "pendente" — na próxima verificação (ou ao abrir o app),
  *    com a permissão concedida, a instalação dispara sozinha.
  *  - Instalador ausente: se nenhum app resolve o intent de instalação
@@ -90,7 +90,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  *    (deleteDownloadedApkIfInstalled + UpdateCleanupReceiver).
  * ★ R8A (2026-11-15) — throttle 24h → 1h (regra do Elton §11);
  *   falha de checagem/download espera 15 min (não queima a janela de
- *   1h, nem tenta em cada onResume); guarda em memória 30 s contra a
+ *   1h, nem tenta em cada onResume); salva em memória 30 s contra a
  *   dupla checagem onCreate+onResume; "Depois" na permissão só volta a
  *   perguntar 24h depois e já não mata o auto-update da versão;
  *   <queries> no manifesto p/ o instalador ser visível (API 30+).
@@ -109,7 +109,7 @@ object UpdateChecker {
     // pode tentar em cada onResume: após uma falha, espera 15 min.
     private const val KEY_LAST_FAILED_CHECK = "last_failed_check_ms"
     private const val FAILED_CHECK_RETRY_MS = 15L * 60 * 1000 // 15 min
-    // R8A — guarda em memória (30 s) p/ a dupla checagem Home onCreate +
+    // R8A — salva em memória (30 s) p/ a dupla checagem Home onCreate +
     // onResume não disparar 2 requests antes de o timestamp gravar
     // (mesmo padrão da BiBi 2.1.9; a Meggy não o tinha).
     private var lastCheckAttemptMs = 0L
@@ -142,7 +142,7 @@ object UpdateChecker {
         // 1) APK pendente primeiro — nunca atrasado pelo throttle. Se
         // instalou, retorna (o checkForUpdate faria a mesma instalação).
         if (resumePendingApk(context)) return
-        // R8A — guarda em memória (30 s): onCreate + onResume da Home
+        // R8A — salva em memória (30 s): onCreate + onResume da Home
         // disparam no mesmo arranque; sem isto iam 2 requests ao GitHub
         // antes de o timestamp da checagem gravar.
         val nowAttempt = System.currentTimeMillis()
@@ -209,25 +209,25 @@ object UpdateChecker {
     private const val APK_FILE_PREFIX = "meggy-"
 
     /**
-     * §9 — ficheiro do APK de atualização na pasta pública Download.
+     * §9 — arquivo do APK de atualização na pasta pública Download.
      * getExternalStoragePublicDirectory está deprecado desde a API 29
-     * mas continua a devolver o caminho real; a escrita em si, na
+     * mas continua a retornar o caminho real; a escrita em si, na
      * API 29+, passa pelo MediaStore (ver openPublicDownloadOutput).
      */
     @Suppress("DEPRECATION")
     private fun publicDownloadFile(fileName: String): File =
         File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), fileName)
 
-    /** §9 — mesmo ficheiro no destino privado antigo (pré-§9), só para limpar lixo. */
+    /** §9 — mesmo arquivo no destino privado antigo (pré-§9), só para limpar lixo. */
     private fun legacyDownloadFile(context: Context, fileName: String): File =
         File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
 
     /**
      * §9 — abre a escrita do APK na pasta pública Download.
      * API 29+ (scoped storage): MediaStore.Downloads — sem permissões, o
-     * ficheiro fica em /storage/emulated/0/Download e pertence ao app
+     * arquivo fica em /storage/emulated/0/Download e pertence ao app
      * (o instalador lê-o depois via FileProvider <external-path>).
-     * API <=28: ficheiro direto (WRITE_EXTERNAL_STORAGE já declarada no
+     * API <=28: arquivo direto (WRITE_EXTERNAL_STORAGE já declarada no
      * manifesto com maxSdkVersion 28). Remove primeiro um resto com o
      * mesmo nome para o MediaStore não criar "nome (1).apk".
      * Lança exceção se não conseguir abrir o destino (o chamador cai no
@@ -252,7 +252,7 @@ object UpdateChecker {
         return target to FileOutputStream(target)
     }
 
-    /** §9 — apaga um APK da pasta pública Download (ficheiro + linha no MediaStore). Nunca lança. */
+    /** §9 — apaga um APK da pasta pública Download (arquivo + linha no MediaStore). Nunca lança. */
     private fun deletePublicDownload(context: Context, fileName: String) {
         try { publicDownloadFile(fileName).delete() } catch (_: Exception) {}
         deletePublicDownloadRow(context, fileName)
@@ -277,7 +277,7 @@ object UpdateChecker {
         } catch (_: Exception) {}
     }
 
-    /** §9 — apaga o ficheiro do APK (pública ou legada). Nunca lança. */
+    /** §9 — apaga o arquivo do APK (pública ou legada). Nunca lança. */
     private fun deleteUpdateApk(context: Context, file: File) {
         try { file.delete() } catch (_: Exception) {}
         if (file.exists()) deletePublicDownloadRow(context, file.name)
@@ -328,10 +328,10 @@ object UpdateChecker {
      * de pendente e fora do throttle) e pelo UpdateCleanupReceiver
      * (MY_PACKAGE_REPLACED). Nunca apaga antes/durante a instalação:
      * se o usuário dispensou o instalador, a versão instalada continua
-     * inferior e o ficheiro fica (o automático não re-oferece graças ao
-     * guarda offered_version; o manual re-oferece). Limpa também um
-     * resto do destino privado pré-§9 com a mesma versão. Devolve true
-     * quando apagou pelo menos um ficheiro.
+     * inferior e o arquivo fica (o automático não re-oferece graças ao
+     * salva offered_version; o manual re-oferece). Limpa também um
+     * resto do destino privado pré-§9 com a mesma versão. Retorna true
+     * quando apagou pelo menos um arquivo.
      */
     fun deleteDownloadedApkIfInstalled(context: Context): Boolean {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -351,7 +351,7 @@ object UpdateChecker {
             if (prefKey != null) prefs.edit().remove(prefKey).apply()
             deletedAny = true
         }
-        // Sem ficheiro restante, o marcador fica obsoleto — limpa-o para
+        // Sem arquivo restante, o marcador fica obsoleto — limpa-o para
         // esta verificação não correr em cada arranque.
         if (candidates.none { (file, _) -> file.exists() }) {
             prefs.edit().remove(KEY_DOWNLOADED_VERSION).apply()
@@ -511,7 +511,7 @@ object UpdateChecker {
                     // tem APK (o workflow ainda publica): dizer isso
                     // em vez de "versão mais recente". No automático
                     // é silencioso (a próxima checagem de 1h apanha
-                    // o APK); no manual, o utilizador fica a saber
+                    // o APK); no manual, o usuário fica a saber
                     // que é só esperar. Isto cobre o caso do Elton
                     // (local 2.7.41, 2.7.42 sem APK): a versão com
                     // APK é a própria local, por isso o ramo de
@@ -521,13 +521,13 @@ object UpdateChecker {
                         context.getString(R.string.update_publishing, newestVersionWithoutApk)
                     )
                 } else {
-                    if (showFeedback) showToast(context, "Voce esta na versao mais recente (v$localVersion)")
+                    if (showFeedback) showToast(context, "Você está na versão mais recente (v$localVersion)")
                 }
                 }
             } catch (e: Exception) {
                 // R8A — falha de rede: tenta de novo em 15 min.
                 prefs.edit().putLong(KEY_LAST_FAILED_CHECK, System.currentTimeMillis()).apply()
-                if (showFeedback) showToast(context, "Erro de rede: ${e.message ?: "verifique sua conexao"}")
+                if (showFeedback) showToast(context, "Erro de rede: ${e.message ?: "verifique sua conexão"}")
             }
         }.start()
     }
@@ -692,8 +692,8 @@ object UpdateChecker {
     ) {
         try {
             val request = DownloadManager.Request(Uri.parse(url)).apply {
-                setTitle("Meggy — Atualizacao v$remoteVersion")
-                setDescription("Baixando nova versao do app...")
+                setTitle("Meggy — Atualização v$remoteVersion")
+                setDescription("Baixando nova versão do app...")
                 setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
                 // §9 — pasta pública Download (o DownloadManager é um
                 // serviço do sistema e escreve lá em qualquer API level).
@@ -706,9 +706,9 @@ object UpdateChecker {
             val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
             val downloadId = dm.enqueue(request)
 
-            // R21: registo no applicationContext (antes era no Context
+            // R21: registro no applicationContext (antes era no Context
             // recebido — a Activity da Home/Settings — e só era
-            // desregistado quando o download completava COM o ficheiro
+            // desregistado quando o download completava COM o arquivo
             // presente: download falhado/cancelado = receiver + Activity
             // retidos para sempre, acumulando um por tentativa).
             val appContext = context.applicationContext
@@ -742,14 +742,14 @@ object UpdateChecker {
     /**
      * ★ v2.7.4: instala o APK com o fluxo completo:
      *  1. Se a permissão de fontes desconhecidas não foi concedida, abre a
-     *     tela do sistema para concedê-la e guarda o APK como pendente.
+     *     tela do sistema para concedê-la e salva o APK como pendente.
      *  2. Se nenhum instalador resolve o intent (algumas TVs), mostra um
      *     diálogo com o caminho do APK em vez de falhar em silêncio.
      *  3. Se o instalador abrir, confirma com toast.
      */
     private fun installApk(context: Context, file: File, version: String? = null) {
         // v2.7.11 — NUNCA interromper reprodução: com o player em 1º
-        // plano, guarda o APK como pendente e NÃO abre o instalador.
+        // plano, salva o APK como pendente e NÃO abre o instalador.
         // Ao voltar à Home, resumePendingApk dispara sozinho.
         if (MeggyApp.isPlayerForeground()) {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

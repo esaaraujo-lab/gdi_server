@@ -23,7 +23,7 @@ import com.meggy.app.R
  * background `tile_focus_border` (state_focused).
  *
  * R18B (Bug 1) — escala por tile na TV: `attach`/`attachCard`
- * aceitam `scaleTv` (só o ramo TV; o telemóvel fica a 1.06×).
+ * aceitam `scaleTv` (só o ramo TV; o celular fica a 1.06×).
  * `SCALE_TV_DENSE` (1.05×) para rails/grades densos onde 1.10×
  * sobrepõe o vizinho; `SCALE_TV_NONE` (1.00×) onde qualquer
  * escala é cortada ou sobrepõe (destaque de largura total,

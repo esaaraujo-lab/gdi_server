@@ -92,10 +92,10 @@ class DescriptionPregenerator(private val context: Context) {
             for (folderPath in upcoming) {
                 if (!isActive()) return@launch
                 if (!waitWhilePaused(isPlaying, isActive)) return@launch
-                // Já tem descrição guardada → nada a gerar.
+                // Já tem descrição salva → nada gerando.
                 if (sm.getLessonDescription(folderPath) != null) continue
                 // R19B (P1): FolderResult — filesOrNull: falha
-                // (expirada ou transitória) vale como sem ficheiros.
+                // (expirada ou transitória) vale como sem arquivos.
                 val files = try {
                     api.listFolder(folderPath).filesOrNull
                 } catch (_: Exception) {
@@ -169,7 +169,7 @@ class DescriptionPregenerator(private val context: Context) {
     }
 
     /**
-     * Espera o vídeo voltar a tocar (pausa da fila). Devolve false se
+     * Espera o vídeo voltar a tocar (pausa da fila). Retorna false se
      * o app saiu de primeiro plano ou se passou o tempo máximo.
      */
     private suspend fun waitWhilePaused(

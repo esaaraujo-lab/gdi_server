@@ -49,16 +49,16 @@ object AuthHelper {
      * R19B (P2) — listFolder com re-login silencioso antes do bounce.
      *
      * 1. Corre o listFolder uma vez. Se não for SessionExpired,
-     *    devolve-o tal como está (Ok OU Transient — transitória nunca
+     *    retorna-o tal como está (Ok OU Transient — transitória nunca
      *    faz bounce, o chamador mostra erro + retry).
-     * 2. Se for SessionExpired, tenta o re-login directo UMA vez
+     * 2. Se for SessionExpired, tenta o re-login direto UMA vez
      *    ([ApiService.reLoginWithSavedCredentials] — usa username+senha
-     *    guardados; [SessionManager.clearSession] preserva os dois, por
+     *    salvos; [SessionManager.clearSession] preserva os dois, por
      *    isso o re-login continua possível). R21: sem o probe redundante
      *    do antigo validateOrReLogin — já sabemos que expirou.
-     * 3. Se o re-login resultar, repete o listFolder UMA vez e devolve
+     * 3. Se o re-login resultar, repete o listFolder UMA vez e retorna
      *    esse resultado (Ok na maioria dos casos — o destino nem pisca).
-     * 4. Se o re-login falhar, devolve SessionExpired — aí sim o
+     * 4. Se o re-login falhar, retorna SessionExpired — aí sim o
      *    chamador faz [bounceToLogin] (sessão genuinamente expirada).
      *
      * Corre em Dispatchers.IO no chamador (o OkHttp é bloqueante).

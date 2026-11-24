@@ -17,7 +17,7 @@ import org.json.JSONObject
  * v2.15.x), o drive aparece no rail da Home mas NÃO abre — o toque
  * mostra só o aviso (HomeActivity.onAdminDriveClick).
  *
- * Este ficheiro concentra o que a Frente C precisou de novo:
+ * Este arquivo concentra o que a Frente C precisou de novo:
  *   - [DriveRailItem]: o rail funde drives fixos e drives do admin
  *     numa só lista (fixos primeiro, admin a seguir);
  *   - transporte do AdminDrive em extras do intent (o DetailActivity
@@ -25,7 +25,7 @@ import org.json.JSONObject
  *     sub-pastas herdam os extras com [forwardAdminDrive]);
  *   - [generalCoverUrl]: a sub-capa GENÉRICA = imagem 'geral' do
  *     manifesto da biblioteca de capas (ver o KDoc da função);
- *   - registo das capas de sub-pasta ([setSubfolderCovers] /
+ *   - registro das capas de sub-pasta ([setSubfolderCovers] /
  *     [subfolderCoverFor]): a biblioteca de capas consulta-o no topo
  *     de resolveInternal, POR CIMA da resolução por biblioteca.
  */
@@ -67,7 +67,7 @@ object AdminDriveUi {
      * Guarda o AdminDrive nos extras do intent que abre o
      * DetailActivity. [rootPath] é o drivePath usado p/ abrir o drive
      * (a raiz do drive do admin) — fica fixo nas navegações p/
-     * sub-pastas (ver [forwardAdminDrive]) e é a raiz do registo de
+     * sub-pastas (ver [forwardAdminDrive]) e é a raiz do registro de
      * capas de sub-pasta. AdminDrive não é Parcelable: os campos vão
      * como extras simples e [adminDriveFromIntent] reconstrói-o com
      * AdminDrive.fromJson (o parse defensivo da Frente B).
@@ -119,7 +119,7 @@ object AdminDriveUi {
         return runCatching { AdminDrive.fromJson(json) }.getOrNull()
     }
 
-    /** Raiz do drive do admin guardada nos extras (null = sem drive do admin). */
+    /** Raiz do drive do admin salva nos extras (null = sem drive do admin). */
     fun adminDriveRootFromIntent(intent: Intent): String? =
         intent.getStringExtra(EXTRA_DRIVE_ROOT_PATH)?.takeIf { it.isNotBlank() }
 
@@ -141,7 +141,7 @@ object AdminDriveUi {
      * imagem 'geral' do manifesto da biblioteca de capas. É a sub-capa
      * usada no hero do detalhe quando o admin não definiu subCoverUrl.
      * Null sem manifesto carregado (ou sem entrada 'geral') — nesse
-     * caso o detalhe cai na hierarquia actual (thumb/biblioteca/
+     * caso o detalhe cai na hierarquia atual (thumb/biblioteca/
      * gerada), nunca fica sem capa.
      *
      * NÃO é o resolveStrict usado nas outras superfícies (que exclui
@@ -149,13 +149,13 @@ object AdminDriveUi {
      * não é a imagem de nenhum curso/pasta): aqui a 'geral' é a escolha
      * explícita do admin ("só a capa + sub-capa genérica"), por isso
      * usa-se a resolução NÃO-estrita. Meggy/BiBi: resolve() sem nomes
-     * (o resolveInternal devolve o fallback 'geral' sem candidatos);
+     * (o resolveInternal retorna o fallback 'geral' sem candidatos);
      * Vovó: CoverLibrary.generalCoverUrl() (o resolveInternal da Vovó
-     * devolve null sem candidatos — ver CoverLibrary).
+     * retorna null sem candidatos — ver CoverLibrary).
      */
     fun generalCoverUrl(context: Context): String? = LibraryCovers.resolve()
 
-    // ── Registo das capas de sub-pasta (consultado pela biblioteca) ──
+    // ── Registro das capas de sub-pasta (consultado pela biblioteca) ──
 
     @Volatile
     private var subfolderRoot: String? = null
@@ -172,7 +172,7 @@ object AdminDriveUi {
      * subfolderCovers do AdminDrive dono. As chaves são normalizadas
      * (ver [normalizePath]) na gravação; o DetailActivity chama isto
      * no onCreate e no onResume e [clearSubfolderCovers] no onDestroy
-     * (um detalhe-filho destruído limpa o registo ao sair; ao voltar,
+     * (um detalhe-filho destruído limpa o registro ao sair; ao voltar,
      * o detalhe-pai volta a valer no onResume).
      */
     fun setSubfolderCovers(rootPath: String, covers: Map<String, String>) {
@@ -264,7 +264,7 @@ object AdminDriveUi {
         return rel.ifEmpty { null }
     }
 
-    /** Normaliza um caminho p/ o registo: minúsculas, sem '/' nas pontas. */
+    /** Normaliza um caminho p/ o registro: minúsculas, sem '/' nas pontas. */
     private fun normalizePath(path: String?): String? {
         val t = path?.trim()?.lowercase()?.trim('/') ?: return null
         return t.ifEmpty { null }

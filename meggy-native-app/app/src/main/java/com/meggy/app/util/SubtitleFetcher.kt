@@ -23,7 +23,7 @@ import org.json.JSONObject
  *       200 text/vtt ......... VTT pronto (com timestamps do Whisper)
  *       202 {status:"generating"} ... Whisper gerando em 2º plano
  *       404 {status:"none"} ... não há legenda possível
- *     O VTT baixado é guardado no cache do app (por path da aula) e
+ *     O VTT baixado é salvo no cache do app (por path da aula) e
  *     anexado ao MediaItem como SubtitleConfiguration.
  *     R21: o pedido ia para BASE_URL (produção) — a única rota "de
  *     IA" fora do AI_BASE_URL; corrigido para AI_BASE_URL, que é
