@@ -1131,7 +1131,7 @@ class DetailActivity : AppCompatActivity() {
      * Ready, is Partial` junta, o smart-cast vai p/ o supertipo
      * comum (Outcome) e `bundle`/`text` deixam de resolver.
      */
-    private fun applyGeneratedOutcome(
+    private suspend fun applyGeneratedOutcome(
         files: List<FileItem>,
         bundle: AiService.GeneratedBundle,
         questionsOutdated: Boolean,
