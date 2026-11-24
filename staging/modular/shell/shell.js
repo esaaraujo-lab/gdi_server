@@ -1429,12 +1429,111 @@
       //   (showMaterial): PDF em iframe inline; MD/TXT/HTML via fetch
       //   + Shell._renderMd com a mesma toolbar/Baixar PDF; áudio em
       //   <audio>; resto → botão Abrir. "Voltar" re-renderiza a pasta.
+      // ★ v2.15.88: classificação de material por EXTENSÃO + MIME real.
+      //   Antes tudo se decidia pelo NOME: um PDF guardado com o nome do
+      //   endpoint da plataforma ("download.aspx" — o navegador guarda
+      //   assim os PDFs servidos sem filename) caía no ramo genérico
+      //   "Abrir" e nunca recebia inline=true; um ".PDF" maiúsculo
+      //   também não (endsWith é sensível à caixa). Sem inline o worker
+      //   serve attachment → o PDF não abre na página.
+      _materialKind21588(f) {
+        const name = String((f && f.name) || '');
+        const ext = (name.split('.').pop() || '').toLowerCase();
+        const fext = String((f && f.fileExtension) || '').toLowerCase();
+        const mt = String((f && f.mimeType) || '').toLowerCase();
+        if (ext === 'pdf' || fext === 'pdf' || mt.includes('pdf')) return 'pdf';
+        if (ext === 'md' || ext === 'txt' || ext === 'html' || fext === 'md' || fext === 'txt' || mt.includes('markdown') || mt === 'text/plain' || mt.includes('html')) return 'text';
+        if (mt.startsWith('audio/') || ext === 'mp3' || ext === 'm4a' || ext === 'wav' || ext === 'ogg') return 'audio';
+        return 'other';
+      },
+
+      _materialInlineLink21588(link) {
+        if (!link || link.includes('inline=')) return link;
+        return link + (link.includes('?') ? '&' : '?') + 'inline=true';
+      },
+
+      _isAndroid21588() {
+        try { return /Android/i.test(navigator.userAgent || ''); } catch (_) { return false; }
+      },
+
+      // ★ v2.15.88: leitor de PDF por pdf.js (canvas) p/ o Android — o
+      //   Chrome Android não renderiza PDF dentro de iframe: troca-o
+      //   pelo cartão de download dele (ícone PDF + nome tirado da URL
+      //   — "download.aspx" — + botão Abrir) e o aluno nunca vê o
+      //   material. Páginas renderizadas preguiçosamente ao rolar;
+      //   qualquer falha cai no iframe de hoje (o chão não muda).
+      async _renderPdfJs21588(bodyEl, link, name) {
+        if (!bodyEl) return;
+        const esc = Shell._esc || ((s) => String(s == null ? '' : s));
+        const mySeq = (Shell._pdfJsSeq = (Shell._pdfJsSeq || 0) + 1);
+        const alive = () => Shell._pdfJsSeq === mySeq && !!bodyEl.isConnected;
+        bodyEl.innerHTML = '<div style="padding:28px;text-align:center;color:#9aa4b8;"><div class="spinner-border" role="status" style="width:22px;height:22px;border-width:3px;"></div><div style="margin-top:10px;font-size:13px;">A abrir o PDF…</div></div>';
+        try {
+          await Shell._ensurePdfLibs();
+          if (!window.pdfjsLib) throw new Error('pdf.js indisponível');
+          const r = await fetch(link);
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          const buf = await r.arrayBuffer();
+          if (!alive()) return;
+          const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+          if (!alive()) return;
+          const total = Math.min(pdf.numPages || 0, 300);
+          bodyEl.innerHTML =
+            '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 12px;background:rgba(255,139,159,0.08);border-bottom:1px solid rgba(255,139,159,0.2);">' +
+              '<span style="font-size:12px;color:#9aa4b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><i class="bi bi-file-earmark-pdf"></i> ' + esc(name || 'Material') + (total ? ' · ' + total + ' pág.' : '') + '</span>' +
+              '<a href="' + link + '" target="_blank" style="flex:none;background:rgba(255,139,159,0.12);border:1px solid rgba(255,139,159,0.3);color:#ff8b9f;border-radius:6px;padding:4px 10px;font-size:12px;text-decoration:none;"><i class="bi bi-download"></i> Baixar</a>' +
+            '</div>' +
+            '<div class="gdi-pdfjs-pages" style="width:100%;height:calc(100% - 41px);min-height:380px;overflow:auto;padding:10px;box-sizing:border-box;"></div>';
+          const host = bodyEl.querySelector('.gdi-pdfjs-pages');
+          if (!host) return;
+          const dpr = Math.min(window.devicePixelRatio || 1, 2);
+          const renderPage = async (n, canvas) => {
+            const page = await pdf.getPage(n);
+            const base = page.getViewport({ scale: 1 });
+            const w = Math.max(280, host.clientWidth - 20);
+            const scale = (w / base.width) * dpr;
+            const vp = page.getViewport({ scale });
+            canvas.width = Math.floor(vp.width);
+            canvas.height = Math.floor(vp.height);
+            canvas.style.width = Math.floor(vp.width / dpr) + 'px';
+            canvas.style.height = Math.floor(vp.height / dpr) + 'px';
+            await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+          };
+          // Altura de reserva pela razão da 1.ª página (páginas de um
+          //   PDF têm quase sempre o mesmo tamanho) — sem isto os
+          //   canvas a 0px "intersectam" todos de uma vez.
+          let ratio = 1.414;
+          try { const p1 = await pdf.getPage(1); const v1 = p1.getViewport({ scale: 1 }); if (v1.width > 0) ratio = v1.height / v1.width; } catch (_) {}
+          const io = ('IntersectionObserver' in window) ? new IntersectionObserver((entries) => {
+            entries.forEach((en) => {
+              if (!en.isIntersecting) return;
+              const c = en.target;
+              io.unobserve(c);
+              if (c.dataset.done) return;
+              c.dataset.done = '1';
+              renderPage(Number(c.dataset.page), c).catch(() => {});
+            });
+          }, { root: host, rootMargin: '600px 0px' }) : null;
+          for (let n = 1; n <= total; n++) {
+            const c = document.createElement('canvas');
+            c.dataset.page = String(n);
+            c.style.cssText = 'display:block;margin:0 auto 10px;background:#fff;border-radius:4px;max-width:100%;min-height:' + Math.round(300 * ratio) + 'px;';
+            host.appendChild(c);
+            if (io) io.observe(c); else { c.dataset.done = '1'; renderPage(n, c).catch(() => {}); }
+          }
+        } catch (e) {
+          if (!alive()) return;
+          bodyEl.innerHTML = '<iframe src="' + link + '" style="width:100%;height:100%;border:none;border-radius:16px;"></iframe>';
+        }
+      },
+
       async _openDriveFile21564(container, f, folderPath) {
         if (!container || !f) return;
         const esc = Shell._esc || ((s) => String(s == null ? '' : s));
         let link = '';
         if (f.link) { link = f.link.startsWith('http') ? f.link : (window.location.origin + f.link); }
         const ext = (String(f.name || '').split('.').pop() || '').toLowerCase();
+        const kind21588 = Shell._materialKind21588(f);  // ★ v2.15.88: extensão + MIME
         container.innerHTML = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;"><button class="meggy-header-btn" id="v21564-file-back" style="font-size:12px;flex:none;"><i class="bi bi-arrow-left"></i> Voltar</button><span style="font-size:13px;color:#e6edf3;font-weight:600;word-break:break-all;">' + esc(f.name || 'Ficheiro') + '</span></div>' +
           '<div id="v21564-file-body"><div class="meggy-loading"><div class="spinner-border"></div><div>Abrir ficheiro...</div></div></div>';
         const backBtn = container.querySelector('#v21564-file-back');
@@ -1442,10 +1541,12 @@
         const body = container.querySelector('#v21564-file-body');
         if (!body) return;
         if (!link) { body.innerHTML = '<div style="text-align:center;padding:40px;color:#6b7488;">Sem preview</div>'; return; }
-        if (ext === 'pdf') {
-          const src = link.includes('inline=') ? link : link + (link.includes('?') ? '&' : '?') + 'inline=true';
-          body.innerHTML = '<iframe src="' + src + '" style="width:100%;height:70vh;border:none;border-radius:12px;"></iframe>';
-        } else if (ext === 'md' || ext === 'txt' || ext === 'html') {
+        if (kind21588 === 'pdf') {
+          const src = Shell._materialInlineLink21588(link);
+          // ★ v2.15.88: Android não renderiza PDF em iframe → pdf.js
+          if (Shell._isAndroid21588()) Shell._renderPdfJs21588(body, src, f.name);
+          else body.innerHTML = '<iframe src="' + src + '" style="width:100%;height:70vh;border:none;border-radius:12px;"></iframe>';
+        } else if (kind21588 === 'text') {
           body.innerHTML = '<div id="v21564-md" style="width:100%;max-height:75vh;overflow:auto;color:#e6edf3;font-size:14px;">Carregando...</div>';
           try {
             const r = await fetch(link);
@@ -3246,7 +3347,7 @@
               const isTransc = lowName.includes('transcri') || ext === 'txt';
               const isAiResumo = lowName.startsWith('resumo') || lowName.includes('resumo_ia') || lowName.includes('resumo-ia') || (lowName.includes('ia') && lowName.includes('resumo'));
               const isEbook = lowName.includes('ebook') || lowName.includes('apostila');
-              const isGenericPdf = ext === 'pdf' && !isTransc && !isAiResumo && !isEbook;
+              const isGenericPdf = Shell._materialKind21588(m) === 'pdf' && !isTransc && !isAiResumo && !isEbook;  // ★ v2.15.88: PDF por MIME também conta (ex.: ficheiro chamado "download.aspx")
               if (isGenericPdf) materialCounter++;
               // ★ Label: "Material 1", "Material 2" se múltiplos PDFs genéricos; só "Material" se único
               let label;
@@ -3255,7 +3356,7 @@
               else if (isEbook) label = 'Ebook';
               else if (isGenericPdf) label = materialCounter > 1 ? 'Material ' + materialCounter : 'Material';
               else label = m.name.replace(/\.[^.]+$/, '').substring(0, 15);
-              const icon = isTransc ? 'bi-card-text' : isAiResumo ? 'bi-stars' : isEbook ? 'bi-book' : ext === 'pdf' ? 'bi-file-earmark-pdf' : 'bi-file-earmark-text';
+              const icon = isTransc ? 'bi-card-text' : isAiResumo ? 'bi-stars' : isEbook ? 'bi-book' : Shell._materialKind21588(m) === 'pdf' ? 'bi-file-earmark-pdf' : 'bi-file-earmark-text';  // ★ v2.15.88: ícone por kind
               const tab = document.createElement('button');
               tab.className = 'gdi-mat-tab' + (i === 0 ? ' active' : '');
               if (i === 0) tab.setAttribute('aria-current', 'true');
@@ -3275,11 +3376,21 @@
               const activeTab = document.querySelector(`.gdi-mat-tab[data-mat="${i}"]`);
               if (activeTab) { activeTab.classList.add('active'); activeTab.setAttribute('aria-current', 'true'); activeTab.style.background = '#1f6feb'; activeTab.style.borderColor = '#1f6feb'; activeTab.style.color = '#fff'; }
               const m = materials[i];
+              const kind21588 = Shell._materialKind21588(m);  // ★ v2.15.88: classe por extensão + MIME (PDF chamado "download.aspx" é PDF; ".PDF" maiúsculo também)
               let link = '';
-              if (m.link) { link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link); if (m.name.endsWith('.pdf') && !link.includes('inline=')) link += (link.includes('?') ? '&' : '?') + 'inline=true'; }
+              if (m.link) { link = m.link.startsWith('http') ? m.link : (window.location.origin + m.link); if (kind21588 === 'pdf') link = Shell._materialInlineLink21588(link); }
               const ext = (m.name.split('.').pop() || '').toLowerCase();
-              if (ext === 'pdf' && link) bodyEl.innerHTML = `<iframe src="${link}" style="width:100%;height:100%;border:none;border-radius:16px;"></iframe>`;
-              else if ((ext === 'md' || ext === 'txt' || ext === 'html') && link) {
+              if (kind21588 === 'pdf' && link) {
+                // ★ v2.15.88: o Chrome Android NÃO renderiza PDF em iframe —
+                //   troca-o pelo cartão de download dele (ícone PDF + nome
+                //   tirado da URL, "download.aspx", + botão Abrir) e o PDF
+                //   nunca abre na página. No Android renderiza com pdf.js
+                //   (o mesmo já usado p/ extrair texto); se falhar, cai no
+                //   iframe de hoje. No desktop fica EXACTAMENTE como está.
+                if (Shell._isAndroid21588()) Shell._renderPdfJs21588(bodyEl, link, m.name);
+                else bodyEl.innerHTML = `<iframe src="${link}" style="width:100%;height:100%;border:none;border-radius:16px;"></iframe>`;
+              }
+              else if (kind21588 === 'text' && link) {
                 bodyEl.innerHTML = '<div id="gdi-mat-md" style="width:100%;height:100%;overflow:auto;padding:0;color:#e6edf3;font-size:14px;">Carregando...</div>';
                 fetch(link).then(r => r.text()).then(async txt => {
                   const el = document.getElementById('gdi-mat-md');
@@ -7659,25 +7770,45 @@ el.scrollTop = 0;
         
         // ★ Renderizar conteúdo NATIVO (sem GDIndex)
         if (feature === 'progresso') {
-          const d = (typeof GDIUser !== 'undefined' && GDIUser && GDIUser.state) || {};
-          const watched = d.watched ? Object.keys(d.watched).length : 0;
-          const history = d.history ? d.history.length : 0;
-          el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">📊 Progresso</h1></div><div class="meggy-cards-grid"><div class="meggy-card" style="cursor:default;"><div class="meggy-card-icon">🎬</div><div class="meggy-card-title" id="gdi-prog-watched">' + watched + '</div><div class="meggy-card-meta">Aulas assistidas</div></div><div class="meggy-card" style="cursor:default;"><div class="meggy-card-icon">📺</div><div class="meggy-card-title" id="gdi-prog-history">' + history + '</div><div class="meggy-card-meta">No histórico</div></div></div>';
           // ★ v2.15.76: fonte ÚNICA dos contadores — os mesmos números
           //   das Estatísticas/Coach, de /api/analytics/summary
-          //   (composto no worker a partir do D1). O snapshot local
-          //   acima pode estar vazio/por carregar (GDIUser.state é
-          //   null até ao fetch de /userstate e a vista nunca se
-          //   re-renderizava) → mostrava 0/0 com 72 aulas no servidor.
-          try {
-            fetch('/api/analytics/summary', { cache: 'no-store', credentials: 'same-origin' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
-              if (!j || !j.ok || !j.data) return;
-              var wEl = document.getElementById('gdi-prog-watched');
-              var hEl = document.getElementById('gdi-prog-history');
-              if (wEl && typeof j.data.watchedCount === 'number') wEl.textContent = j.data.watchedCount;
-              if (hEl && typeof j.data.historyCount === 'number') hEl.textContent = j.data.historyCount;
-            }).catch(function () {});
-          } catch (_) {}
+          //   (composto no worker a partir do D1).
+          // ★ v2.15.85 (B-27): carregamento HONESTO — enquanto o fetch
+          //   não resolve, os cartões mostram "…" e o estado diz
+          //   "A carregar…"; NUNCA os valores do snapshot local (0/0
+          //   enquanto GDIUser.state não carregou — reteste 2026-11-23:
+          //   zeros falsos visíveis ~5s no staging-c, ~15s no
+          //   candidato). Em falha: "—" + estado de erro com retry,
+          //   nunca zeros como se fossem valores.
+          el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">📊 Progresso</h1></div><div class="meggy-cards-grid"><div class="meggy-card" style="cursor:default;"><div class="meggy-card-icon">🎬</div><div class="meggy-card-title" id="gdi-prog-watched">…</div><div class="meggy-card-meta">Aulas assistidas</div></div><div class="meggy-card" style="cursor:default;"><div class="meggy-card-icon">📺</div><div class="meggy-card-title" id="gdi-prog-history">…</div><div class="meggy-card-meta">No histórico</div></div></div><div id="gdi-prog-status" role="status" style="text-align:center;color:#9aa4b8;font-size:13px;margin-top:12px;">A carregar…</div>';
+          var progFail21585 = function () {
+            var wEl = document.getElementById('gdi-prog-watched');
+            var hEl = document.getElementById('gdi-prog-history');
+            var st = document.getElementById('gdi-prog-status');
+            if (wEl) wEl.textContent = '—';
+            if (hEl) hEl.textContent = '—';
+            if (st) {
+              st.textContent = 'Não foi possível carregar o progresso. Toca aqui para tentar de novo.';
+              st.style.cursor = 'pointer';
+              st.onclick = function () { progLoad21585(); };
+            }
+          };
+          var progLoad21585 = function () {
+            var st = document.getElementById('gdi-prog-status');
+            if (st) { st.textContent = 'A carregar…'; st.style.cursor = ''; st.onclick = null; }
+            try {
+              fetch('/api/analytics/summary', { cache: 'no-store', credentials: 'same-origin' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+                if (!j || !j.ok || !j.data || typeof j.data.watchedCount !== 'number' || typeof j.data.historyCount !== 'number') { progFail21585(); return; }
+                var wEl = document.getElementById('gdi-prog-watched');
+                var hEl = document.getElementById('gdi-prog-history');
+                var st2 = document.getElementById('gdi-prog-status');
+                if (wEl) wEl.textContent = j.data.watchedCount;
+                if (hEl) hEl.textContent = j.data.historyCount;
+                if (st2) st2.textContent = '';
+              }).catch(function () { progFail21585(); });
+            } catch (_) { progFail21585(); }
+          };
+          progLoad21585();
           return;
         }
         if (feature === 'questoes' || feature === 'simulado' || feature === 'flashcards' || feature === 'resumos') {
@@ -7702,6 +7833,19 @@ el.scrollTop = 0;
             {icon:'🏆',name:'Streak 30',done:watched>=30},
           ];
           el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">🏆 Conquistas</h1></div><div class="meggy-cards-grid">' + ach.map(a => '<div class="meggy-card" style="opacity:'+(a.done?'1':'0.5')+';cursor:default;"><div class="meggy-card-icon">'+(a.done?a.icon:'🔒')+'</div><div class="meggy-card-title">'+a.name+'</div></div>').join('') + '</div>';
+          return;
+        }
+        if (feature === 'plano') {
+          // ★ v2.15.85 (RES-5): estado interino HONESTO — em abertura
+          //   directa (/plano colado ou refresh) o shell renderiza ANTES
+          //   da bridge + study-plan preguiçoso chegarem (~10s); o
+          //   placeholder genérico dizia "Plano - Em breve.", como se a
+          //   função não existisse — falso: ela carrega sempre. Agora
+          //   diz "A carregar o plano…" e traz o marcador
+          //   id="gdi-plano-loading", que a bridge reconhece na
+          //   verificação de arranque directo (v2.15.9 D) p/ re-renderizar
+          //   com o módulo. Pós-carga: inalterado.
+          el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">📋 Plano</h1></div><div class="meggy-placeholder" id="gdi-plano-loading"><div class="meggy-placeholder-icon">📋</div><div class="meggy-placeholder-title">Plano</div><div class="meggy-placeholder-desc">A carregar o plano…</div></div>';
           return;
         }
         // Outras abas (provas, redacao, etc) — placeholder

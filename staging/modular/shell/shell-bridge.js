@@ -360,7 +360,7 @@
       var _cur = Shell.router.currentPath();
       var _bridged = ['/simulado', '/provas', '/redacao', '/cronograma', '/estatisticas', '/mapa-fracos', '/plano', '/notificacoes'];
       var _mainEl = document.getElementById('meggy-main');
-      if (_bridged.indexOf(_cur) >= 0 && _mainEl && _mainEl.innerHTML.indexOf('Em breve.') >= 0) Shell.renderView();
+      if (_bridged.indexOf(_cur) >= 0 && _mainEl && (_mainEl.innerHTML.indexOf('Em breve.') >= 0 || _mainEl.innerHTML.indexOf('gdi-plano-loading') >= 0)) Shell.renderView();  // ★ v2.15.85 (RES-5): + marcador do estado interino do /plano (shell.js já não pinta "Em breve." p/ plano)
     } catch (_) {}
     window.MeggyShellExtras = {
       version: BRIDGE_VERSION,
