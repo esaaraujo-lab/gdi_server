@@ -90,6 +90,7 @@
     <color name="tile_scrim_top">#66000000</color>
     <color name="tile_scrim_bottom">#F00D0E12</color>
     <color name="tile_focus_ring">#FFA3E635</color>
+    <color name="tile_focus_ring_white">#FFFFFFFF</color>
     <color name="tile_focus_halo">#33A3E635</color>
     <color name="tile_title">#FFFFFFFF</color>
     <color name="tile_subtitle">#FFBCC4BE</color>
