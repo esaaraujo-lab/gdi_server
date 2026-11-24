@@ -24,8 +24,10 @@ package com.meggy.app.util
  * diferir. N ≥ 4 garante sempre solução. A chave é o caminho da
  * pasta (FileAdapter) ou o folderPath do grupo (LessonGridAdapter).
  *
- * NÃO usar aqui: RailAdapter (tela inicial — Destaques, herói e
- * "Continue assistindo" ficam como estão, por ordem do Elton).
+ * Ronda 28 — vale também para os cards "Continuar" do RailAdapter
+ * (mesma chave folderPath, span 1 no rail horizontal): o card
+ * Continuar de uma pasta tem a cor do Tile dessa pasta. Os Destaques
+ * e o herói ficam fora (continuam com o gradiente próprio).
  */
 object TileColors {
 
