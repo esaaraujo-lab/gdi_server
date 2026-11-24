@@ -27,6 +27,10 @@ interface AIInstallPopupProps {
   // RX470 fix (1.9.10): abre o LlamaManager (llama.cpp/Vulkan) — o caminho
   // que funciona na RX470 quando o WebLLM nao carrega.
   onOpenLlama?: () => void;
+  // ★ v1.9.11: modo activo (vem do Home — o estado real, sem detecção
+  // nova). Em nuvem, a Meggy responde pela IA do servidor e o motor
+  // local, mesmo a correr, não é usado — é isto que o banner explica.
+  activeMode?: "local" | "cloud" | "llama";
 }
 
 interface ModelStatus {
@@ -45,7 +49,7 @@ const initialStatus: ModelStatus = {
   errorMsg: null,
 };
 
-export default function AIInstallPopup({ onClose, onChooseLocal, onChooseCloud, onOpenLlama }: AIInstallPopupProps) {
+export default function AIInstallPopup({ onClose, onChooseLocal, onChooseCloud, onOpenLlama, activeMode }: AIInstallPopupProps) {
   const [webgpuOk, setWebgpuOk] = useState<boolean | null>(null);
   // Per-model status: keyed by model id
   const [statuses, setStatuses] = useState<Record<string, ModelStatus>>({});
@@ -228,6 +232,28 @@ export default function AIInstallPopup({ onClose, onChooseLocal, onChooseCloud, 
             Baixe um modelo de IA uma vez e use para sempre. Sem internet, sem login, respostas em segundos direto no seu computador.
           </p>
         </div>
+
+        {/* ★ v1.9.11: modo activo — diz qual motor responde agora. Em nuvem,
+            a Meggy responde pela IA do servidor; o motor local, mesmo a
+            correr, não é usado neste modo. */}
+        {activeMode && (
+          <div style={{
+            padding: "12px 14px",
+            background: activeMode === "cloud" ? "rgba(93,222,218,0.06)" : "rgba(255,139,159,0.08)",
+            border: activeMode === "cloud" ? "1px solid rgba(93,222,218,0.2)" : "1px solid rgba(255,139,159,0.25)",
+            borderRadius: "10px",
+            marginBottom: "20px",
+            fontSize: "13px",
+            lineHeight: 1.5,
+            color: "var(--text)",
+          }}>
+            {activeMode === "cloud"
+              ? "☁️ Modo activo: IA da Nuvem — a Meggy responde pela IA do servidor. O motor local (WebLLM / llama.cpp), mesmo a correr, não é usado neste modo."
+              : activeMode === "local"
+                ? "⚡ Modo activo: WebLLM (local) — a Meggy responde pelo modelo no teu computador."
+                : "🦙 Modo activo: llama.cpp (local) — a Meggy responde pelo servidor local (llama-server, porta 8082)."}
+          </div>
+        )}
 
         {/* WebGPU not available */}
         {webgpuOk === false && (

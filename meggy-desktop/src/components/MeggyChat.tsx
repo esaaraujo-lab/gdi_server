@@ -6,7 +6,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { aiGenerate } from "../lib/api";
-import { localChat, checkWebGPU } from "../lib/local-ai";
+import { localChat, checkWebGPU, isModelLoaded } from "../lib/local-ai";
 import { llamaChat } from "../lib/llama-bridge";
 
 interface MeggyChatProps {
@@ -92,28 +92,30 @@ export default function MeggyChat({ onClose, aiMode, localAiReady }: MeggyChatPr
     try {
       let response = "";
 
-      // Try llama.cpp first if enabled
-      if (aiMode === "llama") {
+      // ★ v1.9.11: roteamento automático do chat — LOCAL PRIMEIRO (llama-server
+      // se estiver a correr, senão WebLLM); se o local falhar, cai para a nuvem.
+      // Já não segue o aiMode global para a ordem das tentativas: o aiMode
+      // governa o modo apresentado e o padrão de arranque, não o caminho do chat.
+      // 1. llama.cpp — falha rápido se o servidor não estiver a correr.
+      try {
         const r = await llamaChat(msg, SYSTEM_PROMPT);
         if (r.ok && r.text) {
           response = r.text;
-        } else {
-          // Fallback to cloud
-          response = await aiGenerate(msg, "resumo");
         }
-      } else if (aiMode === "local" && localAiReady && checkWebGPU()) {
+      } catch (_) { /* cai para o WebLLM / nuvem */ }
+      // 2. WebLLM — só usa o motor se já estiver carregado em memória, ou se o
+      // utilizador escolheu explicitamente o modo local (não carrega um modelo
+      // pesado só porque o chat foi aberto em modo nuvem).
+      if (!response && checkWebGPU() && (isModelLoaded() || (aiMode === "local" && localAiReady))) {
         try {
           const r = await localChat(msg, { maxTokens: 2048, temperature: 0.7, systemPrompt: SYSTEM_PROMPT });
           if (r.ok && r.text && r.text.length > 20) {
             response = r.text;
-          } else {
-            response = await aiGenerate(msg, "resumo");
           }
-        } catch (_) {
-          response = await aiGenerate(msg, "resumo");
-        }
-      } else {
-        // Cloud
+        } catch (_) { /* cai para a nuvem */ }
+      }
+      // 3. Nuvem — sempre há resposta (ou o erro amigo da 1.9.10).
+      if (!response) {
         response = await aiGenerate(msg, "resumo");
       }
 
@@ -160,11 +162,14 @@ export default function MeggyChat({ onClose, aiMode, localAiReady }: MeggyChatPr
         background: "linear-gradient(135deg, rgba(255,139,159,0.08), rgba(192,38,211,0.05))",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <span style={{ fontSize: "24px" }}>🐩</span>
+          {/* ★ v1.9.11: cara verdadeira da Meggy (meggy-fab-dark.webp — o app é tema escuro), no lugar do 🐩. */}
+          <img src="/meggy-fab-dark.webp" alt="Meggy" style={{ width: "24px", height: "24px", borderRadius: "50%" }} />
           <div>
             <div style={{ color: "var(--pink)", fontWeight: 700, fontSize: "15px" }}>Meggy AI</div>
             <div style={{ color: "var(--text-muted)", fontSize: "11px" }}>
-              {aiMode === "local" ? "WebLLM" : aiMode === "llama" ? "llama.cpp" : "Nuvem"}
+              {/* ★ v1.9.11: diz qual motor responde — em nuvem é o servidor,
+                  não o motor local (mesmo com o llama-server a correr). */}
+              {aiMode === "local" ? "WebLLM (local)" : aiMode === "llama" ? "llama.cpp (local · porta 8082)" : "IA da Nuvem — responde pelo servidor"}
             </div>
           </div>
         </div>

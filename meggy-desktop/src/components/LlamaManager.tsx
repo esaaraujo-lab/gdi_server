@@ -15,6 +15,7 @@ import {
   llamaStop,
   llamaChat,
   llamaListModels,
+  setLlamaModel,
   type LlamaStatus as LlamaStatusT,
   type LlamaBinaryInfo as BinaryInfoT,
   type GgufModel,
@@ -106,6 +107,8 @@ export default function LlamaManager({ onClose, onReady }: LlamaManagerProps) {
       const modelsDir = status?.models_dir || "";
       const modelPath = `${modelsDir}/${selectedModel}`;
       const msg = await llamaStart(modelPath, gpuLayers);
+      // ★ v1.9.11: guarda o modelo p/ o arranque automático (padrão llama).
+      setLlamaModel(selectedModel, gpuLayers);
       console.log(msg);
       setBusy(null);
       await refresh();
