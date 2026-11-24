@@ -31,7 +31,9 @@
         android:orientation="vertical">
 
         <!-- Área da imagem 16:9 -->
+        <!-- Ronda 27 — id p/ a altura da capa (16:9 da coluna, mín. 72dp). -->
         <FrameLayout
+            android:id="@+id/card_image_area"
             android:layout_width="match_parent"
             android:layout_height="@dimen/rail_card_image_height">
 
@@ -120,7 +122,9 @@
         </FrameLayout>
 
         <!-- Conteúdo abaixo da imagem -->
+        <!-- Ronda 27 — id p/ o fundo com cor fixa da área do nome. -->
         <LinearLayout
+            android:id="@+id/card_body"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
