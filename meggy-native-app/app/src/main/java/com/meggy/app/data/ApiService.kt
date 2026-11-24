@@ -20,7 +20,7 @@ import java.io.IOException
  * destino fica aberto e NUNCA faz bounce). Ver DIAGNOSIS R19A §4.
  *
  *  • [Ok] — listagem OK. Pode ser parcial: uma falha numa página > 0
- *    devolve o que já foi acumulado em vez de derrubar a tela.
+ *    retorna o que já foi acumulado em vez de derrubar a tela.
  *  • [SessionExpired] — HTTP 401/403 ou corpo HTML de login.
  *  • [Transient] — excepção de rede/timeout, outro não-2xx (ex.: 5xx),
  *    corpo nulo ou JSON inválido. NUNCA faz bounce.
@@ -48,7 +48,7 @@ sealed class FolderResult {
  *  • [VALID] — a sessão responde, ou o re-login silencioso resultou.
  *  • [INVALID] — sessão provada expirada E sem credenciais/re-login.
  *  • [UNKNOWN] — falha transitória (rede/timeout/5xx/quota): NÃO se
- *    sabe se a sessão é válida; nunca deve mandar o utilizador para o
+ *    sabe se a sessão é válida; nunca deve mandar o usuário para o
  *    login (era o defeito do Splash pré-R21: quota esgotada ou rede
  *    caída no arranque = bounce para o login com a sessão boa).
  */
@@ -93,14 +93,14 @@ class ApiService(private val context: Context) {
     // ★ v2.7.7 (diagnóstico listagem): pagina TODAS as páginas.
     // Antes: só page_index 0 / page_token null — qualquer pasta com mais
     // de 100 itens (pageSize do worker, files_list_page_size: 100) perdia
-    // o resto em silêncio, pastas inclusive. O worker devolve
+    // o resto em silêncio, pastas inclusive. O worker retorna
     // nextPageToken no TOPO do JSON (não dentro de data); a próxima
     // página usa esse token (page_index é só ecoado como curPageIndex).
     // Travas: no máximo `maxPages` páginas e parada se o token repetir.
-    // R19B (P1): falha na página 0 devolve um FolderResult tipado —
+    // R19B (P1): falha na página 0 retorna um FolderResult tipado —
     // SessionExpired (401/403 ou HTML de login) ou Transient (rede/
     // timeout, outro não-2xx, corpo nulo, JSON inválido). Falha numa
-    // página posterior devolve o que já foi acumulado (Ok parcial).
+    // página posterior retorna o que já foi acumulado (Ok parcial).
     suspend fun listFolder(fullPath: String, maxPages: Int = 20): FolderResult {
         // Ronda 13 Frente C — caminho por ID ("by-id:<folderId>"): a
         // listagem vai para o sandbox (POST /api/drive/by-id), nao
@@ -167,7 +167,7 @@ class ApiService(private val context: Context) {
                 val json = JSONObject(body)
                 // v2.7.11 — CAUSA RAIZ DO MONOGRAMA: o código antigo
                 // montava o FileItem À MÃO e descartava o thumbnailLink
-                // (o worker devolve thumbnailLink — fields pede o campo).
+                // (o worker retorna thumbnailLink — fields pede o campo).
                 // Sem thumb, launchPlayer() recebia null, addRecent()
                 // nunca gravava thumb nenhuma e o card caía no monograma.
                 // FileItem.fromJson() lê thumbnailLink + aplica o fallback
@@ -235,7 +235,7 @@ class ApiService(private val context: Context) {
      * R21 — totais REAIS de aulas por curso: GET /api/courses/unified
      * (a mesma fonte dos cartões da web desde a v2.15.44; o `total`
      * de cada item kind='course' é o nº de pastas de aula do curso
-     * no D1/fallback do worker). Devolve mapa chave normalizada →
+     * no D1/fallback do worker). Retorna mapa chave normalizada →
      * total (> 0), ou null em qualquer falha (rede/auth/rota) — os
      * chamadores mantêm a contagem local, nunca inventam números.
      * Cache de processo de 5 min, partilhado por todas as instâncias
@@ -282,9 +282,9 @@ class ApiService(private val context: Context) {
     /**
      * Ronda 13 Frente C — GET /api/admin-drives (SANDBOX, ver
      * [SANDBOX_BASE_URL]): drives do admin + os 16 fixos como
-     * registos geridos (a Home usa a resposta como fonte de verdade).
+     * registros gerenciados (a Home usa a resposta como fonte de verdade).
      * Best-effort e silencioso: null em qualquer falha — a Home cai
-     * para DriveItem.ALL e o ecra "Gerir drives" mostra "funcao
+     * para DriveItem.ALL e a tela "Gerenciar drives" mostra "funcao
      * indisponivel". O admin ve TODOS os drives que criou, em
      * qualquer APK (o filtro por targetApps e da Home).
      */
@@ -306,7 +306,7 @@ class ApiService(private val context: Context) {
      * subfolderCovers?} (SANDBOX, ver [SANDBOX_BASE_URL]). So
      * ADMIN_USERS no servidor (403 a nao-admins); erro legivel em
      * pt-BR. Re-adicionar o mesmo driveId faz upsert no servidor
-     * (actualiza sem duplicar).
+     * (atualiza sem duplicar).
      */
     suspend fun addAdminDrive(
         driveId: String,
@@ -330,12 +330,12 @@ class ApiService(private val context: Context) {
         }.toString()
         val (code, respBody) = sandboxCall("/api/admin/admin-drives/add", body)
         if (code == 0) return AdminDriveResult.Error(
-            "Não foi possível guardar. Verifique a conexão e tente novamente.")
+            "Não foi possível salvar. Verifique a conexão e tente novamente.")
         return adminPostResult(code, respBody)
     }
 
     /** Ronda 13 Frente C — POST /api/admin/admin-drives/delete {id}
-     * (SANDBOX). Apaga SO o registo D1 — nunca a pasta no Drive. */
+     * (SANDBOX). Apaga SO o registro D1 — nunca a pasta no Drive. */
     suspend fun deleteAdminDrive(id: Long): AdminDriveResult {
         val body = JSONObject().apply { put("id", id) }.toString()
         val (code, respBody) = sandboxCall("/api/admin/admin-drives/delete", body)
@@ -347,7 +347,7 @@ class ApiService(private val context: Context) {
     /**
      * Ronda 13 Frente C — POST /api/admin/admin-drives/update {id,
      * name?, targetApps?, coverUrl?, subCoverUrl?, subfolderCovers?}
-     * (SANDBOX; so ADMIN_USERS, 403 a nao-admins). O ecra "Gerir
+     * (SANDBOX; so ADMIN_USERS, 403 a nao-admins). A tela "Gerenciar
      * drives" manda TODOS os campos do formulario: capa / sub-capa
      * vazias vao como null JSON e LIMPAM a capa no servidor (o update
      * e parcial no servidor — so os campos presentes mudam).
@@ -382,12 +382,12 @@ class ApiService(private val context: Context) {
      * Ronda 13 Frente C — GET /api/me → {ok, user, isAdmin}: fonte de
      * verdade do papel de admin (SANDBOX, ver [SANDBOX_BASE_URL]).
      * Em 404/erro/rede, FALLBACK PROVISORIO VERIFICADO (nao
-     * inventado): o username guardado e exatamente o da sessao e o
+     * inventado): o username salvo e exatamente o da sessao e o
      * servidor so aceita como admin ADMIN_USERS =
      * ['elton@araujo.eu.org'] — username == esse email ⇒ admin. O
      * servidor continua a ser o executor: os POSTs admin dao 403 a
      * nao-admins, por isso o fallback so decide o que a UI MOSTRA.
-     * O resultado e guardado em SessionManager com o username a que
+     * O resultado e salvo em SessionManager com o username a que
      * diz respeito (revalidado quando o username muda).
      */
     suspend fun checkAdmin(): Boolean {
@@ -417,7 +417,7 @@ class ApiService(private val context: Context) {
     private fun adminPostResult(code: Int, body: String?): AdminDriveResult {
         if (code == 404) return AdminDriveResult.Unavailable
         if (code == 401) return AdminDriveResult.Error("Sessão expirada. Entre novamente.")
-        if (code == 403) return AdminDriveResult.Error("Só o administrador pode gerir drives.")
+        if (code == 403) return AdminDriveResult.Error("Só o administrador pode gerenciar drives.")
         if (code !in 200..299) {
             return AdminDriveResult.Error("Não foi possível concluir. Verifique a conexão e tente novamente.")
         }
@@ -447,7 +447,7 @@ class ApiService(private val context: Context) {
     }
 
     /**
-     * Login no sandbox com as credenciais guardadas (mesmo padrao do
+     * Login no sandbox com as credenciais salvas (mesmo padrao do
      * AiService.aiLogin; o cookie fica em aiSessionCookie). So quando
      * SANDBOX_BASE_URL != BASE_URL. Roda em Dispatchers.IO.
      */
@@ -522,7 +522,7 @@ class ApiService(private val context: Context) {
      * SessionExpired = sessao expirada, Transient = falha de rede/
      * servidor ou pasta inexistente; o chamador decide; 404 da pasta
      * vem como ok:false e cai em Transient, nunca em bounce). O `link`
-     * de cada ficheiro
+     * de cada arquivo
      * e cunhado pelo sandbox (ver fileBaseUrl no DetailActivity).
      */
     suspend fun listFolderById(folderId: String, maxPages: Int = 20): FolderResult {
@@ -654,7 +654,7 @@ class ApiService(private val context: Context) {
 
         /**
          * Ronda 13 Frente C — tira a base (producao ou sandbox) de
-         * uma URL de playback p/ guardar so o link
+         * uma URL de playback p/ salvar so o link
          * (/download.aspx?...). Null quando a URL nao e de nenhuma
          * das bases (ex.: externa).
          */
@@ -687,11 +687,11 @@ class ApiService(private val context: Context) {
         validateSession() == SessionCheck.VALID
 
     /**
-     * R21 — re-login directo com as credenciais guardadas, SEM o probe
+     * R21 — re-login direto com as credenciais salvas, SEM o probe
      * de listagem. Para chamadores que já sabem que a sessão expirou
      * (ex.: AuthHelper.listFolderWithRelogin, que acabou de receber um
      * SessionExpired): o probe antigo repetia uma ida à rede condenada
-     * antes de tentar o login. Devolve false sem credenciais guardadas.
+     * antes de tentar o login. Retorna false sem credenciais salvas.
      */
     suspend fun reLoginWithSavedCredentials(): Boolean {
         val user = sessionManager.username

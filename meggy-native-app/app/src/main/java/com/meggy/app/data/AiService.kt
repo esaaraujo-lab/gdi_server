@@ -84,7 +84,7 @@ object AiService {
         /** R23 — o job TERMINOU (v2.15.6 P9): o poll pára aqui, mesmo
          *  com 0 processados. `done` só é true com processed>0, por
          *  isso um job terminado sem nada gerado nunca o punha a
-         *  true e o poll girava até ao teto. */
+         *  true e o poll girava até o teto. */
         val finished: Boolean,
         val processed: Int,
         val total: Int,
@@ -110,9 +110,9 @@ object AiService {
      * qualquer 2xx de IA. Evita retentar em loop o que não existe.
      *
      * Frente R5A: um 404 de `load-from-folder` NÃO arma esta flag —
-     * "ficheiro guardado em falta" é o caso normal de um material
+     * "arquivo salvo em falta" é o caso normal de um material
      * nunca gerado, não "backend sem rotas" (ver [loadFromFolder]).
-     * Um retry explícito do utilizador limpa a flag antes de tentar
+     * Um retry explícito do usuário limpa a flag antes de tentar
      * de novo (ver [clearBackendUnavailable]).
      */
     /**
@@ -121,7 +121,7 @@ object AiService {
      * [clearBackendUnavailable] era o PdfReader: um 404 transitório
      * ou mal-atribuído no Detail/Player desligava a IA para o resto
      * da sessão do processo, sem forma de recuperar. Agora o latch
-     * expira sozinho passado o TTL (o getter devolve false) e volta
+     * expira sozinho passado o TTL (o getter retorna false) e volta
      * a armar-se se um 404 genuíno voltar. Leituras e escritas
      * existentes não mudam — só a semântica temporal.
      */
@@ -138,9 +138,9 @@ object AiService {
     private const val BACKEND_LATCH_TTL_MS = 10L * 60L * 1000L
 
     /**
-     * Frente R5A — saída do latch: um retry EXPLÍCITO do utilizador
+     * Frente R5A — saída do latch: um retry EXPLÍCITO do usuário
      * (novo toque em "✨ Resumo" / "Gerar novamente") limpa a flag
-     * antes de tentar de facto. A flag volta a armar-se sozinha se
+     * antes de tentar de fato. A flag volta a armar-se sozinha se
      * um 404 genuíno de rota de IA voltar (ver [runCall]). R21: além
      * do gesto, o latch também expira sozinho ao fim do TTL (ver
      * [backendUnavailable]) — continua sem polling.
@@ -178,7 +178,7 @@ object AiService {
     }
 
     /**
-     * Login no host de IA com as credenciais guardadas (mesmo formulário
+     * Login no host de IA com as credenciais salvas (mesmo formulário
      * do ApiService.login). Só quando AI_BASE_URL != BASE_URL: no mesmo
      * host, a sessão principal já é a certa (e o refresh dela é papel
      * do validateOrReLogin, não daqui). Grava o cookie em aiSessionCookie.
@@ -234,7 +234,7 @@ object AiService {
             MeggyApp.okHttpClient.newCall(request).execute().use { response ->
                 val code = response.code
                 // Frente R5A: só um 404 de rota de IA genuína arma o
-                // latch. Um 404 de `load-from-folder` (ficheiro em
+                // latch. Um 404 de `load-from-folder` (arquivo em
                 // falta — o caso normal) passa latchOn404=false e
                 // nunca arma a flag.
                 if (code == 404 && latchOn404) backendUnavailable = true
@@ -284,11 +284,11 @@ object AiService {
 
     /**
      * R22 — lê um campo de texto que pode vir com null JSON.
-     * No Android, JSONObject.optString() devolve a STRING "null"
+     * No Android, JSONObject.optString() retorna a STRING "null"
      * quando o campo está presente com valor null (o JSONObject.NULL
      * é convertido por toString) — foi assim que um pacote ISA só
      * com resumo (mindmap/questions a null no servidor) virou a
-     * pílula literal "null" no ecrã. Este helper trata null JSON,
+     * pílula literal "null" na tela. Este helper trata null JSON,
      * vazio e a string "null" como ausência. (O campo `questions`
      * já tinha a guarda isNull; summary/mindmap não tinham.)
      */
@@ -303,7 +303,7 @@ object AiService {
      * (uma chave `<courseKey>/<pdfName>` do cache ISA): o resumo
      * (`summary`, Markdown), as pilulas (`mindmap`, Markdown em
      * bullets) e as questoes (`questions`, array JSON — ou texto,
-     * conforme o worker as guardou). Qualquer campo pode ser null
+     * conforme o worker as salvou). Qualquer campo pode ser null
      * (o batalhao pode ter gerado so parte dos tres). O cache ISA
      * e a fonte partilhada no servidor; a pasta de materiais no
      * Drive (ver MaterialSaver, no pacote `util` de cada app)
@@ -331,7 +331,7 @@ object AiService {
      * Retorna null quando nao ha nada gerado (ou erro / backend
      * sem a rota). O `summary` continua a ser o que decide
      * "pronto" (ver LessonDescription) — as pilulas/questoes
-     * viajam junto no pacote para serem guardadas na pasta de
+     * viajam junto no pacote para serem salvas na pasta de
      * materiais.
      */
     suspend fun getGeneratedBundle(context: Context, key: String): GeneratedBundle? {
@@ -415,12 +415,12 @@ object AiService {
     /**
      * R23 — 4.ª fonte de questões: o banco unificado por aula.
      * GET /api/ai/question-bank/by-lesson?coursePath=&lessonName=
-     * (item de worker especificado na R22 §2: devolve as questões
+     * (item de worker especificado na R22 §2: retorna as questões
      * do banco cuja proveniência — coursePath + lessonName,
      * gravada no upsert — casa com a aula, no formato do
      * batalhão). A resposta pode vir como array nu `[...]` ou
-     * como objeto `{ok:true, questions:[...]}`; devolve-se a
-     * string do array, que os parsers actuais lêem sem mudança.
+     * como objeto `{ok:true, questions:[...]}`; retorna-se a
+     * string do array, que os parsers actuais leem sem mudança.
      * latchOn404=false: a rota pode ainda não existir no worker
      * (404 = "rota por construir", não "backend sem IA") — um
      * 404 aqui NUNCA arma [backendUnavailable]. Null = sem
@@ -464,7 +464,7 @@ object AiService {
      * Frente R14B — enfileira a geração automática ao PLAY
      * (POST /api/generation/enqueue — contrato da Frente R14C, que
      * implementa a rota no worker; codificado contra o contrato).
-     * Corpo: lessonPath (pasta da aula), videoPath (ficheiro do
+     * Corpo: lessonPath (pasta da aula), videoPath (arquivo do
      * vídeo), courseKey (pasta do curso = pai da pasta da aula),
      * source "play". Resposta: ok + status queued, exists, running
      * ou done. A idempotência é do servidor; o chamador (Player)
@@ -569,7 +569,7 @@ object AiService {
      * Lê o resumo da pasta da aula (`.gdi-resumos/`, discovery: o
      * arquivo mais recente do tipo). Retorna o conteúdo ou null.
      *
-     * Frente R5A: um 404 aqui (ficheiro em falta — o caso normal de
+     * Frente R5A: um 404 aqui (arquivo em falta — o caso normal de
      * um material nunca gerado) NÃO arma [backendUnavailable]: a
      * chamada passa latchOn404=false. Só as rotas de IA genuínas
      * (POST /api/ai, /api/ai/ocr, /api/ai/summaries POST,
@@ -584,7 +584,7 @@ object AiService {
         val path = "/api/materials/load-from-folder" +
             "?lessonPath=${URLEncoder.encode(lessonPath, "UTF-8")}" +
             "&materialType=${URLEncoder.encode(materialType, "UTF-8")}"
-        // Frente R5A: 404 = "ficheiro em falta", não "backend sem
+        // Frente R5A: 404 = "arquivo em falta", não "backend sem
         // rotas" — nunca arma backendUnavailable (ver runCall).
         val res = get(context, path, latchOn404 = false)
         if (res.code != 200) return null
@@ -670,7 +670,7 @@ object AiService {
     /**
      * Gera um resumo (Markdown) a partir do `prompt` completo
      * (prompt rico da web + texto do PDF — ver PdfReaderActivity).
-     * Síncrono: o /api/ai devolve o texto na resposta (ao contrário
+     * Síncrono: o /api/ai retorna o texto na resposta (ao contrário
      * do batalhão, que é um job assíncrono por curso — pesado demais
      * para um botão no leitor e sem courseKey conhecida aqui).
      */
@@ -699,8 +699,8 @@ object AiService {
     /**
      * OCR de uma página do PDF renderizada (JPEG em base64).
      * POST /api/ai/ocr — o worker aceita base64 puro ou data-URL
-     * (14092) e devolve {ok, response} com o texto transcrito.
-     * Devolve o texto ou null (falha / sem texto na página).
+     * (14092) e retorna {ok, response} com o texto transcrito.
+     * Retorna o texto ou null (falha / sem texto na página).
      */
     suspend fun ocrPageImage(
         context: Context,

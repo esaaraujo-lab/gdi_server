@@ -225,7 +225,7 @@ data class HeroItem(
     val icon: String,             // emoji shown in hero corner
     val colorHint: String? = null, // optional colorFromString hint
     // v2.7.11 onda 2 — (a) foto de capa definida pelo admin no
-    // curso em destaque (a API de featured passa a devolver
+    // curso em destaque (a API de featured passa a retornar
     // `cover_url`). Null quando ausente (parse defensivo).
     val coverUrl: String? = null
 ) {
@@ -237,7 +237,7 @@ data class HeroItem(
          */
         /**
          * v2.7.11 onda 2 — parse defensivo da API de cursos em
-         * destaque (o backend passa a devolver `cover_url` — foto
+         * destaque (o backend passa a retornar `cover_url` — foto
          * de capa definida pelo admin). O app AINDA não tem endpoint
          * de featured (os destaques hoje são a lista curada [ALL]);
          * quando a API existir, este parse alimenta o hero com
@@ -325,7 +325,7 @@ data class HeroItem(
 // ──────────────────────────── 2.7.11 onda 2: cursos em destaque ────────────────────────────
 
 /**
- * Um curso em destaque do admin (D1 featured_courses), devolvido por
+ * Um curso em destaque do admin (D1 featured_courses), retornado por
  * GET /api/featured-courses → {ok, courses:[{id, coursePath,
  * courseName, icon, color, sortOrder, addedAt, cover_url}]}.
  * A rota existe no worker v2 (handleFeaturedList); a v2.15.6
@@ -341,7 +341,7 @@ data class FeaturedCourse(
     val icon: String?,
     val color: String?,
     val sortOrder: Int,
-    /** Onda 2 (a) — foto de capa do admin. Null quando o backend ainda não a devolve. */
+    /** Onda 2 (a) — foto de capa do admin. Null quando o backend ainda não a retorna. */
     val coverUrl: String?
 ) {
     companion object {
@@ -381,17 +381,17 @@ data class FeaturedCourse(
  * targetApps:["meggy"|"bibi"|"vovo"], coverUrl, subCoverUrl,
  * subfolderCovers:{path: url}, source, rootIndex}]}.
  *
- * Ronda 13 Frente C — `source` ('hardcoded' = registo do seed dos 16
+ * Ronda 13 Frente C — `source` ('hardcoded' = registro do seed dos 16
  * drives fixos; 'admin' = adicionado pelo admin) e `rootIndex`
  * (indice canonico 0–15, so no seed): a Home usa-os p/ casar o
- * registo gerido com o DriveItem fixo do mesmo indice (ver
+ * registro gerenciado com o DriveItem fixo do mesmo indice (ver
  * HomeActivity.buildDriveRailItems).
  *
  * Parse defensivo (mesmo padrão de FeaturedCourse.fromJson): aceita
  * snake_case e camelCase, campos ausentes → null/vazio, valores de
  * targetApps fora do vocabulário são descartados. "Capa" = imagem do
  * tile na Home; "sub-capa" = hero do detalhe (a Frente C usa estes
- * campos; esta frente só os guarda e os mostra no formulário).
+ * campos; esta frente só os salva e os mostra no formulário).
  */
 data class AdminDrive(
     val id: Long,
@@ -401,9 +401,9 @@ data class AdminDrive(
     val coverUrl: String?,
     val subCoverUrl: String?,
     val subfolderCovers: Map<String, String>,
-    // Ronda 13 Frente C — origem do registo + indice canonico (ver
+    // Ronda 13 Frente C — origem do registro + indice canonico (ver
     // KDoc acima). Defaults p/ nao quebrar os parse/construtores
-    // antigos: sem os campos, o registo e tratado como do admin.
+    // antigos: sem os campos, o registro e tratado como do admin.
     val source: String = "admin",
     val rootIndex: Int? = null
 ) {
@@ -413,7 +413,7 @@ data class AdminDrive(
         const val TARGET_VOVO = "vovo"
         val ALL_TARGETS = listOf(TARGET_MEGGY, TARGET_BIBI, TARGET_VOVO)
 
-        /** APK de destino correspondente ao package do app que está a correr. */
+        /** APK de destino correspondente ao package do app que está rodando. */
         fun targetForPackage(packageName: String): String = when (packageName) {
             "com.meggy.app" -> TARGET_MEGGY
             "com.bibigyn.app" -> TARGET_BIBI
@@ -472,10 +472,10 @@ data class AdminDrive(
         }
     }
 
-    /** Este registo veio do seed dos 16 drives fixos (não de um add do admin). */
+    /** Este registro veio do seed dos 16 drives fixos (não de um add do admin). */
     val isHardcoded: Boolean get() = source == "hardcoded"
 
-    /** Este drive tem como destino o app que está a correr? */
+    /** Este drive tem como destino o app que está rodando? */
     fun targets(packageName: String): Boolean =
         targetApps.contains(targetForPackage(packageName))
 
