@@ -95,6 +95,9 @@
     <color name="tile_scrim_top">#66000000</color>
     <color name="tile_scrim_bottom">#F00D0E12</color>
     <color name="tile_focus_ring">#FFFF8B9F</color>
+    <!-- Ronda 27 — anel de foco branco p/ Tiles de pasta com cor fixa
+         (o rosa dá 3,6–4,5:1 sobre a paleta; o branco dá 8,0–10,8:1). -->
+    <color name="tile_focus_ring_white">#FFFFFFFF</color>
     <color name="tile_focus_halo">#33FF8B9F</color>
     <color name="tile_title">#FFFFFFFF</color>
     <color name="tile_subtitle">#FFB9BEC9</color>
