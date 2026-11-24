@@ -64,6 +64,11 @@
 
     <!-- ── Cards · celular ── -->
     <dimen name="rail_card_width">168dp</dimen>
+    <!-- R26 — cartão do destaque (rail horizontal): 320dp para o
+         próximo cartão espreitar (telas de 360–430dp) sem espremer
+         o texto (thumb 112dp + texto); o rail_card_width (168dp)
+         não cabe no cartão horizontal do destaque. -->
+    <dimen name="featured_card_width">320dp</dimen>
     <dimen name="rail_card_image_height">94dp</dimen>
     <dimen name="drive_card_width">128dp</dimen>
     <dimen name="drive_card_height">210dp</dimen>
