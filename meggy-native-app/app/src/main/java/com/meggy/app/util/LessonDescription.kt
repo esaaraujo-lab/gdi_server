@@ -393,6 +393,67 @@ object LessonDescription {
     }
 
     /**
+     * R23 — pacote resumo-só: resumo existe, pílulas E questões
+     * em falta. É o caso que contava como "feito" (o job tem
+     * processed>0 → done=true) e escondia as partes em falta.
+     */
+    fun isSummaryOnly(bundle: AiService.GeneratedBundle?): Boolean {
+        if (bundle == null) return false
+        return !bundle.summary.isNullOrBlank() &&
+            bundle.mindmap.isNullOrBlank() &&
+            bundle.questionsJson.isNullOrBlank()
+    }
+
+    /** R23 — o job terminou e não volta a gerar por este job. */
+    fun isJobOver(status: AiService.BattalionStatus?): Boolean {
+        val job = status?.job ?: return false
+        return job.finished || job.done
+    }
+
+    /** R23 — constrói o Partial a partir do pacote + status. */
+    private fun toPartial(
+        bundle: AiService.GeneratedBundle,
+        status: AiService.BattalionStatus?
+    ): Outcome.Partial {
+        return Outcome.Partial(
+            bundle = bundle,
+            questionsOutdated = bundle.outdated,
+            jobError = status?.job?.error
+        )
+    }
+
+    /**
+     * R23 — 4.ª fonte de questões: o banco unificado, por aula
+     * (GET /api/ai/question-bank/by-lesson). Sonda as variantes
+     * de chave como a web faz — a proveniência gravada no upsert
+     * (coursePath + lessonName) varia com quem gerou: a app usa
+     * a pasta DA AULA como coursePath e o nome da pasta como
+     * lessonName; a web, o caminho do CURSO e o nome do material.
+     * A primeira variante com questões ganha; sem nenhuma, null
+     * (o banco não tem nada p/ esta aula — ou a rota ainda não
+     * existe no worker). Só questões: o banco não tem pílulas.
+     */
+    suspend fun fetchBankQuestions(
+        context: Context,
+        folderPath: String,
+        folderName: String,
+        materialNames: List<String>
+    ): String? {
+        val materialName = materialNames.firstOrNull()
+        val variants = listOf(
+            folderPath to folderName,
+            parentPath(folderPath) to folderName,
+            parentPath(folderPath) to (materialName ?: ""),
+            folderPath to (materialName ?: "")
+        ).distinct().filter { it.first.isNotBlank() && it.second.isNotBlank() }
+        for ((coursePath, lessonName) in variants) {
+            val found = AiService.getQuestionsByLesson(context, coursePath, lessonName)
+            if (!found.isNullOrBlank()) return found
+        }
+        return null
+    }
+
+    /**
      * Nome do arquivo para gravar um material na pasta da aula
      * (`<usuario>_<Aula>.<ext>` — o padrao da web). Frente K: a
      * extensao varia por tipo (resumo e pilulas: `md`; questoes:
@@ -415,6 +476,31 @@ object LessonDescription {
          * so precisam dele (o resumo continua a decidir "pronto").
          */
         data class Ready(val bundle: AiService.GeneratedBundle) : Outcome() {
+            val text: String get() = bundle.summary.orEmpty()
+        }
+
+        /**
+         * R23 — pacote PARCIAL: o resumo existe mas faltam pílulas
+         * e/ou questões, e o job do batalhão JÁ TERMINOU (finished
+         * ou done) — por este job não chega mais nada. NÃO é Ready:
+         * o resumo-só contava como "feito" (processed>0 → done) e
+         * escondia as partes em falta e os botões Gerar. Aqui o
+         * resumo mostra-se, os botões Gerar das abas em falta
+         * mantêm-se, e o motivo real por parte viaja junto:
+         * `questionsOutdated` (o servidor marcou o pacote como
+         * desatualizado — o batalhão pula as questões quando o
+         * material cita lei revogada) e/ou `jobError` (o erro
+         * terminal do job, texto do servidor). Sem nenhum dos dois,
+         * o motivo é só "não gerado" — nada é inventado.
+         * Regenerar só o que falta exige o `onlyMissing` do worker
+         * (ainda por construir); até lá, o Gerar volta a verificar
+         * e mostra o motivo.
+         */
+        data class Partial(
+            val bundle: AiService.GeneratedBundle,
+            val questionsOutdated: Boolean,
+            val jobError: String?
+        ) : Outcome() {
             val text: String get() = bundle.summary.orEmpty()
         }
 
@@ -449,9 +535,22 @@ object LessonDescription {
         return try {
             val materialNames = files.filter { it.isPdf || it.isMarkdown }.map { it.name }
             val filePath = lessonFilePath(folderPath, files)
+            val courseKey = folderPath
             // 1) Já gerado?
             val existing = fetchGenerated(context, folderPath, materialNames, filePath)
-            if (existing != null && !existing.summary.isNullOrBlank()) return Outcome.Ready(existing)
+            if (existing != null && !existing.summary.isNullOrBlank()) {
+                // R23 — resumo-só NUNCA é Ready: se o job já terminou,
+                // as partes em falta não chegam por este job (Partial,
+                // com o motivo real); se ainda corre, espera-se pelo
+                // resto no poll, sem re-disparar o batalhão.
+                if (!isSummaryOnly(existing)) return Outcome.Ready(existing)
+                val status = AiService.getBattalionStatus(context, courseKey)
+                if (isJobOver(status)) return toPartial(existing, status)
+                return pollForCompletion(
+                    context, folderPath, materialNames, filePath,
+                    courseKey, maxPollAttempts, pollDelayMs
+                )
+            }
             if (AiService.backendUnavailable) return Outcome.Unavailable
 
             // 2) Texto-fonte (MD primeiro, senão PDF).
@@ -461,7 +560,6 @@ object LessonDescription {
             }
 
             // 3) Gatilho (com as guardas do worker: concluído/rodando).
-            val courseKey = folderPath
             when (
                 AiService.startBattalion(
                     context, courseKey, folderPath, folderName,
@@ -475,33 +573,69 @@ object LessonDescription {
                 AiService.TriggerResult.ALREADY_DONE -> {
                     // Job já concluído: o resumo deve estar no cache.
                     val again = fetchGenerated(context, folderPath, materialNames, filePath)
-                    return if (again != null && !again.summary.isNullOrBlank()) Outcome.Ready(again) else Outcome.Failed
+                    if (again == null || again.summary.isNullOrBlank()) return Outcome.Failed
+                    if (!isSummaryOnly(again)) return Outcome.Ready(again)
+                    val status = AiService.getBattalionStatus(context, courseKey)
+                    return if (isJobOver(status)) toPartial(again, status) else Outcome.Generating
                 }
                 AiService.TriggerResult.RUNNING,
                 AiService.TriggerResult.STARTED -> {
                     // 4) Poll limitado: tenta a leitura a cada 30 s.
-                    repeat(maxPollAttempts) {
-                        delay(pollDelayMs)
-                        val found = fetchGenerated(context, folderPath, materialNames, filePath)
-                        if (found != null && !found.summary.isNullOrBlank()) return Outcome.Ready(found)
-                        val status = AiService.getBattalionStatus(context, courseKey)
-                        val skippedNoText = status?.job?.skipped
-                            ?.any { it.reason == "no_text" } == true
-                        if (skippedNoText) {
-                            return Outcome.NoMaterial(NoMaterialReason.SCANNED_PDF)
-                        }
-                        if (status?.job?.done == true) {
-                            val last = fetchGenerated(context, folderPath, materialNames, filePath)
-                            return if (last != null && !last.summary.isNullOrBlank()) Outcome.Ready(last) else Outcome.Failed
-                        }
-                        if (AiService.backendUnavailable) return Outcome.Unavailable
-                    }
-                    return Outcome.Generating
+                    return pollForCompletion(
+                        context, folderPath, materialNames, filePath,
+                        courseKey, maxPollAttempts, pollDelayMs
+                    )
                 }
             }
         } catch (_: Exception) {
             Outcome.Failed
         }
+    }
+
+    /**
+     * R23 — poll honesto, extraído do [ensureDescription] (o mesmo
+     * loop, agora partilhado pelo caminho "já existe resumo-só" e
+     * pelo caminho "disparou agora"). Pára quando o job TERMINOU
+     * (`job.finished==true`, ou o `done` antigo): terminado com
+     * pacote resumo-só devolve [Outcome.Partial] (não Ready nem
+     * Failed); terminado sem nada devolve [Outcome.Failed].
+     * Enquanto o job corre, continua a esperar. Esgotado o teto
+     * sem o job terminar → [Outcome.Generating].
+     */
+    private suspend fun pollForCompletion(
+        context: Context,
+        folderPath: String,
+        materialNames: List<String>,
+        lessonFilePath: String?,
+        courseKey: String,
+        maxPollAttempts: Int,
+        pollDelayMs: Long
+    ): Outcome {
+        repeat(maxPollAttempts) {
+            delay(pollDelayMs)
+            val found = fetchGenerated(context, folderPath, materialNames, lessonFilePath)
+            if (found != null && !found.summary.isNullOrBlank()) {
+                if (!isSummaryOnly(found)) return Outcome.Ready(found)
+                val status = AiService.getBattalionStatus(context, courseKey)
+                if (isJobOver(status)) return toPartial(found, status)
+            } else {
+                val status = AiService.getBattalionStatus(context, courseKey)
+                val skippedNoText = status?.job?.skipped
+                    ?.any { it.reason == "no_text" } == true
+                if (skippedNoText) {
+                    return Outcome.NoMaterial(NoMaterialReason.SCANNED_PDF)
+                }
+                if (isJobOver(status)) {
+                    val last = fetchGenerated(context, folderPath, materialNames, lessonFilePath)
+                    if (last != null && !last.summary.isNullOrBlank()) {
+                        return if (isSummaryOnly(last)) toPartial(last, status) else Outcome.Ready(last)
+                    }
+                    return Outcome.Failed
+                }
+                if (AiService.backendUnavailable) return Outcome.Unavailable
+            }
+        }
+        return Outcome.Generating
     }
 
     /**
@@ -531,7 +665,10 @@ object LessonDescription {
             is AiService.PdfSummaryResult.Ok -> {
                 val keyName = materialNames.firstOrNull() ?: source.name
                 AiService.saveSummary(context, "$folderPath/$keyName", r.text, folderName)
-                Outcome.Ready(AiService.GeneratedBundle(r.text, null, null))
+                // R23 — o fallback directo só gera o RESUMO: é um
+                // pacote parcial por construção, nunca Ready (sem
+                // motivo conhecido p/ as partes em falta).
+                Outcome.Partial(AiService.GeneratedBundle(r.text, null, null), false, null)
             }
             else -> Outcome.Failed
         }
@@ -541,6 +678,12 @@ object LessonDescription {
      * Atalho para a pré-geração: dispara o batalhão para a aula e
      * devolve o texto se já estiver pronto (sem poll longo — a fila
      * não espera a geração terminar; a próxima abertura lê do cache).
+     * R23 — o Ready resumo-só MANTÉM-SE aqui, de propósito: isto é
+     * pré-geração em fundo, não o sinal de "geração completa" — o
+     * chamador (player) só grava o pacote na pasta de materiais e
+     * refresca as abas a partir dos dados reais, e os botões Gerar
+     * por aba continuam a depender do conteúdo real, não do Outcome.
+     * O "nunca Ready resumo-só" vale p/ o [ensureDescription].
      */
     suspend fun triggerOnly(
         context: Context,
