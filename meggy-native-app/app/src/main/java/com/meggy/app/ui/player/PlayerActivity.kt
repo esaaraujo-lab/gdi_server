@@ -2537,7 +2537,7 @@ class PlayerActivity : AppCompatActivity() {
      * supertipo comum (Outcome) e `bundle`/`text` deixam de
      * resolver (ver DetailActivity.applyGeneratedOutcome).
      */
-    private fun saveGeneratedMaterials(
+    private suspend fun saveGeneratedMaterials(
         folderPath: String,
         files: List<FileItem>,
         folderName: String,
