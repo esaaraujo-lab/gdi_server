@@ -160,6 +160,18 @@ class DetailActivity : AppCompatActivity() {
     private var qfFlashcards: List<DetailFlashcard> = emptyList()
     private var qfQuestionsList: LinearLayout? = null
     private var qfFlashcardsList: LinearLayout? = null
+    // R23 — motivo real das questões em falta, por parte (nunca
+    // inventado): `qfQuestionsOutdated` = o servidor marcou o pacote
+    // como desatualizado (batalhão pula as questões quando o material
+    // cita lei revogada); `qfJobError` = o erro terminal do job do
+    // batalhão (texto do servidor). Vêm do Outcome.Partial e da
+    // leitura do pacote em loadQuestionsFlashcards.
+    private var qfQuestionsOutdated: Boolean = false
+    private var qfJobError: String? = null
+    // R23 — recheck limitado depois de Generating (ver onResume):
+    // no máx. 3 re-verificações por aula, com ≥30 s entre elas.
+    private var descriptionRecheckCount: Int = 0
+    private var descriptionRecheckLastMs: Long = 0L
     private var lessonGroups: List<LessonGroup> = emptyList()
     private var allFiles: List<FileItem> = emptyList()
     private var currentTab: Tab = Tab.LESSONS
@@ -569,7 +581,60 @@ class DetailActivity : AppCompatActivity() {
             savedScrollY = 0
             binding.detailScroll.post { binding.detailScroll.scrollTo(0, y) }
         }
+        // R23 — recheck limitado depois de Generating: a geração
+        // ficou a correr quando o poll de 3 min esgotou e o
+        // utilizador voltou ao 1.º plano — uma re-verificação LEVE
+        // (só leitura do pacote + status, sem re-disparar o
+        // batalhão), no máx. 3× por aula e com ≥30 s entre elas.
+        // Sem loop: gerações lentas aparecem sem reabrir a aula;
+        // esgotado o orçamento, fica como está até à próxima
+        // abertura (que relança o fluxo completo).
+        if (descriptionGenerating && descriptionRecheckCount < 3 &&
+            System.currentTimeMillis() - descriptionRecheckLastMs >= 30_000L
+        ) {
+            descriptionRecheckCount++
+            descriptionRecheckLastMs = System.currentTimeMillis()
+            lifecycleScope.launch { recheckDescription() }
+        }
         isFirstResume = false
+    }
+
+    /**
+     * R23 — re-verificação leve da geração em curso (ver onResume):
+     * lê o pacote gerado; se chegou completo, mostra o resumo e
+     * recarrega as abas; se chegou parcial E o job terminou, aplica
+     * o estado Partial (resumo + motivo por parte); se o job ainda
+     * corre (ou nada chegou), mantém o estado "a gerar" sem tocar
+     * em nada. Nunca dispara o batalhão nem lança exceção.
+     */
+    private suspend fun recheckDescription() {
+        if (!descriptionGenerating) return
+        if (!LessonDescription.isLessonFolder(allFiles)) return
+        try {
+            val materialNames = allFiles.filter { it.isPdf || it.isMarkdown }.map { it.name }
+            val filePath = LessonDescription.lessonFilePath(currentPath, allFiles)
+            val bundle = LessonDescription.fetchGenerated(
+                this, currentPath, materialNames, filePath
+            )
+            if (bundle == null || bundle.summary.isNullOrBlank()) return
+            if (!LessonDescription.isSummaryOnly(bundle)) {
+                descriptionGenerating = false
+                SessionManager.get(this).saveLessonDescription(currentPath, bundle.summary)
+                showDescription(bundle.summary, getString(R.string.summary_state_generated), generated = true)
+                loadQuestionsFlashcards(allFiles)
+                return
+            }
+            val status = AiService.getBattalionStatus(this, currentPath)
+            if (!LessonDescription.isJobOver(status)) return
+            descriptionGenerating = false
+            qfQuestionsOutdated = bundle.outdated
+            qfJobError = status?.job?.error
+            SessionManager.get(this).saveLessonDescription(currentPath, bundle.summary)
+            showDescription(bundle.summary, getString(R.string.summary_state_generated), generated = true)
+            loadQuestionsFlashcards(allFiles, jobError = qfJobError)
+        } catch (_: Exception) {
+            // Silencioso: a próxima abertura tenta de novo.
+        }
     }
 
     override fun onDestroy() {
@@ -963,6 +1028,11 @@ class DetailActivity : AppCompatActivity() {
         // 2.7.41 (P1-6) — nova pasta, novo estado: a geração anterior
         // não vale para esta aula (o outcome do poll repõe a flag).
         descriptionGenerating = false
+        // R23 — idem p/ o motivo das partes em falta (repõe-se aqui;
+        // o outcome Partial volta a pô-lo, se for o caso).
+        qfQuestionsOutdated = false
+        qfJobError = null
+        descriptionRecheckCount = 0
         val sm = SessionManager.get(this)
         // (a) Cache local — instantâneo ("abre na hora da próxima vez").
         val cached = sm.getLessonDescription(currentPath)
@@ -1010,24 +1080,10 @@ class DetailActivity : AppCompatActivity() {
                 this@DetailActivity, currentPath, folderName, files
             )) {
                 is LessonDescription.Outcome.Ready -> {
-                    descriptionGenerating = false
-                    sm.saveLessonDescription(currentPath, outcome.text)
-                    // Frente K — grava resumo + pilulas + questoes na
-                    // pasta de materiais (UM caminho: MaterialSaver).
-                    val filePath = LessonDescription.lessonFilePath(currentPath, files)
-                    if (filePath != null) {
-                        MaterialSaver.saveGenerated(
-                            this@DetailActivity, filePath, folderName,
-                            outcome.bundle.summary, outcome.bundle.mindmap,
-                            outcome.bundle.questionsJson
-                        )
-                    }
-                    showDescription(outcome.text, getString(R.string.summary_state_generated), generated = true)
-                    // R22 — as questões/pílulas foram carregadas UMA
-                    // vez na abertura (antes da geração terminar) e
-                    // nunca mais: o pacote que acabou de chegar tem
-                    // de entrar nas abas sem reabrir a aula.
-                    loadQuestionsFlashcards(files)
+                    applyGeneratedOutcome(files, outcome.bundle, outcome.bundle.outdated, null)
+                }
+                is LessonDescription.Outcome.Partial -> {
+                    applyGeneratedOutcome(files, outcome.bundle, outcome.questionsOutdated, outcome.jobError)
                 }
                 is LessonDescription.Outcome.Generating -> {
                     // Ainda gerando após 3 min: mantém o texto e avisa.
@@ -1063,6 +1119,43 @@ class DetailActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * R23 — corpo comum do Ready e do Partial: o resumo mostra-se
+     * como gerado nos dois; o Partial traz ainda o motivo real das
+     * partes em falta, que fica visível nas abas (ver
+     * renderQuestionsList) — e os botões Gerar das abas vazias
+     * mantêm-se, nunca se esconde que falta conteúdo.
+     * As branches são SEPARADAS de propósito: numa branch `is
+     * Ready, is Partial` junta, o smart-cast vai p/ o supertipo
+     * comum (Outcome) e `bundle`/`text` deixam de resolver.
+     */
+    private fun applyGeneratedOutcome(
+        files: List<FileItem>,
+        bundle: AiService.GeneratedBundle,
+        questionsOutdated: Boolean,
+        jobError: String?
+    ) {
+        descriptionGenerating = false
+        qfQuestionsOutdated = questionsOutdated
+        qfJobError = jobError
+        SessionManager.get(this).saveLessonDescription(currentPath, bundle.summary.orEmpty())
+        // Frente K — grava resumo + pilulas + questoes na
+        // pasta de materiais (UM caminho: MaterialSaver).
+        val filePath = LessonDescription.lessonFilePath(currentPath, files)
+        if (filePath != null) {
+            MaterialSaver.saveGenerated(
+                this, filePath, folderName,
+                bundle.summary, bundle.mindmap, bundle.questionsJson
+            )
+        }
+        showDescription(bundle.summary.orEmpty(), getString(R.string.summary_state_generated), generated = true)
+        // R22 — as questões/pílulas foram carregadas UMA vez na
+        // abertura (antes da geração terminar) e nunca mais: o
+        // pacote que acabou de chegar tem de entrar nas abas sem
+        // reabrir a aula.
+        loadQuestionsFlashcards(files, jobError = jobError)
     }
 
     /**
@@ -1355,9 +1448,17 @@ class DetailActivity : AppCompatActivity() {
      * Best-effort: falha de rede vira vazio honesto — nunca crash,
      * nunca bounce para o login com a tela aberta.
      */
-    private fun loadQuestionsFlashcards(files: List<FileItem>) {
+    /**
+     * R23 — `jobError` = o erro terminal do job do batalhão (texto
+     * do servidor), vindo do Outcome.Partial: fica guardado p/ o
+     * vazio das abas mostrar o motivo real. Null = manter o valor
+     * actual (as outras chamadas não sabem o motivo; só o Partial
+     * o traz — nunca se limpa aqui um motivo já conhecido).
+     */
+    private fun loadQuestionsFlashcards(files: List<FileItem>, jobError: String? = null) {
         qfJob?.cancel()
         qfLoaded = false
+        if (jobError != null) qfJobError = jobError
         updateQfGenerateButtons()
         // Pasta de curso (só subpastas) não é uma aula: nada a
         // carregar — os textos de vazio (âmbito "esta aula") ficam.
@@ -1375,11 +1476,16 @@ class DetailActivity : AppCompatActivity() {
                 )
                 var questionsText = bundle?.questionsJson
                 var pillsText = bundle?.mindmap
+                // R23 — o motivo "desatualizado" vem do pacote lido
+                // aqui (o servidor marca-o no cache ISA); sem pacote
+                // ou sem a marca, não há motivo a mostrar.
+                var questionsOutdated = bundle?.outdated == true
                 if (questionsText.isNullOrBlank() && pillsText.isNullOrBlank()) {
                     val direct = fetchQuestionsBundle(materialNames)
                     if (direct != null) {
                         questionsText = direct.questionsJson
                         pillsText = direct.mindmap
+                        if (direct.outdated) questionsOutdated = true
                     }
                 }
                 if (questionsText.isNullOrBlank()) {
@@ -1392,6 +1498,18 @@ class DetailActivity : AppCompatActivity() {
                         AiService.loadFromFolder(this@DetailActivity, it, "flashcard")
                     }
                 }
+                // R23 — 4.ª fonte, DEPOIS das actuais: o banco
+                // unificado por aula (as questões que só existem no
+                // banco — ex. a aula "Poderes Administrativos", cujo
+                // pacote completo está no servidor mas nunca era
+                // lido). Só questões: o banco não tem pílulas.
+                // Sem nada no banco, fica o vazio honesto.
+                if (questionsText.isNullOrBlank()) {
+                    questionsText = LessonDescription.fetchBankQuestions(
+                        this@DetailActivity, currentPath, folderName, materialNames
+                    )
+                }
+                qfQuestionsOutdated = questionsOutdated
                 questions = parseDetailQuestions(questionsText)
                 val cards = parseDetailFlashcards(pillsText)
                 flashcards = if (cards.isNotEmpty()) cards
@@ -1625,9 +1743,15 @@ class DetailActivity : AppCompatActivity() {
         if (!qfLoaded) return
         if (qfQuestions.isEmpty()) {
             // 2.7.41 (P1-6) — "a gerar…" ≠ "não há nada".
-            binding.questoesText.text = getString(
-                if (descriptionGenerating) R.string.qf_loading else R.string.no_questions
-            )
+            // R23 — com motivo real conhecido, mostra-se o motivo
+            // (o skip de questões por lei revogada mantém-se, mas
+            // passa a ser VISÍVEL); sem motivo, o vazio genérico.
+            binding.questoesText.text = when {
+                descriptionGenerating -> getString(R.string.qf_loading)
+                qfJobError != null -> qfJobError
+                qfQuestionsOutdated -> getString(R.string.qf_questions_outdated)
+                else -> getString(R.string.no_questions)
+            }
             updateQfGenerateButtons()
             return
         }
@@ -1648,9 +1772,16 @@ class DetailActivity : AppCompatActivity() {
         if (!qfLoaded) return
         if (qfFlashcards.isEmpty()) {
             // 2.7.41 (P1-6) — "a gerar…" ≠ "não há nada".
-            binding.flashcardsText.text = getString(
-                if (descriptionGenerating) R.string.qf_loading else R.string.no_flashcards
-            )
+            // R23 — os flashcards derivam das pílulas ou das questões:
+            // sem nenhuma das duas E com o motivo das questões
+            // conhecido, o motivo vale aqui também (não há de onde
+            // derivar cartões); com erro do job, mostra-se o erro.
+            binding.flashcardsText.text = when {
+                descriptionGenerating -> getString(R.string.qf_loading)
+                qfJobError != null -> qfJobError
+                qfQuestionsOutdated -> getString(R.string.qf_questions_outdated)
+                else -> getString(R.string.no_flashcards)
+            }
             updateQfGenerateButtons()
             return
         }
