@@ -569,7 +569,7 @@
                     android:textSize="@dimen/tv_body"
                     android:visibility="gone" />
 
-                <!-- R21: retry persistente (ver layout de telemóvel). -->
+                <!-- R21: retry persistente (ver layout de celular). -->
                 <Button
                     android:id="@+id/retryButton"
                     android:layout_width="wrap_content"

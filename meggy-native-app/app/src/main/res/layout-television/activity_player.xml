@@ -122,7 +122,7 @@
 
 
 
-        <!-- Frente H — "A carregar" imediato: véu + spinner sobre o vídeo
+        <!-- Frente H — "Carregando" imediato: véu + spinner sobre o vídeo
              até ao 1º frame (o PlayerActivity esconde-o no 1º STATE_READY
              e no erro de playback). Fica ABAIXO da top_bar / barra de
              controlos (filhos posteriores) e do overlay de descanso
@@ -147,7 +147,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="A carregar…"
+                android:text="Carregando…"
                 android:textColor="@android:color/white"
                 android:textSize="14sp" />
         </LinearLayout>
@@ -287,25 +287,6 @@
                     android:layout_width="0dp"
                     android:layout_height="0dp"
                     android:layout_weight="1" />
-
-                <!-- 2.7.41 (P1-T1) — na TV não há secção de materiais (o
-                     info_scroll fica escondido no fullscreen): este botão
-                     volta ao detalhe na aba Resumo (ver PlayerActivity).
-                     Só existe no layout-television. -->
-                <TextView
-                    android:id="@+id/btn_materials_bar"
-                    android:contentDescription="@string/materials_title"
-                    android:layout_width="wrap_content"
-                    android:layout_height="@dimen/button_height"
-                    android:layout_marginEnd="@dimen/spacing_sm"
-                    android:background="@drawable/player_chip_bg"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center"
-                    android:paddingHorizontal="@dimen/spacing_lg"
-                    android:text="@string/materials_title"
-                    android:textColor="@color/md_on_surface"
-                    android:textSize="@dimen/tv_chip_text" />
 
                 <TextView
                     android:id="@+id/btn_rest_bar"
