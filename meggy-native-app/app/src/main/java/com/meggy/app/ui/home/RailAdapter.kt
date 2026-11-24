@@ -11,10 +11,10 @@ import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.meggy.app.R
 import com.meggy.app.data.FileItem
-import com.meggy.app.data.colorFromString
 import com.meggy.app.databinding.ItemRailCardBinding
 import com.meggy.app.util.CardGradient
 import com.meggy.app.util.ThumbArt
+import com.meggy.app.util.TileColors
 import com.meggy.app.util.LibraryCovers
 import com.meggy.app.util.FocusAnimator
 import com.meggy.app.util.TapFeedback
@@ -37,8 +37,10 @@ import com.meggy.app.util.setWordEllipsized
  */
 data class RailItem(
     // v2.7.11 — `title` é o nome CRU do arquivo (identidade do item: o
-    // clique casa por videoName). `displayTitle` é o título LIMPO
-    // (Format.lessonDisplayTitle) exibido no card; null = mostra title.
+    // clique casa por videoName). `displayTitle` é o título exibido no
+    // card; R28: o NOME DO TEMA DA AULA = o nome da pasta da aula
+    // (último segmento do folderPath) — o nome cru do arquivo some do
+    // título; null = mostra title (fallback: lessonDisplayTitle).
     val title: String,
     val displayTitle: String? = null,
     val subtitle: String,
@@ -73,6 +75,21 @@ class RailAdapter(
     // R21 — maior posição já animada neste adapter (ver onBindViewHolder).
     private var lastAnimatedPosition = -1
 
+    // R28 — cor fixa de cada card (TileColors, como nas Tiles das
+    // pastas): a chave é o folderPath — o card Continuar de uma pasta
+    // tem a cor do Tile dessa pasta. Atribuição por TileColors.assign
+    // sobre os itens do rail (span 1 no rail horizontal: vizinhos lado
+    // a lado diferentes). Calcula-se quando os itens mudam (o onBind
+    // só lê); sem isto, a reciclagem re-sorteava as cores. A cor base
+    // é hash(folderPath) % 5 — igual à do Tile; o ajuste de vizinho
+    // pode deslocá-la um passo da paleta quando um dos lados precisou
+    // dele e o outro não (ver notas da ronda).
+    private var itemColors: List<Int> = TileColors.assign(items.map { it.file?.folderPath ?: it.title }, 1)
+
+    private fun refreshItemColors() {
+        itemColors = TileColors.assign(items.map { it.file?.folderPath ?: it.title }, 1)
+    }
+
 
     /**
      * Ronda 17 Frente B — substitui os itens sem recriar o adapter:
@@ -88,6 +105,7 @@ class RailAdapter(
         if (newItems == items) return false
         val oldItems = items
         items = newItems
+        refreshItemColors()
         // Ronda 18 Frente C (F2) — DiffUtil em vez de
         // notifyDataSetChanged() total: só os itens que mudaram /
         // entraram / saíram são re-ligados; os holders dos outros nem
@@ -222,8 +240,18 @@ class RailAdapter(
             // em vez de deixar uma linha em branco no card.
             cardSubtitle.visibility = if (item.subtitle.isBlank()) View.GONE else View.VISIBLE
 
-            val baseColor = colorFromString(item.colorHint ?: item.title)
-            cardBg.background = CardGradient.drawable(res, baseColor)
+            // R28 — cor fixa do Tile (TileColors, R27): o gradiente
+            // atrás da imagem e a área do nome usam a cor da pasta (a
+            // mesma do Tile dessa pasta); a imagem fica intacta. Rede
+            // de segurança: se a lista mudou sem passar por
+            // updateItems, recalcula (como no LessonGridAdapter).
+            // Chamada segura no cardBody (FIX CI #102 — o
+            // layout-television só ganhou card_body nesta ronda; sem
+            // a vista salta a cor mas o bind continua).
+            if (itemColors.size != items.size) refreshItemColors()
+            val fixedColor = itemColors[position]
+            cardBg.background = CardGradient.drawable(res, fixedColor)
+            cardBody?.setBackgroundColor(fixedColor)
 
             // v2.7.11 onda 2 + camada (3) ESTRITA (2.7.13, sem 'geral')
             // — thumb fotográfica quando houver; sem ela, a imagem da
