@@ -76,6 +76,12 @@ export async function checkWebGPUCompute(): Promise<{ ok: boolean; error?: strin
     if (!adapter) {
       return { ok: false, error: "Nenhuma GPU compatível encontrada. Verifique seus drivers." };
     }
+    // RX470 fix (1.9.10): os modelos WebLLM q4f16_1 EXIGEM o recurso shader-f16.
+    // O teste antigo nao o verificava — o Carregar passava no teste e falhava
+    // (ou travava) dentro do CreateMLCEngine. Falhar aqui e rapido e claro.
+    if (!adapter.features.has("shader-f16")) {
+      return { ok: false, error: "GPU sem suporte a shader-f16 — os modelos WebLLM (q4f16) não rodam aqui. Use o llama.cpp (Vulkan), que funciona na RX470." };
+    }
     const device = await adapter.requestDevice();
     if (!device) {
       return { ok: false, error: "Não foi possível criar dispositivo WebGPU." };
@@ -196,15 +202,50 @@ export async function loadModel(
 
   onProgress?.({ progress: 0, text: "Iniciando download do modelo…" });
 
-  engineInstance = await webllm.CreateMLCEngine(modelId, {
-    initProgressCallback: (info: { progress: number; text: string; timeElapsed?: number }) => {
+  // RX470 fix (1.9.10): o CreateMLCEngine pode TRAVAR em silencio na compilacao
+  // de shaders (GPUs antigas: o callback de progresso nao dispara durante a
+  // compilacao e nao ha timeout) — o botao Carregar sumia e "nada acontecia".
+  // Timeout de 120s + heartbeat: a cada 20s sem progresso real, avisar que
+  // esta a compilar (para o utilizador ver que esta vivo). Se esgotar, erro
+  // visivel a sugerir o llama.cpp (Vulkan) em vez de um hang eterno.
+  const LOAD_TIMEOUT_MS = 120_000;
+  let lastRealProgressAt = Date.now();
+  const heartbeat = setInterval(() => {
+    if (Date.now() - lastRealProgressAt > 20_000) {
       onProgress?.({
-        progress: typeof info.progress === "number" ? info.progress : 0,
-        text: info.text || "",
-        timeElapsed: info.timeElapsed,
+        progress: 0,
+        text: "A compilar os shaders da GPU… pode demorar 1–2 min na primeira vez numa placa mais antiga.",
       });
-    },
-  });
+      lastRealProgressAt = Date.now();
+    }
+  }, 5000);
+  try {
+    engineInstance = await Promise.race([
+      webllm.CreateMLCEngine(modelId, {
+        initProgressCallback: (info: { progress: number; text: string; timeElapsed?: number }) => {
+          lastRealProgressAt = Date.now();
+          onProgress?.({
+            progress: typeof info.progress === "number" ? info.progress : 0,
+            text: info.text || "",
+            timeElapsed: info.timeElapsed,
+          });
+        },
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                "Tempo esgotado (120s) a carregar o modelo local. A GPU pode não suportar os shaders do WebLLM — tente o llama.cpp (Vulkan), que funciona na RX470."
+              )
+            ),
+          LOAD_TIMEOUT_MS
+        )
+      ),
+    ]);
+  } finally {
+    clearInterval(heartbeat);
+  }
   currentLoadedModelId = modelId;
 }
 
