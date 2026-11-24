@@ -19,7 +19,9 @@
     app:strokeWidth="0dp"
     app:strokeColor="@color/tile_focus_ring">
 
+    <!-- Port R27 da Meggy — id p/ o fundo com cor fixa da área do nome. -->
     <LinearLayout
+        android:id="@+id/lessonCardBody"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
@@ -60,7 +62,7 @@
             android:layout_marginTop="@dimen/spacing_md"
             android:ellipsize="end"
             android:maxLines="2"
-            android:textColor="@color/md_on_surface"
+            android:textColor="@color/tile_title"
             android:textSize="@dimen/tv_card_title"
             android:textStyle="bold" />
 

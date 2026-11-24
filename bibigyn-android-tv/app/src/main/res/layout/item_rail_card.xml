@@ -121,7 +121,9 @@
         </FrameLayout>
 
         <!-- Conteúdo abaixo da imagem -->
+        <!-- Port R27 da Meggy — id p/ o fundo com cor fixa da área do nome. -->
         <LinearLayout
+            android:id="@+id/card_body"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
