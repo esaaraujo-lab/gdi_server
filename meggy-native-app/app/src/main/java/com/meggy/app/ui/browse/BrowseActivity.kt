@@ -105,7 +105,9 @@ class BrowseActivity : AppCompatActivity() {
     private fun calculateSpanCount(): Int {
         val displayMetrics = resources.displayMetrics
         val screenWidthDp = displayMetrics.widthPixels / displayMetrics.density
-        return if (screenWidthDp >= 900) 5 else if (screenWidthDp >= 600) 4 else 2
+        // Ronda 27 — celular: 3 colunas (Tiles ~30% menores); a TV
+        // e o tablet largo ficam como estavam (5 / 4 colunas).
+        return if (screenWidthDp >= 900) 5 else if (screenWidthDp >= 600) 4 else 3
     }
 
     private fun loadFolder() {
