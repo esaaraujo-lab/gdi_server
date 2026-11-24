@@ -22,6 +22,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.meggy.app.MeggyApp
+import com.meggy.app.R
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
@@ -427,32 +428,43 @@ object UpdateChecker {
                 prefs.edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis())
                     .remove(KEY_LAST_FAILED_CHECK).apply()
 
-                // Busca a primeira release com tag prefix "native-v"
-                var remoteVersion = ""
-                var apkUrl: String? = null
-                var apkSize = 0L
-
+                // R23 — a PRIMEIRA release native-v* pode ainda não
+                // ter APK (a release publica-se antes de o workflow
+                // acabar o upload — 2.7.41: release 20:27:16, APK
+                // 20:31:13): saltar as releases sem asset `.apk` e
+                // continuar para a anterior, em vez de parar na
+                // primeira e mentir que não há update. A mais nova
+                // sem APK fica registada p/ o aviso "ainda a ser
+                // publicada" (ver abaixo).
+                var newestVersionWithoutApk = ""
                 for (i in 0 until releasesArray.length()) {
                     val release = releasesArray.getJSONObject(i)
                     val tagName = release.optString("tag_name", "")
-                    if (tagName.startsWith(TAG_PREFIX)) {
-                        remoteVersion = tagName.replace(TAG_PREFIX, "").trim()
-                        val assets = release.optJSONArray("assets")
-                        if (assets != null) {
-                            for (j in 0 until assets.length()) {
-                                val asset = assets.getJSONObject(j)
-                                if (asset.optString("name").endsWith(".apk")) {
-                                    apkUrl = asset.optString("browser_download_url")
-                                    apkSize = asset.optLong("size", 0)
-                                    break
-                                }
+                    if (!tagName.startsWith(TAG_PREFIX)) continue
+                    val version = tagName.replace(TAG_PREFIX, "").trim()
+                    val assets = release.optJSONArray("assets")
+                    var foundApkUrl: String? = null
+                    var foundApkSize = 0L
+                    if (assets != null) {
+                        for (j in 0 until assets.length()) {
+                            val asset = assets.getJSONObject(j)
+                            if (asset.optString("name").endsWith(".apk")) {
+                                foundApkUrl = asset.optString("browser_download_url")
+                                foundApkSize = asset.optLong("size", 0)
+                                break
                             }
                         }
+                    }
+                    if (foundApkUrl != null) {
+                        remoteVersion = version
+                        apkUrl = foundApkUrl
+                        apkSize = foundApkSize
                         break
                     }
+                    if (newestVersionWithoutApk.isEmpty()) newestVersionWithoutApk = version
                 }
 
-                if (remoteVersion.isEmpty()) {
+                if (remoteVersion.isEmpty() && newestVersionWithoutApk.isEmpty()) {
                     if (showFeedback) showToast(context, "Nenhuma release native-v* encontrada")
                     return@Thread
                 }
@@ -460,18 +472,14 @@ object UpdateChecker {
                 // v2.7.11 — modo automático: esta versão já foi oferecida
                 // (instalador aberto ou permissão pedida) e não foi
                 // instalada — não baixar nem lançar de novo. A checagem
-                // manual em Ajustes ignora este guarda.
+                // manual em Ajustes ignora este guarda. R23: só vale
+                // quando há versão com APK (remoteVersion vazio = a
+                // mais nova ainda publica — ver abaixo).
                 val offered = prefs.getString(KEY_OFFERED_VERSION, "") ?: ""
-                if (auto && remoteVersion == offered) return@Thread
+                if (auto && remoteVersion.isNotEmpty() && remoteVersion == offered) return@Thread
 
-                // Mesma versao — NAO fazer nada (silencioso)
-                if (remoteVersion == localVersion) {
-                    if (showFeedback) showToast(context, "Voce esta na versao mais recente (v$localVersion)")
-                    return@Thread
-                }
-
-                // Versao remota e mais nova → download in-app + install
-                if (isNewer(remoteVersion, localVersion) && apkUrl != null) {
+                // Versao remota (com APK) mais nova → download in-app + install
+                if (remoteVersion.isNotEmpty() && isNewer(remoteVersion, localVersion) && apkUrl != null) {
                     val sizeStr = if (apkSize > 0) " (${apkSize / 1024 / 1024} MB)" else ""
                     val fileName = "meggy-$remoteVersion.apk"
 
@@ -488,6 +496,22 @@ object UpdateChecker {
                         else showToast(context, "Baixando v$remoteVersion...$sizeStr")
                         downloadInApp(context, apkUrl, fileName, remoteVersion, apkSize, prefs, silent = auto)
                     }
+                } else if (newestVersionWithoutApk.isNotEmpty() &&
+                    isNewer(newestVersionWithoutApk, localVersion)
+                ) {
+                    // R23 — a remota mais nova existe mas ainda NÃO
+                    // tem APK (o workflow ainda publica): dizer isso
+                    // em vez de "versão mais recente". No automático
+                    // é silencioso (a próxima checagem de 1h apanha
+                    // o APK); no manual, o utilizador fica a saber
+                    // que é só esperar. Isto cobre o caso do Elton
+                    // (local 2.7.41, 2.7.42 sem APK): a versão com
+                    // APK é a própria local, por isso o ramo de
+                    // download acima não dispara e cai aqui.
+                    if (showFeedback) showToast(
+                        context,
+                        context.getString(R.string.update_publishing, newestVersionWithoutApk)
+                    )
                 } else {
                     if (showFeedback) showToast(context, "Voce esta na versao mais recente (v$localVersion)")
                 }
