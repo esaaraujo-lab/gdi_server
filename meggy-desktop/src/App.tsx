@@ -28,7 +28,8 @@ export default function App() {
   if (loading) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh" }}>
-        <div style={{ fontSize: "48px" }}>🐩</div>
+        {/* ★ v1.9.11: cara verdadeira da Meggy (meggy-fab-dark.webp — o app é tema escuro), no lugar do 🐩. */}
+        <img src="/meggy-fab-dark.webp" alt="Meggy" style={{ width: "48px", height: "48px", borderRadius: "50%" }} />
       </div>
     );
   }
