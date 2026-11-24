@@ -33,7 +33,7 @@ class MeggyApp : Application() {
          * Autenticação (AiService): o cookie da sessão do educa NÃO
          * vale no staging (outro host). A 1ª chamada de IA manda o
          * cookie do educa, leva 401, e o AiService faz login no staging
-         * com as credenciais guardadas (SessionManager) e repete a
+         * com as credenciais salvas (SessionManager) e repete a
          * chamada com o cookie do staging (aiSessionCookie). Nenhuma
          * ação do usuário é necessária.
          */
