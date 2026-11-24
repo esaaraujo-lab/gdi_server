@@ -45,6 +45,7 @@ import com.meggy.app.util.AuthHelper
 import com.meggy.app.util.Format
 import com.meggy.app.util.LessonDescription
 import com.meggy.app.util.MarkdownRenderer
+import com.meggy.app.util.StaleRecentResolver
 import com.meggy.app.util.MaterialSaver
 import com.meggy.app.util.PlaylistManager
 import com.meggy.app.util.SessionManager
@@ -824,6 +825,22 @@ class DetailActivity : AppCompatActivity() {
                         launchPlayer(fileBaseUrl(folderPath) + clickedVideo.link, videoName, folderPath, clickedVideo.thumbnailLink)
                         return@launch
                     }
+                }
+            }
+            // R29 — a pasta guardada já não existe (listagem vazia):
+            // tenta resolver o vídeo no caminho atual (busca no D1 +
+            // passeio no Drive) em vez de abrir a pasta-mãe. Sem
+            // resultado, cai no comportamento atual logo abaixo.
+            if (files.isEmpty()) {
+                val resolved = withContext(Dispatchers.IO) {
+                    StaleRecentResolver.resolve(api, this@DetailActivity, folderPath, videoName)
+                }
+                if (resolved != null) {
+                    val playable = resolved.playable.map { it.copy(folderPath = resolved.folderPath) }
+                    val idx = playable.indexOfFirst { it.name == resolved.video.name }
+                    PlaylistManager.setPlaylist(playable, if (idx >= 0) idx else 0, this@DetailActivity)
+                    launchPlayer(fileBaseUrl(resolved.folderPath) + (resolved.video.link ?: ""), resolved.video.name, resolved.folderPath, resolved.video.thumbnailLink)
+                    return@launch
                 }
             }
             val intent = Intent(this@DetailActivity, DetailActivity::class.java)
