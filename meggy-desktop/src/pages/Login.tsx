@@ -37,7 +37,8 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
       display: "flex", flexDirection: "column", alignItems: "center",
       justifyContent: "center", height: "100vh", gap: "20px"
     }}>
-      <div style={{ fontSize: "64px" }}>🐩</div>
+      {/* ★ v1.9.11: cara verdadeira da Meggy (meggy-fab-dark.webp — o app é tema escuro), no lugar do 🐩. */}
+      <img src="/meggy-fab-dark.webp" alt="Meggy" style={{ width: "64px", height: "64px", borderRadius: "50%" }} />
       <h1 style={{ color: "var(--pink)", fontSize: "32px", fontWeight: 700 }}>Meggy</h1>
       <p style={{ color: "var(--text-muted)", fontSize: "14px" }}>Plataforma de Estudos</p>
 

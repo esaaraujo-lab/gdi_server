@@ -6,8 +6,9 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type { Update } from "@tauri-apps/plugin-updater";
-import { aiCacheGet, aiCacheSave, aiGenerate, fetchText, extractPdfText, downloadToTemp, saveUserState, getUserState, listFolder } from "../lib/api";
+import { aiCacheGet, aiCacheSave, aiGenerate, fetchText, extractPdfText, downloadToTemp, saveUserState, getUserState, listFolder, downloadLesson, downloadStatus, cancelDownload, type DownloadProgressEvent } from "../lib/api";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import {
   hasLocalAIConfigured,
@@ -17,11 +18,13 @@ import {
   ensureModelLoaded,
   localChat,
   checkWebGPU,
+  getDefaultAiMode,
+  setDefaultAiMode,
 } from "../lib/local-ai";
 import AIInstallPopup from "../components/AIInstallPopup";
 import LlamaManager from "../components/LlamaManager";
 import MeggyChat from "../components/MeggyChat";
-import { llamaChat as llamaLocalChat } from "../lib/llama-bridge";
+import { llamaChat as llamaLocalChat, llamaStatus, llamaStart, getLlamaModel } from "../lib/llama-bridge";
 
 interface Drive { index: number; name: string; }
 interface FileItem { name: string; mime_type: string; id: string; link: string | null; size: number; }
@@ -91,6 +94,51 @@ function groupHistoryByCourse(hist: HistoryEntry[]): HistoryEntry[] {
     if (!seen.has(key)) seen.set(key, h);
   }
   return [...seen.values()];
+}
+
+// ★ v1.9.11: downloads offline de aulas — estado partilhado entre a lista
+// de pastas e o PlayerView; o progresso chega por evento "download-progress"
+// do Rust (ver api.rs download_lesson). Uma só instância vive no Home e
+// desce por props p/ o PlayerView — dois hooks separados divergiam.
+type DownloadState = { status: "downloading" | "done" | "cancelled" | "error"; received: number; total: number; path?: string | null };
+function useDownloads() {
+  const [downloads, setDownloads] = useState<Record<string, DownloadState>>({});
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen<DownloadProgressEvent>("download-progress", (event) => {
+      const p = event.payload;
+      setDownloads((prev) => ({
+        ...prev,
+        [p.lesson_path]: p.cancelled
+          ? { status: "cancelled", received: 0, total: 0 }
+          : p.done
+            ? { status: "done", received: p.received, total: p.total, path: p.path }
+            : { status: "downloading", received: p.received, total: p.total },
+      }));
+    }).then((fn) => { unlisten = fn; }).catch(() => { /* sem eventos — os botões continuam a funcionar */ });
+    return () => { unlisten?.(); };
+  }, []);
+  const startDownload = useCallback(async (url: string, lessonPath: string, fileName: string) => {
+    setDownloads((prev) => ({ ...prev, [lessonPath]: { status: "downloading", received: 0, total: 0 } }));
+    try {
+      await downloadLesson(url, lessonPath, fileName);
+    } catch (e) {
+      setDownloads((prev) => ({ ...prev, [lessonPath]: { status: "error", received: 0, total: 0 } }));
+      throw e;
+    }
+  }, []);
+  const checkDownloaded = useCallback(async (lessonPath: string) => {
+    try {
+      const st = await downloadStatus(lessonPath);
+      if (st.downloaded) {
+        setDownloads((prev) => ({ ...prev, [lessonPath]: { status: "done", received: st.size, total: st.size, path: st.path } }));
+      }
+      return st;
+    } catch (_) {
+      return { downloaded: false, path: null as string | null, size: 0 };
+    }
+  }, []);
+  return { downloads, startDownload, checkDownloaded };
 }
 
 // ─── Markdown → HTML (v1.6.9: fixed HTML entity bug — don't double-escape &entities;) ───
@@ -194,6 +242,15 @@ function fmtTime(s: number): string {
     : `${m}:${String(sec).padStart(2, "0")}`;
 }
 
+// ─── Format bytes → "1.2 GB" / "340 MB" (barra de download, v1.9.11) ───
+function fmtBytes(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "0 B";
+  if (n >= 1024 * 1024 * 1024) return `${(n / 1024 / 1024 / 1024).toFixed(1)} GB`;
+  if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(0)} MB`;
+  if (n >= 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${n} B`;
+}
+
 // ─── Semantic version comparison (returns -1 / 0 / 1) ───
 function compareVersions(a: string, b: string): number {
   const pa = (a || "0").split(".").map((n) => parseInt(n, 10) || 0);
@@ -262,10 +319,17 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
   const [updateDownloadUrl, setUpdateDownloadUrl] = useState<string | null>(null);
   // ★ v1.9.10: guarda p/ a migração de chaves correr uma só vez por sessão.
   const keysMigratedRef = useRef(false);
+  // ★ v1.9.11: downloads offline — uma instância p/ a lista e o player.
+  const { downloads, startDownload, checkDownloaded } = useDownloads();
 
   // ─── v1.5.0 — Local AI state ───
   // ★ v1.8.0: aiMode now has 3 options: "cloud" (worker), "local" (WebLLM), "llama" (llama.cpp)
+  // ★ v1.9.11: o padrão é a última escolha explícita guardada em localStorage
+  // ("meggy-ai-default-mode"). Sem escolha guardada, o comportamento antigo:
+  // WebLLM se configurado, senão nuvem. O modo llama agora entra na lógica.
   const [aiMode, setAiMode] = useState<"local" | "cloud" | "llama">(() => {
+    const saved = getDefaultAiMode();
+    if (saved === "llama" || saved === "cloud") return saved;
     return hasLocalAIConfigured() ? "local" : "cloud";
   });
   const [localAiReady, setLocalAiReady] = useState<boolean>(hasLocalAIConfigured());
@@ -273,19 +337,50 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
   const [showLlamaManager, setShowLlamaManager] = useState<boolean>(false);
   const [llamaReady, setLlamaReady] = useState<boolean>(false);
   const [showMeggyChat, setShowMeggyChat] = useState<boolean>(false);
+  // ★ v1.9.11: aviso visível quando o padrão llama não arranca e o app cai p/ a nuvem.
+  const [aiFallbackNotice, setAiFallbackNotice] = useState<string | null>(null);
 
   // Show the install popup on first launch (if not dismissed).
   useEffect(() => {
-    if (!isPopupDismissed() && !hasLocalAIConfigured()) {
+    // ★ v1.9.11: com o padrão llama já escolhido, o popup do WebLLM não volta a aparecer.
+    if (!isPopupDismissed() && !hasLocalAIConfigured() && getDefaultAiMode() !== "llama") {
       setShowAIPopup(true);
     }
     // Refresh localAiReady whenever popup closes (user may have chosen a model).
+  }, []);
+
+  // ★ v1.9.11: padrão local (llama) — no arranque, se o servidor ainda não
+  // estiver a correr, tenta arrancá-lo com o modelo guardado; se falhar, cai
+  // para a nuvem com aviso visível — nunca fica pendurado (o MeggyChat já
+  // tem fallback p/ a nuvem quando o motor local falha).
+  useEffect(() => {
+    if (getDefaultAiMode() !== "llama") return;
+    let alive = true;
+    (async () => {
+      try {
+        const st = await llamaStatus();
+        if (!alive) return;
+        if (st.running) { setLlamaReady(true); return; }
+        const saved = getLlamaModel();
+        if (!saved || !st.models_dir) throw new Error("sem modelo llama guardado");
+        await llamaStart(`${st.models_dir}/${saved.filename}`, saved.gpuLayers);
+        if (!alive) return;
+        setLlamaReady(true);
+      } catch (e) {
+        if (!alive) return;
+        setAiMode("cloud");
+        setAiFallbackNotice("O servidor local de IA (llama.cpp) não arrancou — a Meggy está a responder pela IA da Nuvem. Abre o gestor de IA (⚙️) para tentar de novo.");
+      }
+    })();
+    return () => { alive = false; };
   }, []);
 
   function handleChooseLocal(modelId: string) {
     localAiSetSelectedModel(modelId);
     setLocalAiReady(true);
     setAiMode("local");
+    // ★ v1.9.11: a IA local activada passa a ser o padrão de arranque.
+    setDefaultAiMode("local");
     dismissPopup();
     setShowAIPopup(false);
   }
@@ -293,6 +388,8 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
   function handleChooseCloud() {
     // User explicitly chose cloud — keep current selection if any, but switch mode.
     setAiMode("cloud");
+    // ★ v1.9.11: a escolha explícita passa a ser o padrão de arranque.
+    setDefaultAiMode("cloud");
     dismissPopup();
     setShowAIPopup(false);
   }
@@ -312,9 +409,12 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
 
   function handleToggleAI() {
     // ★ v1.8.0: Cycle through 3 modes: cloud → local (WebLLM) → llama (llama.cpp) → cloud
+    // ★ v1.9.11: cada mudança real de modo passa a ser o padrão de arranque
+    // (a última escolha explícita); abrir o popup/gestor sem escolher não muda o padrão.
     if (aiMode === "cloud") {
       if (localAiReady) {
         setAiMode("local");
+        setDefaultAiMode("local");
       } else {
         setShowAIPopup(true);
       }
@@ -322,12 +422,14 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
       // Switch to llama if ready, otherwise open LlamaManager
       if (llamaReady) {
         setAiMode("llama");
+        setDefaultAiMode("llama");
       } else {
         setShowLlamaManager(true);
       }
     } else {
       // llama → cloud
       setAiMode("cloud");
+      setDefaultAiMode("cloud");
     }
   }
 
@@ -343,11 +445,30 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
   function handleChooseLlama(modelLabel: string) {
     setLlamaReady(true);
     setAiMode("llama");
+    // ★ v1.9.11: o llama activado passa a ser o padrão de arranque.
+    setDefaultAiMode("llama");
     setShowLlamaManager(false);
     console.log("Llama ready:", modelLabel);
   }
 
   useEffect(() => { loadDrives(); loadUserState(); checkForUpdates(); checkPluginUpdate(); }, []);
+
+  // ★ v1.9.11: ao abrir uma pasta, marca as aulas já baixadas (✓ Baixado)
+  // sem bloquear a lista — cada check é só uma leitura ao disco.
+  useEffect(() => {
+    if (view !== "browse" || files.length === 0) return;
+    let alive = true;
+    (async () => {
+      for (const f of files) {
+        if (!alive) return;
+        const isMedia = f.mime_type.startsWith("video/") || f.mime_type.startsWith("audio/") ||
+          f.name.endsWith(".mp4") || f.name.endsWith(".mp3") || f.name.endsWith(".m4a");
+        if (!isMedia) continue;
+        await checkDownloaded(lessonPathOf(f, currentPath));
+      }
+    })();
+    return () => { alive = false; };
+  }, [view, files]);
 
   async function loadDrives() {
     try {
@@ -751,6 +872,9 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
           onToggleAI={handleToggleAI}
           onManageAI={handleManageAI}
           onLoadInterfolder={loadInterfolderPlaylist}
+          downloads={downloads}
+          onStartDownload={startDownload}
+          onCheckDownloaded={checkDownloaded}
         />
         {showAIPopup && (
           <AIInstallPopup
@@ -758,6 +882,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
             onChooseLocal={handleChooseLocal}
             onChooseCloud={handleChooseCloud}
             onOpenLlama={handleOpenLlamaFromPopup}
+          activeMode={aiMode}
           />
         )}
         {showLlamaManager && (
@@ -815,6 +940,12 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
                   <FileCard
                     key={file.id}
                     file={file}
+                    download={downloads[lessonPathOf(file, currentPath)]}
+                    onDownload={() => {
+                      if (!file.link) return;
+                      startDownload(`${BASE_URL}${file.link}`, lessonPathOf(file, currentPath), file.name).catch(() => { /* o estado "error" já mostra no cartão */ });
+                    }}
+                    onCancelDownload={() => cancelDownload(lessonPathOf(file, currentPath)).catch(() => {})}
                     onClick={() => {
                       const isFolder = file.mime_type === "application/vnd.google-apps.folder";
                       const isVideo = file.mime_type.startsWith("video/") || file.name.endsWith(".mp4");
@@ -834,6 +965,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
             onChooseLocal={handleChooseLocal}
             onChooseCloud={handleChooseCloud}
             onOpenLlama={handleOpenLlamaFromPopup}
+          activeMode={aiMode}
           />
         )}
       </>
@@ -899,6 +1031,21 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
                   {installingUpdate
                     ? (updateProgress !== null && updateProgress < 100 ? `⬇ A descarregar… ${updateProgress}%` : "⬇ A instalar…")
                     : "⬇ Baixar e instalar"}
+                </button>
+              </div>
+            )}
+
+            {/* ★ v1.9.11: aviso visível quando o padrão llama não arrancou e o app caiu p/ a nuvem. */}
+            {aiFallbackNotice && (
+              <div style={{
+                background: "rgba(255,170,0,0.12)",
+                border: "1px solid rgba(255,170,0,0.4)",
+                borderRadius: "14px", padding: "14px 20px", marginBottom: "24px",
+                display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap",
+              }}>
+                <span style={{ color: "#ffb020", fontWeight: 600, fontSize: "13px" }}>⚠️ {aiFallbackNotice}</span>
+                <button onClick={() => setAiFallbackNotice(null)} style={{ ...btnStyle, background: "transparent", borderColor: "rgba(255,170,0,0.4)", color: "#ffb020" }}>
+                  ✕ Fechar
                 </button>
               </div>
             )}
@@ -1038,7 +1185,8 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "14px" }}>
                 {[
                   { icon: "☁️", title: "Explorar Drives", desc: "Navegue por todos os drives disponíveis", action: () => setView("drives"), color: "rgba(93,222,218,0.12)" },
-                  { icon: "🤖", title: "Meggy AI", desc: aiMode === "local" ? "WebLLM ativo (offline)" : aiMode === "llama" ? "llama.cpp ativo (CPU/GPU)" : "IA da Nuvem ativa", action: () => setShowMeggyChat(true), color: "rgba(255,139,159,0.12)" },
+                  // ★ v1.9.11: cara verdadeira da Meggy no lugar do 🤖 (meggy-fab-dark.webp — o app é tema escuro).
+                  { icon: <img src="/meggy-fab-dark.webp" alt="Meggy" style={{ width: "32px", height: "32px", borderRadius: "50%" }} />, title: "Meggy AI", desc: aiMode === "local" ? "WebLLM ativo (offline)" : aiMode === "llama" ? "llama.cpp ativo (CPU/GPU)" : "IA da Nuvem ativa", action: () => setShowMeggyChat(true), color: "rgba(255,139,159,0.12)" },
                   { icon: "📊", title: "Estatísticas", desc: `${watchedCount} aulas assistidas`, action: () => {}, color: "rgba(63,185,80,0.12)" },
                   { icon: "📱", title: "Apps Meggy", desc: "Baixar para outras plataformas", action: () => {
                     const el = document.getElementById("meggy-apps-section");
@@ -1132,6 +1280,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
             onChooseLocal={handleChooseLocal}
             onChooseCloud={handleChooseCloud}
             onOpenLlama={handleOpenLlamaFromPopup}
+          activeMode={aiMode}
           />
         )}
         {showLlamaManager && (
@@ -1146,6 +1295,30 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
             aiMode={aiMode}
             localAiReady={localAiReady}
           />
+        )}
+        {/* ★ v1.9.11: FAB da Meggy (ordem do Elton 20:35) — botão flutuante 62px,
+            canto inferior direito, mesma arte do candidato (meggy-fab-dark.webp —
+            o app é tema escuro; a variante clara fica empacotada p/ um futuro
+            tema claro). Abre o MeggyChat DO APP; esconde-se enquanto o chat
+            está aberto (o chat é o drawer fixo de z 10001; o FAB fica em 10000).
+            Só na vista inicial — não há FAB no login (outra página) nem no
+            player (outra vista). O cartão "Meggy AI" fica como está. */}
+        {!showMeggyChat && (
+          <button
+            type="button"
+            title="Falar com a Meggy"
+            aria-label="Falar com a Meggy"
+            onClick={() => setShowMeggyChat(true)}
+            style={{
+              position: "fixed", right: "18px", bottom: "18px",
+              width: "62px", height: "62px", borderRadius: "50%",
+              border: "none", padding: 0, background: "none",
+              cursor: "pointer", zIndex: 10000,
+              boxShadow: "0 6px 20px rgba(0,0,0,0.35)", overflow: "hidden",
+            }}
+          >
+            <img src="/meggy-fab-dark.webp" alt="Meggy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+          </button>
         )}
       </>
     );
@@ -1180,6 +1353,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
           onChooseLocal={handleChooseLocal}
           onChooseCloud={handleChooseCloud}
           onOpenLlama={handleOpenLlamaFromPopup}
+          activeMode={aiMode}
         />
       )}
       {showLlamaManager && (
@@ -1198,6 +1372,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
 function PlayerView({
   drive, folderPath, playlist, initialIndex, desiredIndex, playerVideoId, onBack, onLogout, onNavigateBreadcrumb, onHome,
   aiMode, localAiReady, onToggleAI, onManageAI, onLoadInterfolder,
+  downloads, onStartDownload, onCheckDownloaded,
 }: {
   drive: Drive;
   folderPath: string;
@@ -1214,6 +1389,10 @@ function PlayerView({
   onToggleAI: () => void;
   onManageAI: () => void;
   onLoadInterfolder: (currentFile: FileItem) => Promise<void>;
+  // ★ v1.9.11: downloads offline (o estado vive no Home, desce por props).
+  downloads: Record<string, DownloadState>;
+  onStartDownload: (url: string, lessonPath: string, fileName: string) => Promise<void>;
+  onCheckDownloaded: (lessonPath: string) => Promise<{ downloaded: boolean; path: string | null; size: number }>;
 }) {
   // ★ v1.7.0: Derived state via REF — only reacts to PROP changes, not manual switchTo.
   // The v1.6.9 version used state (prevDesiredIndex) which switchTo also updated,
@@ -1236,6 +1415,9 @@ function PlayerView({
   const [isaLoadingMsg, setIsaLoadingMsg] = useState<string | null>(null);
   const [watchedSet, setWatchedSet] = useState<Set<string>>(new Set()); // ★ v1.5.5: watched videos
   const [isaError, setIsaError] = useState<string | null>(null);
+  // ★ v1.9.11: aviso de falhanço PARCIAL — não esconde o conteúdo bom, ao
+  // contrário do isaError (o ISAPanel mostra o erro em vez do conteúdo).
+  const [isaWarning, setIsaWarning] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [notesList, setNotesList] = useState<{ time: string; text: string }[]>([]);
   const [currentTime, setCurrentTime] = useState(0);
@@ -1254,6 +1436,29 @@ function PlayerView({
 
   const currentFile = playlist[idx];
   const videoSrc = currentFile?.link ? `${BASE_URL}${currentFile.link}` : "";
+  // ★ v1.9.11: fonte local — ao abrir o player, download_status decide:
+  // com ficheiro baixado, o <video> usa convertFileSrc(path) e o mpv o
+  // caminho bruto; sem ficheiro, o caminho remoto actual fica intacto.
+  // O media só monta depois do check (localChecked) para não tocar o
+  // remoto e trocar a meio. O videoSrc (remoto) NÃO muda — é ele que
+  // alimenta o histórico, as notas e o watchdog, como sempre.
+  const [localPath, setLocalPath] = useState<string | null>(null);
+  const [localChecked, setLocalChecked] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    setLocalChecked(false);
+    setLocalPath(null);
+    if (!currentFile) { setLocalChecked(true); return; }
+    const lp = lessonPathOf(currentFile, currentFolderPath);
+    onCheckDownloaded(lp).then((st) => {
+      if (!alive) return;
+      if (st.downloaded && st.path) setLocalPath(st.path);
+      setLocalChecked(true);
+    });
+    return () => { alive = false; };
+  }, [currentFile, currentFolderPath]);
+  const playSrc = localPath ? convertFileSrc(localPath) : videoSrc;
+  const playUrl = localPath ?? videoSrc;
   const isAudio = currentFile
     ? (currentFile.mime_type.startsWith("audio/") || currentFile.name.endsWith(".mp3") || currentFile.name.endsWith(".m4a"))
     : false;
@@ -1427,7 +1632,7 @@ function PlayerView({
     saveUserStateMerged(patch).catch(() => { /* ignore */ });
   }
 
-  // ★ v1.6.9: Save lesson to history (last 8) when video changes — for "Continue Assistindo"
+  // ★ v1.6.9: Save lesson to history (last 24) when video changes — for "Continue Assistindo"
   useEffect(() => {
     if (!currentFile || !videoSrc) return;
     const folder = (currentFile as FileItem & { folder?: string }).folder;
@@ -1442,7 +1647,7 @@ function PlayerView({
       // ★ v1.9.10: `at` estável por entrada — o servidor dedup eventos por
       // (path, at); sem ele, cada reenvio do array criava eventos duplicados.
       const entry = { name: currentFile.name, path: fullPath, link: currentFile.link || "", at: Date.now() };
-      const newHistory = [...history, entry].slice(-8); // ★ v1.9.5: keep last 8 (was 4)
+      const newHistory = [...history, entry].slice(-24); // ★ v1.9.11: keep last 24 (was 8) — o Continue mostra até 12 cursos
       saveUserStateMerged({ history: newHistory }).catch(() => { /* ignore */ });
     }).catch(() => { /* ignore */ });
   }, [videoSrc]);
@@ -1483,7 +1688,7 @@ function PlayerView({
   // saveResumePosition (throttle 10s → /userstate) e markWatched (>50% /
   // fim). Ao trocar de aula ou sair do player, o cleanup pára o mpv.
   useEffect(() => {
-    if (!useAltPlayer || !videoSrc || !currentFile?.link) return;
+    if (!useAltPlayer || !videoSrc || !currentFile?.link || !localChecked) return;
     let cancelled = false;
     let timer: number | undefined;
     (async () => {
@@ -1496,7 +1701,8 @@ function PlayerView({
       } catch (_) { /* sem posição guardada — começa do início */ }
       if (cancelled) return;
       try {
-        await invoke("mpv_start", { url: videoSrc, startSecs: start, speed: 1.0, title: currentFile.name });
+        // ★ v1.9.11: com ficheiro baixado, o mpv toca o caminho local bruto.
+        await invoke("mpv_start", { url: playUrl, startSecs: start, speed: 1.0, title: currentFile.name });
       } catch (e) {
         console.error("mpv_start", e);
         return;
@@ -1534,7 +1740,7 @@ function PlayerView({
       invoke("mpv_stop").catch(() => {});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [useAltPlayer, videoSrc]);
+  }, [useAltPlayer, videoSrc, localChecked, localPath]);
 
   // Load notes from localStorage on video change
 
@@ -1584,7 +1790,7 @@ function PlayerView({
       v.removeEventListener("playing", poke);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videoSrc, useAltPlayer]);
+  }, [videoSrc, useAltPlayer, localChecked]);
 
   useEffect(() => {
     if (!videoSrc) return;
@@ -1709,6 +1915,7 @@ function PlayerView({
   async function showISA(type: "summary" | "questions" | "mindmap" | "flashcards") {
     setActiveTab({ kind: "isa", id: type });
     setIsaError(null);
+    setIsaWarning(null);
 
     // If already cached and this field exists, render directly
     if (isaCache && (isaCache[type] || (type === "flashcards" && isaCache.flashcards))) return;
@@ -1847,45 +2054,58 @@ function PlayerView({
       const QUESTOES_PROMPT = `Você é um examinador de concurso público brasileiro experiente. Baseado neste material, gere 10 questões de concurso em JSON array. Misture:\n- 6 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"legalText":"...","explanation":"...","fundamentacao":"..."}\n- 4 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"legalText":"...","explanation":"...","fundamentacao":"..."}\n\nCAMPOS:\n- statement: enunciado claro, contexto completo\n- legalText: o dispositivo legal aplicável (ex: "art. 5º, CF")\n- explanation: explicação técnica do acerto/erro\n- fundamentacao: fundamentação didática completa\n\nSem comentários, só JSON.\n\n${textSlice.slice(0, 60000)}`;
 
       // ─── 4. Generate in parallel (Promise.allSettled) ───
-      // ★ v1.8.0: 3 AI modes — "cloud" (worker), "local" (WebLLM), "llama" (llama.cpp)
-      // Each tries its local model first, falls back to cloud on failure.
-      const modeLabel = aiMode === "local" ? " (⚡ WebLLM)" : aiMode === "llama" ? " (🦙 llama.cpp)" : "";
-      setIsaLoadingMsg(`✨ Gerando resumo + pílulas + questões${matSource ? " (fonte: " + matSource + ")" : ""}…${modeLabel}\nIsto pode levar 30-90s.`);
+      // ★ v1.9.11: roteamento automático — o ISA já não segue o aiMode global.
+      // Nuvem primeiro; só cai para o local (llama/WebLLM) se a nuvem falhar.
+      setIsaLoadingMsg(`✨ Gerando resumo + pílulas + questões${matSource ? " (fonte: " + matSource + ")" : ""}… (☁️ Nuvem primeiro)\nIsto pode levar 30-90s.`);
 
       type AiResult = { text: string; source: "local" | "cloud" | "llama" };
 
       const callAiWithFallback = async (prompt: string, kind: string): Promise<AiResult> => {
-        // ★ v1.8.0: llama.cpp mode — uses llama-server (CPU/GPU offloading)
-        if (aiMode === "llama") {
-          try {
-            const shortPrompt = prompt.slice(0, 12000); // llama.cpp can handle larger context
-            const r = await llamaLocalChat(shortPrompt);
-            if (r.ok && r.text && r.text.length >= 100) {
-              return { text: r.text, source: "llama" };
-            }
-            console.warn("llama.cpp failed, falling back to cloud:", r.error);
-          } catch (e) {
-            console.warn("llama.cpp failed, falling back to cloud:", e);
-          }
+        // ★ v1.9.11: ISA — NUVEM PRIMEIRO, sempre. Com o padrão local activo
+        // (ordem 20:25) os resumos iriam para o local (lento); a regra própria
+        // do ISA é nuvem primeiro e só cai para o local se a nuvem falhar
+        // (sem internet, sessão expirada, quota).
+        let cloudErr: unknown = null;
+        try {
+          const text = await aiGenerate(prompt, kind);
+          if (text && text.length > 0) return { text, source: "cloud" };
+          cloudErr = new Error("resposta vazia da nuvem");
+        } catch (e) {
+          cloudErr = e;
         }
-        // ★ v1.5.0: WebLLM mode — uses WebGPU (if GPU supports it)
-        if (aiMode === "local" && localAiReady && checkWebGPU()) {
+        // ★ v1.9.11: as questões em JSON estrito precisam de ~4096 tokens —
+        // com 2048 o JSON vinha cortado e o parse devolvia [] (aba vazia).
+        const maxTokens = kind === "questoes" ? 4096 : 2048;
+        // Fallback local 1: llama.cpp — falha rápido se o servidor não estiver a correr.
+        try {
+          const shortPrompt = prompt.slice(0, 12000); // llama.cpp can handle larger context
+          const r = await llamaLocalChat(shortPrompt, undefined, maxTokens);
+          if (r.ok && r.text && r.text.length >= 100) {
+            return { text: r.text, source: "llama" };
+          }
+          console.warn("llama.cpp falhou no fallback do ISA:", r.error);
+        } catch (e) {
+          console.warn("llama.cpp falhou no fallback do ISA:", e);
+        }
+        // Fallback local 2: WebLLM — só se houver modelo configurado + WebGPU.
+        if (hasLocalAIConfigured() && checkWebGPU()) {
           try {
             const shortPrompt = prompt.slice(0, 6000);
             const loaded = await ensureModelLoaded();
             if (loaded) {
-              const r = await localChat(shortPrompt, { maxTokens: 2048, temperature: 0.6 });
+              const r = await localChat(shortPrompt, { maxTokens, temperature: 0.6 });
               if (r.ok && r.text && r.text.length >= 100) {
                 return { text: r.text, source: "local" };
               }
             }
           } catch (e) {
-            console.warn("local AI failed, falling back to cloud:", e);
+            console.warn("local AI falhou no fallback do ISA:", e);
           }
         }
-        // Cloud fallback with the full prompt.
-        const text = await aiGenerate(prompt, kind);
-        return { text, source: "cloud" };
+        // Nenhum motor local salvou — devolve o erro original da nuvem para o
+        // callIsa tratar (401 = sessão expirada → login, como na 1.9.10).
+        if (cloudErr) throw cloudErr;
+        return { text: "", source: "cloud" };
       };
 
       const callIsa = async (prompt: string, kind: string): Promise<AiResult> => {
@@ -1921,12 +2141,26 @@ function PlayerView({
       const questionsR = stripAiReasoning(questionsRes.text);
 
       // ★ v1.5.0: Determine the AI source badge — if ANY call succeeded locally, show "local".
+      // ★ v1.9.11: o "llama" também conta como local — antes caía para "cloud"
+      // e o selo dizia "IA Nuvem" com a geração feita pelo llama.cpp.
       const sources = [summaryRes.source, mindmapRes.source, questionsRes.source];
-      setAiSource(sources.some((s) => s === "local") ? "local" : "cloud");
+      setAiSource(sources.includes("llama") ? "llama" : sources.includes("local") ? "local" : "cloud");
 
       if (isaGenRef.current !== myKey) return; // stale — user switched video
 
       const questions = parseQuestions(questionsR);
+      // ★ v1.9.11: falhanço parcial — antes só havia erro se as 3 ramificações
+      // falhassem; resumo OK + questões vazias contava como "sucesso" e a aba
+      // ficava vazia sem explicação (o JSON das questões vinha cortado no
+      // caminho local). Avisa quais as partes que falharam; o conteúdo bom
+      // continua visível.
+      const failedParts: string[] = [];
+      if (!summaryR) failedParts.push("o resumo");
+      if (!mindmapR) failedParts.push("as pílulas");
+      if (questions.length === 0) failedParts.push("as questões");
+      if (failedParts.length > 0 && failedParts.length < 3) {
+        setIsaWarning(`Falha parcial: não foi possível gerar ${failedParts.join(", ")} — o resto está pronto. Toque em "Gerar agora" na aba para tentar de novo.`);
+      }
       const flashcards = questions.map(q => {
         let back = "";
         if (q.type === "mc" && q.options) {
@@ -1954,7 +2188,12 @@ function PlayerView({
         questions: (gen.questions as QuizQuestion[]) || null,
         mindmap: (gen.mindmap as string) || null,
         lessonName: (gen.lessonName as string) || "",
-      }).catch(() => { /* ignore */ });
+      }).catch((e) => {
+        // ★ v1.9.11: o save silencioso escondia que nada ficou guardado —
+        // avisa em vez de engolir o erro (o conteúdo continua visível).
+        console.warn("aiCacheSave falhou:", e);
+        setIsaWarning((prev) => prev ? `${prev} Não foi possível guardar o conteúdo gerado neste aparelho (cache local).` : "Não foi possível guardar o conteúdo gerado neste aparelho (cache local) — ele continua visível nesta sessão.");
+      });
 
       // ★ v1.9.10 (auditoria de rotas): save de MD via POST /copy removido
       // (o /copy só copia arquivos do Drive — ver o comentário acima de
@@ -2116,12 +2355,14 @@ function PlayerView({
             background: "#000", border: "1px solid rgba(255,255,255,0.09)", borderRadius: "16px",
             overflow: "hidden", width: "100%",
           }}>
-            {isAudio ? (
+            {!localChecked ? (
+              <div style={{ padding: "28px 20px", textAlign: "center", color: "rgba(255,255,255,0.65)", fontSize: "13px" }}>A verificar ficheiro local…</div>
+            ) : isAudio ? (
               <div style={{ padding: "20px", textAlign: "center" }}>
                 <div style={{ fontSize: "48px", marginBottom: "12px" }}>🎵</div>
                 <audio
                   ref={audioRef}
-                  src={videoSrc}
+                  src={playSrc}
                   controls
                   autoPlay
                   style={{ width: "100%" }}
@@ -2165,9 +2406,9 @@ function PlayerView({
               </div>
             ) : (
               <video
-                key={videoSrc}
+                key={playSrc}
                 ref={videoRef}
-                src={videoSrc}
+                src={playSrc}
                 controls
                 autoPlay
                 playsInline
@@ -2206,6 +2447,48 @@ function PlayerView({
             <button onClick={() => switchTo(idx - 1)} disabled={idx === 0} style={{ ...modeBtnStyle, opacity: idx === 0 ? 0.4 : 1 }}>◀ Anterior</button>
             <button onClick={() => switchTo(idx + 1)} disabled={idx >= playlist.length - 1} style={{ ...modeBtnStyle, opacity: idx >= playlist.length - 1 ? 0.4 : 1 }}>Próxima ▶</button>
             <a href={videoSrc} download={currentFile.name} target="_blank" rel="noreferrer" style={{ ...modeBtnStyle, textDecoration: "none" }}>⬇ Baixar</a>
+            {/* ★ v1.9.11: download offline — botão por aula + barra de progresso.
+                O ficheiro baixado passa a ser a fonte ao abrir o player. */}
+            {(() => {
+              if (!currentFile) return null;
+              const lp = lessonPathOf(currentFile, currentFolderPath);
+              const dl = downloads[lp];
+              if (dl?.status === "done") {
+                return (
+                  <span style={{ ...modeBtnStyle, background: "rgba(93,222,218,0.12)", color: "var(--teal)", borderColor: "rgba(93,222,218,0.3)", cursor: "default" }}>
+                    ✓ Baixado — a tocar do ficheiro local
+                  </span>
+                );
+              }
+              if (dl?.status === "downloading") {
+                const pct = dl.total > 0 ? Math.round((dl.received / dl.total) * 100) : 0;
+                return (
+                  <span style={{ ...modeBtnStyle, gap: "8px", cursor: "default" }}>
+                    A baixar… {pct}% ({fmtBytes(dl.received)} / {fmtBytes(dl.total)})
+                    <span style={{ width: "80px", height: "6px", background: "rgba(255,255,255,0.12)", borderRadius: "999px", overflow: "hidden" }}>
+                      <span style={{ display: "block", height: "100%", width: `${pct}%`, background: "var(--pink)" }} />
+                    </span>
+                    <button
+                      onClick={() => cancelDownload(lp).catch(() => {})}
+                      title="Cancelar download"
+                      style={{ background: "transparent", border: "none", color: "var(--text)", cursor: "pointer", fontSize: "13px", padding: "0 2px" }}
+                    >✕</button>
+                  </span>
+                );
+              }
+              return (
+                <button
+                  onClick={() => {
+                    if (!currentFile.link) return;
+                    onStartDownload(videoSrc, lp, currentFile.name).catch(() => { /* o estado "error" já mostra no botão */ });
+                  }}
+                  style={modeBtnStyle}
+                  title={dl?.status === "error" ? "O último download falhou — tocar para tentar de novo" : "Baixar a aula para ver offline"}
+                >
+                  {dl?.status === "error" ? "⚠ Tentar de novo" : "⬇ Baixar p/ ver offline"}
+                </button>
+              );
+            })()}
           </div>
           {/* Notes */}
           <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: "10px", padding: "12px" }}>
@@ -2346,12 +2629,27 @@ function PlayerView({
                   color: aiSource === "local" ? "var(--pink)" : "var(--text-muted)",
                   border: aiSource === "local" ? "1px solid rgba(255,139,159,0.3)" : "1px solid rgba(139,148,158,0.2)",
                 }}
-                title={aiSource === "local" ? "Conteúdo gerado pela IA Local (WebLLM)" : "Conteúdo gerado pela IA da Nuvem"}
+                title={aiSource === "local" ? "Conteúdo gerado pela IA Local (WebLLM)" : aiSource === "llama" ? "Conteúdo gerado pela IA Local (llama.cpp)" : "Conteúdo gerado pela IA da Nuvem"}
               >
                 {aiSource === "local" ? "⚡ WebLLM" : aiSource === "llama" ? "🦙 llama.cpp" : "☁️ IA Nuvem"}
               </span>
             )}
           </div>
+          {/* ★ v1.9.11: aviso de falhanço parcial da geração — visível em
+              todas as abas ISA, sem esconder o conteúdo que deu certo. */}
+          {activeTab.kind === "isa" && isaWarning && (
+            <div style={{
+              background: "rgba(255,170,0,0.12)",
+              border: "1px solid rgba(255,170,0,0.4)",
+              borderRadius: "12px", padding: "10px 14px",
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px",
+            }}>
+              <span style={{ color: "#ffb020", fontWeight: 600, fontSize: "12px" }}>⚠️ {isaWarning}</span>
+              <button onClick={() => setIsaWarning(null)} style={{ ...btnStyle, background: "transparent", borderColor: "rgba(255,170,0,0.4)", color: "#ffb020", padding: "4px 10px", fontSize: "12px" }}>
+                ✕
+              </button>
+            </div>
+          )}
           {/* Body */}
           <div style={{
             background: "rgba(22,27,38,0.72)", border: "1px solid rgba(255,255,255,0.09)",
@@ -2905,12 +3203,20 @@ function DriveCard({ drive, onClick }: { drive: Drive; onClick: () => void }) {
   );
 }
 
-function FileCard({ file, onClick }: { file: FileItem; onClick: () => void }) {
+function FileCard({ file, onClick, download, onDownload, onCancelDownload }: {
+  file: FileItem;
+  onClick: () => void;
+  // ★ v1.9.11: estado do download offline desta aula (só vídeo/áudio).
+  download?: DownloadState;
+  onDownload?: () => void;
+  onCancelDownload?: () => void;
+}) {
   const isFolder = file.mime_type === "application/vnd.google-apps.folder";
   const isVideo = file.mime_type.startsWith("video/") || file.name.endsWith(".mp4");
   const isAudio = file.mime_type.startsWith("audio/") || file.name.endsWith(".mp3") || file.name.endsWith(".m4a");
   const icon = isFolder ? "📁" : isVideo ? "🎬" : isAudio ? "🎵" : "📄";
   const sizeStr = file.size > 0 ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : "";
+  const dlPct = download && download.total > 0 ? Math.round((download.received / download.total) * 100) : 0;
 
   return (
     <div
@@ -2934,6 +3240,33 @@ function FileCard({ file, onClick }: { file: FileItem; onClick: () => void }) {
         {isFolder && <div style={{ color: "var(--teal)", fontSize: "11px", marginTop: "2px" }}>Abrir pasta →</div>}
         {(isVideo || isAudio) && <div style={{ color: "var(--teal)", fontSize: "11px", marginTop: "2px" }}>▶ Reproduzir</div>}
       </div>
+      {(isVideo || isAudio) && onDownload && (
+        <div style={{ flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+          {download?.status === "done" ? (
+            <span style={{ fontSize: "11px", color: "var(--teal)", fontWeight: 600 }}>✓ Baixado</span>
+          ) : download?.status === "downloading" ? (
+            <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <span style={{ width: "56px", height: "6px", background: "rgba(255,255,255,0.12)", borderRadius: "999px", overflow: "hidden" }}>
+                <span style={{ display: "block", height: "100%", width: `${dlPct}%`, background: "var(--pink)" }} />
+              </span>
+              <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>{download.total > 0 ? `${dlPct}%` : "…"}</span>
+              <button
+                onClick={(e) => { e.stopPropagation(); onCancelDownload?.(); }}
+                title="Cancelar download"
+                style={{ background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "13px", padding: "2px 4px" }}
+              >✕</button>
+            </span>
+          ) : (
+            <button
+              onClick={(e) => { e.stopPropagation(); onDownload(); }}
+              title={download?.status === "error" ? "O último download falhou — tocar para tentar de novo" : "Baixar a aula para ver offline"}
+              style={{ ...modeBtnStyle, fontSize: "12px", padding: "4px 10px" }}
+            >
+              {download?.status === "error" ? "⚠ Tentar de novo" : "⬇ Baixar"}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
