@@ -110,3 +110,44 @@ export async function saveUserState(data: Record<string, unknown>) {
 export async function getUserState() {
   return invoke<Record<string, unknown>>("get_user_state");
 }
+
+// ═══ v1.9.11 — Download offline de aulas ═══
+
+export interface DownloadProgressEvent {
+  lesson_path: string;
+  received: number;
+  total: number;
+  done: boolean;
+  path: string | null;
+  cancelled?: boolean;
+}
+
+export interface DownloadStatusResult {
+  downloaded: boolean;
+  path: string | null;
+  size: number;
+}
+
+export async function downloadLesson(url: string, lessonPath: string, fileName: string) {
+  return invoke<boolean>("download_lesson", { url, lessonPath, fileName });
+}
+
+export async function downloadStatus(lessonPath: string) {
+  return invoke<DownloadStatusResult>("download_status", { lessonPath });
+}
+
+export async function cancelDownload(lessonPath: string) {
+  return invoke<boolean>("cancel_download", { lessonPath });
+}
+
+export async function deleteDownload(lessonPath: string) {
+  return invoke<boolean>("delete_download", { lessonPath });
+}
+
+export async function getDownloadWifiOnly() {
+  return invoke<boolean>("get_download_wifi_only");
+}
+
+export async function setDownloadWifiOnly(value: boolean) {
+  return invoke<boolean>("set_download_wifi_only", { value });
+}

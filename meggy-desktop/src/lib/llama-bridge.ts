@@ -67,12 +67,40 @@ export async function llamaStop(): Promise<boolean> {
 export async function llamaChat(
   message: string,
   systemPrompt?: string,
+  // ★ v1.9.11: limite de tokens (2048 por defeito no Rust). As questões em
+  // JSON estrito precisam de ~4096, senão o JSON vem cortado.
+  maxTokens?: number,
 ): Promise<{ text: string; ok: boolean; error?: string }> {
   return invoke<{ text: string; ok: boolean; error?: string }>("llama_chat", {
-    req: { message, systemPrompt: systemPrompt ?? null },
+    req: { message, systemPrompt: systemPrompt ?? null, max_tokens: maxTokens ?? null },
   });
 }
 
 export async function llamaListModels(): Promise<string[]> {
   return invoke<string[]>("llama_list_models");
+}
+
+// ★ v1.9.11: modelo llama guardado — o arranque automático do servidor
+// precisa de saber qual o modelo + quantas camadas na GPU. Guardado quando
+// o servidor arranca com sucesso no gestor de IA (mesmo molde localStorage
+// do resto do estado local).
+const STORAGE_KEY_LLAMA_MODEL = "meggy-llama-model";
+const STORAGE_KEY_LLAMA_GPU_LAYERS = "meggy-llama-gpu-layers";
+
+export function getLlamaModel(): { filename: string; gpuLayers: number } | null {
+  try {
+    const filename = localStorage.getItem(STORAGE_KEY_LLAMA_MODEL);
+    if (!filename) return null;
+    const layers = parseInt(localStorage.getItem(STORAGE_KEY_LLAMA_GPU_LAYERS) || "10", 10);
+    return { filename, gpuLayers: Number.isFinite(layers) ? layers : 10 };
+  } catch (_) {
+    return null;
+  }
+}
+
+export function setLlamaModel(filename: string, gpuLayers: number): void {
+  try {
+    localStorage.setItem(STORAGE_KEY_LLAMA_MODEL, filename);
+    localStorage.setItem(STORAGE_KEY_LLAMA_GPU_LAYERS, String(gpuLayers));
+  } catch (_) { /* ignore */ }
 }

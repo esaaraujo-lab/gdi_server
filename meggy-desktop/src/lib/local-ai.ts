@@ -41,6 +41,11 @@ export const LOCAL_AI_MODELS: LocalAIModel[] = [
 
 const STORAGE_KEY_MODEL = "meggy-local-ai-model";
 const STORAGE_KEY_DISMISSED = "meggy-local-ai-dismissed";
+// ★ v1.9.11: modo de IA padrão — a última escolha explícita (nuvem / WebLLM /
+// llama.cpp) fica guardada e passa a ser o modo de arranque. Antes disto o
+// arranque era sempre hasLocalAIConfigured() ? "local" : "cloud" e o modo
+// llama nunca entrava na lógica.
+const STORAGE_KEY_AI_MODE = "meggy-ai-default-mode";
 
 // System prompt for the local Meggy AI.
 export const MEGGY_LOCAL_SYSTEM_PROMPT =
@@ -160,6 +165,24 @@ export function undismissPopup(): void {
 /** True if a model has been chosen in localStorage (does NOT mean it's loaded in memory). */
 export function hasLocalAIConfigured(): boolean {
   return !!getSelectedModel();
+}
+
+/** Modo de IA guardado como padrão ("local" | "llama" | "cloud"), ou null
+ *  se o utilizador ainda nunca escolheu (arranque usa o comportamento antigo). */
+export function getDefaultAiMode(): "local" | "llama" | "cloud" | null {
+  try {
+    const v = localStorage.getItem(STORAGE_KEY_AI_MODE);
+    return v === "local" || v === "llama" || v === "cloud" ? v : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/** Grava o modo de IA como padrão de arranque (a última escolha explícita). */
+export function setDefaultAiMode(mode: "local" | "llama" | "cloud"): void {
+  try {
+    localStorage.setItem(STORAGE_KEY_AI_MODE, mode);
+  } catch (_) { /* ignore */ }
 }
 
 // ─── Engine loading ───
