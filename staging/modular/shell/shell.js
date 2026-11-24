@@ -3905,6 +3905,28 @@
         }
         return all;
       },
+      // ★ v2.15.90: pool paginado do banco de RESUMOS (disciplina
+      //   [+ assunto]) — gemeo de _bankPool21565 p/ o GET partilhado
+      //   de resumos (subject/topic/limit/offset). Pagina ate ter o
+      //   conjunto COMPLETO (para em pagina curta ou no tecto de
+      //   seguranca 5.200); FALHA no erro — quem chama decide a
+      //   degradacao.
+      async _summaryPool21590(fetchJson, subject, topic) {
+        const pageSize = 200;
+        const all = [];
+        let offset = 0;
+        while (offset <= 5000) {
+          const q = ['limit=' + pageSize, 'offset=' + offset];
+          if (subject) q.push('subject=' + encodeURIComponent(subject));
+          if (topic) q.push('topic=' + encodeURIComponent(topic));
+          const d = await fetchJson('/api/ai/shared-summaries?' + q.join('&'), 20000);
+          if (!d || !d.ok || !Array.isArray(d.summaries)) throw new Error('summaryPool21590: resposta inválida');
+          for (const it of d.summaries) all.push(it);
+          if (d.summaries.length < pageSize) break;
+          offset += pageSize;
+        }
+        return all;
+      },
 
       // ★ v2.15.48: o BANCO de questões (vista de /questoes) — disciplina →
       //   assunto → praticar, sobre as linhas partilhadas (que SÃO o
@@ -4359,6 +4381,179 @@
           if (!subs.length) {
             const ds = await fetchMetaRetry('/api/ai/shared-subjects');
             if (ds && ds.ok && Array.isArray(ds.flashcardSubjects)) subs = ds.flashcardSubjects;
+          }
+          if (!subs.length) return;
+          const cur = subjectSel.value;
+          subs.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; subjectSel.appendChild(o); });
+          subjectSel.value = cur;
+        })();
+      },
+      // ★ v2.15.90 (Ronda 24): o BANCO de resumos (vista de
+      //   /resumos) — espelho de _renderQuestionBank: abre SEM
+      //   carregar resumos, so a lista de disciplinas (endpoint leve
+      //   de listas); disciplina -> assuntos (summary-topics) + pool
+      //   paginado; "Todos os assuntos" (defeito) carrega TUDO o da
+      //   disciplina; um assunto concreto so estreita. "Todas as
+      //   disciplinas" (__all__) e uma escolha activa que carrega
+      //   tudo; o valor inicial '' nao carrega nada. Sem filtro de
+      //   aluno (saiu, como em /questoes .65) — o autor aparece so
+      //   como papel ("Gerado por: Admin/Aluno"). Um assunto pode
+      //   ter MAIS DE UM resumo: a lista mostra TODOS (sem dedup).
+      async _renderSummaryBank(el) {
+        const root = el.querySelector('#meggy-sum-root');
+        if (!root) return;
+        const esc = Shell.views._esc;
+        const toast = (m) => { try { if (typeof window.showToast === 'function') window.showToast(m); } catch (_) {} };
+        const fetchJson = async (url, ms) => {
+          const _ctl = new AbortController();
+          const _to = setTimeout(() => { try { _ctl.abort(); } catch (_) {} }, ms || 15000);
+          try { const r = await fetch(url, { cache: 'no-store', signal: _ctl.signal }); return await r.json(); } finally { clearTimeout(_to); }
+        };
+        // ★ v2.15.64 (mantido na .90): UMA retentativa dos pedidos
+        //   leves (listas/assuntos) — padrao .49, como em /questoes.
+        const fetchMetaRetry = async (url) => {
+          for (let _a = 0; _a < 2; _a++) {
+            try { const _d = await fetchJson(url, _a === 0 ? 8000 : 15000); if (_d) return _d; } catch (_) {}
+            if (_a === 0) await new Promise(r => setTimeout(r, 1200));
+          }
+          return null;
+        };
+        const SEL = 'flex:1;min-width:160px;background:rgba(255,255,255,.06);border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:8px 10px;font-size:13px;';
+        root.innerHTML = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' +
+          '<select id="meggy-sum-subject" style="' + SEL + '"><option value="">Escolhe a disciplina...</option><option value="__all__">Todas as disciplinas</option></select>' +
+          '<select id="meggy-sum-topic" style="' + SEL + '" disabled><option value="">Todos os assuntos</option></select>' +
+        '</div>' +
+        '<div id="meggy-sum-topics" style="margin-bottom:14px;"></div>' +
+        '<div id="meggy-sum-list"><div style="color:#9aa4b8;font-size:13px;padding:16px 0;">Escolhe uma disciplina acima para veres os assuntos e os resumos dela.</div></div>';
+        const subjectSel = root.querySelector('#meggy-sum-subject');
+        const topicSel = root.querySelector('#meggy-sum-topic');
+        const topicsEl = root.querySelector('#meggy-sum-topics');
+        const listEl = root.querySelector('#meggy-sum-list');
+        const HINT = '<div style="color:#9aa4b8;font-size:12px;padding:2px 0 4px;">Escolhe uma disciplina acima: aparecem os assuntos dela e podes ler os resumos um a um.</div>';
+        topicsEl.innerHTML = HINT;
+        let items = [];          // conjunto carregado (o que a lista mostra)
+        let subjectItems = [];   // pool completo da escolha actual (base do regresso a Todos os assuntos sem refetch)
+        let curSubject = '';     // '' = nenhuma · '__all__' = todas · nome = disciplina
+        let curTopic = '';       // '' = Todos os assuntos
+        let topicsData = null;   // {subject, topics:[{topic,count}]} da disciplina actual
+        const previewOf = (it) => String(it.summary || '').replace(/[#*`>]/g, '').replace(/\n/g, ' ').substring(0, 120);
+        const renderList = () => {
+          if (!items.length) { listEl.innerHTML = '<div style="color:#9aa4b8;font-size:13px;padding:12px 0;">Nenhum resumo com esses filtros.</div>'; return; }
+          let html = '<div class="meggy-study-list">';
+          items.forEach((it, idx) => {
+            const sub = (it.subject || '') + (it.topic ? ' · ' + it.topic : '');
+            const date = it.date ? new Date(it.date).toLocaleDateString('pt-BR') : '';
+            const prev = previewOf(it);
+            html += '<div class="meggy-study-item meggy-sum-item" data-idx="' + idx + '" style="cursor:pointer;"><div class="meggy-study-item-icon">📚</div><div class="meggy-study-item-body"><div class="meggy-study-item-title">' + esc(it.lessonName || it.lesson || 'Aula') + '</div><div class="meggy-study-item-meta">' + esc(prev) + (prev ? '...' : '') + '</div><div class="meggy-study-item-meta">' + esc(sub) + '</div><div class="meggy-study-item-meta" style="color:#ff8b9f;">Gerado por: ' + esc(it.author || '—') + (date ? ' · ' + date : '') + '</div></div><i class="bi bi-chevron-right meggy-study-item-chevron"></i></div>';
+          });
+          html += '</div>';
+          listEl.innerHTML = html;
+          listEl.querySelectorAll('.meggy-sum-item').forEach((node) => {
+            node.onclick = () => {
+              const it = items[parseInt(node.dataset.idx, 10)];
+              if (!it) return;
+              Shell.views._showSummary(el, { lessonName: it.lessonName || it.lesson || 'Aula', summary: it.summary || '', author: it.author || '', date: it.date || 0 });
+            };
+          });
+        };
+        const renderTopics = () => {
+          if (!curSubject) { topicsEl.innerHTML = HINT; return; }
+          if (curSubject === '__all__' || !topicsData || topicsData.subject !== curSubject) { topicsEl.innerHTML = ''; return; }
+          const topics = topicsData.topics || [];
+          if (!topics.length) { topicsEl.innerHTML = ''; return; }
+          let html = '<div style="color:#9aa4b8;font-size:12px;margin-bottom:6px;">Assuntos de <b style="color:var(--meggy-qb-name-soft,#e6edf3);">' + esc(curSubject) + '</b> — toca num assunto para veres os resumos dele:</div><div style="display:flex;flex-direction:column;gap:6px;">';
+          topics.forEach(t => {
+            html += '<div class="meggy-sum-topic-row" data-topic="' + esc(t.topic) + '" title="Ver os resumos deste assunto" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;cursor:pointer;"><div style="flex:1;min-width:0;"><b style="color:var(--meggy-qb-name,#f0f6fc);font-size:13px;">' + esc(t.topic) + '</b><div style="color:#9aa4b8;font-size:12px;">' + (t.count || 0) + ' resumos</div></div><i class="bi bi-chevron-right" style="color:#9aa4b8;"></i></div>';
+          });
+          html += '</div>';
+          topicsEl.innerHTML = html;
+          topicsEl.querySelectorAll('.meggy-sum-topic-row').forEach(r => { r.onclick = () => {
+            const t = r.dataset.topic || '';
+            topicSel.value = t;
+            curTopic = t;
+            if (!t) { if (subjectItems.length) { items = subjectItems; renderList(); } else loadSet(curSubject, ''); }
+            else loadSet(curSubject, t);
+          }; });
+        };
+        // assuntos da disciplina: popula o filtro de assunto e as
+        //   linhas (contagens do endpoint de topics).
+        const loadTopics = async (subject) => {
+          const d = await fetchMetaRetry('/api/ai/summary-topics?subject=' + encodeURIComponent(subject));
+          if (subject !== curSubject) return;  // a selecção mudou entretanto
+          const topics = (d && d.ok && Array.isArray(d.topics)) ? d.topics : [];
+          topicsData = { subject: subject, topics: topics };
+          const cur = topicSel.value || '';
+          topicSel.innerHTML = '<option value="">Todos os assuntos</option>' + topics.map(t => '<option value="' + esc(t.topic) + '">' + esc(t.topic) + '</option>').join('');
+          topicSel.value = topics.some(t => t.topic === cur) ? cur : '';
+          curTopic = topicSel.value || '';
+          renderTopics();
+        };
+        // carrega um conjunto (disciplina [__all__ = todas] +
+        //   assunto opcional) — pool paginado completo, 2
+        //   tentativas (padrão .49). Respostas fora de prazo
+        //   (a selecção mudou) são descartadas.
+        const loadSet = async (subject, topic) => {
+          listEl.innerHTML = '<div class="meggy-loading"><div class="spinner-border" role="status"></div><div>' + (topic ? 'Carregando resumos do assunto...' : 'Carregando resumos...') + '</div></div>';
+          let pool = null;
+          for (let _att = 0; _att < 2 && !pool; _att++) {
+            try { pool = await Shell.views._summaryPool21590(fetchJson, subject === '__all__' ? '' : subject, topic || ''); }
+            catch (_) { pool = null; if (_att === 0) await new Promise(r => setTimeout(r, 1200)); }
+          }
+          if (!pool) {
+            if (subject === curSubject && (topic || '') === curTopic) { items = []; listEl.innerHTML = '<div style="color:#ff8b8b;font-size:13px;padding:12px 0;">Não foi possível carregar o banco agora. Tente de novo em instantes.</div>'; }
+            return;
+          }
+          if (!topic && subject === curSubject) subjectItems = pool;  // base completa da disciplina, mesmo que a vista já tenha estreitado
+          if (subject !== curSubject || (topic || '') !== curTopic) return;
+          items = pool;
+          renderList();
+        };
+        subjectSel.onchange = () => {
+          curSubject = subjectSel.value || '';
+          curTopic = '';
+          items = []; subjectItems = []; topicsData = null;
+          topicSel.innerHTML = '<option value="">Todos os assuntos</option>';
+          topicSel.value = '';
+          if (!curSubject) {
+            topicSel.disabled = true;
+            topicsEl.innerHTML = HINT;
+            listEl.innerHTML = '<div style="color:#9aa4b8;font-size:13px;padding:16px 0;">Escolhe uma disciplina acima para veres os assuntos e os resumos dela.</div>';
+            return;
+          }
+          if (curSubject === '__all__') {
+            topicSel.disabled = true;
+            topicsEl.innerHTML = '';
+            loadSet('__all__', '');
+            return;
+          }
+          topicSel.disabled = false;
+          topicsEl.innerHTML = '<div style="color:#9aa4b8;font-size:12px;">Carregando assuntos...</div>';
+          loadTopics(curSubject);
+          loadSet(curSubject, '');
+        };
+        topicSel.onchange = () => {
+          curTopic = topicSel.value || '';
+          if (!curSubject || curSubject === '__all__') return;
+          if (!curTopic) {
+            // Todos os assuntos: volta ao pool da disciplina já
+            //   carregado (sem refetch); se ele falhou, retenta.
+            if (subjectItems.length) { items = subjectItems; renderList(); }
+            else loadSet(curSubject, '');
+          } else {
+            loadSet(curSubject, curTopic);
+          }
+        };
+        // abertura preguiçosa: SÓ as disciplinas (listas leves,
+        //   com a retentativa .64; degrada p/ question-bank/lists —
+        //   o MESMO universo, por construcao). Nenhum resumo e
+        //   pedido antes de uma escolha activa.
+        (async () => {
+          let subs = [];
+          const dl = await fetchMetaRetry('/api/ai/summary-bank/lists');
+          if (dl && dl.ok && Array.isArray(dl.disciplines) && dl.disciplines.length) subs = dl.disciplines;
+          if (!subs.length) {
+            const ds = await fetchMetaRetry('/api/ai/question-bank/lists');
+            if (ds && ds.ok && Array.isArray(ds.disciplines)) subs = ds.disciplines;
           }
           if (!subs.length) return;
           const cur = subjectSel.value;
@@ -5279,19 +5474,22 @@
       },
 
       resumos(el) {
+        // ★ v2.15.90 (Ronda 24): /resumos EXACTAMENTE como /questoes
+        //   (ordem do Elton 2026-11-23 22:20 -03): o BANCO de resumos
+        //   por disciplina → assunto. A arvore por curso (pastas →
+        //   disciplina → assunto) SAIU daqui — o curso fica so como
+        //   proveniencia/metadata do conteudo, nunca como nivel da
+        //   arvore — e o filtro por aluno saiu, como saiu em /questoes
+        //   (.65). Os resumos partilhados SAO o banco (a seccao
+        //   "Compartilhados — de todos os alunos" vive no cabecalho
+        //   abaixo). _loadStudyCache/_groupEntriesByHierarchy/
+        //   _renderStudyTree/_renderSharedSection ficam definidos
+        //   (nao se apaga funcao que funciona) mas sem chamador
+        //   nesta vista — limpeza futura, fora desta ronda.
         el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">📚 Resumos</h1></div>' +
-          '<div id="meggy-resumos-container"><div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando resumos...</div></div></div>';
-        (async () => {
-          const entries = await Shell.views._loadStudyCache();
-          const withSummary = entries.filter(e => e.summary && typeof e.summary === 'string' && e.summary.length > 50);
-          const container = document.getElementById('meggy-resumos-container');
-          if (!container) return;
-          if (withSummary.length === 0) { Shell.views._renderGenerateHint(el, 'resumos'); Shell.views._renderSharedSection(el, 'resumos'); return; }
-          // ★ Agrupar por curso → disciplina → assunto
-          const tree = Shell.views._groupEntriesByHierarchy(withSummary);
-          Shell.views._renderStudyTree(container, tree, 'resumos', el, withSummary);
-          Shell.views._renderSharedSection(el, 'resumos');
-        })();
+          '<div style="color:#9aa4b8;font-size:13px;margin-bottom:12px;">🤝 Compartilhados — de todos os alunos · Banco de resumos de todos os cursos e alunos, organizado por disciplina e assunto. Gere resumos numa aula e eles entram aqui automaticamente.</div>' +
+          '<div id="meggy-sum-root"><div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando o banco de resumos...</div></div></div>';
+        Shell.views._renderSummaryBank(el);
       },
 
       async _showSummary(el, entry) {
