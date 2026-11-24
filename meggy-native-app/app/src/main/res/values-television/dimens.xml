@@ -10,7 +10,7 @@
   Ronda 7 Frente B: estes valores sao a baseline de escala 1.0 do
   TvAutoFit — o runtime deriva tudo do viewport medido.
   Margens de overscan: 56dp laterais (mínimo 48dp), 40dp topo/fundo
-  neste ficheiro (o detalhe TV partilha estes dimens — a home aplica
+  neste arquivo (o detalhe TV partilha estes dimens — a home aplica
   >=48dp em runtime, ver TvAutoFit.topMarginPx()).
   Patch TV 2.7.7/2.1.6/1.0.5 (bug layout gigante na TV): cards do rail
   360dp -> 200dp (baseline 2.7.5), drive 280dp -> 156dp, thumb do
