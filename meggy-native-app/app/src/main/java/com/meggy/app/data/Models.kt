@@ -274,8 +274,12 @@ data class HeroItem(
                 title = "PF — Agente da Polícia Federal",
                 subtitle = "Preparatório completo. 45 aulas em vídeo HD.",
                 badge = "DESTAQUE DA SEMANA",
-                drivePath = "/0:/",
-                driveName = "RETA FINAL TRTs",
+                // R26 — o path era "/0:/" (RETA FINAL TRTs): o curso
+                // PF vive na raiz 10/ALFACON (registro user_courses,
+                // B-31b) e o toque abria a pasta errada. Path
+                // codificado exato do registro do curso.
+                drivePath = "/10:/PF%20-%20Agente%20da%20Pol%C3%ADcia%20Federal",
+                driveName = "PF - Agente da Polícia Federal",
                 icon = "⚖️"
             ),
             HeroItem(
@@ -304,7 +308,7 @@ data class HeroItem(
             ),
             HeroItem(
                 title = "Vestibulares — Plataformas",
-                subtitle = "Aulas de major vestibulares do país.",
+                subtitle = "Aulas dos maiores vestibulares do país.",
                 badge = "DESTAQUE",
                 drivePath = "/2:/",
                 driveName = "VESTIBULARES PLATAFORMAS",
