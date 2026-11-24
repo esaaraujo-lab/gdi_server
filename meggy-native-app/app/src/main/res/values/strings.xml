@@ -122,6 +122,14 @@
     <string name="materials_generating">A gerar…</string>
     <string name="materials_generate_done">Materiais gerados ✓</string>
     <string name="materials_generate_running">A Meggy está a gerar os materiais — volta a verificar daqui a pouco.</string>
+    <!-- R23 — motivo real por parte (o servidor marcou o pacote como
+         desatualizado; o batalhão pula as questões quando o material
+         cita lei revogada). Sem este sinal, o vazio continua genérico. -->
+    <string name="qf_questions_outdated">Questões não geradas: o material cita lei revogada ou desatualizada.</string>
+    <string name="materials_generate_partial">Resumo pronto — faltam pílulas ou questões nesta aula.</string>
+    <!-- R23 — a release mais nova existe mas ainda não tem APK (o
+         workflow ainda está a publicá-la): não mentir que não há update. -->
+    <string name="update_publishing">A nova versão (v%1$s) ainda está a ser publicada — tenta de novo daqui a pouco.</string>
     <string name="materials_generate_failed">Não foi possível gerar agora. Tenta de novo.</string>
     <string name="materials_generate_unavailable">A geração não está disponível neste servidor.</string>
     <string name="materials_generate_no_material">Sem material legível nesta aula para gerar.</string>
