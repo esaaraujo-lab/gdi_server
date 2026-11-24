@@ -436,6 +436,14 @@ object UpdateChecker {
                 // primeira e mentir que não há update. A mais nova
                 // sem APK fica registada p/ o aviso "ainda a ser
                 // publicada" (ver abaixo).
+                // R23-fix — a reescrita do loop apagou as declarações
+                // destas três (existiam na 2.7.39, UpdateChecker.kt
+                // l.431-433); sem elas o `remoteVersion`/`apkUrl`/
+                // `apkSize` abaixo não resolvem. `remoteVersion`
+                // vazio = nenhuma release com APK encontrada.
+                var remoteVersion = ""
+                var apkUrl: String? = null
+                var apkSize = 0L
                 var newestVersionWithoutApk = ""
                 for (i in 0 until releasesArray.length()) {
                     val release = releasesArray.getJSONObject(i)

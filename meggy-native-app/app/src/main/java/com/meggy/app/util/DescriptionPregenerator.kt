@@ -135,6 +135,25 @@ class DescriptionPregenerator(private val context: Context) {
                         skippedReasons[folderPath] = "backend sem rotas de IA"
                         return@launch
                     }
+                    is LessonDescription.Outcome.Partial -> {
+                        // R23-fix — pacote parcial (resumo existe, faltam
+                        // partes, job terminado): grava-se o que há, como
+                        // no Ready; as partes em falta ficam p/ a abertura
+                        // da aula (o botão Gerar por aba). Branch separada
+                        // de propósito: numa branch junta o smart-cast vai
+                        // p/ o supertipo e `bundle`/`text` não resolvem.
+                        sm.saveLessonDescription(folderPath, outcome.text)
+                        val lessonFile = LessonDescription.lessonFilePath(folderPath, files)
+                        if (lessonFile != null) {
+                            runCatching {
+                                MaterialSaver.saveGenerated(
+                                    context, lessonFile, folderName,
+                                    outcome.bundle.summary, outcome.bundle.mindmap,
+                                    outcome.bundle.questionsJson
+                                )
+                            }
+                        }
+                    }
                     is LessonDescription.Outcome.NoMaterial -> {
                         skippedReasons[folderPath] = "sem material legível (${outcome.reason})"
                     }
