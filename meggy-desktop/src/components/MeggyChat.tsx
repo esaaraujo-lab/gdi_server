@@ -123,7 +123,13 @@ export default function MeggyChat({ onClose, aiMode, localAiReady }: MeggyChatPr
       setMessages(prev => [...prev, { role: "bot", text: response }]);
     } catch (e: unknown) {
       const errMsg = e instanceof Error ? e.message : String(e);
-      setMessages(prev => [...prev, { role: "bot", text: "Erro: " + errMsg }]);
+      // ★ v1.9.10 (auditoria de rotas): 401 = sessão expirada — o chat não
+      // tem acesso ao logout; diz para sair e entrar de novo em vez de
+      // mostrar o código cru.
+      const text = errMsg.includes("AUTH:401")
+        ? "Sua sessão expirou — saia e entre novamente para continuar conversando com a Meggy. 🐾"
+        : "Erro: " + errMsg;
+      setMessages(prev => [...prev, { role: "bot", text }]);
     }
     setLoading(false);
   }

@@ -24,6 +24,9 @@ interface AIInstallPopupProps {
   onClose: () => void;
   onChooseLocal: (modelId: string) => void;
   onChooseCloud: () => void;
+  // RX470 fix (1.9.10): abre o LlamaManager (llama.cpp/Vulkan) — o caminho
+  // que funciona na RX470 quando o WebLLM nao carrega.
+  onOpenLlama?: () => void;
 }
 
 interface ModelStatus {
@@ -42,7 +45,7 @@ const initialStatus: ModelStatus = {
   errorMsg: null,
 };
 
-export default function AIInstallPopup({ onClose, onChooseLocal, onChooseCloud }: AIInstallPopupProps) {
+export default function AIInstallPopup({ onClose, onChooseLocal, onChooseCloud, onOpenLlama }: AIInstallPopupProps) {
   const [webgpuOk, setWebgpuOk] = useState<boolean | null>(null);
   // Per-model status: keyed by model id
   const [statuses, setStatuses] = useState<Record<string, ModelStatus>>({});
@@ -115,22 +118,11 @@ export default function AIInstallPopup({ onClose, onChooseLocal, onChooseCloud }
       setSelectedModelState(m.id);
     } catch (e: unknown) {
       const rawMsg = e instanceof Error ? e.message : String(e);
-      // ★ v1.7.2: Auto-fallback to cloud AI when WebGPU shaders fail (RX470, older GPUs).
-      // Instead of showing a scary blocking error, automatically switch to cloud mode
-      // and close the popup. The user can still use the app normally.
-      const isShaderError = rawMsg.includes("Invalid ShaderModule") ||
-        rawMsg.includes("index_kernel") ||
-        rawMsg.includes("compute stage") ||
-        rawMsg.includes("shader") ||
-        rawMsg.includes("ShaderModule");
-      if (isShaderError) {
-        // Clear the selected model — local AI won't work on this GPU
-        clearSelectedModel();
-        // Auto-switch to cloud AI
-        onChooseCloud();
-        return;
-      }
-      // For other errors, show the message but don't block
+      // RX470 fix (1.9.10): a v1.7.2 fechava o popup EM SILENCIO no erro de
+      // shader e mudava para a nuvem sem dizer por que — o utilizador via o
+      // popup desaparecer ("nada acontece"). Agora o erro fica VISIVEL no
+      // cartao do modelo e oferecemos o llama.cpp (Vulkan), que funciona
+      // na RX470. Nada fecha sozinho.
       updateStatus(m.id, { downloading: false, errorMsg: rawMsg, progress: null });
     }
   }
@@ -258,6 +250,14 @@ export default function AIInstallPopup({ onClose, onChooseLocal, onChooseCloud }
               • Use a IA da Nuvem (já configurada e funcionando)<br />
               • A IA da Nuvem usa os mesmos modelos da plataforma web
             </div>
+            {onOpenLlama && (
+              <button
+                onClick={onOpenLlama}
+                style={{ ...popupBtn, background: "rgba(93,222,218,0.12)", borderColor: "rgba(93,222,218,0.3)", color: "var(--teal)", marginTop: "12px" }}
+              >
+                🦙 Tentar o llama.cpp (Vulkan) — funciona na RX470
+              </button>
+            )}
           </div>
         )}
 
@@ -324,7 +324,12 @@ export default function AIInstallPopup({ onClose, onChooseLocal, onChooseCloud }
                     </div>
                   </div>
 
-                  {/* Progress bar */}
+                  {/* Progress bar / estado do carregamento */}
+                  {st.downloading && !st.progress && (
+                    <div style={{ marginBottom: "8px", fontSize: "11px", color: "var(--text-muted)" }}>
+                      ⏳ A iniciar o carregamento…
+                    </div>
+                  )}
                   {st.downloading && st.progress && (
                     <div style={{ marginBottom: "8px" }}>
                       <div style={{
@@ -368,6 +373,16 @@ export default function AIInstallPopup({ onClose, onChooseLocal, onChooseCloud }
                       fontSize: "11px",
                     }}>
                       ⚠️ {st.errorMsg}
+                      {onOpenLlama && (
+                        <div style={{ marginTop: "8px" }}>
+                          <button
+                            onClick={onOpenLlama}
+                            style={{ ...popupBtn, background: "rgba(93,222,218,0.12)", borderColor: "rgba(93,222,218,0.3)", color: "var(--teal)" }}
+                          >
+                            🦙 Usar llama.cpp (Vulkan) — funciona na RX470
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -388,12 +403,13 @@ export default function AIInstallPopup({ onClose, onChooseLocal, onChooseCloud }
                         ⬇ Baixar ({fmtSize(m.sizeMb)})
                       </button>
                     )}
-                    {st.cached && !st.loaded && !st.downloading && (
+                    {st.cached && !st.loaded && (
                       <button
                         onClick={() => handleDownload(m)}
-                        style={{ ...popupBtn }}
+                        disabled={st.downloading}
+                        style={{ ...popupBtn, opacity: st.downloading ? 0.6 : 1 }}
                       >
-                        ⚡ Carregar
+                        {st.downloading ? "⏳ A carregar…" : "⚡ Carregar"}
                       </button>
                     )}
                     {st.loaded && (
@@ -539,6 +555,15 @@ export default function AIInstallPopup({ onClose, onChooseLocal, onChooseCloud }
         }}>
           💡 A IA Local é mais rápida e funciona offline, mas a IA da Nuvem tem modelos melhores.
           Você pode alternar quando quiser nas configurações.
+          {onOpenLlama && (
+            <>
+              {" "}Se o WebLLM não carregar na sua placa (ex.: RX470), use o{" "}
+              <a href="#" onClick={(e) => { e.preventDefault(); onOpenLlama(); }} style={{ color: "var(--teal)" }}>
+                llama.cpp (Vulkan)
+              </a>
+              .
+            </>
+          )}
         </div>
       </div>
     </div>
