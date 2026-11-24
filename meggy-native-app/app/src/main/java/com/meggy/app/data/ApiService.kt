@@ -11,6 +11,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import java.net.URLEncoder
 
 /**
  * R19B (P1) — resultado tipado de [ApiService.listFolder] /
@@ -21,7 +22,11 @@ import java.io.IOException
  *
  *  • [Ok] — listagem OK. Pode ser parcial: uma falha numa página > 0
  *    retorna o que já foi acumulado em vez de derrubar a tela.
- *  • [SessionExpired] — HTTP 401/403 ou corpo HTML de login.
+ *  • [SessionExpired] — HTTP 401/403, corpo HTML de login, ou 200
+ *    com corpo de texto de sessão ("Session Expired" / "Invalid User",
+ *    R29: o portão do worker devolve 200 + texto quando a sessão
+ *    expira por tempo, e o JSONObject desse texto lançava exceção —
+ *    caía em Transient e nunca fazia bounce nem re-login).
  *  • [Transient] — excepção de rede/timeout, outro não-2xx (ex.: 5xx),
  *    corpo nulo ou JSON inválido. NUNCA faz bounce.
  */
@@ -160,6 +165,21 @@ class ApiService(private val context: Context) {
                 // ★ v1.0.8: verificar se resposta é HTML (login redirect) em vez de JSON
                 if (body.trimStart().startsWith("<!DOCTYPE") || body.trimStart().startsWith("<html")) {
                     // R19B (P1): HTML de login = sessão expirada.
+                    if (pageIndex == 0) return FolderResult.SessionExpired
+                    return@use null
+                }
+
+                // R29 — defesa contra sessão expirada devolvida como
+                // 200 + texto ("Session Expired!" / "Invalid User!"):
+                // o portão do worker responde 200 nesses dois casos e
+                // o JSONObject do texto lançava exceção → Transient →
+                // toast para sempre, sem bounce nem re-login. Só estes
+                // dois textos viram SessionExpired — qualquer outro
+                // corpo estranho continua Transient (o JSONObject
+                // abaixo lança e o catch classifica como Transient).
+                // Página 0 = SessionExpired; páginas > 0 = lista
+                // parcial acumulada (mesmo padrão do HTML de login).
+                if (isSessionExpiredText(body)) {
                     if (pageIndex == 0) return FolderResult.SessionExpired
                     return@use null
                 }
@@ -551,6 +571,12 @@ class ApiService(private val context: Context) {
                 if (pageIndex == 0) return FolderResult.SessionExpired
                 break
             }
+            // R29 — mesmo caso do listFolder (200 + texto de sessão
+            // expirada): SessionExpired na página 0, parcial acima.
+            if (isSessionExpiredText(body)) {
+                if (pageIndex == 0) return FolderResult.SessionExpired
+                break
+            }
             val json = try {
                 JSONObject(body)
             } catch (_: Exception) {
@@ -669,6 +695,59 @@ class ApiService(private val context: Context) {
     }
 
     /**
+     * R29 — busca de aulas no D1 (GET /api/d1/lessons/search, rota
+     * do worker .92 — a mesma que a busca da web usa): devolve, por
+     * aula, lesson_path (o caminho ATUAL da aula, codificado),
+     * lesson_name, course_path e lesson_type. O lesson_path é o
+     * caminho do ARQUIVO — a pasta é o caminho sem o último segmento
+     * (ver StaleRecentResolver.folderOfLessonPath). Null em qualquer
+     * falha (rede, 401, D1 desligado ou quota esgotada) — o chamador
+     * cai para o passeio no Drive (listFolder), que não depende do D1.
+     * Lista vazia = a busca correu e não achou nada.
+     */
+    data class D1LessonHit(
+        val lessonName: String,
+        val lessonPath: String,
+        val coursePath: String,
+        val lessonType: String?
+    )
+
+    suspend fun searchLessonsD1(query: String, limit: Int = 10): List<D1LessonHit>? {
+        if (query.isBlank()) return emptyList()
+        val url = "${MeggyApp.BASE_URL}/api/d1/lessons/search" +
+            "?q=${URLEncoder.encode(query, "UTF-8")}&limit=$limit"
+        val request = Request.Builder()
+            .url(url)
+            .header("Cookie", "session=${sessionManager.sessionCookie ?: ""}")
+            .build()
+        return try {
+            MeggyApp.okHttpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return null
+                val body = response.body?.string() ?: return null
+                val json = JSONObject(body)
+                if (!json.optBoolean("ok", false)) return null
+                val arr = json.optJSONArray("lessons") ?: return emptyList()
+                val out = ArrayList<D1LessonHit>(arr.length())
+                for (i in 0 until arr.length()) {
+                    val obj = arr.optJSONObject(i) ?: continue
+                    val path = obj.optString("lesson_path").takeIf { it.isNotBlank() } ?: continue
+                    out.add(
+                        D1LessonHit(
+                            lessonName = obj.optString("lesson_name"),
+                            lessonPath = path,
+                            coursePath = obj.optString("course_path"),
+                            lessonType = obj.optString("lesson_type").takeIf { it.isNotBlank() }
+                        )
+                    )
+                }
+                out
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
      * ★ v2.7.3 LOGIN PERSISTENCE FIX:
      * Validates the current session by making a lightweight API call.
      * If the session cookie has expired (server returns HTML login page or
@@ -706,6 +785,19 @@ class ApiService(private val context: Context) {
     }
 
     /**
+     * R29 — True quando o corpo de um 200 é o texto de sessão
+     * expirada do portão do worker ("Session Expired!" por tempo,
+     * "Invalid User!" quando o usuário não existe). Só estes dois
+     * textos — qualquer outro corpo não-JSON continua sendo falha
+     * transitória (o JSONObject lança e o catch classifica assim).
+     */
+    private fun isSessionExpiredText(body: String): Boolean {
+        val trimmed = body.trimStart()
+        return trimmed.startsWith("Session Expired") ||
+            trimmed.startsWith("Invalid User")
+    }
+
+    /**
      * R21 — validação tipada da sessão (ver [SessionCheck]).
      *
      * 1) Probe leve (listFolder da raiz, 1 página): Ok = VALID.
@@ -714,6 +806,16 @@ class ApiService(private val context: Context) {
      *    quota esgotada só gastaria pedidos; a sessão pode estar boa.
      * 3) SessionExpired = tenta o re-login silencioso uma vez:
      *    resultou → VALID; falhou/sem credenciais → INVALID.
+     *
+     * R29 — o passo 3 agora cobre também o servidor que diz que a
+     * sessão morreu com 200 + texto ("Session Expired" / "Invalid
+     * User") ou 401: o listFolder classifica esses dois sinais como
+     * SessionExpired, por isso o probe deles cai aqui (re-login →
+     * INVALID quando não há como recuperar) em vez de UNKNOWN. Sem
+     * resposta do servidor continua UNKNOWN — o Splash entra na Home
+     * e as listagens fazem bounce depois, se for mesmo expiração.
+     * É esta distinção que impede o Splash de entrar na Home com a
+     * sessão morta quando o fix do worker falhar.
      */
     suspend fun validateSession(): SessionCheck {
         val probe = try {
