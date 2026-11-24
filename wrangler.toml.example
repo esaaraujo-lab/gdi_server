@@ -1,0 +1,80 @@
+# ═══════════════════════════════════════════════════════════════
+# GDI Index — wrangler.toml de EXEMPLO
+# ═══════════════════════════════════════════════════════════════
+# Copie para wrangler.toml e preencha com os SEUS valores:
+#   cp wrangler.toml.example wrangler.toml
+# Depois edite os IDs e as [vars]. O wrangler.toml preenchido NÃO
+# vai para o repo (está no .gitignore) — cada deploy tem o seu.
+#
+# SEGURANÇA: segredos NUNCA entram aqui ([vars] é texto claro e vai
+# para o repo se o arquivo for commitado por engano). Segredos só por
+# `wrangler secret put` — ver docs/DEPLOY.md, passo 5.
+#
+# Base: worker v2.15.93 (versão limpa). O worker cria o schema do D1
+# sozinho no 1º arranque; migrations/0001_init.sql é o mesmo schema
+# para setup explícito/auditoria.
+
+name = "gdi-index"
+account_id = "SEU_ACCOUNT_ID"
+main = "worker.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# Frente: "usuario/repo" do SEU fork (o worker busca os arquivos de
+# staging/modular/ deste repo). "main" p/ desenvolvimento; p/ distribuir
+# fixe uma tag de release (ex. "v1.0.0") — ver docs/DEPLOY.md, passo 1.
+MODULAR_REPO = "seu-usuario/seu-repo"
+MODULAR_REF = "main"
+
+# Admin: nomes de usuário separados por vírgula. O 1º admin é "admin"
+# (usuário de demonstração — ver docs/DEPLOY.md, passo 7); depois de
+# criar a sua conta, ponha o SEU nome de usuário aqui.
+ADMIN_USERS = "admin"
+
+# Dados de demonstração (admin/admin + usuários de teste + drives
+# fictícios) semeados no 1º arranque com o D1 vazio. "false" desliga o
+# seed (ver docs/DEPLOY.md, passo 7).
+DEMO_SEED = "true"
+
+# Cloudflare AI Gateway (opcional — deixe vazio se não usar).
+AI_GATEWAY_ID = ""
+CF_ACCOUNT_ID = ""
+
+# KV namespace: cache da plataforma (resumos, listas, saúde dos modelos)
+[[kv_namespaces]]
+binding = "MEGGY_CACHE"
+id = "SEU_KV_MEGGY_CACHE_ID"
+
+# KV namespace: sessões e estado (ENV)
+[[kv_namespaces]]
+binding = "ENV"
+id = "SEU_KV_ENV_ID"
+
+# D1 database (principal)
+[[d1_databases]]
+binding = "MEGGY_D1"
+database_name = "gdi-index"
+database_id = "SEU_D1_ID"
+
+# D1 do par — num deploy único aponta para o MESMO D1. Com dois
+# workers (ex. produção + testes), aponta para o D1 do outro worker.
+[[d1_databases]]
+binding = "MEGGY_D1_PEER"
+database_name = "gdi-index"
+database_id = "SEU_D1_ID"
+
+# Workers AI binding (o código usa env.ai — o nome tem de ser "ai")
+[[unsafe.bindings]]
+name = "ai"
+type = "ai"
+
+# Observabilidade: logs/métricas no dashboard Cloudflare
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+# Cron semanal (segunda 00:00 UTC): varredura/backfill dos cursos
+# registrados. Tire o bloco se não quiser o cron.
+[triggers]
+crons = ["0 0 * * 1"]

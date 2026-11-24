@@ -1,0 +1,9 @@
+# GDI Index — o que nunca entra no repo
+.wrangler/
+.dev.vars
+wrangler.toml
+node_modules/
+*.log
+*.sqlite
+*.sqlite3
+.DS_Store

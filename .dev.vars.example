@@ -1,0 +1,35 @@
+# ═══════════════════════════════════════════════════════════════
+# GDI Index — .dev.vars de EXEMPLO (só p/ `wrangler dev` local)
+# ═══════════════════════════════════════════════════════════════
+# Copie para .dev.vars e preencha com os SEUS valores:
+#   cp .dev.vars.example .dev.vars
+# NUNCA commite o .dev.vars (está no .gitignore). Estes valores são
+# SÓ p/ teste local; em produção use `wrangler secret put`
+# (ver docs/DEPLOY.md, passo 5).
+#
+# Gere as chaves de sessão com:  openssl rand -hex 32
+CRYPTO_BASE_KEY="GERAR_COM_openssl_rand_-hex_32"
+HMAC_BASE_KEY="GERAR_COM_openssl_rand_-hex_32"
+
+# Google Drive (OAuth) — crie no Google Cloud Console (ver docs/DEPLOY.md)
+GOOGLE_CLIENT_ID="SEU_CLIENT_ID.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET="SUA_CLIENT_SECRET"
+GOOGLE_REFRESH_TOKEN="SEU_REFRESH_TOKEN"
+
+# Service accounts do Drive (JSON completo numa só linha) — opcional.
+# Sem elas o Drive usa o refresh_token acima.
+SERVICE_ACCOUNT_JSON=""
+SERVICE_ACCOUNT_JSON_0=""
+SERVICE_ACCOUNT_JSON_1=""
+
+# IAs de fallback (opcionais — o Workers AI é o 1º da fila e não
+# precisa de chave; sem estas chaves a cascata cai no Pollinations,
+# que também não precisa de chave).
+NVIDIA_API_KEY=""
+NVIDIA_API_KEY_2=""
+NVIDIA_API_KEY_3=""
+GROQ_API_KEY=""
+GROQ_API_KEY_2=""
+ZHIPU_API_KEY=""
+OPENROUTER_API_KEY=""
+OPENAI_API_KEY=""
