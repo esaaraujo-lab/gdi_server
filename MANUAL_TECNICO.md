@@ -800,7 +800,7 @@ const authConfig = {
   login_days: 7,
   cors_domain: "*",
   users_list: [                          // 14 usuários (plaintext fallback)
-    { username: "elton@araujo.eu.org", password: "F@b@180574" },
+    { username: "elton@araujo.eu.org", password: "[REDACTED]" },
     { username: "joao", password: "joao" },
     // ...
   ],
