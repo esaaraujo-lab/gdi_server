@@ -4,7 +4,7 @@
     <cache-path name="pdfs" path="pdfs/" />
     <cache-path name="downloads" path="downloads/" />
     <!-- §9 (GOLDEN_RULES.md) — APK de atualização na pasta pública Download:
-         o FileProvider só serve ficheiros sob um root aqui declarado. Sem
+         o FileProvider só serve arquivos sob um root aqui declarado. Sem
          este <external-path>, getUriForFile() rebenta com
          IllegalArgumentException e o instalador nunca abre (foi o que
          acontecia até aqui: só havia <cache-path>). -->
