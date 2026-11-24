@@ -2125,6 +2125,10 @@ class PlayerActivity : AppCompatActivity() {
         val summary: String?,
         val pills: List<String>,
         val questions: List<MaterialsQuestion>,
+        // R23 — o servidor marcou o pacote como desatualizado: as
+        // questões em falta têm motivo real (lei revogada), a
+        // mostrar no vazio da aba em vez do texto genérico.
+        val questionsOutdated: Boolean = false,
         val files: List<FileItem>
     )
 
@@ -2201,10 +2205,18 @@ class PlayerActivity : AppCompatActivity() {
                     ?: lessonFile?.let { AiService.loadFromFolder(this@PlayerActivity, it, "flashcard") }
                 val questionsText = bundle?.questionsJson
                     ?: lessonFile?.let { AiService.loadFromFolder(this@PlayerActivity, it, "questoes") }
+                    // R23 — 4.ª fonte, DEPOIS das actuais: o banco
+                    // unificado por aula (as questões que só existem
+                    // no banco nunca eram lidas). Só questões.
+                    ?: LessonDescription.fetchBankQuestions(
+                        this@PlayerActivity, folderPath,
+                        folderPath.trimEnd('/').substringAfterLast('/'), materialNames
+                    )
                 MaterialsData(
                     summary = summary?.takeIf { it.isNotBlank() },
                     pills = parseMaterialsPills(pillsText),
                     questions = parseMaterialsQuestions(questionsText),
+                    questionsOutdated = bundle?.outdated == true,
                     files = materialsLessonFiles(allFiles)
                 )
             } catch (_: Exception) {
@@ -2273,7 +2285,7 @@ class PlayerActivity : AppCompatActivity() {
         mat<View>(R.id.materials_summary_generate)?.visibility =
             if (data.summary != null) View.GONE else View.VISIBLE
         renderMaterialsPills(data.pills)
-        renderMaterialsQuestions(data.questions)
+        renderMaterialsQuestions(data.questions, data.questionsOutdated)
         val flashcards = deriveMaterialsFlashcards(data)
         renderMaterialsFlashcards(flashcards)
         renderMaterialsFiles(data.files)
@@ -2469,19 +2481,22 @@ class PlayerActivity : AppCompatActivity() {
             if (isFinishing || isDestroyed) return@launch
             when (outcome) {
                 is LessonDescription.Outcome.Ready -> {
-                    val lessonFile = LessonDescription.lessonFilePath(folderPath, files)
-                    if (lessonFile != null) {
-                        runCatching {
-                            MaterialSaver.saveGenerated(
-                                this@PlayerActivity, lessonFile, folderName,
-                                outcome.bundle.summary, outcome.bundle.mindmap,
-                                outcome.bundle.questionsJson
-                            )
-                        }
-                    }
-                    SessionManager.get(this@PlayerActivity)
-                        .saveLessonDescription(folderPath, outcome.text)
+                    saveGeneratedMaterials(folderPath, files, folderName, outcome.bundle)
                     Snackbar.make(binding.root, R.string.materials_generate_done, Snackbar.LENGTH_SHORT).show()
+                    if (materialsFolderPath() == folderPath) loadMaterials()
+                }
+                is LessonDescription.Outcome.Partial -> {
+                    saveGeneratedMaterials(folderPath, files, folderName, outcome.bundle)
+                    // R23 — Partial: o resumo chegou mas faltam partes
+                    // (o job terminou) — o Snackbar diz o motivo real
+                    // em vez de "gerado ✓"; as abas vazias mantêm o
+                    // botão Gerar (o refresh abaixo repõe o estado).
+                    val msg = when {
+                        outcome.jobError != null -> outcome.jobError
+                        outcome.questionsOutdated -> getString(R.string.qf_questions_outdated)
+                        else -> getString(R.string.materials_generate_partial)
+                    }
+                    Snackbar.make(binding.root, msg, Snackbar.LENGTH_LONG).show()
                     if (materialsFolderPath() == folderPath) loadMaterials()
                 }
                 is LessonDescription.Outcome.Generating -> {
@@ -2512,6 +2527,33 @@ class PlayerActivity : AppCompatActivity() {
             setMaterialsGenerating(false)
             materialsGeneratingFor = null
         }
+    }
+
+    /**
+     * R23 — gravação comum do pacote gerado (resumo + pílulas +
+     * questões) na pasta de materiais + cache local do resumo.
+     * As branches Ready/Partial são separadas de propósito: numa
+     * branch `is Ready, is Partial` junta, o smart-cast vai p/ o
+     * supertipo comum (Outcome) e `bundle`/`text` deixam de
+     * resolver (ver DetailActivity.applyGeneratedOutcome).
+     */
+    private fun saveGeneratedMaterials(
+        folderPath: String,
+        files: List<FileItem>,
+        folderName: String,
+        bundle: AiService.GeneratedBundle
+    ) {
+        val lessonFile = LessonDescription.lessonFilePath(folderPath, files)
+        if (lessonFile != null) {
+            runCatching {
+                MaterialSaver.saveGenerated(
+                    this@PlayerActivity, lessonFile, folderName,
+                    bundle.summary, bundle.mindmap, bundle.questionsJson
+                )
+            }
+        }
+        SessionManager.get(this@PlayerActivity)
+            .saveLessonDescription(folderPath, bundle.summary.orEmpty())
     }
 
     /**
@@ -2588,10 +2630,19 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun renderMaterialsQuestions(questions: List<MaterialsQuestion>) {
+    private fun renderMaterialsQuestions(questions: List<MaterialsQuestion>, questionsOutdated: Boolean = false) {
         val list = mat<LinearLayout>(R.id.materials_questions_list)
         mat<View>(R.id.materials_questions_empty)?.visibility =
             if (questions.isEmpty()) View.VISIBLE else View.GONE
+        // R23 — vazio com motivo real quando o servidor marcou o
+        // pacote como desatualizado (skip de questões por lei
+        // revogada, agora VISÍVEL); sem motivo, o texto genérico
+        // do layout. O botão "Gerar questões" mantém-se (ver abaixo).
+        if (questions.isEmpty()) {
+            mat<TextView>(R.id.materials_questions_empty)?.text = getString(
+                if (questionsOutdated) R.string.qf_questions_outdated else R.string.no_questions
+            )
+        }
         // 2.7.41 (P1-1) — "Gerar questões" só com a lista vazia.
         mat<View>(R.id.materials_questions_generate)?.visibility =
             if (questions.isEmpty()) View.VISIBLE else View.GONE
