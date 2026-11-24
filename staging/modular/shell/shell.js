@@ -443,6 +443,7 @@
         { id: 'flashcards', label: 'Flashcards', icon: 'bi-card-text', path: '/flashcards' },
         { id: 'meggy-ai', label: 'Meggy AI', icon: 'bi-robot', path: '/meggy-ai' },
         { id: 'resumos', label: 'Resumos', icon: 'bi-journal-text', path: '/resumos' },
+        { id: 'pilulas', label: 'Pílulas', icon: 'bi-capsule', path: '/pilulas' },
         { id: 'conquistas', label: 'Conquistas', icon: 'bi-trophy', path: '/conquistas' },
         { id: 'apps', label: 'Apps', icon: 'bi-phone', path: '/apps' },
         { id: 'config', label: 'Configurações', icon: 'bi-gear', path: '/config' }
@@ -452,7 +453,7 @@
         const sections = [
           { title: 'Plataforma', ids: ['home', 'cursos', 'drives'] },
           { title: 'Estudos', ids: ['progresso', 'questoes', 'flashcards', 'simulado', 'provas', 'redacao', 'cronograma', 'estatisticas', 'mapa-fracos'] },
-          { title: 'IA & Conta', ids: ['meggy-ai', 'resumos', 'conquistas', 'apps', 'config'] }
+          { title: 'IA & Conta', ids: ['meggy-ai', 'resumos', 'pilulas', 'conquistas', 'apps', 'config'] }
         ];
         let html = '';
         for (const sec of sections) {
@@ -507,6 +508,7 @@
         '/conquistas': 'conquistas',
         '/apps': 'apps',
         '/resumos': 'resumos',
+        '/pilulas': 'pilulas',
         '/plano': 'plano',
         '/search': 'search'
       },
@@ -641,6 +643,7 @@
         case 'conquistas':Shell._estudosView(main, 'conquistas'); break;
         case 'apps':      Shell._estudosView(main, 'apps'); break;
         case 'resumos':   Shell.views.resumos(main); break;
+        case 'pilulas':   Shell.views.pilulas(main); break;
         case 'plano':     Shell._estudosView(main, 'plano'); break;
         case 'search':     Shell.views.search(main); break;
         default:          Shell.views.home(main);
@@ -3927,6 +3930,26 @@
         }
         return all;
       },
+      // ★ v2.15.91 (Ronda 25-C): pool de pílulas — espelho de
+      //   _summaryPool21590 com pillsOnly=1 (o servidor só devolve
+      //   linhas com mindmap); o filtro do lado do cliente é rede
+      //   p/ um worker antigo que ainda não conheça o param.
+      async _pillsPool21591(fetchJson, subject, topic) {
+        const pageSize = 200;
+        const all = [];
+        let offset = 0;
+        while (offset <= 5000) {
+          const q = ['limit=' + pageSize, 'offset=' + offset, 'pillsOnly=1'];
+          if (subject) q.push('subject=' + encodeURIComponent(subject));
+          if (topic) q.push('topic=' + encodeURIComponent(topic));
+          const d = await fetchJson('/api/ai/shared-summaries?' + q.join('&'), 20000);
+          if (!d || !d.ok || !Array.isArray(d.summaries)) throw new Error('pillsPool21591: resposta inválida');
+          for (const it of d.summaries) if (it.mindmap) all.push(it);
+          if (d.summaries.length < pageSize) break;
+          offset += pageSize;
+        }
+        return all;
+      },
 
       // ★ v2.15.48: o BANCO de questões (vista de /questoes) — disciplina →
       //   assunto → praticar, sobre as linhas partilhadas (que SÃO o
@@ -4437,8 +4460,76 @@
         let curTopic = '';       // '' = Todos os assuntos
         let topicsData = null;   // {subject, topics:[{topic,count}]} da disciplina actual
         const previewOf = (it) => String(it.summary || '').replace(/[#*`>]/g, '').replace(/\n/g, ' ').substring(0, 120);
+
+        // ★ v2.15.91 (Ronda 25-D): cartão do CRIADOR POR ASSUNTO —
+        //   o assunto não tem resumo: a Meggy cria o pacote completo
+        //   (resumo + pílulas + questões + flashcards) a partir das
+        //   transcrições das aulas que tratam dele. O clique na linha
+        //   do assunto arranca logo (autostart); a escolha pelo filtro
+        //   mostra o cartão com o botão. O resumo abre SEM saudação
+        //   (gancho "Nessa aula vamos estudar...", estilo staging).
+        const _showCreator21591 = (topic, autostart) => {
+          listEl.innerHTML = '<div class="meggy-summary-card" style="padding:16px;">' +
+            '<div style="font-size:15px;font-weight:700;margin-bottom:6px;">✨ Este assunto ainda não tem resumo</div>' +
+            '<div style="color:#9aa4b8;font-size:13px;margin-bottom:12px;">A Meggy pode criar um a partir das aulas de <b style="color:var(--meggy-qb-name-soft,#e6edf3);">' + esc(curSubject) + '</b> que tratam de <b style="color:var(--meggy-qb-name-soft,#e6edf3);">' + esc(topic) + '</b> — lê a transcrição primeiro, depois os PDFs, nunca do vídeo.</div>' +
+            '<div id="meggy-sum-creator-status" style="color:#9aa4b8;font-size:13px;margin-bottom:12px;">Pronto para criar o pacote completo (resumo + pílulas + questões + flashcards).</div>' +
+            '<button id="meggy-sum-creator-btn" class="meggy-header-btn" style="font-size:13px;background:#ff8b9f;border:none;color:#000;font-weight:600;">✨ Criar resumo com a Meggy</button>' +
+          '</div>';
+          const btn = listEl.querySelector('#meggy-sum-creator-btn');
+          const st = listEl.querySelector('#meggy-sum-creator-status');
+          let started = false;
+          const start = async () => {
+            if (started) return; started = true;
+            if (btn) btn.disabled = true;
+            if (st) st.innerHTML = '🐩 A Meggy está a procurar as aulas do assunto...';
+            try {
+              const r = await fetch('/api/ai/creator-by-subject', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subject: curSubject, topic: topic }) });
+              const d = await r.json();
+              if (!d || !d.ok) {
+                if (st) st.innerHTML = 'Não foi possível criar agora: ' + esc(String((d && d.error) || 'erro')) + '.';
+                if (btn) btn.disabled = false; started = false; return;
+              }
+              if (d.already) { if (st) st.innerHTML = 'Este assunto já tem resumo — a carregar...'; loadSet(curSubject, topic); return; }
+              const nSrc = Array.isArray(d.sources) ? d.sources.length : 0;
+              if (st) st.innerHTML = '🐩 A criar o pacote completo a partir de ' + nSrc + (nSrc === 1 ? ' aula' : ' aulas') + ' (resumo + pílulas + questões + flashcards)...';
+              let job = null, polls = 0;
+              while (polls < 60) {
+                polls++;
+                await new Promise(function(res){ setTimeout(res, 5000); });
+                try {
+                  const sr = await fetch('/api/ai/battalion/status?courseKey=' + encodeURIComponent(d.courseKey), { cache: 'no-store' });
+                  const sd = await sr.json();
+                  job = sd && sd.job;
+                  if (job && job.finished) break;
+                  if (job && job.processed) { if (st) st.innerHTML = '🐩 A criar o pacote completo... (' + job.processed + ' processado(s))'; }
+                } catch (_) {}
+              }
+              if (job && job.finished && job.done) {
+                if (st) st.innerHTML = '✅ Pacote criado — a carregar os resumos...';
+                loadSet(curSubject, topic);
+              } else if (job && job.finished) {
+                if (st) st.innerHTML = 'A geração terminou sem pacote' + (job.error ? ': ' + esc(String(job.error).slice(0, 120)) : '.') + ' Tenta outra vez.';
+                if (btn) btn.disabled = false; started = false;
+              } else {
+                if (st) st.innerHTML = 'A geração continua em segundo plano — volta a este assunto dentro de instantes.';
+                if (btn) { btn.disabled = false; btn.innerHTML = '🔄 Verificar agora'; started = false; btn.onclick = () => { loadSet(curSubject, topic); }; }
+              }
+            } catch (_) {
+              if (st) st.innerHTML = 'Não foi possível criar agora. Tenta de novo em instantes.';
+              if (btn) btn.disabled = false; started = false;
+            }
+          };
+          if (btn) btn.onclick = start;
+          if (autostart) start();
+        };
         const renderList = () => {
-          if (!items.length) { listEl.innerHTML = '<div style="color:#9aa4b8;font-size:13px;padding:12px 0;">Nenhum resumo com esses filtros.</div>'; return; }
+          if (!items.length) {
+            // ★ v2.15.91 (Ronda 25-D): assunto SEM resumo → o cartão do
+            //   criador (em vez do vazio seco) — a criação é por assunto.
+            const _tc21591 = curTopic ? (((topicsData && topicsData.topics) || []).find(function(x){ return x.topic === curTopic; }) || null) : null;
+            if (_tc21591 && (_tc21591.count || 0) === 0) { _showCreator21591(curTopic, false); return; }
+            listEl.innerHTML = '<div style="color:#9aa4b8;font-size:13px;padding:12px 0;">Nenhum resumo com esses filtros.</div>'; return;
+          }
           let html = '<div class="meggy-study-list">';
           items.forEach((it, idx) => {
             const sub = (it.subject || '') + (it.topic ? ' · ' + it.topic : '');
@@ -4463,7 +4554,7 @@
           if (!topics.length) { topicsEl.innerHTML = ''; return; }
           let html = '<div style="color:#9aa4b8;font-size:12px;margin-bottom:6px;">Assuntos de <b style="color:var(--meggy-qb-name-soft,#e6edf3);">' + esc(curSubject) + '</b> — toca num assunto para veres os resumos dele:</div><div style="display:flex;flex-direction:column;gap:6px;">';
           topics.forEach(t => {
-            html += '<div class="meggy-sum-topic-row" data-topic="' + esc(t.topic) + '" title="Ver os resumos deste assunto" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;cursor:pointer;"><div style="flex:1;min-width:0;"><b style="color:var(--meggy-qb-name,#f0f6fc);font-size:13px;">' + esc(t.topic) + '</b><div style="color:#9aa4b8;font-size:12px;">' + (t.count || 0) + ' resumos</div></div><i class="bi bi-chevron-right" style="color:#9aa4b8;"></i></div>';
+            html += '<div class="meggy-sum-topic-row" data-topic="' + esc(t.topic) + '" title="Ver os resumos deste assunto" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;cursor:pointer;"><div style="flex:1;min-width:0;"><b style="color:var(--meggy-qb-name,#f0f6fc);font-size:13px;">' + esc(t.topic) + '</b><div style="color:#9aa4b8;font-size:12px;">' + (t.count || 0) + ' resumos' + ((t.count || 0) === 0 ? ' · <span style="color:#ff8b9f;font-weight:600;">✨ Criar com a Meggy</span>' : '') + '</div></div><i class="bi bi-chevron-right" style="color:#9aa4b8;"></i></div>';
           });
           html += '</div>';
           topicsEl.innerHTML = html;
@@ -4471,6 +4562,10 @@
             const t = r.dataset.topic || '';
             topicSel.value = t;
             curTopic = t;
+            // ★ v2.15.91 (Ronda 25-D): assunto sem resumo — o clique
+            //   ACTIVA o criador (em vez de carregar uma lista vazia).
+            const _tc21591 = ((topicsData && topicsData.topics) || []).find(function(x){ return x.topic === t; });
+            if (t && _tc21591 && (_tc21591.count || 0) === 0) { _showCreator21591(t, true); return; }
             if (!t) { if (subjectItems.length) { items = subjectItems; renderList(); } else loadSet(curSubject, ''); }
             else loadSet(curSubject, t);
           }; });
@@ -4547,6 +4642,180 @@
         //   com a retentativa .64; degrada p/ question-bank/lists —
         //   o MESMO universo, por construcao). Nenhum resumo e
         //   pedido antes de uma escolha activa.
+        (async () => {
+          let subs = [];
+          const dl = await fetchMetaRetry('/api/ai/summary-bank/lists');
+          if (dl && dl.ok && Array.isArray(dl.disciplines) && dl.disciplines.length) subs = dl.disciplines;
+          if (!subs.length) {
+            const ds = await fetchMetaRetry('/api/ai/question-bank/lists');
+            if (ds && ds.ok && Array.isArray(ds.disciplines)) subs = ds.disciplines;
+          }
+          if (!subs.length) return;
+          const cur = subjectSel.value;
+          subs.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; subjectSel.appendChild(o); });
+          subjectSel.value = cur;
+        })();
+      },
+      // ★ v2.15.91 (Ronda 25-C): o BANCO de pílulas (vista de
+      //   /pilulas) — espelho de _renderSummaryBank: abre SEM
+      //   carregar pílulas, so a lista de disciplinas (endpoint leve
+      //   de listas — o MESMO universo); disciplina -> assuntos
+      //   (pilulas-topics, só linhas com mindmap) + pool paginado
+      //   (shared-summaries com pillsOnly=1); "Todos os assuntos"
+      //   (defeito) carrega TUDO o da disciplina; um assunto concreto
+      //   so estreita. "Todas as disciplinas" (__all__) e uma escolha
+      //   activa que carrega tudo; o valor inicial '' nao carrega nada.
+      //   Sem filtro de aluno — o autor aparece so como papel
+      //   ("Gerado por: Admin/Aluno"). A aba NASCE VAZIA: as pílulas
+      //   só entram no D1 desde a Ronda 25-B (Gerar Completo).
+      async _renderPillsBank(el) {
+        const root = el.querySelector('#meggy-pil-root');
+        if (!root) return;
+        const esc = Shell.views._esc;
+        const toast = (m) => { try { if (typeof window.showToast === 'function') window.showToast(m); } catch (_) {} };
+        const fetchJson = async (url, ms) => {
+          const _ctl = new AbortController();
+          const _to = setTimeout(() => { try { _ctl.abort(); } catch (_) {} }, ms || 15000);
+          try { const r = await fetch(url, { cache: 'no-store', signal: _ctl.signal }); return await r.json(); } finally { clearTimeout(_to); }
+        };
+        // ★ v2.15.64 (mantido na .90): UMA retentativa dos pedidos
+        //   leves (listas/assuntos) — padrao .49, como em /questoes.
+        const fetchMetaRetry = async (url) => {
+          for (let _a = 0; _a < 2; _a++) {
+            try { const _d = await fetchJson(url, _a === 0 ? 8000 : 15000); if (_d) return _d; } catch (_) {}
+            if (_a === 0) await new Promise(r => setTimeout(r, 1200));
+          }
+          return null;
+        };
+        const SEL = 'flex:1;min-width:160px;background:rgba(255,255,255,.06);border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:8px 10px;font-size:13px;';
+        root.innerHTML = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' +
+          '<select id="meggy-pil-subject" style="' + SEL + '"><option value="">Escolhe a disciplina...</option><option value="__all__">Todas as disciplinas</option></select>' +
+          '<select id="meggy-pil-topic" style="' + SEL + '" disabled><option value="">Todos os assuntos</option></select>' +
+        '</div>' +
+        '<div id="meggy-pil-topics" style="margin-bottom:14px;"></div>' +
+        '<div id="meggy-pil-list"><div style="color:#9aa4b8;font-size:13px;padding:16px 0;">Escolhe uma disciplina acima para veres os assuntos e as pílulas dela.</div></div>';
+        const subjectSel = root.querySelector('#meggy-pil-subject');
+        const topicSel = root.querySelector('#meggy-pil-topic');
+        const topicsEl = root.querySelector('#meggy-pil-topics');
+        const listEl = root.querySelector('#meggy-pil-list');
+        const HINT = '<div style="color:#9aa4b8;font-size:12px;padding:2px 0 4px;">Escolhe uma disciplina acima: aparecem os assuntos dela e podes ler as pílulas uma a uma.</div>';
+        topicsEl.innerHTML = HINT;
+        let items = [];          // conjunto carregado (o que a lista mostra)
+        let subjectItems = [];   // pool completo da escolha actual (base do regresso a Todos os assuntos sem refetch)
+        let curSubject = '';     // '' = nenhuma · '__all__' = todas · nome = disciplina
+        let curTopic = '';       // '' = Todos os assuntos
+        let topicsData = null;   // {subject, topics:[{topic,count}]} da disciplina actual
+        const previewOf = (it) => String(it.mindmap || '').replace(/[#*`>]/g, '').replace(/\n/g, ' ').substring(0, 120);
+        const renderList = () => {
+          if (!items.length) { listEl.innerHTML = '<div style="color:#9aa4b8;font-size:13px;padding:12px 0;">Nenhuma pílula com esses filtros.</div>'; return; }
+          let html = '<div class="meggy-study-list">';
+          items.forEach((it, idx) => {
+            const sub = (it.subject || '') + (it.topic ? ' · ' + it.topic : '');
+            const date = it.date ? new Date(it.date).toLocaleDateString('pt-BR') : '';
+            const prev = previewOf(it);
+            html += '<div class="meggy-study-item meggy-pil-item" data-idx="' + idx + '" style="cursor:pointer;"><div class="meggy-study-item-icon">💊</div><div class="meggy-study-item-body"><div class="meggy-study-item-title">' + esc(it.lessonName || it.lesson || 'Aula') + '</div><div class="meggy-study-item-meta">' + esc(prev) + (prev ? '...' : '') + '</div><div class="meggy-study-item-meta">' + esc(sub) + '</div><div class="meggy-study-item-meta" style="color:#ff8b9f;">Gerado por: ' + esc(it.author || '—') + (date ? ' · ' + date : '') + '</div></div><i class="bi bi-chevron-right meggy-study-item-chevron"></i></div>';
+          });
+          html += '</div>';
+          listEl.innerHTML = html;
+          listEl.querySelectorAll('.meggy-pil-item').forEach((node) => {
+            node.onclick = () => {
+              const it = items[parseInt(node.dataset.idx, 10)];
+              if (!it) return;
+              Shell.views._showPills(el, { lessonName: it.lessonName || it.lesson || 'Aula', mindmap: it.mindmap || '', author: it.author || '', date: it.date || 0 });
+            };
+          });
+        };
+        const renderTopics = () => {
+          if (!curSubject) { topicsEl.innerHTML = HINT; return; }
+          if (curSubject === '__all__' || !topicsData || topicsData.subject !== curSubject) { topicsEl.innerHTML = ''; return; }
+          const topics = topicsData.topics || [];
+          if (!topics.length) { topicsEl.innerHTML = ''; return; }
+          let html = '<div style="color:#9aa4b8;font-size:12px;margin-bottom:6px;">Assuntos de <b style="color:var(--meggy-qb-name-soft,#e6edf3);">' + esc(curSubject) + '</b> — toca num assunto para veres as pílulas dele:</div><div style="display:flex;flex-direction:column;gap:6px;">';
+          topics.forEach(t => {
+            html += '<div class="meggy-pil-topic-row" data-topic="' + esc(t.topic) + '" title="Ver as pílulas deste assunto" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;cursor:pointer;"><div style="flex:1;min-width:0;"><b style="color:var(--meggy-qb-name,#f0f6fc);font-size:13px;">' + esc(t.topic) + '</b><div style="color:#9aa4b8;font-size:12px;">' + (t.count || 0) + ' pílulas</div></div><i class="bi bi-chevron-right" style="color:#9aa4b8;"></i></div>';
+          });
+          html += '</div>';
+          topicsEl.innerHTML = html;
+          topicsEl.querySelectorAll('.meggy-pil-topic-row').forEach(r => { r.onclick = () => {
+            const t = r.dataset.topic || '';
+            topicSel.value = t;
+            curTopic = t;
+            if (!t) { if (subjectItems.length) { items = subjectItems; renderList(); } else loadSet(curSubject, ''); }
+            else loadSet(curSubject, t);
+          }; });
+        };
+        // assuntos da disciplina: popula o filtro de assunto e as
+        //   linhas (contagens do endpoint de topics).
+        const loadTopics = async (subject) => {
+          const d = await fetchMetaRetry('/api/ai/pilulas-topics?subject=' + encodeURIComponent(subject));
+          if (subject !== curSubject) return;  // a selecção mudou entretanto
+          const topics = (d && d.ok && Array.isArray(d.topics)) ? d.topics : [];
+          topicsData = { subject: subject, topics: topics };
+          const cur = topicSel.value || '';
+          topicSel.innerHTML = '<option value="">Todos os assuntos</option>' + topics.map(t => '<option value="' + esc(t.topic) + '">' + esc(t.topic) + '</option>').join('');
+          topicSel.value = topics.some(t => t.topic === cur) ? cur : '';
+          curTopic = topicSel.value || '';
+          renderTopics();
+        };
+        // carrega um conjunto (disciplina [__all__ = todas] +
+        //   assunto opcional) — pool paginado completo, 2
+        //   tentativas (padrão .49). Respostas fora de prazo
+        //   (a selecção mudou) são descartadas.
+        const loadSet = async (subject, topic) => {
+          listEl.innerHTML = '<div class="meggy-loading"><div class="spinner-border" role="status"></div><div>' + (topic ? 'Carregando pílulas do assunto...' : 'Carregando pílulas...') + '</div></div>';
+          let pool = null;
+          for (let _att = 0; _att < 2 && !pool; _att++) {
+            try { pool = await Shell.views._pillsPool21591(fetchJson, subject === '__all__' ? '' : subject, topic || ''); }
+            catch (_) { pool = null; if (_att === 0) await new Promise(r => setTimeout(r, 1200)); }
+          }
+          if (!pool) {
+            if (subject === curSubject && (topic || '') === curTopic) { items = []; listEl.innerHTML = '<div style="color:#ff8b8b;font-size:13px;padding:12px 0;">Não foi possível carregar o banco agora. Tente de novo em instantes.</div>'; }
+            return;
+          }
+          if (!topic && subject === curSubject) subjectItems = pool;  // base completa da disciplina, mesmo que a vista já tenha estreitado
+          if (subject !== curSubject || (topic || '') !== curTopic) return;
+          items = pool;
+          renderList();
+        };
+        subjectSel.onchange = () => {
+          curSubject = subjectSel.value || '';
+          curTopic = '';
+          items = []; subjectItems = []; topicsData = null;
+          topicSel.innerHTML = '<option value="">Todos os assuntos</option>';
+          topicSel.value = '';
+          if (!curSubject) {
+            topicSel.disabled = true;
+            topicsEl.innerHTML = HINT;
+            listEl.innerHTML = '<div style="color:#9aa4b8;font-size:13px;padding:16px 0;">Escolhe uma disciplina acima para veres os assuntos e as pílulas dela.</div>';
+            return;
+          }
+          if (curSubject === '__all__') {
+            topicSel.disabled = true;
+            topicsEl.innerHTML = '';
+            loadSet('__all__', '');
+            return;
+          }
+          topicSel.disabled = false;
+          topicsEl.innerHTML = '<div style="color:#9aa4b8;font-size:12px;">Carregando assuntos...</div>';
+          loadTopics(curSubject);
+          loadSet(curSubject, '');
+        };
+        topicSel.onchange = () => {
+          curTopic = topicSel.value || '';
+          if (!curSubject || curSubject === '__all__') return;
+          if (!curTopic) {
+            // Todos os assuntos: volta ao pool da disciplina já
+            //   carregado (sem refetch); se ele falhou, retenta.
+            if (subjectItems.length) { items = subjectItems; renderList(); }
+            else loadSet(curSubject, '');
+          } else {
+            loadSet(curSubject, curTopic);
+          }
+        };
+        // abertura preguiçosa: SÓ as disciplinas (listas leves,
+        //   com a retentativa .64; degrada p/ question-bank/lists —
+        //   o MESMO universo, por construcao). Nenhuma pílula é
+        //   pedida antes de uma escolha activa.
         (async () => {
           let subs = [];
           const dl = await fetchMetaRetry('/api/ai/summary-bank/lists');
@@ -5491,6 +5760,22 @@
           '<div id="meggy-sum-root"><div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando o banco de resumos...</div></div></div>';
         Shell.views._renderSummaryBank(el);
       },
+      pilulas(el) {
+        // ★ v2.15.91 (Ronda 25-C): /pilulas EXACTAMENTE como /resumos
+        //   e /questoes (ideia do Elton 2026-11-23 23:24 -03): o BANCO
+        //   de pílulas por disciplina → assunto, sobre o MESMO universo
+        //   (summary-bank/lists) e o MESMO pool (shared-summaries com
+        //   pillsOnly=1); as contagens vêm de pilulas-topics (só linhas
+        //   com mindmap). A aba NASCE VAZIA: as pílulas só existem no D1
+        //   desde a Ronda 25-B (Gerar Completo) — antes disso só viviam
+        //   no cache da web. Sem filtro de aluno; o autor aparece só
+        //   como papel ("Gerado por: Admin/Aluno").
+        el.innerHTML = '<div class="meggy-view-header"><h1 class="meggy-view-title">💊 Pílulas</h1></div>' +
+          '<div style="color:#9aa4b8;font-size:13px;margin-bottom:12px;">💊 Pílulas de revisão de todos os cursos e alunos, organizadas por disciplina e assunto. Gere o pacote completo numa aula e as pílulas entram aqui automaticamente.</div>' +
+          '<div id="meggy-pil-root"><div class="meggy-loading"><div class="spinner-border" role="status"></div><div>Carregando o banco de pílulas...</div></div></div>';
+        Shell.views._renderPillsBank(el);
+      },
+
 
       async _showSummary(el, entry) {
         const lessonName = Shell.views._esc(entry.lessonName || 'Aula');
@@ -5528,6 +5813,44 @@
           } else if (typeof window.showToast === 'function') window.showToast('Módulo de voz ainda não carregou. Recarregue a página.');
         };
 el.scrollTop = 0;
+      },
+
+
+      async _showPills(el, entry) {
+        // ★ v2.15.91 (Ronda 25-C): leitor de pílulas — espelho de
+        //   _showSummary com o mindmap (Markdown) no lugar do resumo.
+        const lessonName = Shell.views._esc(entry.lessonName || 'Aula');
+        await Shell._ensureMdLibs();
+        const html = Shell._renderMd(entry.mindmap || '');
+        window._lastIsaText = entry.mindmap || '';
+        window._lastMdText = entry.mindmap || '';
+        window._lastMdName = entry.lessonName || 'pilulas';
+        el.innerHTML = '<div class="meggy-view-header">' +
+            '<button class="meggy-header-btn" onclick="Shell.views.pilulas(document.getElementById(\'meggy-main\'))" style="font-size:13px;"><i class="bi bi-arrow-left"></i> Voltar</button>' +
+            '<h1 class="meggy-view-title" style="font-size:16px;">💊 ' + lessonName + '</h1>' +
+          '</div>' +
+          (entry.author ? '<div style="font-size:13px;color:#ff8b9f;margin:-4px 0 12px;">por ' + Shell.views._esc(entry.author) + (entry.date ? ' · ' + new Date(entry.date).toLocaleDateString('pt-BR') : '') + '</div>' : '') +
+          '<div class="meggy-summary-card">' +
+            '<div class="meggy-summary-toolbar">' +
+              '<span class="meggy-summary-badge">💊 Pílulas Meggy 🐩</span>' +
+              '<div style="display:flex;gap:6px;">' +
+                '<button class="meggy-header-btn" onclick="navigator.clipboard.writeText(window._lastIsaText);this.textContent=\'✓ Copiado!\'" style="font-size:12px;"><i class="bi bi-clipboard"></i> Copiar</button>' +
+                '<button class="meggy-header-btn" onclick="window._downloadMdAsPdf(window._lastMdName)" style="font-size:12px;background:rgba(255,139,159,0.12);border:1px solid rgba(255,139,159,0.3);color:#ff8b9f;"><i class="bi bi-download"></i> PDF</button>' +
+                '<button class="meggy-header-btn" id="gdi-pills-tts-btn" title="Ouvir pílulas em voz natural" style="font-size:12px;background:#ff8b9f;border:none;color:#000;font-weight:600;"><i class="bi bi-volume-up"></i> Ouvir pílulas</button>' +
+              '</div>' +
+            '</div>' +
+            '<div class="meggy-summary-body gdi-isa-summary-body">' + html + '</div>' +
+          '</div>';
+        const _ttsBtn = el.querySelector('#gdi-pills-tts-btn');
+        if (_ttsBtn) _ttsBtn.onclick = () => {
+          if (window.gdiTTS && typeof window.gdiTTS.play === 'function') {
+            const _st = window.gdiTTS.getState();
+            if (_st.status === 'playing' || _st.status === 'paused') { window.gdiTTS.stop(); _ttsBtn.innerHTML = '<i class="bi bi-volume-up"></i> Ouvir pílulas'; return; }
+            _ttsBtn.innerHTML = '⏹ Parar';
+            window.gdiTTS.play(window._lastIsaText || '', { onEnd: function () { _ttsBtn.innerHTML = '<i class="bi bi-volume-up"></i> Ouvir pílulas'; } });
+          } else if (typeof window.showToast === 'function') window.showToast('Módulo de voz ainda não carregou. Recarregue a página.');
+        };
+        el.scrollTop = 0;
       },
 
       // ═══ Meus Concursos — feature baseada em edital ═══
