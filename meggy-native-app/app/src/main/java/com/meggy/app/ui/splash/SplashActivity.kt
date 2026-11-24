@@ -59,11 +59,11 @@ class SplashActivity : AppCompatActivity() {
             // AND password is saved. Falls back to LoginActivity only when
             // re-login fails or there are no saved credentials.
             // R21: validação TIPADA — uma falha transitória (sem rede,
-            // 5xx, quota D1 esgotada) devolve UNKNOWN e entra na Home na
+            // 5xx, quota D1 esgotada) retorna UNKNOWN e entra na Home na
             // mesma: a sessão pode estar válida e as listagens mostram
             // erro + retry (e fazem bounce depois, se for mesmo expiração).
             // Antes, UNKNOWN era tratado como sessão inválida e o arranque
-            // sem rede/quota mandava o utilizador para o login à toa.
+            // sem rede/quota mandava o usuário para o login à toa.
             val check = if (session.isLoggedIn) {
                 withContext(Dispatchers.IO) { api.validateSession() }
             } else SessionCheck.INVALID
