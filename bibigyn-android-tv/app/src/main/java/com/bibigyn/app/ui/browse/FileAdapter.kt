@@ -1,10 +1,13 @@
 package com.bibigyn.app.ui.browse
 
+import android.graphics.Rect
 import android.view.LayoutInflater
+import android.view.TouchDelegate
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AnimationUtils
 import android.widget.Toast
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.ListAdapter
@@ -15,12 +18,14 @@ import com.bibigyn.app.data.DriveItem
 import com.bibigyn.app.data.FileItem
 import com.bibigyn.app.data.colorFromString
 import com.bibigyn.app.databinding.ItemRailCardBinding
+import com.bibigyn.app.ui.detail.FolderTileProgress
 import com.bibigyn.app.util.CardGradient
 import com.bibigyn.app.util.CoverLibrary
 import com.bibigyn.app.util.FocusAnimator
 import com.bibigyn.app.util.TapFeedback
 import com.bibigyn.app.util.Format
 import com.bibigyn.app.util.SessionManager
+import com.bibigyn.app.util.TileColors
 import com.bibigyn.app.util.TvUtils
 
 /**
@@ -48,6 +53,17 @@ class FileAdapter(
     private var watchedNames: Set<String> = emptySet()
     private var currentFolderPath: String = "/"
 
+    // Port R27 da Meggy — progresso por pasta: chave = folderPath do
+    // grupo; o mapa é posto pelo chamador (BrowseActivity).
+    private var folderProgress: Map<String, FolderTileProgress> = emptyMap()
+
+    // Port R27 — cor fixa da área do nome (TileColors): cache da
+    // última lista + span; recalcula-se quando a lista (referência)
+    // ou o span muda — a atribuição depende da ordem da lista.
+    private var tileColors: List<Int> = emptyList()
+    private var tileColorsList: List<FileItem>? = null
+    private var tileColorsSpan: Int = 0
+
     fun setResumeAndWatched(resumed: Set<String>, watched: Set<String>) {
         resumedNames = resumed
         watchedNames = watched
@@ -58,6 +74,32 @@ class FileAdapter(
         currentFolderPath = path
     }
 
+    /** Port R27 — progresso das pastas; refresca os Tiles visíveis. */
+    fun setFolderProgress(progress: Map<String, FolderTileProgress>) {
+        folderProgress = progress
+        if (itemCount > 0) notifyItemRangeChanged(0, itemCount)
+    }
+
+    /** Chave estável do Tile p/ a cor (o caminho da pasta/arquivo). */
+    private fun tileKey(item: FileItem): String =
+        item.folderPath ?: "$currentFolderPath${item.name}"
+
+    /** Span da grade do pai (1 sem grade; o último válido, se sem pai). */
+    private fun spanCountFor(holder: VH): Int {
+        val span = (holder.itemView.parent as? RecyclerView)?.layoutManager
+            ?.let { it as? GridLayoutManager }?.spanCount
+        if (span != null && span > 0) return span
+        return if (tileColorsSpan > 0) tileColorsSpan else 1
+    }
+
+    private fun ensureTileColors(span: Int) {
+        val list = currentList
+        if (list === tileColorsList && span == tileColorsSpan) return
+        tileColors = TileColors.assign(list.map { tileKey(it) }, span)
+        tileColorsList = list
+        tileColorsSpan = span
+    }
+
     inner class VH(val binding: ItemRailCardBinding) : RecyclerView.ViewHolder(binding.root) {
         init {
             binding.root.setOnClickListener {
@@ -66,10 +108,28 @@ class FileAdapter(
                 val item = getItem(pos)
                 if (item.isFolder) onFolder(item) else onFile(item)
             }
+            // Port R27 da Meggy — título completo ao tocar e segurar:
+            // duas pastas podem mostrar o mesmo título cortado
+            // ("PF - Papiloscopista…"); o toque longo mostra o nome
+            // inteiro. Não muda o toque normal (abre a pasta).
+            binding.root.setOnLongClickListener {
+                val pos = bindingAdapterPosition
+                if (pos == RecyclerView.NO_POSITION) return@setOnLongClickListener false
+                Toast.makeText(binding.root.context, getItem(pos).name, Toast.LENGTH_LONG).show()
+                true
+            }
             // R18B (Bug 1 #7): 1.05x na TV — a 1.10x a folga era
             // só 1,1dp (e a vertical já tocava o vizinho); 1.05x dá
             // 5,5dp / 4,9dp de folga, simétrico com a grade #4.
-            FocusAnimator.attachCard(binding.cardRoot, TvUtils.isTv(binding.root.context), scaleTv = FocusAnimator.SCALE_TV_DENSE)
+            // Port R27 — anel BRANCO e grosso (4dp): o anel da marca
+            // é fraco sobre as cores fixas dos Tiles; o branco dá
+            // 8,0–9,9:1 e o foco continua visível em qualquer cor.
+            FocusAnimator.attachCard(
+                binding.cardRoot, TvUtils.isTv(binding.root.context),
+                scaleTv = FocusAnimator.SCALE_TV_DENSE,
+                ringColorRes = R.color.tile_focus_ring_white,
+                ringWidthDp = 4f
+            )
             TapFeedback.attachPress(binding.cardRoot, TvUtils.isTv(binding.root.context))
         }
     }
@@ -105,9 +165,20 @@ class FileAdapter(
         val item = getItem(position)
         val res = holder.itemView.resources
         val ctx = holder.itemView.context
+        // Port R27 — cor fixa da área do nome.
+        ensureTileColors(spanCountFor(holder))
 
         with(holder.binding) {
             cardTitle.text = item.name
+            // Port R27 — cor fixa da área do nome (TileColors): a
+            // imagem fica; o título já é branco; o subtítulo e o
+            // texto do progresso passam a branco (o cinza e a cor da
+            // marca dão pouco contraste sobre a paleta; o branco dá
+            // 8,0–9,9:1).
+            cardBody?.setBackgroundColor(tileColors[position])
+            val white = ContextCompat.getColor(ctx, R.color.tile_title)
+            cardSubtitle.setTextColor(white)
+            cardProgressText.setTextColor(white)
             cardSubtitle.text = when {
                 item.isFolder -> "pasta"
                 item.isVideo -> "vídeo · ${item.humanSize}"
@@ -169,14 +240,35 @@ class FileAdapter(
                 progressRow.visibility = View.GONE
             }
 
-            continueBadge.visibility =
-                if ((item.isVideo || item.isAudio) && item.name in resumedNames) View.VISIBLE else View.GONE
-            watchedBadge.visibility =
-                if ((item.isVideo || item.isAudio) && item.name in watchedNames) View.VISIBLE else View.GONE
+            // Port R27 — progresso da PASTA: barra + texto no lugar
+            // do "Em curso · N%" da linha; pasta completa leva o ✓.
+            // Pastas sem progresso não mudam; arquivos não entram aqui.
+            val fprog = if (item.isFolder) folderProgress[item.folderPath] else null
+            if (fprog != null) {
+                if (fprog.showProgress) {
+                    progressRow.visibility = View.VISIBLE
+                    cardProgress.progress = fprog.barProgress
+                    cardProgressText.text = fprog.text
+                } else {
+                    progressRow.visibility = View.GONE
+                }
+                continueBadge.visibility = if (fprog.showContinue) View.VISIBLE else View.GONE
+                watchedBadge.visibility = if (fprog.complete) View.VISIBLE else View.GONE
+            } else {
+                continueBadge.visibility =
+                    if ((item.isVideo || item.isAudio) && item.name in resumedNames) View.VISIBLE else View.GONE
+                watchedBadge.visibility =
+                    if ((item.isVideo || item.isAudio) && item.name in watchedNames) View.VISIBLE else View.GONE
+            }
 
             // ★ Minha lista — pasta = curso; resto = arquivo.
             if (item.isFolder) {
-                val coursePath = if (currentFolderPath.endsWith("/")) "$currentFolderPath${item.name}/"
+                // Port R27 — o folderPath do item (carimbado pelo
+                // chamador) já é o caminho certo; sem ele, compõe-se
+                // como antes. Sem isto, a estrela marcava um caminho
+                // inexistente.
+                val coursePath = item.folderPath
+                    ?: if (currentFolderPath.endsWith("/")) "$currentFolderPath${item.name}/"
                     else "$currentFolderPath/${item.name}/"
                 favStar.visibility = View.VISIBLE
                 favStar.text = if (sm.isFavoriteCourse(coursePath)) "⭐" else "☆"
@@ -200,6 +292,28 @@ class FileAdapter(
                         else "Removido da Minha lista",
                         Toast.LENGTH_SHORT).show()
                 }
+            }
+        }
+
+        // Port R27 — alvo de toque da estrela ≥48dp: a estrela
+        // visual tem 32dp; o TouchDelegate no card alarga a área
+        // para 48dp (8dp de cada lado). Repõe-se a cada bind (o VH é
+        // reciclado) e lê-se a posição no post{} — a estrela só tem
+        // posição certa depois do layout. Sem o else, um delegate
+        // velho ficava a apontar para a estrela de outro Tile.
+        holder.binding.root.post {
+            val star = holder.binding.favStar
+            val root = holder.binding.root
+            if (star.visibility == View.VISIBLE) {
+                val rect = Rect()
+                star.getHitRect(rect)
+                val starParent = star.parent as? View
+                if (starParent != null) rect.offset(starParent.left, starParent.top)
+                val extra = (8 * holder.itemView.resources.displayMetrics.density).toInt()
+                rect.inset(-extra, -extra)
+                root.touchDelegate = TouchDelegate(rect, star)
+            } else {
+                root.touchDelegate = null
             }
         }
 

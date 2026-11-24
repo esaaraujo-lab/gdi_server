@@ -18,6 +18,8 @@ import com.bibigyn.app.data.ApiService
 import com.bibigyn.app.data.FolderResult
 import com.bibigyn.app.data.FileItem
 import com.bibigyn.app.databinding.ActivityBrowseBinding
+import com.bibigyn.app.ui.detail.LessonGroup
+import com.bibigyn.app.ui.detail.folderTileProgress
 import com.bibigyn.app.ui.player.PlayerActivity
 import com.bibigyn.app.util.AuthHelper
 import com.bibigyn.app.util.PlaylistManager
@@ -152,13 +154,38 @@ class BrowseActivity : AppCompatActivity() {
                 binding.emptyState.visibility = View.VISIBLE
                 adapter.submitList(emptyList())
             } else {
-                adapter.submitList(files)
+                // Port R27 da Meggy (B10/B13) — as pastas entram com o
+                // folderPath carimbado (o caminho da pasta), p/ a cor
+                // fixa do Tile, o progresso e a estrela usarem o
+                // caminho certo.
+                val listed = files.map { file ->
+                    if (file.isFolder) {
+                        val path = if (currentPath.endsWith("/")) "$currentPath${file.name}/"
+                            else "$currentPath/${file.name}/"
+                        file.copy(folderPath = path)
+                    } else file
+                }
+                adapter.submitList(listed)
                 val sm = SessionManager.get(this@BrowseActivity)
                 val resumed = files.filter { it.isVideo && sm.hasResume(currentPath, it.name) }
                     .map { it.name }.toSet()
                 val watched = files.filter { it.isVideo && sm.isWatched(currentPath, it.name) }
                     .map { it.name }.toSet()
                 adapter.setResumeAndWatched(resumed, watched)
+                // Progresso das pastas (grupos sintéticos, só recents:
+                // sem filhos carregados, uma pasta sem recents na
+                // subárvore diria "carregando…" para sempre — por isso
+                // só entram no mapa as pastas com recents; as outras
+                // ficam como hoje, sem linha de progresso).
+                val recents = sm.getRecents()
+                val folderProgress = listed.filter { it.isFolder }.mapNotNull { folder ->
+                    val path = folder.folderPath ?: return@mapNotNull null
+                    if (recents.none { it.folderPath == path || it.folderPath.startsWith(path) }) {
+                        return@mapNotNull null
+                    }
+                    path to folderTileProgress(sm, LessonGroup(folder = folder, folderPath = path))
+                }.toMap()
+                adapter.setFolderProgress(folderProgress)
             }
             // Frente A (TV) — a Browse não definia foco inicial
             // nenhum: o 1º D-pad caía na seta "voltar" da toolbar.
