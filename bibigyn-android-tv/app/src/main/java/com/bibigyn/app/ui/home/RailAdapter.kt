@@ -12,12 +12,12 @@ import coil.load
 import com.bibigyn.app.R
 import com.bibigyn.app.data.DriveItem
 import com.bibigyn.app.data.FileItem
-import com.bibigyn.app.data.colorFromString
 import com.bibigyn.app.databinding.ItemRailCardBinding
 import com.bibigyn.app.util.CardGradient
 import com.bibigyn.app.util.CoverLibrary
 import com.bibigyn.app.util.FocusAnimator
 import com.bibigyn.app.util.TapFeedback
+import com.bibigyn.app.util.TileColors
 import com.bibigyn.app.util.Format
 import com.bibigyn.app.util.SessionManager
 import com.bibigyn.app.util.TvUtils
@@ -36,7 +36,12 @@ import com.bibigyn.app.util.setWordEllipsized
  * Foco: FocusAnimator.attachCard (anel 3dp da marca + escala + elevação).
  */
 data class RailItem(
+    // Port R28 da Meggy — `title` é o nome CRU do arquivo (identidade
+    // do item: o clique casa por videoName). `displayTitle` é o título
+    // exibido no card: o NOME DO TEMA DA AULA = o nome da pasta da aula
+    // (último segmento do folderPath); null = mostra o título antigo.
     val title: String,
+    val displayTitle: String? = null,
     val subtitle: String,
     val icon: String,
     val hasProgress: Boolean,
@@ -71,6 +76,21 @@ class RailAdapter(
     private val onClick: (RailItem) -> Unit
 ) : RecyclerView.Adapter<RailAdapter.VH>() {
 
+    // Port R28 — cor fixa de cada card (TileColors, como nas Tiles das
+    // pastas): a chave é o folderPath — o card Continuar de uma pasta
+    // tem a cor do Tile dessa pasta. Atribuição por TileColors.assign
+    // sobre os itens do rail (span 1 no rail horizontal: vizinhos lado
+    // a lado diferentes). Calcula-se quando os itens mudam (o onBind
+    // só lê); sem isto, a reciclagem re-sorteava as cores. A cor base
+    // é hash(folderPath) % 5 — igual à do Tile; o ajuste de vizinho
+    // pode deslocá-la um passo da paleta quando um dos lados precisou
+    // dele e o outro não (ver notas da ronda).
+    private var itemColors: List<Int> = TileColors.assign(items.map { it.file?.folderPath ?: it.title }, 1)
+
+    private fun refreshItemColors() {
+        itemColors = TileColors.assign(items.map { it.file?.folderPath ?: it.title }, 1)
+    }
+
     /**
      * Ronda 17 Frente B — substitui os itens sem recriar o adapter:
      * sem mudanças, nem redesenha (a Home chama isto em cada
@@ -85,6 +105,7 @@ class RailAdapter(
         if (newItems == items) return false
         val oldItems = items
         items = newItems
+        refreshItemColors()
         // Ronda 18 Frente C (F2) — DiffUtil em vez de
         // notifyDataSetChanged() total: só os itens que mudaram /
         // entraram / saíram são re-ligados; os holders dos outros nem
@@ -145,6 +166,17 @@ class RailAdapter(
                 val pos = bindingAdapterPosition
                 if (pos != RecyclerView.NO_POSITION) onClick(items[pos])
             }
+            // Port R26 da Meggy — título completo ao tocar e segurar:
+            // duas aulas da mesma disciplina podem mostrar o mesmo
+            // título cortado ("Direito…"); o toque longo mostra o
+            // título inteiro. Não muda o toque normal (abre a aula).
+            binding.root.setOnLongClickListener {
+                val pos = bindingAdapterPosition
+                if (pos == RecyclerView.NO_POSITION) return@setOnLongClickListener false
+                val full = items[pos].displayTitle ?: items[pos].title
+                Toast.makeText(binding.root.context, full, Toast.LENGTH_LONG).show()
+                true
+            }
             FocusAnimator.attachCard(binding.cardRoot, TvUtils.isTv(binding.root.context))
             TapFeedback.attachPress(binding.cardRoot, TvUtils.isTv(binding.root.context))
             // Ronda 7 Frente B — auto-ajuste TV (TvAutoFit): o card e a imagem
@@ -202,13 +234,27 @@ class RailAdapter(
         val ctx = holder.itemView.context
 
         with(holder.binding) {
-            // v2.1.9: título limpo ("001 - aula.mp4" → "Aula 01"/tema);
-            // o item.title continua cru — o clique casa por ele.
-            cardTitle.setWordEllipsized(Format.lessonTitle(item.title, item.subtitle))
+            // Port R28 da Meggy — o título exibido é o displayTitle
+            // (nome do tema = pasta da aula); sem ele, o título limpo
+            // antigo. O item.title continua cru — o clique casa por ele.
+            cardTitle.setWordEllipsized(item.displayTitle ?: Format.lessonTitle(item.title, item.subtitle))
             cardSubtitle.setWordEllipsized(item.subtitle)
+            // v2.7.11 — subtítulo vazio (título já traz o curso) some,
+            // em vez de deixar uma linha em branco no card.
+            cardSubtitle.visibility = if (item.subtitle.isBlank()) View.GONE else View.VISIBLE
 
-            val baseColor = colorFromString(item.colorHint ?: item.title)
-            cardBg.background = CardGradient.drawable(res, baseColor)
+            // Port R28 — cor fixa do Tile (TileColors, R27): o gradiente
+            // atrás da imagem e a área do nome usam a cor da pasta (a
+            // mesma do Tile dessa pasta); a imagem fica intacta. Rede
+            // de segurança: se a lista mudou sem passar por
+            // updateItems, recalcula (como no LessonGridAdapter).
+            // Chamada segura no cardBody (o layout-television só ganha
+            // card_body neste port; sem a vista salta a cor mas o bind
+            // continua).
+            if (itemColors.size != items.size) refreshItemColors()
+            val fixedColor = itemColors[position]
+            cardBg.background = CardGradient.drawable(res, fixedColor)
+            cardBody?.setBackgroundColor(fixedColor)
 
             // Onda 2: thumb real quando houver; sem thumb (ou se o
             // Coil falhar — ex.: áudio sem thumb no Drive), (c) capa
