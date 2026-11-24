@@ -2,7 +2,7 @@
 <!--
   Ronda 10 Frente B — uma linha caminho → link de capa de sub-pasta
   no formulário de AdminDrivesActivity. Linhas com os dois campos
-  vazios são ignoradas ao guardar.
+  vazios são ignoradas ao salvar.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"

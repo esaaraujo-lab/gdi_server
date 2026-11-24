@@ -2,7 +2,7 @@
 <!--
   Ronda 10 Frente B — uma linha da lista de drives do admin
   (AdminDrivesActivity). Remover pede confirmação; a pasta no Drive
-  NÃO é apagada — só o registo do drive.
+  NÃO é apagada — só o registro do drive.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"

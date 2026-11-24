@@ -132,7 +132,7 @@
 
 
 
-        <!-- Frente H — "A carregar" imediato: véu + spinner sobre o vídeo
+        <!-- Frente H — "Carregando" imediato: véu + spinner sobre o vídeo
              até ao 1º frame (o PlayerActivity esconde-o no 1º STATE_READY
              e no erro de playback). Fica ABAIXO da top_bar / barra de
              controlos (filhos posteriores) e do overlay de descanso
@@ -157,7 +157,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="A carregar…"
+                android:text="Carregando…"
                 android:textColor="@android:color/white"
                 android:textSize="14sp" />
         </LinearLayout>
@@ -635,10 +635,10 @@
                 android:progressDrawable="@drawable/progress_horizontal" />
 
             <!-- Frente R4 — Materiais da aula (retrato, celular): resumo,
-                 pílulas, questões e ficheiros da pasta da aula, por baixo
+                 pílulas, questões e arquivos da pasta da aula, por baixo
                  do botão "Próxima aula". Carregados em 2º plano ao abrir
                  (PlayerActivity.loadMaterials) — nunca atrasam o vídeo.
-                 A secção NÃO existe no layout-television (TV): os ids são
+                 A seção NÃO existe no layout-television (TV): os ids são
                  lidos por findViewById (nullable), nunca pelo binding. -->
             <LinearLayout
                 android:id="@+id/materials_section"
@@ -656,7 +656,7 @@
                     android:textSize="@dimen/text_card_title"
                     android:textStyle="bold" />
 
-                <!-- A carregar (skeleton subtil — não bloqueia o vídeo) -->
+                <!-- Carregando (skeleton sutil — não bloqueia o vídeo) -->
                 <LinearLayout
                     android:id="@+id/materials_loading"
                     android:layout_width="match_parent"
@@ -691,8 +691,8 @@
                     android:textSize="@dimen/text_card_subtitle"
                     android:visibility="gone" />
 
-                <!-- 2.7.41 (P1-2) — a secção vazia ganha acção: gera o
-                     resumo quando a pasta tem ficheiros legíveis
+                <!-- 2.7.41 (P1-2) — a seção vazia ganha ação: gera o
+                     resumo quando a pasta tem arquivos legíveis
                      (ver PlayerActivity.showMaterialsEmpty); sem eles,
                      fica só o texto acima. Vive FORA de
                      materials_content (que aqui está escondido). -->
@@ -746,7 +746,7 @@
                      Flashcards, um painel por aba. Os painéis são
                      contentores programáticos (precedente R4/R9):
                      o código enche as listas por findViewById. A
-                     secção de ficheiros fica FORA das abas, por baixo
+                     seção de arquivos fica FORA das abas, por baixo
                      (função existente mantida). -->
                 <LinearLayout
                     android:id="@+id/materials_content"
@@ -851,7 +851,7 @@
                         android:textSize="@dimen/text_card_subtitle"
                         android:visibility="gone" />
 
-                    <!-- R22 — estado vazio com acção: gera o pacote
+                    <!-- R22 — estado vazio com ação: gera o pacote
                          (resumo + pílulas + questões) pelo fluxo
                          existente; ver PlayerActivity.generateMaterials. -->
                     <androidx.appcompat.widget.AppCompatButton
@@ -1042,7 +1042,7 @@
                             android:orientation="vertical" />
                     </LinearLayout>
 
-                    <!-- Ficheiros da pasta -->
+                    <!-- Arquivos da pasta -->
                     <TextView
                         android:id="@+id/materials_files_title"
                         android:layout_width="match_parent"

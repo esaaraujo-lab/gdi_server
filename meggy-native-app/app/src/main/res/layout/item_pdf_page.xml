@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Frente I — item de página do scroll contínuo: a página (bitmap do
-  PdfRenderer) ocupa a largura útil do ecrã × zoom; ao ampliar, rola
+  PdfRenderer) ocupa a largura útil da tela × zoom; ao ampliar, rola
   na horizontal dentro do item (o scroll vertical é do RecyclerView).
   A largura/altura do ImageView são definidas pelo adapter.
 -->

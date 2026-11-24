@@ -227,7 +227,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="2dp"
-                            android:text="O vídeo assistido só é guardado no aparelho no Wi-Fi"
+                            android:text="O vídeo assistido só é salvo no aparelho no Wi-Fi"
                             android:textColor="@color/md_on_surface_variant"
                             android:textSize="@dimen/text_card_subtitle" />
                     </LinearLayout>

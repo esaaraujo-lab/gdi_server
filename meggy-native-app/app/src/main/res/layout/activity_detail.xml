@@ -557,7 +557,7 @@
 
                 <!-- R21: retry PERSISTENTE do erro de rede (antes vivia
                      só como ação de um Snackbar temporário; quando ele
-                     desaparecia, o ecrã de erro ficava sem saída). -->
+                     desaparecia, a tela de erro ficava sem saída). -->
                 <Button
                     android:id="@+id/retryButton"
                     android:layout_width="wrap_content"

@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Ronda 10 Frente B — "Gerir drives" (só admin).
+  Ronda 10 Frente B — "Gerenciar drives" (só admin).
   Formulário (ID da pasta, nome, APKs de destino, links opcionais de
   capa/sub-capa, capas por sub-pasta) + lista dos drives do admin com
   Remover. Mesmo estilo de activity_settings.xml (cores md_*, dimens
   do design system, card tile_focus_border, botão btn_primary_pill).
   Sem endpoint no servidor, o estado (adminStatus) diz "função
-  indisponível" e o botão Guardar fica desligado — nunca lista vazia
-  enganadora. O botão Guardar volta a ligar quando o servidor responde.
+  indisponível" e o botão Salvar fica desligado — nunca lista vazia
+  enganadora. O botão Salvar volta a ligar quando o servidor responde.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
