@@ -27,6 +27,21 @@ impl Default for LlamaState {
     }
 }
 
+/// ★ v1.9.11 (adendo 20:18 — janela de consola do llama-server): no
+/// Windows, esconde a janela de consola do processo filho
+/// (CREATE_NO_WINDOW = 0x08000000). Sem isto, cada spawn abre uma
+/// janela de consola vazia — foi o caso do llama-server.exe, do curl e
+/// do powershell. `creation_flags` é método inerente do
+/// tokio::process::Command no Windows (não é o trait std — esse é
+/// selado e só vale p/ std::process::Command). Noutros SO é no-op.
+#[cfg(windows)]
+fn no_console_window(cmd: &mut Command) {
+    cmd.creation_flags(0x08000000);
+}
+
+#[cfg(not(windows))]
+fn no_console_window(_cmd: &mut Command) {}
+
 // ─── Tauri Commands ───
 
 #[derive(Serialize)]
@@ -149,8 +164,11 @@ pub async fn llama_download_binary(app: tauri::AppHandle) -> Result<String, Stri
     // Download via curl (available on all platforms in Tauri)
     // RX470 fix: -f faz o curl falhar no HTTP 404 (antes gravava a pagina de
     // erro dentro do zip e a extracao falhava sem explicar).
-    let status = Command::new("curl")
-        .args(&["-f", "-L", "-o", zip_path.to_str().unwrap(), &info.url])
+    // ★ v1.9.11: sem janela de consola no Windows.
+    let mut curl_cmd = Command::new("curl");
+    curl_cmd.args(&["-f", "-L", "-o", zip_path.to_str().unwrap(), &info.url]);
+    no_console_window(&mut curl_cmd);
+    let status = curl_cmd
         .status()
         .await
         .map_err(|e| format!("curl failed: {}", e))?;
@@ -168,9 +186,11 @@ pub async fn llama_download_binary(app: tauri::AppHandle) -> Result<String, Stri
         .replace("{dest}", llama_dir.to_str().unwrap());
 
     let extract_status = if std::env::consts::OS == "windows" {
-        Command::new("powershell")
-            .args(&["-NoProfile", "-Command", &extract])
-            .status()
+        // ★ v1.9.11: sem janela de consola no Windows.
+        let mut ps = Command::new("powershell");
+        ps.args(&["-NoProfile", "-Command", &extract]);
+        no_console_window(&mut ps);
+        ps.status()
             .await
             .map_err(|e| format!("Extract failed: {}", e))?
     } else {
@@ -225,6 +245,18 @@ pub struct GgufModel {
 pub async fn llama_models() -> Result<Vec<GgufModel>, String> {
     Ok(vec![
         GgufModel {
+            id: "qwen2.5-7b".to_string(),
+            label: "Qwen 2.5 — 7B".to_string(),
+            size_mb: 4500,
+            url: "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m.gguf".to_string(),
+            filename: "qwen2.5-7b-instruct-q4_k_m.gguf".to_string(),
+            description: "Melhor qualidade (~4.5GB). Offload pesado CPU/GPU. ~10-20s por resposta.".to_string(),
+            emoji: "🎓".to_string(),
+            // ★ v1.9.11: modelo local PADRÃO (ordem do Elton 20:34) — 49 = offload
+            // máximo; o que cabe vai p/ a GPU (VRAM), o resto fica na CPU/RAM.
+            recommended_gpu_layers: 49,
+        },
+        GgufModel {
             id: "qwen2.5-1.5b".to_string(),
             label: "Qwen 2.5 — 1.5B".to_string(),
             size_mb: 1000,
@@ -254,16 +286,6 @@ pub async fn llama_models() -> Result<Vec<GgufModel>, String> {
             emoji: "🦙".to_string(),
             recommended_gpu_layers: 14,
         },
-        GgufModel {
-            id: "qwen2.5-7b".to_string(),
-            label: "Qwen 2.5 — 7B".to_string(),
-            size_mb: 4500,
-            url: "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m.gguf".to_string(),
-            filename: "qwen2.5-7b-instruct-q4_k_m.gguf".to_string(),
-            description: "Melhor qualidade (~4.5GB). Offload pesado CPU/GPU. ~10-20s por resposta.".to_string(),
-            emoji: "🎓".to_string(),
-            recommended_gpu_layers: 10,
-        },
     ])
 }
 
@@ -280,15 +302,18 @@ pub async fn llama_download_model(model_url: String, filename: String, app: taur
     }
 
     // Download via curl with resume support
-    let status = Command::new("curl")
-        .args(&[
-            "-L",
-            "-o",
-            model_path.to_str().unwrap(),
-            "-C",
-            "-",  // resume
-            &model_url,
-        ])
+    // ★ v1.9.11: sem janela de consola no Windows.
+    let mut curl_cmd = Command::new("curl");
+    curl_cmd.args(&[
+        "-L",
+        "-o",
+        model_path.to_str().unwrap(),
+        "-C",
+        "-",  // resume
+        &model_url,
+    ]);
+    no_console_window(&mut curl_cmd);
+    let status = curl_cmd
         .status()
         .await
         .map_err(|e| format!("curl failed: {}", e))?;
@@ -338,7 +363,10 @@ pub async fn llama_start(
     let log_path = app_dir.join("llama").join("llama-server.log");
     let log_file = std::fs::File::create(&log_path).map_err(|e| e.to_string())?;
     let err_file = log_file.try_clone().map_err(|e| e.to_string())?;
-    let child = Command::new(&binary_path)
+    // ★ v1.9.11: CREATE_NO_WINDOW — sem isto o llama-server.exe abre uma
+    // janela de consola vazia no Windows (stdout descartado, stderr no log).
+    let mut server_cmd = Command::new(&binary_path);
+    server_cmd
         .args(&[
             "--model", &model_path,
             "--n-gpu-layers", &gpu_layers.to_string(),
@@ -349,7 +377,9 @@ pub async fn llama_start(
             "--top-p", "0.9",
         ])
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::from(err_file))
+        .stderr(std::process::Stdio::from(err_file));
+    no_console_window(&mut server_cmd);
+    let child = server_cmd
         .spawn()
         .map_err(|e| format!("Failed to start llama-server: {}", e))?;
 
@@ -414,6 +444,10 @@ pub async fn llama_stop(state: State<'_, LlamaState>, _app: tauri::AppHandle) ->
 pub struct LlamaChatRequest {
     pub message: String,
     pub system_prompt: Option<String>,
+    /// ★ v1.9.11: limite de tokens (2048 por defeito). As questões em JSON
+    /// estrito precisam de ~4096 — com 2048 o JSON vinha cortado e o parse
+    /// devolvia [] (aba de questões vazia).
+    pub max_tokens: Option<u32>,
 }
 
 #[derive(Serialize)]
@@ -438,8 +472,12 @@ pub async fn llama_chat(
     }
 
     let port = state.port;
+    // ★ v1.9.11: o timeout acompanha o tamanho pedido — 4096 tokens na GPU
+    // local pode passar dos 120 s; o chat (2048) mantém os 120 s.
+    let max_tokens = req.max_tokens.unwrap_or(2048);
+    let timeout_secs = if max_tokens > 2048 { 300 } else { 120 };
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(120))
+        .timeout(std::time::Duration::from_secs(timeout_secs))
         .build()
         .map_err(|e| e.to_string())?;
 
@@ -453,7 +491,7 @@ pub async fn llama_chat(
             { "role": "user", "content": req.message }
         ],
         "temperature": 0.7,
-        "max_tokens": 2048,
+        "max_tokens": max_tokens,
         "stream": false
     });
 

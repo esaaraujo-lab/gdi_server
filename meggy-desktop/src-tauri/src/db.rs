@@ -48,10 +48,98 @@ pub fn init_db(db_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             url TEXT PRIMARY KEY,
             local_path TEXT NOT NULL,
             size INTEGER,
-            downloaded_at INTEGER
+            downloaded_at INTEGER,
+            lesson_path TEXT,
+            total_bytes INTEGER,
+            status TEXT
         );
     ")?;
-    
+
+    // ★ v1.9.11: bancos antigos (criados antes da 1.9.11) têm a
+    // download_cache sem as 3 colunas novas — adiciona só as que faltam.
+    migrate_download_cache(&conn);
+
+    Ok(())
+}
+
+/// ★ v1.9.11: migração idempotente da download_cache — ADD COLUMN só
+/// p/ as colunas que ainda não existem (SQLite não tem IF NOT EXISTS
+/// no ADD COLUMN; o PRAGMA diz o que já lá está).
+fn migrate_download_cache(conn: &Connection) {
+    let existing: Vec<String> = conn
+        .prepare("PRAGMA table_info(download_cache)")
+        .and_then(|mut stmt| {
+            let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
+            Ok(rows.filter_map(|r| r.ok()).collect())
+        })
+        .unwrap_or_default();
+    for (col, ddl) in [
+        ("lesson_path", "ALTER TABLE download_cache ADD COLUMN lesson_path TEXT"),
+        ("total_bytes", "ALTER TABLE download_cache ADD COLUMN total_bytes INTEGER"),
+        ("status", "ALTER TABLE download_cache ADD COLUMN status TEXT"),
+    ] {
+        if !existing.iter().any(|c| c == col) {
+            let _ = conn.execute(ddl, []);
+        }
+    }
+}
+
+/// ★ v1.9.11: definição simples (chave→valor) na tabela user_state —
+/// guarda p. ex. `download_wifi_only` ("1" = só no Wi-Fi, por defeito).
+pub fn db_setting(app: &tauri::AppHandle, key: &str) -> Option<String> {
+    let db_path = get_db_path(app);
+    let conn = Connection::open(&db_path).ok()?;
+    let mut stmt = conn
+        .prepare("SELECT value FROM user_state WHERE key = ?1 LIMIT 1")
+        .ok()?;
+    stmt.query_row([key], |row| row.get::<_, Option<String>>(0))
+        .ok()
+        .flatten()
+}
+
+pub fn db_set_setting(app: &tauri::AppHandle, key: &str, value: &str) -> Result<(), String> {
+    let db_path = get_db_path(app);
+    let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT OR REPLACE INTO user_state (key, value) VALUES (?1, ?2)",
+        rusqlite::params![key, value],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// ★ v1.9.11: regista/actualiza um download de aula na download_cache.
+/// `status`: "downloading" | "done" | "cancelled" | "error".
+pub fn download_cache_upsert(
+    app: &tauri::AppHandle,
+    url: &str,
+    local_path: &str,
+    size: u64,
+    lesson_path: &str,
+    total_bytes: u64,
+    status: &str,
+) -> Result<(), String> {
+    let db_path = get_db_path(app);
+    let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT OR REPLACE INTO download_cache (url, local_path, size, downloaded_at, lesson_path, total_bytes, status) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        rusqlite::params![url, local_path, size as i64, now_ts(), lesson_path, total_bytes as i64, status],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// ★ v1.9.11: apaga os registos da cache cujos ficheiros vivem dentro
+/// de `dir` (usado pela evicção LRU e pelo delete_download).
+pub fn download_cache_delete_dir(app: &tauri::AppHandle, dir: &std::path::Path) -> Result<(), String> {
+    let db_path = get_db_path(app);
+    let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
+    let pattern = format!("{}%", dir.to_string_lossy());
+    conn.execute(
+        "DELETE FROM download_cache WHERE local_path LIKE ?1",
+        rusqlite::params![pattern],
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 

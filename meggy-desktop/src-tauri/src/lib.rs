@@ -17,6 +17,7 @@ use tauri_plugin_single_instance::init as init_single_instance;
 pub fn run() {
     tauri::Builder::default()
         .manage(api::AppState::default())
+        .manage(api::DownloadManager::default())
         .manage(llama::LlamaState::default())
         .manage(mpv::MpvState::default())
         .plugin(tauri_plugin_shell::init())
@@ -91,6 +92,13 @@ pub fn run() {
             api::fetch_text,
             api::extract_pdf_text,
             api::download_to_temp,
+            // v1.9.11 — download offline de aulas (PROGRESSO_AULAS §3.1)
+            api::download_lesson,
+            api::download_status,
+            api::cancel_download,
+            api::delete_download,
+            api::get_download_wifi_only,
+            api::set_download_wifi_only,
             auth::check_session,
             auth::logout,
             db::search_lessons,

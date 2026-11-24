@@ -3,8 +3,11 @@
 // ═══════════════════════════════════════════════════════════════
 
 use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
-use tauri::State;
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 const BASE_URL: &str = "https://educa.eu.org";
 
@@ -720,4 +723,544 @@ pub async fn download_to_temp(url: String, state: State<'_, AppState>) -> Result
     }
 
     Ok(filepath.to_string_lossy().to_string())
+}
+
+// ─────────────────────────────────────────────────────────────────
+// ★ v1.9.11 — Download offline de aulas (desenho PROGRESSO_AULAS §3.1)
+// ─────────────────────────────────────────────────────────────────
+
+/// ★ v1.9.11: downloads em curso — um flag de cancelamento por lesson_path.
+pub struct DownloadManager {
+    pub active: Mutex<HashMap<String, Arc<AtomicBool>>>,
+}
+
+impl Default for DownloadManager {
+    fn default() -> Self {
+        Self {
+            active: Mutex::new(HashMap::new()),
+        }
+    }
+}
+
+/// ★ v1.9.11: tecto do download offline — 2 GB com evicção LRU (§3.3).
+const DOWNLOAD_MAX_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+/// ★ v1.9.11: chave da regra "só no Wi-Fi" na tabela user_state ("1" = ligada).
+const DOWNLOAD_WIFI_ONLY_KEY: &str = "download_wifi_only";
+
+fn downloads_dir(app: &AppHandle) -> std::path::PathBuf {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .unwrap_or_else(|_| dirs::data_dir().unwrap_or_default().join("Meggy"));
+    dir.join("downloads")
+}
+
+fn lesson_download_dir(app: &AppHandle, lesson_path: &str) -> std::path::PathBuf {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    lesson_path.hash(&mut hasher);
+    downloads_dir(app).join(format!("{:016x}", hasher.finish()))
+}
+
+/// ★ v1.9.11: "só no Wi-Fi" por defeito — bloqueia SÓ quando detecta
+/// positivamente uma ligação de dados móveis; Wi-Fi e cabo (Ethernet)
+/// passam sempre; quando não dá para determinar, permite (fail-open —
+/// um bloqueio errado deixaria o desktop sem downloads).
+fn wifi_only_ok() -> bool {
+    // Windows: netsh wlan diz se há Wi-Fi ligado; sem placa Wi-Fi é
+    // desktop com cabo (permitir). A saída pode ser pt-BR ou en — procurar
+    // "conectado"/"connected" sem depender do idioma.
+    #[cfg(target_os = "windows")]
+    {
+        let out = std::process::Command::new("netsh")
+            .args(["wlan", "show", "interfaces"])
+            .output();
+        if let Ok(o) = out {
+            let txt = String::from_utf8_lossy(&o.stdout).to_lowercase();
+            if txt.contains("não há nenhuma interface")
+                || txt.contains("there is no wireless interface")
+            {
+                return true; // sem placa Wi-Fi = cabo
+            }
+            if txt.contains("conectado") || txt.contains("connected") {
+                return true; // Wi-Fi ligado
+            }
+            // Há placa Wi-Fi mas desligada — ver se há Ethernet ligada;
+            // só bloqueia se a única ligação for de dados móveis.
+            if let Ok(o2) = std::process::Command::new("netsh")
+                .args(["interface", "show", "interface"])
+                .output()
+            {
+                let t2 = String::from_utf8_lossy(&o2.stdout).to_lowercase();
+                let mut cellular_only = false;
+                for line in t2.lines() {
+                    if !(line.contains("conectado") || line.contains("connected")) {
+                        continue;
+                    }
+                    if line.contains("ethernet") || line.contains("wi-fi") || line.contains("wifi") {
+                        return true;
+                    }
+                    if line.contains("celular") || line.contains("cellular") || line.contains("mobile") {
+                        cellular_only = true;
+                    }
+                }
+                if cellular_only {
+                    return false;
+                }
+            }
+        }
+        return true; // indeterminado — permitir
+    }
+    // Linux: nmcli lista o tipo de cada ligação activa.
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(o) = std::process::Command::new("nmcli")
+            .args(["-t", "-f", "TYPE,STATE", "device", "status"])
+            .output()
+        {
+            let txt = String::from_utf8_lossy(&o.stdout);
+            let mut cellular_only = false;
+            for line in txt.lines() {
+                let (ty, st) = line.split_once(':').unwrap_or(("", ""));
+                if st.trim() != "connected" {
+                    continue;
+                }
+                match ty.trim() {
+                    "wifi" | "ethernet" => return true,
+                    "gsm" | "cdma" => cellular_only = true,
+                    _ => {}
+                }
+            }
+            if cellular_only {
+                return false;
+            }
+        }
+        return true; // sem nmcli / indeterminado — permitir
+    }
+    // macOS e outros: sem detecção fiável de dados móveis — permitir.
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    {
+        true
+    }
+}
+
+/// ★ v1.9.11: evicção LRU — soma os downloads concluídos e apaga as
+/// pastas mais antigas (por mtime) até `needed` caber dentro do tecto.
+/// Nunca toca na pasta `keep_dir` (a aula que está a baixar agora).
+fn enforce_download_cap(app: &AppHandle, keep_dir: &std::path::Path, needed: u64) {
+    let base = downloads_dir(app);
+    let mut entries: Vec<(u64, std::time::SystemTime, std::path::PathBuf)> = Vec::new();
+    let mut total: u64 = 0;
+    if let Ok(rd) = std::fs::read_dir(&base) {
+        for e in rd.flatten() {
+            let p = e.path();
+            if !p.is_dir() || p == keep_dir {
+                continue;
+            }
+            // Soma só os ficheiros finais (o .part não conta — é retomável).
+            let mut dir_size = 0u64;
+            let mut newest = std::time::SystemTime::UNIX_EPOCH;
+            if let Ok(rd2) = std::fs::read_dir(&p) {
+                for f in rd2.flatten() {
+                    let fp = f.path();
+                    if fp.extension().and_then(|x| x.to_str()) == Some("part") {
+                        continue;
+                    }
+                    if let Ok(m) = f.metadata() {
+                        dir_size += m.len();
+                        if let Ok(mt) = m.modified() {
+                            if mt > newest {
+                                newest = mt;
+                            }
+                        }
+                    }
+                }
+            }
+            total += dir_size;
+            entries.push((dir_size, newest, p));
+        }
+    }
+    if total + needed <= DOWNLOAD_MAX_BYTES {
+        return;
+    }
+    entries.sort_by_key(|(_, mt, _)| *mt); // mais antigos primeiro
+    let mut freed = 0u64;
+    for (size, _, dir) in entries {
+        if total + needed - freed <= DOWNLOAD_MAX_BYTES {
+            break;
+        }
+        if std::fs::remove_dir_all(&dir).is_ok() {
+            freed += size;
+            let _ = crate::db::download_cache_delete_dir(app, &dir);
+            eprintln!("[download] LRU evicted {} ({} bytes)", dir.display(), size);
+        }
+    }
+}
+
+/// ★ v1.9.11: arranca o download de uma aula em 2.º plano e devolve logo
+/// (`true`) — nada bloqueia a UI; o progresso vai por eventos
+/// `download-progress` ({lesson_path, received, total, done, path}).
+/// Destino: <app_data>/downloads/<hash-do-path>/<file_name>; retoma com
+/// `Range` se existir ficheiro parcial; grava em `.part` e renomeia no fim.
+#[tauri::command]
+pub async fn download_lesson(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    downloads: State<'_, DownloadManager>,
+    url: String,
+    lesson_path: String,
+    file_name: String,
+) -> Result<bool, String> {
+    // "Só no Wi-Fi" por defeito (valor "1" quando a chave não existe).
+    let wifi_only = crate::db::db_setting(&app, DOWNLOAD_WIFI_ONLY_KEY)
+        .unwrap_or_else(|| "1".to_string())
+        == "1";
+    if wifi_only && !wifi_only_ok() {
+        return Err(
+            "Download só no Wi-Fi — liga o Wi-Fi (ou o cabo) ou desactiva a regra nas definições."
+                .to_string(),
+        );
+    }
+
+    let dir = lesson_download_dir(&app, &lesson_path);
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let final_path = dir.join(&file_name);
+    let part_path = dir.join(format!("{}.part", file_name));
+
+    // Já baixado? Devolve logo + evento done (o frontend marca ✓ sem rede).
+    if let Ok(meta) = std::fs::metadata(&final_path) {
+        if meta.len() > 0 {
+            let _ = app.emit(
+                "download-progress",
+                serde_json::json!({
+                    "lesson_path": lesson_path,
+                    "received": meta.len(),
+                    "total": meta.len(),
+                    "done": true,
+                    "path": final_path.to_string_lossy().to_string(),
+                }),
+            );
+            return Ok(true);
+        }
+    }
+
+    // Tecto 2 GB com evicção LRU antes de arrancar.
+    enforce_download_cap(&app, &dir, 0);
+
+    // Um download por aula — o 2.º toque devolve erro em vez de duplicar.
+    let cancel = Arc::new(AtomicBool::new(false));
+    {
+        let mut active = downloads.active.lock().unwrap();
+        if active.contains_key(&lesson_path) {
+            return Err("Download já em curso para esta aula".to_string());
+        }
+        active.insert(lesson_path.clone(), cancel.clone());
+    }
+
+    let _ = crate::db::download_cache_upsert(
+        &app,
+        &url,
+        &final_path.to_string_lossy(),
+        0,
+        &lesson_path,
+        0,
+        "downloading",
+    );
+
+    let cookie = state.cookie.lock().unwrap().clone();
+    let app2 = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let result = download_task(
+            app2.clone(),
+            url.clone(),
+            lesson_path.clone(),
+            dir.clone(),
+            final_path.clone(),
+            part_path.clone(),
+            cookie,
+            cancel,
+        )
+        .await;
+        match result {
+            Ok((received, total)) => {
+                let _ = crate::db::download_cache_upsert(
+                    &app2,
+                    &url,
+                    &final_path.to_string_lossy(),
+                    received,
+                    &lesson_path,
+                    total,
+                    "done",
+                );
+                let _ = app2.emit(
+                    "download-progress",
+                    serde_json::json!({
+                        "lesson_path": lesson_path,
+                        "received": received,
+                        "total": total,
+                        "done": true,
+                        "path": final_path.to_string_lossy().to_string(),
+                    }),
+                );
+            }
+            Err(e) if e == "cancelled" => {
+                let _ = crate::db::download_cache_upsert(
+                    &app2,
+                    &url,
+                    &final_path.to_string_lossy(),
+                    0,
+                    &lesson_path,
+                    0,
+                    "cancelled",
+                );
+                let _ = app2.emit(
+                    "download-progress",
+                    serde_json::json!({
+                        "lesson_path": lesson_path,
+                        "received": 0,
+                        "total": 0,
+                        "done": false,
+                        "path": null,
+                        "cancelled": true,
+                    }),
+                );
+            }
+            Err(e) => {
+                eprintln!("[download_lesson] {} ERRO: {}", lesson_path, e);
+                let _ = crate::db::download_cache_upsert(
+                    &app2,
+                    &url,
+                    &final_path.to_string_lossy(),
+                    0,
+                    &lesson_path,
+                    0,
+                    "error",
+                );
+            }
+        }
+        app2
+            .state::<DownloadManager>()
+            .active
+            .lock()
+            .unwrap()
+            .remove(&lesson_path);
+    });
+
+    Ok(true)
+}
+
+/// Corpo do download: stream com Range/retoma, .part + rename no fim.
+/// Devolve (received, total). "cancelled" é erro de controlo — o .part
+/// fica no disco para a próxima chamada retomar de onde parou.
+async fn download_task(
+    app: AppHandle,
+    url: String,
+    lesson_path: String,
+    dir: std::path::PathBuf,
+    final_path: std::path::PathBuf,
+    part_path: std::path::PathBuf,
+    cookie: Option<String>,
+    cancel: Arc<AtomicBool>,
+) -> Result<(u64, u64), String> {
+    use tokio::io::AsyncWriteExt;
+
+    let resumed = std::fs::metadata(&part_path).map(|m| m.len()).unwrap_or(0);
+
+    // Cliente próprio sem timeout global — um download de GBs demora mais
+    // que os 120 s do cliente principal; segue redirects (o host pode 302).
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::limited(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut req = client.get(&url);
+    if let Some(c) = &cookie {
+        req = req.header("Cookie", c);
+    }
+    if resumed > 0 {
+        req = req.header("Range", format!("bytes={}-", resumed));
+    }
+    let mut resp = req.send().await.map_err(|e| e.to_string())?;
+    let status = resp.status().as_u16();
+    if status == 401 {
+        return Err("AUTH:401".to_string());
+    }
+    if status != 200 && status != 206 {
+        return Err(format!("HTTP {}", status));
+    }
+
+    // 206 = retoma aceite (anexar); 200 com .part = servidor ignorou o
+    // Range — recomeçar do zero para não misturar bytes.
+    let append = status == 206 && resumed > 0;
+    let mut received: u64 = if append { resumed } else { 0 };
+    let total: u64 = if let Some(cr) = resp
+        .headers()
+        .get("content-range")
+        .and_then(|v| v.to_str().ok())
+    {
+        // "bytes 123-456/7890" → total = 7890
+        cr.rsplit('/')
+            .next()
+            .and_then(|s| s.trim().parse::<u64>().ok())
+            .unwrap_or(0)
+    } else if let Some(cl) = resp
+        .headers()
+        .get("content-length")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse::<u64>().ok())
+    {
+        if append {
+            received + cl
+        } else {
+            cl
+        }
+    } else {
+        0
+    };
+
+    // Tecto 2 GB com o total já conhecido (a 1.ª passagem foi com 0).
+    if total > 0 {
+        enforce_download_cap(&app, &dir, total);
+    }
+
+    let mut file = if append {
+        tokio::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&part_path)
+            .await
+            .map_err(|e| e.to_string())?
+    } else {
+        tokio::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&part_path)
+            .await
+            .map_err(|e| e.to_string())?
+    };
+
+    let mut last_emit = std::time::Instant::now();
+    loop {
+        if cancel.load(Ordering::SeqCst) {
+            return Err("cancelled".to_string());
+        }
+        match resp.chunk().await {
+            Ok(Some(chunk)) => {
+                file.write_all(&chunk).await.map_err(|e| e.to_string())?;
+                received += chunk.len() as u64;
+                // Progresso por evento, no máximo ~4x/segundo.
+                if last_emit.elapsed().as_millis() >= 250 {
+                    last_emit = std::time::Instant::now();
+                    let _ = app.emit(
+                        "download-progress",
+                        serde_json::json!({
+                            "lesson_path": lesson_path,
+                            "received": received,
+                            "total": total,
+                            "done": false,
+                            "path": null,
+                        }),
+                    );
+                }
+            }
+            Ok(None) => break,
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+    file.flush().await.map_err(|e| e.to_string())?;
+    drop(file);
+
+    // Rename .part → final (no Windows, apagar o destino primeiro).
+    let _ = tokio::fs::remove_file(&final_path).await;
+    tokio::fs::rename(&part_path, &final_path)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok((received, total))
+}
+
+#[derive(Serialize)]
+pub struct DownloadStatus {
+    pub downloaded: bool,
+    pub path: Option<String>,
+    pub size: u64,
+}
+
+/// ★ v1.9.11: estado do download de uma aula — lê o disco, sem rede.
+/// Procura o ficheiro final na pasta da aula (qualquer ficheiro que não
+/// seja .part); sem ficheiro final, downloaded=false (mesmo com .part).
+#[tauri::command]
+pub async fn download_status(
+    app: AppHandle,
+    lesson_path: String,
+) -> Result<DownloadStatus, String> {
+    let dir = lesson_download_dir(&app, &lesson_path);
+    if let Ok(rd) = std::fs::read_dir(&dir) {
+        for e in rd.flatten() {
+            let fp = e.path();
+            if !fp.is_file() {
+                continue;
+            }
+            if fp.extension().and_then(|x| x.to_str()) == Some("part") {
+                continue;
+            }
+            if let Ok(meta) = e.metadata() {
+                return Ok(DownloadStatus {
+                    downloaded: true,
+                    path: Some(fp.to_string_lossy().to_string()),
+                    size: meta.len(),
+                });
+            }
+        }
+    }
+    Ok(DownloadStatus {
+        downloaded: false,
+        path: None,
+        size: 0,
+    })
+}
+
+/// ★ v1.9.11: pede o cancelamento do download em curso (o .part fica
+/// para retomar depois). Devolve false se não havia download activo.
+#[tauri::command]
+pub async fn cancel_download(
+    downloads: State<'_, DownloadManager>,
+    lesson_path: String,
+) -> Result<bool, String> {
+    let active = downloads.active.lock().unwrap();
+    if let Some(flag) = active.get(&lesson_path) {
+        flag.store(true, Ordering::SeqCst);
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
+/// ★ v1.9.11: apaga o ficheiro baixado (e o .part) da aula + o registo
+/// da cache. Devolve false se não havia nada no disco.
+#[tauri::command]
+pub async fn delete_download(app: AppHandle, lesson_path: String) -> Result<bool, String> {
+    let dir = lesson_download_dir(&app, &lesson_path);
+    if !dir.exists() {
+        return Ok(false);
+    }
+    std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
+    let _ = crate::db::download_cache_delete_dir(&app, &dir);
+    Ok(true)
+}
+
+/// ★ v1.9.11: lê a regra "só no Wi-Fi" (por defeito ligada).
+#[tauri::command]
+pub async fn get_download_wifi_only(app: AppHandle) -> Result<bool, String> {
+    Ok(crate::db::db_setting(&app, DOWNLOAD_WIFI_ONLY_KEY)
+        .unwrap_or_else(|| "1".to_string())
+        == "1")
+}
+
+/// ★ v1.9.11: grava a regra "só no Wi-Fi" (a UI de definições usa estes
+/// dois comandos; sem UI nesta ronda, o valor por defeito é "ligada").
+#[tauri::command]
+pub async fn set_download_wifi_only(app: AppHandle, value: bool) -> Result<bool, String> {
+    crate::db::db_set_setting(&app, DOWNLOAD_WIFI_ONLY_KEY, if value { "1" } else { "0" })?;
+    Ok(true)
 }
