@@ -48,6 +48,7 @@ import com.vovofit.app.util.Format
 import com.vovofit.app.util.CoverLibrary
 import com.vovofit.app.util.loadCoverChain
 import com.vovofit.app.util.LessonDescription
+import com.vovofit.app.util.StaleRecentResolver
 import com.vovofit.app.util.MarkdownRenderer
 import com.vovofit.app.util.MaterialSaver
 import com.vovofit.app.util.PlaylistManager
@@ -595,11 +596,19 @@ class DetailActivity : AppCompatActivity() {
         binding.railContinue.addItemDecoration(RailGutterDecoration(8))
 
         val railItems = driveRecents.map { r ->
-            val shortFolder = r.folderPath.substringAfterLast("/").ifBlank { r.folderPath }
             val progress = sm.getResumeProgress(r.folderPath, r.videoName)
+            // Port R28 da Meggy — o título do card é o NOME DO TEMA DA
+            // AULA (nome da pasta); sem segmento, o título antigo.
+            // Subtítulo = nome do curso (regra R26, partilhada c/ a
+            // Home em Format.continueSubtitle).
+            val courseName = Format.extractCourseName(r.folderPath)
+            val displayTitle = LessonDescription.folderNameFromPath(r.folderPath)
+                ?: Format.lessonTitle(r.videoName)
+            val subtitle = Format.continueSubtitle(displayTitle, r.videoName, courseName, TvUtils.isTv(this))
             RailItem(
                 title = r.videoName,
-                subtitle = shortFolder,
+                displayTitle = displayTitle,
+                subtitle = subtitle,
                 icon = "🎥",
                 hasProgress = progress > 0,
                 progress = progress,
@@ -629,7 +638,14 @@ class DetailActivity : AppCompatActivity() {
                 it.folderPath == item.file?.folderPath && it.videoName == item.title
             } ?: currentRecents.find { it.videoName == item.title }
                 ?: return@RailAdapter
-            continueWatching(match.folderPath, match.videoName, item.subtitle)
+            // Port R28 — o 3.º argumento é o nome da pasta p/ o extra
+            // "folderName" do DetailActivity de fallback (o subtítulo
+            // já não é a pasta — é o curso): deriva-se do folderPath
+            // do recent, não do subtítulo do card.
+            continueWatching(
+                match.folderPath, match.videoName,
+                LessonDescription.folderNameFromPath(match.folderPath) ?: match.folderPath
+            )
         }
     }
 
@@ -695,6 +711,24 @@ class DetailActivity : AppCompatActivity() {
                     }
                 }
             }
+            // Port R29 da Meggy — a pasta guardada já não existe
+            // (listagem vazia): tenta resolver o vídeo no caminho atual
+            // (busca no D1 + passeio no Drive) em vez de abrir a
+            // pasta-mãe. Sem resultado, cai no comportamento atual
+            // logo abaixo.
+            if (files.isEmpty()) {
+                val resolved = withContext(Dispatchers.IO) {
+                    StaleRecentResolver.resolve(api, this@DetailActivity, folderPath, videoName)
+                }
+                if (resolved != null) {
+                    val playable = resolved.playable.map { it.copy(folderPath = resolved.folderPath) }
+                    val idx = playable.indexOfFirst { it.name == resolved.video.name }
+                    PlaylistManager.setPlaylist(playable, if (idx >= 0) idx else 0, this@DetailActivity)
+                    launchPlayer(fileBaseUrl(resolved.folderPath) + (resolved.video.link ?: ""), resolved.video.name, resolved.folderPath, resolved.video.thumbnailLink)
+                    return@launch
+                }
+            }
+
             val intent = Intent(this@DetailActivity, DetailActivity::class.java)
             intent.putExtra("drivePath", folderPath)
             intent.putExtra("folderName", shortFolder)
