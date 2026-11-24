@@ -230,7 +230,7 @@ class MyListActivity : AppCompatActivity() {
                 // Frente H — guarda contra duplo toque (um toque = uma navegação).
                 if (!TapFeedback.tryNavigate(fullUrl)) return
                 SessionManager.get(this).saveLastWatched(file.folderPath ?: "/", file.name)
-                // Frente H — guarda o link no recent (ver DetailActivity).
+                // Frente H — salva o link no recent (ver DetailActivity).
                 SessionManager.get(this).addRecent(file.folderPath ?: "/", file.name, null, link)
                 // Frente G: a Minha lista NÃO monta playlist — sem
                 // isto o player tocava a playlist persistida de
@@ -247,7 +247,7 @@ class MyListActivity : AppCompatActivity() {
 
     /** v2.7.6: abrir um documento marcado (PDF/MD) no leitor embutido. */
     private fun openBookmark(b: SessionManager.Bookmark) {
-        // O bookmark guarda o path; a URL de download precisa do link do
+        // O bookmark salva o path; a URL de download precisa do link do
         // Drive, que não é persistido. Reabre-se a pasta do documento
         // (o leitor recebe a URL quando aberto pela aula). Sem o link,
         // abre o detalhe da pasta que contém o documento.
