@@ -45,6 +45,8 @@ import com.vovofit.app.util.PlaylistManager
 import com.vovofit.app.util.SessionManager
 import com.vovofit.app.util.TapFeedback
 import com.vovofit.app.util.Format
+import com.vovofit.app.util.LessonDescription
+import com.vovofit.app.util.StaleRecentResolver
 import com.vovofit.app.util.TvUtils
 import com.vovofit.app.util.TvAutoFit
 import com.vovofit.app.util.FocusAnimator
@@ -581,13 +583,24 @@ class HomeActivity : AppCompatActivity() {
         }
 
         // ★ v2.5.0: Show the COURSE NAME (not the folder path) as subtitle.
-        // extractCourseName() returns a human-friendly label like
+        // Format.extractCourseName() returns a human-friendly label like
         // "PF - Agente" or "DirAdmin" depending on the path depth.
         val railItems = recents.map { r ->
-            val courseName = extractCourseName(r.folderPath)
+            val courseName = Format.extractCourseName(r.folderPath)
+            // Port R28 da Meggy — o título do card é o NOME DO TEMA DA
+            // AULA = o nome da pasta da aula (último segmento do
+            // folderPath, mesma fonte do título da tela Detalhe e do
+            // player p/ arquivo genérico): o nome cru do arquivo
+            // ("Videoaula") some do título. Sem segmento na pasta, cai
+            // no título antigo. Subtítulo = nome do curso (regra R26,
+            // partilhada c/ o Detalhe em Format.continueSubtitle).
+            val displayTitle = LessonDescription.folderNameFromPath(r.folderPath)
+                ?: Format.lessonTitle(r.videoName)
+            val subtitle = Format.continueSubtitle(displayTitle, r.videoName, courseName, TvUtils.isTv(this))
             RailItem(
                 title = r.videoName,
-                subtitle = courseName,
+                displayTitle = displayTitle,
+                subtitle = subtitle,
                 icon = "🎥",
                 hasProgress = sm.hasResume(r.folderPath, r.videoName),
                 progress = sm.getResumeProgress(r.folderPath, r.videoName),
@@ -704,8 +717,13 @@ class HomeActivity : AppCompatActivity() {
         val pos = sm.getResume(best.folderPath, best.videoName)
         val dur = sm.getResumeDuration(best.folderPath, best.videoName)
         binding.featuredSection.visibility = View.VISIBLE
-        binding.featuredTitle.setWordEllipsized(Format.lessonTitle(best.videoName))
-        binding.featuredSubtitle.setWordEllipsized(extractCourseName(best.folderPath))
+        // Port R28 — herói alinhado com o rail: o título é o NOME DO
+        // TEMA DA AULA (nome da pasta); sem segmento, o título antigo.
+        binding.featuredTitle.setWordEllipsized(
+            LessonDescription.folderNameFromPath(best.folderPath)
+                ?: Format.lessonTitle(best.videoName)
+        )
+        binding.featuredSubtitle.setWordEllipsized(Format.extractCourseName(best.folderPath))
         binding.featuredProgress.progress = progress
         binding.featuredProgressText.text = "$progress% concluído"
         binding.featuredTimeText.text = Format.positionText(pos, dur)
@@ -743,7 +761,7 @@ class HomeActivity : AppCompatActivity() {
             showFeaturedArt()
         }
         binding.featuredContinue.setOnClickListener {
-            continueWatching(best.folderPath, best.videoName, extractCourseName(best.folderPath))
+            continueWatching(best.folderPath, best.videoName, Format.extractCourseName(best.folderPath))
         }
         // v1.0.7 — o CARD GRANDE e o alvo do foco na TV: clicavel e
         // focavel, com FocusAnimator.attachCard (anel 3dp da marca +
@@ -756,91 +774,12 @@ class HomeActivity : AppCompatActivity() {
         // blocksDescendants). O card nao e reciclado (view fixa da
         // Home), entao o attach nao depende de rebind.
         binding.featuredCard.setOnClickListener {
-            continueWatching(best.folderPath, best.videoName, extractCourseName(best.folderPath))
+            continueWatching(best.folderPath, best.videoName, Format.extractCourseName(best.folderPath))
         }
         // R18B (Bug 1 #1): 1.00x na TV — o cartão tem 848dp
         // (largura total); qualquer escala é cortada nas laterais
         // e invade o overscan. Ficam anel 3dp + elevação 16dp.
         FocusAnimator.attachCard(binding.featuredCard, true, scaleTv = FocusAnimator.SCALE_TV_NONE)
-    }
-
-    /**
-     * v2.5.1 — Extracts the REAL course name from a folder path.
-     *
-     * PROBLEM: Paths often have generic intermediate buckets like:
-     *   "/0:/0 DIVERSOS/Cursos e Cursinhos Completo/Leilão Vendas e Cripto/Mercado Livre/Módulo 01/Aula 01.mp4"
-     *
-     * The COURSE is "Mercado Livre" — it's the last REAL segment BEFORE
-     * module/lesson patterns start.
-     *
-     * HEURISTIC:
-     *   1. Split path, skip drive index ("0:", "9:", etc.)
-     *   2. Walk segments from DEEPEST to SHALLOWEST.
-     *   3. Skip segments that are modules/lessons (MÓDULO 1, AULA 01, 001 - X).
-     *   4. Skip segments that are too short (< 3 chars: "I", "A", "Sub").
-     *   5. The FIRST non-skipped segment (deepest) is the COURSE name.
-     *   6. If all are skipped, return the deepest segment (fallback).
-     *
-     * Examples:
-     *   "/0:/0 DIVERSOS/Leilão/Mercado Livre/Módulo 1/Sub/Aula.mp4" → "Mercado Livre"
-     *   "/0:/PF - Agente/Curso X/Bloco I/DirAdmin/001 - PODERES/" → "DirAdmin"
-     *   "/9:/Tribunal Regional/TRT 3ª Região/Aulas/" → "TRT 3ª Região"
-     */
-    private fun extractCourseName(folderPath: String): String {
-        val segments = folderPath.trim('/').split('/').filter { it.isNotBlank() }
-        if (segments.isEmpty()) return folderPath
-
-        // Skip drive index ("0:", "9:", etc.)
-        val startIdx = if (segments[0].matches(Regex("^\\d+:$"))) 1 else 0
-        val pathSegments = segments.drop(startIdx)
-        if (pathSegments.isEmpty()) return segments.last()
-
-        /**
-         * Returns true if a segment is a MODULE or LESSON or GENERIC bucket
-         * (not a course name). These are skipped when searching for the course.
-         */
-        fun isModuleOrLesson(seg: String): Boolean {
-            val lower = seg.trim().lowercase()
-            // Module/lesson patterns: "MÓDULO 1", "AULA 01", "BLOCO I", "PARTE 1"
-            if (lower.matches(Regex("^(módulo|modulo|aula|bloco|parte|capítulo|capitulo|unidade|topico|tópico)\\s*\\d+.*"))) return true
-            // Numbered prefix: "001 - PODERES", "01 - INTRODUÇÃO" (lesson names)
-            if (seg.matches(Regex("^\\d{2,}\\s*[-–].*"))) return true
-            // Pure number: "001", "2026", "1"
-            if (seg.matches(Regex("^\\d+$"))) return true
-            // Too short to be a course name (less than 3 chars): "I", "A", "1A", "Sub"
-            if (seg.trim().length < 3) return true
-            // GENERIC bucket names — organizational folders, NOT courses
-            val GENERIC = setOf(
-                "diversos", "vídeos", "videos", "aulas", "aulão", "aulao",
-                "curso", "cursos", "cursinho", "cursinhos", "completo", "completos",
-                "módulos", "modulos", "modulo", "módulo", "bloco", "blocos",
-                "material", "materiais", "apostila", "apostilas", "pdf", "pdfs",
-                "plataforma", "plataformas", "novidades", "atualizado", "atualizados",
-                "sub", "subs", "subpasta", "subpastas", "geral", "extra", "extras",
-                "provas", "exercícios", "exercicios", "questões", "questoes",
-                "leilão vendas e cripto", "leilao vendas e cripto",
-                "cursos e cursinhos completo", "cursos e cursinhos",
-                "retas final", "reta final", "retafinal",
-                "2024", "2025", "2026", "2027"
-            )
-            if (lower in GENERIC) return true
-            // "0 DIVERSOS", "1 VÍDEOS", "2 AULAS" — starts with number + space
-            if (seg.matches(Regex("^\\d+\\s+.*"))) return true
-            // Ends with file extension (it's a file, not a folder): .mp4, .mp3, .pdf
-            if (lower.matches(Regex("^.*\\.(mp4|mkv|webm|mov|avi|mp3|m4a|aac|ogg|wav|flac|pdf)$"))) return true
-            return false
-        }
-
-        // Walk from DEEPEST to SHALLOWEST, skip modules/lessons, return first real segment.
-        // This finds the course name = the deepest folder that isn't a module/lesson bucket.
-        for (seg in pathSegments.reversed()) {
-            if (!isModuleOrLesson(seg)) {
-                return seg
-            }
-        }
-
-        // Fallback: all segments were modules/lessons → return the deepest one
-        return pathSegments.last()
     }
 
     /**
@@ -943,6 +882,24 @@ class HomeActivity : AppCompatActivity() {
             // IMMEDIATE PARENT folder in DetailActivity — that's where the user
             // was watching. The DetailActivity's "Continue de onde parou" rail
             // will show the video at the top.
+            // Port R29 da Meggy — a pasta guardada já não existe
+            // (listagem vazia): tenta resolver o vídeo no caminho atual
+            // (busca no D1 + passeio no Drive) em vez de abrir a
+            // pasta-mãe. Sem resultado, cai no comportamento atual
+            // logo abaixo.
+            if (files.isEmpty()) {
+                val resolved = withContext(Dispatchers.IO) {
+                    StaleRecentResolver.resolve(api, this@HomeActivity, folderPath, videoName)
+                }
+                if (resolved != null) {
+                    val playable = resolved.playable.map { it.copy(folderPath = resolved.folderPath) }
+                    val idx = playable.indexOfFirst { it.name == resolved.video.name }
+                    PlaylistManager.setPlaylist(playable, if (idx >= 0) idx else 0, this@HomeActivity)
+                    launchPlayer(VovoFitApp.BASE_URL + (resolved.video.link ?: ""), resolved.video.name, resolved.folderPath, resolved.video.thumbnailLink)
+                    return@launch
+                }
+            }
+
             val (parentPath, parentName) = immediateParentPath(folderPath)
             val intent = Intent(this@HomeActivity, DetailActivity::class.java)
             intent.putExtra("drivePath", parentPath)
