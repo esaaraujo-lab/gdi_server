@@ -54,17 +54,30 @@ object FocusAnimator {
     /**
      * Liga a animação de foco a um MaterialCardView, incluindo o anel:
      * stroke 3dp na cor da marca + fundo `tile_bg_focused` quando focado.
+     *
+     * Ronda 27 — `ringColorRes`/`ringWidthDp` opcionais: os Tiles de
+     * pasta com cor fixa usam anel BRANCO e grosso (4dp) — o anel rosa
+     * (3,6–4,5:1 sobre a paleta) é fraco demais na TV, e o branco dá
+     * 8,0–10,8:1 sobre qualquer cor da paleta. Sem os parâmetros, o
+     * comportamento é o de sempre (anel rosa 3dp) — a tela inicial
+     * (Destaques, herói, "Continue assistindo") não muda.
      */
-    fun attachCard(card: MaterialCardView, isTv: Boolean, scaleTv: Float? = null) {
+    fun attachCard(
+        card: MaterialCardView,
+        isTv: Boolean,
+        scaleTv: Float? = null,
+        ringColorRes: Int = R.color.tile_focus_ring,
+        ringWidthDp: Float = 3f
+    ) {
         val scale = if (isTv) (scaleTv ?: SCALE_TV) else SCALE_PHONE
         val elevDp = if (isTv) ELEV_TV_DP else ELEV_PHONE_DP
         val density = card.resources.displayMetrics.density
-        val ringColor = ContextCompat.getColor(card.context, R.color.tile_focus_ring)
+        val ringColor = ContextCompat.getColor(card.context, ringColorRes)
         val focusedBg = ContextCompat.getColor(card.context, R.color.tile_bg_focused)
         val normalBg = ContextCompat.getColor(card.context, R.color.tile_bg)
         card.setOnFocusChangeListener { v, hasFocus ->
             animate(v, hasFocus, scale, elevDp * density)
-            card.strokeWidth = ((if (hasFocus) 3f else 0f) * density).toInt()
+            card.strokeWidth = ((if (hasFocus) ringWidthDp else 0f) * density).toInt()
             card.strokeColor = ringColor
             card.setCardBackgroundColor(if (hasFocus) focusedBg else normalBg)
         }
