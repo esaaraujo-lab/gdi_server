@@ -708,12 +708,22 @@ class DetailActivity : AppCompatActivity() {
         binding.railContinue.addItemDecoration(RailGutterDecoration(8))
 
         val railItems = driveRecents.map { r ->
-            val shortFolder = r.folderPath.substringAfterLast("/").ifBlank { r.folderPath }
+            // R28 — título = NOME DO TEMA DA AULA = nome da pasta da
+            // aula (último segmento do folderPath, mesma fonte do
+            // título desta tela e do player p/ arquivo genérico): o
+            // nome cru do arquivo ("Videoaula") some do título. Sem
+            // segmento na pasta, cai no título antigo.
+            // Subtítulo = nome do curso (regra R26, partilhada c/ a
+            // Home em Format.continueSubtitle).
+            val courseName = Format.extractCourseName(r.folderPath)
+            val displayTitle = LessonDescription.folderNameFromPath(r.folderPath)
+                ?: Format.lessonDisplayTitle(r.videoName, courseName)
+            val subtitle = Format.continueSubtitle(displayTitle, r.videoName, courseName, TvUtils.isTv(this))
             val progress = sm.getResumeProgress(r.folderPath, r.videoName)
             RailItem(
                 title = r.videoName,
-                displayTitle = Format.lessonDisplayTitle(r.videoName, shortFolder),
-                subtitle = shortFolder,
+                displayTitle = displayTitle,
+                subtitle = subtitle,
                 icon = "🎥",
                 hasProgress = progress > 0,
                 progress = progress,
@@ -743,7 +753,14 @@ class DetailActivity : AppCompatActivity() {
                 it.folderPath == item.file?.folderPath && it.videoName == item.title
             } ?: currentRecents.find { it.videoName == item.title }
                 ?: return@RailAdapter
-            continueWatching(match.folderPath, match.videoName, item.subtitle)
+            // R28 — o 3.º argumento é o nome da pasta p/ o extra
+            // "folderName" do DetailActivity de fallback (o subtítulo
+            // já não é a pasta — é o curso): deriva-se do folderPath
+            // do recent, não do subtítulo do card.
+            continueWatching(
+                match.folderPath, match.videoName,
+                LessonDescription.folderNameFromPath(match.folderPath) ?: match.folderPath
+            )
         }
     }
 
