@@ -223,4 +223,6 @@
     <string name="side_menu_version">Meggy v%1$s • Conectado</string>
     <string name="breadcrumb_home">Início</string>
     <string name="tv_remote_hints">Controle remoto • A: Selecionar/Entrar • B: Voltar</string>
+    <string name="browse_tv_hints">Use ◀ ▶ ▲ ▼ para navegar • OK para selecionar</string>
+    <string name="watch_from_start">Assistir do Início</string>
 </resources>
