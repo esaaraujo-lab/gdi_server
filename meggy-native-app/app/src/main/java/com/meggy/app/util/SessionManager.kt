@@ -11,8 +11,9 @@ import org.json.JSONObject
  * resume positions + recent items + favorites + user settings.
  *
  * v2.0.0 additions:
- *  • Recent items — circular list of last 8 (folder, video, timestamp)
- *    used by the "Continue assistindo" rail (was single-item before).
+ *  • Recent items — circular list of last 12 (folder, video, timestamp)
+ *    used by the "Continue assistindo" rail (was single-item before;
+ *    teto 8 até à 2.7.52, 12 desde a 2.7.53).
  *  • Favorites — JSON list of FileItem used by "Minha lista".
  *  • Settings — default playback speed, autoplay-next toggle,
  *    sleep-timer default, stored as primitives.
@@ -345,8 +346,9 @@ class SessionManager private constructor(context: Context) {
 
     // ───────── v2.0.0: Recent items (Continue Assistindo rail) ─────────
     //
-    // Circular list of last 8 watched items, stored as a JSON array.
-    // Each entry: { folder, video, ts }. Deduped by (folder, video).
+    // Circular list of last 12 watched items, stored as a JSON array
+    // (teto 8 até à 2.7.52). Each entry: { folder, video, ts }.
+    // Deduped by (folder, video).
 
     /** Adds (or moves to top) a (folder, video) entry in the recents list. */
     fun addRecent(folderPath: String, videoName: String, thumbnailLink: String? = null, link: String? = null) {
@@ -382,8 +384,9 @@ class SessionManager private constructor(context: Context) {
         // navegar para o player sem o listFolder prévio.
         if (!savedLink.isNullOrBlank()) entry.put("link", savedLink)
         newList.add(0, entry)
-        // Cap at 8
-        while (newList.size > 8) newList.removeAt(newList.size - 1)
+        // Cap at 12 (2.7.53 — paridade com os 12 cursos do desktop;
+        // antes 8, decisão §11.3 do APK_PROGRESS_SYNC_DESIGN)
+        while (newList.size > 12) newList.removeAt(newList.size - 1)
         val out = JSONArray()
         newList.forEach { out.put(it) }
         prefs.edit().putString(KEY_RECENTS, out.toString()).apply()
@@ -434,9 +437,12 @@ class SessionManager private constructor(context: Context) {
     // com um apply por chave). Regras (APK_PROGRESS_SYNC_DESIGN §5.4):
     // resume/durations só entram quando o local é 0/ausente (o aparelho
     // em uso tem sempre a posição mais fresca); watched é união; os
-    // recents chegam já fundidos e ordenados (locais + servidor, teto 8)
-    // e substituem a lista — a chamada é no onCreate, antes de qualquer
-    // reprodução neste processo, por isso não há corrida com o player.
+    // recents chegam já fundidos e ordenados (locais + servidor,
+    // teto 12 desde a 2.7.53) e substituem a lista. As chamadas são
+    // no arranque (onCreate da Home) e ao voltar à Home (onResume,
+    // 2.7.53): a fusão lê os recents locais no momento em que corre
+    // (depois do GET), por isso um recent gravado pelo player entretanto
+    // entra na fusão; resume/watched locais nunca recuam (regras acima).
 
     /**
      * Funde o estado do servidor nas prefs locais, num só apply().
