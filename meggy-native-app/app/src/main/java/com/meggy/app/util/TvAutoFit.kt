@@ -191,11 +191,20 @@ object TvAutoFit {
                 "margin=${"%.3f".format(marginScale)}"
     }
 
-    /** Mede o viewport e a densidade fisica a partir dos recursos. */
-    fun forContext(context: Context): Fit {
+    /**
+     * 2.7.48 — [sideMenuWidthDp] desconta a largura do menu lateral
+     * da TV (0 quando não há menu: celular, ou TV com o menu
+     * desligado) da largura do viewport antes de dimensionar o
+     * conteúdo. Ver SideMenuView.currentWidthDp(). No detalhe da TV
+     * o menu não existe: usa-se forContext(context) (0). Nota: o
+     * ramo PHYSICAL passa a ver a largura do conteúdo (não a do
+     * painel) — a diferença é ~13% e fica dentro dos clamps.
+     */
+    fun forContext(context: Context, sideMenuWidthDp: Float): Fit {
         val dm = context.resources.displayMetrics
+        val menuPx = (sideMenuWidthDp * dm.density).roundToInt()
         return compute(
-            widthPx = dm.widthPixels,
+            widthPx = (dm.widthPixels - menuPx).coerceAtLeast(1),
             heightPx = dm.heightPixels,
             densityDpi = dm.densityDpi,
             density = dm.density,
@@ -204,6 +213,9 @@ object TvAutoFit {
             ydpi = dm.ydpi
         )
     }
+
+    /** Mede o viewport e a densidade fisica a partir dos recursos. */
+    fun forContext(context: Context): Fit = forContext(context, 0f)
 
     /**
      * Matematica pura da escala (testavel sem Android — ver verify-B.py).

@@ -1,32 +1,47 @@
 package com.meggy.app.util
 
+import android.content.Context
+import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
+
 /**
- * v2.7.11 — COSTURA DO ECOSSISTEMA: resume/progresso entre aparelhos.
+ * 2.7.48 — COSTURA DO ECOSSISTEMA: resume/progresso entre aparelhos.
  *
- * PENDENTE — NÃO ATIVO. O "Continuar de onde parou" hoje é 100% LOCAL
- * (SessionManager, SharedPreferences por aparelho): a posição e a
- * duração de cada (pasta, vídeo) e o flag "assistido" nunca saem do
- * aparelho. Entre aparelhos, o aluno recomeça do zero.
+ * ATIVO. O "Continuar de onde parou" lê as SharedPreferences locais,
+ * mas elas já não são só locais: o arranque importa o estado do
+ * servidor (GET /userstate — ver UserStateSync) e a reprodução grava
+ * de volta (POST /userstate/save). Mesmas rotas que o desktop usa
+ * (worker .93, tabelas user_watched + user_history_events, D1
+ * primeiro + journal no Drive em falha — ver APK_PROGRESS_SYNC_DESIGN
+ * §2). Nenhuma rota nova no servidor.
  *
- * O endpoint de progresso/resume no servidor está no escopo da v2.15.6
- * do backend (worker v2) e AINDA NÃO EXISTE — nenhuma rota /api/progress
- * (ou equivalente) foi encontrada no worker auditado, por isso NADA
- * aqui chama a rede: inventar um endpoint local seria um silo novo, o
- * oposto da diretriz do Elton (20:06).
+ * COMO FUNCIONA (os pontos de chamada já existiam — ver KDoc antigo
+ * da v2.7.11, preservado no fim deste arquivo):
+ *   - SessionManager.saveResume() -> [noteResumeSaved]: POST throttled
+ *     a 10 s (posição em segundos + duração) + POST final ao sair do
+ *     player ([flushResume]);
+ *   - SessionManager.markWatched() -> [noteWatched]: POST
+ *     {watched:{path:true}} (só no fim da aula — a decisão §11.1 dos
+ *     >50% continua pendente do Elton);
+ *   - PlayerActivity (fim da sessão) -> [noteHistorySession]: POST do
+ *     evento de histórico {path, name, at, minutes} com os MINUTOS
+ *     REAIS assistidos — é isto que alimenta as horas da semana e a
+ *     sequência do painel de progresso (e as estatísticas do site).
+ *     O evento vai no FIM da sessão (não no início): o worker faz
+ *     INSERT OR IGNORE por (username, lesson_path, event_at), por isso
+ *     um evento enviado no início com minutes=0 nunca mais aceitaria
+ *     os minutos — ver SPEC 2.7.48 §6.
+ *   - SessionManager.getResume() -> [resolveResume]: continua LOCAL
+ *     (as posições do servidor já lá estão via import do arranque).
  *
- * COMO LIGAR (quando o endpoint existir):
- *   1. confirmar a rota real no worker (método, path, corpo, resposta)
- *      e preencher [RESUME_ENDPOINT_PATH] — hoje é null DE PROPÓSITO
- *      (o path não foi adivinhado; um literal seria um chute, não o
- *      contrato);
- *   2. implementar o GET/POST em [resolveResume]/[noteResumeSaved]
- *      com o cookie de sessão (mesmo padrão do AiService);
- *   3. pôr [SERVER_RESUME_ENABLED] = true.
- * Os pontos de chamada JÁ EXISTEM e são inertes enquanto a flag é
- * false: SessionManager.getResume() (leitura) e
- * SessionManager.saveResume() (escrita) chamam [resolveResume] e
- * [noteResumeSaved] — que hoje retornam o valor local / não fazem
- * nada. Nenhum outro arquivo precisa mudar para ligar.
+ * PATCHES, não GET+merge (o desktop faz GET+merge+POST do blob
+ * inteiro; o APK poupa um GET por gravação porque o worker funde do
+ * lado dele). Tudo fire-and-forget em Dispatchers.IO: falhou, fica
+ * só local e tenta-se no próximo tick/arranque — nunca toast, nunca
+ * bloqueio do player, nunca bounce p/ o login daqui.
+ * Nunca enviar resume 0 (o worker ignora t=0). Chave SEMPRE por path
+ * (nunca por link).
  *
  * O MESMO valeria para o resto do estado local (ver auditoria abaixo):
  * quando o backend tiver rota, cada um ganha a sua costura no mesmo
@@ -65,10 +80,15 @@ package com.meggy.app.util
  *
  *   PENDENTE (não existe no backend OU o app não consome — registrado,
  *   NÃO inventado):
- *   - Resume entre aparelhos: endpoint v2.15.6 (este arquivo).
- *   - "Assistido" (watched), favoritos e recentes: só SharedPreferences
- *     locais; sem rota no backend — quando existir, costurar no mesmo
- *     molde deste arquivo.
+ *   - Resume entre aparelhos: ATIVO na 2.7.48 (POST /userstate/save +
+ *     GET /userstate, worker .93 — ver o KDoc da classe). O que falta
+ *     é a ronda 2.7.49: decisões §11 do desenho (assistido aos >50%,
+ *     fila offline, teto de recents, refresh ao voltar à Home) + o
+ *     porte p/ BiBi/Vovó.
+ *   - "Assistido" (watched): ATIVO na 2.7.48 (noteWatched, só no fim).
+ *     Favoritos e recents: os recents são alimentados pelo import do
+ *     servidor (UserStateSync); os favoritos continuam só locais — sem
+ *     rota no backend; quando existir, costurar no mesmo molde.
  *   - Questões/flashcards no app: as abas Questões/Flashcards do
  *     detalhe mostram estados vazios POR DESENHO ("o app não tem fonte
  *     de dados para elas — nunca inventar perguntas"); o batalhão gera
@@ -86,57 +106,140 @@ package com.meggy.app.util
 object ProgressSync {
 
     /**
-     * Flag-mestra do resume no servidor. false = DESLIGADO: o resume
-     * continua 100% local (SessionManager) e nenhum byte de progresso
-     * sai do aparelho. Só pôr true DEPOIS que o endpoint existir de
-     * verdade no worker v2.15.6 (e com o path confirmado).
-     *
-     * É `val` (não `const`) de propósito: com `const val false` o
-     * compilador marcaria o corpo de [resolveResume]/[noteResumeSaved]
-     * como inalcançável; como `val`, o ramo desligado continua sendo
-     * código normal e a flag pode ser ligada sem tocar na lógica.
+     * Flag-mestra do resume no servidor. true = LIGADO (2.7.48): as
+     * rotas existem no worker .93 (GET /userstate + POST
+     * /userstate/save) e os POSTs abaixo correm. false = DESLIGADO:
+     * nada sai do aparelho (o local continua a funcionar sozinho).
      */
-    val SERVER_RESUME_ENABLED = false
+    val SERVER_RESUME_ENABLED = true
 
-    /**
-     * Path do endpoint de progresso/resume (v2.15.6) — null DE PROPÓSITO.
-     * A rota ainda não existe no backend e o path real não foi adivinhado:
-     * um literal aqui seria um chute, não o contrato. Não chamar (nem
-     * "só para testar") enquanto [SERVER_RESUME_ENABLED] for false: um
-     * 404 com sessão válida é o sinal de "rota inexistente" (ver
-     * AiService.backendUnavailable) e não deve virar loop. Quando existir,
-     * preencher com o path real confirmado no worker. Contrato esperado:
-     * GET com sessão retorna a posição salva do usuário p/
-     * (folderPath, videoName); POST grava posição + duração + assistido.
-     */
-    val RESUME_ENDPOINT_PATH: String? = null
+    /** GET do estado (import do arranque — ver UserStateSync). */
+    const val USERSTATE_GET_PATH = "/userstate"
+
+    /** POST dos patches (posição, assistido, histórico). */
+    const val USERSTATE_SAVE_PATH = "/userstate/save"
+
+    /** Throttle da posição: 1 POST por 10 s a tocar (como o desktop). */
+    private const val RESUME_POST_THROTTLE_MS = 10_000L
+
+    private val lastResumePostAt = HashMap<String, Long>()
 
     /**
      * Resolve a posição de resume p/ (pasta, vídeo).
-     * Hoje: retorna [localMs] SEMPRE (flag desligada — o servidor não
-     * é consultado). Quando o endpoint existir e a flag ligar: se
-     * [localMs] for 0 (sem resume neste aparelho), busca a posição no
-     * servidor e retorna a dele quando válida; se houver resume local,
-     * o local vence (é o aparelho que está tocando). Chamado por
-     * SessionManager.getResume() — nenhum outro chamador.
+     * Sempre o valor LOCAL: as posições do servidor chegam pelo
+     * import do arranque (UserStateSync.importOnStartup), que escreve
+     * nestas mesmas chaves — consultar a rede aqui seria um bloqueio
+     * no caminho do player (o getResume é síncrono). Ver
+     * APK_PROGRESS_SYNC_DESIGN §5.1.
      */
-    fun resolveResume(folderPath: String, videoName: String, localMs: Long): Long {
-        if (!SERVER_RESUME_ENABLED) return localMs
-        // Endpoint ainda não existe — sem implementação possível sem
-        // inventar o contrato. Quando existir, implementar aqui o GET
-        // autenticado em RESUME_ENDPOINT_PATH (ver KDoc da classe).
-        return localMs
-    }
+    fun resolveResume(folderPath: String, videoName: String, localMs: Long): Long =
+        localMs
 
     /**
      * Regista que a posição de resume mudou (chamado por
-     * SessionManager.saveResume()). Hoje: não faz NADA (flag
-     * desligada — a gravação local acima já aconteceu). Quando o
-     * endpoint existir e a flag ligar: POST best-effort (sem bloquear
-     * o player, sem toast em falha) da posição + duração.
+     * SessionManager.saveResume() — a cada 2 s a tocar + ao sair do
+     * player). POST best-effort throttled a 10 s: {resume:{path:
+     * segundos}, durations:{path: segundos}} — segundos (o local é
+     * ms). Nunca envia t=0 (o worker ignora-o e não apaga a posição
+     * guardada). [force] = POST imediato (saída do player).
      */
-    fun noteResumeSaved(folderPath: String, videoName: String, positionMs: Long) {
+    fun noteResumeSaved(
+        context: Context,
+        folderPath: String,
+        videoName: String,
+        positionMs: Long,
+        force: Boolean = false
+    ) {
         if (!SERVER_RESUME_ENABLED) return
-        // Endpoint ainda não existe — ver KDoc da classe.
+        if (positionMs <= 0L) return
+        val key = "$folderPath::$videoName"
+        val now = System.currentTimeMillis()
+        if (!force) {
+            val lastAt = lastResumePostAt[key] ?: 0L
+            if (now - lastAt < RESUME_POST_THROTTLE_MS) return
+        }
+        lastResumePostAt[key] = now
+        val appContext = context.applicationContext
+        UserStateSync.ioScope.launch {
+            val sm = SessionManager.get(appContext)
+            val path = UserStateSync.lessonPath(folderPath, videoName)
+            val patch = JSONObject()
+            val resume = JSONObject()
+            resume.put(path, positionMs / 1000)
+            patch.put("resume", resume)
+            val durMs = sm.getResumeDuration(folderPath, videoName)
+            if (durMs > 0L) {
+                val durations = JSONObject()
+                durations.put(path, durMs / 1000)
+                patch.put("durations", durations)
+            }
+            UserStateSync.postUserStatePatch(appContext, patch.toString())
+        }
+    }
+
+    /**
+     * POST final da posição ao sair do player (ignora o throttle):
+     * a última posição não pode ficar 10 s à espera. Chamado pelo
+     * PlayerActivity.releasePlayer() depois do último saveResumeFor.
+     */
+    fun flushResume(context: Context, folderPath: String, videoName: String, positionMs: Long) {
+        noteResumeSaved(context, folderPath, videoName, positionMs, force = true)
+    }
+
+    /**
+     * Regista que a aula foi vista até ao fim (chamado por
+     * SessionManager.markWatched() — PlayerActivity.markEnded).
+     * POST {watched:{path:true}}. Só no fim (a decisão §11.1 —
+     * marcar aos >50% como o desktop — continua pendente do Elton).
+     */
+    fun noteWatched(context: Context, folderPath: String, videoName: String) {
+        if (!SERVER_RESUME_ENABLED) return
+        val appContext = context.applicationContext
+        UserStateSync.ioScope.launch {
+            val path = UserStateSync.lessonPath(folderPath, videoName)
+            val patch = JSONObject()
+            val watched = JSONObject()
+            watched.put(path, true)
+            patch.put("watched", watched)
+            UserStateSync.postUserStatePatch(appContext, patch.toString())
+        }
+    }
+
+    /**
+     * Evento de histórico do fim da sessão (chamado pelo
+     * PlayerActivity ao sair do player / ao fim do vídeo, UMA vez por
+     * sessão): {history:[{path, name, at, minutes}]} — `at` é o
+     * início da sessão (ms, estável p/ a dedup do servidor) e
+     * `minutes` são os minutos REAIS assistidos nesta sessão
+     * (segundos de reprodução / 60). É isto que alimenta as horas da
+     * semana e a sequência do painel (e as estatísticas do site):
+     * sem minutes, o worker regista 0 e o painel fica sempre a 0.
+     * Vai no FIM (não no início): INSERT OR IGNORE por (username,
+     * lesson_path, event_at) — um evento enviado no início com
+     * minutes=0 nunca mais aceitaria os minutos.
+     */
+    fun noteHistorySession(
+        context: Context,
+        folderPath: String,
+        videoName: String,
+        sessionStartMs: Long,
+        minutesWatched: Int
+    ) {
+        if (!SERVER_RESUME_ENABLED) return
+        if (sessionStartMs <= 0L) return
+        val appContext = context.applicationContext
+        UserStateSync.ioScope.launch {
+            val path = UserStateSync.lessonPath(folderPath, videoName)
+            val patch = JSONObject()
+            val events = JSONArray()
+            val event = JSONObject()
+            event.put("path", path)
+            event.put("name", videoName)
+            event.put("at", sessionStartMs)
+            event.put("minutes", minutesWatched.coerceAtLeast(0))
+            events.put(event)
+            patch.put("history", events)
+            UserStateSync.postUserStatePatch(appContext, patch.toString())
+        }
     }
 }

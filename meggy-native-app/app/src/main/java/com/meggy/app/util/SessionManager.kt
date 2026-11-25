@@ -22,6 +22,11 @@ class SessionManager private constructor(context: Context) {
     private val prefs: SharedPreferences =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
+    // 2.7.48 — contexto da app p/ a costura do servidor (ProgressSync):
+    // as chamadas de rede correm em 2º plano e precisam de um Context
+    // seguro fora do ciclo de vida de qualquer Activity.
+    private val appContext: Context = context.applicationContext
+
     // ───────── session cookie ─────────
 
     var sessionCookie: String?
@@ -207,11 +212,11 @@ class SessionManager private constructor(context: Context) {
 
     fun saveResume(folderPath: String, videoName: String, positionMs: Long) {
         prefs.edit().putLong(resumeKey(folderPath, videoName), positionMs).apply()
-        // v2.7.11 ECOSSISTEMA — costura do resume entre aparelhos
-        // (PENDENTE, endpoint v2.15.6): ver ProgressSync. Enquanto
-        // SERVER_RESUME_ENABLED == false, não faz nada e o resume
-        // local acima continua sendo a única fonte.
-        ProgressSync.noteResumeSaved(folderPath, videoName, positionMs)
+        // 2.7.48 — costura do resume entre aparelhos (ProgressSync,
+        // POST /userstate/save throttled a 10 s): o servidor recebe a
+        // posição; a leitura continua local (o import do arranque
+        // alimenta estas mesmas prefs — ver UserStateSync).
+        ProgressSync.noteResumeSaved(appContext, folderPath, videoName, positionMs)
     }
 
     /**
@@ -222,9 +227,9 @@ class SessionManager private constructor(context: Context) {
      */
     fun getResume(folderPath: String, videoName: String): Long {
         val pos = prefs.getLong(resumeKey(folderPath, videoName), 0L)
-        // v2.7.11 ECOSSISTEMA (PENDENTE, endpoint v2.15.6): sem resume
-        // local, o servidor seria consultado aqui (ver ProgressSync) —
-        // enquanto SERVER_RESUME_ENABLED == false, retorna 0 como antes.
+        // 2.7.48 — a leitura continua LOCAL: as posições do servidor
+        // chegam pelo import do arranque (UserStateSync), que escreve
+        // nestas mesmas chaves. resolveResume só devolve o local.
         if (pos <= 0L) return ProgressSync.resolveResume(folderPath, videoName, 0L)
         val dur = prefs.getLong(durKey(folderPath, videoName), 0L)
         // If we know the duration and the position is within 10s of the end,
@@ -232,6 +237,15 @@ class SessionManager private constructor(context: Context) {
         if (dur > 0L && dur - pos < 10_000L) return 0L
         return ProgressSync.resolveResume(folderPath, videoName, pos)
     }
+
+    /**
+     * 2.7.48 — posição gravada SEM a regra dos 10 s do fim (valor
+     * cru). Só o import do servidor usa isto: a decisão "local > 0
+     * vence" precisa do valor guardado, não do valor já ajustado
+     * p/ leitura.
+     */
+    fun getResumeRaw(folderPath: String, videoName: String): Long =
+        prefs.getLong(resumeKey(folderPath, videoName), 0L)
 
     /**
      * v2.3.1: Uses getResume() so the ▶ continuar badge disappears when the
@@ -285,6 +299,10 @@ class SessionManager private constructor(context: Context) {
 
     fun markWatched(folderPath: String, videoName: String) {
         prefs.edit().putBoolean(watchedKey(folderPath, videoName), true).apply()
+        // 2.7.48 — o "assistido" também vai p/ o servidor (POST
+        // /userstate/save, {watched:{path:true}}), p/ o visto do
+        // curso casar entre aparelhos. Best-effort, sem bloquear.
+        ProgressSync.noteWatched(appContext, folderPath, videoName)
     }
 
     fun isWatched(folderPath: String, videoName: String): Boolean =
@@ -408,6 +426,120 @@ class SessionManager private constructor(context: Context) {
         }
         return out
     }
+
+    // ───────── 2.7.48: importação do servidor (UserStateSync) ─────────
+    //
+    // O GET /userstate do arranque funde-se nestas mesmas prefs, num
+    // só apply() (um aluno com muitas aulas não pode travar o arranque
+    // com um apply por chave). Regras (APK_PROGRESS_SYNC_DESIGN §5.4):
+    // resume/durations só entram quando o local é 0/ausente (o aparelho
+    // em uso tem sempre a posição mais fresca); watched é união; os
+    // recents chegam já fundidos e ordenados (locais + servidor, teto 8)
+    // e substituem a lista — a chamada é no onCreate, antes de qualquer
+    // reprodução neste processo, por isso não há corrida com o player.
+
+    /**
+     * Funde o estado do servidor nas prefs locais, num só apply().
+     * As chaves (folder, video) já vêm na forma local (pasta com a
+     * barra final nos drives — ver UserStateSync.serverFolderToLocal).
+     */
+    fun importServerState(
+        resumeMs: Map<Pair<String, String>, Long>,
+        durationsMs: Map<Pair<String, String>, Long>,
+        watched: Set<Pair<String, String>>,
+        recents: List<RecentItem>
+    ) {
+        val editor = prefs.edit()
+        for ((key, ms) in resumeMs) {
+            if (ms <= 0L) continue
+            val (folder, video) = key
+            if (prefs.getLong(resumeKey(folder, video), 0L) == 0L) {
+                editor.putLong(resumeKey(folder, video), ms)
+            }
+        }
+        for ((key, ms) in durationsMs) {
+            if (ms <= 0L) continue
+            val (folder, video) = key
+            if (prefs.getLong(durKey(folder, video), 0L) == 0L) {
+                editor.putLong(durKey(folder, video), ms)
+            }
+        }
+        for ((folder, video) in watched) {
+            if (!prefs.getBoolean(watchedKey(folder, video), false)) {
+                editor.putBoolean(watchedKey(folder, video), true)
+            }
+        }
+        val out = JSONArray()
+        for (r in recents) {
+            val o = JSONObject()
+            o.put("folder", r.folderPath)
+            o.put("video", r.videoName)
+            o.put("ts", r.timestamp)
+            r.thumbnailLink?.let { o.put("thumb", it) }
+            r.link?.let { o.put("link", it) }
+            out.put(o)
+        }
+        editor.putString(KEY_RECENTS, out.toString())
+        editor.apply()
+    }
+
+    // ───────── 2.7.48: cache dos agregados do painel de progresso ─────────
+    //
+    // FONTE: o servidor (GET /userstate + fórmula do site). A cache
+    // guarda o último valor derivado p/ o painel mostrar alguma coisa
+    // quando o GET falha (sem rede / D1 esgotado); sem cache, o painel
+    // esconde-se. Nunca se escreve aqui um valor inventado no aparelho:
+    // os minutos assistidos só entram via eventos de histórico do
+    // servidor (ver ProgressSync.noteHistorySession).
+
+    data class PanelAggregates(
+        val weekMinutes: Int,
+        val streak: Int,
+        val fetchedAt: Long
+    )
+
+    fun cachePanelAggregates(weekMinutes: Int, streak: Int) {
+        val o = JSONObject()
+        o.put("fetchedAt", System.currentTimeMillis())
+        o.put("weekMinutes", weekMinutes)
+        o.put("streak", streak)
+        prefs.edit().putString(KEY_PANEL_CACHE, o.toString()).apply()
+    }
+
+    fun getCachedPanelAggregates(): PanelAggregates? {
+        val raw = prefs.getString(KEY_PANEL_CACHE, null) ?: return null
+        return try {
+            val o = JSONObject(raw)
+            PanelAggregates(
+                weekMinutes = o.optInt("weekMinutes", 0),
+                streak = o.optInt("streak", 0),
+                fetchedAt = o.optLong("fetchedAt", 0L)
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    // ───────── 2.7.48: preferências da interface nova ─────────
+
+    /**
+     * Menu lateral da TV ligado (interruptor nos Ajustes). Padrão:
+     * ligado. Desligado, a TV volta à navegação anterior (ícones no
+     * cabeçalho).
+     */
+    var tvSideMenuEnabled: Boolean
+        get() = prefs.getBoolean(KEY_TV_SIDE_MENU, true)
+        set(value) = prefs.edit().putBoolean(KEY_TV_SIDE_MENU, value).apply()
+
+    /** Menu lateral da TV recolhido (só ícones). Padrão: expandido. */
+    var tvSideMenuCollapsed: Boolean
+        get() = prefs.getBoolean(KEY_TV_SIDE_MENU_COLLAPSED, false)
+        set(value) = prefs.edit().putBoolean(KEY_TV_SIDE_MENU_COLLAPSED, value).apply()
+
+    /** Lista plana do detalhe em grade (vs lista). Padrão: lista. */
+    var flatListGrid: Boolean
+        get() = prefs.getBoolean(KEY_FLAT_LIST_GRID, false)
+        set(value) = prefs.edit().putBoolean(KEY_FLAT_LIST_GRID, value).apply()
 
     /**
      * R21 — elementos-objecto de um JSONArray, saltando os que não
@@ -722,6 +854,17 @@ class SessionManager private constructor(context: Context) {
         private const val KEY_IS_ADMIN_USER = "is_admin_user"
         private const val KEY_LESSON_DESCRIPTIONS = "lesson_descriptions_v1"
         private const val MAX_LESSON_DESCRIPTIONS = 200
+
+        // 2.7.48 — cache dos agregados do painel de progresso (fonte:
+        // servidor, via GET /userstate; a cache é só cache — ver
+        // UserStateSync.derivePanelAggregates).
+        private const val KEY_PANEL_CACHE = "panel_cache_v1"
+        // 2.7.48 — menu lateral da TV (interruptor nos Ajustes) e o
+        // seu estado recolhido (só ícones).
+        private const val KEY_TV_SIDE_MENU = "tv_side_menu_enabled"
+        private const val KEY_TV_SIDE_MENU_COLLAPSED = "tv_side_menu_collapsed"
+        // 2.7.48 — lista plana do detalhe em grade (vs lista).
+        private const val KEY_FLAT_LIST_GRID = "flat_list_grid"
 
         // ───────── Ronda 12: migração de caminhos salvos ─────────
         //

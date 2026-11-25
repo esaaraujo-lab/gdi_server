@@ -60,7 +60,9 @@ object FocusAnimator {
      * (3,6–4,5:1 sobre a paleta) é fraco demais na TV, e o branco dá
      * 8,0–10,8:1 sobre qualquer cor da paleta. Sem os parâmetros, o
      * comportamento é o de sempre (anel rosa 3dp) — a tela inicial
-     * (Destaques, herói, "Continue assistindo") não muda.
+     * (Destaques, herói) não muda. 2.7.48: o "Continue assistindo" da
+     * TV passa o anel branco 4dp (conceito 3) — ver o parâmetro
+     * `whiteFocusRing` do RailAdapter.
      */
     fun attachCard(
         card: MaterialCardView,
