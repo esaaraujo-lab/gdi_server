@@ -23,8 +23,8 @@ android {
         // ★ 2.7.50: splash animado (vídeo TV/celular em res/raw)
         // ★ 2.7.51: splash com ExoPlayer (corrige o VideoView preto da 2.7.50)
         // ★ 2.7.53: ProgressSync completo (assistido aos >50%, recents 12, import ao voltar à Home)
-        versionCode 92
-        versionName "2.7.56"
+        versionCode 93
+        versionName "2.7.57"
     }
 
     // ★ v1.4.0: Signing config com keystore FIXA (mesma em todos os builds)
