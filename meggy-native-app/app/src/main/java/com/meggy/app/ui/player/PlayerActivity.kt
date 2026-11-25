@@ -53,7 +53,6 @@ import com.meggy.app.data.FileItem
 import com.meggy.app.databinding.ActivityPlayerBinding
 import com.meggy.app.ui.detail.DetailActivity
 import com.meggy.app.ui.home.HomeActivity
-import com.meggy.app.ui.mylist.MyListActivity
 import com.meggy.app.ui.reader.MdReaderActivity
 import com.meggy.app.ui.reader.PdfReaderActivity
 import com.meggy.app.ui.search.SearchActivity
@@ -67,6 +66,7 @@ import com.meggy.app.util.LessonDescription
 import com.meggy.app.util.MaterialDiscovery
 import com.meggy.app.util.MarkdownRenderer
 import com.meggy.app.util.MaterialSaver
+import com.meggy.app.util.ProgressSync
 import com.meggy.app.util.LibraryCovers
 import com.meggy.app.util.SubtitleFetcher
 import com.meggy.app.util.ThumbArt
@@ -366,6 +366,18 @@ class PlayerActivity : AppCompatActivity() {
     private var saveJob: Job? = null
     private var timeJob: Job? = null
 
+    // 2.7.48 — sessão de reprodução p/ o evento de histórico do
+    // servidor (POST /userstate/save): os minutos REAIS assistidos
+    // alimentam as horas da semana e a sequência do painel de
+    // progresso (e as estatísticas do site). O saveJob acumula os
+    // segundos a tocar; o evento vai UMA vez por sessão, no fim
+    // (releasePlayer/markEnded/troca de aula) — ver flushSessionHistory.
+    private var sessionFolder: String? = null
+    private var sessionVideo: String? = null
+    private var sessionStartMs: Long = 0L
+    private var sessionPlayedSeconds: Long = 0L
+    private var sessionHistorySent: Boolean = false
+
     private var sleepMode = false
     private val handler = Handler(Looper.getMainLooper())
     private var controlsVisible = true
@@ -605,8 +617,9 @@ class PlayerActivity : AppCompatActivity() {
         binding.bottomNav.setOnItemSelectedListener { menuItem ->
             when (menuItem.itemId) {
                 R.id.nav_home -> { startActivity(Intent(this, HomeActivity::class.java)); true }
-                R.id.nav_search -> { startActivity(Intent(this, SearchActivity::class.java)); true }
-                R.id.nav_mylist -> { startActivity(Intent(this, MyListActivity::class.java)); true }
+                R.id.nav_drives -> { val i = Intent(this, HomeActivity::class.java); i.putExtra(HomeActivity.EXTRA_SCROLL_TO_DRIVES, true); startActivity(i); true }
+                R.id.nav_simulados -> { HomeActivity.openSimulados(this); true }
+                R.id.nav_meggy -> { startActivity(Intent(this, SearchActivity::class.java)); true }
                 R.id.nav_settings -> { startActivity(Intent(this, SettingsActivity::class.java)); true }
                 else -> false
             }
@@ -1799,6 +1812,9 @@ class PlayerActivity : AppCompatActivity() {
                 val it = currentItem ?: break
                 if (p.playbackState == Player.STATE_READY && p.isPlaying) {
                     saveResumeFor(it, currentUrl, p.currentPosition)
+                    // 2.7.48 — acumula os segundos reais a tocar p/ o
+                    // evento de histórico do servidor (minutos da sessão).
+                    trackSessionPlaying(it)
                     val fp = it.folderPath
                     if (!fp.isNullOrBlank()) {
                         // v2.7.6: salva a thumb junto — alimenta os cards
@@ -1907,7 +1923,15 @@ class PlayerActivity : AppCompatActivity() {
             val url = currentUrl
             if (it != null && url != null) {
                 saveResumeFor(it, url, p.currentPosition)
+                // 2.7.48 — posição final p/ o servidor (ignora o
+                // throttle de 10 s) + evento de histórico da sessão.
+                val fp = it.folderPath?.takeIf { s -> s.isNotBlank() }
+                    ?: intent.getStringExtra(EXTRA_FOLDER_PATH)?.takeIf { s -> s.isNotBlank() }
+                if (!fp.isNullOrBlank() && it.name.isNotBlank()) {
+                    ProgressSync.flushResume(this, fp, it.name, p.currentPosition)
+                }
             }
+            flushSessionHistory()
         } catch (_: Exception) {}
         p.release()
         player = null
@@ -2018,6 +2042,60 @@ class PlayerActivity : AppCompatActivity() {
                 SessionManager.get(this).clearResumePosition(url)
             }
         }
+        // 2.7.48 — a aula acabou: os minutos da sessão são finais e
+        // o evento de histórico vai já (o releasePlayer que vier a
+        // seguir já não o reenvia — ver sessionHistorySent).
+        flushSessionHistory()
+    }
+
+    /**
+     * 2.7.48 — acumula 2 s de reprodução real p/ a sessão actual.
+     * A sessão é (pasta, vídeo): ao trocar de aula (avanço automático
+     * da playlist), a sessão anterior fecha primeiro (o evento vai
+     * com os minutos dela) e começa uma nova. Só conta a tocar
+     * (STATE_READY + isPlaying) — pausa/buffer não contam.
+     */
+    private fun trackSessionPlaying(item: FileItem) {
+        val fp = item.folderPath?.takeIf { it.isNotBlank() }
+            ?: intent.getStringExtra(EXTRA_FOLDER_PATH)?.takeIf { it.isNotBlank() }
+        if (fp.isNullOrBlank() || item.name.isBlank()) return
+        if (sessionFolder != fp || sessionVideo != item.name) {
+            flushSessionHistory()
+            sessionFolder = fp
+            sessionVideo = item.name
+            sessionStartMs = System.currentTimeMillis()
+            sessionPlayedSeconds = 0L
+            sessionHistorySent = false
+        }
+        sessionPlayedSeconds += 2L
+    }
+
+    /**
+     * 2.7.48 — envia o evento de histórico da sessão actual (UMA vez):
+     * {path, name, at=início da sessão, minutes=minutos assistidos}.
+     * Depois de enviado, a sessão limpa-se — reabrir a mesma aula
+     * começa uma sessão nova. Sem sessão (ou já enviada), não faz nada.
+     * Best-effort (ProgressSync): falhou, fica só local.
+     */
+    private fun flushSessionHistory() {
+        val fp = sessionFolder
+        val video = sessionVideo
+        if (sessionHistorySent || sessionStartMs <= 0L || fp.isNullOrBlank() || video.isNullOrBlank()) {
+            sessionFolder = null
+            sessionVideo = null
+            sessionStartMs = 0L
+            sessionPlayedSeconds = 0L
+            sessionHistorySent = false
+            return
+        }
+        sessionHistorySent = true
+        val minutes = (sessionPlayedSeconds / 60L).toInt()
+        val startMs = sessionStartMs
+        sessionFolder = null
+        sessionVideo = null
+        sessionStartMs = 0L
+        sessionPlayedSeconds = 0L
+        ProgressSync.noteHistorySession(this, fp, video, startMs, minutes)
     }
 
     // ★ v1.6.0: Picture-in-Picture — NUNCA na TV (v2.7.6).
