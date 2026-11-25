@@ -3278,29 +3278,65 @@
               const mt = (x.mimeType || '').toLowerCase();
               return ext === 'pdf' || mt.includes('pdf') || ext === 'md' || mt.includes('markdown') || ext === 'txt' || mt === 'text/plain' || ext === 'html' || mt.includes('html');
             };
-            let found = [];
-            // 1. Pasta atual
-            const here = await window.gdiListAllFiles(folderPath, '');
-            found = here.filter(isMaterial);
-            // 2. Subpastas (até 20, para no 1º)
-            if (!found.length) {
-              const subs = here.filter(x => x.mimeType === 'application/vnd.google-apps.folder').slice(0, 20);
-              for (const sf of subs) {
-                const fp = folderPath + encodeURIComponent(sf.name) + '/';
-                const subFiles = await window.gdiListAllFiles(fp, '');
-                found = found.concat(subFiles.filter(isMaterial));
-                if (found.length) break;
-              }
+            // ★ v2.15.95 (bug ao vivo 2026-11-25 — "Não foi possível
+            //   carregar o material" em TODAS as aulas): a cadeia de
+            //   listagem era crua — UMA falha do gdiListAllFiles
+            //   (rejeição ou resultado não-array; o mesmo modo de falha
+            //   que o M9 do gdi-core.js já trata desde a v2.15.8-E /
+            //   v2.15.14-M e que o _listLessonFiles do showISA trata
+            //   com retry) caía direto no catch terminal, sem 2.ª
+            //   tentativa. Agora: cada chamada é protegida (try/catch
+            //   + Array.isArray), a falha fica marcada e, se nada foi
+            //   achado E houve falha, a cadeia inteira retenta 1× após
+            //   600 ms (padrão do M9). Falha persistente → lança p/ o
+            //   catch, que mostra o erro COM botão de retry (antes a
+            //   mensagem mandava "tocar na aba" e não havia aba de
+            //   material p/ tocar). Sucesso (com ou sem materiais)
+            //   segue EXACTAMENTE o fluxo de antes.
+            async function _listMat21595(p) {
+              try {
+                const r = await window.gdiListAllFiles(p, '');
+                if (Array.isArray(r)) return { files: r, failed: false };
+              } catch (_) {}
+              return { files: [], failed: true };
             }
-            // 3. Pasta pai
-            if (!found.length) {
-              const parts = folderPath.split('/').filter(Boolean);
-              const parentPath = '/' + parts.slice(0, -1).join('/') + '/';
-              if (parentPath !== '/' && parentPath !== folderPath) {
-                const parentFiles = await window.gdiListAllFiles(parentPath, '');
-                found = parentFiles.filter(isMaterial);
+            async function _collectMat21595() {
+              let failed = false;
+              // 1. Pasta atual
+              const _here = await _listMat21595(folderPath);
+              if (_here.failed) failed = true;
+              const here = _here.files;
+              let found = here.filter(isMaterial);
+              // 2. Subpastas (até 20, para no 1º)
+              if (!found.length) {
+                const subs = here.filter(x => x.mimeType === 'application/vnd.google-apps.folder').slice(0, 20);
+                for (const sf of subs) {
+                  const fp = folderPath + encodeURIComponent(sf.name) + '/';
+                  const _sub = await _listMat21595(fp);
+                  if (_sub.failed) { failed = true; continue; }
+                  found = found.concat(_sub.files.filter(isMaterial));
+                  if (found.length) break;
+                }
               }
+              // 3. Pasta pai
+              if (!found.length) {
+                const parts = folderPath.split('/').filter(Boolean);
+                const parentPath = '/' + parts.slice(0, -1).join('/') + '/';
+                if (parentPath !== '/' && parentPath !== folderPath) {
+                  const _par = await _listMat21595(parentPath);
+                  if (_par.failed) failed = true;
+                  else found = _par.files.filter(isMaterial);
+                }
+              }
+              return { found: found, failed: failed };
             }
+            let _collected = await _collectMat21595();
+            if (!_collected.found.length && _collected.failed) {
+              await new Promise((res) => setTimeout(res, 600));
+              _collected = await _collectMat21595();
+              if (!_collected.found.length && _collected.failed) throw new Error('listagem de materiais falhou');
+            }
+            let found = _collected.found;
             // ★ Dedup por nome similar (STAGING FIX).
             // Normalização: lowercase + remove tudo que não é letra a-z
             //   (isso remove dígitos, espaços, hífens, prefixes tipo "1 - ", "2 - ", acentos).
@@ -3425,7 +3461,9 @@
             console.error('[Shell] loadMaterials:', e);
             try { renderIsaTabs(); } catch (_) { tabsEl.innerHTML = ''; }
             if (statusEl) statusEl.textContent = 'não foi possível carregar';
-            bodyEl.innerHTML = `<div style="text-align:center;padding:40px 24px;color:#e6edf3;"><div style="font-weight:700;margin-bottom:8px;">Não foi possível carregar o material</div><div style="font-size:14px;line-height:1.5;color:#9aa4b8;">Verifique sua conexão e toque na aba novamente.</div></div>`;
+            bodyEl.innerHTML = `<div style="text-align:center;padding:40px 24px;color:#e6edf3;"><div style="font-weight:700;margin-bottom:8px;">Não foi possível carregar o material</div><div style="font-size:14px;line-height:1.5;color:#9aa4b8;">Verifique sua conexão e toque na aba novamente.</div><button id="gdi-mat-retry" class="meggy-header-btn" style="margin-top:16px;background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-arrow-clockwise"></i> Tentar novamente</button></div>`;
+            const _matRetry21595 = bodyEl.querySelector('#gdi-mat-retry');
+            if (_matRetry21595) _matRetry21595.onclick = () => { try { loadMaterials(); } catch (_) {} };
           }
         }
         // ★ v2.15.6 (PROVA EXTRA): descrição da aula sob o título.
