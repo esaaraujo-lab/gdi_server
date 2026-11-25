@@ -17,7 +17,6 @@ import com.meggy.app.data.FileItem
 import com.meggy.app.databinding.ActivitySearchBinding
 import com.meggy.app.ui.browse.BrowseActivity
 import com.meggy.app.ui.home.HomeActivity
-import com.meggy.app.ui.mylist.MyListActivity
 import com.meggy.app.ui.player.PlayerActivity
 import com.meggy.app.ui.settings.SettingsActivity
 import com.meggy.app.util.FocusAnimator
@@ -61,12 +60,13 @@ class SearchActivity : AppCompatActivity() {
         if (TvUtils.isTv(this)) {
             binding.bottomNav.visibility = View.GONE
         } else {
-            binding.bottomNav.selectedItemId = R.id.nav_search
+            binding.bottomNav.selectedItemId = R.id.nav_meggy
             binding.bottomNav.setOnItemSelectedListener { item ->
                 when (item.itemId) {
-                    R.id.nav_search -> true
+                    R.id.nav_meggy -> true
                     R.id.nav_home -> { startActivity(Intent(this, HomeActivity::class.java)); overridePendingTransition(0, 0); true }
-                    R.id.nav_mylist -> { startActivity(Intent(this, MyListActivity::class.java)); overridePendingTransition(0, 0); true }
+                    R.id.nav_drives -> { val i = Intent(this, HomeActivity::class.java); i.putExtra(HomeActivity.EXTRA_SCROLL_TO_DRIVES, true); startActivity(i); overridePendingTransition(0, 0); true }
+                    R.id.nav_simulados -> { HomeActivity.openSimulados(this); overridePendingTransition(0, 0); true }
                     R.id.nav_settings -> { startActivity(Intent(this, SettingsActivity::class.java)); overridePendingTransition(0, 0); true }
                     else -> false
                 }
@@ -115,7 +115,7 @@ class SearchActivity : AppCompatActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        binding.bottomNav.selectedItemId = R.id.nav_search
+        binding.bottomNav.selectedItemId = R.id.nav_meggy
     }
 
     private fun setFilter(filter: Filter) {
