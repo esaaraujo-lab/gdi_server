@@ -39,51 +39,63 @@
             android:textStyle="bold" />
     </FrameLayout>
 
-    <TextView
-        android:id="@+id/homeCourseTitle"
+    <!-- 2.7.48 — área de nome com a cor fixa do Tile (TileColors, a
+         mesma do Tile da pasta: vizinhos diferentes, texto branco).
+         O rosa claro do conceito não entra (2,2:1 — excluído na R27);
+         fica a paleta escura aprovada. -->
+    <LinearLayout
+        android:id="@+id/homeCourseNameArea"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
-        android:ellipsize="end"
-        android:maxLines="2"
-        android:textColor="@color/md_on_surface"
-        android:textSize="@dimen/text_card_title"
-        android:textStyle="bold" />
-
-    <TextView
-        android:id="@+id/homeCourseMeta"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="2dp"
-        android:textColor="@color/md_on_surface_variant"
-        android:textSize="@dimen/text_card_subtitle"
-        android:visibility="gone" />
-
-    <LinearLayout
-        android:id="@+id/homeCourseProgressRow"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:visibility="gone">
-
-        <ProgressBar
-            android:id="@+id/homeCourseProgress"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="0dp"
-            android:layout_height="4dp"
-            android:layout_weight="1"
-            android:max="100"
-            android:progressDrawable="@drawable/progress_horizontal" />
+        android:orientation="vertical"
+        android:padding="10dp">
 
         <TextView
-            android:id="@+id/homeCoursePct"
-            android:layout_width="wrap_content"
+            android:id="@+id/homeCourseTitle"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:textColor="@color/md_primary"
-            android:textSize="@dimen/text_card_subtitle"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:textColor="@color/md_on_primary"
+            android:textSize="@dimen/text_card_title"
             android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/homeCourseMeta"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textColor="@color/md_on_primary"
+            android:textSize="@dimen/text_card_subtitle"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/homeCourseProgressRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <ProgressBar
+                android:id="@+id/homeCourseProgress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="0dp"
+                android:layout_height="4dp"
+                android:layout_weight="1"
+                android:max="100"
+                android:progressDrawable="@drawable/progress_horizontal" />
+
+            <TextView
+                android:id="@+id/homeCoursePct"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:textColor="@color/md_on_primary"
+                android:textSize="@dimen/text_card_subtitle"
+                android:textStyle="bold" />
+        </LinearLayout>
     </LinearLayout>
 </LinearLayout>

@@ -439,56 +439,141 @@
 
                 <!-- Frente R4B — filtro da lista plana (só no layout do
                      celular; a TV/largo usa a grade e não tem estes ids —
-                     o código lê-os por findViewById, nunca pelo binding). -->
+                     o código lê-os por findViewById, nunca pelo binding).
+                     2.7.48 — 6 chips (conceito 2: Todas / Assistidas /
+                     Por assistir / Com resumo / Vídeo / PDF) com rolagem
+                     horizontal + alternar Grade/Lista + contador
+                     "N aulas encontradas". -->
                 <LinearLayout
                     android:id="@+id/filterChipsRow"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/spacing_md"
+                    android:gravity="center_vertical"
                     android:orientation="horizontal"
                     android:visibility="gone">
 
-                    <TextView
-                        android:id="@+id/chipFilterAll"
-                        android:layout_width="wrap_content"
-                        android:layout_height="@dimen/chip_height"
-                        android:layout_marginEnd="@dimen/spacing_sm"
-                        android:background="@drawable/chip_outline"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:gravity="center"
-                        android:paddingHorizontal="@dimen/spacing_md"
-                        android:text="@string/flat_filter_all"
-                        android:textColor="@color/md_on_surface_variant"
-                        android:textSize="@dimen/text_chip" />
+                    <HorizontalScrollView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:overScrollMode="never"
+                        android:scrollbars="none">
+
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:id="@+id/chipFilterAll"
+                                android:layout_width="wrap_content"
+                                android:layout_height="@dimen/chip_height"
+                                android:layout_marginEnd="@dimen/spacing_sm"
+                                android:background="@drawable/chip_outline"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center"
+                                android:paddingHorizontal="@dimen/spacing_md"
+                                android:text="@string/flat_filter_all"
+                                android:textColor="@color/md_on_surface_variant"
+                                android:textSize="@dimen/text_chip" />
+
+                            <TextView
+                                android:id="@+id/chipFilterWatched"
+                                android:layout_width="wrap_content"
+                                android:layout_height="@dimen/chip_height"
+                                android:layout_marginEnd="@dimen/spacing_sm"
+                                android:background="@drawable/chip_outline"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center"
+                                android:paddingHorizontal="@dimen/spacing_md"
+                                android:text="@string/flat_filter_watched"
+                                android:textColor="@color/md_on_surface_variant"
+                                android:textSize="@dimen/text_chip" />
+
+                            <TextView
+                                android:id="@+id/chipFilterUnwatched"
+                                android:layout_width="wrap_content"
+                                android:layout_height="@dimen/chip_height"
+                                android:layout_marginEnd="@dimen/spacing_sm"
+                                android:background="@drawable/chip_outline"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center"
+                                android:paddingHorizontal="@dimen/spacing_md"
+                                android:text="@string/flat_filter_unwatched"
+                                android:textColor="@color/md_on_surface_variant"
+                                android:textSize="@dimen/text_chip" />
+
+                            <TextView
+                                android:id="@+id/chipFilterSummary"
+                                android:layout_width="wrap_content"
+                                android:layout_height="@dimen/chip_height"
+                                android:layout_marginEnd="@dimen/spacing_sm"
+                                android:background="@drawable/chip_outline"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center"
+                                android:paddingHorizontal="@dimen/spacing_md"
+                                android:text="@string/flat_filter_summary"
+                                android:textColor="@color/md_on_surface_variant"
+                                android:textSize="@dimen/text_chip" />
+
+                            <TextView
+                                android:id="@+id/chipFilterVideos"
+                                android:layout_width="wrap_content"
+                                android:layout_height="@dimen/chip_height"
+                                android:layout_marginEnd="@dimen/spacing_sm"
+                                android:background="@drawable/chip_outline"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center"
+                                android:paddingHorizontal="@dimen/spacing_md"
+                                android:text="@string/flat_filter_videos"
+                                android:textColor="@color/md_on_surface_variant"
+                                android:textSize="@dimen/text_chip" />
+
+                            <TextView
+                                android:id="@+id/chipFilterPdf"
+                                android:layout_width="wrap_content"
+                                android:layout_height="@dimen/chip_height"
+                                android:background="@drawable/chip_outline"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center"
+                                android:paddingHorizontal="@dimen/spacing_md"
+                                android:text="@string/flat_filter_pdf"
+                                android:textColor="@color/md_on_surface_variant"
+                                android:textSize="@dimen/text_chip" />
+                        </LinearLayout>
+                    </HorizontalScrollView>
 
                     <TextView
-                        android:id="@+id/chipFilterVideos"
+                        android:id="@+id/flatViewToggle"
                         android:layout_width="wrap_content"
                         android:layout_height="@dimen/chip_height"
-                        android:layout_marginEnd="@dimen/spacing_sm"
+                        android:layout_marginStart="@dimen/spacing_sm"
                         android:background="@drawable/chip_outline"
                         android:clickable="true"
                         android:focusable="true"
                         android:gravity="center"
                         android:paddingHorizontal="@dimen/spacing_md"
-                        android:text="@string/flat_filter_videos"
-                        android:textColor="@color/md_on_surface_variant"
-                        android:textSize="@dimen/text_chip" />
-
-                    <TextView
-                        android:id="@+id/chipFilterMaterials"
-                        android:layout_width="wrap_content"
-                        android:layout_height="@dimen/chip_height"
-                        android:background="@drawable/chip_outline"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:gravity="center"
-                        android:paddingHorizontal="@dimen/spacing_md"
-                        android:text="@string/flat_filter_materials"
-                        android:textColor="@color/md_on_surface_variant"
-                        android:textSize="@dimen/text_chip" />
+                        android:text="@string/flat_list_toggle_grid"
+                        android:textColor="@color/md_primary"
+                        android:textSize="@dimen/text_chip"
+                        android:textStyle="bold" />
                 </LinearLayout>
+
+                <TextView
+                    android:id="@+id/flatFoundCount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_sm"
+                    android:textColor="@color/md_on_surface_variant"
+                    android:textSize="@dimen/text_chip"
+                    android:visibility="gone" />
 
                 <TextView
                     android:id="@+id/labelContinue"

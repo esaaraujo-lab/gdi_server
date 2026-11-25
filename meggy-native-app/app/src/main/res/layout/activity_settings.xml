@@ -239,6 +239,45 @@
                         android:focusable="true" />
                 </LinearLayout>
 
+                <!-- 2.7.48 — interruptor do menu lateral da TV (só na
+                     TV: no celular a linha esconde-se em código). -->
+                <LinearLayout
+                    android:id="@+id/tvSideMenuRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingVertical="@dimen/spacing_md">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/tv_side_menu_title"
+                            android:textColor="@color/md_on_surface"
+                            android:textSize="@dimen/text_card_title" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="@string/tv_side_menu_sub"
+                            android:textColor="@color/md_on_surface_variant"
+                            android:textSize="@dimen/text_card_subtitle" />
+                    </LinearLayout>
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchTvSideMenu"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:focusable="true" />
+                </LinearLayout>
+
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"

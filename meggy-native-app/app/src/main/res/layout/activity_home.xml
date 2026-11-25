@@ -54,19 +54,6 @@
                     android:textSize="@dimen/text_topbar_title"
                     android:textStyle="bold" />
 
-                <ImageView
-                    android:id="@+id/homeSearchBtn"
-                    android:layout_width="@dimen/button_height"
-                    android:layout_height="@dimen/button_height"
-                    android:layout_marginEnd="4dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:clickable="true"
-                    android:contentDescription="@string/home_search"
-                    android:focusable="true"
-                    android:padding="9dp"
-                    android:src="@drawable/ic_search"
-                    app:tint="@color/md_on_surface" />
-
                 <TextView
                     android:id="@+id/topSair"
                     android:layout_width="wrap_content"
@@ -81,6 +68,40 @@
                     android:text="@string/home_logout"
                     android:textColor="@color/md_primary"
                     android:textSize="@dimen/text_topbar_action" />
+            </LinearLayout>
+
+            <!-- 2.7.48 — barra de busca global no topo (conceito 1):
+                 campo de largura total; o toque abre a busca
+                 existente (é um atalho, não um campo editável).
+                 Substitui o ícone homeSearchBtn do cabeçalho. -->
+            <LinearLayout
+                android:id="@+id/homeSearchBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_lg"
+                android:background="@drawable/card_surface_rounded"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="@dimen/spacing_md"
+                android:paddingVertical="@dimen/spacing_md">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_search"
+                    app:tint="@color/md_on_surface_variant" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/spacing_md"
+                    android:layout_weight="1"
+                    android:text="@string/home_search_bar_hint"
+                    android:textColor="@color/md_on_surface_variant"
+                    android:textSize="@dimen/text_card_subtitle" />
             </LinearLayout>
 
             <!-- 2.7.41 (P1-13) — estados de carregamento/erro da home:
@@ -387,16 +408,39 @@
                 </com.google.android.material.card.MaterialCardView>
             </LinearLayout>
 
-            <!-- Continue assistindo -->
-            <TextView
-                android:id="@+id/labelContinue"
+            <!-- Continue assistindo — 2.7.48: cabeçalho com "Ver tudo ›"
+                 (a linha esconde-se com a seção — ver setupContinueRail). -->
+            <LinearLayout
+                android:id="@+id/continueHeader"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_xl"
-                android:text="@string/continue_watching"
-                android:textColor="@color/md_on_surface"
-                android:textSize="@dimen/text_section_title"
-                android:textStyle="bold" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/labelContinue"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/continue_watching"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_section_title"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/continueSeeAll"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="@dimen/spacing_sm"
+                    android:text="@string/see_all"
+                    android:textColor="@color/md_primary"
+                    android:textSize="@dimen/text_card_subtitle"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+            </LinearLayout>
 
             <!-- R15C (ronda 15, frente C): halo de foco TV — 16dp laterais / 12dp verticais + sem corte (clipChildren=false). -->
             <androidx.recyclerview.widget.RecyclerView
@@ -410,22 +454,92 @@
                 android:clipChildren="false"
                 android:overScrollMode="never" />
 
-            <!-- R22 UI (conceito "início celular"): "Meus cursos" em
-                 grelha de 2 colunas — os cursos favoritos do aluno
-                 (mesma fonte da Minha Lista) com total real (unified)
-                 e progresso local. Só no celular: ids novos, lidos
-                 por findViewById com guarda de plataforma. -->
-            <TextView
-                android:id="@+id/labelMyCourses"
-                android:layout_width="wrap_content"
+            <!-- 2.7.48 — "Pastas recentes" (conceito 1): pastas dos
+                 recents, até 6. A linha esconde-se com a seção. -->
+            <LinearLayout
+                android:id="@+id/recentFoldersHeader"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="@dimen/content_margin"
                 android:layout_marginTop="@dimen/spacing_xl"
-                android:text="@string/home_my_courses"
-                android:textColor="@color/md_on_surface"
-                android:textSize="@dimen/text_section_title"
-                android:textStyle="bold"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/labelRecentFolders"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/home_recent_folders"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_section_title"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/recentFoldersSeeAll"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="@dimen/spacing_sm"
+                    android:text="@string/see_all"
+                    android:textColor="@color/md_primary"
+                    android:textSize="@dimen/text_card_subtitle"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/railRecentFolders"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:clipToPadding="false"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="12dp"
+                android:clipChildren="false"
+                android:overScrollMode="never"
                 android:visibility="gone" />
+
+            <!-- R22 UI (conceito "início celular"): "Meus cursos" em
+                 grelha de 3 colunas (2.7.48 — era 2) — os cursos
+                 favoritos do aluno (mesma fonte da Minha Lista) com
+                 total real (unified) e progresso local. Só no celular:
+                 ids novos, lidos por findViewById com guarda de
+                 plataforma. -->
+            <LinearLayout
+                android:id="@+id/myCoursesHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/labelMyCourses"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/content_margin"
+                    android:layout_weight="1"
+                    android:text="@string/home_my_courses"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_section_title"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/myCoursesSeeAll"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="@dimen/spacing_sm"
+                    android:text="@string/see_all"
+                    android:textColor="@color/md_primary"
+                    android:textSize="@dimen/text_card_subtitle"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+            </LinearLayout>
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/gridMyCourses"
@@ -437,6 +551,84 @@
                 android:paddingStart="@dimen/content_margin"
                 android:paddingEnd="@dimen/content_margin"
                 android:visibility="gone" />
+
+            <!-- 2.7.48 — painel "Seu Progresso" (conceito 1): horas da
+                 semana + sequência de dias, LIDOS DO SERVIDOR (a seção
+                 some sem o cache do import — nunca número local). -->
+            <LinearLayout
+                android:id="@+id/progressPanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:background="@drawable/card_surface_rounded"
+                android:orientation="vertical"
+                android:padding="@dimen/spacing_lg"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/progressTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/home_progress_title"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_section_title"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_md"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/progressWeekHours"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/md_primary"
+                            android:textSize="@dimen/text_section_title"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/progressWeekLabel"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="@string/home_progress_week"
+                            android:textColor="@color/md_on_surface_variant"
+                            android:textSize="@dimen/text_card_subtitle" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/progressStreak"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/md_primary"
+                            android:textSize="@dimen/text_section_title"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/progressStreakLabel"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="@string/home_progress_streak"
+                            android:textColor="@color/md_on_surface_variant"
+                            android:textSize="@dimen/text_card_subtitle" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
 
             <!-- R22 UI: "Destaques" em cartões horizontais — cursos em
                  destaque da API; sem resposta, os itens curados do
