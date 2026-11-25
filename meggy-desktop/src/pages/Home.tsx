@@ -1704,6 +1704,23 @@ function PlayerView({
     }
   }, [videoSrc]);
 
+  // ★ PlayerFix Fase 2: sniff do contentor — ficheiros ".mp4" que são
+  // MPEG-TS disfarçados (aulas de História/Vestibulares) nunca tocam
+  // no <video>; sem esperar 30 s pelo watchdog, o resultado "ts"
+  // marca nativeFailed e o leitor avançado assume em ~1 s. Corre em
+  // paralelo com a montagem normal: ficheiros bons não atrasam nada.
+  useEffect(() => {
+    if (!currentFile || isAudio || isLegacyVideo || !localChecked) return;
+    let alive = true;
+    invoke<string>("sniff_container", { url: playUrl })
+      .then((kind) => {
+        if (alive && kind === "ts") setNativeFailed(true);
+      })
+      .catch(() => { /* sem sniff, o watchdog decide como hoje */ });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videoSrc, localChecked, localPath]);
+
   // ★ Motor alternativo (mpv): arranca com a posição guardada e faz poll
   // do progresso (2s), gravando pelas MESMAS rotas do <video> —
   // saveResumePosition (throttle 10s → /userstate) e markWatched (>50% /
