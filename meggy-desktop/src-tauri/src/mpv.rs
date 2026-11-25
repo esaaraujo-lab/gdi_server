@@ -17,6 +17,27 @@
 // intacto. Posição/progresso: o frontend faz poll de mpv_status
 // e grava pelas MESMAS rotas de sempre (/userstate via
 // saveResumePosition/markWatched) — nada muda no servidor.
+//
+// ★ PlayerFix Fase 1 (2026-11-25) — o travamento do app:
+// no Tauri v2 os comandos síncronos correm na THREAD PRINCIPAL.
+// mpv_status era chamado de 2 em 2 s e fazia 4 pedidos IPC
+// sequenciais (timeout de 800 ms cada) segurando o Mutex — com o
+// mpv ocupado a abrir um stream de 300–500 MB, cada poll podia
+// bloquear a interface ~3,2 s, de 2 em 2 s → o app congelava e
+// tinha de ser fechado à força (relato do Elton, aulas de
+// História/Vestibulares). mpv_start agravava: shutdown síncrono +
+// ipc_connect até 5 s, também na thread principal.
+// Correcção, sem mudar NENHUM comportamento visível:
+//   - mpv_start / mpv_command / mpv_stop passam a comandos async
+//     e o trabalho bloqueante corre em spawn_blocking (runtime),
+//     nunca na thread principal.
+//   - mpv_status deixa de falar com o mpv: devolve uma CACHE
+//     actualizada por uma thread de fundo (poll interno de
+//     500 ms, dona dos pedidos IPC). O comando fica instantâneo.
+//   - A thread de fundo detecta a morte do processo (janela do
+//     mpv fechada, crash, EOF) e limpa a sessão, como o antigo
+//     mpv_status fazia. Um contador de geração impede que a
+//     thread de uma sessão antiga toque na sessão nova.
 // ═══════════════════════════════════════════════════════════════
 
 use serde::Serialize;
@@ -25,7 +46,8 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 #[cfg(unix)]
@@ -148,11 +170,221 @@ impl MpvSession {
     }
 }
 
-pub struct MpvState(pub Mutex<Option<MpvSession>>);
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct MpvStatus {
+    running: bool,
+    time_pos: Option<f64>,
+    duration: Option<f64>,
+    paused: bool,
+    eof: bool,
+}
+
+impl MpvStatus {
+    fn stopped() -> Self {
+        MpvStatus {
+            running: false,
+            time_pos: None,
+            duration: None,
+            paused: false,
+            eof: false,
+        }
+    }
+}
+
+/// Estado partilhado do mpv. ★ PlayerFix: a sessão e a cache vivem
+/// atrás de um Arc para os comandos async poderem mover o estado
+/// para as threads do runtime (spawn_blocking) — a thread
+/// principal nunca mais espera pelo IPC.
+pub struct MpvInner {
+    session: Mutex<Option<MpvSession>>,
+    cache: Mutex<MpvStatus>,
+    generation: AtomicU64,
+}
+
+pub struct MpvState(pub Arc<MpvInner>);
 
 impl Default for MpvState {
     fn default() -> Self {
-        MpvState(Mutex::new(None))
+        MpvState(Arc::new(MpvInner {
+            session: Mutex::new(None),
+            cache: Mutex::new(MpvStatus::stopped()),
+            generation: AtomicU64::new(0),
+        }))
+    }
+}
+
+impl MpvInner {
+    fn set_cache(&self, status: MpvStatus) {
+        if let Ok(mut c) = self.cache.lock() {
+            *c = status;
+        }
+    }
+
+    /// Arranca o mpv (corpo bloqueante — só chamado via
+    /// spawn_blocking). Comportamento idêntico ao original:
+    /// desliga a sessão anterior, localiza o binário, liga o IPC.
+    fn start(
+        self: &Arc<Self>,
+        url: String,
+        start_secs: f64,
+        speed: f64,
+        title: String,
+    ) -> Result<(), String> {
+        // Nova geração: qualquer poller antigo pára no próximo ciclo.
+        let gen = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
+        let mut guard = self
+            .session
+            .lock()
+            .map_err(|_| "mpv state poisoned".to_string())?;
+        if let Some(mut old) = guard.take() {
+            old.shutdown();
+        }
+        // Se o arranque falhar a meio, a cache não pode ficar com o
+        // estado da sessão antiga (o caminho de sucesso sobrescreve).
+        self.set_cache(MpvStatus::stopped());
+
+        let bin = mpv_binary();
+        #[cfg(unix)]
+        let (addr, sock_path) = ipc_endpoint();
+        #[cfg(windows)]
+        let (addr, port) = ipc_endpoint();
+
+        let mut cmd = Command::new(&bin);
+        cmd.arg("--no-config")
+            .arg(format!("--input-ipc-server={addr}"))
+            .arg("--force-window=yes")
+            .arg("--keep-open=no")
+            .arg(format!("--title={title}"));
+        if start_secs > 0.0 {
+            cmd.arg(format!("--start={start_secs}"));
+        }
+        if (speed - 1.0).abs() > f64::EPSILON {
+            cmd.arg(format!("--speed={speed}"));
+        }
+        cmd.arg(&url)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        let child = cmd
+            .spawn()
+            .map_err(|e| format!("não foi possível iniciar o mpv ({}): {e}", bin.display()))?;
+
+        #[cfg(unix)]
+        let stream = match ipc_connect(&sock_path) {
+            Ok(s) => s,
+            Err(e) => {
+                let mut c = child;
+                let _ = c.kill();
+                let _ = c.wait();
+                return Err(e);
+            }
+        };
+        #[cfg(windows)]
+        let stream = match ipc_connect(port) {
+            Ok(s) => s,
+            Err(e) => {
+                let mut c = child;
+                let _ = c.kill();
+                let _ = c.wait();
+                return Err(e);
+            }
+        };
+        stream.set_timeouts();
+        let writer = stream.try_clone().map_err(|e| e.to_string())?;
+        let session = MpvSession {
+            child,
+            reader: BufReader::new(stream),
+            writer,
+            next_id: 0,
+            #[cfg(unix)]
+            sock_path,
+        };
+        *guard = Some(session);
+        drop(guard);
+        self.set_cache(MpvStatus {
+            running: true,
+            time_pos: None,
+            duration: None,
+            paused: false,
+            eof: false,
+        });
+        Self::spawn_poller(self.clone(), gen);
+        Ok(())
+    }
+
+    /// Thread de fundo dona dos pedidos de estado. Actualiza a
+    /// cache de 500 em 500 ms; detecta a morte do processo e limpa
+    /// a sessão (o papel que o antigo mpv_status síncrono fazia).
+    /// Sai quando a geração muda (sessão substituída/parada).
+    fn spawn_poller(inner: Arc<MpvInner>, gen: u64) {
+        std::thread::spawn(move || loop {
+            std::thread::sleep(Duration::from_millis(500));
+            if inner.generation.load(Ordering::SeqCst) != gen {
+                return;
+            }
+            let mut guard = match inner.session.lock() {
+                Ok(g) => g,
+                Err(_) => return,
+            };
+            if guard.is_none() {
+                inner.set_cache(MpvStatus::stopped());
+                return;
+            }
+            // O processo morreu (janela fechada, crash, fim)?
+            let alive = match guard.as_mut().map(|s| s.child.try_wait()) {
+                Some(Ok(None)) => true,  // ainda a correr
+                Some(Err(_)) => true,    // indeterminado — trata como vivo
+                _ => false,              // Ok(Some(_)) = saiu
+            };
+            if !alive {
+                if let Some(mut old) = guard.take() {
+                    old.shutdown();
+                }
+                drop(guard);
+                inner.set_cache(MpvStatus::stopped());
+                return;
+            }
+            let session = guard.as_mut().expect("session presente");
+            let time_pos = session.get_prop("time-pos").and_then(|v| v.as_f64());
+            let duration = session.get_prop("duration").and_then(|v| v.as_f64());
+            let paused = session
+                .get_prop("pause")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let eof = session
+                .get_prop("eof-reached")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            drop(guard);
+            inner.set_cache(MpvStatus {
+                running: true,
+                time_pos,
+                duration,
+                paused,
+                eof,
+            });
+        });
+    }
+
+    fn command(&self, args: Vec<Value>) -> Result<(), String> {
+        let mut guard = self
+            .session
+            .lock()
+            .map_err(|_| "mpv state poisoned".to_string())?;
+        let session = guard.as_mut().ok_or("mpv não está a correr")?;
+        session.request(args).map(|_| ())
+    }
+
+    fn stop(&self) {
+        // Invalida o poller da sessão actual antes de a desligar.
+        self.generation.fetch_add(1, Ordering::SeqCst);
+        if let Ok(mut guard) = self.session.lock() {
+            if let Some(mut old) = guard.take() {
+                old.shutdown();
+            }
+        }
+        self.set_cache(MpvStatus::stopped());
     }
 }
 
@@ -225,150 +457,47 @@ impl SetTimeouts for UnixStream {
 }
 
 #[tauri::command]
-pub fn mpv_start(
+pub async fn mpv_start(
     state: tauri::State<'_, MpvState>,
     url: String,
     start_secs: f64,
     speed: f64,
     title: String,
 ) -> Result<(), String> {
-    let mut guard = state.0.lock().map_err(|_| "mpv state poisoned".to_string())?;
-    if let Some(mut old) = guard.take() {
-        old.shutdown();
-    }
-
-    let bin = mpv_binary();
-    #[cfg(unix)]
-    let (addr, sock_path) = ipc_endpoint();
-    #[cfg(windows)]
-    let (addr, port) = ipc_endpoint();
-
-    let mut cmd = Command::new(&bin);
-    cmd.arg("--no-config")
-        .arg(format!("--input-ipc-server={addr}"))
-        .arg("--force-window=yes")
-        .arg("--keep-open=no")
-        .arg(format!("--title={title}"));
-    if start_secs > 0.0 {
-        cmd.arg(format!("--start={start_secs}"));
-    }
-    if (speed - 1.0).abs() > f64::EPSILON {
-        cmd.arg(format!("--speed={speed}"));
-    }
-    cmd.arg(&url)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    let child = cmd
-        .spawn()
-        .map_err(|e| format!("não foi possível iniciar o mpv ({}): {e}", bin.display()))?;
-
-    #[cfg(unix)]
-    let stream = match ipc_connect(&sock_path) {
-        Ok(s) => s,
-        Err(e) => {
-            let mut c = child;
-            let _ = c.kill();
-            let _ = c.wait();
-            return Err(e);
-        }
-    };
-    #[cfg(windows)]
-    let stream = match ipc_connect(port) {
-        Ok(s) => s,
-        Err(e) => {
-            let mut c = child;
-            let _ = c.kill();
-            let _ = c.wait();
-            return Err(e);
-        }
-    };
-    stream.set_timeouts();
-    let writer = stream.try_clone().map_err(|e| e.to_string())?;
-    let session = MpvSession {
-        child,
-        reader: BufReader::new(stream),
-        writer,
-        next_id: 0,
-        #[cfg(unix)]
-        sock_path,
-    };
-    *guard = Some(session);
-    Ok(())
+    let inner = state.0.clone();
+    tauri::async_runtime::spawn_blocking(move || inner.start(url, start_secs, speed, title))
+        .await
+        .map_err(|e| format!("mpv_start: {e}"))?
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MpvStatus {
-    running: bool,
-    time_pos: Option<f64>,
-    duration: Option<f64>,
-    paused: bool,
-    eof: bool,
-}
-
+/// Instantâneo por desenho: devolve a cache mantida pela thread de
+/// fundo — nunca fala com o mpv, nunca bloqueia a interface.
 #[tauri::command]
 pub fn mpv_status(state: tauri::State<'_, MpvState>) -> Result<MpvStatus, String> {
-    let mut guard = state.0.lock().map_err(|_| "mpv state poisoned".to_string())?;
-    if guard.is_none() {
-        return Ok(MpvStatus {
-            running: false,
-            time_pos: None,
-            duration: None,
-            paused: false,
-            eof: false,
-        });
-    }
-    // O processo morreu (janela fechada pelo utilizador, crash)?
-    let alive = match guard.as_mut().map(|s| s.child.try_wait()) {
-        Some(Ok(None)) => true,  // ainda a correr
-        Some(Err(_)) => true,    // indeterminado — trata como vivo
-        _ => false,              // Ok(Some(_)) = saiu
-    };
-    if !alive {
-        if let Some(mut old) = guard.take() {
-            old.shutdown();
-        }
-        return Ok(MpvStatus {
-            running: false,
-            time_pos: None,
-            duration: None,
-            paused: false,
-            eof: false,
-        });
-    }
-    let session = guard.as_mut().expect("session presente");
-    let time_pos = session.get_prop("time-pos").and_then(|v| v.as_f64());
-    let duration = session.get_prop("duration").and_then(|v| v.as_f64());
-    let paused = session
-        .get_prop("pause")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    let eof = session
-        .get_prop("eof-reached")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    Ok(MpvStatus {
-        running: true,
-        time_pos,
-        duration,
-        paused,
-        eof,
-    })
+    let cache = state
+        .0
+        .cache
+        .lock()
+        .map_err(|_| "mpv state poisoned".to_string())?;
+    Ok(cache.clone())
 }
 
 #[tauri::command]
-pub fn mpv_command(state: tauri::State<'_, MpvState>, args: Vec<Value>) -> Result<(), String> {
-    let mut guard = state.0.lock().map_err(|_| "mpv state poisoned".to_string())?;
-    let session = guard.as_mut().ok_or("mpv não está a correr")?;
-    session.request(args).map(|_| ())
+pub async fn mpv_command(
+    state: tauri::State<'_, MpvState>,
+    args: Vec<Value>,
+) -> Result<(), String> {
+    let inner = state.0.clone();
+    tauri::async_runtime::spawn_blocking(move || inner.command(args))
+        .await
+        .map_err(|e| format!("mpv_command: {e}"))?
 }
 
 #[tauri::command]
-pub fn mpv_stop(state: tauri::State<'_, MpvState>) -> Result<(), String> {
-    let mut guard = state.0.lock().map_err(|_| "mpv state poisoned".to_string())?;
-    if let Some(mut old) = guard.take() {
-        old.shutdown();
-    }
+pub async fn mpv_stop(state: tauri::State<'_, MpvState>) -> Result<(), String> {
+    let inner = state.0.clone();
+    tauri::async_runtime::spawn_blocking(move || inner.stop())
+        .await
+        .map_err(|e| format!("mpv_stop: {e}"))?;
     Ok(())
 }
