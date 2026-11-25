@@ -54,10 +54,13 @@
     <dimen name="tv_drive_card_width">150dp</dimen>
     <dimen name="tv_drive_card_height">210dp</dimen>
     <dimen name="tv_detail_hero_width">800dp</dimen>
-    <dimen name="tv_play_fab_size">120dp</dimen>
+    <dimen name="tv_play_fab_size">80dp</dimen>
     <!-- v2.7.10 — disco de play da TV: 120dp era o circulo rosa gigante
-         da foto (11:48); 96dp e o disco modesto sobre o video. -->
-    <dimen name="play_fab_size">96dp</dimen>
+         da foto (11:48); 96dp e o disco modesto sobre o video.
+         2.7.55 — 80dp: o Elton achou o hero do detalhe enorme no
+         teste da TV; este dimen é o que dimensiona o heroPlayFab
+         do detalhe TV (o tv_play_fab_size nunca foi referenciado). -->
+    <dimen name="play_fab_size">80dp</dimen>
     <!-- Frente R3A (Plyr) — botao play/pausa da barra SO-ICONE na TV:
          48dp, glifo 24sp; disco central (overlay de pausa) 56dp, glifo 24sp.
          player_fab_size (Frente E, 72dp) sai. -->
