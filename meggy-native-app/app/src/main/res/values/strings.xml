@@ -41,7 +41,6 @@
     <!-- Frente R4B — filtro e seções da lista plana. -->
     <string name="flat_filter_all">Todos</string>
     <string name="flat_filter_videos">Vídeos</string>
-    <string name="flat_filter_materials">Materiais</string>
     <string name="flat_section_videos">Vídeos</string>
     <string name="flat_section_materials">Materiais</string>
     <string name="flat_empty_filter">Nada aqui com este filtro.</string>
@@ -195,4 +194,33 @@
     <string name="cd_fullscreen">Tela cheia</string>
     <string name="cd_prev_lesson">Aula anterior</string>
     <string name="cd_next_lesson">Próxima aula</string>
+
+    <!-- 2.7.48 — nova casca (conceitos aprovados): busca global, hero
+         compacto, Pastas recentes, painel de progresso, filtros novos. -->
+    <string name="home_search_bar_hint">Buscar aula, curso ou assunto</string>
+    <string name="home_recent_folders">Pastas recentes</string>
+    <string name="home_progress_title">Seu Progresso</string>
+    <string name="home_progress_week">Horas assistidas esta semana</string>
+    <string name="home_progress_streak">Sequência de dias</string>
+    <string name="home_greeting_plural">Olá, %1$s! 👋 Você tem %2$d aulas em andamento.</string>
+    <string name="home_greeting_singular">Olá, %1$s! 👋 Você tem 1 aula em andamento.</string>
+    <string name="see_all">Ver tudo ›</string>
+    <string name="recent_folders_lessons">%1$d aulas</string>
+    <string name="flat_filter_watched">Assistidas</string>
+    <string name="flat_filter_unwatched">Por assistir</string>
+    <string name="flat_filter_summary">Com resumo</string>
+    <string name="flat_filter_pdf">PDF</string>
+    <string name="flat_section_pdfs">PDFs</string>
+    <string name="flat_found_count_plural">%1$d aulas encontradas</string>
+    <string name="flat_found_count_singular">1 aula encontrada</string>
+    <string name="flat_empty_summary">Nenhuma aula com resumo nesta pasta.</string>
+    <string name="flat_list_toggle_grid">Grade</string>
+    <string name="flat_list_toggle_list">Lista</string>
+    <string name="tv_side_menu_title">Menu lateral da TV</string>
+    <string name="tv_side_menu_sub">Mostrar o menu lateral na tela inicial da TV</string>
+    <string name="side_menu_collapse">« Recolher</string>
+    <string name="side_menu_expand">Expandir »</string>
+    <string name="side_menu_version">Meggy v%1$s • Conectado</string>
+    <string name="breadcrumb_home">Início</string>
+    <string name="tv_remote_hints">Controle remoto • A: Selecionar/Entrar • B: Voltar</string>
 </resources>
