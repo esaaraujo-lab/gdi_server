@@ -3293,18 +3293,21 @@
             //   mensagem mandava "tocar na aba" e não havia aba de
             //   material p/ tocar). Sucesso (com ou sem materiais)
             //   segue EXACTAMENTE o fluxo de antes.
-            async function _listMat21595(p) {
+            async function _listMat21596(p) {
               try {
                 const r = await window.gdiListAllFiles(p, '');
-                if (Array.isArray(r)) return { files: r, failed: false };
-              } catch (_) {}
-              return { files: [], failed: true };
+                if (Array.isArray(r)) return { files: r, failed: false, why: '' };
+                return { files: [], failed: true, why: 'não-array (' + (r === null ? 'null' : typeof r) + ')' };
+              } catch (e21596) {
+                return { files: [], failed: true, why: 'rejeição: ' + String((e21596 && e21596.message) || e21596 || '').slice(0, 120) };
+              }
             }
             async function _collectMat21595() {
               let failed = false;
+              let why = '';
               // 1. Pasta atual
-              const _here = await _listMat21595(folderPath);
-              if (_here.failed) failed = true;
+              const _here = await _listMat21596(folderPath);
+              if (_here.failed) { failed = true; if (!why) why = _here.why; }
               const here = _here.files;
               let found = here.filter(isMaterial);
               // 2. Subpastas (até 20, para no 1º)
@@ -3312,8 +3315,8 @@
                 const subs = here.filter(x => x.mimeType === 'application/vnd.google-apps.folder').slice(0, 20);
                 for (const sf of subs) {
                   const fp = folderPath + encodeURIComponent(sf.name) + '/';
-                  const _sub = await _listMat21595(fp);
-                  if (_sub.failed) { failed = true; continue; }
+                  const _sub = await _listMat21596(fp);
+                  if (_sub.failed) { failed = true; if (!why) why = _sub.why; continue; }
                   found = found.concat(_sub.files.filter(isMaterial));
                   if (found.length) break;
                 }
@@ -3323,18 +3326,18 @@
                 const parts = folderPath.split('/').filter(Boolean);
                 const parentPath = '/' + parts.slice(0, -1).join('/') + '/';
                 if (parentPath !== '/' && parentPath !== folderPath) {
-                  const _par = await _listMat21595(parentPath);
-                  if (_par.failed) failed = true;
+                  const _par = await _listMat21596(parentPath);
+                  if (_par.failed) { failed = true; if (!why) why = _par.why; }
                   else found = _par.files.filter(isMaterial);
                 }
               }
-              return { found: found, failed: failed };
+              return { found: found, failed: failed, why: why };
             }
             let _collected = await _collectMat21595();
             if (!_collected.found.length && _collected.failed) {
               await new Promise((res) => setTimeout(res, 600));
               _collected = await _collectMat21595();
-              if (!_collected.found.length && _collected.failed) throw new Error('listagem de materiais falhou');
+              if (!_collected.found.length && _collected.failed) throw new Error('listagem de materiais falhou — ' + (_collected.why || 'motivo desconhecido'));
             }
             let found = _collected.found;
             // ★ Dedup por nome similar (STAGING FIX).
@@ -3464,6 +3467,15 @@
             bodyEl.innerHTML = `<div style="text-align:center;padding:40px 24px;color:#e6edf3;"><div style="font-weight:700;margin-bottom:8px;">Não foi possível carregar o material</div><div style="font-size:14px;line-height:1.5;color:#9aa4b8;">Verifique sua conexão e toque na aba novamente.</div><button id="gdi-mat-retry" class="meggy-header-btn" style="margin-top:16px;background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border:none;"><i class="bi bi-arrow-clockwise"></i> Tentar novamente</button></div>`;
             const _matRetry21595 = bodyEl.querySelector('#gdi-mat-retry');
             if (_matRetry21595) _matRetry21595.onclick = () => { try { loadMaterials(); } catch (_) {} };
+            // ★ v2.15.96: o motivo do erro fica visível no painel
+            //   (mesmo estilo do erro do showISA) — sem isto, o erro
+            //   era uma caixa negra e a causa real não se via ao vivo.
+            try {
+              const _matWhy21596 = document.createElement('div');
+              _matWhy21596.style.cssText = 'font-size:12px;color:#6b7488;margin-top:10px;';
+              _matWhy21596.textContent = 'Motivo: ' + String((e && e.message) || e || '').slice(0, 160);
+              if (bodyEl.firstElementChild) bodyEl.firstElementChild.appendChild(_matWhy21596);
+            } catch (_) {}
           }
         }
         // ★ v2.15.6 (PROVA EXTRA): descrição da aula sob o título.
