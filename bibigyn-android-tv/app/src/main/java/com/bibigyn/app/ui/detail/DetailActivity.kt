@@ -127,6 +127,8 @@ class DetailActivity : AppCompatActivity() {
     private var lessonListAdapter: LessonListAdapter? = null
     private var lessonGridAdapter: LessonGridAdapter? = null
     private var flatAdapter: FlatLessonAdapter? = null
+    // v2.1.41 — fileira de aulas do cabeçalho TV (só TV).
+    private var tvLessonsAdapter: TvLessonRailAdapter? = null
     // Frente R4B — filtro da lista plana (Todos / Vídeos / Materiais).
     private var flatFilter: FlatFilter = FlatFilter.ALL
     private var isFlatMode: Boolean = false
@@ -305,6 +307,27 @@ class DetailActivity : AppCompatActivity() {
             FocusAnimator.attach(binding.headerSearch, true)
         }
 
+        // v2.1.41 — TV SÓ VÍDEO (regra do Elton, conceito detalhe):
+        // as abas de estudo e os chips de contagem/materiais ficam
+        // GONE na TV (a aba Aulas é forçada pelo selectTab abaixo) e
+        // os materiais nem são carregados (ver loadFolder). Os
+        // botões do cabeçalho imersivo ganham feedback de foco e o
+        // "Assistir do Início" abre pela MESMA via de sempre
+        // (playFirstVideo → openFile no 1.º vídeo directo; o botão
+        // só aparece quando há vídeo directo — ver
+        // updateTvDetailHeader).
+        if (isTv) {
+            binding.tabsRow.visibility = View.GONE
+            binding.chipsRow.visibility = View.GONE
+            FocusAnimator.attach(binding.ctaContinue, true, scaleTv = FocusAnimator.SCALE_TV_DENSE)
+            binding.ctaFromStart?.let { btn ->
+                FocusAnimator.attach(btn, true, scaleTv = FocusAnimator.SCALE_TV_DENSE)
+                btn.setOnClickListener { playFirstVideo() }
+            }
+            binding.tvLessonsRail?.layoutManager =
+                LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        }
+
         // Busca dentro da aba Aulas (filtra as aulas pelo nome, local).
         binding.lessonSearch.addTextChangedListener(object : TextWatcher {
             override fun afterTextChanged(s: Editable?) = filterLessons(s?.toString().orEmpty())
@@ -475,20 +498,19 @@ class DetailActivity : AppCompatActivity() {
             val root = AdminDriveUi.adminDriveRootFromIntent(intent) ?: currentPath
             AdminDriveUi.setSubfolderCovers(root, drive.subfolderCovers)
         }
-        // Ronda 17 Frente B (gatilho D) — o CTA do topo NUNCA é focado
-        // no onResume: voltar de uma subpasta punha a página no início.
-        // 1.ª abertura: foco no 1.º card do rail quando há rail (como
-        // hoje); sem rail, não se foca nada — o 1.º D-pad cai na 1.ª
-        // vista focável (todas têm anel desde a Frente A).
-        // Regresso: repõe o foco real guardado + o scrollY.
+        // Ronda 17 Frente B (gatilho D) — nos REGRESSOS o CTA do
+        // topo NUNCA é focado: voltar de uma subpasta punha a página
+        // no início; repõe-se o foco real guardado + o scrollY.
+        // v2.1.41 — na 1.ª abertura o foco vai para o botão
+        // Continuar do cabeçalho imersivo (SPEC §5 da ronda TV);
+        // antes ia para o 1.º card do rail.
         if (TvUtils.isTv(this)) {
             if (isFirstResume) {
-                if (binding.railContinue.visibility == View.VISIBLE) {
-                    binding.railContinue.post {
-                        binding.railContinue.findViewHolderForAdapterPosition(0)
-                            ?.itemView?.requestFocus()
-                    }
-                }
+                // v2.1.41 — foco por omissão do detalhe TV: o botão
+                // Continuar do cabeçalho imersivo (SPEC §5). Nos
+                // regressos mantém-se o restauro R17B (o CTA nunca
+                // é focado ao voltar de uma subpasta).
+                binding.ctaContinue.post { binding.ctaContinue.requestFocus() }
             } else {
                 restoreDetailFocusOnResume()
             }
@@ -596,7 +618,9 @@ class DetailActivity : AppCompatActivity() {
         }
         binding.railContinue.adapter = RailAdapter(
             railItems,
-            nextFocusUpId = R.id.tabAulas,
+            // v2.1.41 — na TV as abas estão escondidas: o UP do rail
+            // vai para o botão Continuar do cabeçalho imersivo.
+            nextFocusUpId = if (TvUtils.isTv(this)) R.id.ctaContinue else R.id.tabAulas,
             nextFocusDownId = R.id.recycler
         ) { item ->
             lastFocusedContinuePos = railItems.indexOf(item)
@@ -804,15 +828,23 @@ class DetailActivity : AppCompatActivity() {
             }
 
             // Resumo: descrição gerada / provisória / branco (00:21).
-            loadLessonDescription(files)
+            // v2.1.41 — na TV NÃO se carrega (regra "TV só vídeo":
+            // não carregar nem listar materiais no detalhe TV).
+            if (!TvUtils.isTv(this@DetailActivity)) loadLessonDescription(files)
 
             // Hero: progresso da aula mais recente em andamento.
             updateHeroProgress()
 
+            // v2.1.41 — cabeçalho imersivo TV (progresso do curso,
+            // "Assistir do Início", fileira de aulas, fundo do
+            // resume). No celular a função sai logo (isTv).
+            updateTvDetailHeader(files)
+
             // Ronda 9 Frente B — questões/flashcards DA AULA (não do
             // curso): mesmo âmbito do resumo; pasta de curso (só
             // subpastas) fica no estado vazio honesto.
-            loadQuestionsFlashcards(files)
+            // v2.1.41 — idem resumo: na TV não se carrega.
+            if (!TvUtils.isTv(this@DetailActivity)) loadQuestionsFlashcards(files)
 
             if (files.isEmpty()) {
                 binding.emptyState.text = getString(R.string.browse_empty)
@@ -848,7 +880,13 @@ class DetailActivity : AppCompatActivity() {
                         onFolder = { file -> openFolder(file) },
                         onFile = { file -> openFile(file) },
                         // Frente A (TV): UP da 1ª linha -> aba Aulas.
-                        firstRowNextFocusUpId = R.id.tabAulas
+                        // v2.1.41: na TV as abas estão escondidas —
+                        // o UP vai para o botão Continuar do cabeçalho.
+                        firstRowNextFocusUpId = if (TvUtils.isTv(this@DetailActivity)) {
+                            R.id.ctaContinue
+                        } else {
+                            R.id.tabAulas
+                        }
                     )
                     fileAdapter = adapter
                     adapter.setFolderPath(currentPath)
@@ -1084,6 +1122,83 @@ class DetailActivity : AppCompatActivity() {
         binding.heroTime.visibility = View.GONE
         binding.ctaContinue.text = getString(R.string.cta_watch)
         binding.detailFooter.text = ""
+    }
+
+    /**
+     * v2.1.41 — cabeçalho imersivo do detalhe TV (conceito
+     * "tv-detalhe-video", SPEC §4). Só APRESENTAÇÃO sobre os dados
+     * que o loadFolder já trouxe — nenhuma chamada nova:
+     * - fundo: a thumb da aula do resume substitui a da 1.ª aula
+     *   (a capa do admin, quando existe, mantém a precedência);
+     * - "Assistir do Início" só aparece com vídeos directos na
+     *   pasta (o clique chama playFirstVideo — a via de sempre);
+     * - progresso do curso "X de Y aulas concluídas • Z%" sobre os
+     *   vídeos directos (Y) e o isWatched existente (X);
+     * - fileira de aulas com os vídeos directos, na ordem da
+     *   listagem; o toque abre por openFile (a mesma via da grade
+     *   da pasta — playlist completa, como hoje).
+     * No celular sai logo (as vistas novas nem existem no layout).
+     */
+    private fun updateTvDetailHeader(files: List<FileItem>) {
+        if (!TvUtils.isTv(this)) return
+        val sm = SessionManager.get(this)
+        val videos = files.filter { it.isVideo || it.isAudio }
+        val resumeFile = videos
+            .filter { sm.hasResume(currentPath, it.name) }
+            .maxByOrNull { sm.getResumeProgress(currentPath, it.name) }
+
+        if (adminDrive?.subCoverUrl.isNullOrBlank() &&
+            !resumeFile?.thumbnailLink.isNullOrBlank()
+        ) {
+            binding.heroImage.visibility = View.VISIBLE
+            binding.heroMonogram.visibility = View.GONE
+            binding.heroImage.load(resumeFile!!.thumbnailLink) {
+                error(R.drawable.card_gradient_pink)
+            }
+        }
+
+        binding.ctaFromStart?.visibility =
+            if (videos.isNotEmpty()) View.VISIBLE else View.GONE
+
+        val progressText = binding.tvCourseProgressText
+        val progressBar = binding.tvCourseProgressBar
+        if (videos.isNotEmpty()) {
+            val watched = videos.count { sm.isWatched(currentPath, it.name) }
+            val pct = watched * 100 / videos.size
+            progressText?.text = getString(
+                R.string.detail_course_progress, watched, videos.size, pct
+            )
+            progressText?.visibility = View.VISIBLE
+            progressBar?.progress = pct
+            progressBar?.visibility = View.VISIBLE
+        } else {
+            progressText?.visibility = View.GONE
+            progressBar?.visibility = View.GONE
+        }
+
+        val rail = binding.tvLessonsRail
+        val label = binding.tvLessonsLabel
+        if (rail != null && label != null) {
+            if (videos.isEmpty()) {
+                rail.visibility = View.GONE
+                label.visibility = View.GONE
+            } else {
+                label.visibility = View.VISIBLE
+                rail.visibility = View.VISIBLE
+                if (tvLessonsAdapter == null) {
+                    tvLessonsAdapter = TvLessonRailAdapter(
+                        folderPath = currentPath,
+                        items = videos,
+                        resumeName = resumeFile?.name,
+                        nextFocusUpId = R.id.ctaContinue,
+                        onClick = { file -> openFile(file) }
+                    )
+                    rail.adapter = tvLessonsAdapter
+                } else {
+                    tvLessonsAdapter?.submit(videos, resumeFile?.name)
+                }
+            }
+        }
     }
 
     /**
