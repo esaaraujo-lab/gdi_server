@@ -184,6 +184,15 @@ class DetailActivity : AppCompatActivity() {
     private var descriptionRecheckLastMs: Long = 0L
     private var lessonGroups: List<LessonGroup> = emptyList()
     private var allFiles: List<FileItem> = emptyList()
+    // 2.7.52 — estatísticas dos vídeos DIRECTOS da pasta p/ o
+    // cabeçalho TV (SPEC §4: "X de Y aulas concluídas" conta os
+    // filhos directos; ver setupTvLessonsRail/syncTvCourseLine).
+    // 0 = ainda sem dados (a linha cai no texto dos chips).
+    private var tvDirectTotal: Int = 0
+    private var tvDirectWatched: Int = 0
+    // 2.7.52 — adapter da fileira de aulas da TV (reutilizado entre
+    // reconstruções p/ não acumular decorações; ver setupTvLessonsRail).
+    private var tvLessonsAdapter: RailAdapter? = null
     private var currentTab: Tab = Tab.LESSONS
     private var lastFocusedContinuePos = -1
     // Ronda 17 Frente B — posição real do foco (D-pad) na grade/lista
@@ -382,6 +391,15 @@ class DetailActivity : AppCompatActivity() {
                 btn.setOnClickListener { selectTab(Tab.QUESTIONS) }
                 FocusAnimator.attach(btn, true, scaleTv = FocusAnimator.SCALE_TV_NONE)
             }
+            // 2.7.52 — botão "Assistir do Início" do cabeçalho
+            // imersivo (só existe no layout-television): abre a 1.ª
+            // aula da pasta pela MESMA playFirstVideo de sempre. A
+            // visibilidade (gone sem vídeos directos) é da
+            // setupTvLessonsRail.
+            findViewById<View>(R.id.btnFromStart)?.let { btn ->
+                btn.setOnClickListener { playFirstVideo() }
+                FocusAnimator.attach(btn, true, scaleTv = FocusAnimator.SCALE_TV_NONE)
+            }
         }
 
         // Busca dentro da aba Aulas (filtra as aulas pelo nome, local).
@@ -561,6 +579,12 @@ class DetailActivity : AppCompatActivity() {
         // reconstrói o dela em cada onResume). Reconstrói aqui também,
         // ANTES da lógica de foco que lê a visibilidade do rail.
         setupContinueRail()
+        // 2.7.52 — a fileira de aulas da TV também se reconstrói no
+        // regresso (✓/progresso frescos depois do player, como o rail
+        // Continuar). Sem rede: lê só allFiles + SessionManager.
+        if (TvUtils.isTv(this) && allFiles.isNotEmpty()) {
+            setupTvLessonsRail(allFiles)
+        }
         // 2.7.41 (P1-T1) — regresso do player da TV com aba pedida
         // (openTabOnReturn): abre a aba em vez de repor o foco salvo
         // (que era da aba Aulas, agora escondida). Consome uma só vez.
@@ -575,8 +599,11 @@ class DetailActivity : AppCompatActivity() {
         // Regresso: repõe o foco real salvo + o scrollY.
         if (TvUtils.isTv(this)) {
             if (returnTabConsumed) {
-                // Aba pedida pelo player: foca a aba Resumo.
-                binding.tabResumo.post { binding.tabResumo.requestFocus() }
+                // 2.7.52 — na TV a aba pedida pelo player NÃO abre
+                // (regra TV só vídeo: o selectTab já forçou Aulas e
+                // as abas estão gone): repõe-se o foco/rolagem como
+                // num regresso normal, sem focar a aba escondida.
+                restoreDetailFocusOnResume()
             } else if (isFirstResume) {
                 if (binding.railContinue.visibility == View.VISIBLE) {
                     binding.railContinue.post {
@@ -685,7 +712,12 @@ class DetailActivity : AppCompatActivity() {
     }
 
     private fun selectTab(tab: Tab) {
-        currentTab = tab
+        // 2.7.52 — regra TV SÓ VÍDEO: na TV as abas de estudo estão
+        // escondidas (layout) e NENHUMA selecção as abre — nem o
+        // regresso do player com aba pedida (openTabOnReturn). A aba
+        // efectiva na TV é sempre Aulas; no celular, a pedida.
+        val effectiveTab = if (TvUtils.isTv(this)) Tab.LESSONS else tab
+        currentTab = effectiveTab
         val pink = ContextCompat.getColor(this, R.color.md_primary)
         val muted = ContextCompat.getColor(this, R.color.md_on_surface_variant)
         val white = ContextCompat.getColor(this, R.color.md_on_surface)
@@ -693,14 +725,92 @@ class DetailActivity : AppCompatActivity() {
             (label as android.widget.TextView).setTextColor(if (active) white else muted)
             indicator.setBackgroundColor(if (active) pink else android.graphics.Color.TRANSPARENT)
         }
-        set(binding.tabResumo, binding.tabResumoLabel, binding.tabIndicatorResumo, tab == Tab.SUMMARY)
-        set(binding.tabAulas, binding.tabAulasLabel, binding.tabIndicatorAulas, tab == Tab.LESSONS)
-        set(binding.tabQuestoes, binding.tabQuestoesLabel, binding.tabIndicatorQuestoes, tab == Tab.QUESTIONS)
-        set(binding.tabFlashcards, binding.tabFlashcardsLabel, binding.tabIndicatorFlashcards, tab == Tab.FLASHCARDS)
-        binding.panelResumo.visibility = if (tab == Tab.SUMMARY) View.VISIBLE else View.GONE
-        binding.panelAulas.visibility = if (tab == Tab.LESSONS) View.VISIBLE else View.GONE
-        binding.panelQuestoes.visibility = if (tab == Tab.QUESTIONS) View.VISIBLE else View.GONE
-        binding.panelFlashcards.visibility = if (tab == Tab.FLASHCARDS) View.VISIBLE else View.GONE
+        set(binding.tabResumo, binding.tabResumoLabel, binding.tabIndicatorResumo, effectiveTab == Tab.SUMMARY)
+        set(binding.tabAulas, binding.tabAulasLabel, binding.tabIndicatorAulas, effectiveTab == Tab.LESSONS)
+        set(binding.tabQuestoes, binding.tabQuestoesLabel, binding.tabIndicatorQuestoes, effectiveTab == Tab.QUESTIONS)
+        set(binding.tabFlashcards, binding.tabFlashcardsLabel, binding.tabIndicatorFlashcards, effectiveTab == Tab.FLASHCARDS)
+        binding.panelResumo.visibility = if (effectiveTab == Tab.SUMMARY) View.VISIBLE else View.GONE
+        binding.panelAulas.visibility = if (effectiveTab == Tab.LESSONS) View.VISIBLE else View.GONE
+        binding.panelQuestoes.visibility = if (effectiveTab == Tab.QUESTIONS) View.VISIBLE else View.GONE
+        binding.panelFlashcards.visibility = if (effectiveTab == Tab.FLASHCARDS) View.VISIBLE else View.GONE
+    }
+
+    /**
+     * 2.7.52 — fileira horizontal de aulas do cabeçalho TV (conceito
+     * tv-detalhe-video, SPEC §4): os vídeos DIRECTOS da pasta, na
+     * ordem da listagem, em cartões grandes (RailAdapter 340dp).
+     * Cartão: thumbnail, título = tema/nome limpo da aula, subtítulo
+     * "Aula N · duração · Assistido/Assistindo agora" (duração só
+     * quando conhecida — a gravada no resume; "Assistindo agora" no
+     * item do resume desta pasta; ✓ verde do adapter quando
+     * isWatched). Toque = a MESMA abertura que a grade plana da TV
+     * já usa p/ estes ficheiros (openFile). Sem vídeos directos:
+     * fileira e botão "Assistir do Início" escondidos. Só TV — fora
+     * dela a função sai sem tocar em nada. Sem rede: tudo sai de
+     * [files] (a listagem já carregada) + SessionManager.
+     */
+    private fun setupTvLessonsRail(files: List<FileItem>) {
+        if (!TvUtils.isTv(this)) return
+        val rail = findViewById<RecyclerView>(R.id.tvLessonsRail) ?: return
+        val label = findViewById<TextView>(R.id.tvLessonsLabel)
+        val fromStart = findViewById<View>(R.id.btnFromStart)
+        val videos = files.filter { it.isVideo || it.isAudio }
+        if (videos.isEmpty()) {
+            label?.visibility = View.GONE
+            rail.visibility = View.GONE
+            fromStart?.visibility = View.GONE
+            return
+        }
+        fromStart?.visibility = View.VISIBLE
+        val sm = SessionManager.get(this)
+        val courseName = Format.extractCourseName(currentPath)
+        // Item do resume DESTA pasta: o recent com maior progresso
+        // cujo folderPath é exactamente a pasta aberta.
+        val resumeName = sm.getRecents()
+            .filter { it.folderPath == currentPath && sm.hasResume(it.folderPath, it.videoName) }
+            .maxByOrNull { sm.getResumeProgress(it.folderPath, it.videoName) }
+            ?.videoName
+        val items = videos.mapIndexed { idx, file ->
+            val dur = sm.getResumeDuration(currentPath, file.name)
+            val watched = sm.isWatched(currentPath, file.name)
+            val parts = mutableListOf("Aula ${idx + 1}")
+            if (dur > 0) parts.add(Format.mmss(dur))
+            if (file.name == resumeName) parts.add("Assistindo agora")
+            else if (watched) parts.add("Assistido")
+            RailItem(
+                title = file.name,
+                displayTitle = Format.lessonDisplayTitle(file.name, courseName),
+                subtitle = parts.joinToString(" · "),
+                icon = "🎥",
+                hasProgress = sm.hasResume(currentPath, file.name),
+                progress = sm.getResumeProgress(currentPath, file.name),
+                isWatched = watched,
+                hasResume = sm.hasResume(currentPath, file.name),
+                thumbnailUrl = file.thumbnailLink,
+                file = file.copy(folderPath = currentPath)
+            )
+        }
+        label?.visibility = View.VISIBLE
+        rail.visibility = View.VISIBLE
+        val existing = tvLessonsAdapter
+        if (existing == null) {
+            rail.layoutManager =
+                LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+            rail.addItemDecoration(RailGutterDecoration(8))
+            val adapter = RailAdapter(
+                items,
+                whiteFocusRing = true,
+                tvCardBaseDp = 340f
+            ) { item ->
+                val file = allFiles.firstOrNull { it.name == item.title }
+                    ?: return@RailAdapter
+                openFile(file)
+            }
+            tvLessonsAdapter = adapter
+            rail.adapter = adapter
+        } else {
+            existing.updateItems(items)
+        }
     }
 
     /** "Continue de onde parou" (per-drive recents) — igual ao v2.2.0. */
@@ -952,6 +1062,14 @@ class DetailActivity : AppCompatActivity() {
                 }
             }
             val sm = SessionManager.get(this@DetailActivity)
+            // 2.7.52 — vídeos DIRECTOS da pasta (SPEC §4): total e
+            // assistidos, p/ a linha "X de Y aulas concluídas" do
+            // cabeçalho TV e p/ a fileira de aulas. Sem rede extra:
+            // conta-se sobre a listagem que já chegou.
+            tvDirectTotal = files.count { it.isVideo || it.isAudio }
+            tvDirectWatched = files.count {
+                (it.isVideo || it.isAudio) && sm.isWatched(currentPath, it.name)
+            }
             if (folderCount == 0) {
                 updateProgressChip(files)
             } else {
@@ -962,6 +1080,10 @@ class DetailActivity : AppCompatActivity() {
             }
             // R22 UI: linha do curso da TV (no-op no celular).
             syncTvCourseLine()
+
+            // 2.7.52 — fileira de aulas da TV + visibilidade do
+            // botão "Assistir do Início" (no-op fora da TV).
+            setupTvLessonsRail(files)
 
             // Resumo: descrição gerada / provisória / branco (00:21).
             loadLessonDescription(files)
@@ -1420,6 +1542,19 @@ class DetailActivity : AppCompatActivity() {
     private fun syncTvCourseLine() {
         val line = findViewById<TextView>(R.id.tvCourseLine) ?: return
         val bar = findViewById<ProgressBar>(R.id.tvCourseProgress) ?: return
+        // 2.7.52 — com vídeos DIRECTOS na pasta, a linha é a do
+        // conceito (SPEC §4): "Progresso do curso • X de Y aulas
+        // concluídas • Z%", contada nos filhos directos (os mesmos
+        // dados da fileira de aulas). Sem vídeos directos (pasta de
+        // curso), fica o texto dos chips, como até aqui.
+        if (tvDirectTotal > 0) {
+            val pct = tvDirectWatched * 100 / tvDirectTotal
+            line.text = "Progresso do curso • $tvDirectWatched de $tvDirectTotal aulas concluídas • $pct%"
+            bar.progress = pct
+            line.visibility = View.VISIBLE
+            bar.visibility = View.VISIBLE
+            return
+        }
         val count = binding.chipCount.text?.toString().orEmpty()
         val progress = binding.chipProgress.text?.toString().orEmpty()
         val aulas = count.substringBefore(" · ").trim()
