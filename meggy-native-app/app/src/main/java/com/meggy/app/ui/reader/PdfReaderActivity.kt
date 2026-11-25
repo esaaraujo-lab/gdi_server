@@ -30,7 +30,6 @@ import com.meggy.app.data.AiService
 import com.meggy.app.data.ApiService
 import com.meggy.app.databinding.ActivityPdfReaderBinding
 import com.meggy.app.ui.home.HomeActivity
-import com.meggy.app.ui.mylist.MyListActivity
 import com.meggy.app.ui.search.SearchActivity
 import com.meggy.app.ui.settings.SettingsActivity
 import com.meggy.app.util.FileDownloader
@@ -170,8 +169,9 @@ class PdfReaderActivity : AppCompatActivity() {
             binding.bottomNav.setOnItemSelectedListener { item ->
                 when (item.itemId) {
                     R.id.nav_home -> { startActivity(Intent(this, HomeActivity::class.java)); true }
-                    R.id.nav_search -> { startActivity(Intent(this, SearchActivity::class.java)); true }
-                    R.id.nav_mylist -> { startActivity(Intent(this, MyListActivity::class.java)); true }
+                    R.id.nav_drives -> { val i = Intent(this, HomeActivity::class.java); i.putExtra(HomeActivity.EXTRA_SCROLL_TO_DRIVES, true); startActivity(i); true }
+                    R.id.nav_simulados -> { HomeActivity.openSimulados(this); true }
+                    R.id.nav_meggy -> { startActivity(Intent(this, SearchActivity::class.java)); true }
                     R.id.nav_settings -> { startActivity(Intent(this, SettingsActivity::class.java)); true }
                     else -> false
                 }
