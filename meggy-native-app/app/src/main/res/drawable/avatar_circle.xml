@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  2.7.55 — fundo oval do avatar do header TV (carinha da Meggy).
+  Serve de outline p/ o clipToOutline do ImageView headerAvatar:
+  o GradientDrawable oval define o contorno e a foto é recortada
+  em círculo. O preenchido rosa só aparece num eventual rebordo
+  sub-pixel — a foto (opaca) cobre o resto.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="@color/md_primary" />
+</shape>
