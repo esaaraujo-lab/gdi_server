@@ -31,9 +31,11 @@
     <!-- ── Tipo (TV) ── -->
     <dimen name="tv_title_lg">30sp</dimen>
     <dimen name="tv_title_md">22sp</dimen>
-    <dimen name="tv_section_title">18sp</dimen>
-    <dimen name="tv_card_title">13sp</dimen>
-    <dimen name="tv_card_meta">10.5sp</dimen>
+    <!-- 2.7.56 — escala tipográfica da proposta Plex (aprovada
+         2026-11-25): detalhe 30 / seção 20 / cartão 15 / metadados 13. -->
+    <dimen name="tv_section_title">28sp</dimen>
+    <dimen name="tv_card_title">15sp</dimen>
+    <dimen name="tv_card_meta">13sp</dimen>
     <dimen name="tv_body">13sp</dimen>
     <dimen name="tv_body_lg">14sp</dimen>
     <dimen name="tv_chip_text">12sp</dimen>
@@ -42,8 +44,11 @@
 
     <!-- ── Overscan / margens (TV) ── -->
     <dimen name="tv_margin_side">56dp</dimen>
-    <dimen name="tv_margin_top">40dp</dimen>
-    <dimen name="tv_margin_bottom">40dp</dimen>
+    <!-- 2.7.56 — topo/fundo alinhados ao piso de overscan de 48dp
+         (a home já aplicava >=48dp em runtime via TvAutoFit; o
+         detalhe usava estes dimens directamente e ficava a 40dp). -->
+    <dimen name="tv_margin_top">48dp</dimen>
+    <dimen name="tv_margin_bottom">48dp</dimen>
     <dimen name="tv_section_spacing">26dp</dimen>
     <dimen name="tv_rail_spacing">12dp</dimen>
 
