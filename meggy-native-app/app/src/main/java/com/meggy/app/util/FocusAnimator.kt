@@ -71,15 +71,26 @@ object FocusAnimator {
         ringColorRes: Int = R.color.tile_focus_ring,
         ringWidthDp: Float = 3f
     ) {
+        // 2.7.56 (B14 da proposta Plex) — sinal de foco UNIFORME na
+        // TV: quem chama com os valores por omissão (anel rosa 3dp)
+        // passa a anel BRANCO 4dp na TV — o mesmo dos Tiles e do
+        // "Continue assistindo" (8,0–10,8:1 sobre qualquer fundo,
+        // contra 3,6–4,5:1 do rosa). Quem passa anel explícito
+        // (branco 4dp) não muda; no celular nada muda.
+        val effectiveRingColorRes =
+            if (isTv && ringColorRes == R.color.tile_focus_ring) R.color.tile_focus_ring_white
+            else ringColorRes
+        val effectiveRingWidthDp =
+            if (isTv && ringColorRes == R.color.tile_focus_ring) 4f else ringWidthDp
         val scale = if (isTv) (scaleTv ?: SCALE_TV) else SCALE_PHONE
         val elevDp = if (isTv) ELEV_TV_DP else ELEV_PHONE_DP
         val density = card.resources.displayMetrics.density
-        val ringColor = ContextCompat.getColor(card.context, ringColorRes)
+        val ringColor = ContextCompat.getColor(card.context, effectiveRingColorRes)
         val focusedBg = ContextCompat.getColor(card.context, R.color.tile_bg_focused)
         val normalBg = ContextCompat.getColor(card.context, R.color.tile_bg)
         card.setOnFocusChangeListener { v, hasFocus ->
             animate(v, hasFocus, scale, elevDp * density)
-            card.strokeWidth = ((if (hasFocus) ringWidthDp else 0f) * density).toInt()
+            card.strokeWidth = ((if (hasFocus) effectiveRingWidthDp else 0f) * density).toInt()
             card.strokeColor = ringColor
             card.setCardBackgroundColor(if (hasFocus) focusedBg else normalBg)
         }

@@ -218,6 +218,31 @@ object TvAutoFit {
     fun forContext(context: Context): Fit = forContext(context, 0f)
 
     /**
+     * 2.7.56 — span da grade de Tiles da TV derivado da LARGURA ÚNICA
+     * do tile (proposta Plex, aprovada 2026-11-25): tile de 152dp +
+     * gutter de 10dp (GridGutterDecoration(10) de todas as grades do
+     * FileAdapter); a largura útil é o viewport menos as margens de
+     * overscan (56dp × 2) e menos [extraInsetDp] (o padding próprio
+     * da lista — ex.: 16dp × 2 na grade do detalhe). A 1080p
+     * (960dp): (848+10)/162 = 5 colunas — o mesmo número no Browse e
+     * no detalhe, e é ESTE span que se passa ao TileColors.assign
+     * (vizinhos certos). Clamp [3, 8] para painéis fora do comum.
+     */
+    fun gridSpanForTile(
+        context: Context,
+        tileWidthDp: Float = 152f,
+        gapDp: Float = 10f,
+        extraInsetDp: Float = 0f
+    ): Int {
+        val dm = context.resources.displayMetrics
+        val widthDp = dm.widthPixels / dm.density
+        // 56dp = @dimen/tv_margin_side (a margem de overscan real das
+        // telas de grade; MIN_SIDE_MARGIN_DP é o piso de 48dp do Fit).
+        val usable = widthDp - 2 * 56f - extraInsetDp
+        return ((usable + gapDp) / (tileWidthDp + gapDp)).toInt().coerceIn(3, 8)
+    }
+
+    /**
      * Matematica pura da escala (testavel sem Android — ver verify-B.py).
      * `density` e o factor dp->px; `xdpi`/`ydpi` sao os dpi fisicos
      * reportados (muitas TVs retornam o bucket em vez do valor fisico —
