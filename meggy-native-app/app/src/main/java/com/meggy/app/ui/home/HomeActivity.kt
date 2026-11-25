@@ -1115,7 +1115,7 @@ class HomeActivity : AppCompatActivity() {
         }
         panel.visibility = View.VISIBLE
         week.text = UserStateSync.formatWeekHours(agg.weekMinutes)
-        streak.text = if (agg.streakDays == 1) "1 dia" else "${agg.streakDays} dias"
+        streak.text = if (agg.streak == 1) "1 dia" else "${agg.streak} dias"
     }
 
     /**
