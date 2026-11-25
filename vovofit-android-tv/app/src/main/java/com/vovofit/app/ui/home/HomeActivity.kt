@@ -43,6 +43,7 @@ import com.vovofit.app.util.AdminDriveUi
 import com.vovofit.app.util.DriveRailItem
 import com.vovofit.app.util.PlaylistManager
 import com.vovofit.app.util.SessionManager
+import com.vovofit.app.util.ResumeSync
 import com.vovofit.app.util.TapFeedback
 import com.vovofit.app.util.Format
 import com.vovofit.app.util.LessonDescription
@@ -227,6 +228,34 @@ class HomeActivity : AppCompatActivity() {
         fetchAdminDrives()
         setupTvFocusChains()
         applyTvAutoFit()
+        // 1.0.39 — import do progresso do servidor (GET /userstate);
+        // o mesmo import também corre ao voltar à Home
+        // (ver launchUserStateImport).
+        launchUserStateImport()
+    }
+
+    /**
+     * 1.0.39 — import do progresso do servidor (GET /userstate):
+     * alimenta recents/resume/assistido locais. Best-effort, em 2º
+     * plano; ao terminar, refrescam-se as seções que leem esses
+     * dados. Sem rede/D1, fica tudo como estava e o próximo
+     * arranque tenta outra vez.
+     * Corre no onCreate E ao voltar à Home (onResume): o progresso
+     * feito noutro aparelho enquanto a app estava aberta passa a
+     * aparecer sem reiniciar. Sem duplicar imports em curso: a
+     * guarda do ResumeSync salta o GET se um import já estiver
+     * a correr (nesse caso, é o refresh desse import que actualiza
+     * as seções quando ele termina).
+     */
+    private fun launchUserStateImport() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            ResumeSync.importOnStartup(this@HomeActivity)
+            withContext(Dispatchers.Main) {
+                if (isFinishing || isDestroyed) return@withContext
+                setupContinueRail()
+                setupTvFocusChains()
+            }
+        }
     }
 
 
@@ -372,6 +401,11 @@ class HomeActivity : AppCompatActivity() {
         // em destaque pode ter aparecido entretanto.
         setupContinueRail()
         setupTvFocusChains()
+        // 1.0.39 — o import do servidor também corre ao voltar: o
+        // progresso gravado noutro aparelho (site/desktop/TV)
+        // enquanto a app estava aberta entra sem reiniciar. Sem
+        // duplicar um import em curso (guarda no ResumeSync).
+        launchUserStateImport()
         // Ronda 10 Frente C — re-busca os drives do admin ao
         // voltar: o remover da Frente B faz o tile sumir sem
         // reiniciar o app.
