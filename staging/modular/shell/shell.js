@@ -1774,17 +1774,28 @@
         pl.forEach(v => { const o = v.origName || v.name; counts[o] = (counts[o] || 0) + 1; });
         pl.forEach(v => { const o = v.origName || v.name; if (counts[o] > 1 && v.folder && v.name === o) v.name = v.folder + ' - ' + o; });
 
-        let resumePos = 0;
-        try {
-          if (typeof GDIUser !== 'undefined' && GDIUser && GDIUser.state && GDIUser.state.resume) {
-            // ★ v2.15.76: 1.º pelo PATH da aula (chave canónica),
-            //   2.º pela chave-URL antiga (migração); aceita a forma
-            //   real {t,d,at} — a leitura antiga só aceitava número
-            //   ou .pos, e a forma gravada é {t,…} → nunca retomava.
-            const _pick = (v) => (typeof v === 'number') ? v : (v && typeof v.t === 'number') ? v.t : (v && v.pos) ? v.pos : 0;
-            resumePos = _pick(GDIUser.state.resume[lessonPath]) || _pick(GDIUser.state.resume[videoUrl]);
-          }
-        } catch (e) {}
+        // ★ v2.15.98: identidade MUTÁVEL da aula aberta — o switchTo
+        //   (Próxima/Anterior/playlist/fim do vídeo) actualiza estas
+        //   variáveis, p/ a página passar a ser a da aula nova. Antes
+        //   ficavam congeladas na aula da abertura: o breadcrumb, os
+        //   materiais e as questões não mudavam, o progresso/histórico
+        //   gravava na aula errada e o player retomava a posição da
+        //   aula anterior. O picker de retoma é o da abertura (.76:
+        //   1.º pelo PATH canónico, 2.º pela chave-URL antiga; aceita
+        //   a forma real {t,d,at}) — agora reutilizável pelo switchTo.
+        let curLessonPath = lessonPath;
+        let curVideoUrl = videoUrl;
+        let curLessonName = name;
+        const _pickResume21598 = (p, u) => {
+          try {
+            if (typeof GDIUser !== 'undefined' && GDIUser && GDIUser.state && GDIUser.state.resume) {
+              const _pick = (v) => (typeof v === 'number') ? v : (v && typeof v.t === 'number') ? v.t : (v && v.pos) ? v.pos : 0;
+              return _pick(GDIUser.state.resume[p]) || _pick(GDIUser.state.resume[u]) || 0;
+            }
+          } catch (e) {}
+          return 0;
+        };
+        let resumePos = _pickResume21598(lessonPath, videoUrl);
 
         if (main._cleanupKeyboard) { main._cleanupKeyboard(); main._cleanupKeyboard = null; }
         Shell.state.currentView = 'player';
@@ -1969,22 +1980,22 @@
           const now = Date.now();
           if (now - lastSave < 5000) return;
           lastSave = now;
-          try { window.GDIUser?.setResume?.(videoUrl, video.currentTime, video.duration || 0); } catch (e) {}
+          try { window.GDIUser?.setResume?.(curVideoUrl, video.currentTime, video.duration || 0); } catch (e) {}
           // ★ v2.15.76: grava TAMBÉM pelo path canónico + empurra o
           //   histórico com minutos — sem isto, NENHUM evento de
           //   histórico nascia das aulas vistas na web (Continue
           //   congelado, admin sem eventos de hoje, minutos a 0).
-          if (lessonPath && lessonPath !== videoUrl) {
-            try { window.GDIUser?.setResume?.(lessonPath, video.currentTime, video.duration || 0); } catch (e) {}
-            try { window.GDIUser?.pushHistory?.(lessonPath, name, Math.floor((video.currentTime || 0) / 60)); } catch (e) {}
+          if (curLessonPath && curLessonPath !== curVideoUrl) {
+            try { window.GDIUser?.setResume?.(curLessonPath, video.currentTime, video.duration || 0); } catch (e) {}
+            try { window.GDIUser?.pushHistory?.(curLessonPath, curLessonName, Math.floor((video.currentTime || 0) / 60)); } catch (e) {}
           }
           // ★ v2.15.76: grava TAMBÉM pelo path canónico + empurra o
           //   histórico com minutos — sem isto, NENHUM evento de
           //   histórico nascia das aulas vistas na web (Continue
           //   congelado, admin sem eventos de hoje, minutos a 0).
-          if (lessonPath && lessonPath !== videoUrl) {
-            try { window.GDIUser?.setResume?.(lessonPath, video.currentTime, video.duration || 0); } catch (e) {}
-            try { window.GDIUser?.pushHistory?.(lessonPath, name, Math.floor((video.currentTime || 0) / 60)); } catch (e) {}
+          if (curLessonPath && curLessonPath !== curVideoUrl) {
+            try { window.GDIUser?.setResume?.(curLessonPath, video.currentTime, video.duration || 0); } catch (e) {}
+            try { window.GDIUser?.pushHistory?.(curLessonPath, curLessonName, Math.floor((video.currentTime || 0) / 60)); } catch (e) {}
           }
         };
 
@@ -2011,11 +2022,66 @@
           video.addEventListener('ended', () => { if (idx < pl.length - 1) switchTo(idx + 1); });
         }
 
+        // ★ v2.15.98: reconstrói o breadcrumb p/ a aula dada (a MESMA
+        //   construção da abertura em _playVideoInline) e religa os
+        //   cliques das pastas — o switchTo chama-o com a pasta e o
+        //   nome da aula nova.
+        function _renderBreadcrumb21598(bcFolderPath, bcName) {
+          const bcEl = document.querySelector('.gdi-bc');
+          if (!bcEl) return;
+          const parts = (bcFolderPath || '').split('/').filter(Boolean);
+          let html = '<li><a href="/" data-nav="/" data-bc-type="home">Home</a></li><li class="gdi-bc-sep">/</li>';
+          let cumPath = '';
+          for (let i = 0; i < parts.length; i++) {
+            cumPath += '/' + parts[i];
+            const label = parts[i].match(/^\d+:$/) ? (window.drive_names?.[+parts[i].slice(0,-1)] || parts[i]) : (function(){ try { return decodeURIComponent(parts[i]); } catch (_) { return parts[i]; } })();
+            const short = label.length > 20 ? label.slice(0,17) + '…' : label;
+            const encoded = cumPath.split('/').map((s, si) => {
+              if (si === 0) return '';
+              let _d = s; try { _d = decodeURIComponent(s); } catch (_) {}
+              return /^\d+:$/.test(_d) ? _d : encodeURIComponent(_d);
+            }).join('/');
+            html += `<li><a href="${encoded}/" data-nav="${cumPath}/" data-bc-type="folder">${short}</a></li><li class="gdi-bc-sep">/</li>`;
+          }
+          html += `<li class="gdi-bc-cur">${bcName.length > 20 ? bcName.slice(0,17)+'…' : bcName}</li>`;
+          bcEl.innerHTML = html;
+          bcEl.querySelectorAll('a[data-nav]').forEach(a => {
+            a.onclick = (e) => {
+              e.preventDefault();
+              if (a.dataset.bcType === 'home') Shell.router.navigate('/');
+              else { Shell.router.navigate('/drives'); setTimeout(() => Shell.views._renderDrives(a.dataset.nav), 50); }
+            };
+          });
+        }
+
         function switchTo(newIdx) {
           if (newIdx < 0 || newIdx >= pl.length) return;
           const v = pl[newIdx];
           idx = newIdx;
           Shell.state.playerIndex = idx;
+          // ★ v2.15.98: a página passa a ser a da aula NOVA — a
+          //   identidade actualiza ANTES de trocar o src: pasta actual
+          //   (a regra do resolveOpenLesson p/ listas Interfolder:
+          //   troca o último segmento da pasta da abertura pela pasta
+          //   do item), path canónico (nome cru, como na abertura),
+          //   URL e nome correntes, e a retoma DESTA aula (o handler
+          //   de loadedmetadata lê resumePos — sem isto aplicava a
+          //   posição da aula anterior ao vídeo novo).
+          const _bare21598 = (v && (v.origName || v.name)) || '';
+          const _seg21598 = (v && (v.folder || v.folderLabel)) || '';
+          let _folder21598 = folderPath || '';
+          if (_seg21598) {
+            const _segs21598 = _folder21598.split('/').filter(Boolean);
+            let _last21598 = '';
+            try { _last21598 = decodeURIComponent(_segs21598[_segs21598.length - 1] || ''); } catch (_) { _last21598 = _segs21598[_segs21598.length - 1] || ''; }
+            if (_last21598 !== _seg21598) _folder21598 = '/' + _segs21598.slice(0, -1).join('/') + '/' + encodeURIComponent(_seg21598) + '/';
+          }
+          Shell.state.currentFolderPath = _folder21598;
+          curVideoUrl = v.link.startsWith('http') ? v.link : (window.location.origin + v.link);
+          curLessonPath = (v.link && v.link.charAt(0) === '/' && v.link.indexOf(':/') > 0) ? v.link : (_folder21598.indexOf(':/') > 0 ? _folder21598.replace(/\/?$/, '/') + encodeURIComponent(_bare21598) : '');
+          curLessonName = _bare21598;
+          resumePos = _pickResume21598(curLessonPath, curVideoUrl);
+          _renderBreadcrumb21598(_folder21598, v.name || _bare21598);
           video.src = v.link.startsWith('http') ? v.link : (window.location.origin + v.link);
           video.play().catch(() => {});
           document.getElementById('gdi-file-header-name').textContent = v.name;
@@ -2030,6 +2096,11 @@
           document.getElementById('gdi-prev-btn').disabled = idx === 0;
           document.getElementById('gdi-next-btn').disabled = idx >= pl.length - 1;
           updateLessonDescription();
+          // ★ v2.15.98: recarrega os materiais e o pacote da aula
+          //   nova — o loadMaterials lê Shell.state.currentFolderPath
+          //   (já actualizado) e repõe o painel: o conteúdo gerado da
+          //   aula anterior sai com o reset das abas e do corpo.
+          try { loadMaterials(); } catch (_) {}
           main.scrollTop = 0;
         }
 
@@ -2067,7 +2138,7 @@
           this.classList.toggle('done', !w);
           this.setAttribute('aria-pressed', String(!w));
           this.innerHTML = !w ? '<i class="bi bi-eye-fill"></i> Assistida ✓' : '<i class="bi bi-eye"></i> Assistido';
-          try { const _wk = lessonPath || videoUrl; if (!w) window.GDIUser?.markWatched?.(_wk); else window.GDIUser?.unmarkWatched?.(_wk); } catch (e) {}  // ★ v2.15.76: setWatched NÃO existe em GDIUser (o clique era um no-op); marca pelo path da aula
+          try { const _wk = curLessonPath || curVideoUrl; if (!w) window.GDIUser?.markWatched?.(_wk); else window.GDIUser?.unmarkWatched?.(_wk); } catch (e) {}  // ★ v2.15.76: setWatched NÃO existe em GDIUser (o clique era um no-op); marca pelo path da aula
         };
 
         document.getElementById('gdi-prev-btn').onclick = () => { if (idx > 0) switchTo(idx - 1); };
@@ -2263,6 +2334,12 @@
             document.getElementById('gdi-playlist-list').innerHTML = pl.map((v, i) => `<div class="gdi-playlist-item ${i === idx ? 'cur' : ''}" data-idx="${i}" title="${v.name}" role="button" tabindex="0" aria-label="Reproduzir ${v.name}" style="display:flex;justify-content:space-between;align-items:center;padding:12px 10px;border-radius:6px;cursor:pointer;font-size:12px;color:${i === idx ? '#ff8b9f' : '#9aa4b8'};${i === idx ? 'background:rgba(255,139,159,0.12);' : ''}"><div style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><i class="bi ${i === idx ? 'bi-play-fill' : 'bi-film'} me-2"></i><span style="font-weight:${i === idx ? '600' : '400'};">${v.name}</span></div><span class="gdi-pl-size" style="font-size:10px;color:#6b7488;margin-left:8px;">${v.size || ''}</span></div>`).join('');
             plCountEl.textContent = `${idx + 1} / ${pl.length}`;
             document.querySelectorAll('.gdi-playlist-item').forEach(item => { item.onclick = () => { const i = parseInt(item.dataset.idx); if (i !== idx) switchTo(i); }; item.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); item.click(); } }; });
+            // ★ v2.15.98: os botões Anterior/Próxima nasceram com o
+            //   disabled da playlist inicial (1 vídeo) e a coleta não
+            //   o actualizava — a Próxima ficava morta com a lista
+            //   cheia até ao primeiro switchTo manual. // _ifBtns21598
+            document.getElementById('gdi-prev-btn').disabled = idx === 0;
+            document.getElementById('gdi-next-btn').disabled = idx >= pl.length - 1;
             if (_ifStatus) _ifStatus.textContent = '✓ ' + pl.length + ' aulas'; // ★ v2.15.10-E4-interfolder-fim-span (era btn.innerHTML — o botão continua "Interfolder", ver E2)
           } catch (e) {
             console.error(e);
