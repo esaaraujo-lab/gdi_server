@@ -6,6 +6,7 @@ import android.view.ViewGroup
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.meggy.app.R
@@ -468,13 +469,26 @@ class LessonListAdapter(
  */
 class LessonGridAdapter(
     private val onPlayLesson: (LessonGroup) -> Unit,
-    private val onOpenLesson: (LessonGroup) -> Unit
+    private val onOpenLesson: (LessonGroup) -> Unit,
+    /**
+     * 2.7.56 (B5) — span REAL da grade onde o adapter vive (a
+     * DetailActivity passa o derivado do tile de 152dp; 2 = o
+     * tablet de sempre). O TileColors.assign tem de receber este
+     * span: com o 2 fixo antigo, numa grade de 4/5 colunas os
+     * vizinhos de cima repetiam cor.
+     */
+    private val gridSpan: Int = 2,
+    /**
+     * 2.7.56 (B4) — alvo do UP da 1.ª linha (a DetailActivity passa
+     * a vista visível acima da grade; na TV a aba Aulas está gone).
+     */
+    private val firstRowNextFocusUpId: Int = R.id.tabAulas
 ) : RecyclerView.Adapter<LessonGridAdapter.VH>() {
 
     private val groups = mutableListOf<LessonGroup>()
 
-    // Ronda 27 — cor fixa da área do nome (TileColors; span 2 fixo
-    // no DetailActivity). Recalculada a cada submit, na ordem da
+    // Ronda 27 — cor fixa da área do nome (TileColors; span = o da
+    // grade, ver gridSpan). Recalculada a cada submit, na ordem da
     // lista filtrada — vizinhos (lado e abaixo) sempre diferentes.
     private var tileColors: List<Int> = emptyList()
 
@@ -492,8 +506,8 @@ class LessonGridAdapter(
         })
         groups.clear()
         groups.addAll(newGroups)
-        // Ronda 27 — cores da lista nova (ordem filtrada; span 2).
-        tileColors = TileColors.assign(groups.map { it.folderPath }, 2)
+        // Ronda 27 — cores da lista nova (ordem filtrada; span real).
+        tileColors = TileColors.assign(groups.map { it.folderPath }, gridSpan)
         diff.dispatchUpdatesTo(this)
     }
 
@@ -540,17 +554,25 @@ class LessonGridAdapter(
     }
 
     /**
-     * Frente A (TV) — UP da 1ª linha da grade (span 2 fixo no
-     * DetailActivity) volta à aba Aulas. Sem isto, UP da 1ª linha
-     * cai no FocusFinder, que ignora as abas quando a grade rolou.
+     * Frente A (TV) — UP da 1ª linha da grade volta ao alvo que a
+     * DetailActivity indicar. Sem isto, UP da 1ª linha cai no
+     * FocusFinder, que ignora as abas quando a grade rolou.
      * Em onViewAttachedToWindow (ver FileAdapter): o prefetch pode
      * ligar o VH sem pai e a posição só é fiável quando anexado.
+     * 2.7.56 (B4) — a "1.ª linha" é o span REAL da grade (lido do
+     * LayoutManager do pai, como no FileAdapter; fallback gridSpan):
+     * com o `pos < 2` fixo antigo, as colunas 3–5 de uma grade de
+     * 4/5 não tinham rota de subida — e o alvo (aba Aulas) está
+     * gone na TV.
      */
     override fun onViewAttachedToWindow(holder: VH) {
         super.onViewAttachedToWindow(holder)
         val pos = holder.bindingAdapterPosition
         if (pos == RecyclerView.NO_POSITION) return
-        holder.itemView.nextFocusUpId = if (pos < 2) R.id.tabAulas else View.NO_ID
+        val span = (holder.itemView.parent as? RecyclerView)?.layoutManager
+            ?.let { it as? GridLayoutManager }?.spanCount ?: gridSpan
+        holder.itemView.nextFocusUpId =
+            if (pos < span) firstRowNextFocusUpId else View.NO_ID
     }
 
     override fun onBindViewHolder(holder: VH, position: Int) {
@@ -561,7 +583,7 @@ class LessonGridAdapter(
         // Ronda 27 — rede de segurança: o submit() já calcula as
         // cores; se a lista mudou sem passar por ele, recalcula.
         if (tileColors.size != groups.size) {
-            tileColors = TileColors.assign(groups.map { it.folderPath }, 2)
+            tileColors = TileColors.assign(groups.map { it.folderPath }, gridSpan)
         }
         val video = group.children?.firstOrNull { it.isVideo || it.isAudio }
         // Ronda 17 Frente B — ver groupProgress: fração

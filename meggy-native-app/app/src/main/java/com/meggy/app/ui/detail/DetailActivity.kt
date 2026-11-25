@@ -383,6 +383,12 @@ class DetailActivity : AppCompatActivity() {
             FocusAnimator.attach(binding.heroPlayFab, true)
             FocusAnimator.attach(binding.heroFav, true)
             FocusAnimator.attach(binding.headerSearch, true)
+            // 2.7.56 (B7) — o CTA primário não tinha FocusAnimator:
+            // só o anel do fundo (btn_cta_gradient). Passa a ter o
+            // tratamento completo e uniforme da TV (anel branco 4dp
+            // do fundo + escala densa + elevação), igual ao botão
+            // secundário ao lado.
+            FocusAnimator.attach(binding.ctaContinue, true, scaleTv = FocusAnimator.SCALE_TV_DENSE)
             // R22 UI (conceito "detalhe TV"): botão "Ver questões da
             // disciplina" do painel esquerdo — só existe no
             // layout-television; selecciona a aba de questões que já
@@ -398,7 +404,11 @@ class DetailActivity : AppCompatActivity() {
             // setupTvLessonsRail.
             findViewById<View>(R.id.btnFromStart)?.let { btn ->
                 btn.setOnClickListener { playFirstVideo() }
-                FocusAnimator.attach(btn, true, scaleTv = FocusAnimator.SCALE_TV_NONE)
+                // 2.7.56 (B7) — escala densa como o CTA (era
+                // SCALE_TV_NONE: dois botões vizinhos com dois
+                // tratamentos de foco diferentes); o anel branco
+                // 4dp vem do fundo (chip_outline com estado focado).
+                FocusAnimator.attach(btn, true, scaleTv = FocusAnimator.SCALE_TV_DENSE)
             }
         }
 
@@ -611,7 +621,15 @@ class DetailActivity : AppCompatActivity() {
                 // num regresso normal, sem focar a aba escondida.
                 restoreDetailFocusOnResume()
             } else if (isFirstResume) {
-                if (binding.railContinue.visibility == View.VISIBLE) {
+                // 2.7.56 (B6) — foco inicial no CTA PRIMÁRIO: com a
+                // faixa visível (página de aula), a 1.ª abertura foca
+                // o "Continuar Assistindo"; sem faixa (pasta
+                // intermédia), mantém-se o 1.º cartão do rail
+                // Continuar, como antes.
+                val heroCard = findViewById<View>(R.id.heroCard)
+                if (heroCard != null && heroCard.visibility == View.VISIBLE) {
+                    binding.ctaContinue.post { binding.ctaContinue.requestFocus() }
+                } else if (binding.railContinue.visibility == View.VISIBLE) {
                     binding.railContinue.post {
                         binding.railContinue.findViewHolderForAdapterPosition(0)
                             ?.itemView?.requestFocus()
@@ -783,12 +801,35 @@ class DetailActivity : AppCompatActivity() {
         val label = findViewById<TextView>(R.id.tvLessonsLabel)
         val fromStart = findViewById<View>(R.id.btnFromStart)
         val videos = files.filter { it.isVideo || it.isAudio }
+        // 2.7.56 (B3 da proposta Plex) — a faixa-backdrop de 200dp
+        // só existe onde a pasta tem vídeos directos (página de
+        // aula): pasta intermédia (só subpastas) fica SEM faixa, a
+        // qualquer profundidade. A visibilidade decide-se aqui, que
+        // é onde os vídeos directos se conhecem.
+        val heroCard = findViewById<View>(R.id.heroCard)
         if (videos.isEmpty()) {
+            heroCard?.visibility = View.GONE
+            // Se o foco estava dentro da faixa que some, ele cai
+            // para a 1.ª vista de conteúdo visível (rail Continuar
+            // ou a lupa do cabeçalho) — nunca fica órfão.
+            if (binding.ctaContinue.hasFocus() || binding.heroPlayFab.hasFocus() ||
+                binding.heroFav.hasFocus()
+            ) {
+                if (binding.railContinue.visibility == View.VISIBLE) {
+                    binding.railContinue.post {
+                        binding.railContinue.findViewHolderForAdapterPosition(0)
+                            ?.itemView?.requestFocus()
+                    }
+                } else {
+                    binding.headerSearch.requestFocus()
+                }
+            }
             label?.visibility = View.GONE
             rail.visibility = View.GONE
             fromStart?.visibility = View.GONE
             return
         }
+        heroCard?.visibility = View.VISIBLE
         fromStart?.visibility = View.VISIBLE
         val sm = SessionManager.get(this)
         val courseName = Format.extractCourseName(currentPath)
@@ -828,7 +869,9 @@ class DetailActivity : AppCompatActivity() {
             val adapter = RailAdapter(
                 items,
                 whiteFocusRing = true,
-                tvCardBaseDp = 248f
+                // 2.7.56 — largura da fileira de aulas da proposta
+                // Plex: 240dp (era 248dp da 2.7.55).
+                tvCardBaseDp = 240f
             ) { item ->
                 val file = allFiles.firstOrNull { it.name == item.title }
                     ?: return@RailAdapter
@@ -890,7 +933,11 @@ class DetailActivity : AppCompatActivity() {
         }
         binding.railContinue.adapter = RailAdapter(
             railItems,
-            nextFocusUpId = R.id.tabAulas,
+            // 2.7.56 (B4) — na TV o UP já não aponta para a aba
+            // Aulas (gone na TV — o beco): fica o roteamento
+            // geométrico (acima está a fileira de aulas/faixa). No
+            // celular mantém-se a aba, que lá é visível.
+            nextFocusUpId = if (TvUtils.isTv(this)) View.NO_ID else R.id.tabAulas,
             nextFocusDownId = R.id.recycler
         ) { item ->
             lastFocusedContinuePos = railItems.indexOf(item)
@@ -1001,7 +1048,27 @@ class DetailActivity : AppCompatActivity() {
     }
 
 
+    /**
+     * 2.7.56 (B4) — alvo do UP da 1.ª linha das grades do detalhe
+     * na TV: a vista visível mais próxima acima da grade (rail
+     * Continuar → fileira de aulas → CTA da faixa → lupa do
+     * cabeçalho). NUNCA a aba Aulas: na TV ela está gone (tabsRow)
+     * e era um beco sem saída para as colunas além da 2.ª.
+     */
+    private fun tvGridUpTargetId(): Int = when {
+        binding.railContinue.visibility == View.VISIBLE -> R.id.railContinue
+        findViewById<View>(R.id.tvLessonsRail)?.visibility == View.VISIBLE -> R.id.tvLessonsRail
+        findViewById<View>(R.id.heroCard)?.visibility == View.VISIBLE -> R.id.ctaContinue
+        else -> R.id.headerSearch
+    }
+
     private fun calculateSpanCount(): Int {
+        // 2.7.56 — TV: span derivado da largura única do tile
+        // (152dp → 5 colunas a 1080p; TvAutoFit.gridSpanForTile,
+        // o mesmo cálculo do Browse; +32dp do padding da grade).
+        if (TvUtils.isTv(this)) {
+            return com.meggy.app.util.TvAutoFit.gridSpanForTile(this, extraInsetDp = 32f)
+        }
         val displayMetrics = resources.displayMetrics
         val screenWidthDp = displayMetrics.widthPixels / displayMetrics.density
         // Ronda 27 — celular: 3 colunas (Tiles ~30% menores), igual
@@ -1154,18 +1221,50 @@ class DetailActivity : AppCompatActivity() {
                     "Arquivos"
                 }
                 if (isWide()) {
+                    val isTvHere = TvUtils.isTv(this@DetailActivity)
                     val adapter = com.meggy.app.ui.browse.FileAdapter(
                         onFolder = { file -> openFolder(file) },
                         onFile = { file -> openFile(file) },
                         // Frente A (TV): UP da 1ª linha -> aba Aulas.
-                        firstRowNextFocusUpId = R.id.tabAulas
+                        // 2.7.56 (B4): na TV a aba está gone — o alvo
+                        // é a vista visível acima da grade.
+                        firstRowNextFocusUpId = if (isTvHere) {
+                            tvGridUpTargetId()
+                        } else {
+                            R.id.tabAulas
+                        }
                     )
                     fileAdapter = adapter
                     adapter.setFolderPath(currentPath)
                     binding.recycler.layoutManager = GridLayoutManager(this@DetailActivity, calculateSpanCount())
                     binding.recycler.addItemDecoration(GridGutterDecoration(10))
                     binding.recycler.adapter = adapter
-                    adapter.submitList(files)
+                    // 2.7.56 (B11) — na TV, a fileira de aulas
+                    // SUBSTITUI a listagem dos vídeos directos: a
+                    // grade fica só com os restantes ficheiros (os
+                    // materiais), sem duplicar aula nenhuma; as
+                    // legendas nunca são Tiles (como na lista plana
+                    // do celular). Grade vazia → grade e rótulo
+                    // somem (a fileira de aulas chega). Fora da TV,
+                    // a lista é exactamente a de sempre.
+                    val gridFiles = if (isTvHere) {
+                        files.filter { file ->
+                            !file.isVideo && !file.isAudio &&
+                                !file.name.endsWith(".srt", true) &&
+                                !file.name.endsWith(".vtt", true)
+                        }
+                    } else {
+                        files
+                    }
+                    if (isTvHere && gridFiles.isEmpty()) {
+                        binding.recycler.visibility = View.GONE
+                        binding.sectionLabel.visibility = View.GONE
+                    } else {
+                        binding.recycler.visibility = View.VISIBLE
+                        binding.sectionLabel.visibility = View.VISIBLE
+                        if (isTvHere) binding.sectionLabel.text = "Arquivos"
+                    }
+                    adapter.submitList(gridFiles)
                     val resumed = files.filter { it.isVideo && sm.hasResume(currentPath, it.name) }
                         .map { it.name }.toSet()
                     val watched = files.filter { it.isVideo && sm.isWatched(currentPath, it.name) }
@@ -2219,16 +2318,28 @@ class DetailActivity : AppCompatActivity() {
             binding.recycler.removeItemDecorationAt(0)
         }
         if (isWide()) {
+            // 2.7.56 — TV: span derivado da largura única do tile
+            // (152dp → 5 colunas a 1080p; era 4 fixo na 2.7.55 e 2
+            // antes dela — os "Tiles enormes" do teste do Elton);
+            // o tablet largo (isWide sem ser TV) mantém as 2 colunas.
+            val gridSpan = if (TvUtils.isTv(this)) {
+                com.meggy.app.util.TvAutoFit.gridSpanForTile(this, extraInsetDp = 32f)
+            } else 2
             val adapter = LessonGridAdapter(
                 onPlayLesson = { group -> playLessonGroup(group) },
-                onOpenLesson = { group -> openLessonGroup(group) }
+                onOpenLesson = { group -> openLessonGroup(group) },
+                gridSpan = gridSpan,
+                // 2.7.56 (B4) — UP da 1.ª linha: na TV, a vista
+                // visível acima da grade (nunca a aba gone).
+                firstRowNextFocusUpId = if (TvUtils.isTv(this)) {
+                    tvGridUpTargetId()
+                } else {
+                    R.id.tabAulas
+                }
             )
             lessonGridAdapter = adapter
-            // 2.7.55 — TV: 4 colunas (os Tiles de 2 colunas eram
-            // enormes — fotos do Elton 2026-11-25 18:04); o tablet
-            // largo (isWide sem ser TV) mantém as 2 colunas.
             binding.recycler.layoutManager =
-                GridLayoutManager(this, if (TvUtils.isTv(this)) 4 else 2)
+                GridLayoutManager(this, gridSpan)
             binding.recycler.addItemDecoration(GridGutterDecoration(12))
             binding.recycler.adapter = adapter
             adapter.submit(lessonGroups)
