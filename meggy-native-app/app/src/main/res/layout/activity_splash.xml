@@ -1,20 +1,34 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  2.7.50 — splash ANIMADO (vídeo) por cima do splash estático de antes.
-  Raiz FrameLayout: o conteúdo estático fica por trás do vídeo e é o
-  fallback — se o vídeo falhar, o VideoView esconde-se e o estático
-  aparece (o usuário nunca vê tela preta). O vídeo é mostrado "fit"
-  (sem cortar): numa tela com proporção diferente ficam barras pretas,
-  nunca a cara da Meggy cortada.
+  2.7.51 — splash ANIMADO (vídeo) com ExoPlayer (media3), a corrigir o
+  VideoView preto da 2.7.50.
+
+  Causa da 2.7.50 (print do Elton 2026-11-25 00:27): o VideoView do sistema
+  nunca rendeu um frame no celular dele (preso no prepare, sem watchdog) e,
+  como o vídeo é 9:16 e a tela é mais alta, o VideoView mediu-se pelo
+  aspecto do vídeo e ficou mais curto que a tela — o gradiente rosa do
+  splash estático por trás vazou em baixo (faixa rosa na foto).
+
+  Esta versão fecha os dois buracos:
+  • PlayerView (ExoPlayer) em vez de VideoView — mesmo player do
+    PlayerActivity e da BiBi 2.1.40 (media3 1.2.1, já dependência do app).
+  • Raiz PRETA e PlayerView match_parent a cobrir a tela TODA — as barras
+    do resize_mode="fit" são pretas e invisíveis; o gradiente nunca vaza.
+  • O splash estático (🐩 + nome + ProgressBar) arranca GONE e só aparece
+    se o vídeo falhar (watchdog de pronto 2 s ou erro do player) — nunca
+    por trás do vídeo.
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@android:color/black"
     tools:context=".ui.splash.SplashActivity">
 
-    <!-- Splash estático (o de antes): por trás do vídeo; fallback se o vídeo falhar. -->
+    <!-- Splash estático (o de antes): GONE no arranque; fallback SE o vídeo
+         falhar (a SplashActivity põe VISIBLE nesse caso). Nunca por trás
+         do vídeo — é isto que impedia o vazamento rosa da 2.7.50. -->
     <LinearLayout
         android:id="@+id/splashStatic"
         android:layout_width="match_parent"
@@ -22,7 +36,8 @@
         android:orientation="vertical"
         android:background="@drawable/gradient_meggy"
         android:gravity="center"
-        android:padding="32dp">
+        android:padding="32dp"
+        android:visibility="gone">
 
         <TextView
             android:layout_width="wrap_content"
@@ -55,13 +70,17 @@
 
     </LinearLayout>
 
-    <!-- 2.7.50 — vídeo animado do splash (TV: splash_tv.mp4 4 s; celular:
+    <!-- 2.7.51 — vídeo animado do splash (TV: splash_tv.mp4 4 s; celular:
          splash_mobile.mp4 5 s). Sem som (os vídeos têm faixa AAC — o
-         volume é posto a 0 no onPrepared). -->
-    <VideoView
-        android:id="@+id/splashVideo"
+         volume é posto a 0 no player). Sem controller, sem buffering
+         visível — só o vídeo, a cobrir a tela toda. -->
+    <androidx.media3.ui.PlayerView
+        android:id="@+id/splashPlayer"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@android:color/black" />
+        android:background="@android:color/black"
+        app:use_controller="false"
+        app:resize_mode="fit"
+        app:show_buffering="never" />
 
 </FrameLayout>
