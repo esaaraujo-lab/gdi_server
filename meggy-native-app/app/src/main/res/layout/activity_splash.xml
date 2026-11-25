@@ -1,40 +1,67 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+  2.7.50 — splash ANIMADO (vídeo) por cima do splash estático de antes.
+  Raiz FrameLayout: o conteúdo estático fica por trás do vídeo e é o
+  fallback — se o vídeo falhar, o VideoView esconde-se e o estático
+  aparece (o usuário nunca vê tela preta). O vídeo é mostrado "fit"
+  (sem cortar): numa tela com proporção diferente ficam barras pretas,
+  nunca a cara da Meggy cortada.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="@drawable/gradient_meggy"
-    android:gravity="center"
-    android:padding="32dp">
+    android:background="@android:color/black"
+    tools:context=".ui.splash.SplashActivity">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textSize="120sp"
-        android:text="🐩" />
+    <!-- Splash estático (o de antes): por trás do vídeo; fallback se o vídeo falhar. -->
+    <LinearLayout
+        android:id="@+id/splashStatic"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:background="@drawable/gradient_meggy"
+        android:gravity="center"
+        android:padding="32dp">
 
-    <Space android:layout_width="match_parent" android:layout_height="24dp" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="120sp"
+            android:text="🐩" />
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/app_name"
-        android:textAppearance="@style/TextAppearance.Meggy.Title"
-        android:textSize="44sp" />
+        <Space android:layout_width="match_parent" android:layout_height="24dp" />
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:text="@string/app_subtitle"
-        android:textAppearance="@style/TextAppearance.Meggy.Subtitle" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/app_name"
+            android:textAppearance="@style/TextAppearance.Meggy.Title"
+            android:textSize="44sp" />
 
-    <Space android:layout_width="match_parent" android:layout_height="48dp" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/app_subtitle"
+            android:textAppearance="@style/TextAppearance.Meggy.Subtitle" />
 
-    <ProgressBar
-        android:layout_width="32dp"
-        android:layout_height="32dp"
-        android:indeterminateTint="@android:color/white" />
+        <Space android:layout_width="match_parent" android:layout_height="48dp" />
 
-</LinearLayout>
+        <ProgressBar
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:indeterminateTint="@android:color/white" />
+
+    </LinearLayout>
+
+    <!-- 2.7.50 — vídeo animado do splash (TV: splash_tv.mp4 4 s; celular:
+         splash_mobile.mp4 5 s). Sem som (os vídeos têm faixa AAC — o
+         volume é posto a 0 no onPrepared). -->
+    <VideoView
+        android:id="@+id/splashVideo"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/black" />
+
+</FrameLayout>
