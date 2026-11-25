@@ -11,8 +11,9 @@ import org.json.JSONObject
  * resume positions + recent items + favorites + user settings.
  *
  * v2.0.0 additions:
- *  • Recent items — circular list of last 8 (folder, video, timestamp)
- *    used by the "Continue assistindo" rail (was single-item before).
+ *  • Recent items — circular list of last 12 (folder, video, timestamp)
+ *    used by the "Continue assistindo" rail (was single-item before;
+ *    teto 8 até à 2.1.42, 12 desde a 2.1.43).
  *  • Favorites — JSON list of FileItem used by "Minha lista".
  *  • Settings — default playback speed, autoplay-next toggle,
  *    sleep-timer default, stored as primitives.
@@ -21,6 +22,8 @@ class SessionManager private constructor(context: Context) {
 
     private val prefs: SharedPreferences =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    private val appContext: Context = context.applicationContext
 
     // ───────── session cookie ─────────
 
@@ -203,6 +206,11 @@ class SessionManager private constructor(context: Context) {
 
     fun saveResume(folderPath: String, videoName: String, positionMs: Long) {
         prefs.edit().putLong(resumeKey(folderPath, videoName), positionMs).apply()
+        // 2.1.43 — costura do resume entre aparelhos (ProgressSync,
+        // POST /userstate/save throttled a 10 s): o servidor recebe a
+        // posição; a leitura continua local (o import do arranque
+        // alimenta estas mesmas prefs — ver UserStateSync).
+        ProgressSync.noteResumeSaved(appContext, folderPath, videoName, positionMs)
     }
 
     /**
@@ -213,13 +221,25 @@ class SessionManager private constructor(context: Context) {
      */
     fun getResume(folderPath: String, videoName: String): Long {
         val pos = prefs.getLong(resumeKey(folderPath, videoName), 0L)
-        if (pos <= 0L) return 0L
+        // 2.1.43 — a leitura continua LOCAL: as posições do servidor
+        // chegam pelo import do arranque (UserStateSync), que escreve
+        // nestas mesmas chaves. resolveResume só devolve o local.
+        if (pos <= 0L) return ProgressSync.resolveResume(folderPath, videoName, 0L)
         val dur = prefs.getLong(durKey(folderPath, videoName), 0L)
         // If we know the duration and the position is within 10s of the end,
         // treat as "finished" — return 0 so the player starts from the beginning.
         if (dur > 0L && dur - pos < 10_000L) return 0L
-        return pos
+        return ProgressSync.resolveResume(folderPath, videoName, pos)
     }
+
+    /**
+     * 2.1.43 — posição gravada SEM a regra dos 10 s do fim (valor
+     * cru). Só o import do servidor usa isto: a decisão "local > 0
+     * vence" precisa do valor guardado, não do valor já ajustado
+     * p/ leitura.
+     */
+    fun getResumeRaw(folderPath: String, videoName: String): Long =
+        prefs.getLong(resumeKey(folderPath, videoName), 0L)
 
     /**
      * v2.3.1: Uses getResume() so the ▶ continuar badge disappears when the
@@ -273,6 +293,10 @@ class SessionManager private constructor(context: Context) {
 
     fun markWatched(folderPath: String, videoName: String) {
         prefs.edit().putBoolean(watchedKey(folderPath, videoName), true).apply()
+        // 2.1.43 — o "assistido" também vai p/ o servidor (POST
+        // /userstate/save, {watched:{path:true}}), p/ o visto do
+        // curso casar entre aparelhos. Best-effort, sem bloquear.
+        ProgressSync.noteWatched(appContext, folderPath, videoName)
     }
 
     fun isWatched(folderPath: String, videoName: String): Boolean =
@@ -299,8 +323,9 @@ class SessionManager private constructor(context: Context) {
 
     // ───────── v2.0.0: Recent items (Continue Assistindo rail) ─────────
     //
-    // Circular list of last 8 watched items, stored as a JSON array.
-    // Each entry: { folder, video, ts }. Deduped by (folder, video).
+    // Circular list of last 12 watched items, stored as a JSON array
+    // (teto 8 até à 2.1.42). Each entry: { folder, video, ts }.
+    // Deduped by (folder, video).
 
     /** Adds (or moves to top) a (folder, video) entry in the recents list. */
     fun addRecent(folderPath: String, videoName: String, thumbnailLink: String? = null, link: String? = null) {
@@ -336,8 +361,8 @@ class SessionManager private constructor(context: Context) {
         // navegar para o player sem o listFolder prévio.
         if (!savedLink.isNullOrBlank()) entry.put("link", savedLink)
         newList.add(0, entry)
-        // Cap at 8
-        while (newList.size > 8) newList.removeAt(newList.size - 1)
+        // Cap at 12 (2.1.43 — paridade com a Meggy/desktop; antes 8)
+        while (newList.size > 12) newList.removeAt(newList.size - 1)
         val out = JSONArray()
         newList.forEach { out.put(it) }
         prefs.edit().putString(KEY_RECENTS, out.toString()).apply()
@@ -364,6 +389,104 @@ class SessionManager private constructor(context: Context) {
     private fun recentArray(): JSONArray {
         val raw = prefs.getString(KEY_RECENTS, null) ?: return JSONArray()
         return try { JSONArray(raw) } catch (_: Exception) { JSONArray() }
+    }
+
+    // ───────── 2.1.43: importação do servidor (UserStateSync) ─────────
+    //
+    // O GET /userstate funde-se nestas mesmas prefs, num só apply()
+    // (um aluno com muitas aulas não pode travar o arranque com um
+    // apply por chave). Regras (APK_PROGRESS_SYNC_DESIGN §5.4):
+    // resume/durations só entram quando o local é 0/ausente (o
+    // aparelho em uso tem sempre a posição mais fresca); watched é
+    // união; os recents chegam já fundidos e ordenados (locais +
+    // servidor, teto 12) e substituem a lista. As chamadas são no
+    // arranque (onCreate da Home) e ao voltar à Home (onResume,
+    // 2.1.43): a fusão lê os recents locais no momento em que corre
+    // (depois do GET), por isso um recent gravado pelo player
+    // entretanto entra na fusão; resume/watched locais nunca recuam
+    // (regras acima).
+
+    /**
+     * Funde o estado do servidor nas prefs locais, num só apply().
+     * As chaves (folder, video) já vêm na forma local (pasta com a
+     * barra final nos drives — ver UserStateSync.serverFolderToLocal).
+     */
+    fun importServerState(
+        resumeMs: Map<Pair<String, String>, Long>,
+        durationsMs: Map<Pair<String, String>, Long>,
+        watched: Set<Pair<String, String>>,
+        recents: List<RecentItem>
+    ) {
+        val editor = prefs.edit()
+        for ((key, ms) in resumeMs) {
+            if (ms <= 0L) continue
+            val (folder, video) = key
+            if (prefs.getLong(resumeKey(folder, video), 0L) == 0L) {
+                editor.putLong(resumeKey(folder, video), ms)
+            }
+        }
+        for ((key, ms) in durationsMs) {
+            if (ms <= 0L) continue
+            val (folder, video) = key
+            if (prefs.getLong(durKey(folder, video), 0L) == 0L) {
+                editor.putLong(durKey(folder, video), ms)
+            }
+        }
+        for ((folder, video) in watched) {
+            if (!prefs.getBoolean(watchedKey(folder, video), false)) {
+                editor.putBoolean(watchedKey(folder, video), true)
+            }
+        }
+        val out = JSONArray()
+        for (r in recents) {
+            val o = JSONObject()
+            o.put("folder", r.folderPath)
+            o.put("video", r.videoName)
+            o.put("ts", r.timestamp)
+            r.thumbnailLink?.let { o.put("thumb", it) }
+            r.link?.let { o.put("link", it) }
+            out.put(o)
+        }
+        editor.putString(KEY_RECENTS, out.toString())
+        editor.apply()
+    }
+
+    // ───────── 2.1.43: cache dos agregados do painel de progresso ─────────
+    //
+    // FONTE: o servidor (GET /userstate + fórmula do site). A BiBi
+    // não tem painel de progresso na Home — a cache fica gravada na
+    // mesma (paridade com a Meggy; é só cache, nunca a fonte) p/ o
+    // import ter exactamente a mesma semântica nas duas apps.
+    // Nunca se escreve aqui um valor inventado no aparelho: os
+    // minutos assistidos só entram via eventos de histórico do
+    // servidor (ver ProgressSync.noteHistorySession).
+
+    data class PanelAggregates(
+        val weekMinutes: Int,
+        val streak: Int,
+        val fetchedAt: Long
+    )
+
+    fun cachePanelAggregates(weekMinutes: Int, streak: Int) {
+        val o = JSONObject()
+        o.put("fetchedAt", System.currentTimeMillis())
+        o.put("weekMinutes", weekMinutes)
+        o.put("streak", streak)
+        prefs.edit().putString(KEY_PANEL_CACHE, o.toString()).apply()
+    }
+
+    fun getCachedPanelAggregates(): PanelAggregates? {
+        val raw = prefs.getString(KEY_PANEL_CACHE, null) ?: return null
+        return try {
+            val o = JSONObject(raw)
+            PanelAggregates(
+                weekMinutes = o.optInt("weekMinutes", 0),
+                streak = o.optInt("streak", 0),
+                fetchedAt = o.optLong("fetchedAt", 0L)
+            )
+        } catch (_: Exception) {
+            null
+        }
     }
 
     // ───────── v2.1.5: descrições geradas das aulas (aba Resumo) ─────────
@@ -667,6 +790,7 @@ class SessionManager private constructor(context: Context) {
         private const val KEY_IS_ADMIN_USER = "is_admin_user"
         private const val KEY_LESSON_DESCRIPTIONS = "lesson_descriptions_v1"
         private const val MAX_LESSON_DESCRIPTIONS = 200
+        private const val KEY_PANEL_CACHE = "panel_cache_v1"
 
         // ───────── Ronda 12: migração de caminhos guardados ─────────
         //
