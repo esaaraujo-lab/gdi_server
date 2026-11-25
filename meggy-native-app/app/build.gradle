@@ -22,8 +22,8 @@ android {
         // ★ v2.7.3: Login persistence (auto re-login when cookie expires) + TV keyboard fix (showSoftInput)
         // ★ 2.7.50: splash animado (vídeo TV/celular em res/raw)
         // ★ 2.7.51: splash com ExoPlayer (corrige o VideoView preto da 2.7.50)
-        versionCode 87
-        versionName "2.7.51"
+        versionCode 88
+        versionName "2.7.52"
     }
 
     // ★ v1.4.0: Signing config com keystore FIXA (mesma em todos os builds)
