@@ -76,6 +76,7 @@ pub fn run() {
             api::login,
             api::get_drives,
             api::list_folder,
+            api::sniff_container,
             api::get_course_lessons,
             api::get_courses_list,
             api::ai_chat,
