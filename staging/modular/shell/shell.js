@@ -2657,8 +2657,23 @@
                     if (e === 'md' || e === 'txt' || e === 'html') texts.push(f);
                     else if (e === 'pdf') pdfs.push(f);
                   }
-                  const _tr = (f) => /transcri/i.test(f.name) ? 0 : 1;
-                  texts.sort((a, b) => _tr(a) - _tr(b));
+                  // ★ v2.15.99: a MESMA ordem de prioridade do painel
+                  //   (Elton 2026-11-25): transcrição em MD (0) →
+                  //   transcrição noutro formato (1) → material em MD
+                  //   (2) → PDFs (3; os de transcrição à frente dos de
+                  //   material). Antes: textos por "transcri no nome"
+                  //   com MD/TXT misturados pela listagem, PDFs pela
+                  //   listagem. Sort estável nos dois.
+                  const _rk21599 = (f) => {
+                    const e = _ext(f);
+                    const tr = /transcri/i.test(f.name);
+                    if (tr && e === 'md') return 0;
+                    if (tr) return 1;
+                    if (e === 'md' || e === 'html') return 2;
+                    return 3;
+                  };
+                  texts.sort((a, b) => _rk21599(a) - _rk21599(b));
+                  pdfs.sort((a, b) => _rk21599(a) - _rk21599(b));
                   return { texts: texts, pdfs: pdfs };
                 }
                 // [21563-src-order-end]
@@ -3447,7 +3462,24 @@
               seenNorm.push(norm);
               uniq.push(x);
             });
-            const materials = uniq.slice(0, 12);
+            // ★ v2.15.99: ORDEM DE PRIORIDADE dos materiais (ordem do
+            //   Elton 2026-11-25): 1º Transcrição em MD, 2º Transcrição
+            //   (outro formato), 3º Material em MD, 4º PDFs. Antes a
+            //   ordem era a da listagem do Drive — um PDF podia abrir
+            //   à frente da transcrição. Sort estável: dentro do mesmo
+            //   nível fica a ordem da listagem. A classificação é a
+            //   mesma das abas ('transcri' no nome ou .txt = transcrição).
+            const _matRank21599 = (x) => {
+              const _e = (x.name.split('.').pop() || '').toLowerCase();
+              const _ln = x.name.toLowerCase();
+              const _tr = _ln.includes('transcri') || _e === 'txt';
+              if (_tr && _e === 'md') return 0;
+              if (_tr) return 1;
+              if (_e === 'md' || _e === 'html') return 2;
+              if (Shell._materialKind21588(x) === 'pdf') return 3;
+              return 4;
+            };
+            const materials = uniq.slice().sort((a, b) => _matRank21599(a) - _matRank21599(b)).slice(0, 12);
 
             tabsEl.innerHTML = '';
             if (!materials.length) {
