@@ -1,27 +1,169 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  v2.1.5 — Home TV (layout-television, conceito home TV + TV continuar).
+  v2.1.41 — Home TV nova (conceito aprovado "tv-home-nova"): menu
+  lateral à esquerda (painel escuro arredondado) + conteúdo à direita.
+  O destaque "Continuar de onde parou" vira o HERÓI IMERSIVO em tela
+  cheia (thumb de fundo, gradiente, título do tema, botão Continuar,
+  progresso) e o hero de drives some quando há destaque (sem
+  duplicação). Fileiras com cartões grandes 16:9.
   Margens de overscan 56dp laterais / 40dp topo e fundo no XML (a home
-  aplica >=48dp em runtime — TvAutoFit). Tipos TV reais (título 30sp,
-  seção 18sp, card 13sp, meta 10.5sp). Sem bottom nav na TV (gone no layout e no
-  código). Foco inicial: botão "Continuar" do destaque.
-  Mesmos ids do layout de celular (ViewBinding único).
-  v2.1.8 — destaque focavel (anel 3dp + 1.10x) + estrela sem armadilha de foco (Elton 11:47).
+  aplica >=48dp em runtime — TvAutoFit). Sem bottom nav na TV.
+  Mesmos ids do layout de celular (ViewBinding único) + ids novos
+  só-TV (menu), acedidos com ?. no código.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/md_background"
-    android:orientation="vertical"
+    android:orientation="horizontal"
     android:paddingHorizontal="@dimen/tv_margin_side"
     android:paddingTop="@dimen/tv_margin_top"
     android:paddingBottom="@dimen/tv_margin_bottom">
 
+    <!-- Menu lateral (só TV) -->
+    <LinearLayout
+        android:id="@+id/tvSideMenu"
+        android:layout_width="264dp"
+        android:layout_height="match_parent"
+        android:layout_marginEnd="24dp"
+        android:background="@drawable/side_menu_bg"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/app_name"
+            android:textColor="@color/md_on_surface"
+            android:textSize="26sp"
+            android:textStyle="bold" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginVertical="14dp"
+            android:background="#33FFFFFF" />
+
+        <!-- Item activo: rótulo na cor da marca (o foco mostra o anel). -->
+        <LinearLayout
+            android:id="@+id/menuHome"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/focus_ring_transparent"
+            android:clickable="true"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="14dp"
+                android:text="🏠"
+                android:textSize="20sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/menu_home"
+                android:textColor="@color/md_primary"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/menuDrives"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/focus_ring_transparent"
+            android:clickable="true"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="14dp"
+                android:text="📁"
+                android:textSize="20sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/menu_drives"
+                android:textColor="@color/md_on_surface"
+                android:textSize="17sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/menuContinue"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/focus_ring_transparent"
+            android:clickable="true"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="14dp"
+                android:text="▶"
+                android:textColor="@color/md_on_surface"
+                android:textSize="20sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/menu_continue"
+                android:textColor="@color/md_on_surface"
+                android:textSize="17sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/menuSettings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/focus_ring_transparent"
+            android:clickable="true"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="14dp"
+                android:text="⚙️"
+                android:textSize="20sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_title"
+                android:textColor="@color/md_on_surface"
+                android:textSize="17sp" />
+        </LinearLayout>
+    </LinearLayout>
+
     <ScrollView
         android:id="@+id/homeScroll"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
         android:layout_weight="1"
         android:fillViewport="true">
 
@@ -62,7 +204,8 @@
                     android:textSize="@dimen/tv_body" />
             </LinearLayout>
 
-            <!-- Hero -->
+            <!-- Hero de drives (some na TV quando há destaque de
+                 continue — o herói passa a ser o featuredSection). -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/heroCard"
                 android:layout_width="match_parent"
@@ -76,16 +219,12 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent">
 
-                    <!-- v2.1.9: gradiente escuro limpo (base do hero sem
-                         foto). A foto vem no heroThumb (Coil) + scrim. -->
                     <View
                         android:id="@+id/heroBg"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
                         android:background="@drawable/hero_gradient" />
 
-                    <!-- v2.1.9: arte real do hero (thumb do 1º vídeo do
-                         drive). Sem arte, fica só o gradiente escuro. -->
                     <ImageView
                         android:id="@+id/heroThumb"
                         android:layout_width="match_parent"
@@ -94,14 +233,11 @@
                         android:visibility="gone"
                         android:contentDescription="@string/thumb_desc" />
 
-                    <!-- Scrim escuro p/ o texto legível sobre a foto -->
                     <View
                         android:id="@+id/heroScrim"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
                         android:background="@drawable/hero_scrim" />
-
-                    <!-- (v2.1.9: heroIcon removido — ver layout celular) -->
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -155,15 +291,14 @@
                             android:textColor="@color/md_on_primary"
                             android:textSize="@dimen/tv_button_text"
                             android:textStyle="bold" />
-
-                        <!-- v2.1.9: dots removidos (fiel ao conceito) -->
                     </LinearLayout>
-
-                    <!-- v2.1.9: setas removidas (conceito) -->
                 </FrameLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- "Continuar de onde parou" — destaque (TV) -->
+            <!-- Herói imersivo "Continuar de onde parou" (v2.1.41):
+                 fundo = thumb da aula em curso, gradiente escuro,
+                 título do tema, progresso e o botão Continuar (o
+                 MESMO continueWatching de sempre). -->
             <LinearLayout
                 android:id="@+id/featuredSection"
                 android:layout_width="match_parent"
@@ -172,19 +307,10 @@
                 android:orientation="vertical"
                 android:visibility="gone">
 
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/continue_from_where"
-                    android:textColor="@color/md_on_surface"
-                    android:textSize="@dimen/tv_section_title"
-                    android:textStyle="bold" />
-
                 <com.google.android.material.card.MaterialCardView
                     android:id="@+id/featured_card"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/tv_rail_spacing"
+                    android:layout_height="400dp"
                     android:clickable="true"
                     android:descendantFocusability="blocksDescendants"
                     android:focusable="true"
@@ -196,46 +322,46 @@
                     app:strokeWidth="0dp"
                     app:strokeColor="@color/tile_focus_ring">
 
-                    <LinearLayout
+                    <FrameLayout
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:padding="@dimen/tv_rail_spacing">
+                        android:layout_height="match_parent">
 
-                        <FrameLayout
-                            android:layout_width="@dimen/tv_featured_thumb_width"
-                            android:layout_height="@dimen/tv_featured_card_height">
+                        <View
+                            android:id="@+id/featuredBg"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:background="@drawable/card_gradient_pink" />
 
-                            <View
-                                android:id="@+id/featuredBg"
-                                android:layout_width="match_parent"
-                                android:layout_height="match_parent"
-                                android:background="@drawable/card_gradient_pink" />
+                        <ImageView
+                            android:id="@+id/featuredThumb"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:scaleType="centerCrop"
+                            android:visibility="gone"
+                            android:contentDescription="@string/thumb_desc" />
 
-                            <ImageView
-                                android:id="@+id/featuredThumb"
-                                android:layout_width="match_parent"
-                                android:layout_height="match_parent"
-                                android:scaleType="centerCrop"
-                                android:visibility="gone"
-                                android:contentDescription="@string/thumb_desc" />
+                        <TextView
+                            android:id="@+id/featuredDriveArt"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:gravity="center"
+                            android:textColor="@color/tile_title"
+                            android:textSize="56sp"
+                            android:textStyle="bold" />
 
-                            <TextView
-                                android:id="@+id/featuredDriveArt"
-                                android:layout_width="match_parent"
-                                android:layout_height="match_parent"
-                                android:gravity="center"
-                                android:textColor="@color/tile_title"
-                                android:textSize="56sp"
-                                android:textStyle="bold" />
-                        </FrameLayout>
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:background="@drawable/hero_scrim" />
 
                         <LinearLayout
-                            android:layout_width="0dp"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="@dimen/tv_rail_spacing"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
+                            android:layout_gravity="bottom|start"
+                            android:orientation="vertical"
+                            android:paddingHorizontal="32dp"
+                            android:paddingTop="26dp"
+                            android:paddingBottom="26dp">
 
                             <TextView
                                 android:id="@+id/featuredTitle"
@@ -244,62 +370,69 @@
                                 android:ellipsize="end"
                                 android:maxLines="2"
                                 android:textColor="@color/md_on_surface"
-                                android:textSize="@dimen/tv_title_md"
+                                android:textSize="36sp"
                                 android:textStyle="bold" />
 
                             <TextView
                                 android:id="@+id/featuredSubtitle"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
+                                android:layout_marginTop="6dp"
                                 android:ellipsize="end"
                                 android:maxLines="1"
                                 android:textColor="@color/md_on_surface_variant"
-                                android:textSize="@dimen/tv_body" />
+                                android:textSize="17sp" />
 
                             <ProgressBar
                                 android:id="@+id/featuredProgress"
                                 style="?android:attr/progressBarStyleHorizontal"
                                 android:layout_width="match_parent"
-                                android:layout_height="8dp"
-                                android:layout_marginTop="@dimen/spacing_lg"
+                                android:layout_height="6dp"
+                                android:layout_marginTop="18dp"
                                 android:max="100"
                                 android:progressDrawable="@drawable/progress_horizontal" />
 
-                            <TextView
-                                android:id="@+id/featuredProgressText"
+                            <LinearLayout
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="@dimen/spacing_sm"
-                                android:textColor="@color/md_primary"
-                                android:textSize="@dimen/tv_body" />
+                                android:layout_marginTop="8dp"
+                                android:orientation="horizontal">
 
-                            <TextView
-                                android:id="@+id/featuredTimeText"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
-                                android:textColor="@color/md_on_surface_variant"
-                                android:textSize="@dimen/tv_body" />
+                                <TextView
+                                    android:id="@+id/featuredProgressText"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:textColor="@color/md_primary"
+                                    android:textSize="15sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:id="@+id/featuredTimeText"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:textColor="@color/md_on_surface_variant"
+                                    android:textSize="15sp" />
+                            </LinearLayout>
 
                             <androidx.appcompat.widget.AppCompatButton
                                 android:id="@+id/featuredContinue"
                                 android:layout_width="wrap_content"
-                                android:layout_height="48dp"
-                                android:layout_marginTop="@dimen/spacing_lg"
+                                android:layout_height="56dp"
+                                android:layout_marginTop="18dp"
                                 android:background="@drawable/btn_primary_pill"
                                 android:focusable="true"
                                 android:paddingHorizontal="@dimen/spacing_2xl"
                                 android:text="@string/cta_continue"
                                 android:textColor="@color/md_on_primary"
-                                android:textSize="@dimen/tv_button_text"
+                                android:textSize="17sp"
                                 android:textStyle="bold" />
                         </LinearLayout>
-                    </LinearLayout>
+                    </FrameLayout>
                 </com.google.android.material.card.MaterialCardView>
             </LinearLayout>
 
-            <!-- Continue assistindo -->
+            <!-- Continue assistindo (sem o item do herói — v2.1.41) -->
             <TextView
                 android:id="@+id/labelContinue"
                 android:layout_width="match_parent"
@@ -310,7 +443,6 @@
                 android:textSize="@dimen/tv_section_title"
                 android:textStyle="bold" />
 
-            <!-- R15C (ronda 15, frente C): halo de foco TV — 16dp laterais / 12dp verticais + sem corte (clipChildren=false). -->
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/railContinue"
                 android:layout_width="match_parent"
@@ -322,7 +454,7 @@
                 android:clipChildren="false"
                 android:overScrollMode="never" />
 
-            <!-- Explorar drives -->
+            <!-- Explorar drives (cartões grandes — v2.1.41) -->
             <TextView
                 android:id="@+id/labelDrives"
                 android:layout_width="match_parent"
@@ -333,7 +465,6 @@
                 android:textSize="@dimen/tv_section_title"
                 android:textStyle="bold" />
 
-            <!-- R15C (ronda 15, frente C): halo de foco TV — 16dp laterais / 12dp verticais + sem corte (clipChildren=false). -->
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/railDrives"
                 android:layout_width="match_parent"
@@ -359,7 +490,7 @@
     <!-- Sem bottom nav na TV -->
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottomNav"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:visibility="gone"
         app:menu="@menu/bottom_nav_menu" />
