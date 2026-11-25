@@ -13657,6 +13657,36 @@ FORMATO MARKDOWN (o gancho acima vem antes de tudo):
     const lines = t.split('\n');
     let i = 0; while(i < lines.length && !lines[i].trim()) i++;
     if(i >= lines.length) return t;
+    // ★ v2.15.95-saudacao: CORTA a saudação/apresentação do topo ANTES
+    //   da lógica do gancho. O caminho genérico /api/ai usa a persona
+    //   de chat e o texto vinha "Oi gente…"/"🐩 Meggy Apresenta: …" —
+    //   o gancho era prefixado e a saudação ficava gravada a seguir.
+    //   Regra do Elton (2026-11-25): o resumo abre com a prévia do
+    //   assunto, NUNCA com saudação. Só o topo (máx 3 linhas) e só
+    //   padrões inequívocos; linha com saudação+gancho perde só o
+    //   prefixo da saudação.
+    const _greet95 = (raw) => {
+      const n = String(raw || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/^[#*_>\s]+/, '').replace(/^[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u2600-\u26FF\u2700-\u27BF\s]+/u, '').trim();
+      if(!n) return 'blank';
+      if(/^meggy apresenta\b/.test(n)) return 'cut';
+      if(/^(oi|ola|e ai|fala)(,|\s|!)+/.test(n) && /(gente|pessoal|turma|concurseir|galera|tudo bem)/.test(n.slice(0, 40))) return 'cut';
+      if(/^(eu sou|sou|aqui e) a meggy\b/.test(n)) return 'cut';
+      if(/^(bem[\s-]?vind[oa]s?|seja bem[\s-]?vind[oa])\b/.test(n)) return 'cut';
+      if(/^tudo bem\b/.test(n) && n.length <= 40) return 'cut';
+      return '';
+    };
+    let _cut95 = 0;
+    while(i < lines.length && _cut95 < 3){
+      const g = _greet95(lines[i]);
+      if(g === 'cut'){
+        const m = lines[i].match(/(nessa aula vamos|nesta aula,? vamos|hoje vamos|nesta aula,? voc[e\u00ea] vai|prepare-se)/i);
+        if(m && m.index > 0){ lines[i] = lines[i].slice(m.index); break; }
+        lines.splice(i, 1); _cut95++; continue;
+      }
+      if(g === 'blank' && _cut95 > 0){ lines.splice(i, 1); continue; }
+      break;
+    }
+    if(i >= lines.length) return lines.join('\n');
     // ★ v2.15.26-A-batalhao-gancho: NÃO testar o formato da 1ª linha.
     //   Causa provada (o mesmo defeito já corrigido no drawer, round 5 —
     //   shell.js _ensureDrawerHook / meggy-widget.js ensureDrawerSummaryHook):
@@ -13670,12 +13700,12 @@ FORMATO MARKDOWN (o gancho acima vem antes de tudo):
     //   (gancho PRIMEIRO, alerta logo depois, como manda o SYSTEM_PROMPT).
     const first = lines[i].trim();
     const norm = first.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/^[#*_\s>]+/, '').trim();
-    if(/^(nessa|nesta) aula,? vamos (estudar|mergulhar em)/.test(norm)) return t;
-    if(/^hoje,? vamos (estudar|mergulhar em)/.test(norm)) return t;
-    if(/^nesta aula,? voce vai (entender|aprender|ver|conhecer)/.test(norm)) return t;
-    if(/^prepare-se[:,!]? nesta aula vamos estudar/.test(norm)) return t;
-    if(/o foco desta aula/.test(norm)) return t;
-    if(/^(sem resposta|erro:)/.test(norm)) return t;
+    if(/^(nessa|nesta) aula,? vamos (estudar|mergulhar em)/.test(norm)) return lines.join('\n');
+    if(/^hoje,? vamos (estudar|mergulhar em)/.test(norm)) return lines.join('\n');
+    if(/^nesta aula,? voce vai (entender|aprender|ver|conhecer)/.test(norm)) return lines.join('\n');
+    if(/^prepare-se[:,!]? nesta aula vamos estudar/.test(norm)) return lines.join('\n');
+    if(/o foco desta aula/.test(norm)) return lines.join('\n');
+    if(/^(sem resposta|erro:)/.test(norm)) return lines.join('\n');
     lines.splice(i, 0, battalionSummaryHook(lesson, pdfName), '');
     return lines.join('\n');
   }
@@ -20631,7 +20661,7 @@ async function handleAi(request) {
     const _lessonSourceLabel = _lessonMaterialKind === 'md' ? 'transcrição em MD' : 'texto extraído de PDF';
     const _lessonGuard = '\n\nCONTEXTO DA AULA ABERTA — FONTE ÚNICA: estás na aula "' + _lessonName + '" e o material abaixo (' + _lessonSourceLabel + ') é a ÚNICA fonte desta resposta. Usa APENAS o que está no material. Se o material não contiver a informação pedida, diz honestamente que não está no material — NUNCA inventes conteúdo, datas, artigos ou definições. Não cites vídeos nem conhecimento fora do material.';
     const _lessonUserPrompt = _lessonIntent === 'resumo'
-      ? 'Gera um resumo didático em Markdown desta aula ("' + _lessonName + '"), a partir APENAS do material abaixo. Abre com uma prévia da aula ("Nessa aula vamos estudar..."), usa ## títulos e ### subtítulos, **negrito** nas palavras-chave, exemplos práticos, uma secção ## Pegadinhas de Prova e um ## Resumo Rápido com 5-10 bullets.\n\nMaterial (fonte: ' + _lessonSourceLabel + '):\n\n' + _lessonMaterialText
+      ? 'Gera um resumo didático em Markdown desta aula ("' + _lessonName + '"), a partir APENAS do material abaixo. Abre com uma prévia da aula ("Nessa aula vamos estudar...") — a PRIMEIRA linha é a prévia: NUNCA comeces com saudação nem apresentação (nada de "Oi gente", "Eu sou a Meggy" ou "Meggy Apresenta"), usa ## títulos e ### subtítulos, **negrito** nas palavras-chave, exemplos práticos, uma secção ## Pegadinhas de Prova e um ## Resumo Rápido com 5-10 bullets.\n\nMaterial (fonte: ' + _lessonSourceLabel + '):\n\n' + _lessonMaterialText
       : _lessonIntent === 'explicar'
       ? 'Explica o conceito principal desta aula ("' + _lessonName + '") a partir APENAS do material abaixo, em linguagem clara e didática, com exemplos. Se o material não cobrir o conceito, diz isso honestamente.\n\nMaterial (fonte: ' + _lessonSourceLabel + '):\n\n' + _lessonMaterialText
       : userMsg + '\n\nMaterial da aula "' + _lessonName + '" (fonte: ' + _lessonSourceLabel + ' — usa APENAS isto como fonte):\n\n' + _lessonMaterialText;
