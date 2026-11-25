@@ -105,7 +105,12 @@ class BrowseActivity : AppCompatActivity() {
     private fun calculateSpanCount(): Int {
         // 2.7.52 — TV: grade cheia de 5 colunas (conceito
         // tv-grade-drives, SPEC §3). O celular mantém a regra actual.
-        if (TvUtils.isTv(this)) return 5
+        // 2.7.56 — TV: o 5 deixa de ser fixo e passa a DERIVAR da
+        // largura única do tile (152dp — TvAutoFit.gridSpanForTile;
+        // a 1080p dá os mesmos 5, e é o mesmo cálculo do detalhe).
+        if (TvUtils.isTv(this)) {
+            return com.meggy.app.util.TvAutoFit.gridSpanForTile(this)
+        }
         val displayMetrics = resources.displayMetrics
         val screenWidthDp = displayMetrics.widthPixels / displayMetrics.density
         // Ronda 27 — celular: 3 colunas (Tiles ~30% menores); a TV
@@ -138,6 +143,12 @@ class BrowseActivity : AppCompatActivity() {
                 // com o botão "Tentar de novo" — nunca o bounce.
                 binding.errorText?.text = "Não foi possível carregar esta pasta. Verifique a conexão e toque em \"Tentar de novo\"."
                 binding.errorState?.visibility = View.VISIBLE
+                // 2.7.56 (B16) — na TV o erro foca o "Tentar de
+                // novo": sem isto o estado de erro era um beco
+                // (nenhuma vista focável em destaque a 3 m).
+                if (TvUtils.isTv(this@BrowseActivity)) {
+                    binding.retryButton?.post { binding.retryButton?.requestFocus() }
+                }
                 return@launch
             }
             val files = (result as FolderResult.Ok).files
