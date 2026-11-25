@@ -462,7 +462,12 @@ class LessonGridAdapter(
         super.onViewAttachedToWindow(holder)
         val pos = holder.bindingAdapterPosition
         if (pos == RecyclerView.NO_POSITION) return
-        holder.itemView.nextFocusUpId = if (pos < 2) R.id.tabAulas else View.NO_ID
+        // v2.1.41 — na TV as abas estão escondidas (detalhe só
+        // vídeo): o UP da 1ª linha vai para o botão Continuar do
+        // cabeçalho imersivo, como na grade plana.
+        holder.itemView.nextFocusUpId = if (pos < 2) {
+            if (TvUtils.isTv(holder.itemView.context)) R.id.ctaContinue else R.id.tabAulas
+        } else View.NO_ID
     }
 
     override fun onBindViewHolder(holder: VH, position: Int) {
