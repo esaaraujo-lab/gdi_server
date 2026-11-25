@@ -18,7 +18,6 @@ import com.meggy.app.data.monogramFor
 import com.meggy.app.databinding.ActivitySettingsBinding
 import com.meggy.app.ui.home.HomeActivity
 import com.meggy.app.ui.login.LoginActivity
-import com.meggy.app.ui.mylist.MyListActivity
 import com.meggy.app.ui.search.SearchActivity
 import com.meggy.app.util.FocusAnimator
 import com.meggy.app.util.PlaylistManager
@@ -97,8 +96,9 @@ class SettingsActivity : AppCompatActivity() {
                 when (item.itemId) {
                     R.id.nav_settings -> true
                     R.id.nav_home -> { startActivity(Intent(this, HomeActivity::class.java)); overridePendingTransition(0, 0); true }
-                    R.id.nav_search -> { startActivity(Intent(this, SearchActivity::class.java)); overridePendingTransition(0, 0); true }
-                    R.id.nav_mylist -> { startActivity(Intent(this, MyListActivity::class.java)); overridePendingTransition(0, 0); true }
+                    R.id.nav_drives -> { val i = Intent(this, HomeActivity::class.java); i.putExtra(HomeActivity.EXTRA_SCROLL_TO_DRIVES, true); startActivity(i); overridePendingTransition(0, 0); true }
+                    R.id.nav_simulados -> { HomeActivity.openSimulados(this); overridePendingTransition(0, 0); true }
+                    R.id.nav_meggy -> { startActivity(Intent(this, SearchActivity::class.java)); overridePendingTransition(0, 0); true }
                     else -> false
                 }
             }
@@ -167,6 +167,20 @@ class SettingsActivity : AppCompatActivity() {
                 else "Cache de vídeo em qualquer rede",
                 Toast.LENGTH_SHORT).show()
         }
+        // 2.7.48 — menu lateral da TV (só na TV: no celular a linha
+        // esconde-se — a preferência não faz sentido lá).
+        if (TvUtils.isTv(this)) {
+            binding.switchTvSideMenu.isChecked = sm.tvSideMenuEnabled
+            binding.switchTvSideMenu.setOnCheckedChangeListener { _, isChecked ->
+                sm.tvSideMenuEnabled = isChecked
+                Toast.makeText(this,
+                    if (isChecked) "Menu lateral da TV ativado"
+                    else "Menu lateral da TV desativado",
+                    Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            binding.tvSideMenuRow.visibility = View.GONE
+        }
         binding.switchSubtitles.isChecked = sm.subtitlesEnabled
         binding.switchSubtitles.setOnCheckedChangeListener { _, isChecked ->
             sm.subtitlesEnabled = isChecked
@@ -214,6 +228,7 @@ class SettingsActivity : AppCompatActivity() {
         if (TvUtils.isTv(this)) {
             listOf(binding.switchNotifications, binding.switchAutoplay,
                 binding.switchWifiOnly, binding.switchSubtitles,
+                binding.switchTvSideMenu,
                 binding.btnSpeedDown, binding.btnSpeedUp,
                 binding.btnSleepDown, binding.btnSleepUp,
                 binding.btnQualityDown, binding.btnQualityUp,
