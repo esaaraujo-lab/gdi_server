@@ -1,12 +1,16 @@
 package com.meggy.app.ui.splash
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.datasource.RawResourceDataSource
+import androidx.media3.exoplayer.ExoPlayer
 import com.meggy.app.R
 import com.meggy.app.data.ApiService
 import com.meggy.app.data.SessionCheck
@@ -57,14 +61,37 @@ import kotlinx.coroutines.withTimeoutOrNull
  * o splash estático de antes com o atraso de 1500 ms — o app NUNCA fica
  * preso no splash. O vídeo é SEM SOM: os mp4 têm faixa AAC e o volume é
  * posto a 0 no onPrepared.
+ *
+ * 2.7.51 CORRECÇÃO DO SPLASH PRETO (print do Elton 2026-11-25 00:27):
+ * na 2.7.50 o vídeo NÃO TOCOU no celular dele — tela preta + faixa rosa
+ * em baixo, animação nenhuma. Os vídeos estão bons (H.264 High L3.1,
+ * yuv420p, 24 fps, AAC-LC, frames conferidos); a falha foi do player:
+ * o VideoView do sistema nunca rendeu um frame (preso no prepare, sem
+ * watchdog) e, como o vídeo é 9:16 e a tela é mais alta, o VideoView
+ * mediu-se pelo aspecto do vídeo e ficou mais curto que a tela — o
+ * gradiente rosa do estático por trás vazou em baixo. Esta versão:
+ *   • ExoPlayer (media3 1.2.1) em vez de VideoView — o MESMO player do
+ *     PlayerActivity e da BiBi 2.1.40 (já dependência do app, mesma
+ *     versão); PlayerView match_parent sobre raiz preta, resize_mode
+ *     fit — as barras são pretas e invisíveis, o gradiente nunca vaza.
+ *   • O splash estático arranca GONE e só aparece se o vídeo falhar —
+ *     nunca por trás do vídeo.
+ *   • Watchdog de pronto: se o player não chegar a STATE_READY em 2 s,
+ *     trata-se como falha → estático + routing (fail-open). O app NUNCA
+ *     fica preso no splash.
+ * Os mp4s são OS MESMOS da 2.7.50 (nada re-encodado). Routing, validação
+ * da sessão e teto de 10 s: iguais à 2.7.50.
  */
 class SplashActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivitySplashBinding
+    private var player: ExoPlayer? = null
 
-    // 2.7.50: sinalizado pelo onCompletion/onError do VideoView.
+    // 2.7.51: sinalizado pelo listener do ExoPlayer (STATE_ENDED /
+    // onPlayerError) ou pelo watchdog de pronto.
     private val videoDone = CompletableDeferred<Unit>()
     private var videoFailed = false
+    @Volatile private var playerReady = false
     private var routed = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -98,9 +125,9 @@ class SplashActivity : AppCompatActivity() {
             withTimeoutOrNull(videoMs + VIDEO_MARGIN_MS) { videoDone.await() }
 
             if (videoFailed) {
-                // Fallback estático: mostra o splash de antes e espera o
-                // tempo mínimo antigo antes de rotear.
-                binding.splashVideo.visibility = View.GONE
+                // Fallback estático: esconde o player, mostra o splash de
+                // antes e espera o tempo mínimo antigo antes de rotear.
+                binding.splashPlayer.visibility = View.GONE
                 binding.splashStatic.visibility = View.VISIBLE
                 delay(1500)
             }
@@ -119,40 +146,66 @@ class SplashActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        // Liberta o MediaPlayer do VideoView se a activity morrer a meio
-        // do vídeo (ex.: o usuário sai do app durante o splash).
-        runCatching { binding.splashVideo.stopPlayback() }
+        releasePlayer()
         super.onDestroy()
     }
 
     /**
-     * 2.7.50: liga o VideoView ao mp4 de res/raw. Sem som (setVolume 0 —
-     * os vídeos têm faixa AAC). onError devolve true para suprimir o
-     * diálogo de erro do sistema; o fallback estático trata o resto.
+     * 2.7.51: toca o vídeo do splash com o ExoPlayer (media3 1.2.1 — o
+     * mesmo do PlayerActivity e da BiBi 2.1.40), sem som (os vídeos têm
+     * faixa AAC, volume a 0). Qualquer falha na criação/preparação do
+     * player liberta o routing (fail-open) em vez de prender a abertura.
+     * O watchdog de pronto cobre o modo de falha da 2.7.50 (player preso
+     * no prepare sem renderizar um frame): sem STATE_READY em 2 s, o
+     * vídeo é dado como falhado e entra o estático.
      */
     private fun setupVideo(videoRes: Int) {
-        val videoView = binding.splashVideo
-        videoView.setOnPreparedListener { mp ->
-            mp.setVolume(0f, 0f)
-            mp.isLooping = false
-            videoView.start()
-        }
-        videoView.setOnCompletionListener {
-            videoDone.complete(Unit)
-        }
-        videoView.setOnErrorListener { _, _, _ ->
+        try {
+            val exo = ExoPlayer.Builder(this).build()
+            player = exo
+            binding.splashPlayer.player = exo
+            exo.addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    when (playbackState) {
+                        Player.STATE_READY -> playerReady = true
+                        Player.STATE_ENDED -> videoDone.complete(Unit)
+                    }
+                }
+
+                override fun onPlayerError(error: PlaybackException) {
+                    // Vídeo que não toca não pode prender a abertura.
+                    videoFailed = true
+                    videoDone.complete(Unit)
+                }
+            })
+            exo.setMediaItem(MediaItem.fromUri(RawResourceDataSource.buildRawResourceUri(videoRes)))
+            exo.volume = 0f
+            exo.prepare()
+            exo.playWhenReady = true
+        } catch (_: Exception) {
+            // Recurso em falta, codec indisponível, etc. — segue sem vídeo.
             videoFailed = true
             videoDone.complete(Unit)
-            true
         }
-        runCatching {
-            videoView.setVideoURI(
-                Uri.parse("android.resource://$packageName/$videoRes")
-            )
-        }.onFailure {
-            videoFailed = true
-            videoDone.complete(Unit)
+
+        // 2.7.51 — watchdog de pronto (ver KDoc): o VideoView da 2.7.50
+        // ficava preso no prepare sem nunca renderizar (tela preta no
+        // celular do Elton). Sem STATE_READY em 2 s → falha, estático.
+        lifecycleScope.launch {
+            delay(READY_WATCHDOG_MS)
+            if (!playerReady && !videoDone.isCompleted) {
+                videoFailed = true
+                videoDone.complete(Unit)
+            }
         }
+    }
+
+    private fun releasePlayer() {
+        player?.let {
+            binding.splashPlayer.player = null
+            it.release()
+        }
+        player = null
     }
 
     /**
@@ -163,6 +216,7 @@ class SplashActivity : AppCompatActivity() {
     private fun route(check: SessionCheck) {
         if (routed || isFinishing || isDestroyed) return
         routed = true
+        releasePlayer()
 
         // ★ v2.7.3: validate session server-side; auto re-login if expired
         // AND password is saved. Falls back to LoginActivity only when
@@ -192,8 +246,11 @@ class SplashActivity : AppCompatActivity() {
         // Durações reais dos vídeos (ffprobe): TV 4,0 s; celular 5,0 s.
         private const val VIDEO_MS_TV = 4000L
         private const val VIDEO_MS_MOBILE = 5000L
-        // Margem para o onCompletion chegar depois do fim do vídeo.
+        // Margem para o fim do vídeo chegar depois do fim do vídeo.
         private const val VIDEO_MARGIN_MS = 500L
+        // 2.7.51 — watchdog de pronto: sem STATE_READY neste tempo, o
+        // vídeo é dado como falhado (fail-open para o estático).
+        private const val READY_WATCHDOG_MS = 2000L
         // Tecto total do splash desde o arranque — nunca ficar preso aqui.
         private const val SPLASH_MAX_MS = 10_000L
     }
