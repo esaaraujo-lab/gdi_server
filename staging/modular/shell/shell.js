@@ -9600,6 +9600,20 @@ el.scrollTop = 0;
     w.document.close();
   };
 
+  // ★ v2.15.97 (bug dos Materiais — causa provada ao vivo 2026-11-25
+  //   pelo Motivo da .96: "Shell._materialKind21588 is not a function"):
+  //   os helpers 21588 vivem dentro de Shell.views (desde a v2.15.88)
+  //   mas o loadMaterials e o _openDriveFile21564 chamam-nos como
+  //   Shell._materialKind21588(...) → TypeError → o painel caía SEMPRE
+  //   no erro quando a aula tinha material (sem material, o ramo das
+  //   abas nunca corria e o erro não aparecia). Os helpers não usam
+  //   `this` (só argumentos e Shell._esc) — aliases na raiz resolvem
+  //   todas as chamadas sem tocar nas definições nem nos chamadores.
+  Shell._materialKind21588 = Shell.views._materialKind21588;
+  Shell._materialInlineLink21588 = Shell.views._materialInlineLink21588;
+  Shell._isAndroid21588 = Shell.views._isAndroid21588;
+  Shell._renderPdfJs21588 = Shell.views._renderPdfJs21588;
+
   window.Shell = Shell; // ★ Alias para onclick inline
 
 
