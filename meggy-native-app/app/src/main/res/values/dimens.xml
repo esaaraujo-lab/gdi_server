@@ -143,7 +143,7 @@
     <dimen name="tv_drive_card_width">150dp</dimen>
     <dimen name="tv_drive_card_height">210dp</dimen>
     <dimen name="tv_detail_hero_width">800dp</dimen>
-    <dimen name="tv_play_fab_size">120dp</dimen>
+    <dimen name="tv_play_fab_size">80dp</dimen>
     <dimen name="tv_rail_gap">8dp</dimen>
     <dimen name="tv_drive_tile_height">112dp</dimen>
     <dimen name="tv_hero_text_padding_side">80dp</dimen>
