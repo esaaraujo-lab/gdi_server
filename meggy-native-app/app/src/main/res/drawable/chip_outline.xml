@@ -1,11 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- v2.7.6 — Chip de metadado com borda (detalhe da aula): fundo
-     surface_container, borda outline, raio 16dp. -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <corners android:radius="16dp" />
-    <solid android:color="@color/md_surface_container" />
-    <stroke
-        android:width="1dp"
-        android:color="@color/md_outline" />
-</shape>
+     surface_container, borda outline, raio 16dp.
+     2.7.56 (B7 da proposta Plex) — passa a selector com estado
+     focado (anel branco 4dp, o sinal uniforme da TV): o botão
+     "Assistir do Início" do detalhe TV usa este fundo e não tinha
+     NENHUM feedback de foco. Os chips que usam o mesmo fundo não
+     são focáveis — o estado focado nunca dispara neles e o repouso
+     fica byte a byte o de sempre. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="16dp" />
+            <solid android:color="@color/md_surface_container" />
+            <stroke
+                android:width="4dp"
+                android:color="@color/tile_focus_ring_white" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="16dp" />
+            <solid android:color="@color/md_surface_container" />
+            <stroke
+                android:width="1dp"
+                android:color="@color/md_outline" />
+        </shape>
+    </item>
+</selector>

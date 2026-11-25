@@ -1,41 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  R22 UI — CTA em gradiente p/ o detalhe de curso na TV (conceito
-  TV): normal = pílula em gradiente rosa→violeta; focado = mesmo
-  gradiente + anel branco 3dp (o "brilho" de foco do conceito).
-  Só o layout-television o referencia — o celular não muda.
+  CTA do detalhe na TV. R22: pílula em gradiente rosa→violeta.
+  v2.7.56 — conceitos Plex aprovados (2026-11-25): o "Continuar" é uma
+  pílula rosa SÓLIDA na cor da marca, com o anel branco de 4dp quando
+  focado (o "brilho" de foco do conceito). Só o layout-television o
+  referencia — o celular não muda. (O nome do ficheiro fica por
+  compatibilidade com as referências existentes.)
 -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">
         <shape android:shape="rectangle">
             <corners android:radius="@dimen/radius_pill" />
-            <gradient
-                android:type="linear"
-                android:angle="0"
-                android:startColor="@color/meggy_pink"
-                android:endColor="@color/meggy_purple" />
-            <stroke android:width="3dp" android:color="@android:color/white" />
+            <solid android:color="@color/md_primary" />
+            <stroke android:width="4dp" android:color="@android:color/white" />
         </shape>
     </item>
     <item android:state_pressed="true">
         <shape android:shape="rectangle">
             <corners android:radius="@dimen/radius_pill" />
-            <gradient
-                android:type="linear"
-                android:angle="0"
-                android:startColor="@color/meggy_pink"
-                android:endColor="@color/meggy_purple" />
+            <solid android:color="@color/md_primary" />
             <stroke android:width="2dp" android:color="@android:color/white" />
         </shape>
     </item>
     <item>
         <shape android:shape="rectangle">
             <corners android:radius="@dimen/radius_pill" />
-            <gradient
-                android:type="linear"
-                android:angle="0"
-                android:startColor="@color/meggy_pink"
-                android:endColor="@color/meggy_purple" />
+            <solid android:color="@color/md_primary" />
         </shape>
     </item>
 </selector>

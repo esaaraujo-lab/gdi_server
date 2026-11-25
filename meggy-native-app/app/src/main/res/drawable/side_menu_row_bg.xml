@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  v2.7.56 — Fundo das linhas do menu lateral TV (réplica Plex; conceitos
+  aprovados 2026-11-25, que mandam em conflito pontual com a proposta):
+  a linha COM FOCO é uma pílula rosa SÓLIDA na cor da marca (ícone e
+  rótulo brancos via ColorStateList com duplicateParentState — ver
+  SideMenuView); a linha SELECCIONADA sem foco (página actual) leva a
+  tinta rosa de 16% da proposta. Raio 12dp como nas pílulas dos
+  conceitos. Repouso transparente.
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="12dp" />
+            <solid android:color="@color/md_primary" />
+        </shape>
+    </item>
+    <item android:state_selected="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="12dp" />
+            <solid android:color="#29FF8B9F" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="12dp" />
+            <solid android:color="@android:color/transparent" />
+        </shape>
+    </item>
+</selector>
