@@ -70,6 +70,19 @@
             android:textStyle="bold" />
     </LinearLayout>
 
+    <!-- 2.7.48 — breadcrumb da TV (conceito 4): "Início › …" com os
+         segmentos do caminho actual (o segmento do drive "N:" salta).
+         Só na TV; o código escreve-o por findViewById. -->
+    <TextView
+        android:id="@+id/tvBreadcrumb"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_md"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="@color/md_on_surface_variant"
+        android:textSize="@dimen/tv_body" />
+
     <ScrollView
         android:id="@+id/detailScroll"
         android:layout_width="match_parent"
@@ -635,6 +648,19 @@
             </LinearLayout>
         </LinearLayout>
     </ScrollView>
+
+    <!-- 2.7.48 — dicas do controle remoto (conceito 4): SÓ as que
+         funcionam (A = seleccionar/entrar, B = voltar). As dicas Y/X/
+         Menu não entram — não há handlers p/ elas (ver SPEC). -->
+    <TextView
+        android:id="@+id/tvRemoteHints"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_md"
+        android:gravity="center"
+        android:text="@string/tv_remote_hints"
+        android:textColor="@color/md_on_surface_variant"
+        android:textSize="@dimen/tv_body" />
 
     <!-- Sem bottom nav na TV -->
     <com.google.android.material.bottomnavigation.BottomNavigationView

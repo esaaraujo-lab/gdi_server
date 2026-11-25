@@ -13,10 +13,28 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/md_background"
-    android:orientation="vertical"
+    android:orientation="horizontal"
     android:paddingHorizontal="@dimen/tv_margin_side"
     android:paddingTop="@dimen/tv_margin_top"
     android:paddingBottom="@dimen/tv_margin_bottom">
+
+    <!-- 2.7.48 — menu lateral (conceito 3/4; decisão 21:37: só na
+         TV). A largura inicial é a expandida (240dp); o estado
+         recolhido/expandido e a visibilidade (interruptor nos
+         Ajustes) resolvem-se em código (SideMenuView/HomeActivity).
+         Sem menu, o conteúdo ocupa a largura toda. -->
+    <com.meggy.app.ui.home.SideMenuView
+        android:id="@+id/tvSideMenu"
+        android:layout_width="240dp"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/homeContent"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:orientation="vertical">
 
     <ScrollView
         android:id="@+id/homeScroll"
@@ -31,8 +49,10 @@
             android:orientation="vertical"
             android:clipChildren="false">
 
-            <!-- Topo: logo + sair -->
+            <!-- Topo: logo + sair (2.7.48: com o menu ligado esta
+                 linha esconde-se — o menu cobre a navegação e o Sair). -->
             <LinearLayout
+                android:id="@+id/homeTopBar"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
@@ -444,6 +464,135 @@
                 android:clipChildren="false"
                 android:overScrollMode="never" />
 
+            <!-- 2.7.48 — "Destaques" (conceito 3): os mesmos ids do
+                 celular; o layout de item é o do celular (a largura
+                 do cartão não é escalada pelo TvAutoFit — ver SPEC). -->
+            <TextView
+                android:id="@+id/labelDestaques"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/tv_section_spacing"
+                android:text="@string/home_highlights"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/tv_section_title"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/listDestaques"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/tv_rail_spacing"
+                android:clipToPadding="false"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="12dp"
+                android:clipChildren="false"
+                android:overScrollMode="never"
+                android:visibility="gone" />
+
+            <!-- 2.7.48 — "Pastas recentes" (conceito 1): mesmos ids do
+                 celular, sem "Ver tudo" na TV. -->
+            <TextView
+                android:id="@+id/labelRecentFolders"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/tv_section_spacing"
+                android:text="@string/home_recent_folders"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/tv_section_title"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/railRecentFolders"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/tv_rail_spacing"
+                android:clipToPadding="false"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="12dp"
+                android:clipChildren="false"
+                android:overScrollMode="never"
+                android:visibility="gone" />
+
+            <!-- 2.7.48 — painel "Seu Progresso" (conceito 3): horas da
+                 semana + sequência de dias, LIDOS DO SERVIDOR (a seção
+                 some sem o cache do import — nunca número local). -->
+            <LinearLayout
+                android:id="@+id/progressPanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/tv_section_spacing"
+                android:background="@drawable/card_surface_rounded"
+                android:orientation="vertical"
+                android:padding="@dimen/tv_rail_spacing"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/progressTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/home_progress_title"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/tv_section_title"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/tv_rail_spacing"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/progressWeekHours"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/md_primary"
+                            android:textSize="@dimen/tv_title_md"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/progressWeekLabel"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="@string/home_progress_week"
+                            android:textColor="@color/md_on_surface_variant"
+                            android:textSize="@dimen/tv_body" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/progressStreak"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/md_primary"
+                            android:textSize="@dimen/tv_title_md"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/progressStreakLabel"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="@string/home_progress_streak"
+                            android:textColor="@color/md_on_surface_variant"
+                            android:textSize="@dimen/tv_body" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+
             <!-- Explorar drives -->
             <TextView
                 android:id="@+id/labelDrives"
@@ -485,4 +634,5 @@
         android:layout_height="wrap_content"
         android:visibility="gone"
         app:menu="@menu/bottom_nav_menu" />
+    </LinearLayout>
 </LinearLayout>
