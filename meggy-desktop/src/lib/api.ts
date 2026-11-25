@@ -95,6 +95,13 @@ export async function fetchText(url: string) {
   return invoke<string>("fetch_text", { url });
 }
 
+// ═══ v1.9.12 — Simulados: GET autenticado p/ as rotas do banco ═══
+// O fetch_text não manda o cookie de sessão; o bank_get manda (Rust)
+// e só aceita os 3 prefixos do banco. Devolve o JSON já parseado.
+export async function bankGet(path: string) {
+  return invoke<Record<string, unknown>>("bank_get", { path });
+}
+
 export async function extractPdfText(url: string) {
   return invoke<string>("extract_pdf_text", { url });
 }
