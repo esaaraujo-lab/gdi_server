@@ -8,7 +8,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { Update } from "@tauri-apps/plugin-updater";
-import { aiCacheGet, aiCacheSave, aiGenerate, fetchText, extractPdfText, downloadToTemp, saveUserState, getUserState, listFolder, downloadLesson, downloadStatus, cancelDownload, type DownloadProgressEvent } from "../lib/api";
+import { aiCacheGet, aiCacheSave, aiGenerate, fetchText, extractPdfText, downloadToTemp, saveUserState, getUserState, listFolder, downloadLesson, downloadStatus, cancelDownload, bankGet, type DownloadProgressEvent } from "../lib/api";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import {
   hasLocalAIConfigured,
@@ -305,7 +305,7 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<"home" | "drives" | "browse" | "player">("home");
+  const [view, setView] = useState<"home" | "drives" | "browse" | "player" | "simulado">("home");
   const [playlist, setPlaylist] = useState<FileItem[]>([]);
   const [playerIndex, setPlayerIndex] = useState(0);
   const [userState, setUserState] = useState<Record<string, unknown>>({});
@@ -972,6 +972,38 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
     );
   }
 
+  // ─── Simulado view (v1.9.12) ───
+  if (view === "simulado") {
+    return (
+      <>
+        <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+          <Header
+            onBack={backToHome}
+            onHome={null}
+            onLogout={logout}
+            breadcrumb={<span style={{ color: "var(--text-muted)", fontSize: "14px" }}>📝 Simulados</span>}
+            aiMode={aiMode}
+            localAiReady={localAiReady}
+            onToggleAI={handleToggleAI}
+            onManageAI={handleManageAI}
+          />
+          <div style={{ flex: 1, overflow: "auto", padding: "24px", width: "100%" }}>
+            <SimuladoView onSessionExpired={handleSessionExpired} />
+          </div>
+        </div>
+        {showAIPopup && (
+          <AIInstallPopup
+            onClose={handleClosePopup}
+            onChooseLocal={handleChooseLocal}
+            onChooseCloud={handleChooseCloud}
+            onOpenLlama={handleOpenLlamaFromPopup}
+          activeMode={aiMode}
+          />
+        )}
+      </>
+    );
+  }
+
   // ─── Home view (Área do Aluno — rich staging-style) ───
   if (view === "home") {
     const history = (userState.history as HistoryEntry[]) || [];
@@ -1014,7 +1046,11 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
             onToggleAI={handleToggleAI}
             onManageAI={handleManageAI}
           />
-          <div style={{ flex: 1, overflow: "auto", padding: "24px", maxWidth: "1280px", margin: "0 auto", width: "100%" }}>
+          {/* ★ v1.9.12: sem tecto de largura — em tela grande o conteúdo usa
+              a largura toda (antes, maxWidth 1280px centrado deixava o
+              conteúdo estreito e a página rolava sem necessidade; as grelhas
+              já são auto-fill, por isso espalham-se sozinhas). */}
+          <div style={{ flex: 1, overflow: "auto", padding: "24px", width: "100%" }}>
             {/* Update notification */}
             {updateAvailable && (
               <div style={{
@@ -1188,10 +1224,10 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
                   // ★ v1.9.11: cara verdadeira da Meggy no lugar do 🤖 (meggy-fab-dark.webp — o app é tema escuro).
                   { icon: <img src="/meggy-fab-dark.webp" alt="Meggy" style={{ width: "32px", height: "32px", borderRadius: "50%" }} />, title: "Meggy AI", desc: aiMode === "local" ? "WebLLM ativo (offline)" : aiMode === "llama" ? "llama.cpp ativo (CPU/GPU)" : "IA da Nuvem ativa", action: () => setShowMeggyChat(true), color: "rgba(255,139,159,0.12)" },
                   { icon: "📊", title: "Estatísticas", desc: `${watchedCount} aulas assistidas`, action: () => {}, color: "rgba(63,185,80,0.12)" },
-                  { icon: "📱", title: "Apps Meggy", desc: "Baixar para outras plataformas", action: () => {
-                    const el = document.getElementById("meggy-apps-section");
-                    if (el) el.scrollIntoView({ behavior: "smooth" });
-                  }, color: "rgba(192,38,211,0.12)" },
+                  // ★ v1.9.12: tile Simulados no lugar do "Apps Meggy" (ordem
+                  // do Elton 20:38) — o tile antigo só fazia scroll p/ a
+                  // secção de links do GitHub, que também saiu.
+                  { icon: "📝", title: "Simulados", desc: "Questões do banco por matéria e assunto", action: () => setView("simulado"), color: "rgba(93,222,218,0.12)" },
                 ].map((card, i) => (
                   <div
                     key={i}
@@ -1249,24 +1285,9 @@ export default function Home({ onLogout }: { onLogout: () => void }) {
               </div>
             </div>
 
-            {/* ── Apps Meggy ── */}
-            <div id="meggy-apps-section" style={{ marginBottom: "24px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
-                <span style={{ fontSize: "20px" }}>📱</span>
-                <h2 style={{ color: "var(--text)", fontSize: "18px", fontWeight: 700, margin: 0 }}>Apps Meggy</h2>
-              </div>
-              <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-                <a href="https://github.com/esaaraujo-lab/gdi_server/releases/latest" target="_blank" rel="noreferrer" style={{ ...btnStyle, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "8px", padding: "10px 18px" }}>
-                  🖥️ Windows / Linux
-                </a>
-                <a href="https://github.com/esaaraujo-lab/gdi_server/releases/latest" target="_blank" rel="noreferrer" style={{ ...btnStyle, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "8px", padding: "10px 18px" }}>
-                  📱 Android APK
-                </a>
-                <a href="https://github.com/esaaraujo-lab/gdi_server/releases/latest" target="_blank" rel="noreferrer" style={{ ...btnStyle, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "8px", padding: "10px 18px" }}>
-                  📺 Roku
-                </a>
-              </div>
-            </div>
+            {/* ★ v1.9.12: secção "Apps Meggy" removida (ordem do Elton 20:41) —
+                era a redundância que o tile antigo apontava; o link GitHub
+                do rodapé fica. */}
 
             {/* Footer version */}
             <div style={{ textAlign: "center", padding: "20px 0", color: "var(--text-muted)", fontSize: "12px", borderTop: "1px solid rgba(255,255,255,0.06)", marginTop: "12px" }}>
@@ -2945,19 +2966,60 @@ function ISAPanel({
 // ═══════════════════════════════════════════════════════════════
 // QuizView — interactive quiz
 // ═══════════════════════════════════════════════════════════════
-function QuizView({ questions, onRegenerate }: { questions: QuizQuestion[]; onRegenerate?: () => void }) {
+// ★ v1.9.12: durationSec (só o simulado passa) = cronómetro — ao esgotar,
+// envia as respostas sozinho; onFinish avisa o fim uma só vez (p/ o
+// histórico do simulado). Sem durationSec, comporta-se como antes (ISA).
+function QuizView({ questions, onRegenerate, durationSec, onFinish }: { questions: QuizQuestion[]; onRegenerate?: () => void; durationSec?: number; onFinish?: (score: number, total: number) => void }) {
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [submitted, setSubmitted] = useState(false);
+  const [deadline, setDeadline] = useState<number | null>(durationSec != null ? Date.now() + durationSec * 1000 : null);
+  const [timeLeft, setTimeLeft] = useState<number | null>(durationSec != null ? durationSec : null);
+  const finishedRef = useRef(false);
 
   const score = questions.reduce((acc, q, i) => acc + (answers[i] === q.correct ? 1 : 0), 0);
+
+  useEffect(() => {
+    if (deadline == null || submitted) return;
+    const t = setInterval(() => {
+      const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      setTimeLeft(left);
+      if (left <= 0) { setSubmitted(true); clearInterval(t); }
+    }, 1000);
+    return () => clearInterval(t);
+  }, [deadline, submitted]);
+
+  useEffect(() => {
+    if (submitted && !finishedRef.current) {
+      finishedRef.current = true;
+      onFinish?.(score, questions.length);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submitted]);
 
   function handleRestart() {
     setSubmitted(false);
     setAnswers({});
+    finishedRef.current = false;
+    if (durationSec != null) {
+      const d = Date.now() + durationSec * 1000;
+      setDeadline(d);
+      setTimeLeft(durationSec);
+    }
   }
 
   return (
     <div style={{ height: "100%", overflow: "auto", padding: "16px" }}>
+      {durationSec != null && !submitted && timeLeft != null && (
+        <div style={{
+          padding: "10px 16px", background: timeLeft <= 60 ? "rgba(255,139,159,0.12)" : "rgba(255,255,255,0.04)",
+          border: timeLeft <= 60 ? "1px solid rgba(255,139,159,0.4)" : "1px solid rgba(255,255,255,0.08)", borderRadius: "8px",
+          marginBottom: "16px", color: timeLeft <= 60 ? "#ff8b9f" : "var(--text)", fontWeight: 600, fontSize: "14px",
+          display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px",
+        }}>
+          <span>⏱ Tempo restante: {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, "0")}</span>
+          <span style={{ fontWeight: 400, fontSize: "12px", color: "var(--text-muted)" }}>{Object.keys(answers).length} de {questions.length} respondidas</span>
+        </div>
+      )}
       {submitted && (
         <div style={{
           padding: "12px 16px", background: "rgba(93,222,218,0.08)",
@@ -3039,6 +3101,316 @@ function QuizView({ questions, onRegenerate }: { questions: QuizQuestion[]; onRe
           {onRegenerate && (
             <button onClick={onRegenerate} style={{ ...btnStyle, background: "linear-gradient(135deg,#ff8b9f,#c026d3)", color: "#fff", border: "none" }}>🔄 Gerar mais questões</button>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SimuladoView — Simulados do banco de questões (v1.9.12)
+// Mesma lógica da página de simulados do site: escolhe-se a matéria
+// e o assunto, a quantidade e o tempo; as questões vêm do banco
+// partilhado (rotas do worker: question-bank/lists, question-topics,
+// shared-flashcards?kind=question, com paginação até esgotar).
+// Responde-se primeiro e só depois se vê o feedback — regra da casa.
+// O resultado fica no histórico local (localStorage, como no site).
+// ═══════════════════════════════════════════════════════════════
+interface SimuladoHistoryEntry {
+  date: string;
+  title: string;
+  total: number;
+  hits: number;
+  durationMin: number;
+}
+
+function SimuladoView({ onSessionExpired }: { onSessionExpired: () => void }) {
+  const [listsLoading, setListsLoading] = useState(true);
+  const [listsError, setListsError] = useState<string | null>(null);
+  const [disciplines, setDisciplines] = useState<string[]>([]);
+  const [topicsByDiscipline, setTopicsByDiscipline] = useState<Record<string, string[]>>({});
+  const [discipline, setDiscipline] = useState<string>("");
+  const [topics, setTopics] = useState<{ topic: string; count: number }[]>([]);
+  const [topicsLoading, setTopicsLoading] = useState(false);
+  const [topic, setTopic] = useState<string>("");
+  const [count, setCount] = useState(10);
+  const [minutes, setMinutes] = useState(30);
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+  const [run, setRun] = useState<{ key: number; title: string; questions: QuizQuestion[]; durationSec: number } | null>(null);
+  const [history, setHistory] = useState<SimuladoHistoryEntry[]>(() => {
+    try {
+      const raw = localStorage.getItem("meggy-simulados-v1");
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? (arr as SimuladoHistoryEntry[]) : [];
+    } catch (_) { return []; }
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    bankGet("/api/ai/question-bank/lists")
+      .then((data) => {
+        if (cancelled) return;
+        const d = data as { disciplines?: unknown; topics?: unknown };
+        const discs = Array.isArray(d.disciplines) ? (d.disciplines as unknown[]).map(String).filter(Boolean) : [];
+        const tps = (d.topics && typeof d.topics === "object" ? d.topics : {}) as Record<string, unknown>;
+        const map: Record<string, string[]> = {};
+        for (const k of Object.keys(tps)) {
+          map[k] = Array.isArray(tps[k]) ? (tps[k] as unknown[]).map(String).filter(Boolean) : [];
+        }
+        setDisciplines(discs);
+        setTopicsByDiscipline(map);
+        setListsLoading(false);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        if (isAuthError(e)) { onSessionExpired(); return; }
+        setListsError("Não foi possível carregar as matérias do banco. Verifica a ligação e tenta de novo.");
+        setListsLoading(false);
+      });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function selectDiscipline(d: string) {
+    setDiscipline(d);
+    setTopic("");
+    setTopics([]);
+    if (!d) return;
+    setTopicsLoading(true);
+    try {
+      const data = await bankGet(`/api/ai/question-topics?subject=${encodeURIComponent(d)}`);
+      const t = (data as { topics?: unknown }).topics;
+      const list = Array.isArray(t)
+        ? (t as { topic?: unknown; count?: unknown }[]).map((x) => ({ topic: String(x.topic ?? "A classificar"), count: Number(x.count) || 0 })).filter((x) => x.count > 0)
+        : [];
+      setTopics(list);
+    } catch (e) {
+      if (isAuthError(e)) { onSessionExpired(); return; }
+      // sem contagens, usam-se os assuntos do /lists (sem número)
+      setTopics((topicsByDiscipline[d] || []).map((tp) => ({ topic: tp, count: 0 })));
+    } finally {
+      setTopicsLoading(false);
+    }
+  }
+
+  function fisherYates<T>(arr: T[]): T[] {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  async function startSimulado() {
+    if (!discipline || starting) return;
+    setStarting(true);
+    setStartError(null);
+    try {
+      const base = `/api/ai/shared-flashcards?subject=${encodeURIComponent(discipline)}&kind=question&limit=500`;
+      const url = topic ? `${base}&topic=${encodeURIComponent(topic)}` : base;
+      let items: Record<string, unknown>[] = [];
+      let offset = 0;
+      for (;;) {
+        const data = await bankGet(`${url}&offset=${offset}`);
+        const page = (data as { items?: unknown }).items;
+        if (!Array.isArray(page) || !page.length) break;
+        items = items.concat(page as Record<string, unknown>[]);
+        if (page.length < 500) break;
+        offset += page.length;
+        if (offset >= 5000) break; // tecto de segurança — 5000 questões chegam
+      }
+      // normaliza p/ o formato do parseQuestions (legal_text → legalText)
+      const normalized = items.map((it) => ({
+        ...it,
+        legalText: (it.legalText as string | undefined) ?? (it.legal_text as string | undefined) ?? (it.fundamentacao as string | undefined) ?? "",
+      }));
+      const parsed = parseQuestions(JSON.stringify(normalized));
+      // dedup por enunciado (o banco tem linhas duplicadas)
+      const seen = new Set<string>();
+      const pool = parsed.filter((q) => {
+        const k = q.statement.trim().toLowerCase();
+        if (!k || seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+      if (pool.length < 5) {
+        setStartError(`Só há ${pool.length} questões neste ${topic ? "assunto" : "matéria"} — o simulado precisa de pelo menos 5. Escolhe outro assunto.`);
+        setStarting(false);
+        return;
+      }
+      const picked = fisherYates(pool).slice(0, Math.min(count, pool.length));
+      setRun({
+        key: Date.now(),
+        title: `${discipline}${topic ? " — " + topic : " — Todos os assuntos"}`,
+        questions: picked,
+        durationSec: minutes * 60,
+      });
+    } catch (e) {
+      if (isAuthError(e)) { onSessionExpired(); return; }
+      setStartError("Não foi possível carregar as questões. Verifica a ligação e tenta de novo.");
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  function handleFinish(score: number, total: number) {
+    if (!run) return;
+    const entry: SimuladoHistoryEntry = {
+      date: new Date().toISOString(),
+      title: run.title,
+      total,
+      hits: score,
+      durationMin: minutes,
+    };
+    setHistory((prev) => {
+      const next = [entry, ...prev].slice(0, 20);
+      try { localStorage.setItem("meggy-simulados-v1", JSON.stringify(next)); } catch (_) { /* sem espaço — o histórico fica só em memória */ }
+      return next;
+    });
+  }
+
+  if (run) {
+    return (
+      <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px", flexWrap: "wrap" }}>
+          <button onClick={() => setRun(null)} style={btnStyle}>← Novo simulado</button>
+          <div>
+            <div style={{ color: "var(--text)", fontWeight: 700, fontSize: "16px" }}>📝 {run.title}</div>
+            <div style={{ color: "var(--text-muted)", fontSize: "12px" }}>{run.questions.length} questões · {minutes} min</div>
+          </div>
+        </div>
+        <div style={{ flex: 1, minHeight: 0, background: "var(--surface)", borderRadius: "14px", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <QuizView key={run.key} questions={run.questions} durationSec={run.durationSec} onFinish={handleFinish} />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ height: "100%", overflow: "auto" }}>
+      <h1 style={{ fontSize: "22px", fontWeight: 800, color: "var(--text)", margin: "0 0 6px" }}>📝 Simulados</h1>
+      <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 20px", lineHeight: 1.5 }}>
+        Monta um simulado com as questões do banco partilhado — escolhe a matéria, o assunto, a quantidade e o tempo.
+      </p>
+      {listsLoading && (
+        <div style={{ textAlign: "center", padding: "40px", color: "var(--text-muted)" }}>A carregar as matérias do banco…</div>
+      )}
+      {listsError && (
+        <div style={{ padding: "12px 16px", background: "rgba(255,139,159,0.12)", border: "1px solid rgba(255,139,159,0.4)", borderRadius: "8px", color: "#ff8b9f", fontSize: "13px", marginBottom: "16px" }}>
+          {listsError}
+        </div>
+      )}
+      {!listsLoading && !listsError && disciplines.length === 0 && (
+        <div style={{ padding: "12px 16px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", color: "var(--text-muted)", fontSize: "13px" }}>
+          O banco ainda não tem matérias — gera questões numa aula para o simulado ter de onde tirar.
+        </div>
+      )}
+      {!listsLoading && disciplines.length > 0 && (
+        <>
+          <div style={{ marginBottom: "16px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "8px" }}>Matéria</div>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              {disciplines.map((d) => (
+                <button
+                  key={d}
+                  onClick={() => selectDiscipline(d)}
+                  style={{
+                    ...modeBtnStyle, fontSize: "12px",
+                    ...(discipline === d ? { background: "linear-gradient(135deg,#ff8b9f,#c026d3)", color: "#fff", border: "none" } : {}),
+                  }}
+                >
+                  {d}
+                </button>
+              ))}
+            </div>
+          </div>
+          {discipline && (
+            <div style={{ marginBottom: "16px" }}>
+              <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "8px" }}>Assunto</div>
+              {topicsLoading && <div style={{ color: "var(--text-muted)", fontSize: "13px" }}>A carregar os assuntos…</div>}
+              {!topicsLoading && topics.length > 0 && (
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <button
+                    onClick={() => setTopic("")}
+                    style={{
+                      ...modeBtnStyle, fontSize: "12px",
+                      ...(topic === "" ? { background: "linear-gradient(135deg,#ff8b9f,#c026d3)", color: "#fff", border: "none" } : {}),
+                    }}
+                  >
+                    Todos os assuntos
+                  </button>
+                  {topics.map((t) => (
+                    <button
+                      key={t.topic}
+                      onClick={() => setTopic(t.topic)}
+                      style={{
+                        ...modeBtnStyle, fontSize: "12px",
+                        ...(topic === t.topic ? { background: "linear-gradient(135deg,#ff8b9f,#c026d3)", color: "#fff", border: "none" } : {}),
+                      }}
+                    >
+                      {t.topic}{t.count > 0 ? ` (${t.count})` : ""}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {!topicsLoading && topics.length === 0 && (
+                <div style={{ color: "var(--text-muted)", fontSize: "13px" }}>Sem assuntos com questões nesta matéria.</div>
+              )}
+            </div>
+          )}
+          {discipline && (
+            <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", alignItems: "center", marginBottom: "16px" }}>
+              <label style={{ fontSize: "13px", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "8px" }}>
+                Questões:
+                <select value={count} onChange={(e) => setCount(Number(e.target.value))} style={{ background: "var(--surface)", color: "var(--text)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "6px", padding: "6px 8px", fontSize: "13px" }}>
+                  {[5, 10, 20, 30].map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+              <label style={{ fontSize: "13px", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "8px" }}>
+                Tempo (min):
+                <select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} style={{ background: "var(--surface)", color: "var(--text)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "6px", padding: "6px 8px", fontSize: "13px" }}>
+                  {[15, 30, 60, 90].map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+              <button
+                onClick={startSimulado}
+                disabled={starting}
+                style={{
+                  padding: "10px 20px", background: "linear-gradient(135deg,#ff8b9f,#c026d3)",
+                  color: "#fff", border: "none", borderRadius: "8px", cursor: starting ? "default" : "pointer",
+                  fontSize: "14px", fontWeight: 600, opacity: starting ? 0.6 : 1,
+                }}
+              >
+                {starting ? "A carregar as questões…" : "▶ Iniciar simulado"}
+              </button>
+            </div>
+          )}
+          {startError && (
+            <div style={{ padding: "12px 16px", background: "rgba(255,139,159,0.12)", border: "1px solid rgba(255,139,159,0.4)", borderRadius: "8px", color: "#ff8b9f", fontSize: "13px", marginBottom: "16px" }}>
+              {startError}
+            </div>
+          )}
+        </>
+      )}
+      {history.length > 0 && (
+        <div style={{ marginTop: "8px" }}>
+          <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "8px" }}>Histórico</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxWidth: "760px" }}>
+            {history.map((s, i) => {
+              const pct = s.total > 0 ? Math.round((s.hits / s.total) * 100) : 0;
+              return (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: "10px", background: "var(--surface)", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.08)", padding: "10px 14px", flexWrap: "wrap" }}>
+                  <span style={{ flex: 1, minWidth: 0, color: "var(--text)", fontSize: "13px" }}>
+                    <b>{s.title}</b> <span style={{ color: "var(--text-muted)", fontSize: "11px" }}>· {new Date(s.date).toLocaleDateString("pt-BR")} · {s.durationMin} min</span>
+                  </span>
+                  <span style={{ color: pct >= 60 ? "#3fb950" : "#ff8b8b", fontWeight: 700, fontSize: "13px" }}>{pct}%</span>
+                  <span style={{ color: "var(--text-muted)", fontSize: "11px" }}>{s.hits}/{s.total}</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
