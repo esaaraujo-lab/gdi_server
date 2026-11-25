@@ -21,8 +21,9 @@ android {
         // ★ v2.0.0: Bottom Nav (4 tabs) + Hero rotativo + Search/MyList/Settings + Player gestures
         // ★ v2.1.2: Login persistence (auto re-login when cookie expires) + TV keyboard fix (showSoftInput)
         // 2.1.40: Splash animado (vídeo do avatar — TV letra a letra, celular profundidade)
-        versionCode 47
-        versionName "2.1.40"
+        // 2.1.41: Nova interface de TV (conceitos aprovados) — apresentação apenas
+        versionCode 48
+        versionName "2.1.41"
     }
 
     // ★ v1.4.0: Signing config com keystore FIXA (mesma em todos os builds)
