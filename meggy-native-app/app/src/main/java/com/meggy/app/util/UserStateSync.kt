@@ -15,6 +15,7 @@ import org.json.JSONObject
 import java.util.Calendar
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * 2.7.48 — Transporte do progresso p/ o servidor (regra multiplataforma
@@ -68,6 +69,13 @@ object UserStateSync {
 
     /** Âmbito p/ os POSTs fire-and-forget (nunca bloqueiam o player). */
     val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * 2.7.53 — guarda de import em curso: o import corre no arranque
+     * e ao voltar à Home; dois em simultâneo fariam o mesmo GET e a
+     * mesma fusão duas vezes.
+     */
+    private val importInFlight = AtomicBoolean(false)
 
     /** Um evento de histórico do blob /userstate. */
     data class HistoryEvent(
@@ -238,22 +246,39 @@ object UserStateSync {
     fun serverFolderToLocal(folder: String): String =
         if (folder.startsWith("/")) folder.trimEnd('/') + "/" else folder
 
-    // ───────── importação (arranque) ─────────
+    // ───────── importação (arranque + regresso à Home) ─────────
 
     /**
-     * Importação do arranque (APK_PROGRESS_SYNC_DESIGN §5.4): GET +
-     * merge nas prefs locais + agregados do painel. Corre em
-     * Dispatchers.IO; não lança excepção; falha = nada muda (o local
-     * continua a funcionar e o próximo arranque tenta outra vez).
+     * Importação (APK_PROGRESS_SYNC_DESIGN §5.4): GET + merge nas
+     * prefs locais + agregados do painel. Corre no arranque (onCreate
+     * da Home) e, desde a 2.7.53, também ao voltar à Home (onResume)
+     * — assim o progresso feito noutro aparelho enquanto a app estava
+     * aberta aparece sem reiniciar a app. Corre em Dispatchers.IO;
+     * não lança excepção; falha = nada muda (o local continua a
+     * funcionar e o próximo arranque/regresso tenta outra vez).
+     * A guarda [importInFlight] impede imports duplicados em
+     * simultâneo (quem chega segundo salta; a fusão em curso já lê
+     * o estado local no momento em que corre, depois do GET).
      * Regras de merge (local ganha onde há conflito):
      * - resume: só importa quando o local é 0/ausente;
      * - durations: idem; - watched: união (nunca se desmarca);
      * - history -> recents: só os eventos cuja (pasta, vídeo) não
-     *   existe nos recents locais; fundidos por timestamp DESC, teto 8.
+     *   existe nos recents locais; fundidos por timestamp DESC,
+     *   teto 12 (8 até à 2.7.52).
      * Os agregados do painel derivam-se do MESMO blob (fórmula do
      * site) e ficam em cache — a cache é só cache, nunca a fonte.
      */
     fun importOnStartup(context: Context) {
+        if (!importInFlight.compareAndSet(false, true)) return
+        try {
+            importMerged(context)
+        } finally {
+            importInFlight.set(false)
+        }
+    }
+
+    /** Corpo do import (GET + fusão) — só corre com a guarda tomada. */
+    private fun importMerged(context: Context) {
         val blob = fetchUserState(context) ?: return
         val sm = SessionManager.get(context)
 
@@ -296,7 +321,7 @@ object UserStateSync {
             }
         val mergedRecents = (localRecents + imported)
             .sortedByDescending { it.timestamp }
-            .take(8)
+            .take(12)
 
         val (weekMinutes, streak) = derivePanelAggregates(blob.history)
         sm.importServerState(resumeMs, durationsMs, watched, mergedRecents)
