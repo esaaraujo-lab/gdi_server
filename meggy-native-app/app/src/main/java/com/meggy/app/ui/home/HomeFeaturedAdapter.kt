@@ -11,8 +11,10 @@ import com.meggy.app.data.colorFromString
 import com.meggy.app.data.monogramFor
 import com.meggy.app.databinding.ItemHomeFeaturedBinding
 import com.meggy.app.util.CardGradient
+import com.meggy.app.util.FocusAnimator
 import com.meggy.app.util.LibraryCovers
 import com.meggy.app.util.ThumbArt
+import com.meggy.app.util.TvUtils
 
 /**
  * R22 UI (conceito "início celular") — item da seção "Destaques" da
@@ -41,6 +43,15 @@ class HomeFeaturedAdapter(
                 val pos = bindingAdapterPosition
                 if (pos == RecyclerView.NO_POSITION) return@setOnClickListener
                 onItem(getItem(pos))
+            }
+            // 2.7.52 — foco na TV (SPEC §5: anel + escala): a escala
+            // 1,05 + elevação vêm do FocusAnimator.attach; o anel
+            // branco 4dp vem do fundo com estado da variante TV do
+            // layout (featured_card_bg_tv — o cartão é um
+            // LinearLayout, não um MaterialCardView, por isso o
+            // attachCard não se aplica). No celular nada muda.
+            if (TvUtils.isTv(binding.root.context)) {
+                FocusAnimator.attach(binding.root, true, scaleTv = FocusAnimator.SCALE_TV_DENSE)
             }
         }
     }
