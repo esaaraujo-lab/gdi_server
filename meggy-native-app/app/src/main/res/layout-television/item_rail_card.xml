@@ -119,6 +119,21 @@
                 android:textSize="10sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
+
+            <!-- v2.7.56 — barra de progresso SOBRE a base da imagem
+                 (assinatura visual do Plex: a linha rosa vive na aresta
+                 inferior da capa; o texto "% · Xmin restantes" fica no
+                 corpo). Visibilidade sincronizada com progress_row pelo
+                 RailAdapter. -->
+            <ProgressBar
+                android:id="@+id/card_progress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="4dp"
+                android:layout_gravity="bottom"
+                android:max="100"
+                android:progressDrawable="@drawable/progress_horizontal"
+                android:visibility="gone" />
         </FrameLayout>
 
         <!-- Conteúdo abaixo da imagem -->
@@ -156,7 +171,8 @@
                 android:textColor="@color/tile_subtitle"
                 android:textSize="@dimen/tv_card_meta" />
 
-            <!-- Progresso: barra + "% concluído · Xmin restantes" -->
+            <!-- Progresso: texto "% concluído · Xmin restantes" (a barra
+                 vive sobre a base da imagem desde a 2.7.56) -->
             <LinearLayout
                 android:id="@+id/progress_row"
                 android:layout_width="match_parent"
@@ -165,19 +181,10 @@
                 android:orientation="vertical"
                 android:visibility="gone">
 
-                <ProgressBar
-                    android:id="@+id/card_progress"
-                    style="?android:attr/progressBarStyleHorizontal"
-                    android:layout_width="match_parent"
-                    android:layout_height="4dp"
-                    android:max="100"
-                    android:progressDrawable="@drawable/progress_horizontal" />
-
                 <TextView
                     android:id="@+id/card_progress_text"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
                     android:textColor="@color/md_primary"
                     android:textSize="12sp" />
             </LinearLayout>

@@ -27,6 +27,7 @@
             android:layout_height="72dp"
             android:background="@color/bg_primary"
             android:elevation="0dp"
+            android:paddingHorizontal="56dp"
             app:titleTextColor="@color/text_primary"
             app:titleTextAppearance="@style/TextAppearance.Material3.TitleLarge"
             app:navigationIconTint="@color/meggy_pink" />
@@ -98,19 +99,14 @@
             android:gravity="center"
             android:visibility="gone">
 
+            <!-- 2.7.56 (B16) — sem emoji gigante como "arte":
+                 estados vazios/erro legíveis a 3 m são texto. -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="56sp"
-                android:text="📭" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
                 android:text="@string/browse_empty"
                 android:textColor="@color/text_secondary"
-                android:textSize="16sp" />
+                android:textSize="18sp" />
         </LinearLayout>
 
         <LinearLayout
@@ -123,20 +119,14 @@
             android:padding="24dp"
             android:visibility="gone">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="56sp"
-                android:text="⚠️" />
-
+            <!-- 2.7.56 (B16) — idem estado vazio: sem emoji 56sp. -->
             <TextView
                 android:id="@+id/error_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
                 android:gravity="center"
                 android:textColor="@color/text_secondary"
-                android:textSize="16sp" />
+                android:textSize="18sp" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/retry_button"

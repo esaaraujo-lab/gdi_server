@@ -109,10 +109,17 @@
             android:clipChildren="false">
 
             <!-- Cabeçalho imersivo (2.7.52; altura reduzida na
-                 2.7.55 — 440dp era "enorme e feio" no teste do Elton) -->
+                 2.7.55 — 440dp era "enorme e feio" no teste do Elton).
+                 2.7.56 (B3 da proposta Plex): faixa-backdrop de 200dp
+                 SÓ onde a pasta tem vídeos directos (página de aula);
+                 pasta intermédia fica SEM faixa — a visibilidade é do
+                 setupTvLessonsRail (id heroCard, findViewById como o
+                 btnFromStart). Conteúdo aparado p/ caber nos 200dp:
+                 título 1 linha 30sp, metadados 14sp, botões 56dp. -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/heroCard"
                 android:layout_width="match_parent"
-                android:layout_height="280dp"
+                android:layout_height="200dp"
                 android:layout_marginTop="@dimen/tv_section_spacing"
                 app:cardCornerRadius="@dimen/radius_lg"
                 app:cardElevation="@dimen/elevation_0"
@@ -191,14 +198,14 @@
                         android:layout_gravity="bottom"
                         android:orientation="vertical"
                         android:paddingHorizontal="28dp"
-                        android:paddingBottom="24dp">
+                        android:paddingBottom="16dp">
 
                         <TextView
                             android:id="@+id/heroTitle"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:ellipsize="end"
-                            android:maxLines="2"
+                            android:maxLines="1"
                             android:textColor="@color/md_on_surface"
                             android:textSize="30sp"
                             android:textStyle="bold" />
@@ -211,18 +218,18 @@
                             android:ellipsize="end"
                             android:maxLines="1"
                             android:textColor="@color/md_primary"
-                            android:textSize="18sp" />
+                            android:textSize="@dimen/tv_body_lg" />
 
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="@dimen/spacing_xl"
+                            android:layout_marginTop="@dimen/spacing_md"
                             android:orientation="horizontal">
 
                             <androidx.appcompat.widget.AppCompatButton
                                 android:id="@+id/ctaContinue"
                                 android:layout_width="0dp"
-                                android:layout_height="64dp"
+                                android:layout_height="56dp"
                                 android:layout_weight="1"
                                 android:background="@drawable/btn_cta_gradient"
                                 android:focusable="true"
@@ -241,7 +248,7 @@
                             <androidx.appcompat.widget.AppCompatButton
                                 android:id="@+id/btnFromStart"
                                 android:layout_width="0dp"
-                                android:layout_height="64dp"
+                                android:layout_height="56dp"
                                 android:layout_marginStart="@dimen/spacing_lg"
                                 android:layout_weight="1"
                                 android:background="@drawable/chip_outline"
@@ -259,7 +266,7 @@
                             android:id="@+id/heroTime"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="@dimen/spacing_lg"
+                            android:layout_marginTop="@dimen/spacing_sm"
                             android:textColor="@color/tile_title"
                             android:textSize="@dimen/tv_time_text"
                             android:textStyle="bold" />
@@ -585,7 +592,7 @@
                     android:layout_marginTop="@dimen/tv_rail_spacing"
                     android:clipToPadding="false"
                     android:paddingHorizontal="16dp"
-                    android:paddingVertical="12dp"
+                    android:paddingVertical="16dp"
                     android:clipChildren="false"
                     android:overScrollMode="never"
                     android:visibility="gone" />
@@ -609,7 +616,7 @@
                     android:layout_marginTop="@dimen/tv_rail_spacing"
                     android:clipToPadding="false"
                     android:paddingHorizontal="16dp"
-                    android:paddingVertical="12dp"
+                    android:paddingVertical="16dp"
                     android:clipChildren="false"
                     android:overScrollMode="never"
                     android:visibility="gone" />
@@ -652,7 +659,7 @@
                     android:gravity="center"
                     android:text="@string/browse_empty"
                     android:textColor="@color/md_on_surface_variant"
-                    android:textSize="@dimen/tv_body"
+                    android:textSize="18sp"
                     android:visibility="gone" />
 
                 <!-- R21: retry persistente (ver layout de celular). -->

@@ -8,33 +8,29 @@
   Mesmos ids do layout de celular (ViewBinding único).
   v2.7.10 — destaque focavel (anel 3dp + 1.10x) + estrela sem armadilha de foco (Elton 11:47).
 -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/md_background"
-    android:orientation="horizontal"
-    android:paddingHorizontal="@dimen/tv_margin_side"
-    android:paddingTop="@dimen/tv_margin_top"
-    android:paddingBottom="@dimen/tv_margin_bottom">
+    android:background="@color/md_background">
 
-    <!-- 2.7.48 — menu lateral (conceito 3/4; decisão 21:37: só na
-         TV). A largura inicial é a expandida (240dp); o estado
-         recolhido/expandido e a visibilidade (interruptor nos
-         Ajustes) resolvem-se em código (SideMenuView/HomeActivity).
-         Sem menu, o conteúdo ocupa a largura toda. -->
-    <com.meggy.app.ui.home.SideMenuView
-        android:id="@+id/tvSideMenu"
-        android:layout_width="240dp"
-        android:layout_height="match_parent"
-        android:visibility="gone" />
-
+    <!-- 2.7.56 — estrutura Plex: o conteúdo tem largura FIXA (ecrã
+         menos os 56dp da barra em repouso, via layout_marginStart) e
+         NUNCA é re-medido; a barra lateral (último filho, por cima)
+         expande deslizando sobre ele — a Home traduz o conteúdo
+         (translationX) ao ritmo da expansão, sem refluir. As margens
+         de overscan vivem aqui (a home aplica >=48dp em runtime —
+         TvAutoFit, sobre esta vista). Sem menu (Ajustes), a Home
+         põe a margem a 0 e o conteúdo ocupa tudo. -->
     <LinearLayout
         android:id="@+id/homeContent"
-        android:layout_width="0dp"
+        android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_weight="1"
-        android:orientation="vertical">
+        android:layout_marginStart="56dp"
+        android:orientation="vertical"
+        android:paddingHorizontal="@dimen/tv_margin_side"
+        android:paddingTop="@dimen/tv_margin_top"
+        android:paddingBottom="@dimen/tv_margin_bottom">
 
     <ScrollView
         android:id="@+id/homeScroll"
@@ -93,7 +89,7 @@
                     android:focusable="true"
                     android:focusableInTouchMode="true"
                     android:nextFocusRight="@id/tvNavMylist"
-                    android:nextFocusDown="@id/heroPlay"
+                    android:nextFocusDown="@id/railContinue"
                     android:padding="12dp"
                     android:src="@drawable/ic_search"
                     app:tint="@color/md_on_surface" />
@@ -110,7 +106,7 @@
                     android:focusableInTouchMode="true"
                     android:nextFocusLeft="@id/tvNavSearch"
                     android:nextFocusRight="@id/tvNavSettings"
-                    android:nextFocusDown="@id/heroPlay"
+                    android:nextFocusDown="@id/railContinue"
                     android:padding="12dp"
                     android:src="@drawable/ic_nav_bookmark"
                     app:tint="@color/md_on_surface" />
@@ -127,7 +123,7 @@
                     android:focusableInTouchMode="true"
                     android:nextFocusLeft="@id/tvNavMylist"
                     android:nextFocusRight="@id/topSair"
-                    android:nextFocusDown="@id/heroPlay"
+                    android:nextFocusDown="@id/railContinue"
                     android:padding="12dp"
                     android:src="@drawable/ic_nav_settings"
                     app:tint="@color/md_on_surface" />
@@ -141,7 +137,7 @@
                     android:background="@drawable/focus_ring_transparent"
                     android:focusableInTouchMode="true"
                     android:nextFocusLeft="@id/tvNavSettings"
-                    android:nextFocusDown="@id/heroPlay"
+                    android:nextFocusDown="@id/railContinue"
                     android:padding="@dimen/spacing_sm"
                     android:text="@string/home_logout"
                     android:textColor="@color/md_primary"
@@ -210,12 +206,18 @@
                     android:text="@string/browse_retry" />
             </LinearLayout>
 
-            <!-- Hero -->
+            <!-- Hero — 2.7.56: GONE na TV (B2 da proposta Plex:
+                 home por fileiras, sem hero fixo a competir; o
+                 cartão largo do Continuar é o 1.º da fileira). A
+                 estrutura fica (ViewBinding único; o celular usa a
+                 sua variante) mas nunca é visível nem focável aqui,
+                 e o setupHero da TV já não cria o rotador. -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/heroCard"
                 android:layout_width="match_parent"
                 android:layout_height="@dimen/tv_hero_height"
                 android:layout_marginTop="@dimen/tv_section_spacing"
+                android:visibility="gone"
                 app:cardCornerRadius="@dimen/radius_lg"
                 app:cardElevation="@dimen/elevation_0"
                 app:cardBackgroundColor="@color/tile_bg">
@@ -480,7 +482,7 @@
                 android:layout_marginTop="@dimen/tv_rail_spacing"
                 android:clipToPadding="false"
                 android:paddingHorizontal="16dp"
-                android:paddingVertical="12dp"
+                android:paddingVertical="16dp"
                 android:clipChildren="false"
                 android:overScrollMode="never" />
 
@@ -505,7 +507,7 @@
                 android:layout_marginTop="@dimen/tv_rail_spacing"
                 android:clipToPadding="false"
                 android:paddingHorizontal="16dp"
-                android:paddingVertical="12dp"
+                android:paddingVertical="16dp"
                 android:clipChildren="false"
                 android:overScrollMode="never"
                 android:visibility="gone" />
@@ -530,7 +532,7 @@
                 android:layout_marginTop="@dimen/tv_rail_spacing"
                 android:clipToPadding="false"
                 android:paddingHorizontal="16dp"
-                android:paddingVertical="12dp"
+                android:paddingVertical="16dp"
                 android:clipChildren="false"
                 android:overScrollMode="never"
                 android:visibility="gone" />
@@ -632,7 +634,7 @@
                 android:layout_marginTop="@dimen/tv_rail_spacing"
                 android:clipToPadding="false"
                 android:paddingHorizontal="16dp"
-                android:paddingVertical="12dp"
+                android:paddingVertical="16dp"
                 android:clipChildren="false"
                 android:overScrollMode="never" />
 
@@ -655,4 +657,16 @@
         android:visibility="gone"
         app:menu="@menu/bottom_nav_menu" />
     </LinearLayout>
-</LinearLayout>
+
+    <!-- 2.7.56 — barra lateral estilo Plex POR CIMA do conteúdo
+         (último filho do FrameLayout): repouso 56dp só ícones;
+         expande a 240dp ao foco e desliza sobre o conteúdo sem o
+         refluir. A largura/visibilidade resolvem-se em código
+         (SideMenuView: comportamento ao foco; HomeActivity:
+         interruptor dos Ajustes). -->
+    <com.meggy.app.ui.home.SideMenuView
+        android:id="@+id/tvSideMenu"
+        android:layout_width="56dp"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+</FrameLayout>

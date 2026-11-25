@@ -1,13 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 2.7.52 — "Destaques" na TV (conceito tv-home-nova): cartão GRANDE
-     340dp, capa 16:9 em cima e título/subtítulo em baixo — o mesmo
+<!-- 2.7.52 — "Destaques" na TV (conceito tv-home-nova): cartão
+     GRANDE, capa 16:9 em cima e título/subtítulo em baixo — o mesmo
      formato visual da fileira "Continue assistindo". MESMOS ids da
      variante do celular (ViewBinding único; o adapter não muda).
      Foco: anel branco 4dp pelo fundo com estado (featured_card_bg_tv)
      + escala 1,05 pelo FocusAnimator.attach no adapter (só TV).
-     O celular mantém o cartão horizontal de 320dp (layout/). -->
+     O celular mantém o cartão horizontal de 320dp (layout/).
+     2.7.56 (B10 da proposta Plex) — largura da fileira passa a
+     240dp (era 340dp), capa 240×135 (16:9). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="340dp"
+    android:layout_width="240dp"
     android:layout_height="wrap_content"
     android:background="@drawable/featured_card_bg_tv"
     android:clickable="true"
@@ -17,7 +19,7 @@
 
     <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="191dp">
+        android:layout_height="135dp">
 
         <View
             android:id="@+id/homeFeaturedBg"
