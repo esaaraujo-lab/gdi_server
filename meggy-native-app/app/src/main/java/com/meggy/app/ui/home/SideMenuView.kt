@@ -281,14 +281,14 @@ class SideMenuView @JvmOverloads constructor(
                 layoutParams = LayoutParams(dp(24f), dp(24f))
                 setImageResource(item.iconRes)
                 imageTintList = focusableTintList(R.color.md_on_surface)
-                duplicateParentState = true
+                setDuplicateParentStateEnabled(true)
             }
             row.addView(icon)
         }
         val label = TextView(context).apply {
             text = item?.label ?: ""
             setTextColor(focusableTintList(R.color.md_on_surface))
-            duplicateParentState = true
+            setDuplicateParentStateEnabled(true)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
             setPadding(if (item == null) 0 else dp(12f), 0, 0, 0)
             if (labelTag != null) tag = labelTag
