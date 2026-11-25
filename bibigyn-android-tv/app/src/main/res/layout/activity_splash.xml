@@ -1,32 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- 2.1.40 — Splash animado: o vídeo (celular = profundidade, TV = letra a
+     letra) ocupa o tela inteiro. Fundo preto: os vídeos já têm fundo escuro,
+     por isso eventuais barras do resize_mode="fit" ficam invisíveis.
+     Sem controller, sem buffering visível — só o vídeo. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:gravity="center"
-    android:background="@drawable/gradient_meggy">
+    android:background="@android:color/black">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textSize="64sp"
-        android:text="💪" />
+    <androidx.media3.ui.PlayerView
+        android:id="@+id/splash_player"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/black"
+        app:use_controller="false"
+        app:resize_mode="fit"
+        app:show_buffering="never" />
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="BiBi Fit"
-        android:textSize="32sp"
-        android:textStyle="bold"
-        android:textColor="#FF6B35" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:text="Fitness &amp; Hipopressivos"
-        android:textColor="#8B949E"
-        android:textSize="14sp" />
-
-</LinearLayout>
+</FrameLayout>
