@@ -22,8 +22,9 @@ android {
         // ★ v2.1.2: Login persistence (auto re-login when cookie expires) + TV keyboard fix (showSoftInput)
         // 2.1.40: Splash animado (vídeo do avatar — TV letra a letra, celular profundidade)
         // 2.1.41: Nova interface de TV (conceitos aprovados) — apresentação apenas
-        versionCode 49
-        versionName "2.1.42"
+        // 2.1.43: ProgressSync completo (progresso entre aparelhos: import /userstate, assistido >50%, recents 12)
+        versionCode 50
+        versionName "2.1.43"
     }
 
     // ★ v1.4.0: Signing config com keystore FIXA (mesma em todos os builds)
