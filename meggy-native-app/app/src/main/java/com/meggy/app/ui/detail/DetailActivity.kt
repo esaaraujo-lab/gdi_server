@@ -81,8 +81,8 @@ import org.json.JSONObject
  * para elas — nunca inventar perguntas). Bottom nav presente.
  *
  * "Escolher as aulas" (aba Aulas): estrutura interfolder — cada aula
- * é uma pasta; a lista expansível (celular) ou grade 2 colunas (TV/
- * tablet largo) mostra vídeo, PDF, pasta de PDFs e .md/transcrição.
+ * é uma pasta; a lista expansível (celular) ou grade (TV 4 colunas /
+ * tablet largo 2) mostra vídeo, PDF, pasta de PDFs e .md/transcrição.
  * Vídeo → player (playlist existente, intacta); PDF → leitor embutido;
  * .md → leitor de MD. Pasta sem subpastas: grade plana (FileAdapter),
  * como antes.
@@ -585,6 +585,12 @@ class DetailActivity : AppCompatActivity() {
         if (TvUtils.isTv(this) && allFiles.isNotEmpty()) {
             setupTvLessonsRail(allFiles)
         }
+        // 2.7.55 — retoma o prefetch parado no onStop (ver o comentário
+        // lá): só com grupos já carregados por preencher — na 1.ª
+        // abertura a lista está vazia e o arranque é o do loadFolder.
+        if (lessonGroups.isNotEmpty() && lessonGroups.any { it.children == null }) {
+            prefetchLessonChildren()
+        }
         // 2.7.41 (P1-T1) — regresso do player da TV com aba pedida
         // (openTabOnReturn): abre a aba em vez de repor o foco salvo
         // (que era da aba Aulas, agora escondida). Consome uma só vez.
@@ -679,6 +685,23 @@ class DetailActivity : AppCompatActivity() {
         }
     }
 
+    override fun onStop() {
+        super.onStop()
+        // 2.7.55 — correcção da lentidão progressiva ao navegar
+        // (relato do Elton 2026-11-25 18:04: "quanto mais fundo
+        // navego, mais trava"): cada pasta abre um NOVO DetailActivity
+        // e os anteriores ficam vivos na pilha. O prefetch corria em
+        // lifecycleScope sem nunca parar fora do ecrã — até
+        // PREFETCH_MAX_GROUPS (240) listagens de rede por nível, sem
+        // cache (ApiService.listFolder vai sempre à rede), em lotes de
+        // 6 em paralelo. Com k níveis abertos, k prefetches concorriam
+        // pela rede/CPU e cada nível novo abria mais lento. Ao sair do
+        // ecrã o prefetch pára; ao voltar, o onResume retoma-o (os
+        // grupos sem filhos são os que faltam — comportamento visível
+        // igual, sem o trabalho de fundo dos níveis escondidos).
+        prefetchJob?.cancel()
+    }
+
     override fun onDestroy() {
         // Ronda 10 Frente C — desactiva as capas de sub-pasta
         // do drive do admin.
@@ -699,6 +722,9 @@ class DetailActivity : AppCompatActivity() {
         LibraryCovers.removeOnReadyListener(libraryReadyListener)
         descriptionJob?.cancel()
         qfJob?.cancel()
+        // 2.7.55 — o prefetchJob também entra na lista (já pára no
+        // onStop; aqui é a rede de segurança, como nos outros três).
+        prefetchJob?.cancel()
         // R21: o extraMaterialsJob também é cancelado (era o único dos
         // três jobs do detalhe fora do onDestroy — sem crash, porque o
         // lifecycleScope cancela tudo, mas inconsistente).
@@ -738,7 +764,9 @@ class DetailActivity : AppCompatActivity() {
     /**
      * 2.7.52 — fileira horizontal de aulas do cabeçalho TV (conceito
      * tv-detalhe-video, SPEC §4): os vídeos DIRECTOS da pasta, na
-     * ordem da listagem, em cartões grandes (RailAdapter 340dp).
+     * ordem da listagem, em cartões grandes (RailAdapter 248dp;
+     * 340dp até à 2.7.54 — o Elton achou os Tiles do detalhe TV
+     * muito grandes no teste de 2026-11-25).
      * Cartão: thumbnail, título = tema/nome limpo da aula, subtítulo
      * "Aula N · duração · Assistido/Assistindo agora" (duração só
      * quando conhecida — a gravada no resume; "Assistindo agora" no
@@ -800,7 +828,7 @@ class DetailActivity : AppCompatActivity() {
             val adapter = RailAdapter(
                 items,
                 whiteFocusRing = true,
-                tvCardBaseDp = 340f
+                tvCardBaseDp = 248f
             ) { item ->
                 val file = allFiles.firstOrNull { it.name == item.title }
                     ?: return@RailAdapter
@@ -981,7 +1009,7 @@ class DetailActivity : AppCompatActivity() {
         return if (screenWidthDp >= 900) 5 else if (screenWidthDp >= 600) 4 else 3
     }
 
-    /** Largura ≥ 600dp (tablet/TV): grade 2 colunas de aulas. */
+    /** Largura ≥ 600dp (tablet/TV): grade de aulas (TV 4 colunas, tablet 2). */
     private fun isWide(): Boolean {
         val dm = resources.displayMetrics
         return dm.widthPixels / dm.density >= 600
@@ -2196,7 +2224,11 @@ class DetailActivity : AppCompatActivity() {
                 onOpenLesson = { group -> openLessonGroup(group) }
             )
             lessonGridAdapter = adapter
-            binding.recycler.layoutManager = GridLayoutManager(this, 2)
+            // 2.7.55 — TV: 4 colunas (os Tiles de 2 colunas eram
+            // enormes — fotos do Elton 2026-11-25 18:04); o tablet
+            // largo (isWide sem ser TV) mantém as 2 colunas.
+            binding.recycler.layoutManager =
+                GridLayoutManager(this, if (TvUtils.isTv(this)) 4 else 2)
             binding.recycler.addItemDecoration(GridGutterDecoration(12))
             binding.recycler.adapter = adapter
             adapter.submit(lessonGroups)
@@ -2206,8 +2238,9 @@ class DetailActivity : AppCompatActivity() {
             // + item_rail_card, o mesmo padrão da tela ALFACON 2026)
             // em vez da lista expansível com chevron. Um toque no Tile
             // abre a pasta; sem dropdown. Os cartões de progresso do
-            // topo (hero) ficam como cabeçalho. A grade da TV (2
-            // colunas grandes, LessonGridAdapter) não muda.
+            // topo (hero) ficam como cabeçalho. A grade larga
+            // (LessonGridAdapter) não muda no celular: TV 4 colunas,
+            // tablet 2.
             val adapter = com.meggy.app.ui.browse.FileAdapter(
                 onFolder = { file ->
                     val group = lessonGroups.firstOrNull { it.folderPath == file.folderPath }
