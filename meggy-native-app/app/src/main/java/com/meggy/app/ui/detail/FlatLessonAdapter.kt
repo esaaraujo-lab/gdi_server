@@ -11,6 +11,7 @@ import com.meggy.app.R
 import com.meggy.app.data.FileItem
 import com.meggy.app.data.colorFromString
 import com.meggy.app.databinding.ItemFlatLessonBinding
+import com.meggy.app.databinding.ItemFlatLessonGridBinding
 import com.meggy.app.databinding.ItemSectionHeaderBinding
 import com.meggy.app.util.CardGradient
 import com.meggy.app.util.FocusAnimator
@@ -32,8 +33,10 @@ sealed interface FlatRow {
     data class Item(val file: FileItem) : FlatRow
 }
 
-/** Frente R4B — filtro dos chips: Todos / Vídeos / Materiais. */
-enum class FlatFilter { ALL, VIDEOS, MATERIALS }
+/** 2.7.48 — filtro dos chips: Todas / Assistidas / Por assistir /
+ *  Com resumo / Vídeo / PDF (conceito 2). "Materiais" saiu: os
+ *  materiais partem-se em PDFs e outros (ver submitSections). */
+enum class FlatFilter { ALL, WATCHED, UNWATCHED, WITH_SUMMARY, VIDEOS, PDF }
 
 /**
  * v2.7.6 — Lista PLANA (conceito escolher-aulas-pasta-unica, Elton 00:04).
@@ -64,28 +67,58 @@ class FlatLessonAdapter(
 ) : ListAdapter<FlatRow, RecyclerView.ViewHolder>(DIFF) {
 
     // Frente R4B — seções da lista plana + filtro dos chips.
+    // 2.7.48 — três seções: Vídeos (.mp4) / PDFs / Materiais (outros).
     private var videos: List<FileItem> = emptyList()
-    private var materials: List<FileItem> = emptyList()
+    private var pdfs: List<FileItem> = emptyList()
+    private var others: List<FileItem> = emptyList()
     private var filter: FlatFilter = FlatFilter.ALL
 
     /**
-     * Recebe as duas seções já partidas (Vídeos .mp4 / Materiais, sem
-     * legendas — ver DetailActivity.refreshFlatList) e o filtro ativo,
-     * e reconstrói as linhas: cabeçalho + itens por seção não vazia.
-     * Seção vazia não aparece (nem o cabeçalho).
+     * 2.7.48 — modo grade (alternar Grade/Lista, conceito 2): os
+     * itens usam o cartão vertical (GridVH) em vez da linha
+     * horizontal; os cabeçalhos de seção ocupam a linha toda (o
+     * SpanSizeLookup vive no DetailActivity). Mudar o modo exige
+     * notifyDataSetChanged() — o DiffUtil não re-liga itens iguais
+     * com outro viewType.
      */
-    fun submitSections(videos: List<FileItem>, materials: List<FileItem>, filter: FlatFilter) {
+    var gridMode: Boolean = false
+
+    /**
+     * Recebe as três seções já partidas (Vídeos .mp4 / PDFs / outros,
+     * sem legendas — ver DetailActivity.refreshFlatList) e o filtro
+     * ativo, e reconstrói as linhas: cabeçalho + itens por seção não
+     * vazia. As listas chegam JÁ filtradas pelo DetailActivity (o
+     * adapter não tem Context p/ ler o SessionManager aqui); a guarda
+     * por filtro abaixo é a rede de segurança p/ uma lista que chegue
+     * por engano sob o filtro errado. Seção vazia não aparece (nem o
+     * cabeçalho).
+     */
+    fun submitSections(
+        videos: List<FileItem>,
+        pdfs: List<FileItem>,
+        others: List<FileItem>,
+        filter: FlatFilter
+    ) {
         this.videos = videos
-        this.materials = materials
+        this.pdfs = pdfs
+        this.others = others
         this.filter = filter
         val rows = ArrayList<FlatRow>()
-        if (filter != FlatFilter.MATERIALS && videos.isNotEmpty()) {
+        if (filter != FlatFilter.PDF && videos.isNotEmpty()) {
             rows.add(FlatRow.Header(R.string.flat_section_videos, videos.size))
             videos.forEach { rows.add(FlatRow.Item(it)) }
         }
-        if (filter != FlatFilter.VIDEOS && materials.isNotEmpty()) {
-            rows.add(FlatRow.Header(R.string.flat_section_materials, materials.size))
-            materials.forEach { rows.add(FlatRow.Item(it)) }
+        if ((filter == FlatFilter.ALL || filter == FlatFilter.PDF ||
+                    filter == FlatFilter.WITH_SUMMARY) && pdfs.isNotEmpty()
+        ) {
+            rows.add(FlatRow.Header(R.string.flat_section_pdfs, pdfs.size))
+            pdfs.forEach { rows.add(FlatRow.Item(it)) }
+        }
+        if ((filter == FlatFilter.ALL ||
+                    filter == FlatFilter.WITH_SUMMARY) && others.isNotEmpty()
+        ) {
+            rows.add(FlatRow.Header(R.string.flat_section_materials, others.size))
+            others.forEach { rows.add(FlatRow.Item(it)) }
         }
         submitList(rows)
     }
@@ -95,7 +128,8 @@ class FlatLessonAdapter(
     private fun fileAt(pos: Int): FileItem? = (getItem(pos) as? FlatRow.Item)?.file
 
     override fun getItemViewType(position: Int): Int =
-        if (getItem(position) is FlatRow.Header) TYPE_HEADER else TYPE_ITEM
+        if (getItem(position) is FlatRow.Header) TYPE_HEADER
+        else if (gridMode) TYPE_GRID_ITEM else TYPE_ITEM
 
     /** Frente R4B — cabeçalho de seção ("Vídeos · 13" / "Materiais · 5"). */
     inner class HeaderVH(val binding: ItemSectionHeaderBinding) :
@@ -134,12 +168,94 @@ class FlatLessonAdapter(
         }
     }
 
+    /**
+     * 2.7.48 — cartão vertical da grade (conceito 2): thumb 16:9,
+     * título, meta e progresso — o mesmo conteúdo da linha, compacto.
+     * Sem botão "Continuar": o estado vai no texto ("✓ Concluída" /
+     * "X% concluída") e na barra.
+     */
+    inner class GridVH(val binding: ItemFlatLessonGridBinding) :
+        RecyclerView.ViewHolder(binding.root) {
+        init {
+            binding.root.setOnClickListener {
+                val pos = bindingAdapterPosition
+                if (pos == RecyclerView.NO_POSITION) return@setOnClickListener
+                dispatch(fileAt(pos))
+            }
+            FocusAnimator.attachCard(binding.flatGridCardRoot, TvUtils.isTv(binding.root.context))
+            TapFeedback.attachPress(binding.flatGridCardRoot, TvUtils.isTv(binding.root.context))
+        }
+
+        private fun dispatch(item: FileItem?) {
+            if (item == null) return
+            when {
+                item.isVideo || item.isAudio -> onPlay(item)
+                item.isPdf -> onOpenPdf(item)
+                item.isMarkdown -> onOpenMd(item)
+                else -> onOpenOther(item)
+            }
+        }
+
+        fun bind(item: FileItem) {
+            val res = binding.root.resources
+            val ctx = binding.root.context
+            val sm = SessionManager.get(ctx)
+            with(binding) {
+                flatGridTitle.text = LessonDescription.displayNameForLesson(
+                    item.name, LessonDescription.folderNameFromPath(folderPath)
+                ) ?: item.name
+                flatGridThumbBg.background = CardGradient.drawable(res, colorFromString(item.name))
+                val coverRes = ThumbArt.coverResForPath(folderPath)
+                val thumb = LibraryCovers.remoteCoverStrict(item.thumbnailLink, item.name, folderPath)
+                if (!thumb.isNullOrBlank() && (item.isVideo || item.isAudio || item.isPdf)) {
+                    flatGridThumb.visibility = View.VISIBLE
+                    flatGridMonogram.visibility = View.GONE
+                    flatGridThumb.load(thumb) {
+                        error(coverRes)
+                        listener(onError = { _, _ -> flatGridThumb.setImageResource(coverRes) })
+                    }
+                } else {
+                    flatGridThumb.visibility = View.VISIBLE
+                    flatGridMonogram.visibility = View.GONE
+                    flatGridThumb.setImageResource(coverRes)
+                }
+                val dur = if (item.isVideo || item.isAudio) sm.getResumeDuration(folderPath, item.name) else 0L
+                flatGridMeta.text = when {
+                    item.isVideo -> if (dur > 0) "Vídeo · ${Format.mmss(dur)}" else "Vídeo"
+                    item.isAudio -> if (dur > 0) "Áudio · ${Format.mmss(dur)}" else "Áudio"
+                    item.isPdf -> "PDF · ${item.humanSize}"
+                    item.isMarkdown -> "Markdown · ${item.humanSize}"
+                    else -> item.humanSize
+                }
+                val progress = if (item.isVideo || item.isAudio) sm.getResumeProgress(folderPath, item.name) else 0
+                val watched = if (item.isVideo || item.isAudio) sm.isWatched(folderPath, item.name) else false
+                flatGridProgress.progress = if (watched) 100 else progress
+                when {
+                    watched -> {
+                        flatGridProgress.visibility = View.VISIBLE
+                        flatGridProgressText.visibility = View.VISIBLE
+                        flatGridProgressText.text = "✓ Concluída"
+                    }
+                    progress > 0 -> {
+                        flatGridProgress.visibility = View.VISIBLE
+                        flatGridProgressText.visibility = View.VISIBLE
+                        flatGridProgressText.text = "$progress% concluída"
+                    }
+                    else -> {
+                        flatGridProgress.visibility = View.GONE
+                        flatGridProgressText.visibility = View.GONE
+                    }
+                }
+            }
+        }
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         val inflater = LayoutInflater.from(parent.context)
-        return if (viewType == TYPE_HEADER) {
-            HeaderVH(ItemSectionHeaderBinding.inflate(inflater, parent, false))
-        } else {
-            VH(ItemFlatLessonBinding.inflate(inflater, parent, false))
+        return when (viewType) {
+            TYPE_HEADER -> HeaderVH(ItemSectionHeaderBinding.inflate(inflater, parent, false))
+            TYPE_GRID_ITEM -> GridVH(ItemFlatLessonGridBinding.inflate(inflater, parent, false))
+            else -> VH(ItemFlatLessonBinding.inflate(inflater, parent, false))
         }
     }
 
@@ -149,8 +265,12 @@ class FlatLessonAdapter(
             (holder as HeaderVH).bind(row)
             return
         }
-        val vh = holder as VH
         val item = (row as FlatRow.Item).file
+        if (holder is GridVH) {
+            holder.bind(item)
+            return
+        }
+        val vh = holder as VH
         val res = vh.itemView.resources
         val ctx = vh.itemView.context
         val sm = SessionManager.get(ctx)
@@ -217,8 +337,10 @@ class FlatLessonAdapter(
     }
 
     companion object {
-        private const val TYPE_HEADER = 0
+        /** Público: o DetailActivity usa-o no SpanSizeLookup da grade. */
+        const val TYPE_HEADER = 0
         private const val TYPE_ITEM = 1
+        private const val TYPE_GRID_ITEM = 2
 
         val DIFF = object : DiffUtil.ItemCallback<FlatRow>() {
             override fun areItemsTheSame(oldItem: FlatRow, newItem: FlatRow): Boolean =

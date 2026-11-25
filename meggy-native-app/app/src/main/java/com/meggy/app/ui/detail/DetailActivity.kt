@@ -34,7 +34,6 @@ import com.meggy.app.databinding.ActivityDetailBinding
 import com.meggy.app.ui.home.HomeActivity
 import com.meggy.app.ui.home.RailAdapter
 import com.meggy.app.ui.home.RailItem
-import com.meggy.app.ui.mylist.MyListActivity
 import com.meggy.app.ui.player.PlayerActivity
 import com.meggy.app.ui.reader.MdReaderActivity
 import com.meggy.app.ui.reader.PdfReaderActivity
@@ -132,8 +131,16 @@ class DetailActivity : AppCompatActivity() {
     // Ronda 27 — grade de Tiles da aba Aulas no celular (3 colunas).
     private var aulasFileAdapter: com.meggy.app.ui.browse.FileAdapter? = null
     private var flatAdapter: FlatLessonAdapter? = null
-    // Frente R4B — filtro da lista plana (Todos / Vídeos / Materiais).
+    // 2.7.48 — filtro da lista plana (Todas / Assistidas / Por
+    // assistir / Com resumo / Vídeo / PDF).
     private var flatFilter: FlatFilter = FlatFilter.ALL
+    // 2.7.48 — "Com resumo": o resumo é POR PASTA (não por vídeo).
+    // null = ainda sem verificar; o cache local responde na hora e
+    // a pasta .gdi-resumos/ do Drive confirma em 2º plano.
+    private var flatSummaryKnown: Boolean? = null
+    private var flatSummaryCheckJob: Job? = null
+    // 2.7.48 — alternar Grade/Lista (persistido em SessionManager).
+    private var flatGrid: Boolean = false
     private var isFlatMode: Boolean = false
     // Frente R14A — materiais vindos da pasta ao lado (ver
     // MaterialDiscovery): só entram na seção Materiais da lista
@@ -301,6 +308,10 @@ class DetailActivity : AppCompatActivity() {
         binding.heroTitle.text = folderName
         binding.toolbar.title = folderName
         binding.toolbar.setNavigationOnClickListener { finish() }
+        // 2.7.48 — breadcrumb da TV (conceito 4): "Início › …" com os
+        // segmentos do caminho actual. Só na TV (o layout do celular
+        // não tem a vista).
+        updateTvBreadcrumb()
         val baseColor = colorFromString(folderName)
         binding.heroBg.background = heroGradient(baseColor)
         // v2.7.11 onda 2 — hero sempre com capa: a gerada do drive
@@ -389,8 +400,9 @@ class DetailActivity : AppCompatActivity() {
         binding.bottomNav.setOnItemSelectedListener { item ->
             when (item.itemId) {
                 R.id.nav_home -> { startActivity(Intent(this, HomeActivity::class.java)); true }
-                R.id.nav_search -> { startActivity(Intent(this, SearchActivity::class.java)); true }
-                R.id.nav_mylist -> { startActivity(Intent(this, MyListActivity::class.java)); true }
+                R.id.nav_drives -> { val i = Intent(this, HomeActivity::class.java); i.putExtra(HomeActivity.EXTRA_SCROLL_TO_DRIVES, true); startActivity(i); true }
+                R.id.nav_simulados -> { HomeActivity.openSimulados(this); true }
+                R.id.nav_meggy -> { startActivity(Intent(this, SearchActivity::class.java)); true }
                 R.id.nav_settings -> { startActivity(Intent(this, SettingsActivity::class.java)); true }
                 else -> false
             }
@@ -1018,10 +1030,14 @@ class DetailActivity : AppCompatActivity() {
                         onOpenOther = { file -> openFile(file) }
                     )
                     flatAdapter = adapter
-                    binding.recycler.layoutManager = LinearLayoutManager(this@DetailActivity)
                     binding.recycler.adapter = adapter
+                    // 2.7.48 — grade/lista pela preferência guardada;
+                    // o resumo volta a verificar-se por pasta.
+                    flatGrid = SessionManager.get(this@DetailActivity).flatListGrid
+                    flatSummaryKnown = null
+                    applyFlatLayoutManager()
                     // Frente R4B — a lista chega já partida em seções
-                    // (Vídeos .mp4 / Materiais), sem as legendas.
+                    // (Vídeos .mp4 / PDFs / Materiais), sem as legendas.
                     refreshFlatList()
                     // Frente R14A — materiais da pasta ao lado: corre
                     // em 2º plano (nunca atrasa a tela); quando chega,
@@ -2194,8 +2210,29 @@ class DetailActivity : AppCompatActivity() {
         if (positions.isNotEmpty()) restoreDetailFocus(snap)
     }
 
+    /**
+     * 2.7.48 — breadcrumb da TV (conceito 4): "Início › A › B › C" a
+     * partir do [currentPath]. O segmento do drive ("0:", "11:")
+     * salta — não é um nome de pasta. Em by-id não há segmentos:
+     * mostra-se o nome da pasta. Só existe no layout-television
+     * (findViewById com guarda); cada navegação abre um novo
+     * DetailActivity, por isso basta escrever uma vez no onCreate.
+     */
+    private fun updateTvBreadcrumb() {
+        val view = findViewById<TextView>(R.id.tvBreadcrumb) ?: return
+        val segments = currentPath.trim('/').split('/')
+            .filter { it.isNotBlank() && !it.matches(Regex("\\d+:")) }
+        view.text = if (segments.isEmpty()) {
+            getString(R.string.breadcrumb_home) + " › " + folderName
+        } else {
+            getString(R.string.breadcrumb_home) + " › " + segments.joinToString(" › ")
+        }
+    }
+
     // Frente R4B — chips Todos / Vídeos / Materiais (lista plana,
-    // celular). Os ids só existem no layout do celular: na TV (e no
+    // celular). 2.7.48 — 6 chips (conceito 2: Todas / Assistidas /
+    // Por assistir / Com resumo / Vídeo / PDF) + alternar Grade/Lista.
+    // Os ids só existem no layout do celular: na TV (e no
     // layout-television) o findViewById retorna null e a função sai
     // sem fazer nada. Os ids NUNCA são lidos pelo binding: o binding
     // gerado exige-os em todas as variantes do layout e a TV não os
@@ -2203,12 +2240,84 @@ class DetailActivity : AppCompatActivity() {
     // re-aplica a lista; sem filtro ativo, "Todos" é o padrão.
     private fun setupFlatFilterChips() {
         val all = findViewById<TextView>(R.id.chipFilterAll) ?: return
+        val watched = findViewById<TextView>(R.id.chipFilterWatched) ?: return
+        val unwatched = findViewById<TextView>(R.id.chipFilterUnwatched) ?: return
+        val summary = findViewById<TextView>(R.id.chipFilterSummary) ?: return
         val videos = findViewById<TextView>(R.id.chipFilterVideos) ?: return
-        val materials = findViewById<TextView>(R.id.chipFilterMaterials) ?: return
+        val pdf = findViewById<TextView>(R.id.chipFilterPdf) ?: return
         all.setOnClickListener { setFlatFilter(FlatFilter.ALL) }
+        watched.setOnClickListener { setFlatFilter(FlatFilter.WATCHED) }
+        unwatched.setOnClickListener { setFlatFilter(FlatFilter.UNWATCHED) }
+        summary.setOnClickListener { setFlatFilter(FlatFilter.WITH_SUMMARY) }
         videos.setOnClickListener { setFlatFilter(FlatFilter.VIDEOS) }
-        materials.setOnClickListener { setFlatFilter(FlatFilter.MATERIALS) }
+        pdf.setOnClickListener { setFlatFilter(FlatFilter.PDF) }
+        flatGrid = SessionManager.get(this).flatListGrid
+        findViewById<TextView>(R.id.flatViewToggle)?.setOnClickListener {
+            flatGrid = !flatGrid
+            SessionManager.get(this).flatListGrid = flatGrid
+            updateFlatChipStyles()
+            applyFlatLayoutManager()
+        }
         updateFlatChipStyles()
+    }
+
+    /**
+     * 2.7.48 — troca o LayoutManager da lista plana (Lista ↔ Grade)
+     * e o modo do adapter. Os cabeçalhos ocupam a linha toda na
+     * grade (SpanSizeLookup); os itens, 1 coluna cada. O
+     * notifyDataSetChanged() é obrigatório: o DiffUtil não re-liga
+     * itens iguais com outro viewType.
+     */
+    private fun applyFlatLayoutManager() {
+        val adapter = flatAdapter ?: return
+        adapter.gridMode = flatGrid
+        binding.recycler.layoutManager = if (flatGrid) {
+            GridLayoutManager(this, 3).apply {
+                spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
+                    override fun getSpanSize(position: Int): Int =
+                        if (adapter.getItemViewType(position) == FlatLessonAdapter.TYPE_HEADER) 3 else 1
+                }
+            }
+        } else {
+            LinearLayoutManager(this)
+        }
+        adapter.notifyDataSetChanged()
+    }
+
+    /**
+     * 2.7.48 — verifica se a pasta tem resumo ("Com resumo" é por
+     * pasta, não por vídeo). 1.º o cache local (instantâneo); depois
+     * UMA listagem da pasta .gdi-resumos/ no Drive — o mesmo sítio
+     * onde o site grava (POST /api/materials/save-in-folder) —
+     * comparando o nome esperado (<usuário>_<pasta>.md). Em cache por
+     * pasta; falha de rede = fica o cache local (sem bounce, sem
+     * crash). Quando chega, re-monta a lista se o filtro ainda for
+     * o de resumo.
+     */
+    private fun checkFlatSummary() {
+        if (flatSummaryKnown != null || flatSummaryCheckJob?.isActive == true) return
+        val sm = SessionManager.get(this)
+        if (sm.getLessonDescription(currentPath) != null) {
+            flatSummaryKnown = true
+            return
+        }
+        flatSummaryCheckJob = lifecycleScope.launch {
+            val has = withContext(Dispatchers.IO) {
+                runCatching {
+                    val folderName = LessonDescription.folderNameFromPath(currentPath)
+                        ?: Format.extractCourseName(currentPath)
+                    val expected = LessonDescription.folderFileName(this@DetailActivity, folderName)
+                    val resumosPath = currentPath.trimEnd('/') + "/.gdi-resumos/"
+                    when (val r = api.listFolder(resumosPath)) {
+                        is FolderResult.Ok -> r.files.any { it.name == expected }
+                        else -> false
+                    }
+                }.getOrDefault(false)
+            }
+            if (isFinishing || isDestroyed) return@launch
+            flatSummaryKnown = has
+            if (flatFilter == FlatFilter.WITH_SUMMARY) refreshFlatList()
+        }
     }
 
     private fun setFlatFilter(filter: FlatFilter) {
@@ -2231,21 +2340,37 @@ class DetailActivity : AppCompatActivity() {
             chip.setTextColor(if (active) onPink else muted)
         }
         paint(R.id.chipFilterAll, flatFilter == FlatFilter.ALL)
+        paint(R.id.chipFilterWatched, flatFilter == FlatFilter.WATCHED)
+        paint(R.id.chipFilterUnwatched, flatFilter == FlatFilter.UNWATCHED)
+        paint(R.id.chipFilterSummary, flatFilter == FlatFilter.WITH_SUMMARY)
         paint(R.id.chipFilterVideos, flatFilter == FlatFilter.VIDEOS)
-        paint(R.id.chipFilterMaterials, flatFilter == FlatFilter.MATERIALS)
+        paint(R.id.chipFilterPdf, flatFilter == FlatFilter.PDF)
+        // 2.7.48 — o alternar mostra o modo para onde VAI ("Grade"
+        // quando está em lista, "Lista" quando está em grade).
+        findViewById<TextView>(R.id.flatViewToggle)?.text =
+            getString(
+                if (flatGrid) R.string.flat_list_toggle_list
+                else R.string.flat_list_toggle_grid
+            )
     }
 
     // Frente R4B — (re)monta a lista plana em seções a partir de
     // [allFiles], com a busca e o filtro dos chips aplicados:
     //   Vídeos — só .mp4, por ordem, com progresso como hoje;
-    //   Materiais — PDFs, .md, áudios e outros arquivos da pasta.
-    // Legendas .srt/.vtt (FileItem.isSubtitle) NUNCA entram na lista:
+    //   PDFs — só .pdf (antes iam nos Materiais);
+    //   Materiais — .md, áudios e outros arquivos da pasta.
+    // 2.7.48 — o filtro corta as listas AQUI (o adapter só mostra as
+    // seções que chegam, com a guarda por filtro dele): Assistidas /
+    // Por assistir usam isWatched (existe); "Com resumo" é por pasta
+    // (ver checkFlatSummary) — com resumo, tudo; sem, nada. Legendas
+    // .srt/.vtt (FileItem.isSubtitle) NUNCA entram na lista:
     // continuam carregando no player — o SubtitleFetcher lê o
     // listFolder completo (PlayerActivity.ensureSubtitles), não a
     // lista do adapter. Pastas não existem aqui (modo plano =
     // folderCount == 0), mas são excluídas na mesma, por defesa.
     private fun refreshFlatList() {
         val adapter = flatAdapter ?: return
+        val sm = SessionManager.get(this)
         val query = binding.lessonSearch.text?.toString().orEmpty()
         val base = if (query.isBlank()) allFiles
             else allFiles.filter { it.name.contains(query, ignoreCase = true) }
@@ -2253,21 +2378,52 @@ class DetailActivity : AppCompatActivity() {
         // Frente R14A — aos materiais da pasta somam-se os da pasta
         // ao lado (extraMaterials); o vídeo nunca entra aqui e as
         // legendas continuam de fora. A pasta ganha ao nome repetido.
-        val materials = (base.filter { f ->
-            !f.isFolder && !f.isSubtitle && !f.name.endsWith(".mp4", true)
-        } + extraMaterials.filter { f ->
+        val extra = extraMaterials.filter { f ->
             query.isBlank() || f.name.contains(query, ignoreCase = true)
-        }).distinctBy { it.name.lowercase() }
-        adapter.submitSections(videos, materials, flatFilter)
+        }
+        val pdfs = (base.filter { f ->
+            !f.isFolder && !f.isSubtitle && f.name.endsWith(".pdf", true)
+        } + extra.filter { it.name.endsWith(".pdf", true) })
+            .distinctBy { it.name.lowercase() }
+        val others = (base.filter { f ->
+            !f.isFolder && !f.isSubtitle && !f.name.endsWith(".mp4", true) &&
+                !f.name.endsWith(".pdf", true)
+        } + extra.filter { !it.name.endsWith(".pdf", true) })
+            .distinctBy { it.name.lowercase() }
+        val (showVideos, showPdfs, showOthers) = when (flatFilter) {
+            FlatFilter.ALL -> Triple(videos, pdfs, others)
+            FlatFilter.VIDEOS -> Triple(videos, emptyList(), emptyList())
+            FlatFilter.PDF -> Triple(emptyList(), pdfs, emptyList())
+            FlatFilter.WATCHED -> Triple(
+                videos.filter { sm.isWatched(currentPath, it.name) },
+                emptyList(), emptyList()
+            )
+            FlatFilter.UNWATCHED -> Triple(
+                videos.filter { !sm.isWatched(currentPath, it.name) },
+                emptyList(), emptyList()
+            )
+            FlatFilter.WITH_SUMMARY -> {
+                if (flatSummaryKnown == true) Triple(videos, pdfs, others)
+                else {
+                    checkFlatSummary()
+                    Triple(emptyList(), emptyList(), emptyList())
+                }
+            }
+        }
+        adapter.submitSections(showVideos, showPdfs, showOthers, flatFilter)
         findViewById<View>(R.id.filterChipsRow)?.visibility = View.VISIBLE
         updateFlatChipStyles()
-        val visible = when (flatFilter) {
-            FlatFilter.ALL -> videos.size + materials.size
-            FlatFilter.VIDEOS -> videos.size
-            FlatFilter.MATERIALS -> materials.size
+        val visible = showVideos.size + showPdfs.size + showOthers.size
+        // 2.7.48 — contador "N aulas encontradas" (só no celular).
+        findViewById<TextView>(R.id.flatFoundCount)?.apply {
+            visibility = View.VISIBLE
+            text = if (visible == 1) getString(R.string.flat_found_count_singular)
+                else getString(R.string.flat_found_count_plural, visible)
         }
         if (visible == 0) {
-            binding.emptyState.text = getString(R.string.flat_empty_filter)
+            binding.emptyState.text = if (flatFilter == FlatFilter.WITH_SUMMARY)
+                getString(R.string.flat_empty_summary)
+            else getString(R.string.flat_empty_filter)
             binding.emptyState.visibility = View.VISIBLE
         } else {
             binding.emptyState.text = getString(R.string.browse_empty)
