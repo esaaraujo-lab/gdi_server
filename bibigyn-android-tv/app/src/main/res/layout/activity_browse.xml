@@ -69,6 +69,25 @@
             tools:ignore="HardcodedText" />
     </LinearLayout>
 
+    <!-- v2.1.41 — entrada de busca SÓ TV (gone por omissão; o código
+         mostra-a apenas com TvUtils.isTv e abre a SearchActivity,
+         a mesma busca de todo o app). No celular nunca aparece. -->
+    <TextView
+        android:id="@+id/browseSearch"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="18dp"
+        android:layout_marginTop="4dp"
+        android:background="@drawable/breadcrumb_chip"
+        android:clickable="true"
+        android:focusable="true"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="9dp"
+        android:text="@string/browse_search"
+        android:textColor="@color/text_primary"
+        android:textSize="14sp"
+        android:visibility="gone" />
+
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -154,4 +173,16 @@
                 android:text="@string/browse_retry" />
         </LinearLayout>
     </FrameLayout>
+
+    <!-- v2.1.41 — dicas do comando no rodapé, SÓ TV (gone no celular). -->
+    <TextView
+        android:id="@+id/browseTvHint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:paddingVertical="10dp"
+        android:text="@string/tv_remote_hint"
+        android:textColor="@color/text_secondary"
+        android:textSize="13sp"
+        android:visibility="gone" />
 </LinearLayout>
