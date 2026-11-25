@@ -375,7 +375,9 @@ class LessonListAdapter(
                 val meta = buildList {
                     video?.let { add(if (it.isAudio) "áudio" else "vídeo") }
                     val pdfs = row.children?.count { it.isPdf } ?: 0
-                    if (pdfs > 0) add("$pdfs PDF")
+                    // 2.7.55 — regra TV SÓ VÍDEO: na TV a meta da pasta
+                    // não mostra a contagem de PDFs (só no celular).
+                    if (pdfs > 0 && !TvUtils.isTv(holder.itemView.context)) add("$pdfs PDF")
                     if (row.pdfFolderCount >= 0) add("${row.pdfFolderCount} arquivos")
                 }.joinToString(" · ")
                 b.lessonMeta.text = meta.ifBlank { "" }
@@ -421,7 +423,13 @@ class LessonListAdapter(
                     item.isMarkdown -> "Markdown · ${item.humanSize}"
                     item.isFolder -> {
                         val count = row.group.pdfFolderCount
-                        if (count >= 0) "Pasta de PDFs — $count arquivos" else "Pasta de PDFs"
+                        // 2.7.55 — regra TV SÓ VÍDEO: na TV a meta da
+                        // pasta de PDFs não mostra a contagem.
+                        if (count >= 0 && !TvUtils.isTv(holder.itemView.context)) {
+                            "Pasta de PDFs — $count arquivos"
+                        } else {
+                            "Pasta de PDFs"
+                        }
                     }
                     else -> item.humanSize
                 }
@@ -600,7 +608,10 @@ class LessonGridAdapter(
             }
             val pdfs = group.children?.count { it.isPdf } ?: 0
             val pdfTotal = pdfs + group.pdfFolderCount.coerceAtLeast(0)
-            if (pdfTotal > 0) {
+            // 2.7.55 — regra TV SÓ VÍDEO (Elton, 2026-11-23): na TV o
+            // cartão da pasta NÃO mostra o selo "N PDFs" (a TV é só
+            // vídeo). No celular o selo fica como está.
+            if (pdfTotal > 0 && !TvUtils.isTv(ctx)) {
                 lessonCardChipPdf.visibility = View.VISIBLE
                 lessonCardChipPdf.text = if (pdfTotal == 1) "1 PDF" else "$pdfTotal PDFS"
             } else {
