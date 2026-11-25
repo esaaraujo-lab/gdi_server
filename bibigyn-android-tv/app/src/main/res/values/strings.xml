@@ -49,6 +49,16 @@
     <string name="tab_flashcards">Flashcards</string>
     <string name="cta_continue">▶ Continuar assistindo</string>
     <string name="cta_watch">▶ Assistir</string>
+    <!-- v2.1.41 — nova interface de TV (conceitos aprovados). -->
+    <string name="cta_from_start">Assistir do Início</string>
+    <string name="menu_home">Início</string>
+    <string name="menu_drives">Drives</string>
+    <string name="menu_continue">Continuar</string>
+    <string name="tv_remote_hint">Use ◀ ▶ ▲ ▼ para navegar • OK para selecionar</string>
+    <string name="browse_search">Buscar</string>
+    <string name="detail_course_progress">%1$d de %2$d aulas concluídas • %3$d%%</string>
+    <string name="tv_now_watching">Assistindo agora</string>
+    <string name="tv_watched_label">Assistido</string>
     <string name="no_summary">Ainda não há resumo gerado para este curso.</string>
     <!-- v2.7.6 — estados da descrição da aula (aba Resumo, Elton 00:21). -->
     <string name="summary_state_generated">Descrição gerada pela Meggy</string>
