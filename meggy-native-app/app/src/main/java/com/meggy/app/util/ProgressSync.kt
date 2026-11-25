@@ -22,8 +22,9 @@ import org.json.JSONObject
  *     a 10 s (posição em segundos + duração) + POST final ao sair do
  *     player ([flushResume]);
  *   - SessionManager.markWatched() -> [noteWatched]: POST
- *     {watched:{path:true}} (só no fim da aula — a decisão §11.1 dos
- *     >50% continua pendente do Elton);
+ *     {watched:{path:true}} — no fim da aula e, desde a 2.7.53, aos
+ *     >50% da duração (decisão §11.1 tomada na SPEC
+ *     PROGRESSO_ADMIN_94: paridade com o desktop);
  *   - PlayerActivity (fim da sessão) -> [noteHistorySession]: POST do
  *     evento de histórico {path, name, at, minutes} com os MINUTOS
  *     REAIS assistidos — é isto que alimenta as horas da semana e a
@@ -81,11 +82,15 @@ import org.json.JSONObject
  *   PENDENTE (não existe no backend OU o app não consome — registrado,
  *   NÃO inventado):
  *   - Resume entre aparelhos: ATIVO na 2.7.48 (POST /userstate/save +
- *     GET /userstate, worker .93 — ver o KDoc da classe). O que falta
- *     é a ronda 2.7.49: decisões §11 do desenho (assistido aos >50%,
- *     fila offline, teto de recents, refresh ao voltar à Home) + o
- *     porte p/ BiBi/Vovó.
- *   - "Assistido" (watched): ATIVO na 2.7.48 (noteWatched, só no fim).
+ *     GET /userstate, worker .93 — ver o KDoc da classe). COMPLETO
+ *     na 2.7.53 (SPEC PROGRESSO_ADMIN_94, Parte 2): assistido aos
+ *     >50%, teto de recents 8->12 e import também ao voltar à Home
+ *     (onResume). A fila offline ficou FORA outra vez (decisão da
+ *     SPEC: best-effort, sem fila persistente nesta ronda). O porte
+ *     p/ BiBi/Vovó é a Parte 3 da mesma SPEC.
+ *   - "Assistido" (watched): ATIVO na 2.7.48 (noteWatched, só no fim);
+ *     2.7.53: também aos >50% (o player chama markWatched no loop de
+ *     gravação ao cruzar metade da duração a tocar).
  *     Favoritos e recents: os recents são alimentados pelo import do
  *     servidor (UserStateSync); os favoritos continuam só locais — sem
  *     rota no backend; quando existir, costurar no mesmo molde.
@@ -187,10 +192,12 @@ object ProgressSync {
     }
 
     /**
-     * Regista que a aula foi vista até ao fim (chamado por
-     * SessionManager.markWatched() — PlayerActivity.markEnded).
-     * POST {watched:{path:true}}. Só no fim (a decisão §11.1 —
-     * marcar aos >50% como o desktop — continua pendente do Elton).
+     * Regista que a aula conta como assistida (chamado por
+     * SessionManager.markWatched()). POST {watched:{path:true}}.
+     * Chamadores: PlayerActivity.markEnded (fim da aula, desde a
+     * 2.7.48) e o loop de gravação do player aos >50% da duração
+     * (2.7.53 — decisão §11.1, paridade com o desktop). Idempotente
+     * do lado do servidor (união; watched_at = max).
      */
     fun noteWatched(context: Context, folderPath: String, videoName: String) {
         if (!SERVER_RESUME_ENABLED) return
