@@ -70,6 +70,14 @@ class RailAdapter(
      */
     private var nextFocusUpId: Int = View.NO_ID,
     private var nextFocusDownId: Int = View.NO_ID,
+    /**
+     * v2.1.41 — largura base do cartão na TV. O default (200f) é o
+     * comportamento de sempre (rail do detalhe incluído); a Home TV
+     * passa 300f para os cartões grandes 16:9 do conceito, com anel
+     * BRANCO 4dp + escala 1.05 (padrão R27 das grades). Só se aplica
+     * na TV — no celular o VH ignora o parâmetro.
+     */
+    private val tvCardWidthDp: Float = 200f,
     // Build-fix 2.7.16: onClick em ULTIMO — os call sites usam trailing
     // lambda; com onClick em 2o a lambda ligava a nextFocusDownId (Int)
     // e onClick ficava sem valor (compileReleaseKotlin falhou na 2.7.15).
@@ -177,7 +185,19 @@ class RailAdapter(
                 Toast.makeText(binding.root.context, full, Toast.LENGTH_LONG).show()
                 true
             }
-            FocusAnimator.attachCard(binding.cardRoot, TvUtils.isTv(binding.root.context))
+            // v2.1.41 — cartões grandes (Home TV): anel branco 4dp +
+            // escala 1.05; nos restantes casos, o attach de sempre.
+            val bigTvCard = tvCardWidthDp > 200f && TvUtils.isTv(binding.root.context)
+            if (bigTvCard) {
+                FocusAnimator.attachCard(
+                    binding.cardRoot, true,
+                    scaleTv = FocusAnimator.SCALE_TV_DENSE,
+                    ringColorRes = R.color.tile_focus_ring_white,
+                    ringWidthDp = 4f
+                )
+            } else {
+                FocusAnimator.attachCard(binding.cardRoot, TvUtils.isTv(binding.root.context))
+            }
             TapFeedback.attachPress(binding.cardRoot, TvUtils.isTv(binding.root.context))
             // Ronda 7 Frente B — auto-ajuste TV (TvAutoFit): o card e a imagem
             // passam a derivar do viewport medido; no celular e na 32" de
@@ -186,20 +206,23 @@ class RailAdapter(
             // TV, nao da home) — comportamento intencional e consistente.
             if (TvUtils.isTv(binding.root.context)) {
                 val fit = TvAutoFit.forContext(binding.root.context)
-                val cardWidthPx = fit.layoutPx(200f)
+                val cardWidthPx = fit.layoutPx(tvCardWidthDp)
                 val rootLp = binding.cardRoot.layoutParams as ViewGroup.MarginLayoutParams
                 rootLp.width = cardWidthPx
-                rootLp.marginEnd = fit.gapHalfPx(200f)
+                rootLp.marginEnd = fit.gapHalfPx(tvCardWidthDp)
                 binding.cardRoot.layoutParams = rootLp
                 // Imagem 16:9 — a altura deriva da largura (nao de 112dp x escala).
                 val imageArea = binding.cardThumbnail.parent as View
                 imageArea.layoutParams = imageArea.layoutParams.apply {
                     height = cardWidthPx * 9 / 16
                 }
-                binding.cardTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
-                binding.cardSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(10.5f))
-                binding.cardProgressText.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(12f))
-                binding.cardDriveArt.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(44f))
+                // v2.1.41 — nos cartões grandes o tipo acompanha o
+                // tamanho (conceito: títulos legíveis a 3 m).
+                val big = tvCardWidthDp > 200f
+                binding.cardTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(if (big) 17f else 13f))
+                binding.cardSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(if (big) 13f else 10.5f))
+                binding.cardProgressText.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(if (big) 13f else 12f))
+                binding.cardDriveArt.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(if (big) 56f else 44f))
                 binding.watchedBadge.layoutParams = binding.watchedBadge.layoutParams.apply {
                     width = fit.layoutPx(24f)
                     height = fit.layoutPx(24f)
