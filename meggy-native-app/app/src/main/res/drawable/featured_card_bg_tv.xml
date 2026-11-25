@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 2.7.52 — fundo do cartão "Destaques" na TV (variante
+     layout-television de item_home_featured): em repouso a superfície
+     de sempre; focado, anel BRANCO de 4dp (o cartão é um LinearLayout,
+     não um MaterialCardView — o anel do FocusAnimator.attachCard não
+     se aplica; a escala 1,05 vem do FocusAnimator.attach no adapter).
+     Só a TV usa este drawable; o celular mantém card_surface_rounded. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/md_surface_container" />
+            <stroke
+                android:width="4dp"
+                android:color="@color/tile_focus_ring_white" />
+            <corners android:radius="16dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/md_surface_container" />
+            <corners android:radius="16dp" />
+        </shape>
+    </item>
+</selector>
