@@ -21,8 +21,9 @@ android {
         // ★ v2.0.0: Bottom Nav (4 tabs) + Hero rotativo + Search/MyList/Settings + Player gestures
         // ★ v2.7.3: Login persistence (auto re-login when cookie expires) + TV keyboard fix (showSoftInput)
         // ★ 2.7.50: splash animado (vídeo TV/celular em res/raw)
-        versionCode 86
-        versionName "2.7.50"
+        // ★ 2.7.51: splash com ExoPlayer (corrige o VideoView preto da 2.7.50)
+        versionCode 87
+        versionName "2.7.51"
     }
 
     // ★ v1.4.0: Signing config com keystore FIXA (mesma em todos os builds)
