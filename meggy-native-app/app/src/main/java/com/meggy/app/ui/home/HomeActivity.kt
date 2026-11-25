@@ -1076,7 +1076,12 @@ class HomeActivity : AppCompatActivity() {
         val label = findViewById<TextView>(R.id.labelRecentFolders) ?: return
         val rail = findViewById<RecyclerView>(R.id.railRecentFolders) ?: return
         val recents = SessionManager.get(this).getRecents()
-        val groups = recents.groupBy { it.folderPath }
+        // 2.7.54 — regra do Elton (2026-11-25 17:55): esta área mostra
+        // a pasta da DISCIPLINA, não a pasta da aula. Quando a pasta
+        // do recent é pasta-de-aula ("Aula 18 - Parte 01…"), o cartão
+        // sobe para a pasta-mãe — agrupamento, título, total e toque
+        // (abre o detalhe da pasta-mãe) usam a pasta da disciplina.
+        val groups = recents.groupBy { disciplineFolderOf(it.folderPath) }
             .map { (folder, items) -> Triple(folder, items.maxOf { it.timestamp }, items) }
             .sortedByDescending { it.second }
             .take(6)
@@ -1143,6 +1148,25 @@ class HomeActivity : AppCompatActivity() {
         } else {
             recentFoldersAdapter?.updateItems(items)
         }
+    }
+
+    /**
+     * 2.7.54 — pasta da disciplina de um recent: se a pasta do vídeo
+     * é pasta-de-aula (o nome começa por "aula", contém " - parte "
+     * ou é "NNN - aula"), devolve a pasta-mãe (a que agrupa as aulas
+     * da disciplina); senão devolve a própria — pastas de tópico com
+     * vídeos directos (ex.: "1_Brasil_Colonia") ficam como estão.
+     * Nunca sobe além do 1.º nível dentro do drive ("/N:/<raiz>").
+     */
+    private fun disciplineFolderOf(folderPath: String): String {
+        val clean = folderPath.trimEnd('/')
+        val name = clean.substringAfterLast('/').lowercase()
+        val isLessonFolder = name.startsWith("aula") ||
+            name.contains(" - parte ") ||
+            Regex("^\\d+\\s*[-–.]\\s*aula\\b").containsMatchIn(name)
+        if (!isLessonFolder) return folderPath
+        val parent = clean.substringBeforeLast('/', "")
+        return if (parent.count { it == '/' } >= 2) parent else folderPath
     }
 
     /**
