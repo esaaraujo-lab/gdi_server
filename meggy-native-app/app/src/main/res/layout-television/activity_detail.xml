@@ -1,12 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  v2.7.6 — Detalhe · TV (conceito TV detalhe): 2 colunas — vídeo à
-  esquerda (16:9, play rosa, tempo + barra) e à direita título grande,
-  curso em rosa, chips, botão "Continuar assistindo" EM FOCO, abas
-  Resumo/Questões/Flashcards, texto do resumo e rodapé
-  "Você está em X% — Ymin assistidos". Header com logo + busca + avatar.
-  A aba Aulas mostra a grade 2×2 (conceito TV escolher-aulas).
-  Mesmos ids do layout de celular (ViewBinding único).
+  v2.7.6 — Detalhe · TV. 2.7.52 (conceito tv-detalhe-video, regra
+  TV SÓ VÍDEO): cabeçalho IMERSIVO em largura total — fundo = capa/
+  thumb da aula (heroImage, a cadeia de capas de sempre), título =
+  tema/pasta sobre a foto (40sp), botões "Continuar Assistindo"
+  (ctaContinue, a MESMA playResumeOrFirst) e "Assistir do Início"
+  (btnFromStart, só TV, a MESMA playFirstVideo), tempo + progresso
+  da aula; abaixo, a linha de progresso do curso (tvCourseLine/
+  tvCourseProgress) e a fileira horizontal de aulas (tvLessonsRail,
+  só TV). As abas de estudo, o botão de questões e os chips de
+  contagem ficam GONE neste layout e o selectTab força a aba Aulas
+  na TV — no celular nada muda (layout/activity_detail.xml intacto).
+  Mesmos ids do layout de celular (ViewBinding único); os ids novos
+  (btnFromStart, tvLessonsLabel, tvLessonsRail) só existem aqui e o
+  código lê-os por findViewById.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -96,395 +103,426 @@
             android:orientation="vertical"
             android:clipChildren="false">
 
-            <!-- Linha hero + info -->
-            <LinearLayout
+            <!-- Cabeçalho imersivo (2.7.52) -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="440dp"
                 android:layout_marginTop="@dimen/tv_section_spacing"
-                android:orientation="horizontal">
+                app:cardCornerRadius="@dimen/radius_lg"
+                app:cardElevation="@dimen/elevation_0"
+                app:cardBackgroundColor="@color/tile_bg">
 
-                <!-- Hero -->
-                <com.google.android.material.card.MaterialCardView
-                    android:layout_width="0dp"
-                    android:layout_height="360dp"
-                    android:layout_weight="52"
-                    app:cardCornerRadius="@dimen/radius_lg"
-                    app:cardElevation="@dimen/elevation_0"
-                    app:cardBackgroundColor="@color/tile_bg">
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
 
-                    <FrameLayout
+                    <View
+                        android:id="@+id/heroBg"
                         android:layout_width="match_parent"
-                        android:layout_height="match_parent">
+                        android:layout_height="match_parent"
+                        android:background="@drawable/card_gradient_pink" />
 
-                        <View
-                            android:id="@+id/heroBg"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:background="@drawable/card_gradient_pink" />
+                    <ImageView
+                        android:id="@+id/heroImage"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="centerCrop"
+                        android:visibility="gone"
+                        android:contentDescription="@string/thumb_desc" />
 
-                        <ImageView
-                            android:id="@+id/heroImage"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:scaleType="centerCrop"
-                            android:visibility="gone"
-                            android:contentDescription="@string/thumb_desc" />
+                    <TextView
+                        android:id="@+id/heroMonogram"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:gravity="center"
+                        android:textColor="@color/tile_title"
+                        android:textSize="72sp"
+                        android:textStyle="bold" />
+
+                    <!-- Scrim escuro p/ legibilidade do texto
+                         sobre a foto (contraste ≥ 4.5:1). -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/tile_overlay_bottom" />
+
+                    <TextView
+                        android:id="@+id/heroPlayFab"
+                        android:layout_width="@dimen/play_fab_size"
+                        android:layout_height="@dimen/play_fab_size"
+                        android:layout_gravity="center"
+                        android:background="@drawable/btn_play_circle"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:nextFocusRight="@id/ctaContinue"
+                        android:gravity="center"
+                        android:text="▶"
+                        android:textColor="@color/md_on_primary"
+                        android:textSize="48sp" />
+
+                    <TextView
+                        android:id="@+id/heroFav"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="top|end"
+                        android:layout_margin="@dimen/spacing_lg"
+                        android:background="@drawable/badge_resume"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:nextFocusLeft="@id/heroPlayFab"
+                        android:nextFocusDown="@id/ctaContinue"
+                        android:paddingHorizontal="@dimen/spacing_lg"
+                        android:paddingVertical="@dimen/spacing_sm"
+                        android:text="☆  Salvar"
+                        android:textColor="@color/tile_title"
+                        android:textSize="@dimen/tv_chip_text" />
+
+                    <!-- Título + botões + progresso da aula, sobre
+                         a foto, em baixo. -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="bottom"
+                        android:orientation="vertical"
+                        android:paddingHorizontal="28dp"
+                        android:paddingBottom="24dp">
 
                         <TextView
-                            android:id="@+id/heroMonogram"
+                            android:id="@+id/heroTitle"
                             android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:gravity="center"
-                            android:textColor="@color/tile_title"
-                            android:textSize="72sp"
+                            android:layout_height="wrap_content"
+                            android:ellipsize="end"
+                            android:maxLines="2"
+                            android:textColor="@color/md_on_surface"
+                            android:textSize="40sp"
                             android:textStyle="bold" />
 
                         <TextView
-                            android:id="@+id/heroPlayFab"
-                            android:layout_width="@dimen/play_fab_size"
-                            android:layout_height="@dimen/play_fab_size"
-                            android:layout_gravity="center"
-                            android:background="@drawable/btn_play_circle"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:nextFocusRight="@id/ctaContinue"
-                            android:gravity="center"
-                            android:text="▶"
-                            android:textColor="@color/md_on_primary"
-                            android:textSize="48sp" />
-
-                        <TextView
-                            android:id="@+id/heroFav"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_gravity="top|end"
-                            android:layout_margin="@dimen/spacing_lg"
-                            android:background="@drawable/badge_resume"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:nextFocusLeft="@id/heroPlayFab"
-                            android:nextFocusDown="@id/ctaContinue"
-                            android:paddingHorizontal="@dimen/spacing_lg"
-                            android:paddingVertical="@dimen/spacing_sm"
-                            android:text="☆  Salvar"
-                            android:textColor="@color/tile_title"
-                            android:textSize="@dimen/tv_chip_text" />
-
-                        <LinearLayout
+                            android:id="@+id/heroSubtitle"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_gravity="bottom"
-                            android:orientation="vertical"
-                            android:paddingHorizontal="@dimen/spacing_lg"
-                            android:paddingBottom="@dimen/spacing_md">
-
-                            <TextView
-                                android:id="@+id/heroTime"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:textColor="@color/tile_title"
-                                android:textSize="@dimen/tv_time_text"
-                                android:textStyle="bold" />
-
-                            <ProgressBar
-                                android:id="@+id/heroProgress"
-                                style="?android:attr/progressBarStyleHorizontal"
-                                android:layout_width="match_parent"
-                                android:layout_height="8dp"
-                                android:layout_marginTop="4dp"
-                                android:max="100"
-                                android:progressDrawable="@drawable/progress_horizontal" />
-                        </LinearLayout>
-                    </FrameLayout>
-                </com.google.android.material.card.MaterialCardView>
-
-                <!-- Info -->
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="@dimen/tv_section_spacing"
-                    android:layout_weight="48"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:id="@+id/heroTitle"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:ellipsize="end"
-                        android:maxLines="3"
-                        android:textColor="@color/md_on_surface"
-                        android:textSize="@dimen/tv_title_lg"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/heroSubtitle"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/spacing_sm"
-                        android:ellipsize="end"
-                        android:maxLines="1"
-                        android:textColor="@color/md_primary"
-                        android:textSize="@dimen/tv_body_lg" />
-
-                    <LinearLayout
-                        android:id="@+id/chipsRow"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/spacing_lg"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:id="@+id/chipCount"
-                            android:layout_width="wrap_content"
-                            android:layout_height="48dp"
-                            android:layout_marginEnd="@dimen/spacing_md"
-                            android:background="@drawable/chip_outline"
-                            android:gravity="center"
-                            android:paddingHorizontal="@dimen/spacing_lg"
-                            android:textColor="@color/md_on_surface"
-                            android:textSize="@dimen/tv_chip_text" />
-
-                        <TextView
-                            android:id="@+id/chipProgress"
-                            android:layout_width="wrap_content"
-                            android:layout_height="48dp"
-                            android:background="@drawable/chip_outline"
-                            android:gravity="center"
-                            android:paddingHorizontal="@dimen/spacing_lg"
-                            android:textColor="@color/md_on_surface"
-                            android:textSize="@dimen/tv_chip_text" />
-                    </LinearLayout>
-
-                    <!-- R22 UI (conceito "detalhe TV"): linha do curso
-                         "N aulas · Z% concluído" + barra grossa, lidas
-                         dos chips reais por syncTvCourseLine(). Só
-                         existem neste layout (TV). -->
-                    <TextView
-                        android:id="@+id/tvCourseLine"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/spacing_lg"
-                        android:textColor="@color/md_on_surface"
-                        android:textSize="@dimen/tv_body_lg"
-                        android:textStyle="bold"
-                        android:visibility="gone" />
-
-                    <ProgressBar
-                        android:id="@+id/tvCourseProgress"
-                        style="?android:attr/progressBarStyleHorizontal"
-                        android:layout_width="match_parent"
-                        android:layout_height="10dp"
-                        android:layout_marginTop="@dimen/spacing_sm"
-                        android:max="100"
-                        android:progressDrawable="@drawable/progress_horizontal"
-                        android:visibility="gone" />
-
-                    <androidx.appcompat.widget.AppCompatButton
-                        android:id="@+id/ctaContinue"
-                        android:layout_width="match_parent"
-                        android:layout_height="64dp"
-                        android:layout_marginTop="@dimen/spacing_xl"
-                        android:background="@drawable/btn_cta_gradient"
-                        android:focusable="true"
-                        android:nextFocusLeft="@id/heroPlayFab"
-                        android:nextFocusDown="@id/btnTvQuestions"
-                        android:text="@string/cta_continue"
-                        android:textColor="@color/md_on_primary"
-                        android:textSize="@dimen/tv_button_text"
-                        android:textStyle="bold" />
-
-                    <!-- R22 UI: segundo botão do painel — abre a aba
-                         de questões da disciplina (selectTab). -->
-                    <androidx.appcompat.widget.AppCompatButton
-                        android:id="@+id/btnTvQuestions"
-                        android:layout_width="match_parent"
-                        android:layout_height="56dp"
-                        android:layout_marginTop="@dimen/spacing_md"
-                        android:background="@drawable/chip_outline"
-                        android:focusable="true"
-                        android:nextFocusLeft="@id/heroPlayFab"
-                        android:nextFocusUp="@id/ctaContinue"
-                        android:nextFocusDown="@id/tabResumo"
-                        android:text="@string/tv_questions_button"
-                        android:textColor="@color/md_on_surface"
-                        android:textSize="@dimen/tv_button_text"
-                        android:textStyle="bold" />
-
-                    <!-- Abas -->
-                    <LinearLayout
-                        android:id="@+id/tabsRow"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/tv_section_spacing"
-                        android:orientation="horizontal">
-
-                        <LinearLayout
-                            android:id="@+id/tabResumo"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:background="@drawable/focus_ring_transparent"
-                            android:focusableInTouchMode="true"
-                            android:nextFocusRight="@id/tabAulas"
-                            android:nextFocusUp="@id/ctaContinue"
-                            android:nextFocusDown="@id/recycler"
-                            android:gravity="center"
-                            android:orientation="vertical"
-                            android:paddingVertical="@dimen/spacing_md">
-
-                            <TextView
-                                android:id="@+id/tabResumoLabel"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/tab_summary"
-                                android:textColor="@color/md_primary"
-                                android:textSize="@dimen/tv_body"
-                                android:textStyle="bold" />
-
-                            <View
-                                android:id="@+id/tabIndicatorResumo"
-                                android:layout_width="match_parent"
-                                android:layout_height="4dp"
-                                android:layout_marginTop="6dp"
-                                android:background="@color/md_primary" />
-                        </LinearLayout>
-
-                        <LinearLayout
-                            android:id="@+id/tabAulas"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:background="@drawable/focus_ring_transparent"
-                            android:focusableInTouchMode="true"
-                            android:nextFocusLeft="@id/tabResumo"
-                            android:nextFocusRight="@id/tabQuestoes"
-                            android:nextFocusUp="@id/ctaContinue"
-                            android:nextFocusDown="@id/recycler"
-                            android:gravity="center"
-                            android:orientation="vertical"
-                            android:paddingVertical="@dimen/spacing_md">
-
-                            <TextView
-                                android:id="@+id/tabAulasLabel"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/tab_lessons"
-                                android:textColor="@color/md_on_surface_variant"
-                                android:textSize="@dimen/tv_body" />
-
-                            <View
-                                android:id="@+id/tabIndicatorAulas"
-                                android:layout_width="match_parent"
-                                android:layout_height="4dp"
-                                android:layout_marginTop="6dp"
-                                android:background="@android:color/transparent" />
-                        </LinearLayout>
-
-                        <LinearLayout
-                            android:id="@+id/tabQuestoes"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:background="@drawable/focus_ring_transparent"
-                            android:focusableInTouchMode="true"
-                            android:nextFocusLeft="@id/tabAulas"
-                            android:nextFocusRight="@id/tabFlashcards"
-                            android:nextFocusUp="@id/ctaContinue"
-                            android:nextFocusDown="@id/recycler"
-                            android:gravity="center"
-                            android:orientation="vertical"
-                            android:paddingVertical="@dimen/spacing_md">
-
-                            <TextView
-                                android:id="@+id/tabQuestoesLabel"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/tab_questions"
-                                android:textColor="@color/md_on_surface_variant"
-                                android:textSize="@dimen/tv_body" />
-
-                            <View
-                                android:id="@+id/tabIndicatorQuestoes"
-                                android:layout_width="match_parent"
-                                android:layout_height="4dp"
-                                android:layout_marginTop="6dp"
-                                android:background="@android:color/transparent" />
-                        </LinearLayout>
-
-                        <LinearLayout
-                            android:id="@+id/tabFlashcards"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:background="@drawable/focus_ring_transparent"
-                            android:focusableInTouchMode="true"
-                            android:nextFocusLeft="@id/tabQuestoes"
-                            android:nextFocusUp="@id/ctaContinue"
-                            android:nextFocusDown="@id/recycler"
-                            android:gravity="center"
-                            android:orientation="vertical"
-                            android:paddingVertical="@dimen/spacing_md">
-
-                            <TextView
-                                android:id="@+id/tabFlashcardsLabel"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/tab_flashcards"
-                                android:textColor="@color/md_on_surface_variant"
-                                android:textSize="@dimen/tv_body" />
-
-                            <View
-                                android:id="@+id/tabIndicatorFlashcards"
-                                android:layout_width="match_parent"
-                                android:layout_height="4dp"
-                                android:layout_marginTop="6dp"
-                                android:background="@android:color/transparent" />
-                        </LinearLayout>
-                    </LinearLayout>
-
-                    <!-- Painel: Resumo (na coluna direita) -->
-                    <LinearLayout
-                        android:id="@+id/panelResumo"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:id="@+id/resumoState"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/spacing_sm"
+                            android:ellipsize="end"
+                            android:maxLines="1"
                             android:textColor="@color/md_primary"
-                            android:textSize="@dimen/tv_chip_text" />
+                            android:textSize="18sp" />
 
-                        <TextView
-                            android:id="@+id/resumoText"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="@dimen/spacing_md"
-                            android:textColor="@color/md_on_surface"
-                            android:textSize="@dimen/tv_body" />
-
-                        <TextView
-                            android:id="@+id/detailFooter"
+                        <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="@dimen/spacing_xl"
-                            android:gravity="end"
-                            android:textColor="@color/md_on_surface_variant"
-                            android:textSize="@dimen/tv_body" />
+                            android:orientation="horizontal">
+
+                            <androidx.appcompat.widget.AppCompatButton
+                                android:id="@+id/ctaContinue"
+                                android:layout_width="0dp"
+                                android:layout_height="64dp"
+                                android:layout_weight="1"
+                                android:background="@drawable/btn_cta_gradient"
+                                android:focusable="true"
+                                android:nextFocusLeft="@id/heroPlayFab"
+                                android:nextFocusRight="@id/btnFromStart"
+                                android:nextFocusDown="@id/tvLessonsRail"
+                                android:text="@string/cta_continue"
+                                android:textColor="@color/md_on_primary"
+                                android:textSize="@dimen/tv_button_text"
+                                android:textStyle="bold" />
+
+                            <!-- 2.7.52 — "Assistir do Início" (só
+                                 TV): abre a 1.ª aula da pasta pela
+                                 MESMA playFirstVideo. Gone até haver
+                                 vídeos directos (setupTvLessonsRail). -->
+                            <androidx.appcompat.widget.AppCompatButton
+                                android:id="@+id/btnFromStart"
+                                android:layout_width="0dp"
+                                android:layout_height="64dp"
+                                android:layout_marginStart="@dimen/spacing_lg"
+                                android:layout_weight="1"
+                                android:background="@drawable/chip_outline"
+                                android:focusable="true"
+                                android:nextFocusLeft="@id/ctaContinue"
+                                android:nextFocusDown="@id/tvLessonsRail"
+                                android:text="@string/watch_from_start"
+                                android:textColor="@color/md_on_surface"
+                                android:textSize="@dimen/tv_button_text"
+                                android:textStyle="bold"
+                                android:visibility="gone" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/heroTime"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/spacing_lg"
+                            android:textColor="@color/tile_title"
+                            android:textSize="@dimen/tv_time_text"
+                            android:textStyle="bold" />
+
+                        <ProgressBar
+                            android:id="@+id/heroProgress"
+                            style="?android:attr/progressBarStyleHorizontal"
+                            android:layout_width="match_parent"
+                            android:layout_height="8dp"
+                            android:layout_marginTop="4dp"
+                            android:max="100"
+                            android:progressDrawable="@drawable/progress_horizontal" />
                     </LinearLayout>
+                </FrameLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- R22 UI + 2.7.52: linha do curso + barra larga, em
+                 largura total sob o cabeçalho. A fonte são os textos
+                 REAIS dos chips (syncTvCourseLine); com vídeos
+                 directos na pasta, "Progresso do curso • X de Y
+                 aulas concluídas • Z%" (SPEC §4). Só TV. -->
+            <TextView
+                android:id="@+id/tvCourseLine"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_lg"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/tv_body_lg"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <ProgressBar
+                android:id="@+id/tvCourseProgress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="10dp"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:max="100"
+                android:progressDrawable="@drawable/progress_horizontal"
+                android:visibility="gone" />
+
+            <!-- Chips de contagem: GONE na TV (regra TV só vídeo —
+                 nada de "tem x PDFs/pastas" no detalhe). As vistas
+                 ficam na hierarquia porque o binding e o
+                 syncTvCourseLine lêem os textos delas. -->
+            <LinearLayout
+                android:id="@+id/chipsRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_lg"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/chipCount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:layout_marginEnd="@dimen/spacing_md"
+                    android:background="@drawable/chip_outline"
+                    android:gravity="center"
+                    android:paddingHorizontal="@dimen/spacing_lg"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/tv_chip_text" />
+
+                <TextView
+                    android:id="@+id/chipProgress"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:background="@drawable/chip_outline"
+                    android:gravity="center"
+                    android:paddingHorizontal="@dimen/spacing_lg"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/tv_chip_text" />
+            </LinearLayout>
+
+            <!-- R22 UI: botão de questões — GONE na TV (2.7.52, regra
+                 TV só vídeo). A vista fica p/ o findViewById do
+                 onCreate não mudar; o clique nunca é alcançável. -->
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnTvQuestions"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:background="@drawable/chip_outline"
+                android:focusable="true"
+                android:text="@string/tv_questions_button"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/tv_button_text"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <!-- Abas de estudo: GONE na TV (2.7.52, regra TV só
+                 vídeo). A estrutura fica (binding + selectTab pintam
+                 os rótulos), mas nunca é visível nem focável; o
+                 selectTab força a aba Aulas na TV. -->
+            <LinearLayout
+                android:id="@+id/tabsRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/tv_section_spacing"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:id="@+id/tabResumo"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:background="@drawable/focus_ring_transparent"
+                    android:focusableInTouchMode="true"
+                    android:nextFocusRight="@id/tabAulas"
+                    android:nextFocusUp="@id/ctaContinue"
+                    android:nextFocusDown="@id/recycler"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:paddingVertical="@dimen/spacing_md">
+
+                    <TextView
+                        android:id="@+id/tabResumoLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/tab_summary"
+                        android:textColor="@color/md_primary"
+                        android:textSize="@dimen/tv_body"
+                        android:textStyle="bold" />
+
+                    <View
+                        android:id="@+id/tabIndicatorResumo"
+                        android:layout_width="match_parent"
+                        android:layout_height="4dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@color/md_primary" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/tabAulas"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:background="@drawable/focus_ring_transparent"
+                    android:focusableInTouchMode="true"
+                    android:nextFocusLeft="@id/tabResumo"
+                    android:nextFocusRight="@id/tabQuestoes"
+                    android:nextFocusUp="@id/ctaContinue"
+                    android:nextFocusDown="@id/recycler"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:paddingVertical="@dimen/spacing_md">
+
+                    <TextView
+                        android:id="@+id/tabAulasLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/tab_lessons"
+                        android:textColor="@color/md_on_surface_variant"
+                        android:textSize="@dimen/tv_body" />
+
+                    <View
+                        android:id="@+id/tabIndicatorAulas"
+                        android:layout_width="match_parent"
+                        android:layout_height="4dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@android:color/transparent" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/tabQuestoes"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:background="@drawable/focus_ring_transparent"
+                    android:focusableInTouchMode="true"
+                    android:nextFocusLeft="@id/tabAulas"
+                    android:nextFocusRight="@id/tabFlashcards"
+                    android:nextFocusUp="@id/ctaContinue"
+                    android:nextFocusDown="@id/recycler"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:paddingVertical="@dimen/spacing_md">
+
+                    <TextView
+                        android:id="@+id/tabQuestoesLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/tab_questions"
+                        android:textColor="@color/md_on_surface_variant"
+                        android:textSize="@dimen/tv_body" />
+
+                    <View
+                        android:id="@+id/tabIndicatorQuestoes"
+                        android:layout_width="match_parent"
+                        android:layout_height="4dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@android:color/transparent" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/tabFlashcards"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:background="@drawable/focus_ring_transparent"
+                    android:focusableInTouchMode="true"
+                    android:nextFocusLeft="@id/tabQuestoes"
+                    android:nextFocusUp="@id/ctaContinue"
+                    android:nextFocusDown="@id/recycler"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:paddingVertical="@dimen/spacing_md">
+
+                    <TextView
+                        android:id="@+id/tabFlashcardsLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/tab_flashcards"
+                        android:textColor="@color/md_on_surface_variant"
+                        android:textSize="@dimen/tv_body" />
+
+                    <View
+                        android:id="@+id/tabIndicatorFlashcards"
+                        android:layout_width="match_parent"
+                        android:layout_height="4dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@android:color/transparent" />
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- Painel: Aulas (grade 2×2, largura total) -->
+            <!-- Painel: Resumo (na TV nunca abre — selectTab força
+                 Aulas; a estrutura fica p/ o binding). -->
+            <LinearLayout
+                android:id="@+id/panelResumo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/resumoState"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/md_primary"
+                    android:textSize="@dimen/tv_chip_text" />
+
+                <TextView
+                    android:id="@+id/resumoText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_md"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/tv_body" />
+
+                <TextView
+                    android:id="@+id/detailFooter"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_xl"
+                    android:gravity="end"
+                    android:textColor="@color/md_on_surface_variant"
+                    android:textSize="@dimen/tv_body" />
+            </LinearLayout>
+
+            <!-- Painel: Aulas (grade, largura total) -->
             <LinearLayout
                 android:id="@+id/panelAulas"
                 android:layout_width="match_parent"
@@ -516,6 +554,35 @@
                         android:textColorHint="@color/md_on_surface_variant"
                         android:textSize="@dimen/tv_body" />
                 </com.google.android.material.textfield.TextInputLayout>
+
+                <!-- 2.7.52 — fileira horizontal de aulas (só TV,
+                     conceito tv-detalhe-video): os vídeos DIRECTOS
+                     da pasta em cartões grandes (RailAdapter);
+                     toque = a mesma abertura de hoje (openFile).
+                     Montada por setupTvLessonsRail; gone sem vídeos
+                     directos. -->
+                <TextView
+                    android:id="@+id/tvLessonsLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/tv_section_spacing"
+                    android:text="@string/tab_lessons"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/tv_section_title"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/tvLessonsRail"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/tv_rail_spacing"
+                    android:clipToPadding="false"
+                    android:paddingHorizontal="16dp"
+                    android:paddingVertical="12dp"
+                    android:clipChildren="false"
+                    android:overScrollMode="never"
+                    android:visibility="gone" />
 
                 <TextView
                     android:id="@+id/labelContinue"
@@ -593,7 +660,7 @@
                     android:visibility="gone" />
             </LinearLayout>
 
-            <!-- Painel: Questões -->
+            <!-- Painel: Questões (na TV nunca abre — ver panelResumo) -->
             <LinearLayout
                 android:id="@+id/panelQuestoes"
                 android:layout_width="match_parent"
@@ -620,7 +687,7 @@
                     android:visibility="gone" />
             </LinearLayout>
 
-            <!-- Painel: Flashcards -->
+            <!-- Painel: Flashcards (na TV nunca abre — ver panelResumo) -->
             <LinearLayout
                 android:id="@+id/panelFlashcards"
                 android:layout_width="match_parent"
