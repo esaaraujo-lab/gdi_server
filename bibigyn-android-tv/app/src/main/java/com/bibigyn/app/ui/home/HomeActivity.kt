@@ -180,6 +180,7 @@ class HomeActivity : AppCompatActivity() {
 
         // v2.1.5: TV não tem bottom nav.
         if (TvUtils.isTv(this)) binding.bottomNav.visibility = View.GONE
+        setupTvSideMenu()
 
         binding.topSair?.setOnClickListener { logout() }
 
@@ -470,13 +471,20 @@ class HomeActivity : AppCompatActivity() {
         // hoje); regresso: foco + scrollY guardados.
         if (TvUtils.isTv(this)) {
             if (isFirstResume) {
-                binding.railContinue.post {
-                    binding.railContinue.findViewHolderForAdapterPosition(0)
-                        ?.itemView?.requestFocus()
-                }
-                binding.railDrives.post {
-                    binding.railDrives.findViewHolderForAdapterPosition(0)
-                        ?.itemView?.requestFocus()
+                // v2.1.41 — foco por omissão da home TV: o herói
+                // (botão Continuar do destaque) quando ele existe;
+                // sem destaque, o 1.º cartão do rail (como antes).
+                if (binding.featuredSection.visibility == View.VISIBLE) {
+                    binding.featuredCard.post { binding.featuredCard.requestFocus() }
+                } else {
+                    binding.railContinue.post {
+                        binding.railContinue.findViewHolderForAdapterPosition(0)
+                            ?.itemView?.requestFocus()
+                    }
+                    binding.railDrives.post {
+                        binding.railDrives.findViewHolderForAdapterPosition(0)
+                            ?.itemView?.requestFocus()
+                    }
                 }
             } else {
                 restoreHomeFocusOnResume()
@@ -695,10 +703,36 @@ class HomeActivity : AppCompatActivity() {
             binding.railContinue.addItemDecoration(RailGutterDecoration(tvAutoFit?.gutterDp(200f) ?: 8))
         }
 
+        // v2.1.41 — na TV o item do herói imersivo (o "best" do
+        // setupFeaturedContinue) SAI da fileira: sem duplicação
+        // (foto do Elton: o mesmo item aparecia no herói e como
+        // 1.º cartão da fileira).
+        val isTvHome = TvUtils.isTv(this)
+        val heroRecent = if (isTvHome) {
+            recents.filter { sm.hasResume(it.folderPath, it.videoName) }
+                .maxByOrNull { sm.getResumeProgress(it.folderPath, it.videoName) }
+        } else null
+        val railRecents = if (heroRecent != null) {
+            recents.filterNot {
+                it.folderPath == heroRecent.folderPath && it.videoName == heroRecent.videoName
+            }
+        } else recents
+        if (railRecents.isEmpty()) {
+            // Só existe o item do herói: a fileira some, o herói fica.
+            binding.labelContinue.visibility = View.GONE
+            binding.railContinue.visibility = View.GONE
+            continueAdapter?.updateItems(emptyList())
+            setupFeaturedContinue(recents)
+            if (recents.any { it.thumbnailLink.isNullOrBlank() }) {
+                lifecycleScope.launch { backfillRecentThumbs(recents) }
+            }
+            return
+        }
+
         // ★ v2.5.0: Show the COURSE NAME (not the folder path) as subtitle.
         // Format.extractCourseName() returns a human-friendly label like
         // "PF - Agente" or "DirAdmin" depending on the path depth.
-        val railItems = recents.map { r ->
+        val railItems = railRecents.map { r ->
             val courseName = Format.extractCourseName(r.folderPath)
             // Port R28 da Meggy — o título do card é o NOME DO TEMA DA
             // AULA = o nome da pasta da aula (último segmento do
@@ -742,7 +776,10 @@ class HomeActivity : AppCompatActivity() {
             continueAdapter = RailAdapter(
                 railItems,
                 nextFocusUpId = if (hasFeatured) R.id.featured_card else R.id.heroPlay,
-                nextFocusDownId = R.id.railDrives
+                nextFocusDownId = R.id.railDrives,
+                // v2.1.41 — cartões grandes 16:9 na TV (conceito);
+                // no celular o parâmetro nem é aplicado (VH só na TV).
+                tvCardWidthDp = if (isTvHome) 300f else 200f
             ) { item ->
                 // Ronda 18 Frente C (F1) — a lambda nasce UMA só vez
                 // (firstBuild) mas os recents mudam a cada vídeo visto:
@@ -818,8 +855,14 @@ class HomeActivity : AppCompatActivity() {
             .maxByOrNull { sm.getResumeProgress(it.folderPath, it.videoName) }
         if (best == null) {
             binding.featuredSection.visibility = View.GONE
+            // v2.1.41 — sem destaque, o herói de drives volta (a home
+            // nunca fica sem herói).
+            binding.heroCard.visibility = View.VISIBLE
             return
         }
+        // v2.1.41 — com destaque, ELE é o herói (imersivo, tela
+        // cheia): o hero de drives some para não duplicar conteúdo.
+        binding.heroCard.visibility = View.GONE
         val progress = sm.getResumeProgress(best.folderPath, best.videoName)
         val pos = sm.getResume(best.folderPath, best.videoName)
         val dur = sm.getResumeDuration(best.folderPath, best.videoName)
@@ -833,7 +876,11 @@ class HomeActivity : AppCompatActivity() {
         )
         binding.featuredSubtitle.setWordEllipsized(Format.extractCourseName(best.folderPath))
         binding.featuredProgress.progress = progress
-        binding.featuredProgressText.text = "$progress% concluído"
+        // v2.1.41 (conceito): "% concluído · X min restantes" — os
+        // minutos restantes só aparecem com duração conhecida
+        // (Format.progressText); sem duração, só o %.
+        binding.featuredProgressText.text =
+            if (dur > 0) Format.progressText(progress, dur, pos) else "$progress% concluído"
         binding.featuredTimeText.text = Format.positionText(pos, dur)
         // Onda 2 + camada 3 — "Continuar de onde parou": (b) thumb
         // do Drive; sem ela (ou se ela falhar), (3) biblioteca por
@@ -870,10 +917,16 @@ class HomeActivity : AppCompatActivity() {
         binding.featuredCard.setOnClickListener {
             continueWatching(best.folderPath, best.videoName, Format.extractCourseName(best.folderPath))
         }
-        // R18B (Bug 1 #1): 1.00x na TV — o cartão tem 848dp
-        // (largura total); qualquer escala é cortada nas laterais
-        // e invade o overscan. Ficam anel 3dp + elevação 16dp.
-        FocusAnimator.attachCard(binding.featuredCard, true, scaleTv = FocusAnimator.SCALE_TV_NONE)
+        // R18B (Bug 1 #1): 1.00x na TV — o cartão tem largura total;
+        // qualquer escala é cortada nas laterais e invade o
+        // overscan. v2.1.41: o anel passa a BRANCO 4dp (conceito +
+        // padrão R27 das grades) — fica anel branco + elevação 16dp.
+        FocusAnimator.attachCard(
+            binding.featuredCard, true,
+            scaleTv = FocusAnimator.SCALE_TV_NONE,
+            ringColorRes = R.color.tile_focus_ring_white,
+            ringWidthDp = 4f
+        )
     }
 
     /**
@@ -1060,11 +1113,64 @@ class HomeActivity : AppCompatActivity() {
 
 
     /**
+     * v2.1.41 — menu lateral da Home TV (conceito "tv-home-nova").
+     * A BiBi NÃO tinha menu lateral (o SideMenuView é da Meggy):
+     * este é só APRESENTAÇÃO + foco — cada item leva a um destino
+     * que já existe: Início = topo da home; Drives/Continuar =
+     * rolagem + foco na fileira existente; Ajustes = a MESMA
+     * Intent da bottom nav. Nenhuma rota nem lógica de abertura
+     * nova. As cadeias DIREITA vivem em setupTvFocusChains.
+     */
+    private fun setupTvSideMenu() {
+        if (!TvUtils.isTv(this)) return
+        val items = listOf(
+            binding.menuHome, binding.menuDrives,
+            binding.menuContinue, binding.menuSettings
+        )
+        items.forEach { item ->
+            item?.let {
+                FocusAnimator.attach(it, true, scaleTv = FocusAnimator.SCALE_TV_DENSE)
+            }
+        }
+        binding.menuHome?.setOnClickListener {
+            binding.homeScroll.scrollTo(0, 0)
+            binding.homeScroll.post {
+                if (binding.featuredSection.visibility == View.VISIBLE) {
+                    binding.featuredCard.requestFocus()
+                } else {
+                    binding.heroPlay.requestFocus()
+                }
+            }
+        }
+        binding.menuContinue?.setOnClickListener {
+            binding.homeScroll.post {
+                if (binding.featuredSection.visibility == View.VISIBLE) {
+                    binding.featuredCard.requestFocus()
+                } else {
+                    binding.railContinue.findViewHolderForAdapterPosition(0)
+                        ?.itemView?.requestFocus()
+                }
+            }
+        }
+        binding.menuDrives?.setOnClickListener {
+            binding.homeScroll.post {
+                binding.railDrives.findViewHolderForAdapterPosition(0)
+                    ?.itemView?.requestFocus()
+            }
+        }
+        binding.menuSettings?.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
+            overridePendingTransition(0, 0)
+        }
+    }
+
+    /**
      * Frente A (TV) — cadeias D-pad explícitas da home (só TV).
      * Do hero: DOWN vai ao destaque quando existe, senão ao rail
      * visível de cima; do destaque: UP volta ao hero, DOWN vai ao
      * rail visível de cima. Sem isto, o FocusFinder decide sozinho
      * entre secções que estão fora do viewport do ScrollView.
+     * v2.1.41 — + cadeias do menu lateral (DIREITA/ESQUERDA).
      */
     private fun setupTvFocusChains() {
         if (!TvUtils.isTv(this)) return
@@ -1077,6 +1183,23 @@ class HomeActivity : AppCompatActivity() {
         binding.featuredCard.nextFocusUpId = R.id.heroPlay
         binding.featuredCard.nextFocusDownId =
             if (continueVisible) R.id.railContinue else R.id.railDrives
+        // v2.1.41 — menu lateral: DIREITA entra no conteúdo do topo;
+        // do herói/destaque, ESQUERDA volta ao menu.
+        val topTarget = when {
+            featuredVisible -> R.id.featured_card
+            binding.heroCard.visibility == View.VISIBLE -> R.id.heroPlay
+            continueVisible -> R.id.railContinue
+            else -> R.id.railDrives
+        }
+        binding.menuHome?.nextFocusRightId = topTarget
+        binding.menuSettings?.nextFocusRightId = topTarget
+        binding.menuContinue?.nextFocusRightId =
+            if (featuredVisible) R.id.featured_card
+            else if (continueVisible) R.id.railContinue
+            else R.id.railDrives
+        binding.menuDrives?.nextFocusRightId = R.id.railDrives
+        binding.heroPlay.nextFocusLeftId = R.id.menuHome
+        binding.featuredCard.nextFocusLeftId = R.id.menuHome
     }
 
     /**
@@ -1117,20 +1240,16 @@ class HomeActivity : AppCompatActivity() {
         binding.heroTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(30f))
         binding.heroSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(14f))
         binding.heroPlay.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(15f))
-        // Destaque: titulo da seccao (1o filho, sem id) + thumb 16:9.
-        (binding.featuredSection.getChildAt(0) as? TextView)?.setTextSize(
-            TypedValue.COMPLEX_UNIT_SP, fit.textSp(18f))
-        val thumbWidthPx = fit.layoutPx(320f)
-        val thumbBox = binding.featuredThumb.parent as View
-        thumbBox.layoutParams = thumbBox.layoutParams.apply {
-            width = thumbWidthPx
-            height = thumbWidthPx * 9 / 16
-        }
-        binding.featuredTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(22f))
-        binding.featuredSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
-        binding.featuredProgressText.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
-        binding.featuredTimeText.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
-        binding.featuredContinue.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(15f))
+        // Destaque (v2.1.41 — herói imersivo): cartão em largura
+        // total, altura pela escala do hero (400dp de base); a thumb
+        // é full-bleed (a caixa 320x180 da versão antiga saiu).
+        binding.featuredCard.layoutParams =
+            binding.featuredCard.layoutParams.apply { height = fit.heroPx(400f) }
+        binding.featuredTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(36f))
+        binding.featuredSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(17f))
+        binding.featuredProgressText.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(15f))
+        binding.featuredTimeText.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(15f))
+        binding.featuredContinue.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(17f))
         binding.featuredDriveArt.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(56f))
         // Seccoes + rodape.
         binding.labelContinue.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(18f))
