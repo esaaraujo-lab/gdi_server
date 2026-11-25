@@ -64,6 +64,7 @@ import com.vovofit.app.util.PlaylistManager
 import com.vovofit.app.util.DescriptionPregenerator
 import com.vovofit.app.util.FocusAnimator
 import com.vovofit.app.util.SessionManager
+import com.vovofit.app.util.ResumeSync
 import com.vovofit.app.util.SubtitleFetcher
 import com.vovofit.app.util.TvUtils
 import com.vovofit.app.util.VideoCache
@@ -336,6 +337,17 @@ class PlayerActivity : AppCompatActivity() {
 
     private var saveJob: Job? = null
     private var timeJob: Job? = null
+
+    // 1.0.39 — sessão de histórico p/ o servidor (POST
+    // /userstate/save): os minutos REAIS assistidos alimentam as
+    // horas da semana e as estatísticas do site. O saveJob acumula
+    // os segundos a tocar; o evento vai UMA vez por sessão, no fim
+    // (releasePlayer/markEnded/troca de aula) — ver flushSessionHistory.
+    private var sessionFolder: String? = null
+    private var sessionVideo: String? = null
+    private var sessionStartMs: Long = 0L
+    private var sessionPlayedSeconds: Long = 0L
+    private var sessionHistorySent: Boolean = false
 
     private var sleepMode = false
     private val handler = Handler(Looper.getMainLooper())
@@ -1677,11 +1689,33 @@ class PlayerActivity : AppCompatActivity() {
                 val it = currentItem ?: break
                 if (p.playbackState == Player.STATE_READY && p.isPlaying) {
                     saveResumeFor(it, currentUrl, p.currentPosition)
+                    // 1.0.39 — acumula os segundos reais a tocar p/ o
+                    // evento de histórico do servidor (minutos da sessão).
+                    trackSessionPlaying(it)
                     val fp = it.folderPath
                     if (!fp.isNullOrBlank()) {
                         // v2.7.6: salva a thumb junto — alimenta os cards
                         // "Continue assistindo" com foto real.
                         SessionManager.get(this@PlayerActivity).addRecent(fp, it.name, it.thumbnailLink)
+                        // 1.0.39 — assistido aos >50% (paridade com o
+                        // desktop, que marca aos >50% ou no fim): ao
+                        // cruzar metade da duração A TOCAR, marca a
+                        // aula como assistida — local + servidor, pelo
+                        // caminho de hoje (SessionManager.markWatched
+                        // -> ResumeSync.noteWatched -> POST
+                        // /userstate/save {watched:{path:true}}).
+                        // Uma vez por aula: o isWatched é a guarda —
+                        // depois de marcado, nem os ticks seguintes nem
+                        // sessões futuras repetem este POST (a marca
+                        // do fim, no markEnded, mantém-se como hoje).
+                        // Sem duração conhecida (dur <= 0) não há
+                        // metade — fica só a marca do fim.
+                        val dur = p.duration
+                        if (dur > 0L && p.currentPosition * 2L >= dur &&
+                            !SessionManager.get(this@PlayerActivity).isWatched(fp, it.name)
+                        ) {
+                            SessionManager.get(this@PlayerActivity).markWatched(fp, it.name)
+                        }
                     }
                 }
             }
@@ -1784,7 +1818,15 @@ class PlayerActivity : AppCompatActivity() {
             val url = currentUrl
             if (it != null && url != null) {
                 saveResumeFor(it, url, p.currentPosition)
+                // 1.0.39 — posição final p/ o servidor (ignora o
+                // throttle de 10 s) + evento de histórico da sessão.
+                val fp = it.folderPath?.takeIf { s -> s.isNotBlank() }
+                    ?: intent.getStringExtra(EXTRA_FOLDER_PATH)?.takeIf { s -> s.isNotBlank() }
+                if (!fp.isNullOrBlank() && it.name.isNotBlank()) {
+                    ResumeSync.flushResume(this, fp, it.name, p.currentPosition)
+                }
             }
+            flushSessionHistory()
         } catch (_: Exception) {}
         p.release()
         player = null
@@ -1895,6 +1937,60 @@ class PlayerActivity : AppCompatActivity() {
                 SessionManager.get(this).clearResumePosition(url)
             }
         }
+        // 1.0.39 — a aula acabou: os minutos da sessão são finais e
+        // o evento de histórico vai já (o releasePlayer que vier a
+        // seguir já não o reenvia — ver sessionHistorySent).
+        flushSessionHistory()
+    }
+
+    /**
+     * 1.0.39 — acumula 2 s de reprodução real p/ a sessão actual.
+     * A sessão é (pasta, vídeo): ao trocar de aula (avanço automático
+     * da playlist), a sessão anterior fecha primeiro (o evento vai
+     * com os minutos dela) e começa uma nova. Só conta a tocar
+     * (STATE_READY + isPlaying) — pausa/buffer não contam.
+     */
+    private fun trackSessionPlaying(item: FileItem) {
+        val fp = item.folderPath?.takeIf { it.isNotBlank() }
+            ?: intent.getStringExtra(EXTRA_FOLDER_PATH)?.takeIf { it.isNotBlank() }
+        if (fp.isNullOrBlank() || item.name.isBlank()) return
+        if (sessionFolder != fp || sessionVideo != item.name) {
+            flushSessionHistory()
+            sessionFolder = fp
+            sessionVideo = item.name
+            sessionStartMs = System.currentTimeMillis()
+            sessionPlayedSeconds = 0L
+            sessionHistorySent = false
+        }
+        sessionPlayedSeconds += 2L
+    }
+
+    /**
+     * 1.0.39 — envia o evento de histórico da sessão actual (UMA vez):
+     * {path, name, at=início da sessão, minutes=minutos assistidos}.
+     * Depois de enviado, a sessão limpa-se — reabrir a mesma aula
+     * começa uma sessão nova. Sem sessão (ou já enviada), não faz nada.
+     * Best-effort (ResumeSync): falhou, fica só local.
+     */
+    private fun flushSessionHistory() {
+        val fp = sessionFolder
+        val video = sessionVideo
+        if (sessionHistorySent || sessionStartMs <= 0L || fp.isNullOrBlank() || video.isNullOrBlank()) {
+            sessionFolder = null
+            sessionVideo = null
+            sessionStartMs = 0L
+            sessionPlayedSeconds = 0L
+            sessionHistorySent = false
+            return
+        }
+        sessionHistorySent = true
+        val minutes = (sessionPlayedSeconds / 60L).toInt()
+        val startMs = sessionStartMs
+        sessionFolder = null
+        sessionVideo = null
+        sessionStartMs = 0L
+        sessionPlayedSeconds = 0L
+        ResumeSync.noteHistorySession(this, fp, video, startMs, minutes)
     }
 
     // ★ v1.6.0: Picture-in-Picture — NUNCA na TV (v2.7.6).
