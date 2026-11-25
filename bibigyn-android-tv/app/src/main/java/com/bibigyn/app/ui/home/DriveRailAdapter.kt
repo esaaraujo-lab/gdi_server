@@ -141,20 +141,32 @@ class DriveRailAdapter(
                 val pos = bindingAdapterPosition
                 if (pos != RecyclerView.NO_POSITION) onClick(items[pos])
             }
-            FocusAnimator.attachCard(binding.driveCardRoot, TvUtils.isTv(binding.root.context))
+            // v2.1.41 — tile de drive grande na TV (conceito):
+            // anel branco 4dp + escala 1.05 (padrão R27).
+            if (TvUtils.isTv(binding.root.context)) {
+                FocusAnimator.attachCard(
+                    binding.driveCardRoot, true,
+                    scaleTv = FocusAnimator.SCALE_TV_DENSE,
+                    ringColorRes = R.color.tile_focus_ring_white,
+                    ringWidthDp = 4f
+                )
+            } else {
+                FocusAnimator.attachCard(binding.driveCardRoot, TvUtils.isTv(binding.root.context))
+            }
             TapFeedback.attachPress(binding.driveCardRoot, TvUtils.isTv(binding.root.context))
-            // Ronda 7 Frente B — auto-ajuste TV (TvAutoFit): o tile passa a
-            // derivar do viewport medido; a proporcao 150:210 mantem-se.
-            // No celular e na 32" de referencia (escala 1.0) nada muda.
+            // Ronda 7 Frente B — auto-ajuste TV (TvAutoFit): o tile
+            // deriva do viewport medido. v2.1.41 — a base passa de
+            // 150x210 para 230x300 (cartões grandes do conceito; a
+            // proporção retrato mantém-se). No celular nada muda.
             if (TvUtils.isTv(binding.root.context)) {
                 val fit = TvAutoFit.forContext(binding.root.context)
                 val driveLp = binding.driveCardRoot.layoutParams as ViewGroup.MarginLayoutParams
-                driveLp.width = fit.layoutPx(150f)
-                driveLp.height = fit.layoutPx(210f)
-                driveLp.marginEnd = fit.gapHalfPx(150f)
+                driveLp.width = fit.layoutPx(230f)
+                driveLp.height = fit.layoutPx(300f)
+                driveLp.marginEnd = fit.gapHalfPx(230f)
                 binding.driveCardRoot.layoutParams = driveLp
-                binding.driveName.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
-                binding.driveMeta.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(10.5f))
+                binding.driveName.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(16f))
+                binding.driveMeta.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(12f))
                 binding.driveFavStar.layoutParams = binding.driveFavStar.layoutParams.apply {
                     width = fit.layoutPx(32f)
                     height = fit.layoutPx(32f)
