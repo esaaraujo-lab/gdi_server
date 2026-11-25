@@ -11,6 +11,7 @@ import android.util.Log
 import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.widget.TextView
 import android.view.animation.AlphaAnimation
@@ -780,11 +781,37 @@ class HomeActivity : AppCompatActivity() {
         val recents = sm.getRecents()
         homeRecents = recents
 
-        if (recents.isEmpty()) {
+        // 2.7.52 — SEM DUPLICAÇÃO (queixa do Elton nas fotos da TV:
+        // a aula do hero aparecia outra vez como 1.º cartão da
+        // fileira). Na TV, o item do hero — o MESMO cálculo do
+        // setupFeaturedContinue (recent com resume de maior
+        // progresso) — sai da fileira. No celular nada muda (o
+        // cartão largo e o rail já coexistiam assim).
+        val isTvHere = TvUtils.isTv(this)
+        val heroItem = if (isTvHere) {
+            recents.filter { sm.hasResume(it.folderPath, it.videoName) }
+                .maxByOrNull { sm.getResumeProgress(it.folderPath, it.videoName) }
+        } else {
+            null
+        }
+        val railRecents = if (heroItem != null) {
+            recents.filterNot {
+                it.folderPath == heroItem.folderPath && it.videoName == heroItem.videoName
+            }
+        } else {
+            recents
+        }
+
+        if (railRecents.isEmpty()) {
             binding.labelContinue.visibility = View.GONE
             binding.railContinue.visibility = View.GONE
             findViewById<View>(R.id.continueHeader)?.visibility = View.GONE
             findViewById<View>(R.id.continueSeeAll)?.visibility = View.GONE
+            // 2.7.52 — fileira vazia na TV pode significar "só há o
+            // item do hero": o destaque monta-se na mesma (no
+            // celular este ramo é o recents.isEmpty() de sempre e o
+            // setupFeaturedContinue esconde a seção, como antes).
+            setupFeaturedContinue(recents)
             return
         }
 
@@ -809,7 +836,10 @@ class HomeActivity : AppCompatActivity() {
         if (binding.railContinue.layoutManager == null) {
             binding.railContinue.layoutManager =
                 LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
-            binding.railContinue.addItemDecoration(RailGutterDecoration(tvAutoFit?.gutterDp(200f) ?: 8))
+            // 2.7.52 — na TV os cartões são grandes (340dp): o gutter
+            // acompanha a base nova. No celular tvAutoFit é null e
+            // fica o 8 de sempre.
+            binding.railContinue.addItemDecoration(RailGutterDecoration(tvAutoFit?.gutterDp(340f) ?: 8))
         }
 
         // ★ v2.5.0: Show the COURSE NAME (not the folder path) as subtitle.
@@ -820,7 +850,7 @@ class HomeActivity : AppCompatActivity() {
         // título da tela Detalhe e do player p/ arquivo genérico):
         // o nome cru do arquivo ("Videoaula") some do título. Sem
         // segmento na pasta, cai no título antigo (lessonDisplayTitle).
-        val railItems = recents.map { r ->
+        val railItems = railRecents.map { r ->
             val courseName = Format.extractCourseName(r.folderPath)
             val displayTitle = LessonDescription.folderNameFromPath(r.folderPath)
                 ?: Format.lessonDisplayTitle(r.videoName, courseName)
@@ -858,7 +888,10 @@ class HomeActivity : AppCompatActivity() {
                 nextFocusUpId = if (hasFeatured) R.id.featured_card else R.id.heroPlay,
                 nextFocusDownId = R.id.railDrives,
                 // 2.7.48 — anel de foco branco 4dp na TV (conceito 3).
-                whiteFocusRing = true
+                whiteFocusRing = true,
+                // 2.7.52 — cartões grandes na TV (conceito
+                // tv-home-nova); no celular a base fica a de sempre.
+                tvCardBaseDp = if (isTvHere) 340f else 200f
             ) { item ->
                 // Ronda 18 Frente C (F1) — a lambda nasce UMA só vez
                 // (firstBuild) mas os recents mudam a cada vídeo visto:
@@ -1256,26 +1289,44 @@ class HomeActivity : AppCompatActivity() {
         // N = recents com resume guardado); o TEMA da aula fica no
         // SUBTÍTULO — a regra 14:51 mantém-se (o nome que se vê é o
         // tema da aula, nunca o nome do ficheiro).
+        // 2.7.52 — na TV o destaque é o HERO IMERSIVO (conceito
+        // tv-home-nova): título = TEMA da aula (regra R28), subtítulo
+        // = curso, progresso "% • Xmin restantes" (minutos só com
+        // duração conhecida) e o texto de posição some. O ramo do
+        // celular fica byte a byte o de sempre.
         val inProgress = recents.count { sm.hasResume(it.folderPath, it.videoName) }
         val username = sm.username ?: "Aluno"
-        binding.featuredTitle.setWordEllipsized(
-            if (inProgress == 1) getString(R.string.home_greeting_singular, username)
-            else getString(R.string.home_greeting_plural, username, inProgress)
-        )
-        binding.featuredSubtitle.setWordEllipsized(
-            Format.lessonDisplayTitle(best.videoName, Format.extractCourseName(best.folderPath))
-        )
+        if (isTvHere) {
+            val courseName = Format.extractCourseName(best.folderPath)
+            binding.featuredTitle.setWordEllipsized(
+                LessonDescription.folderNameFromPath(best.folderPath)
+                    ?: Format.lessonDisplayTitle(best.videoName, courseName)
+            )
+            binding.featuredSubtitle.setWordEllipsized(courseName)
+            binding.featuredProgressText.text =
+                if (dur > 0) Format.progressText(progress, dur, pos)
+                else "$progress% concluído"
+            binding.featuredTimeText.visibility = View.GONE
+        } else {
+            binding.featuredTitle.setWordEllipsized(
+                if (inProgress == 1) getString(R.string.home_greeting_singular, username)
+                else getString(R.string.home_greeting_plural, username, inProgress)
+            )
+            binding.featuredSubtitle.setWordEllipsized(
+                Format.lessonDisplayTitle(best.videoName, Format.extractCourseName(best.folderPath))
+            )
+            binding.featuredProgressText.text = "$progress% concluído"
+            // R22 UI: no celular o cartão mostra o que FALTA ("Faltam
+            // MM:SS", como no conceito); na TV mantém-se o texto completo
+            // de posição. Sem duração conhecida, cai no texto de posição.
+            binding.featuredTimeText.text =
+                if (dur > pos && pos > 0) {
+                    getString(R.string.home_remaining, Format.mmss(dur - pos))
+                } else {
+                    Format.positionText(pos, dur)
+                }
+        }
         binding.featuredProgress.progress = progress
-        binding.featuredProgressText.text = "$progress% concluído"
-        // R22 UI: no celular o cartão mostra o que FALTA ("Faltam
-        // MM:SS", como no conceito); na TV mantém-se o texto completo
-        // de posição. Sem duração conhecida, cai no texto de posição.
-        binding.featuredTimeText.text =
-            if (!isTvHere && dur > pos && pos > 0) {
-                getString(R.string.home_remaining, Format.mmss(dur - pos))
-            } else {
-                Format.positionText(pos, dur)
-            }
         // v2.7.11 — sem monograma: arte-padrão do drive quando não há
         // thumb (o ícone do drive vem do path da pasta do vídeo).
         // v2.7.11 onda 2 — sem thumb do Drive, o destaque da TV
@@ -1575,20 +1626,22 @@ class HomeActivity : AppCompatActivity() {
         binding.heroTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(30f))
         binding.heroSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(14f))
         binding.heroPlay.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(15f))
-        // Destaque: titulo da secao (1o filho, sem id) + thumb 16:9.
+        // Destaque: titulo da secao (1o filho, sem id) + thumb.
+        // 2.7.52 — a thumb do hero imersivo é FULL-BLEED (a caixa
+        // ocupa o cartão inteiro de 400dp; o texto vai por cima,
+        // sobre o scrim do layout). Título do hero: 40sp (SPEC §5).
         (binding.featuredSection.getChildAt(0) as? TextView)?.setTextSize(
             TypedValue.COMPLEX_UNIT_SP, fit.textSp(18f))
-        val thumbWidthPx = fit.layoutPx(320f)
         val thumbBox = binding.featuredThumb.parent as View
         thumbBox.layoutParams = thumbBox.layoutParams.apply {
-            width = thumbWidthPx
-            height = thumbWidthPx * 9 / 16
+            width = ViewGroup.LayoutParams.MATCH_PARENT
+            height = ViewGroup.LayoutParams.MATCH_PARENT
         }
-        binding.featuredTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(22f))
-        binding.featuredSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
-        binding.featuredProgressText.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
+        binding.featuredTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(40f))
+        binding.featuredSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(18f))
+        binding.featuredProgressText.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(16f))
         binding.featuredTimeText.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
-        binding.featuredContinue.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(15f))
+        binding.featuredContinue.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(18f))
         binding.featuredFallbackIcon.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(56f))
         // Secoes + rodape.
         binding.labelContinue.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(18f))
