@@ -1179,8 +1179,41 @@ async function handleUserStateSave(request){
   if(!d1){ console.warn('[v2.15.29-C] userstate save sem D1 p/ '+user); try{ if(typeof fbJournalUserStateBlob==='function' && await fbJournalUserStateBlob(user,incoming)) return new Response(JSON.stringify({ok:true,fallback:true}),{status:200,headers:cors}); }catch(_){} return new Response(JSON.stringify({ok:false,error:'no d1'}),{status:502,headers:cors}); }
   try{
     await userStateSaveApplyD1(d1,user,incoming);
+    // ★ v2.15.94: dual-write literal SÓ dos eventos watched (decisão
+    //   do Elton 2026-11-25; desenho PROGRESSO_AULAS §3.3.1): com o
+    //   D1 gravado, as linhas watched espelham-se no journal do
+    //   Drive. Best-effort total — falha do espelho NUNCA falha o
+    //   save. O resume NÃO é espelhado (fica D1-primeiro + journal
+    //   em falha, como sempre). O replay do journal não passa por
+    //   aqui (fbExecOp chama userStateSaveApplyD1 directo): sem
+    //   ciclos de re-journal.
+    try{ await userStateMirrorWatched94(d1,user,incoming); }catch(_){}
     return new Response(JSON.stringify({ok:true}),{status:200,headers:cors});
   }catch(e){ try{ if(typeof fbJournalUserStateBlob==='function' && await fbJournalUserStateBlob(user,incoming)) return new Response(JSON.stringify({ok:true,fallback:true}),{status:200,headers:cors}); }catch(_){} console.warn('[v2.15.29-C] userstate save falhou:',e.message); return new Response(JSON.stringify({ok:false,error:'save failed'}),{status:502,headers:cors}); }
+}
+
+// ★ v2.15.94: espelho dos watched do /userstate/save no journal
+//   do Drive. Lê as linhas ACABADAS de gravar no D1 (valores
+//   exactos já fundidos: watched_at/last_position) e anexa-as via
+//   fbJournalUserProgressSave em modo watchedOnly — na hidratação
+//   o replay é idempotente (linha igual = salta; nunca regride a
+//   posição). Sem watched no save, tráfego zero.
+async function userStateMirrorWatched94(d1,user,incoming){
+  const watchedIn=(incoming&&incoming.watched&&typeof incoming.watched==='object')?incoming.watched:{};
+  const paths=Object.keys(watchedIn).slice(0,240);
+  if(!paths.length) return false;
+  const rows=[];
+  for(let i=0;i<paths.length;i+=50){
+    const chunk=paths.slice(i,i+50);
+    const r=await d1.prepare('SELECT lesson_path, course_path, watched_at, last_position FROM user_watched WHERE username = ? AND lesson_path IN ('+chunk.map(function(){return '?';}).join(',')+')').bind(user,...chunk).all();
+    for(const row of (r.results||[])) rows.push(row);
+  }
+  if(!rows.length) return false;
+  const byCourse={};
+  for(const row of rows){ const cp=row.course_path||''; (byCourse[cp]=byCourse[cp]||[]).push({ path: row.lesson_path, watched: true, lastPosition: (typeof row.last_position==='number'?row.last_position:undefined), watchedAt: (typeof row.watched_at==='number'?row.watched_at:undefined) }); }
+  let ok=false;
+  for(const cp in byCourse){ if(await fbJournalUserProgressSave(user,cp,courseHashFromPath(cp),null,byCourse[cp],{watchedOnly:true,source:'userstate'})) ok=true; }
+  return ok;
 }
 
 // ★ v2.15.41: decomposição do save do /userstate extraída de
@@ -5479,7 +5512,7 @@ async function admListUsers() {
     if (!username) return;
     const key = username;
     if (!key) return;
-    const e = map.get(key) || { username: key, courses: 0, summaries: 0, flashcards: 0, watched: 0, migrated: null, last: 0 };
+    const e = map.get(key) || { username: key, courses: 0, summaries: 0, flashcards: 0, watched: 0, migrated: null, last: 0, lastLessonName: null, lastAt: 0 };
     Object.assign(e, patch);
     map.set(key, e);
   };
@@ -5511,6 +5544,12 @@ async function admListUsers() {
     const r = await d1.prepare("SELECT username, MAX(event_at) as last FROM user_history_events GROUP BY username").all();
     for (const row of (r.results || [])) merge(row.username, { last: Math.max(map.get(row.username)?.last || 0, row.last || 0) });
   } catch (_) { _failed.user_history_events = true; }
+  try { if(_qd61) throw new Error('D1 quota (carimbo .60)');
+    // ★ v2.15.94: última aula assistida (nome + quando) por aluno —
+    //   UMA query agrupada com ROW_NUMBER sobre user_watched.
+    const r = await d1.prepare("SELECT username, lesson_name, watched_at FROM (SELECT username, lesson_name, watched_at, ROW_NUMBER() OVER (PARTITION BY username ORDER BY watched_at DESC) AS rn FROM user_watched) WHERE rn = 1").all();
+    for (const row of (r.results || [])) merge(row.username, { lastLessonName: row.lesson_name || null, lastAt: row.watched_at || 0 });
+  } catch (_) { _failed.user_watched_last = true; }
   try { if(_qd61) throw new Error('D1 quota (carimbo .60)'); 
     const r = await d1.prepare("SELECT username, status FROM history_migrations").all();
     for (const row of (r.results || [])) merge(row.username, { migrated: row.status || 'pending' });
@@ -5527,6 +5566,7 @@ async function admListUsers() {
     if (_failed.shared_flashcards) await _agg('shared_flashcards', 'author', 'date', 'flashcards');
     if (_failed.user_watched) await _agg('user_watched', 'username', 'watched_at', 'watched');
     if (_failed.history_migrations) { const _hm = await loadTableSnapshot('history_migrations'); if (_hm) for (const row of _hm) merge(row.username, { migrated: row.status || 'pending' }); }
+    if (_failed.user_watched_last) { const _uw = await loadTableSnapshot('user_watched'); if (_uw) { const _best = {}; for (const row of _uw) { if (!row.username) continue; const cur = _best[row.username]; if (!cur || (row.watched_at || 0) > cur.at) _best[row.username] = { name: row.lesson_name || null, at: row.watched_at || 0 }; } for (const u in _best) merge(u, { lastLessonName: _best[u].name, lastAt: _best[u].at }); } }
     if (_failed.user_history_events) { const _ev = await loadTableSnapshot('user_history_events'); if (_ev) for (const row of _ev) { if (row.username) merge(row.username, { last: Math.max((map.get(row.username) || {}).last || 0, row.event_at || 0) }); } }
   }
   return Array.from(map.values()).sort((a, b) => (b.last || 0) - (a.last || 0));
@@ -7278,13 +7318,20 @@ async function fbJournalStudyPlanSave(user, body){
   const value = JSON.stringify(Object.assign({}, body.plan, { user: user, savedAt: now }));
   return fbJournalAppend([{ id: fbOpId(), ts: now, table: 'user_state_kv', action: 'insert', key: { username: user, key: 'study-plan' }, row: { username: user, key: 'study-plan', value: value, updated_at: now } }]);
 }
-async function fbJournalUserProgressSave(user, coursePath, hash, data, progress){
+async function fbJournalUserProgressSave(user, coursePath, hash, data, progress, opts){
   const now = Date.now();
-  const ops = [{ id: fbOpId(), ts: now, table: 'user_state_kv', action: 'insert', key: { username: user, key: 'course-progress:' + hash }, row: { username: user, key: 'course-progress:' + hash, value: JSON.stringify(data), updated_at: (data && data.updatedAt) || now } }];
+  // ★ v2.15.94: opts.watchedOnly — só o espelho user_watched, SEM a
+  //   op do blob 'course-progress:<hash>' (dual-write do
+  //   /userstate/save: o blob por curso não nasce deste caminho e um
+  //   blob sintético esmagaria o verdadeiro na hidratação).
+  //   opts.source troca a fonte das linhas; p.watchedAt fixa o
+  //   watched_at (o save espelha a linha tal qual ficou no D1).
+  const ops = [];
+  if(!(opts && opts.watchedOnly)) ops.push({ id: fbOpId(), ts: now, table: 'user_state_kv', action: 'insert', key: { username: user, key: 'course-progress:' + hash }, row: { username: user, key: 'course-progress:' + hash, value: JSON.stringify(data), updated_at: (data && data.updatedAt) || now } });
   const mirror = [];
   for(const p of (progress || [])){ if(!p || !p.path) continue; if(p.watched === true || typeof p.lastPosition === 'number') mirror.push(p); }
   for(const p of mirror.slice(0, 500)){
-    ops.push({ id: fbOpId(), ts: now, table: 'user_watched', action: 'insert', key: { username: user, lesson_path: p.path }, row: { username: user, lesson_path: p.path, lesson_name: historyLessonName(p.path), course_path: coursePath, watched_at: now, last_position: (typeof p.lastPosition === 'number' ? p.lastPosition : null), source: 'user-progress', updated_at: now } });
+    ops.push({ id: fbOpId(), ts: now, table: 'user_watched', action: 'insert', key: { username: user, lesson_path: p.path }, row: { username: user, lesson_path: p.path, lesson_name: historyLessonName(p.path), course_path: coursePath, watched_at: (typeof p.watchedAt === 'number' ? p.watchedAt : now), last_position: (typeof p.lastPosition === 'number' ? p.lastPosition : null), source: (opts && opts.source) || 'user-progress', updated_at: now } });
   }
   return fbJournalAppend(ops);
 }
@@ -9878,6 +9925,8 @@ async function handleAdminV23(request, url) {
   .adm-card .n{font-size:26px;font-weight:700;line-height:1.1}
   .adm-card .l{color:var(--muted);font-size:12px;margin-top:4px}
   .adm-card .sub2{color:var(--dim);font-size:11px;margin-top:2px}
+  .adm-prog{height:6px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;overflow:hidden;margin-top:5px;min-width:70px}
+  .adm-prog span{display:block;height:100%;background:var(--cyan)}
   table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;font-size:13px}
   th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--border);vertical-align:middle}
   th{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em;background:var(--surface2)}
@@ -10525,8 +10574,8 @@ function admV23Client() {
     };
     box.innerHTML = '<div class="adm-toolbar"><button class="adm-btn" id="st-backfill">⬇ Migrar histórico do Drive</button><span class="adm-count">' + USERS.length + ' aluno(s)</span><span id="st-bf-status" class="muted sm"></span></div>' +
       '<div id="st-detail"></div>' +
-      (USERS.length ? '<table><tr><th>Aluno</th><th>Cursos</th><th>Resumos</th><th>Flashcards</th><th>Assistidas</th><th>Última atividade</th><th>Histórico</th><th></th></tr>' +
-      USERS.map(u => '<tr><td><b>' + esc(u.username) + '</b></td><td>' + (u.courses || 0) + '</td><td>' + (u.summaries || 0) + '</td><td>' + (u.flashcards || 0) + '</td><td>' + (u.watched || 0) + '</td><td>' + fmtDate(u.last) + '</td><td>' + migBadge(u) + '</td>' +
+      (USERS.length ? '<table><tr><th>Aluno</th><th>Cursos</th><th>Resumos</th><th>Flashcards</th><th>Assistidas</th><th>Última aula</th><th>Última atividade</th><th>Histórico</th><th></th></tr>' +
+      USERS.map(u => '<tr><td><b>' + esc(u.username) + '</b></td><td>' + (u.courses || 0) + '</td><td>' + (u.summaries || 0) + '</td><td>' + (u.flashcards || 0) + '</td><td>' + (u.watched || 0) + '</td><td>' + (u.lastLessonName ? esc(u.lastLessonName) + '<div class="muted sm">' + fmtDate(u.lastAt) + '</div>' : '<span class="muted">—</span>') + '</td><td>' + fmtDate(u.last) + '</td><td>' + migBadge(u) + '</td>' +
         '<td style="white-space:nowrap"><button class="adm-btn sm" data-history="' + esc(u.username) + '">👁 Ver trajetória</button> <button class="adm-btn sm danger" data-user="' + esc(u.username) + '">Excluir</button></td></tr>').join('') + '</table>' +
       '<p class="muted sm">Excluir remove os cursos, resumos, flashcards e o histórico migrado do aluno no D1 e a sessão no KV. O arquivo &lt;usuário&gt;.json no Drive NÃO é apagado.</p>'
       : '<div class="adm-empty">Nenhum aluno com atividade no D1 ainda.</div>');
@@ -10557,13 +10606,16 @@ function admV23Client() {
       return;
     }
     const s = d.summary || {};
+    const ll94 = d.lastLesson || null;
+    const llCourse94 = ll94 ? ((d.courses || []).find(c => (c.coursePath || '') === (ll94.coursePath || '')) || null) : null;
     const cards = '<div class="adm-cards">' +
       '<div class="adm-card acc-cyan"><div class="n">' + (s.watched || 0) + '</div><div class="l">aulas assistidas</div></div>' +
       '<div class="adm-card acc-pink"><div class="n">' + (s.courses || 0) + '</div><div class="l">cursos com atividade</div></div>' +
       '<div class="adm-card acc-green"><div class="n">' + (s.minutes || 0) + '</div><div class="l">minutos registrados</div></div>' +
-      '<div class="adm-card acc-yellow"><div class="n">' + fmtDate(s.lastActivity) + '</div><div class="l">última atividade</div></div></div>';
+      '<div class="adm-card acc-yellow"><div class="n">' + fmtDate(s.lastActivity) + '</div><div class="l">última atividade</div></div>' +
+      '<div class="adm-card acc-blue"><div class="n" style="font-size:15px;line-height:1.25">' + (ll94 && ll94.name ? esc(ll94.name) : '—') + '</div><div class="l">última aula' + (ll94 ? ' — ' + esc((llCourse94 && llCourse94.name) || ll94.coursePath || '') + ' · ' + fmtDate(ll94.at) : '') + '</div></div></div>';
     const coursesHtml = (d.courses || []).length
-      ? '<h3 class="adm-h3">Cursos</h3><table><tr><th>Curso</th><th>Assistidas</th><th>Total</th><th>%</th><th>Última aula</th></tr>' + d.courses.map(c => '<tr><td>' + esc(c.name || c.coursePath || '—') + '</td><td>' + (c.watched || 0) + '</td><td>' + (c.total || 0) + '</td><td>' + (c.percent == null ? '—' : c.percent + '%') + '</td><td>' + fmtDate(c.lastWatchedAt) + '</td></tr>').join('') + '</table>'
+      ? '<h3 class="adm-h3">Cursos</h3><table><tr><th>Curso</th><th>Assistidas</th><th>Total</th><th>%</th><th>Última aula</th></tr>' + d.courses.map(c => '<tr><td>' + esc(c.name || c.coursePath || '—') + '</td><td>' + (c.watched || 0) + '</td><td>' + (c.total || 0) + '</td><td>' + (c.percent == null ? '—' : c.percent + '%<div class="adm-prog"><span style="width:' + Math.max(0, Math.min(100, c.percent)) + '%"></span></div>') + '</td><td>' + (c.lastLessonName ? esc(c.lastLessonName) + '<div class="muted sm">' + fmtDate(c.lastWatchedAt) + '</div>' : fmtDate(c.lastWatchedAt)) + '</td></tr>').join('') + '</table>'
       : '<div class="adm-empty">Nenhum curso com aulas assistidas.</div>';
     const tlRows = (d.timeline || []).map(ev => '<tr><td>' + fmtDate(ev.at) + '</td><td>' + esc(ev.lesson_name || ev.lesson_path || '—') + '</td><td>' + esc(ev.course_path || '—') + '</td><td>' + (ev.minutes || 0) + ' min</td></tr>').join('');
     const tlHtml = tlRows ? '<h3 class="adm-h3">Linha do tempo (últimas 100)</h3><table><tr><th>Quando</th><th>Aula</th><th>Curso</th><th>Duração</th></tr>' + tlRows + '</table>' : '<div class="adm-empty">Sem eventos na linha do tempo.</div>';
@@ -24752,6 +24804,17 @@ async function admStudentHistory(d1, username) {
     const r = await d1.prepare('SELECT course_path, COUNT(*) AS n, MAX(watched_at) AS lastAt FROM user_watched WHERE username = ? GROUP BY course_path').bind(username).all();
     for (const row of (r.results || [])) byCourse[row.course_path || ''] = { n: row.n || 0, lastAt: row.lastAt || 0 };
   } catch (_) { const _s = (typeof loadTableSnapshot === 'function' ? await loadTableSnapshot('user_watched') : null); if (_s) for (const row of _s) { if (row.username !== username) continue; const k = row.course_path || ''; const en = byCourse[k] || (byCourse[k] = { n: 0, lastAt: 0 }); en.n++; if ((row.watched_at || 0) > en.lastAt) en.lastAt = row.watched_at || 0; } }
+  // ★ v2.15.94: última aula (nome + caminho) por curso e a global
+  //   do aluno — UMA query com ROW_NUMBER sobre user_watched (a
+  //   mesma tabela que já alimenta o byCourse; nada de varrer a
+  //   tabela lessons). Fallback = snapshot, como os blocos vizinhos.
+  const lastByCourse = {};
+  let lastLesson = null;
+  const _noteLast94 = function(cp, lp, ln, at){ const k = cp || ''; const cur = lastByCourse[k]; if (!cur || (at || 0) > cur.at) lastByCourse[k] = { name: ln || null, path: lp || null, at: at || 0 }; if (!lastLesson || (at || 0) > lastLesson.at) lastLesson = { name: ln || null, path: lp || null, coursePath: cp || null, at: at || 0 }; };
+  try {
+    const r = await d1.prepare('SELECT course_path, lesson_path, lesson_name, watched_at FROM (SELECT course_path, lesson_path, lesson_name, watched_at, ROW_NUMBER() OVER (PARTITION BY course_path ORDER BY watched_at DESC) AS rn FROM user_watched WHERE username = ?) WHERE rn = 1').bind(username).all();
+    for (const row of (r.results || [])) _noteLast94(row.course_path, row.lesson_path, row.lesson_name, row.watched_at || 0);
+  } catch (_) { const _s = (typeof loadTableSnapshot === 'function' ? await loadTableSnapshot('user_watched') : null); if (_s) for (const row of _s) { if (row.username !== username) continue; _noteLast94(row.course_path, row.lesson_path, row.lesson_name, row.watched_at || 0); } }
   const courseMap = new Map();
   for (const c of courses) {
     courseMap.set(c.course_path, { coursePath: c.course_path, name: c.course_name || c.course_path, total: _totFor(c.course_path) || c.pdf_count || 0,
@@ -24766,6 +24829,7 @@ async function admStudentHistory(d1, username) {
   const courseList = [...courseMap.values()].map(c => ({
     ...c, percent: c.total > 0 ? Math.round((c.watched / c.total) * 100) : null
   })).sort((a, b) => (b.watched - a.watched) || ((b.lastWatchedAt || 0) - (a.lastWatchedAt || 0)));
+  for (const c of courseList) { const ll = lastByCourse[c.coursePath || '']; c.lastLessonName = ll ? ll.name : null; c.lastLessonPath = ll ? ll.path : null; }
   let timeline = [];
   try {
     const r = await d1.prepare('SELECT lesson_path, lesson_name, course_path, event_at, minutes FROM user_history_events WHERE username = ? ORDER BY event_at DESC LIMIT 100').bind(username).all();
@@ -24790,7 +24854,7 @@ async function admStudentHistory(d1, username) {
   return { ok: true, username,
     migrated: mig ? { status: mig.status, watched_done: mig.watched_done || 0, watched_total: mig.watched_total || 0, events_done: mig.events_done || 0, events_total: mig.events_total || 0, migrated_at: mig.migrated_at || 0, updated_at: mig.updated_at || 0 } : null,
     summary: { courses: courseList.length, watched: totalWatched, minutes: totalMinutes, lastActivity },
-    courses: courseList, timeline };
+    courses: courseList, timeline, lastLesson };
 }
 
 // ═══ v2.7: scan com auto-resume + "done" definitivo ═══
