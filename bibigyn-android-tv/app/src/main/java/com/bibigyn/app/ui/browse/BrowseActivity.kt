@@ -21,6 +21,7 @@ import com.bibigyn.app.databinding.ActivityBrowseBinding
 import com.bibigyn.app.ui.detail.LessonGroup
 import com.bibigyn.app.ui.detail.folderTileProgress
 import com.bibigyn.app.ui.player.PlayerActivity
+import com.bibigyn.app.ui.search.SearchActivity
 import com.bibigyn.app.util.AuthHelper
 import com.bibigyn.app.util.PlaylistManager
 import com.bibigyn.app.util.SessionManager
@@ -59,6 +60,23 @@ class BrowseActivity : AppCompatActivity() {
         val layoutManager = GridLayoutManager(this, spanCount)
         binding.recycler.layoutManager = layoutManager
         binding.recycler.addItemDecoration(GridGutterDecoration(10))
+
+        // v2.1.41 — TV: entrada de busca (a MESMA SearchActivity de
+        // todo o app) + dicas do comando no rodapé + respiro lateral
+        // de overscan na grade (56dp). No celular as vistas novas
+        // ficam gone e nada muda.
+        if (TvUtils.isTv(this)) {
+            binding.browseSearch.visibility = View.VISIBLE
+            binding.browseTvHint.visibility = View.VISIBLE
+            binding.browseSearch.setOnClickListener {
+                startActivity(Intent(this, SearchActivity::class.java))
+            }
+            val sidePx = (56 * resources.displayMetrics.density).toInt()
+            binding.recycler.setPadding(
+                sidePx, binding.recycler.paddingTop,
+                sidePx, binding.recycler.paddingBottom
+            )
+        }
 
         binding.retryButton?.setOnClickListener { loadFolder() }
 
@@ -105,6 +123,10 @@ class BrowseActivity : AppCompatActivity() {
     }
 
     private fun calculateSpanCount(): Int {
+        // v2.1.41 — na TV a grade é de 5 colunas (conceito aprovado),
+        // independentemente da largura reportada; fora da TV, a
+        // regra por largura de sempre (o celular não muda).
+        if (TvUtils.isTv(this)) return 5
         val displayMetrics = resources.displayMetrics
         val screenWidthDp = displayMetrics.widthPixels / displayMetrics.density
         return if (screenWidthDp >= 900) 5 else if (screenWidthDp >= 600) 4 else 2
