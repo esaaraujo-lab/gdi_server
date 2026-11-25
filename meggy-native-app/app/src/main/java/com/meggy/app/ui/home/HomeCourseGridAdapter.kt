@@ -1,5 +1,6 @@
 package com.meggy.app.ui.home
 
+import android.graphics.drawable.GradientDrawable
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -15,6 +16,7 @@ import com.meggy.app.util.CardGradient
 import com.meggy.app.util.LibraryCovers
 import com.meggy.app.util.SessionManager
 import com.meggy.app.util.ThumbArt
+import com.meggy.app.util.TileColors
 
 /**
  * R22 UI (conceito "início celular") — grelha "Meus cursos" da home:
@@ -30,6 +32,24 @@ class HomeCourseGridAdapter(
 
     /** Totais reais por curso (chave de ApiService.normalizeCourseKey). */
     var courseTotals: Map<String, Int> = emptyMap()
+
+    /**
+     * 2.7.48 — cor fixa da área de nome (TileColors, span 3: vizinhos
+     * lado a lado e em baixo diferentes — a mesma regra dos Tiles das
+     * pastas). Calcula-se no submitList, como o FileAdapter faz; a
+     * chave é o drivePath, a mesma do card Continuar dessa pasta.
+     */
+    private var nameColors: List<Int> = emptyList()
+
+    override fun submitList(list: List<SessionManager.FavCourse>?) {
+        nameColors = TileColors.assign(list?.map { it.drivePath } ?: emptyList(), 3)
+        super.submitList(list)
+    }
+
+    override fun submitList(list: List<SessionManager.FavCourse>?, commitCallback: Runnable?) {
+        nameColors = TileColors.assign(list?.map { it.drivePath } ?: emptyList(), 3)
+        super.submitList(list, commitCallback)
+    }
 
     inner class VH(val binding: ItemHomeCourseBinding) : RecyclerView.ViewHolder(binding.root) {
         init {
@@ -53,6 +73,14 @@ class HomeCourseGridAdapter(
         val ctx = holder.itemView.context
         val b = holder.binding
         b.homeCourseTitle.text = course.name
+
+        // 2.7.48 — área de nome na cor fixa do Tile (sólida, cantos
+        // arredondados; sem a cor, fica o fallback hash do nome).
+        val nameColor = nameColors.getOrElse(position) { colorFromString(course.name) }
+        b.homeCourseNameArea.background = GradientDrawable().apply {
+            setColor(nameColor)
+            cornerRadius = 12f * ctx.resources.displayMetrics.density
+        }
 
         // Capa: biblioteca por nome/caminho; sem capa, monograma sobre
         // o gradiente da cor do nome (mesmo padrão da Minha Lista).

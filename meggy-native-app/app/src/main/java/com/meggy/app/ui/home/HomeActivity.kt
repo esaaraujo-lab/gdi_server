@@ -1,6 +1,8 @@
 package com.meggy.app.ui.home
 
+import android.content.Context
 import android.content.Intent
+import android.text.format.DateUtils
 import android.graphics.Rect
 import android.os.Bundle
 import android.os.Handler
@@ -50,6 +52,7 @@ import com.meggy.app.util.ThumbArt
 import com.meggy.app.util.LibraryCovers
 import com.meggy.app.util.TvUtils
 import com.meggy.app.util.TvAutoFit
+import com.meggy.app.util.UserStateSync
 import com.meggy.app.util.FocusAnimator
 import com.meggy.app.util.setWordEllipsized
 import com.meggy.app.util.UpdateChecker
@@ -203,9 +206,10 @@ class HomeActivity : AppCompatActivity() {
         if (TvUtils.isTv(this)) binding.bottomNav.visibility = View.GONE
 
         binding.topSair?.setOnClickListener { logout() }
-        // R22 UI: ícone de busca no cabeçalho (só existe no layout do
-        // celular) — abre a busca existente.
-        findViewById<View>(R.id.homeSearchBtn)?.setOnClickListener {
+        // 2.7.48 — barra de busca no topo (conceito 1; só existe no
+        // layout do celular) — abre a busca existente. O ícone antigo
+        // (homeSearchBtn) saiu do layout.
+        findViewById<View>(R.id.homeSearchBar)?.setOnClickListener {
             startActivity(Intent(this, SearchActivity::class.java))
         }
         // 2.7.41 (P0-2/P0-3) — atalhos de navegação no cabeçalho da home
@@ -238,15 +242,20 @@ class HomeActivity : AppCompatActivity() {
         binding.bottomNav.setOnItemSelectedListener { item ->
             when (item.itemId) {
                 R.id.nav_home -> true
-                R.id.nav_search -> {
-                    startActivity(Intent(this, SearchActivity::class.java))
-                    overridePendingTransition(0, 0)
-                    // Do NOT finish() — singleTask on SearchActivity handles
-                    // back-stack cleanup automatically.
+                R.id.nav_drives -> {
+                    // Já estamos na Home: rola até "Explorar drives".
+                    scrollToDrives()
                     true
                 }
-                R.id.nav_mylist -> {
-                    startActivity(Intent(this, MyListActivity::class.java))
+                R.id.nav_simulados -> {
+                    openSimulados(this)
+                    overridePendingTransition(0, 0)
+                    true
+                }
+                R.id.nav_meggy -> {
+                    // 2.7.48 (Q2 provisório): sem chat no app — o item
+                    // Meggy abre a busca existente.
+                    startActivity(Intent(this, SearchActivity::class.java))
                     overridePendingTransition(0, 0)
                     true
                 }
@@ -261,12 +270,18 @@ class HomeActivity : AppCompatActivity() {
 
         // Ronda 7 Frente B — medir o viewport ANTES de montar os
         // rails (o gutter do rail depende da escala). So TV.
-        if (TvUtils.isTv(this)) tvAutoFit = TvAutoFit.forContext(this)
+        // 2.7.48 — desconta a largura do menu lateral (0 sem menu).
+        if (TvUtils.isTv(this)) tvAutoFit = TvAutoFit.forContext(this, SideMenuView.currentWidthDp(this))
+        // 2.7.48 — menu lateral da TV (no-op no celular: sem a vista).
+        setupSideMenu()
         setupHero()
         setupContinueRail()
         setupDrivesRail()
         // R22 UI: grelha "Meus cursos" do celular (no-op na TV).
         setupMyCourses()
+        // 2.7.48 — pastas recentes + painel de progresso.
+        setupRecentFolders()
+        setupProgressPanel()
         setupTvFocusChains()
         applyTvAutoFit()
         fetchFeaturedCovers()
@@ -282,6 +297,23 @@ class HomeActivity : AppCompatActivity() {
         // carregamento (o fetch de destaques, assíncrono, re-avalia o
         // erro quando terminar — ver fetchFeaturedCovers).
         updateHomeStateViews()
+        // 2.7.48 — import do progresso do servidor (GET /userstate):
+        // alimenta recents/resume/assistido locais + cache do painel.
+        // Best-effort, em 2º plano; ao terminar, refrescam-se as
+        // seções que leem esses dados. Sem rede/D1, fica tudo como
+        // estava e o próximo arranque tenta outra vez.
+        lifecycleScope.launch(Dispatchers.IO) {
+            UserStateSync.importOnStartup(this@HomeActivity)
+            withContext(Dispatchers.Main) {
+                if (isFinishing || isDestroyed) return@withContext
+                setupContinueRail()
+                setupRecentFolders()
+                setupProgressPanel()
+                setupTvFocusChains()
+            }
+        }
+        // Item Drives vindo de outra aba: rolar até os drives.
+        if (intent.getBooleanExtra(EXTRA_SCROLL_TO_DRIVES, false)) scrollToDrives()
     }
 
     /**
@@ -309,11 +341,13 @@ class HomeActivity : AppCompatActivity() {
         binding.homeLoading.visibility = View.VISIBLE
         // Sem setupHero(): na TV ele criaria um SEGUNDO HeroRotator e o
         // antigo continuaria a rodar por cima; o hero já corre e o
-        // retry só precisa das seções (setupDestaques é no-op na TV).
+        // retry só precisa das seções.
         setupDestaques()
         setupContinueRail()
         setupDrivesRail()
         setupMyCourses()
+        setupRecentFolders()
+        setupProgressPanel()
         setupTvFocusChains()
         fetchFeaturedCovers()
         fetchAdminDrives()
@@ -522,6 +556,10 @@ class HomeActivity : AppCompatActivity() {
         // R22 UI: a grelha "Meus cursos" do celular refresca ao
         // voltar (favoritos e progresso podem ter mudado no player).
         setupMyCourses()
+        // 2.7.48 — pastas recentes + painel de progresso refrescam ao
+        // voltar (o player grava no servidor; o import é só no arranque).
+        setupRecentFolders()
+        setupProgressPanel()
         // Ronda 10 Frente C — re-busca os drives do admin ao
         // voltar: o remover da Frente B faz o tile sumir sem
         // reiniciar o app.
@@ -570,6 +608,7 @@ class HomeActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         binding.bottomNav.selectedItemId = R.id.nav_home
+        if (intent.getBooleanExtra(EXTRA_SCROLL_TO_DRIVES, false)) scrollToDrives()
     }
 
     // ──────────── v2.0.0: Hero rotativo ────────────
@@ -744,11 +783,23 @@ class HomeActivity : AppCompatActivity() {
         if (recents.isEmpty()) {
             binding.labelContinue.visibility = View.GONE
             binding.railContinue.visibility = View.GONE
+            findViewById<View>(R.id.continueHeader)?.visibility = View.GONE
+            findViewById<View>(R.id.continueSeeAll)?.visibility = View.GONE
             return
         }
 
         binding.labelContinue.visibility = View.VISIBLE
         binding.railContinue.visibility = View.VISIBLE
+        findViewById<View>(R.id.continueHeader)?.visibility = View.VISIBLE
+        // 2.7.48 (Q4 provisório) — "Ver tudo ›" do Continue abre a
+        // busca (as aulas em andamento). Só no celular (a TV não tem
+        // o link — o findViewById devolve null e nada acontece).
+        findViewById<View>(R.id.continueSeeAll)?.apply {
+            visibility = View.VISIBLE
+            setOnClickListener {
+                startActivity(Intent(this@HomeActivity, SearchActivity::class.java))
+            }
+        }
         // Ronda 17 Frente B (gatilho A) — LayoutManager, decoração e
         // adapter criados UMA só vez: recriá-los no onResume apagava
         // a rolagem do rail e repunha a posição em 0 (e as decorações
@@ -805,7 +856,9 @@ class HomeActivity : AppCompatActivity() {
             continueAdapter = RailAdapter(
                 railItems,
                 nextFocusUpId = if (hasFeatured) R.id.featured_card else R.id.heroPlay,
-                nextFocusDownId = R.id.railDrives
+                nextFocusDownId = R.id.railDrives,
+                // 2.7.48 — anel de foco branco 4dp na TV (conceito 3).
+                whiteFocusRing = true
             ) { item ->
                 // Ronda 18 Frente C (F1) — a lambda nasce UMA só vez
                 // (firstBuild) mas os recents mudam a cada vídeo visto:
@@ -891,6 +944,10 @@ class HomeActivity : AppCompatActivity() {
     // R22 UI (conceito "início celular") — adapters das seções novas
     // da home do celular. Null na TV (as vistas não existem lá).
     private var homeCoursesAdapter: HomeCourseGridAdapter? = null
+
+    /** 2.7.48 — totais unificados em cache (setupMyCourses) p/ o "N aulas" das pastas recentes. */
+    private var courseTotalsCache: Map<String, Int> = emptyMap()
+    private var recentFoldersAdapter: RailAdapter? = null
     private var destaquesAdapter: HomeFeaturedAdapter? = null
 
     /**
@@ -907,12 +964,15 @@ class HomeActivity : AppCompatActivity() {
         if (courses.isEmpty()) {
             label.visibility = View.GONE
             grid.visibility = View.GONE
+            findViewById<View>(R.id.myCoursesHeader)?.visibility = View.GONE
             return
         }
         label.visibility = View.VISIBLE
         grid.visibility = View.VISIBLE
+        findViewById<View>(R.id.myCoursesHeader)?.visibility = View.VISIBLE
         if (grid.layoutManager == null) {
-            grid.layoutManager = GridLayoutManager(this, 2)
+            // 2.7.48 — grelha densa de 3 colunas (conceito 1).
+            grid.layoutManager = GridLayoutManager(this, 3)
         }
         if (homeCoursesAdapter == null) {
             homeCoursesAdapter = HomeCourseGridAdapter { course ->
@@ -924,6 +984,15 @@ class HomeActivity : AppCompatActivity() {
             grid.adapter = homeCoursesAdapter
         }
         homeCoursesAdapter?.submitList(courses)
+        // 2.7.48 (Q4 provisório) — "Ver tudo ›" abre a Minha lista
+        // (a aba Cursos é a predefinida — é o destino "Cursos para
+        // você" do conceito). Só no celular.
+        findViewById<View>(R.id.myCoursesSeeAll)?.apply {
+            visibility = View.VISIBLE
+            setOnClickListener {
+                startActivity(Intent(this@HomeActivity, MyListActivity::class.java))
+            }
+        }
         // Totais reais (cache de 5 min no ApiService) — best-effort:
         // sem resposta, os cartões ficam sem a linha de progresso.
         lifecycleScope.launch {
@@ -931,19 +1000,174 @@ class HomeActivity : AppCompatActivity() {
             val adapter = homeCoursesAdapter ?: return@launch
             if (totals != null && totals != adapter.courseTotals) {
                 adapter.courseTotals = totals
+                // 2.7.48 — os mesmos totais servem o "N aulas" das
+                // pastas recentes (setupRecentFolders).
+                courseTotalsCache = totals
                 adapter.notifyDataSetChanged()
+                setupRecentFolders()
             }
         }
+    }
+
+    /**
+     * 2.7.48 — "Pastas recentes" (conceito 1): as pastas dos recents
+     * (locais + import do servidor — a fonte é o /userstate, nunca
+     * só o aparelho), agrupadas por pasta, ordenadas pela aula mais
+     * recente, até 6. O cartão mostra "N aulas" SÓ quando há total
+     * real unificado p/ o curso (nunca o nº de aulas vistas); sem
+     * total, o cartão fica sem o número. "Atualizado …" é o ts do
+     * recent mais recente da pasta. O toque abre o detalhe da pasta
+     * (o fluxo drive → pastas não muda).
+     */
+    private fun setupRecentFolders() {
+        val label = findViewById<TextView>(R.id.labelRecentFolders) ?: return
+        val rail = findViewById<RecyclerView>(R.id.railRecentFolders) ?: return
+        val recents = SessionManager.get(this).getRecents()
+        val groups = recents.groupBy { it.folderPath }
+            .map { (folder, items) -> Triple(folder, items.maxOf { it.timestamp }, items) }
+            .sortedByDescending { it.second }
+            .take(6)
+        if (groups.isEmpty()) {
+            label.visibility = View.GONE
+            rail.visibility = View.GONE
+            findViewById<View>(R.id.recentFoldersHeader)?.visibility = View.GONE
+            findViewById<View>(R.id.recentFoldersSeeAll)?.visibility = View.GONE
+            return
+        }
+        label.visibility = View.VISIBLE
+        rail.visibility = View.VISIBLE
+        findViewById<View>(R.id.recentFoldersHeader)?.visibility = View.VISIBLE
+        // 2.7.48 (Q4 provisório) — "Ver tudo ›" rola até os drives.
+        // Só no celular (a TV não tem o link).
+        findViewById<View>(R.id.recentFoldersSeeAll)?.apply {
+            visibility = View.VISIBLE
+            setOnClickListener { scrollToDrives() }
+        }
+        val now = System.currentTimeMillis()
+        val items = groups.map { (folder, latestTs, _) ->
+            val total = ApiService.unifiedTotalFor(courseTotalsCache, folder)
+            val folderName = LessonDescription.folderNameFromPath(folder)
+                ?: Format.extractCourseName(folder)
+            val updated = DateUtils.getRelativeTimeSpanString(
+                latestTs, now, DateUtils.MINUTE_IN_MILLIS
+            ).toString()
+            val subtitle = if (total != null && total > 0) {
+                getString(R.string.recent_folders_lessons, total) + " • " + updated
+            } else {
+                updated
+            }
+            RailItem(
+                title = folderName,
+                displayTitle = folderName,
+                subtitle = subtitle,
+                icon = "📁",
+                hasProgress = false,
+                progress = 0,
+                isWatched = false,
+                hasResume = false,
+                thumbnailUrl = null,
+                file = com.meggy.app.data.FileItem(
+                    name = folderName, mimeType = "folder", id = "",
+                    driveId = null, link = null, size = 0L, modifiedTime = null,
+                    folderPath = folder
+                )
+            )
+        }
+        if (rail.layoutManager == null) {
+            rail.layoutManager =
+                LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+            rail.addItemDecoration(RailGutterDecoration(tvAutoFit?.gutterDp(200f) ?: 8))
+        }
+        if (recentFoldersAdapter == null) {
+            recentFoldersAdapter = RailAdapter(items) { item ->
+                val folder = item.file?.folderPath ?: return@RailAdapter
+                val intent = Intent(this, DetailActivity::class.java)
+                intent.putExtra("drivePath", folder)
+                intent.putExtra("folderName", item.title)
+                startActivity(intent)
+            }
+            rail.adapter = recentFoldersAdapter
+        } else {
+            recentFoldersAdapter?.updateItems(items)
+        }
+    }
+
+    /**
+     * 2.7.48 — painel "Seu Progresso" (conceito 1/3): horas da semana
+     * + sequência de dias, LIDOS DO SERVIDOR (regra 22:41). A fonte é
+     * o cache de SessionManager, escrito SÓ pelo import do /userstate
+     * (UserStateSync.derivePanelAggregates — a mesma fórmula do
+     * /api/analytics/summary do site: semana = minutos dos eventos
+     * dos últimos 7 dias; sequência = dias seguidos desde HOJE com
+     * minutos > 0). Sem cache (ainda sem import), a seção some —
+     * nunca um número inventado localmente. Zeros do servidor
+     * mostram-se como zeros: as sessões do desktop contribuem 0
+     * minutos (o desktop ainda não os envia — fora deste âmbito).
+     */
+    private fun setupProgressPanel() {
+        val panel = findViewById<View>(R.id.progressPanel) ?: return
+        val week = findViewById<TextView>(R.id.progressWeekHours) ?: return
+        val streak = findViewById<TextView>(R.id.progressStreak) ?: return
+        val agg = SessionManager.get(this).getCachedPanelAggregates()
+        if (agg == null) {
+            panel.visibility = View.GONE
+            return
+        }
+        panel.visibility = View.VISIBLE
+        week.text = UserStateSync.formatWeekHours(agg.weekMinutes)
+        streak.text = if (agg.streakDays == 1) "1 dia" else "${agg.streakDays} dias"
+    }
+
+    /**
+     * 2.7.48 — menu lateral da TV (conceito 3/4; decisão 21:37: só
+     * na TV). Sem a vista (celular) é no-op. Com o menu ligado, o
+     * cabeçalho antigo (ícones Buscar/Minha lista/Ajustes + Sair)
+     * esconde-se — o menu cobre tudo (o Sair fica no fim do menu);
+     * desligado, volta o cabeçalho de antes.
+     */
+    private fun setupSideMenu() {
+        val menu = findViewById<SideMenuView>(R.id.tvSideMenu) ?: return
+        val sm = SessionManager.get(this)
+        val topBar = findViewById<View>(R.id.homeTopBar)
+        topBar?.visibility = if (sm.tvSideMenuEnabled) View.GONE else View.VISIBLE
+        menu.visibility = if (sm.tvSideMenuEnabled) View.VISIBLE else View.GONE
+        if (!sm.tvSideMenuEnabled) return
+        menu.setSelected(SideMenuView.MenuItem.HOME)
+        menu.onMenuItemSelected = { item ->
+            when (item) {
+                SideMenuView.MenuItem.HOME -> binding.homeScroll.smoothScrollTo(0, 0)
+                SideMenuView.MenuItem.DRIVES -> scrollToDrives()
+                SideMenuView.MenuItem.SIMULADOS -> openSimulados(this)
+                SideMenuView.MenuItem.MEGGY ->
+                    startActivity(Intent(this, SearchActivity::class.java))
+                SideMenuView.MenuItem.DOWNLOADS ->
+                    startActivity(Intent(this, MyListActivity::class.java))
+                SideMenuView.MenuItem.SETTINGS ->
+                    startActivity(Intent(this, SettingsActivity::class.java))
+            }
+        }
+        menu.onLogoutSelected = { logout() }
+        menu.onCollapseToggled = {
+            sm.tvSideMenuCollapsed = !sm.tvSideMenuCollapsed
+            menu.applyCollapsed(sm.tvSideMenuCollapsed)
+            // A largura do conteúdo mudou: re-medir e re-aplicar.
+            tvAutoFit = TvAutoFit.forContext(this, SideMenuView.currentWidthDp(this))
+            applyTvAutoFit()
+            setupTvFocusChains()
+        }
+        menu.applyCollapsed(sm.tvSideMenuCollapsed)
     }
 
     /**
      * R22 UI — seção "Destaques" (cartões horizontais): primeiro os
      * itens curados do hero (dados reais da app, abrem o drive como o
      * hero sempre fez); quando a API de cursos em destaque responde,
-     * a lista passa a ser esses cursos (abrem o curso). Só no celular.
+     * a lista passa a ser esses cursos (abrem o curso).
+     * 2.7.48 — a seção passa a existir também na TV (conceito 3):
+     * o `return` da TV saiu; o layout-television ganhou os ids
+     * labelDestaques/listDestaques. Mesma rota, mesmo adapter.
      */
     private fun setupDestaques() {
-        if (TvUtils.isTv(this)) return
         val label = findViewById<TextView>(R.id.labelDestaques) ?: return
         val list = findViewById<RecyclerView>(R.id.listDestaques) ?: return
         if (list.layoutManager == null) {
@@ -1027,9 +1251,20 @@ class HomeActivity : AppCompatActivity() {
         val pos = sm.getResume(best.folderPath, best.videoName)
         val dur = sm.getResumeDuration(best.folderPath, best.videoName)
         binding.featuredSection.visibility = View.VISIBLE
+        // 2.7.48 — hero compacto (conceitos 1/3): o TÍTULO passa a ser
+        // a saudação ("Olá, <nome>! 👋 Você tem N aulas em andamento.",
+        // N = recents com resume guardado); o TEMA da aula fica no
+        // SUBTÍTULO — a regra 14:51 mantém-se (o nome que se vê é o
+        // tema da aula, nunca o nome do ficheiro).
+        val inProgress = recents.count { sm.hasResume(it.folderPath, it.videoName) }
+        val username = sm.username ?: "Aluno"
         binding.featuredTitle.setWordEllipsized(
-            Format.lessonDisplayTitle(best.videoName, Format.extractCourseName(best.folderPath)))
-        binding.featuredSubtitle.setWordEllipsized(Format.extractCourseName(best.folderPath))
+            if (inProgress == 1) getString(R.string.home_greeting_singular, username)
+            else getString(R.string.home_greeting_plural, username, inProgress)
+        )
+        binding.featuredSubtitle.setWordEllipsized(
+            Format.lessonDisplayTitle(best.videoName, Format.extractCourseName(best.folderPath))
+        )
         binding.featuredProgress.progress = progress
         binding.featuredProgressText.text = "$progress% concluído"
         // R22 UI: no celular o cartão mostra o que FALTA ("Faltam
@@ -1269,12 +1504,26 @@ class HomeActivity : AppCompatActivity() {
         if (!TvUtils.isTv(this)) return
         val featuredVisible = binding.featuredSection.visibility == View.VISIBLE
         val continueVisible = binding.railContinue.visibility == View.VISIBLE
-        // 2.7.41 (P0-2/P0-3) — os atalhos do cabeçalho descem para o
-        // hero e o hero volta a subir para o 1.º atalho (Buscar).
-        findViewById<View>(R.id.tvNavSearch)?.nextFocusDownId = R.id.heroPlay
-        findViewById<View>(R.id.tvNavMylist)?.nextFocusDownId = R.id.heroPlay
-        findViewById<View>(R.id.tvNavSettings)?.nextFocusDownId = R.id.heroPlay
-        binding.heroPlay.nextFocusUpId = R.id.tvNavSearch
+        val menu = findViewById<SideMenuView>(R.id.tvSideMenu)
+        val menuOn = menu != null && SessionManager.get(this).tvSideMenuEnabled
+        if (menuOn) {
+            // 2.7.48 — menu lateral activo: o cabeçalho antigo está
+            // escondido; as linhas do menu descem para o hero (direita)
+            // e o hero volta para a linha marcada (esquerda). Não há
+            // nada acima do hero.
+            menu!!.rows().forEach { row ->
+                row.nextFocusRightId = R.id.heroPlay
+            }
+            binding.heroPlay.nextFocusLeftId = menu.selectedRowId()
+            binding.heroPlay.nextFocusUpId = View.NO_ID
+        } else {
+            // 2.7.41 (P0-2/P0-3) — os atalhos do cabeçalho descem para o
+            // hero e o hero volta a subir para o 1.º atalho (Buscar).
+            findViewById<View>(R.id.tvNavSearch)?.nextFocusDownId = R.id.heroPlay
+            findViewById<View>(R.id.tvNavMylist)?.nextFocusDownId = R.id.heroPlay
+            findViewById<View>(R.id.tvNavSettings)?.nextFocusDownId = R.id.heroPlay
+            binding.heroPlay.nextFocusUpId = R.id.tvNavSearch
+        }
         binding.heroPlay.nextFocusDownId =
             if (featuredVisible) R.id.featured_card
             else if (continueVisible) R.id.railContinue
@@ -1344,6 +1593,21 @@ class HomeActivity : AppCompatActivity() {
         // Secoes + rodape.
         binding.labelContinue.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(18f))
         binding.labelDrives.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(18f))
+        // 2.7.48 — novas seções da TV, nos mesmos tamanhos.
+        findViewById<TextView>(R.id.labelRecentFolders)?.setTextSize(
+            TypedValue.COMPLEX_UNIT_SP, fit.textSp(18f))
+        findViewById<TextView>(R.id.labelDestaques)?.setTextSize(
+            TypedValue.COMPLEX_UNIT_SP, fit.textSp(18f))
+        findViewById<TextView>(R.id.progressTitle)?.setTextSize(
+            TypedValue.COMPLEX_UNIT_SP, fit.textSp(18f))
+        findViewById<TextView>(R.id.progressWeekHours)?.setTextSize(
+            TypedValue.COMPLEX_UNIT_SP, fit.textSp(22f))
+        findViewById<TextView>(R.id.progressStreak)?.setTextSize(
+            TypedValue.COMPLEX_UNIT_SP, fit.textSp(22f))
+        findViewById<TextView>(R.id.progressWeekLabel)?.setTextSize(
+            TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
+        findViewById<TextView>(R.id.progressStreakLabel)?.setTextSize(
+            TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
         binding.footerVersion.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
         // Espacamentos verticais com marginScale.
         fit.applyTopMargin(binding.heroCard, fit.marginPx(26f))
@@ -1353,6 +1617,22 @@ class HomeActivity : AppCompatActivity() {
         fit.applyTopMargin(binding.footerVersion, fit.marginPx(26f))
         fit.applyTopMargin(binding.railContinue, fit.marginPx(12f))
         fit.applyTopMargin(binding.railDrives, fit.marginPx(12f))
+        // 2.7.48 — as novas seções entram no mesmo ritmo.
+        findViewById<View>(R.id.labelRecentFolders)?.let {
+            fit.applyTopMargin(it, fit.marginPx(26f))
+        }
+        findViewById<View>(R.id.railRecentFolders)?.let {
+            fit.applyTopMargin(it, fit.marginPx(12f))
+        }
+        findViewById<View>(R.id.labelDestaques)?.let {
+            fit.applyTopMargin(it, fit.marginPx(26f))
+        }
+        findViewById<View>(R.id.listDestaques)?.let {
+            fit.applyTopMargin(it, fit.marginPx(12f))
+        }
+        findViewById<View>(R.id.progressPanel)?.let {
+            fit.applyTopMargin(it, fit.marginPx(26f))
+        }
     }
 
     private fun setupDrivesRail() {
@@ -1531,6 +1811,37 @@ class HomeActivity : AppCompatActivity() {
         focusListenerRegistered = false
         super.onDestroy()
         heroRotator?.stop()
+    }
+
+    companion object {
+        /**
+         * Extra: ao abrir a Home, rolar até "Explorar drives" (item
+         * Drives da barra inferior nas outras abas).
+         */
+        const val EXTRA_SCROLL_TO_DRIVES = "scroll_to_drives"
+
+        /**
+         * 2.7.48 (Q1 provisório) — "Simulados" abre o drive RETA FINAL
+         * TRTs (descrição "Simulados + resumos", índice 0). Não há
+         * Simulados no app — o drive é o destino existente. Usado pela
+         * barra inferior (todas as abas) e pelo menu lateral da TV.
+         */
+        fun openSimulados(context: Context) {
+            val drive = DriveItem.ALL.firstOrNull { it.name == "RETA FINAL TRTs" }
+                ?: DriveItem.ALL.firstOrNull { it.index == 0 }
+                ?: return
+            val intent = Intent(context, DetailActivity::class.java)
+            intent.putExtra("drivePath", "/${drive.index}:/")
+            intent.putExtra("folderName", drive.name)
+            context.startActivity(intent)
+        }
+    }
+
+    /** Rola até a seção "Explorar drives" (item Drives da barra). */
+    private fun scrollToDrives() {
+        binding.homeScroll.post {
+            binding.homeScroll.smoothScrollTo(0, binding.labelDrives.top)
+        }
     }
 
     private class RailGutterDecoration(private val gutterDp: Int) : RecyclerView.ItemDecoration() {

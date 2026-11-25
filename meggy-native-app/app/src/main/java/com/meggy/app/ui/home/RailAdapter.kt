@@ -66,6 +66,13 @@ class RailAdapter(
      */
     private var nextFocusUpId: Int = View.NO_ID,
     private var nextFocusDownId: Int = View.NO_ID,
+    /**
+     * 2.7.48 — anel de foco branco 4dp na TV (conceito 3): o "Continue
+     * assistindo" da home passa o anel branco em vez do rosa da marca;
+     * os outros rails (Destaques, drives, detalhe) mantêm o rosa.
+     * Só tem efeito na TV; no celular o anel não se usa.
+     */
+    private val whiteFocusRing: Boolean = false,
     // Build-fix 2.7.16: onClick em ULTIMO — os call sites usam trailing
     // lambda; com onClick em 2o a lambda ligava a nextFocusDownId (Int)
     // e onClick ficava sem valor (compileReleaseKotlin falhou na 2.7.15).
@@ -177,15 +184,28 @@ class RailAdapter(
                 Toast.makeText(binding.root.context, full, Toast.LENGTH_LONG).show()
                 true
             }
-            FocusAnimator.attachCard(binding.cardRoot, TvUtils.isTv(binding.root.context))
+            // 2.7.48 — anel branco 4dp no "Continue assistindo" da TV
+            // (conceito 3); nos outros rails, o rosa da marca (3dp).
+            if (whiteFocusRing && TvUtils.isTv(binding.root.context)) {
+                FocusAnimator.attachCard(
+                    binding.cardRoot, true,
+                    ringColorRes = R.color.tile_focus_ring_white, ringWidthDp = 4f
+                )
+            } else {
+                FocusAnimator.attachCard(binding.cardRoot, TvUtils.isTv(binding.root.context))
+            }
             TapFeedback.attachPress(binding.cardRoot, TvUtils.isTv(binding.root.context))
             // Ronda 7 Frente B — auto-ajuste TV (TvAutoFit): o card e a imagem
             // passam a derivar do viewport medido; no celular e na 32" de
             // referencia (escala 1.0) nada muda. O rail do detalhe usa o
             // mesmo adapter e herda o mesmo tamanho de card (geometria da
             // TV, nao da home) — comportamento intencional e consistente.
+            // 2.7.48 — na home da TV o viewport é o conteúdo (viewport
+            // menos a largura do menu lateral); no detalhe não há menu.
             if (TvUtils.isTv(binding.root.context)) {
-                val fit = TvAutoFit.forContext(binding.root.context)
+                val ctx = binding.root.context
+                val menuDp = if (ctx is HomeActivity) SideMenuView.currentWidthDp(ctx) else 0f
+                val fit = TvAutoFit.forContext(ctx, menuDp)
                 val cardWidthPx = fit.layoutPx(200f)
                 val rootLp = binding.cardRoot.layoutParams as ViewGroup.MarginLayoutParams
                 rootLp.width = cardWidthPx
