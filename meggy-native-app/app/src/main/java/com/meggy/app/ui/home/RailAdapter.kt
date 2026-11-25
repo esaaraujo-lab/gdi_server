@@ -73,6 +73,15 @@ class RailAdapter(
      * Só tem efeito na TV; no celular o anel não se usa.
      */
     private val whiteFocusRing: Boolean = false,
+    /**
+     * 2.7.52 — base do cartão na TV (TvAutoFit): 200dp é o cartão de
+     * sempre; as fileiras grandes dos conceitos aprovados (Continue
+     * da home, aulas do detalhe) passam 340f — cartão ~340dp, textos
+     * maiores e foco com escala 1,05 (densa) em vez de 1,10. Só tem
+     * efeito na TV (o bloco de geometria do VH é gateado por isTv);
+     * no celular nada muda.
+     */
+    private val tvCardBaseDp: Float = 200f,
     // Build-fix 2.7.16: onClick em ULTIMO — os call sites usam trailing
     // lambda; com onClick em 2o a lambda ligava a nextFocusDownId (Int)
     // e onClick ficava sem valor (compileReleaseKotlin falhou na 2.7.15).
@@ -186,9 +195,13 @@ class RailAdapter(
             }
             // 2.7.48 — anel branco 4dp no "Continue assistindo" da TV
             // (conceito 3); nos outros rails, o rosa da marca (3dp).
+            // 2.7.52 — nos cartões GRANDES (base > 200) a escala de
+            // foco é a densa (1,05, SPEC §5); nos de 200dp fica a de
+            // sempre (1,10).
             if (whiteFocusRing && TvUtils.isTv(binding.root.context)) {
                 FocusAnimator.attachCard(
                     binding.cardRoot, true,
+                    scaleTv = if (tvCardBaseDp > 200f) FocusAnimator.SCALE_TV_DENSE else null,
                     ringColorRes = R.color.tile_focus_ring_white, ringWidthDp = 4f
                 )
             } else {
@@ -206,20 +219,24 @@ class RailAdapter(
                 val ctx = binding.root.context
                 val menuDp = if (ctx is HomeActivity) SideMenuView.currentWidthDp(ctx) else 0f
                 val fit = TvAutoFit.forContext(ctx, menuDp)
-                val cardWidthPx = fit.layoutPx(200f)
+                val cardWidthPx = fit.layoutPx(tvCardBaseDp)
                 val rootLp = binding.cardRoot.layoutParams as ViewGroup.MarginLayoutParams
                 rootLp.width = cardWidthPx
-                rootLp.marginEnd = fit.gapHalfPx(200f)
+                rootLp.marginEnd = fit.gapHalfPx(tvCardBaseDp)
                 binding.cardRoot.layoutParams = rootLp
                 // Imagem 16:9 — a altura deriva da largura (nao de 112dp x escala).
                 val imageArea = binding.cardThumbnail.parent as View
                 imageArea.layoutParams = imageArea.layoutParams.apply {
                     height = cardWidthPx * 9 / 16
                 }
-                binding.cardTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
-                binding.cardSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(10.5f))
-                binding.cardProgressText.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(12f))
-                binding.cardFallbackIcon.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(44f))
+                // 2.7.52 — cartões grandes levam textos maiores
+                // (SPEC §5: metadados legíveis a 3 m); os de 200dp
+                // mantêm os valores de sempre.
+                val bigCard = tvCardBaseDp > 200f
+                binding.cardTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(if (bigCard) 18f else 13f))
+                binding.cardSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(if (bigCard) 14f else 10.5f))
+                binding.cardProgressText.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(if (bigCard) 14f else 12f))
+                binding.cardFallbackIcon.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(if (bigCard) 56f else 44f))
                 binding.watchedBadge.layoutParams = binding.watchedBadge.layoutParams.apply {
                     width = fit.layoutPx(24f)
                     height = fit.layoutPx(24f)
