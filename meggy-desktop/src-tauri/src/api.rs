@@ -579,6 +579,57 @@ pub async fn fetch_text(url: String) -> Result<String, String> {
     resp.text().await.map_err(|e| e.to_string())
 }
 
+// ─────────────────────────────────────────────────────────────────
+// v1.9.12 — Simulados: GET autenticado p/ as rotas do banco
+// ─────────────────────────────────────────────────────────────────
+
+/// GET autenticado p/ as rotas do banco de questões do worker
+/// (/api/ai/question-bank/lists, /api/ai/question-topics,
+/// /api/ai/shared-flashcards). O fetch_text NÃO manda o cookie de
+/// sessão, por isso estas rotas devolviam sempre 401 — este comando
+/// segue o molde do get_user_state (cookie + redirects + AUTH:401).
+/// Só aceita os 3 prefixos do banco — nunca um URL arbitrário com o
+/// cookie da sessão.
+#[tauri::command]
+pub async fn bank_get(state: State<'_, AppState>, path: String) -> Result<serde_json::Value, String> {
+    const ALLOWED: [&str; 3] = [
+        "/api/ai/question-bank/",
+        "/api/ai/question-topics",
+        "/api/ai/shared-flashcards",
+    ];
+    if !ALLOWED.iter().any(|p| path.starts_with(p)) {
+        return Err("bank_get: caminho não permitido".to_string());
+    }
+    let cookie = state.cookie.lock().unwrap().clone();
+    let cookie = cookie.ok_or("Not logged in")?;
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .redirect(reqwest::redirect::Policy::limited(5))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let resp = client
+        .get(format!("{}{}", BASE_URL, path))
+        .header("Cookie", &cookie)
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let status = resp.status();
+    eprintln!("[bank_get] {} HTTP {}", path, status);
+    // ★ v1.9.10: 401 = sessão expirada — o chamador volta p/ o login.
+    if status.as_u16() == 401 {
+        return Err("AUTH:401".to_string());
+    }
+    if !status.is_success() {
+        return Err(format!("HTTP:{}", status.as_u16()));
+    }
+    let text = resp.text().await.map_err(|e| e.to_string())?;
+    Ok(serde_json::from_str(&text).unwrap_or_else(|_| serde_json::json!({})))
+}
+
 /// ★ v1.4.7: Extract text from a PDF URL using pdf-extract crate.
 /// Downloads the PDF to a temp file, extracts text (cap 50K chars), returns it.
 /// Used by ISA generation when no transcription exists — falls back to PDF material.

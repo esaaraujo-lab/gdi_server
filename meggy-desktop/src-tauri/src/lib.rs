@@ -90,6 +90,8 @@ pub fn run() {
             api::ai_cache_save,
             api::ai_generate,
             api::fetch_text,
+            // v1.9.12 — Simulados (GET autenticado p/ as rotas do banco)
+            api::bank_get,
             api::extract_pdf_text,
             api::download_to_temp,
             // v1.9.11 — download offline de aulas (PROGRESSO_AULAS §3.1)
