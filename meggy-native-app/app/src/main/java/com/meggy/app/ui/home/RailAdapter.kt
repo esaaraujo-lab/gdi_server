@@ -67,6 +67,13 @@ class RailAdapter(
     private var nextFocusUpId: Int = View.NO_ID,
     private var nextFocusDownId: Int = View.NO_ID,
     /**
+     * 2.7.56 — LEFT dos cards para a linha seleccionada do menu
+     * lateral da TV (a Home passa o id quando o menu está ligado;
+     * NO_ID = roteamento padrão). Aplicado no VH e a cada bind,
+     * como os ids de cima/baixo.
+     */
+    private var nextFocusLeftId: Int = View.NO_ID,
+    /**
      * 2.7.48 — anel de foco branco 4dp na TV (conceito 3): o "Continue
      * assistindo" da home passa o anel branco em vez do rosa da marca;
      * os outros rails (Destaques, drives, detalhe) mantêm o rosa.
@@ -82,6 +89,14 @@ class RailAdapter(
      * no celular nada muda.
      */
     private val tvCardBaseDp: Float = 200f,
+    /**
+     * 2.7.56 — cartão LARGO da posição 0 (proposta Plex: o item em
+     * curso é o cartão de 320dp da 1.ª fileira do Continuar — sem
+     * hero separado, sem duplicação). 0 = sem cartão largo. A
+     * geometria aplica-se no onBind (a posição só lá se conhece);
+     * só TV (o bloco de geometria é gateado por isTv).
+     */
+    private val firstCardWideDp: Float = 0f,
     // Build-fix 2.7.16: onClick em ULTIMO — os call sites usam trailing
     // lambda; com onClick em 2o a lambda ligava a nextFocusDownId (Int)
     // e onClick ficava sem valor (compileReleaseKotlin falhou na 2.7.15).
@@ -173,6 +188,16 @@ class RailAdapter(
         }
     }
 
+    /** 2.7.56 — idem updateFocusIds, para o LEFT (menu lateral). */
+    fun updateFocusLeftId(leftId: Int) {
+        if (leftId == nextFocusLeftId) return
+        nextFocusLeftId = leftId
+        val rv = attachedRecyclerView ?: return
+        for (i in 0 until rv.childCount) {
+            if (leftId != View.NO_ID) rv.getChildAt(i).nextFocusLeftId = leftId
+        }
+    }
+
     /** Posição atual do item nos dados do adapter (-1 se já não existir). */
     fun indexOf(item: RailItem): Int = items.indexOf(item)
 
@@ -232,10 +257,12 @@ class RailAdapter(
                 // 2.7.52 — cartões grandes levam textos maiores
                 // (SPEC §5: metadados legíveis a 3 m); os de 200dp
                 // mantêm os valores de sempre.
+                // 2.7.56 — escala da proposta Plex p/ as fileiras:
+                // título de cartão 15sp, metadados 13sp.
                 val bigCard = tvCardBaseDp > 200f
-                binding.cardTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(if (bigCard) 18f else 13f))
-                binding.cardSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(if (bigCard) 14f else 10.5f))
-                binding.cardProgressText.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(if (bigCard) 14f else 12f))
+                binding.cardTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(if (bigCard) 15f else 13f))
+                binding.cardSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(if (bigCard) 13f else 10.5f))
+                binding.cardProgressText.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(if (bigCard) 13f else 12f))
                 binding.cardFallbackIcon.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(if (bigCard) 56f else 44f))
                 binding.watchedBadge.layoutParams = binding.watchedBadge.layoutParams.apply {
                     width = fit.layoutPx(24f)
@@ -253,6 +280,7 @@ class RailAdapter(
             // Frente A (TV): nextFocus explícito (ver params).
             if (nextFocusUpId != View.NO_ID) itemView.nextFocusUpId = nextFocusUpId
             if (nextFocusDownId != View.NO_ID) itemView.nextFocusDownId = nextFocusDownId
+            if (nextFocusLeftId != View.NO_ID) itemView.nextFocusLeftId = nextFocusLeftId
         }
     }
 
@@ -267,6 +295,28 @@ class RailAdapter(
         // cada bind (o updateFocusIds da Home só os salva).
         if (nextFocusUpId != View.NO_ID) holder.itemView.nextFocusUpId = nextFocusUpId
         if (nextFocusDownId != View.NO_ID) holder.itemView.nextFocusDownId = nextFocusDownId
+        if (nextFocusLeftId != View.NO_ID) holder.itemView.nextFocusLeftId = nextFocusLeftId
+        // 2.7.56 — geometria do cartão largo (posição 0): a mesma
+        // matemática do init do VH, com a base larga; os holders
+        // reciclados repõem a base normal nas outras posições.
+        if (firstCardWideDp > 0f && TvUtils.isTv(holder.itemView.context)) {
+            val ctx = holder.itemView.context
+            val menuDp = if (ctx is HomeActivity) SideMenuView.currentWidthDp(ctx) else 0f
+            val fit = TvAutoFit.forContext(ctx, menuDp)
+            val base = if (position == 0) firstCardWideDp else tvCardBaseDp
+            val cardWidthPx = fit.layoutPx(base)
+            val rootLp = holder.binding.cardRoot.layoutParams as ViewGroup.MarginLayoutParams
+            if (rootLp.width != cardWidthPx || rootLp.marginEnd != fit.gapHalfPx(base)) {
+                rootLp.width = cardWidthPx
+                rootLp.marginEnd = fit.gapHalfPx(base)
+                holder.binding.cardRoot.layoutParams = rootLp
+            }
+            val imageArea = holder.binding.cardThumbnail.parent as View
+            val targetH = cardWidthPx * 9 / 16
+            if (imageArea.layoutParams.height != targetH) {
+                imageArea.layoutParams = imageArea.layoutParams.apply { height = targetH }
+            }
+        }
         val res = holder.itemView.resources
         val ctx = holder.itemView.context
 
@@ -334,6 +384,11 @@ class RailAdapter(
             } else {
                 progressRow.visibility = View.GONE
             }
+            // v2.7.56 (TV): a barra vive sobre a base da imagem (layout-
+            // television) — a visibilidade acompanha a da linha de texto.
+            // No celular a barra está dentro da progress_row e o valor é
+            // o mesmo, sem efeito visual.
+            cardProgress.visibility = progressRow.visibility
 
             watchedBadge.visibility = if (item.isWatched) View.VISIBLE else View.GONE
             continueBadge.visibility = if (item.hasResume) View.VISIBLE else View.GONE

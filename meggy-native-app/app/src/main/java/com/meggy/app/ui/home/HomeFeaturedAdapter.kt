@@ -34,8 +34,21 @@ data class HomeFeaturedItem(
 )
 
 class HomeFeaturedAdapter(
+    /** 2.7.56 — LEFT p/ a linha seleccionada do menu lateral da TV
+     *  (NO_ID = roteamento padrão; no celular fica NO_ID). */
+    private var nextFocusLeftId: Int = View.NO_ID,
+    /** 2.7.56 — UP/DOWN entre fileiras da home TV (ver HomeActivity). */
+    private var nextFocusUpId: Int = View.NO_ID,
+    private var nextFocusDownId: Int = View.NO_ID,
     private val onItem: (HomeFeaturedItem) -> Unit
 ) : ListAdapter<HomeFeaturedItem, HomeFeaturedAdapter.VH>(DIFF) {
+
+    /** 2.7.56 — o DOWN depende da visibilidade das fileiras de
+     *  baixo, que só se conhece depois de todas montadas (a Home
+     *  corrige-o nas cadeias de foco). */
+    fun updateFocusDownId(downId: Int) {
+        nextFocusDownId = downId
+    }
 
     inner class VH(val binding: ItemHomeFeaturedBinding) : RecyclerView.ViewHolder(binding.root) {
         init {
@@ -44,6 +57,9 @@ class HomeFeaturedAdapter(
                 if (pos == RecyclerView.NO_POSITION) return@setOnClickListener
                 onItem(getItem(pos))
             }
+            if (nextFocusLeftId != View.NO_ID) itemView.nextFocusLeftId = nextFocusLeftId
+            if (nextFocusUpId != View.NO_ID) itemView.nextFocusUpId = nextFocusUpId
+            if (nextFocusDownId != View.NO_ID) itemView.nextFocusDownId = nextFocusDownId
             // 2.7.52 — foco na TV (SPEC §5: anel + escala): a escala
             // 1,05 + elevação vêm do FocusAnimator.attach; o anel
             // branco 4dp vem do fundo com estado da variante TV do
@@ -64,6 +80,9 @@ class HomeFeaturedAdapter(
     }
 
     override fun onBindViewHolder(holder: VH, position: Int) {
+        if (nextFocusLeftId != View.NO_ID) holder.itemView.nextFocusLeftId = nextFocusLeftId
+        if (nextFocusUpId != View.NO_ID) holder.itemView.nextFocusUpId = nextFocusUpId
+        if (nextFocusDownId != View.NO_ID) holder.itemView.nextFocusDownId = nextFocusDownId
         val item = getItem(position)
         val ctx = holder.itemView.context
         val b = holder.binding

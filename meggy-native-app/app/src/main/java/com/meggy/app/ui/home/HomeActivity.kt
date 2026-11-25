@@ -645,13 +645,15 @@ class HomeActivity : AppCompatActivity() {
             setupDestaques()
             return
         }
-        heroRotator = HeroRotator(binding, HeroItem.ALL) { hero ->
-            val intent = Intent(this, BrowseActivity::class.java)
-            intent.putExtra("drivePath", hero.drivePath)
-            intent.putExtra("folderName", hero.driveName)
-            startActivity(intent)
-        }
-        heroRotator?.start()
+        // 2.7.56 — TV SEM HERO (B2 da proposta Plex): a home é uma
+        // estrutura por fileiras a partir do topo (Continuar
+        // primeiro, com o item em curso como cartão largo da
+        // fileira); o hero rotativo — que rodava por swipe, gesto
+        // que não existe na TV, e a cada 8s sob o foco — sai. O
+        // heroCard está gone no layout-television e o rotador nunca
+        // se cria (heroRotator fica null; os usos são null-safe).
+        // Os Destaques montam-se como no celular.
+        setupDestaques()
     }
 
     private inner class HeroRotator(
@@ -805,8 +807,13 @@ class HomeActivity : AppCompatActivity() {
         // a aula do hero aparecia outra vez como 1.º cartão da
         // fileira). Na TV, o item do hero — o MESMO cálculo do
         // setupFeaturedContinue (recent com resume de maior
-        // progresso) — sai da fileira. No celular nada muda (o
+        // progresso) — saía da fileira. No celular nada muda (o
         // cartão largo e o rail já coexistiam assim).
+        // 2.7.56 — SEM HERO na TV (B2 da proposta Plex): o item em
+        // curso já não sai da fileira — passa a ser o CARTÃO LARGO
+        // (320dp) da posição 0 dela (ver RailAdapter.firstCardWideDp).
+        // A não-duplicação mantém-se: o item aparece UMA vez, como
+        // 1.º cartão do Continuar. A ordem dos restantes não muda.
         val isTvHere = TvUtils.isTv(this)
         val heroItem = if (isTvHere) {
             recents.filter { sm.hasResume(it.folderPath, it.videoName) }
@@ -814,12 +821,14 @@ class HomeActivity : AppCompatActivity() {
         } else {
             null
         }
-        val railRecents = if (heroItem != null) {
-            recents.filterNot {
+        val railRecents = when {
+            heroItem == null -> recents
+            isTvHere -> listOf(heroItem) + recents.filterNot {
                 it.folderPath == heroItem.folderPath && it.videoName == heroItem.videoName
             }
-        } else {
-            recents
+            else -> recents.filterNot {
+                it.folderPath == heroItem.folderPath && it.videoName == heroItem.videoName
+            }
         }
 
         if (railRecents.isEmpty()) {
@@ -856,10 +865,11 @@ class HomeActivity : AppCompatActivity() {
         if (binding.railContinue.layoutManager == null) {
             binding.railContinue.layoutManager =
                 LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
-            // 2.7.52 — na TV os cartões são grandes (340dp): o gutter
-            // acompanha a base nova. No celular tvAutoFit é null e
+            // 2.7.52 — na TV os cartões são grandes: o gutter
+            // acompanha a base. No celular tvAutoFit é null e
             // fica o 8 de sempre.
-            binding.railContinue.addItemDecoration(RailGutterDecoration(tvAutoFit?.gutterDp(340f) ?: 8))
+            // 2.7.56 — base da fileira na TV: 240dp (proposta Plex).
+            binding.railContinue.addItemDecoration(RailGutterDecoration(tvAutoFit?.gutterDp(240f) ?: 8))
         }
 
         // ★ v2.5.0: Show the COURSE NAME (not the folder path) as subtitle.
@@ -902,16 +912,37 @@ class HomeActivity : AppCompatActivity() {
         // setupFeaturedContinue corre depois e já não o corrige).
         val hasFeatured = TvUtils.isTv(this) &&
             recents.any { sm.hasResume(it.folderPath, it.videoName) }
+        // 2.7.56 — cadeias da fileira na TV (sem hero nem destaque):
+        // UP — com o menu ligado não há nada acima (é a 1.ª fileira);
+        // sem menu, o 1.º atalho do cabeçalho. DOWN — a próxima
+        // fileira visível (Destaques → Pastas recentes → Drives).
+        // LEFT — a linha seleccionada do menu (tvMenuLeftTargetId).
+        // No celular ficam os ids de sempre.
+        val continueUpId = when {
+            !isTvHere -> if (hasFeatured) R.id.featured_card else R.id.heroPlay
+            sm.tvSideMenuEnabled -> View.NO_ID
+            else -> R.id.tvNavSearch
+        }
+        val continueDownId = when {
+            !isTvHere -> R.id.railDrives
+            findViewById<View>(R.id.listDestaques)?.visibility == View.VISIBLE -> R.id.listDestaques
+            findViewById<View>(R.id.railRecentFolders)?.visibility == View.VISIBLE -> R.id.railRecentFolders
+            else -> R.id.railDrives
+        }
         if (firstBuild) {
             continueAdapter = RailAdapter(
                 railItems,
-                nextFocusUpId = if (hasFeatured) R.id.featured_card else R.id.heroPlay,
-                nextFocusDownId = R.id.railDrives,
+                nextFocusUpId = continueUpId,
+                nextFocusDownId = continueDownId,
+                nextFocusLeftId = tvMenuLeftTargetId(),
                 // 2.7.48 — anel de foco branco 4dp na TV (conceito 3).
                 whiteFocusRing = true,
                 // 2.7.52 — cartões grandes na TV (conceito
                 // tv-home-nova); no celular a base fica a de sempre.
-                tvCardBaseDp = if (isTvHere) 340f else 200f
+                // 2.7.56 — base da proposta Plex: 240dp; a posição 0
+                // (o item em curso) é o cartão largo de 320dp.
+                tvCardBaseDp = if (isTvHere) 240f else 200f,
+                firstCardWideDp = if (isTvHere) 320f else 0f
             ) { item ->
                 // Ronda 18 Frente C (F1) — a lambda nasce UMA só vez
                 // (firstBuild) mas os recents mudam a cada vídeo visto:
@@ -935,10 +966,8 @@ class HomeActivity : AppCompatActivity() {
             // Só os dados mudam (o foco/rolagem repõem-se se mudou algo).
             val snap = captureHomeFocus()
             val changed = continueAdapter?.updateItems(railItems) ?: false
-            continueAdapter?.updateFocusIds(
-                if (hasFeatured) R.id.featured_card else R.id.heroPlay,
-                R.id.railDrives
-            )
+            continueAdapter?.updateFocusIds(continueUpId, continueDownId)
+            continueAdapter?.updateFocusLeftId(tvMenuLeftTargetId())
             if (changed) restoreHomeFocus(snap)
         }
         continueAdapter?.let { backfillRecentThumbs(recents, railItems, it) }
@@ -1137,7 +1166,22 @@ class HomeActivity : AppCompatActivity() {
             rail.addItemDecoration(RailGutterDecoration(tvAutoFit?.gutterDp(200f) ?: 8))
         }
         if (recentFoldersAdapter == null) {
-            recentFoldersAdapter = RailAdapter(items) { item ->
+            recentFoldersAdapter = RailAdapter(
+                items,
+                // 2.7.56 — cadeia vertical das fileiras na TV (UP =
+                // fileira visível de cima; DOWN = Drives; LEFT =
+                // menu). No celular, sem ids (como sempre foi).
+                nextFocusUpId = if (TvUtils.isTv(this)) {
+                    when {
+                        findViewById<View>(R.id.listDestaques)?.visibility == View.VISIBLE ->
+                            R.id.listDestaques
+                        binding.railContinue.visibility == View.VISIBLE -> R.id.railContinue
+                        else -> View.NO_ID
+                    }
+                } else View.NO_ID,
+                nextFocusDownId = if (TvUtils.isTv(this)) R.id.railDrives else View.NO_ID,
+                nextFocusLeftId = tvMenuLeftTargetId()
+            ) { item ->
                 val folder = item.file?.folderPath ?: return@RailAdapter
                 val intent = Intent(this, DetailActivity::class.java)
                 intent.putExtra("drivePath", folder)
@@ -1208,6 +1252,22 @@ class HomeActivity : AppCompatActivity() {
         val topBar = findViewById<View>(R.id.homeTopBar)
         topBar?.visibility = if (sm.tvSideMenuEnabled) View.GONE else View.VISIBLE
         menu.visibility = if (sm.tvSideMenuEnabled) View.VISIBLE else View.GONE
+        // 2.7.56 — o conteúdo reserva os 56dp da barra em repouso
+        // (layout_marginStart do layout-television); sem menu, a
+        // margem sai e o conteúdo ocupa a largura toda. A largura
+        // do conteúdo NUNCA muda com a expansão (desliza, não refluí).
+        findViewById<View>(R.id.homeContent)?.let { content ->
+            val lp = content.layoutParams as? ViewGroup.MarginLayoutParams
+            if (lp != null) {
+                val target = if (sm.tvSideMenuEnabled) {
+                    (SideMenuView.WIDTH_COLLAPSED_DP * resources.displayMetrics.density).toInt()
+                } else 0
+                if (lp.marginStart != target) {
+                    lp.marginStart = target
+                    content.layoutParams = lp
+                }
+            }
+        }
         if (!sm.tvSideMenuEnabled) return
         menu.setSelected(SideMenuView.MenuItem.HOME)
         menu.onMenuItemSelected = { item ->
@@ -1224,15 +1284,16 @@ class HomeActivity : AppCompatActivity() {
             }
         }
         menu.onLogoutSelected = { logout() }
-        menu.onCollapseToggled = {
-            sm.tvSideMenuCollapsed = !sm.tvSideMenuCollapsed
-            menu.applyCollapsed(sm.tvSideMenuCollapsed)
-            // A largura do conteúdo mudou: re-medir e re-aplicar.
-            tvAutoFit = TvAutoFit.forContext(this, SideMenuView.currentWidthDp(this))
-            applyTvAutoFit()
-            setupTvFocusChains()
-        }
-        menu.applyCollapsed(sm.tvSideMenuCollapsed)
+        // 2.7.56 — a expansão é AO FOCO (dentro do SideMenuView; o
+        // interruptor persistido e a linha de recolher saíram). Aqui
+        // só se liga o DESLIZE do conteúdo: translationX = 184dp ×
+        // fracção, sincronizado com a animação da barra pelo mesmo
+        // ValueAnimator — sem re-medir nada, sem TvAutoFit novo,
+        // sem cadeias refeitas.
+        val content = findViewById<View>(R.id.homeContent)
+        val slidePx = (SideMenuView.WIDTH_EXPANDED_DP - SideMenuView.WIDTH_COLLAPSED_DP) *
+            resources.displayMetrics.density
+        menu.onExpandFractionChanged = { f -> content?.translationX = slidePx * f }
     }
 
     /**
@@ -1259,10 +1320,20 @@ class HomeActivity : AppCompatActivity() {
             // Sem SnapHelper e sem dots: os outros rails também não
             // têm (rolagem livre) — consistência da página.
             list.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
-            list.addItemDecoration(RailGutterDecoration(tvAutoFit?.gutterDp(320f) ?: 8))
+            // 2.7.56 — gutter acompanha a largura da fileira (240dp).
+            list.addItemDecoration(RailGutterDecoration(tvAutoFit?.gutterDp(240f) ?: 8))
         }
         if (destaquesAdapter == null) {
-            destaquesAdapter = HomeFeaturedAdapter { item ->
+            destaquesAdapter = HomeFeaturedAdapter(
+                nextFocusLeftId = tvMenuLeftTargetId(),
+                // 2.7.56 — UP: a fileira Continuar; DOWN: corrigido
+                // nas cadeias (depende das Pastas recentes). No
+                // celular, sem ids (roteamento de sempre).
+                nextFocusUpId = if (TvUtils.isTv(this) &&
+                    binding.railContinue.visibility == View.VISIBLE
+                ) R.id.railContinue else View.NO_ID,
+                nextFocusDownId = if (TvUtils.isTv(this)) R.id.railDrives else View.NO_ID
+            ) { item ->
                 if (item.openAsCourse) {
                     val intent = Intent(this, DetailActivity::class.java)
                     intent.putExtra("drivePath", item.path)
@@ -1317,6 +1388,15 @@ class HomeActivity : AppCompatActivity() {
         // comportamento é exatamente o anterior. As diferenças de
         // apresentação ficam salvas por isTvHere.
         val isTvHere = TvUtils.isTv(this)
+        // 2.7.56 — na TV a seção de destaque NÃO existe (B2: o item
+        // em curso é o cartão largo da fileira Continuar — ver
+        // setupContinueRail). A vista está gone no layout e nenhum
+        // caminho a volta a mostrar aqui. No celular, o cartão
+        // largo continua a ser montado como sempre.
+        if (isTvHere) {
+            binding.featuredSection.visibility = View.GONE
+            return
+        }
         val best = recents
             .filter { sm.hasResume(it.folderPath, it.videoName) }
             .maxByOrNull { sm.getResumeProgress(it.folderPath, it.videoName) }
@@ -1589,43 +1669,58 @@ class HomeActivity : AppCompatActivity() {
 
 
     /**
+     * 2.7.56 — alvo do LEFT dos cartões da home TV: a linha
+     * seleccionada do menu lateral (o padrão que o heroPlay já
+     * usava). NO_ID sem TV ou com o menu desligado — aí o
+     * roteamento é o padrão.
+     */
+    private fun tvMenuLeftTargetId(): Int {
+        if (!TvUtils.isTv(this)) return View.NO_ID
+        if (!SessionManager.get(this).tvSideMenuEnabled) return View.NO_ID
+        return findViewById<SideMenuView>(R.id.tvSideMenu)?.selectedRowId() ?: View.NO_ID
+    }
+
+    /** 2.7.56 — id da 1.ª fileira de conteúdo visível da home TV. */
+    private fun tvFirstContentId(): Int = when {
+        binding.railContinue.visibility == View.VISIBLE -> R.id.railContinue
+        findViewById<View>(R.id.listDestaques)?.visibility == View.VISIBLE -> R.id.listDestaques
+        findViewById<View>(R.id.railRecentFolders)?.visibility == View.VISIBLE ->
+            R.id.railRecentFolders
+        else -> R.id.railDrives
+    }
+
+    /**
      * Frente A (TV) — cadeias D-pad explícitas da home (só TV).
-     * Do hero: DOWN vai ao destaque quando existe, senão ao rail
-     * visível de cima; do destaque: UP volta ao hero, DOWN vai ao
-     * rail visível de cima. Sem isto, o FocusFinder decide sozinho
-     * entre seções que estão fora do viewport do ScrollView.
+     * 2.7.56 — sem hero nem destaque: com o menu ligado, o RIGHT das
+     * linhas do menu entra no conteúdo pela 1.ª fileira visível (e o
+     * LEFT dos cartões volta à linha seleccionada, via adapters);
+     * sem menu, os atalhos do cabeçalho descem para essa fileira.
+     * As cadeias verticais entre fileiras vivem nos adapters (UP/
+     * DOWN por fileira, na ordem da página); aqui só se corrige o
+     * DOWN dos Destaques, que depende das Pastas recentes (montadas
+     * depois dos Destaques).
      */
     private fun setupTvFocusChains() {
         if (!TvUtils.isTv(this)) return
-        val featuredVisible = binding.featuredSection.visibility == View.VISIBLE
-        val continueVisible = binding.railContinue.visibility == View.VISIBLE
         val menu = findViewById<SideMenuView>(R.id.tvSideMenu)
         val menuOn = menu != null && SessionManager.get(this).tvSideMenuEnabled
+        val firstContent = tvFirstContentId()
         if (menuOn) {
-            // 2.7.48 — menu lateral activo: o cabeçalho antigo está
-            // escondido; as linhas do menu descem para o hero (direita)
-            // e o hero volta para a linha marcada (esquerda). Não há
-            // nada acima do hero.
             menu!!.rows().forEach { row ->
-                row.nextFocusRightId = R.id.heroPlay
+                row.nextFocusRightId = firstContent
             }
-            binding.heroPlay.nextFocusLeftId = menu.selectedRowId()
-            binding.heroPlay.nextFocusUpId = View.NO_ID
         } else {
-            // 2.7.41 (P0-2/P0-3) — os atalhos do cabeçalho descem para o
-            // hero e o hero volta a subir para o 1.º atalho (Buscar).
-            findViewById<View>(R.id.tvNavSearch)?.nextFocusDownId = R.id.heroPlay
-            findViewById<View>(R.id.tvNavMylist)?.nextFocusDownId = R.id.heroPlay
-            findViewById<View>(R.id.tvNavSettings)?.nextFocusDownId = R.id.heroPlay
-            binding.heroPlay.nextFocusUpId = R.id.tvNavSearch
+            findViewById<View>(R.id.tvNavSearch)?.nextFocusDownId = firstContent
+            findViewById<View>(R.id.tvNavMylist)?.nextFocusDownId = firstContent
+            findViewById<View>(R.id.tvNavSettings)?.nextFocusDownId = firstContent
         }
-        binding.heroPlay.nextFocusDownId =
-            if (featuredVisible) R.id.featured_card
-            else if (continueVisible) R.id.railContinue
-            else R.id.railDrives
-        binding.featuredCard.nextFocusUpId = R.id.heroPlay
-        binding.featuredCard.nextFocusDownId =
-            if (continueVisible) R.id.railContinue else R.id.railDrives
+        destaquesAdapter?.updateFocusDownId(
+            if (findViewById<View>(R.id.railRecentFolders)?.visibility == View.VISIBLE) {
+                R.id.railRecentFolders
+            } else {
+                R.id.railDrives
+            }
+        )
     }
 
     /**
@@ -1647,7 +1742,10 @@ class HomeActivity : AppCompatActivity() {
         val fit = tvAutoFit ?: return
         Log.i(TvAutoFit.TAG, fit.describe())
         // Overscan: laterais 56dp (piso 48dp), topo/fundo >=48dp.
-        binding.root.setPadding(
+        // 2.7.56 — o padding vai para o CONTEÚDO (homeContent): a
+        // raiz é agora o FrameLayout que também segura a barra
+        // lateral sobreposta, e a barra não leva margem de overscan.
+        findViewById<View>(R.id.homeContent)?.setPadding(
             fit.sideMarginPx(), fit.topMarginPx(),
             fit.sideMarginPx(), fit.bottomMarginPx()
         )
@@ -1658,45 +1756,19 @@ class HomeActivity : AppCompatActivity() {
             width = fit.layoutPx(56f)
             height = fit.layoutPx(56f)
         }
-        // Hero: altura = fraccao da altura do viewport (heroScale);
-        // texto com textScale; padding do bloco de texto com marginScale.
-        binding.heroCard.layoutParams =
-            binding.heroCard.layoutParams.apply { height = fit.heroPx(320f) }
-        (binding.heroTitle.parent as View).setPadding(
-            fit.marginPx(32f), fit.marginPx(26f),
-            fit.marginPx(32f), fit.marginPx(26f)
-        )
-        binding.heroBadge.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(12f))
-        binding.heroTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(30f))
-        binding.heroSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(14f))
-        binding.heroPlay.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(15f))
-        // Destaque: titulo da secao (1o filho, sem id) + thumb.
-        // 2.7.52 — a thumb do hero imersivo é FULL-BLEED (a caixa
-        // ocupa o cartão inteiro de 400dp; o texto vai por cima,
-        // sobre o scrim do layout). Título do hero: 40sp (SPEC §5).
-        (binding.featuredSection.getChildAt(0) as? TextView)?.setTextSize(
-            TypedValue.COMPLEX_UNIT_SP, fit.textSp(18f))
-        val thumbBox = binding.featuredThumb.parent as View
-        thumbBox.layoutParams = thumbBox.layoutParams.apply {
-            width = ViewGroup.LayoutParams.MATCH_PARENT
-            height = ViewGroup.LayoutParams.MATCH_PARENT
-        }
-        binding.featuredTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(40f))
-        binding.featuredSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(18f))
-        binding.featuredProgressText.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(16f))
-        binding.featuredTimeText.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
-        binding.featuredContinue.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(18f))
-        binding.featuredFallbackIcon.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(56f))
-        // Secoes + rodape.
-        binding.labelContinue.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(18f))
-        binding.labelDrives.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(18f))
+        // 2.7.56 — os blocos do hero e do destaque SAÍRAM (B2: as
+        // duas vistas estão gone na TV e nada as dimensiona).
+        // Secoes + rodape. 2.7.56 — rótulos de seção a 28sp (conceitos aprovados)
+        // (30 detalhe / 28 secção pelos conceitos / 15 cartão / 13 meta).
+        binding.labelContinue.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(28f))
+        binding.labelDrives.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(28f))
         // 2.7.48 — novas seções da TV, nos mesmos tamanhos.
         findViewById<TextView>(R.id.labelRecentFolders)?.setTextSize(
-            TypedValue.COMPLEX_UNIT_SP, fit.textSp(18f))
+            TypedValue.COMPLEX_UNIT_SP, fit.textSp(28f))
         findViewById<TextView>(R.id.labelDestaques)?.setTextSize(
-            TypedValue.COMPLEX_UNIT_SP, fit.textSp(18f))
+            TypedValue.COMPLEX_UNIT_SP, fit.textSp(28f))
         findViewById<TextView>(R.id.progressTitle)?.setTextSize(
-            TypedValue.COMPLEX_UNIT_SP, fit.textSp(18f))
+            TypedValue.COMPLEX_UNIT_SP, fit.textSp(28f))
         findViewById<TextView>(R.id.progressWeekHours)?.setTextSize(
             TypedValue.COMPLEX_UNIT_SP, fit.textSp(22f))
         findViewById<TextView>(R.id.progressStreak)?.setTextSize(
@@ -1707,8 +1779,6 @@ class HomeActivity : AppCompatActivity() {
             TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
         binding.footerVersion.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
         // Espacamentos verticais com marginScale.
-        fit.applyTopMargin(binding.heroCard, fit.marginPx(26f))
-        fit.applyTopMargin(binding.featuredSection, fit.marginPx(26f))
         fit.applyTopMargin(binding.labelContinue, fit.marginPx(26f))
         fit.applyTopMargin(binding.labelDrives, fit.marginPx(26f))
         fit.applyTopMargin(binding.footerVersion, fit.marginPx(26f))
@@ -1733,12 +1803,25 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun setupDrivesRail() {
-        // Frente A (TV) — UP do tile de drive volta ao rail de cima
-        // ("Continue assistindo", destaque ou hero — o que existir).
-        val drivesUpId = when {
-            binding.railContinue.visibility == View.VISIBLE -> R.id.railContinue
-            binding.featuredSection.visibility == View.VISIBLE -> R.id.featured_card
-            else -> R.id.heroPlay
+        // Frente A (TV) — UP do tile de drive volta à fileira de
+        // cima (a visível mais próxima). 2.7.56: na TV a cadeia
+        // segue a ordem das fileiras (Pastas recentes → Destaques →
+        // Continuar); no celular ficam os alvos de sempre.
+        val drivesUpId = if (TvUtils.isTv(this)) {
+            when {
+                findViewById<View>(R.id.railRecentFolders)?.visibility == View.VISIBLE ->
+                    R.id.railRecentFolders
+                findViewById<View>(R.id.listDestaques)?.visibility == View.VISIBLE ->
+                    R.id.listDestaques
+                binding.railContinue.visibility == View.VISIBLE -> R.id.railContinue
+                else -> View.NO_ID
+            }
+        } else {
+            when {
+                binding.railContinue.visibility == View.VISIBLE -> R.id.railContinue
+                binding.featuredSection.visibility == View.VISIBLE -> R.id.featured_card
+                else -> R.id.heroPlay
+            }
         }
         // Ronda 17 Frente B — LayoutManager, decoração e adapter
         // criados UMA só vez (como o rail Continue): hoje corriam em
@@ -1751,7 +1834,8 @@ class HomeActivity : AppCompatActivity() {
             binding.railDrives.addItemDecoration(RailGutterDecoration(tvAutoFit?.gutterDp(150f) ?: 8))
             drivesAdapter = DriveRailAdapter(
                 buildDriveRailItems(), featuredCoverByPath,
-                nextFocusUpId = drivesUpId
+                nextFocusUpId = drivesUpId,
+                nextFocusLeftId = tvMenuLeftTargetId()
             ) { item ->
                 lastFocusDrives = driveRailItems.indexOf(item)
                 when (item) {

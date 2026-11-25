@@ -51,6 +51,8 @@ class DriveRailAdapter(
      */
     private var nextFocusUpId: Int = View.NO_ID,
     private var nextFocusDownId: Int = View.NO_ID,
+    /** 2.7.56 — LEFT p/ a linha seleccionada do menu lateral (ver RailAdapter). */
+    private var nextFocusLeftId: Int = View.NO_ID,
     // Build-fix 2.7.16: onClick em ULTIMO (mesmo motivo do RailAdapter).
     private val onClick: (DriveRailItem) -> Unit
 ) : RecyclerView.Adapter<DriveRailAdapter.VH>() {
@@ -157,8 +159,8 @@ class DriveRailAdapter(
                 driveLp.height = fit.layoutPx(210f)
                 driveLp.marginEnd = fit.gapHalfPx(150f)
                 binding.driveCardRoot.layoutParams = driveLp
-                binding.driveName.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
-                binding.driveMeta.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(10.5f))
+                binding.driveName.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(15f))
+                binding.driveMeta.setTextSize(TypedValue.COMPLEX_UNIT_SP, fit.textSp(13f))
                 binding.driveFavStar.layoutParams = binding.driveFavStar.layoutParams.apply {
                     width = fit.layoutPx(32f)
                     height = fit.layoutPx(32f)
@@ -172,6 +174,7 @@ class DriveRailAdapter(
             // Frente A (TV): nextFocus explícito (ver params).
             if (nextFocusUpId != View.NO_ID) itemView.nextFocusUpId = nextFocusUpId
             if (nextFocusDownId != View.NO_ID) itemView.nextFocusDownId = nextFocusDownId
+            if (nextFocusLeftId != View.NO_ID) itemView.nextFocusLeftId = nextFocusLeftId
         }
     }
 
@@ -185,6 +188,7 @@ class DriveRailAdapter(
         // cada bind (o updateFocusIds da Home só os salva).
         if (nextFocusUpId != View.NO_ID) holder.itemView.nextFocusUpId = nextFocusUpId
         if (nextFocusDownId != View.NO_ID) holder.itemView.nextFocusDownId = nextFocusDownId
+        if (nextFocusLeftId != View.NO_ID) holder.itemView.nextFocusLeftId = nextFocusLeftId
         // Ronda 10 Frente C — o tile fixo e o tile do admin
         // partilham o layout, mas a capa e o favorito diferem
         // (ver bindFixed / bindAdmin).
