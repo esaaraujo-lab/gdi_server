@@ -1315,3 +1315,93 @@ pub async fn set_download_wifi_only(app: AppHandle, value: bool) -> Result<bool,
     crate::db::db_set_setting(&app, DOWNLOAD_WIFI_ONLY_KEY, if value { "1" } else { "0" })?;
     Ok(true)
 }
+
+// ─── PlayerFix Fase 2 (2026-11-25): sniff do contentor ─────────
+// Há ficheiros ".mp4" que na verdade são MPEG-TS (extensão trocada
+// na origem — confirmado nas aulas de História/Vestibulares: byte
+// de sincronismo 0x47 a cada 188 bytes). O <video> do WebView2 não
+// lê MPEG-TS: fica à espera até o watchdog desistir aos 30 s. Este
+// comando lê só os primeiros 564 bytes (remoto: com a cookie da
+// sessão e redirects manuais; local: do disco) e classifica:
+// "ts" | "mp4" | "unknown". Qualquer erro → "unknown" (o caminho
+// actual fica intacto — watchdog incluído).
+fn classify_container(bytes: &[u8]) -> &'static str {
+    if bytes.len() >= 377 && bytes[0] == 0x47 && bytes[188] == 0x47 && bytes[376] == 0x47 {
+        return "ts";
+    }
+    if bytes.len() >= 8 && &bytes[4..8] == b"ftyp" {
+        return "mp4";
+    }
+    "unknown"
+}
+
+#[tauri::command]
+pub async fn sniff_container(state: State<'_, AppState>, url: String) -> Result<String, String> {
+    // Ficheiro local (aula baixada): lê os primeiros bytes do disco.
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        let head = std::fs::File::open(&url)
+            .and_then(|mut f| {
+                use std::io::Read;
+                let mut buf = vec![0u8; 564];
+                let n = f.read(&mut buf)?;
+                buf.truncate(n);
+                Ok(buf)
+            })
+            .unwrap_or_default();
+        return Ok(classify_container(&head).to_string());
+    }
+
+    let cookie = state.cookie.lock().unwrap().clone();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(8))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut current = url.clone();
+    let mut head: Vec<u8> = Vec::new();
+    for _hop in 0..4 {
+        let mut req = client.get(&current).header("Range", "bytes=0-563");
+        // A cookie da sessão só vai para o nosso servidor — nunca
+        // para o destino de um redirect (ex.: Google).
+        if current.starts_with(BASE_URL) {
+            if let Some(c) = &cookie {
+                req = req.header("Cookie", c);
+            }
+        }
+        let mut resp = match req.send().await {
+            Ok(r) => r,
+            Err(_) => return Ok("unknown".to_string()),
+        };
+        let status = resp.status();
+        if status.is_redirection() {
+            match resp.headers().get("location").and_then(|v| v.to_str().ok()) {
+                Some(loc) => {
+                    current = if loc.starts_with("http") {
+                        loc.to_string()
+                    } else {
+                        format!("{}{}", BASE_URL, loc)
+                    };
+                    continue;
+                }
+                None => return Ok("unknown".to_string()),
+            }
+        }
+        if !status.is_success() {
+            return Ok("unknown".to_string());
+        }
+        // Lê no máximo 564 bytes e fecha — mesmo que o servidor
+        // ignore o Range e queira mandar o ficheiro inteiro.
+        while head.len() < 564 {
+            match resp.chunk().await {
+                Ok(Some(chunk)) => {
+                    let take = (564 - head.len()).min(chunk.len());
+                    head.extend_from_slice(&chunk[..take]);
+                }
+                _ => break,
+            }
+        }
+        break;
+    }
+    Ok(classify_container(&head).to_string())
+}
