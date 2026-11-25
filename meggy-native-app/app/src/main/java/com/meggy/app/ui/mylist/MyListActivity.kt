@@ -61,12 +61,14 @@ class MyListActivity : AppCompatActivity() {
         if (TvUtils.isTv(this)) {
             binding.bottomNav.visibility = View.GONE
         } else {
-            binding.bottomNav.selectedItemId = R.id.nav_mylist
+            // 2.7.48 — a Minha lista saiu da barra (não é aba): nenhum
+            // item fica seleccionado; a barra continua a navegar.
             binding.bottomNav.setOnItemSelectedListener { item ->
                 when (item.itemId) {
-                    R.id.nav_mylist -> true
                     R.id.nav_home -> { startActivity(Intent(this, HomeActivity::class.java)); overridePendingTransition(0, 0); true }
-                    R.id.nav_search -> { startActivity(Intent(this, SearchActivity::class.java)); overridePendingTransition(0, 0); true }
+                    R.id.nav_drives -> { val i = Intent(this, HomeActivity::class.java); i.putExtra(HomeActivity.EXTRA_SCROLL_TO_DRIVES, true); startActivity(i); overridePendingTransition(0, 0); true }
+                    R.id.nav_simulados -> { HomeActivity.openSimulados(this); overridePendingTransition(0, 0); true }
+                    R.id.nav_meggy -> { startActivity(Intent(this, SearchActivity::class.java)); overridePendingTransition(0, 0); true }
                     R.id.nav_settings -> { startActivity(Intent(this, SettingsActivity::class.java)); overridePendingTransition(0, 0); true }
                     else -> false
                 }
@@ -110,7 +112,7 @@ class MyListActivity : AppCompatActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        binding.bottomNav.selectedItemId = R.id.nav_mylist
+        // 2.7.48 — sem item seleccionado (a Minha lista não é aba).
     }
 
     override fun onResume() {
