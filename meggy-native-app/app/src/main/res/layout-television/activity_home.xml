@@ -304,7 +304,14 @@
                 </FrameLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- "Continuar de onde parou" — destaque (TV) -->
+            <!-- 2.7.52 — HERO IMERSIVO (conceito tv-home-nova): o
+                 destaque "Continuar" passa a hero em tela cheia:
+                 thumbnail full-bleed, scrim escuro, título = tema da
+                 aula (40sp), curso, progresso e o botão "Continuar
+                 Assistindo" (a MESMA continueWatching de sempre).
+                 O rótulo da seção some na TV (o hero fala por si);
+                 continua a ser o 1.º filho porque o applyTvAutoFit
+                 lhe ajusta o tipo. Mesmos ids (ViewBinding único). -->
             <LinearLayout
                 android:id="@+id/featuredSection"
                 android:layout_width="match_parent"
@@ -319,12 +326,13 @@
                     android:text="@string/continue_from_where"
                     android:textColor="@color/md_on_surface"
                     android:textSize="@dimen/tv_section_title"
-                    android:textStyle="bold" />
+                    android:textStyle="bold"
+                    android:visibility="gone" />
 
                 <com.google.android.material.card.MaterialCardView
                     android:id="@+id/featured_card"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    android:layout_height="400dp"
                     android:layout_marginTop="@dimen/tv_rail_spacing"
                     android:clickable="true"
                     android:descendantFocusability="blocksDescendants"
@@ -337,15 +345,13 @@
                     app:strokeWidth="0dp"
                     app:strokeColor="@color/tile_focus_ring">
 
-                    <LinearLayout
+                    <FrameLayout
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:padding="@dimen/tv_rail_spacing">
+                        android:layout_height="match_parent">
 
                         <FrameLayout
-                            android:layout_width="@dimen/tv_featured_thumb_width"
-                            android:layout_height="@dimen/tv_featured_card_height">
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent">
 
                             <View
                                 android:id="@+id/featuredBg"
@@ -372,12 +378,21 @@
                                 android:alpha="0.95" />
                         </FrameLayout>
 
+                        <!-- Scrim escuro p/ legibilidade do texto
+                             sobre a foto (contraste ≥ 4.5:1). -->
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:background="@drawable/tile_overlay_bottom" />
+
                         <LinearLayout
-                            android:layout_width="0dp"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="@dimen/tv_rail_spacing"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
+                            android:layout_gravity="bottom|start"
+                            android:orientation="vertical"
+                            android:paddingHorizontal="32dp"
+                            android:paddingTop="24dp"
+                            android:paddingBottom="28dp">
 
                             <TextView
                                 android:id="@+id/featuredTitle"
@@ -386,23 +401,23 @@
                                 android:ellipsize="end"
                                 android:maxLines="2"
                                 android:textColor="@color/md_on_surface"
-                                android:textSize="@dimen/tv_title_md"
+                                android:textSize="40sp"
                                 android:textStyle="bold" />
 
                             <TextView
                                 android:id="@+id/featuredSubtitle"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
+                                android:layout_marginTop="6dp"
                                 android:ellipsize="end"
                                 android:maxLines="1"
                                 android:textColor="@color/md_on_surface_variant"
-                                android:textSize="@dimen/tv_body" />
+                                android:textSize="18sp" />
 
                             <ProgressBar
                                 android:id="@+id/featuredProgress"
                                 style="?android:attr/progressBarStyleHorizontal"
-                                android:layout_width="match_parent"
+                                android:layout_width="520dp"
                                 android:layout_height="8dp"
                                 android:layout_marginTop="@dimen/spacing_lg"
                                 android:max="100"
@@ -414,30 +429,35 @@
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="@dimen/spacing_sm"
                                 android:textColor="@color/md_primary"
-                                android:textSize="@dimen/tv_body" />
+                                android:textSize="16sp" />
 
+                            <!-- Na TV o texto de posição some: o
+                                 progresso já diz "% • Xmin restantes"
+                                 (featuredProgressText). A vista fica
+                                 (binding) mas gone. -->
                             <TextView
                                 android:id="@+id/featuredTimeText"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="4dp"
                                 android:textColor="@color/md_on_surface_variant"
-                                android:textSize="@dimen/tv_body" />
+                                android:textSize="@dimen/tv_body"
+                                android:visibility="gone" />
 
                             <androidx.appcompat.widget.AppCompatButton
                                 android:id="@+id/featuredContinue"
                                 android:layout_width="wrap_content"
-                                android:layout_height="48dp"
+                                android:layout_height="56dp"
                                 android:layout_marginTop="@dimen/spacing_lg"
                                 android:background="@drawable/btn_primary_pill"
                                 android:focusable="true"
                                 android:paddingHorizontal="@dimen/spacing_2xl"
                                 android:text="@string/cta_continue"
                                 android:textColor="@color/md_on_primary"
-                                android:textSize="@dimen/tv_button_text"
+                                android:textSize="18sp"
                                 android:textStyle="bold" />
                         </LinearLayout>
-                    </LinearLayout>
+                    </FrameLayout>
                 </com.google.android.material.card.MaterialCardView>
             </LinearLayout>
 
