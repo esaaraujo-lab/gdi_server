@@ -103,6 +103,9 @@ class BrowseActivity : AppCompatActivity() {
     }
 
     private fun calculateSpanCount(): Int {
+        // 2.7.52 — TV: grade cheia de 5 colunas (conceito
+        // tv-grade-drives, SPEC §3). O celular mantém a regra actual.
+        if (TvUtils.isTv(this)) return 5
         val displayMetrics = resources.displayMetrics
         val screenWidthDp = displayMetrics.widthPixels / displayMetrics.density
         // Ronda 27 — celular: 3 colunas (Tiles ~30% menores); a TV
