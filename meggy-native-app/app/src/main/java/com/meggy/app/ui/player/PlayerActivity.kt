@@ -1820,6 +1820,25 @@ class PlayerActivity : AppCompatActivity() {
                         // v2.7.6: salva a thumb junto — alimenta os cards
                         // "Continue assistindo" com foto real.
                         SessionManager.get(this@PlayerActivity).addRecent(fp, it.name, it.thumbnailLink)
+                        // 2.7.53 — assistido aos >50% (paridade com o
+                        // desktop, que marca aos >50% ou no fim): ao
+                        // cruzar metade da duração A TOCAR, marca a
+                        // aula como assistida — local + servidor, pelo
+                        // caminho de hoje (SessionManager.markWatched
+                        // -> ProgressSync.noteWatched -> POST
+                        // /userstate/save {watched:{path:true}}).
+                        // Uma vez por aula: o isWatched é a guarda —
+                        // depois de marcado, nem os ticks seguintes nem
+                        // sessões futuras repetem este POST (a marca
+                        // do fim, no markEnded, mantém-se como hoje).
+                        // Sem duração conhecida (dur <= 0) não há
+                        // metade — fica só a marca do fim.
+                        val dur = p.duration
+                        if (dur > 0L && p.currentPosition * 2L >= dur &&
+                            !SessionManager.get(this@PlayerActivity).isWatched(fp, it.name)
+                        ) {
+                            SessionManager.get(this@PlayerActivity).markWatched(fp, it.name)
+                        }
                     }
                 }
             }
