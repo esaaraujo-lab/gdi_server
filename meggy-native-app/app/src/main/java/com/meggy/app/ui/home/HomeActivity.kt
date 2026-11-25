@@ -298,11 +298,28 @@ class HomeActivity : AppCompatActivity() {
         // carregamento (o fetch de destaques, assíncrono, re-avalia o
         // erro quando terminar — ver fetchFeaturedCovers).
         updateHomeStateViews()
-        // 2.7.48 — import do progresso do servidor (GET /userstate):
-        // alimenta recents/resume/assistido locais + cache do painel.
-        // Best-effort, em 2º plano; ao terminar, refrescam-se as
-        // seções que leem esses dados. Sem rede/D1, fica tudo como
-        // estava e o próximo arranque tenta outra vez.
+        // 2.7.48 — import do progresso do servidor (GET /userstate);
+        // 2.7.53: o mesmo import também corre ao voltar à Home
+        // (ver launchUserStateImport).
+        launchUserStateImport()
+        // Item Drives vindo de outra aba: rolar até os drives.
+        if (intent.getBooleanExtra(EXTRA_SCROLL_TO_DRIVES, false)) scrollToDrives()
+    }
+
+    /**
+     * 2.7.48 — import do progresso do servidor (GET /userstate):
+     * alimenta recents/resume/assistido locais + cache do painel.
+     * Best-effort, em 2º plano; ao terminar, refrescam-se as seções
+     * que leem esses dados. Sem rede/D1, fica tudo como estava e o
+     * próximo arranque tenta outra vez.
+     * 2.7.53 — corre no onCreate E ao voltar à Home (onResume): o
+     * progresso feito noutro aparelho enquanto a app estava aberta
+     * passa a aparecer sem reiniciar. Sem duplicar imports em
+     * curso: a guarda do UserStateSync salta o GET se um import já
+     * estiver a correr (nesse caso, é o refresh desse import que
+     * actualiza as seções quando ele termina).
+     */
+    private fun launchUserStateImport() {
         lifecycleScope.launch(Dispatchers.IO) {
             UserStateSync.importOnStartup(this@HomeActivity)
             withContext(Dispatchers.Main) {
@@ -313,8 +330,6 @@ class HomeActivity : AppCompatActivity() {
                 setupTvFocusChains()
             }
         }
-        // Item Drives vindo de outra aba: rolar até os drives.
-        if (intent.getBooleanExtra(EXTRA_SCROLL_TO_DRIVES, false)) scrollToDrives()
     }
 
     /**
@@ -558,9 +573,14 @@ class HomeActivity : AppCompatActivity() {
         // voltar (favoritos e progresso podem ter mudado no player).
         setupMyCourses()
         // 2.7.48 — pastas recentes + painel de progresso refrescam ao
-        // voltar (o player grava no servidor; o import é só no arranque).
+        // voltar (dados locais).
         setupRecentFolders()
         setupProgressPanel()
+        // 2.7.53 — o import do servidor também corre ao voltar: o
+        // progresso gravado noutro aparelho (site/desktop/TV)
+        // enquanto a app estava aberta entra sem reiniciar. Sem
+        // duplicar um import em curso (guarda no UserStateSync).
+        launchUserStateImport()
         // Ronda 10 Frente C — re-busca os drives do admin ao
         // voltar: o remover da Frente B faz o tile sumir sem
         // reiniciar o app.
