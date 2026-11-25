@@ -43,6 +43,7 @@ import com.bibigyn.app.util.DriveRailItem
 import com.bibigyn.app.util.CoverLibrary
 import com.bibigyn.app.util.PlaylistManager
 import com.bibigyn.app.util.SessionManager
+import com.bibigyn.app.util.UserStateSync
 import com.bibigyn.app.util.TapFeedback
 import com.bibigyn.app.util.Format
 import com.bibigyn.app.util.LessonDescription
@@ -248,6 +249,34 @@ class HomeActivity : AppCompatActivity() {
             // (nada focado + scroll 0 = nada a fazer).
             if (snap.target != 0 || snap.scrollY > 0) restoreHomeFocus(snap)
             setupFeaturedContinue(SessionManager.get(this).getRecents())
+        }
+        // 2.1.43 — import do progresso do servidor (GET /userstate);
+        // o mesmo import também corre ao voltar à Home
+        // (ver launchUserStateImport).
+        launchUserStateImport()
+    }
+
+    /**
+     * 2.1.43 — import do progresso do servidor (GET /userstate):
+     * alimenta recents/resume/assistido locais. Best-effort, em 2º
+     * plano; ao terminar, refrescam-se as seções que leem esses
+     * dados. Sem rede/D1, fica tudo como estava e o próximo
+     * arranque tenta outra vez.
+     * Corre no onCreate E ao voltar à Home (onResume): o progresso
+     * feito noutro aparelho enquanto a app estava aberta passa a
+     * aparecer sem reiniciar. Sem duplicar imports em curso: a
+     * guarda do UserStateSync salta o GET se um import já estiver
+     * a correr (nesse caso, é o refresh desse import que actualiza
+     * as seções quando ele termina).
+     */
+    private fun launchUserStateImport() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            UserStateSync.importOnStartup(this@HomeActivity)
+            withContext(Dispatchers.Main) {
+                if (isFinishing || isDestroyed) return@withContext
+                setupContinueRail()
+                setupTvFocusChains()
+            }
         }
     }
 
@@ -458,6 +487,11 @@ class HomeActivity : AppCompatActivity() {
         // em destaque pode ter aparecido entretanto.
         setupContinueRail()
         setupTvFocusChains()
+        // 2.1.43 — o import do servidor também corre ao voltar: o
+        // progresso gravado noutro aparelho (site/desktop/TV)
+        // enquanto a app estava aberta entra sem reiniciar. Sem
+        // duplicar um import em curso (guarda no UserStateSync).
+        launchUserStateImport()
         // Ronda 10 Frente C — re-busca os drives do admin ao
         // voltar: o remover da Frente B faz o tile sumir sem
         // reiniciar o app.
