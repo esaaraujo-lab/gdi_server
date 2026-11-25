@@ -63,18 +63,23 @@
             android:src="@drawable/ic_search"
             android:tint="@color/md_on_surface" />
 
-        <TextView
+        <!-- 2.7.55 — carinha da Meggy (pedido do Elton, foto da TV
+             18:01): a bolinha rosa vazia passa a foto oficial da
+             Meggy (a mesma do site), recortada em círculo pelo
+             outline oval de @drawable/avatar_circle + clipToOutline.
+             Mantém o id e os 56dp do header. -->
+        <ImageView
             android:id="@+id/headerAvatar"
             android:layout_width="56dp"
             android:layout_height="56dp"
             android:layout_marginStart="@dimen/spacing_lg"
-            android:background="@drawable/btn_play_circle"
+            android:background="@drawable/avatar_circle"
+            android:clipToOutline="true"
             android:clickable="false"
+            android:contentDescription="Meggy"
             android:focusable="false"
-            android:gravity="center"
-            android:textColor="@color/md_on_primary"
-            android:textSize="22sp"
-            android:textStyle="bold" />
+            android:scaleType="centerCrop"
+            android:src="@drawable/meggy_face" />
     </LinearLayout>
 
     <!-- 2.7.48 — breadcrumb da TV (conceito 4): "Início › …" com os
@@ -103,10 +108,11 @@
             android:orientation="vertical"
             android:clipChildren="false">
 
-            <!-- Cabeçalho imersivo (2.7.52) -->
+            <!-- Cabeçalho imersivo (2.7.52; altura reduzida na
+                 2.7.55 — 440dp era "enorme e feio" no teste do Elton) -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
-                android:layout_height="440dp"
+                android:layout_height="280dp"
                 android:layout_marginTop="@dimen/tv_section_spacing"
                 app:cardCornerRadius="@dimen/radius_lg"
                 app:cardElevation="@dimen/elevation_0"
@@ -136,7 +142,7 @@
                         android:layout_height="match_parent"
                         android:gravity="center"
                         android:textColor="@color/tile_title"
-                        android:textSize="72sp"
+                        android:textSize="40sp"
                         android:textStyle="bold" />
 
                     <!-- Scrim escuro p/ legibilidade do texto
@@ -158,7 +164,7 @@
                         android:gravity="center"
                         android:text="▶"
                         android:textColor="@color/md_on_primary"
-                        android:textSize="48sp" />
+                        android:textSize="30sp" />
 
                     <TextView
                         android:id="@+id/heroFav"
@@ -194,7 +200,7 @@
                             android:ellipsize="end"
                             android:maxLines="2"
                             android:textColor="@color/md_on_surface"
-                            android:textSize="40sp"
+                            android:textSize="30sp"
                             android:textStyle="bold" />
 
                         <TextView
