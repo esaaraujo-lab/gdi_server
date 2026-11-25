@@ -1,7 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  v2.0.0 — Bottom navigation menu (4 tabs).
-  Início / Buscar / Minha lista / Ajustes
+  2.7.48 — Bottom navigation menu (5 tabs, conceito aprovado 21:37):
+  Início / Drives / Simulados / Meggy / Ajustes.
+  A barra antiga (Início / Buscar / Minha lista / Ajustes) sai:
+  - Drives rola até "Explorar drives" na Home;
+  - Simulados abre o drive RETA FINAL TRTs (Simulados + resumos);
+  - Meggy abre a busca (não há chat no app — ver SPEC 2.7.48 §2);
+  - Minha lista sai da barra (continua em "Ver tudo" de Meus cursos
+    e em "Downloads" do menu lateral da TV).
 -->
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item
@@ -9,13 +15,17 @@
         android:icon="@drawable/ic_nav_home"
         android:title="Início" />
     <item
-        android:id="@+id/nav_search"
-        android:icon="@drawable/ic_nav_search"
-        android:title="Buscar" />
+        android:id="@+id/nav_drives"
+        android:icon="@drawable/ic_folder"
+        android:title="Drives" />
     <item
-        android:id="@+id/nav_mylist"
-        android:icon="@drawable/ic_nav_bookmark"
-        android:title="Minha lista" />
+        android:id="@+id/nav_simulados"
+        android:icon="@drawable/ic_nav_simulados"
+        android:title="Simulados" />
+    <item
+        android:id="@+id/nav_meggy"
+        android:icon="@drawable/ic_nav_meggy"
+        android:title="Meggy" />
     <item
         android:id="@+id/nav_settings"
         android:icon="@drawable/ic_nav_settings"
