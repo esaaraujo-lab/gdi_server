@@ -109,6 +109,19 @@
                 android:textSize="10sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
+
+            <!-- 1.0.40 — progresso NA ARESTA da imagem (cartões
+                 uniformes estilo Plex). A visibilidade é controlada
+                 pelo adapter (a barra saiu da progress_row). -->
+            <ProgressBar
+                android:id="@+id/card_progress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="4dp"
+                android:layout_gravity="bottom"
+                android:max="100"
+                android:progressDrawable="@drawable/progress_horizontal"
+                android:visibility="gone" />
         </FrameLayout>
 
         <!-- Conteúdo abaixo da imagem -->
@@ -144,7 +157,9 @@
                 android:textColor="@color/tile_subtitle"
                 android:textSize="@dimen/tv_card_meta" />
 
-            <!-- Progresso: barra + "% concluído · Xmin restantes" -->
+            <!-- Progresso: texto "% concluído · Xmin restantes"
+                 (a barra vive na aresta da imagem desde a 1.0.40;
+                 o texto fica — legibilidade +60). -->
             <LinearLayout
                 android:id="@+id/progress_row"
                 android:layout_width="match_parent"
@@ -152,14 +167,6 @@
                 android:layout_marginTop="@dimen/spacing_sm"
                 android:orientation="vertical"
                 android:visibility="gone">
-
-                <ProgressBar
-                    android:id="@+id/card_progress"
-                    style="?android:attr/progressBarStyleHorizontal"
-                    android:layout_width="match_parent"
-                    android:layout_height="4dp"
-                    android:max="100"
-                    android:progressDrawable="@drawable/progress_horizontal" />
 
                 <TextView
                     android:id="@+id/card_progress_text"
