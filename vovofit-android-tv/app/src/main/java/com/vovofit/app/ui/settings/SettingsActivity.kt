@@ -106,6 +106,13 @@ class SettingsActivity : AppCompatActivity() {
 
         val sm = SessionManager.get(this)
 
+        // 1.0.40 — rail lateral persistente da TV (TvRailHost).
+        com.vovofit.app.ui.home.TvRailHost.attach(
+            this,
+            com.vovofit.app.ui.home.SideMenuView.MenuItem.SETTINGS,
+            binding.btnSpeedDown
+        )
+
         // Perfil — só o username existe de verdade.
         val username = sm.username ?: "Aluno"
         binding.profileAvatar.text = monogramFor(username)
