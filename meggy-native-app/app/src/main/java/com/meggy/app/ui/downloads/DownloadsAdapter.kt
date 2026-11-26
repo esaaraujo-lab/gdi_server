@@ -5,6 +5,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.card.MaterialCardView
 import com.meggy.app.R
 import com.meggy.app.util.DownloadRegistry
 import com.meggy.app.util.FocusAnimator
@@ -48,7 +49,7 @@ class DownloadsAdapter(
                 val pos = bindingAdapterPosition
                 if (pos != RecyclerView.NO_POSITION) onDelete(items[pos])
             }
-            FocusAnimator.attachCard(view, TvUtils.isTv(view.context))
+            FocusAnimator.attachCard(view as MaterialCardView, TvUtils.isTv(view.context))
         }
     }
 
