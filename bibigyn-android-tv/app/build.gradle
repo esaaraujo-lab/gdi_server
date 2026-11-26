@@ -23,8 +23,8 @@ android {
         // 2.1.40: Splash animado (vídeo do avatar — TV letra a letra, celular profundidade)
         // 2.1.41: Nova interface de TV (conceitos aprovados) — apresentação apenas
         // 2.1.43: ProgressSync completo (progresso entre aparelhos: import /userstate, assistido >50%, recents 12)
-        versionCode 50
-        versionName "2.1.43"
+        versionCode 51
+        versionName "2.1.44"
     }
 
     // ★ v1.4.0: Signing config com keystore FIXA (mesma em todos os builds)
