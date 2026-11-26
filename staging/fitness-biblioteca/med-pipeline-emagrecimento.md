@@ -1,0 +1,44 @@
+---
+id: med-pipeline-emagrecimento
+temas: [retatrutida, orforglipron, cagrisema, cagrilintida, amicretina, amycretin, futuro, novos remédios, pipeline, em investigação, comprimido novo]
+personas: [fitness-bibi, fitness-vovo]
+actualizado: 2026-11-26
+tipo: medicamento — só informação geral, nunca dose nem recomendação pessoal
+---
+
+# Pipeline do emagrecimento — o que está [EM INVESTIGAÇÃO]
+
+**Pergunta-tipo:** "Vem aí algum remédio ainda melhor?" / "Vi um vídeo sobre retatrutida, já existe?"
+
+**Resposta baseada em evidência:**
+
+Tudo nesta ficha é **[EM INVESTIGAÇÃO]**: moléculas em ensaios, sem que daqui se possa concluir disponibilidade, aprovação futura ou superioridade real. Números de fases iniciais são sistematicamente mais frágeis (amostras menores, durações curtas, doses ainda a afinar). O estatuto regulatório muda depressa e varia por país — verificar sempre a data.
+
+**1. Retatrutida — agonista triplo (GLP-1 + GIP + glucagon) [EM INVESTIGAÇÃO]**
+- Fase 2 (n=338, 48 semanas): perda média até **−24,2%** na dose mais alta estudada vs. −2,1% placebo, com as curvas ainda sem plateau claro às 48 semanas (Jastreboff et al., NEJM 2023).
+- É o maior número publicado da classe — **em fase 2**. O programa de fase 3 (TRIUMPH) é que pode confirmar ou corrigir. Efeitos adversos: padrão gastrointestinal da classe, dependente da velocidade de subida de dose.
+
+**2. Orforglipron — GLP-1 oral de molécula pequena [EM INVESTIGAÇÃO nesta biblioteca]**
+- Diferença conceptual: não é um péptido — é uma molécula pequena oral diária, sem as restrições de jejum/água da semaglutida oral.
+- Fase 2: até −14,7% às 36 semanas (Wharton et al., NEJM 2023). Fase 3 ATTAIN-1 (n=3.127, sem diabetes, 72 semanas): **−11,2%** na dose mais alta vs. −2,1% placebo (estimativa de política de tratamento; −12,4% na estimativa de adesão) (Wharton et al., NEJM 2025). No programa da diabetes (ACHIEVE-1), reduções de HbA1c de ~1,3–1,6 pontos percentuais às 40 semanas.
+- Nota de honestidade: magnitude menor que os injectáveis âncora, com a conveniência do comprimido. Decisões regulatórias posteriores à recolha-base desta biblioteca devem ser confirmadas no rótulo vigente antes de qualquer afirmação a um aluno.
+
+**3. CagriSema — cagrilintida (análogo de amilina) + semaglutida [EM INVESTIGAÇÃO]**
+- Combinação semanal de duas hormonas de saciedade. REDEFINE 1 (n=3.417, sem diabetes, 68 semanas): **−20,4% vs. −3,0%** placebo (política de tratamento); na estimativa de adesão, −22,7% vs. −16,1% da semaglutida isolada e −11,8% da cagrilintida isolada (Garvey et al., NEJM 2025).
+- Em diabetes (REDEFINE 2): −13,7%. Efeitos gastrointestinais frequentes (79,6% vs. 39,9% placebo no REDEFINE 1) e nem todos chegaram à dose máxima — tolerabilidade é parte do resultado, não um detalhe.
+
+**4. Amicretina (amycretin) — molécula única GLP-1 + amilina [EM INVESTIGAÇÃO, fase inicial]**
+- Fase 1/1b-2a apenas (amostras ~125–144 pessoas): injectável semanal até **−24,3% às 36 semanas** na dose mais alta e oral diária até **−13,1% às 12 semanas** (Dahl et al. e Gasiorek et al., Lancet 2025).
+- Números de fase 1 são exploratórios por desenho: servem para decidir se a molécula avança, não para prometer resultados.
+
+**Como ler vídeos sobre pipeline:** fase 2 ≠ produto; "% maior" sem duração, população e estimativa é marketing; e nenhum destes nomes é comprável legitimamente como "versão manipulada" — produtos vendidos com estes nomes fora de ensaio são, por definição, não verificados.
+
+**Limites desta ficha:** nada aqui é uma promessa de aprovação nem de resultado. Isso já é assunto de saúde — eu só posso te passar informação geral. Para o seu caso, vale conversar com um médico ou nutricionista.
+
+**Fontes:**
+- Jastreboff AM et al. Triple-Hormone-Receptor Agonist Retatrutide for Obesity — A Phase 2 Trial. *N Engl J Med* 2023.
+- Wharton S et al. Daily Oral GLP-1 Receptor Agonist Orforglipron for Adults with Obesity (fase 2). *N Engl J Med* 2023.
+- Wharton S et al. Orforglipron, an Oral Small-Molecule GLP-1 Receptor Agonist for Obesity Treatment (ATTAIN-1). *N Engl J Med* 2025;393:1796-1806.
+- Garvey WT et al. Coadministered Cagrilintide and Semaglutide in Adults with Overweight or Obesity (REDEFINE 1). *N Engl J Med* 2025;393:635-647.
+- Dahl K et al. Amycretin, a novel, unimolecular GLP-1 and amylin receptor agonist administered subcutaneously: phase 1b/2a. *Lancet* 2025.
+- Gasiorek A et al. Safety, tolerability, pharmacokinetics, and pharmacodynamics of amycretin: first-in-human phase 1. *Lancet* 2025.
