@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v2.1.44 — Cabeçalho de seção da lista unificada (grupo com
+     vários vídeos / "Materiais"). Porte da Meggy 2.7.58. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/unifiedHeaderTitle"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="@dimen/spacing_md"
+    android:layout_marginBottom="@dimen/spacing_sm"
+    android:textColor="@color/md_on_surface"
+    android:textSize="@dimen/text_card_title"
+    android:textStyle="bold" />
