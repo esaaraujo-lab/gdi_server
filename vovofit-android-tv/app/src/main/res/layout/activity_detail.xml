@@ -221,11 +221,26 @@
                 android:layout_marginTop="@dimen/spacing_lg"
                 android:background="@drawable/btn_primary_pill"
                 android:focusable="true"
-                android:nextFocusDown="@id/tabResumo"
+                android:nextFocusDown="@id/ctaFromStart"
                 android:text="@string/cta_continue"
                 android:textColor="@color/md_on_primary"
                 android:textSize="@dimen/text_button"
                 android:textStyle="bold" />
+
+            <!-- 1.0.40 — "Do início" verdadeiro (porte 2.7.58):
+                 toca a 1.ª aula da pasta a partir do 0. -->
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/ctaFromStart"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:background="@drawable/chip_outline"
+                android:focusable="true"
+                android:nextFocusUp="@id/ctaContinue"
+                android:nextFocusDown="@id/tabResumo"
+                android:text="@string/detail_from_start"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/text_button" />
 
             <!-- Abas -->
             <LinearLayout
@@ -245,7 +260,7 @@
                     android:background="@drawable/focus_ring_transparent"
                     android:focusableInTouchMode="true"
                     android:nextFocusRight="@id/tabAulas"
-                    android:nextFocusUp="@id/ctaContinue"
+                    android:nextFocusUp="@id/ctaFromStart"
                     android:nextFocusDown="@id/recycler"
                     android:gravity="center"
                     android:orientation="vertical"
@@ -279,7 +294,7 @@
                     android:focusableInTouchMode="true"
                     android:nextFocusLeft="@id/tabResumo"
                     android:nextFocusRight="@id/tabQuestoes"
-                    android:nextFocusUp="@id/ctaContinue"
+                    android:nextFocusUp="@id/ctaFromStart"
                     android:nextFocusDown="@id/recycler"
                     android:gravity="center"
                     android:orientation="vertical"
@@ -312,7 +327,7 @@
                     android:focusableInTouchMode="true"
                     android:nextFocusLeft="@id/tabAulas"
                     android:nextFocusRight="@id/tabFlashcards"
-                    android:nextFocusUp="@id/ctaContinue"
+                    android:nextFocusUp="@id/ctaFromStart"
                     android:nextFocusDown="@id/recycler"
                     android:gravity="center"
                     android:orientation="vertical"
@@ -344,7 +359,7 @@
                     android:background="@drawable/focus_ring_transparent"
                     android:focusableInTouchMode="true"
                     android:nextFocusLeft="@id/tabQuestoes"
-                    android:nextFocusUp="@id/ctaContinue"
+                    android:nextFocusUp="@id/ctaFromStart"
                     android:nextFocusDown="@id/recycler"
                     android:gravity="center"
                     android:orientation="vertical"
