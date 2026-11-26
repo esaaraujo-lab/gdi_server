@@ -179,4 +179,17 @@
     <string name="fitness_chat_typing">A assistente está a escrever…</string>
     <string name="fitness_chat_busy">Estou com muitas perguntas agora — tenta outra vez dentro de instantes.</string>
     <string name="fitness_chat_error">Não consegui responder agora. Tente novamente.</string>
+    <!-- v2.1.47 — Chips de temas da Biblioteca de Conhecimento (fichas
+         em fitness-biblioteca/INDICE.md): rótulo curto + pergunta
+         completa enviada pelo caminho normal do chat. -->
+    <string name="fitness_chip_tirzepatida_label">Tirzepatida</string>
+    <string name="fitness_chip_tirzepatida_question">O que os estudos dizem da tirzepatida?</string>
+    <string name="fitness_chip_suplementos_label">Suplementos com evidência</string>
+    <string name="fitness_chip_suplementos_question">Que suplementos têm evidência comprovada?</string>
+    <string name="fitness_chip_estrategia_label">Estratégia p/ emagrecer</string>
+    <string name="fitness_chip_estrategia_question">Qual a melhor estratégia para emagrecer sem perder massa muscular?</string>
+    <string name="fitness_chip_creatina_label">Creatina e cafeína</string>
+    <string name="fitness_chip_creatina_question">Creatina e cafeína funcionam mesmo? O que diz a evidência?</string>
+    <string name="fitness_chip_vitaminas_label">Vitamina D e combinações</string>
+    <string name="fitness_chip_vitaminas_question">Vitamina D e combinações de suplementos: o que vale a pena?</string>
 </resources>
