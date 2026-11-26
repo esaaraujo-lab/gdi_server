@@ -62,19 +62,26 @@
                     android:textSize="@dimen/tv_body" />
             </LinearLayout>
 
-            <!-- Hero -->
+            <!-- Hero — 1.0.41: cantos de 24dp com recorte real do
+                 conteúdo (clipToOutline no FrameLayout interno) e
+                 anel lima de 3dp à volta do bloco (feedback visual
+                 permanente do hero, pedido do Elton). -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/heroCard"
                 android:layout_width="match_parent"
                 android:layout_height="@dimen/tv_hero_height"
                 android:layout_marginTop="@dimen/tv_section_spacing"
-                app:cardCornerRadius="@dimen/radius_lg"
+                app:cardCornerRadius="@dimen/radius_hero"
                 app:cardElevation="@dimen/elevation_0"
-                app:cardBackgroundColor="@color/tile_bg">
+                app:cardBackgroundColor="@color/tile_bg"
+                app:strokeColor="@color/vovofit_lime"
+                app:strokeWidth="3dp">
 
                 <FrameLayout
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent">
+                    android:layout_height="match_parent"
+                    android:background="@drawable/hero_rounded_clip"
+                    android:clipToOutline="true">
 
                     <View
                         android:id="@+id/heroBg"
