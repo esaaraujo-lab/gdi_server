@@ -1038,7 +1038,7 @@ class PlayerActivity : AppCompatActivity() {
         val item = currentItem ?: return
         val fp = item.folderPath ?: intent.getStringExtra(EXTRA_FOLDER_PATH) ?: ""
         val entry = com.meggy.app.util.DownloadRegistry.find(this, fp, item.name)
-        val done = entry != null && java.io.File(entry.filePath()).exists()
+        val done = entry != null && entry.exists()
         chip.text = getString(
             if (done) R.string.download_done else R.string.player_download
         )
