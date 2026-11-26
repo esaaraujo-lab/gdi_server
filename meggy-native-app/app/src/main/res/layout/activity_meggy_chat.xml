@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 2.7.58 — Chat da Meggy (celular): cabeçalho com a carinha real,
+     mensagens e campo de escrita. A Meggy é a da web, na nuvem. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/md_background"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="@dimen/content_margin"
+        android:paddingVertical="@dimen/spacing_sm">
+
+        <TextView
+            android:id="@+id/meggyChatBack"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:clickable="true"
+            android:focusable="true"
+            android:padding="@dimen/spacing_sm"
+            android:text="‹"
+            android:textColor="@color/md_primary"
+            android:textSize="28sp" />
+
+        <ImageView
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="@dimen/spacing_xs"
+            android:background="@drawable/avatar_circle"
+            android:clipToOutline="true"
+            android:scaleType="centerCrop"
+            android:src="@drawable/meggy_face" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/spacing_sm"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/meggy_chat_title"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/text_topbar_title"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/meggy_chat_subtitle"
+                android:textColor="@color/md_on_surface_variant"
+                android:textSize="@dimen/text_card_subtitle" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/md_outline" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/meggyChatList"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingHorizontal="@dimen/content_margin"
+        android:paddingTop="@dimen/spacing_md" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="@dimen/content_margin"
+        android:paddingVertical="@dimen/spacing_sm">
+
+        <EditText
+            android:id="@+id/meggyChatInput"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/card_surface_rounded"
+            android:hint="@string/meggy_chat_hint"
+            android:imeOptions="actionSend"
+            android:inputType="textMultiLine|textCapSentences"
+            android:maxLength="4000"
+            android:maxLines="4"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="12dp"
+            android:textColor="@color/md_on_surface"
+            android:textColorHint="@color/md_on_surface_variant"
+            android:textSize="@dimen/text_card_title" />
+
+        <TextView
+            android:id="@+id/meggyChatSend"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/spacing_sm"
+            android:background="@drawable/btn_primary_pill"
+            android:clickable="true"
+            android:focusable="true"
+            android:paddingHorizontal="18dp"
+            android:paddingVertical="12dp"
+            android:text="@string/meggy_chat_send"
+            android:textColor="@color/md_on_primary"
+            android:textStyle="bold" />
+    </LinearLayout>
+</LinearLayout>

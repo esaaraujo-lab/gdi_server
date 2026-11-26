@@ -31,7 +31,11 @@
             android:paddingTop="@dimen/spacing_lg"
             android:paddingBottom="@dimen/spacing_lg">
 
-            <!-- Topo: logo + sair -->
+            <!-- Topo: avatar da Meggy + nome + busca.
+                 2.7.58 (SPEC §3.1): o avatar passa a ser a carinha
+                 real da Meggy (a mesma do educa); o "Sair" do topo
+                 sai (logout vive em Ajustes — decisão D2) e entra o
+                 ícone de busca, que abre a busca existente. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -42,8 +46,11 @@
                     android:layout_width="40dp"
                     android:layout_height="40dp"
                     android:layout_marginEnd="@dimen/spacing_sm"
+                    android:background="@drawable/avatar_circle"
+                    android:clipToOutline="true"
                     android:contentDescription="@string/app_name"
-                    android:src="@drawable/ic_launcher_foreground_img" />
+                    android:scaleType="centerCrop"
+                    android:src="@drawable/meggy_face" />
 
                 <TextView
                     android:layout_width="0dp"
@@ -54,54 +61,17 @@
                     android:textSize="@dimen/text_topbar_title"
                     android:textStyle="bold" />
 
-                <TextView
-                    android:id="@+id/topSair"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:background="@drawable/focus_ring_transparent"
-                    android:focusableInTouchMode="true"
-                    android:minHeight="@dimen/button_height"
-                    android:gravity="center_vertical"
-                    android:padding="@dimen/spacing_sm"
-                    android:text="@string/home_logout"
-                    android:textColor="@color/md_primary"
-                    android:textSize="@dimen/text_topbar_action" />
-            </LinearLayout>
-
-            <!-- 2.7.48 — barra de busca global no topo (conceito 1):
-                 campo de largura total; o toque abre a busca
-                 existente (é um atalho, não um campo editável).
-                 Substitui o ícone homeSearchBtn do cabeçalho. -->
-            <LinearLayout
-                android:id="@+id/homeSearchBar"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_lg"
-                android:background="@drawable/card_surface_rounded"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingHorizontal="@dimen/spacing_md"
-                android:paddingVertical="@dimen/spacing_md">
-
                 <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:contentDescription="@null"
+                    android:id="@+id/homeSearchIcon"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="@drawable/focus_ring_transparent"
+                    android:clickable="true"
+                    android:contentDescription="@string/home_search"
+                    android:focusable="true"
+                    android:padding="8dp"
                     android:src="@drawable/ic_search"
-                    app:tint="@color/md_on_surface_variant" />
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="@dimen/spacing_md"
-                    android:layout_weight="1"
-                    android:text="@string/home_search_bar_hint"
-                    android:textColor="@color/md_on_surface_variant"
-                    android:textSize="@dimen/text_card_subtitle" />
+                    app:tint="@color/md_primary" />
             </LinearLayout>
 
             <!-- 2.7.41 (P1-13) — estados de carregamento/erro da home:

@@ -45,6 +45,38 @@
             android:background="#22FF8B9F" />
     </FrameLayout>
 
+    <!-- 2.7.58 — atalho de busca (SPEC §3.3): barra no topo do
+         Explorar; o toque abre a busca existente. -->
+    <LinearLayout
+        android:id="@+id/browseSearchBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="18dp"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/card_surface_rounded"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="12dp">
+
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_search" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:text="@string/browse_search_hint"
+            android:textColor="@color/md_on_surface_variant"
+            android:textSize="14sp" />
+    </LinearLayout>
+
     <!-- Breadcrumb chip -->
     <LinearLayout
         android:layout_width="match_parent"

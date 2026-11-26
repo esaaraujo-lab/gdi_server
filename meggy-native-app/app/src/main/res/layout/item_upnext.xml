@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 2.7.58 — Linha "A seguir" do player: miniatura 16:9 + título
+     + marcador "a tocar" da aula actual. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="@dimen/spacing_sm"
+    android:background="@drawable/card_surface_rounded"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:padding="@dimen/spacing_sm">
+
+    <ImageView
+        android:id="@+id/upnextThumb"
+        android:layout_width="80dp"
+        android:layout_height="45dp"
+        android:contentDescription="@null"
+        android:scaleType="centerCrop" />
+
+    <TextView
+        android:id="@+id/upnextTitle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/spacing_md"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:textColor="@color/md_on_surface"
+        android:textSize="@dimen/text_card_subtitle" />
+
+    <TextView
+        android:id="@+id/upnextMarker"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="▶"
+        android:textColor="@color/md_primary"
+        android:textSize="14sp"
+        android:visibility="invisible" />
+</LinearLayout>

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 2.7.58 — Linha do histórico de simulados: título + data/acertos. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="@dimen/spacing_sm"
+    android:background="@drawable/card_surface_rounded"
+    android:orientation="vertical"
+    android:padding="@dimen/spacing_md">
+
+    <TextView
+        android:id="@+id/historyItemTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="@color/md_on_surface"
+        android:textSize="@dimen/text_card_title"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/historyItemMeta"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textColor="@color/md_on_surface_variant"
+        android:textSize="@dimen/text_card_subtitle" />
+</LinearLayout>
