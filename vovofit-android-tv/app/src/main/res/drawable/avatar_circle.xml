@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  1.0.40 — fundo oval do avatar do chat da assistente (identidade da
+  Vovó Fit). Serve de outline p/ o clipToOutline do ImageView: o
+  shape oval define o contorno e a imagem é recortada em círculo.
+  Porte do padrão Meggy 2.7.55/2.7.58 (avatar_circle).
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="@color/md_primary" />
+</shape>
