@@ -150,4 +150,33 @@
     <string name="admin_drives_error_generic">Não foi possível concluir. Verifique a conexão e tente novamente.</string>
     <!-- Ronda 10 Frente C — drives do admin na Home -->
     <string name="admin_drive_tile_tag">Drive do admin</string>
+
+    <!-- v2.1.44 — porte do pacote Plex + destinos (paridade Meggy 2.7.58) -->
+    <string name="side_menu_version">BiBi Fit v%1$s • Conectado</string>
+    <string name="ambient_continue">▶ Continuar</string>
+    <string name="tv_side_menu_title">Menu lateral da TV</string>
+    <string name="tv_side_menu_sub">Mostrar o menu lateral estilo Plex nas telas da TV</string>
+    <string name="downloads_title">Downloads</string>
+    <string name="downloads_empty">Ainda não baixaste nenhuma aula — usa o botão Baixar no player.</string>
+    <string name="downloads_delete">Apagar</string>
+    <string name="downloads_deleted">Download apagado.</string>
+    <string name="download_started">Download iniciado — vês o progresso nas notificações.</string>
+    <string name="download_done">✓ Baixado</string>
+    <string name="download_failed">Não foi possível iniciar o download.</string>
+    <string name="download_wifi_only">Downloads só no Wi-Fi (Ajustes) — liga o Wi-Fi para baixar.</string>
+    <string name="player_download">⬇ Baixar</string>
+    <string name="my_courses_title">Meus Cursos</string>
+    <string name="my_courses_empty">Ainda não adicionaste cursos ou treinos. Explora os drives e adiciona os teus.</string>
+    <string name="courses_load_error">Não foi possível carregar. Verifique a conexão e tente de novo.</string>
+    <string name="courses_retry">Tentar de novo</string>
+    <string name="detail_section_materials">Materiais</string>
+    <string name="detail_current_lesson">Aula atual</string>
+    <string name="fitness_chat_title">Assistente BiBi</string>
+    <string name="fitness_chat_subtitle">Treino, alimentação e bem-estar</string>
+    <string name="fitness_chat_hint">Pergunta sobre treino, dieta, suplementos…</string>
+    <string name="fitness_chat_send">Enviar</string>
+    <string name="fitness_chat_greeting">Olá! Sou a assistente da BiBi Fit 💪 Posso ajudar com treinos, alimentação, emagrecimento, hipertrofia e suplementos — é só perguntar.</string>
+    <string name="fitness_chat_typing">A assistente está a escrever…</string>
+    <string name="fitness_chat_busy">Estou com muitas perguntas agora — tenta outra vez dentro de instantes.</string>
+    <string name="fitness_chat_error">Não consegui responder agora. Tente novamente.</string>
 </resources>
