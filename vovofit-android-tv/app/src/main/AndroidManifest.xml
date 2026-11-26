@@ -104,6 +104,17 @@
         <activity android:name=".ui.mylist.MyListActivity" android:exported="false"
             android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
+        <!-- 1.0.40: Meus Cursos (menu TV + atalho do celular),
+             Downloads (ficheiros em Download/VovoFit/) e a
+             Assistente fitness (só celular; persona fitness-vovo
+             no servidor) -->
+        <activity android:name=".ui.home.MyCoursesActivity" android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
+        <activity android:name=".ui.downloads.DownloadsActivity" android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
+        <activity android:name=".ui.assistente.AssistenteChatActivity" android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
         <!-- v1.0.4: leitores embutidos (PDF/MD) -->
         <activity android:name=".ui.reader.PdfReaderActivity" android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
