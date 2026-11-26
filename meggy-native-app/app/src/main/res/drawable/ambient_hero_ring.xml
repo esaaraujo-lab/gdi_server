@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  2.7.61 — Anel do HERO AMBIENTE da Home TV: contorno branco 3dp
+  com cantos de 24dp, desenhado como foreground do bloco (por cima
+  da arte e do scrim). Visível sempre que o hero está visível:
+  marca o bloco como o "ecrã" do item focado (feedback visual que
+  faltava — foto do teste do Elton à 2.7.60). O preenchimento é
+  transparente; só a borda se vê.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <corners android:radius="24dp" />
+    <solid android:color="@android:color/transparent" />
+    <stroke android:width="3dp" android:color="@android:color/white" />
+</shape>
