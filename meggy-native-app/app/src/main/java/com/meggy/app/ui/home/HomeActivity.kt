@@ -140,6 +140,9 @@ class HomeActivity : AppCompatActivity() {
     // derrubar (ver onGhostRecentsRemoved).
     private var ambientDefaultKey: String? = null
     private var ambientDefaultRecentKey: String? = null
+    // 2.7.61 — o outline arredondado (24dp) do hero ambiente só se
+    // instala uma vez (ver styleAmbientHero).
+    private var ambientHeroStyled = false
     // 2.7.60 — 1.º destaque conhecido: primeiro o curado (fallback
     // síncrono do setupDestaques) e, quando a API responde, o 1.º
     // curso em destaque. São a fonte preferida do hero ambiente
@@ -902,8 +905,24 @@ class HomeActivity : AppCompatActivity() {
      * grande — miniatura da aula ou capa — com título, meta,
      * progresso e a acção Continuar (só visual: o OK faz-se no
      * cartão focado, pelo caminho de sempre). Muda com o foco
-     * (globalFocusListener). Sem item/sem arte: bloco ESCONDIDO —
-     * fundo escuro limpo, nunca um bloco vazio gigante.
+     * (globalFocusListener). Sem item: bloco ESCONDIDO — nunca um
+     * bloco vazio gigante.
+     *
+     * 2.7.61 (teste do Elton à 2.7.60 — o hero lia-se como um
+     * rectângulo roxo liso, sem imagem nem feedback):
+     *  - ARTE SEMPRE REAL: a cadeia nunca termina em "sem imagem".
+     *    (1) thumbnail/capa remota estrita (LibraryCovers: thumb do
+     *    Drive → capa da disciplina do manifesto, por nome); (2) a
+     *    arte local do drive (ThumbArt — para um drive "/N:/" é a
+     *    capa gerada desse drive); (3) sem caminho, a arte genérica
+     *    da app (ThumbArt devolve a capa genérica de estudo). O
+     *    gradiente por cima passa a ser o scrim TRANSLÚCIDO
+     *    ambient_hero_scrim — o hero_gradient antigo era OPACO e
+     *    escondia a imagem por completo (causa-raiz da foto).
+     *  - FEEDBACK: anel branco 3dp à volta do bloco (foreground no
+     *    layout), crossfade de 300 ms na troca da imagem remota,
+     *    fade na troca local e pulso de escala na pílula Continuar
+     *    — a mudança de item TEM de se ver.
      */
     private fun updateAmbientHero(
         title: String,
@@ -915,6 +934,7 @@ class HomeActivity : AppCompatActivity() {
         if (!TvUtils.isTv(this)) return
         val block = findViewById<View>(R.id.ambientHero) ?: return
         val img = findViewById<android.widget.ImageView>(R.id.ambientImage) ?: return
+        styleAmbientHero(block)
         findViewById<TextView>(R.id.ambientTitle)?.text = title
         findViewById<TextView>(R.id.ambientMeta)?.text = meta
         val bar = findViewById<android.widget.ProgressBar>(R.id.ambientProgress)
@@ -928,20 +948,68 @@ class HomeActivity : AppCompatActivity() {
         val key = title + "|" + (thumbUrl ?: coverPath ?: "")
         if (key == ambientKey) return
         ambientKey = key
+        // 2.7.61 — cadeia de arte (ver o KDoc): remota estrita com
+        // crossfade; o erro do Coil e a ausência de remota caem na
+        // arte local do drive; sem caminho, na genérica da app.
+        // A ImageView fica SEMPRE visível com o bloco.
+        val localArt = ThumbArt.coverResForPath(coverPath ?: "")
         val remote = LibraryCovers.remoteCoverStrict(
             thumbUrl, title, meta, coverPath ?: ""
         )
+        img.visibility = View.VISIBLE
         if (remote != null) {
-            img.visibility = View.VISIBLE
             img.load(remote) {
-                error(ThumbArt.coverResForPath(coverPath ?: ""))
+                crossfade(300)
+                error(localArt)
             }
-        } else if (!coverPath.isNullOrBlank()) {
-            img.visibility = View.VISIBLE
-            img.setImageResource(ThumbArt.coverResForPath(coverPath))
         } else {
-            img.visibility = View.GONE
+            img.setImageResource(localArt)
+            img.animate().cancel()
+            img.alpha = 0.3f
+            img.animate().alpha(1f).setDuration(300).start()
         }
+        pulseAmbientPill()
+    }
+
+    /**
+     * 2.7.61 — cantos arredondados de 24dp com recorte real do
+     * conteúdo do hero ambiente: outline arredondado + clipToOutline
+     * (o atributo também está no layout; o outline é o que define a
+     * forma do recorte). Instalado uma vez, na primeira utilização.
+     */
+    private fun styleAmbientHero(block: View) {
+        if (ambientHeroStyled) return
+        ambientHeroStyled = true
+        val radiusPx = 24f * block.resources.displayMetrics.density
+        block.clipToOutline = true
+        block.outlineProvider = object : android.view.ViewOutlineProvider() {
+            override fun getOutline(
+                view: View,
+                outline: android.graphics.Outline
+            ) {
+                outline.setRoundRect(0, 0, view.width, view.height, radiusPx)
+            }
+        }
+    }
+
+    /**
+     * 2.7.61 — pulso da pílula "Continuar" do hero ambiente a cada
+     * mudança de conteúdo: escala 1 → 1.12 → 1 (160 + 200 ms). É o
+     * realce sincronizado com a troca da imagem — o utilizador vê
+     * que o topo mudou com o foco. A pílula continua NÃO focável.
+     */
+    private fun pulseAmbientPill() {
+        val pill = findViewById<View>(R.id.ambientContinuePill) ?: return
+        pill.animate().cancel()
+        pill.scaleX = 1f
+        pill.scaleY = 1f
+        pill.animate()
+            .scaleX(1.12f).scaleY(1.12f)
+            .setDuration(160)
+            .withEndAction {
+                pill.animate().scaleX(1f).scaleY(1f).setDuration(200).start()
+            }
+            .start()
     }
 
     private fun ambientFromContinueItem(item: RailItem) {
