@@ -482,6 +482,24 @@
                         android:textSize="@dimen/text_chip"
                         android:textStyle="bold" />
 
+                    <!-- 1.0.40 — Baixar a aula (Downloads reais):
+                         só no layout do celular (na TV o binding é
+                         nullable e o chip não existe). -->
+                    <TextView
+                        android:id="@+id/btn_download_info"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:layout_marginStart="@dimen/spacing_sm"
+                        android:background="@drawable/player_chip_bg"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:paddingHorizontal="@dimen/spacing_lg"
+                        android:text="@string/player_download"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="@dimen/text_chip"
+                        android:textStyle="bold" />
+
                     <TextView
                         android:id="@+id/btn_fullscreen"
                         android:layout_width="48dp"
