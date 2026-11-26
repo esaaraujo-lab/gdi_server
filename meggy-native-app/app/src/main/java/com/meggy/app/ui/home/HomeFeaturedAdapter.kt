@@ -50,6 +50,13 @@ class HomeFeaturedAdapter(
         nextFocusDownId = downId
     }
 
+    /** 2.7.60 — idem para o UP (os Destaques passam a ser a 1.ª
+     *  fileira da home TV: o alvo de cima depende do menu lateral,
+     *  que a Home só confirma nas cadeias de foco). */
+    fun updateFocusUpId(upId: Int) {
+        nextFocusUpId = upId
+    }
+
     inner class VH(val binding: ItemHomeFeaturedBinding) : RecyclerView.ViewHolder(binding.root) {
         init {
             binding.root.setOnClickListener {
