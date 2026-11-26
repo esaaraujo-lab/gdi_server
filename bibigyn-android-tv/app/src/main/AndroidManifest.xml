@@ -78,6 +78,16 @@
         <activity android:name=".ui.home.HomeActivity" android:exported="false"
             android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
+        <!-- v2.1.44: Meus Cursos (grade do rail da TV + atalho) -->
+        <activity android:name=".ui.home.MyCoursesActivity" android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
+        <!-- v2.1.44: Downloads reais (ficheiros em Download/BiBiFit/) -->
+        <activity android:name=".ui.downloads.DownloadsActivity" android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
+        <!-- v2.1.44: assistente fitness (celular; persona fitness-bibi) -->
+        <activity android:name=".ui.fitness.FitnessChatActivity" android:exported="false"
+            android:windowSoftInputMode="adjustResize|stateHidden"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
         <activity android:name=".ui.browse.BrowseActivity" android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
         <!-- v2.1.0: DetailActivity (Netflix-style hero + grid) -->
