@@ -12,8 +12,10 @@ import android.view.View
 import android.view.ViewTreeObserver
 import android.widget.TextView
 import android.view.animation.AlphaAnimation
+import android.view.animation.Animation
 import android.view.animation.AnimationSet
 import android.view.animation.DecelerateInterpolator
+import android.view.animation.ScaleAnimation
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -572,11 +574,47 @@ class HomeActivity : AppCompatActivity() {
         binding.heroBadge.visibility = View.GONE
         binding.heroTitle.setWordEllipsized(title)
         binding.heroSubtitle.setWordEllipsized(subtitle)
+        // 1.0.41 — imagem SEMPRE real no hero: a capa local do drive
+        // entra já como placeholder (foto 16:9 do aparelho), por isso
+        // o bloco nunca fica no gradiente vazio enquanto a thumb/capa
+        // remota carrega — e se ela falhar, a cadeia cai na mesma
+        // capa local (error). Nunca só cor lisa.
+        val coverRes = driveCoverRes(driveIndexFromPath(coverPath) ?: 15)
         binding.heroArt.loadCoverChain(
             thumbUrl,
-            driveCoverRes(driveIndexFromPath(coverPath) ?: 15),
+            coverRes,
             title, coverPath,
+            placeholderRes = coverRes,
             strict = true
+        )
+        // 1.0.41 — feedback visual da troca: crossfade curto da arte
+        // e dos textos + pulso sincronizado da pílula do hero (o anel
+        // lima permanente está no layout). Só animação — tamanhos e
+        // alvos de foco intactos (legibilidade +60). Mesmo padrão de
+        // animação partilhada do render() do rotator.
+        val fade = AlphaAnimation(0.25f, 1f).apply {
+            duration = 280
+            interpolator = DecelerateInterpolator()
+        }
+        binding.heroArt.startAnimation(fade)
+        binding.heroTitle.startAnimation(fade)
+        binding.heroSubtitle.startAnimation(fade)
+        binding.heroPlay.startAnimation(
+            AnimationSet(true).apply {
+                interpolator = DecelerateInterpolator()
+                addAnimation(AlphaAnimation(0.4f, 1f).apply { duration = 280 })
+                addAnimation(
+                    ScaleAnimation(
+                        1f, 1.06f, 1f, 1.06f,
+                        Animation.RELATIVE_TO_SELF, 0.5f,
+                        Animation.RELATIVE_TO_SELF, 0.5f
+                    ).apply {
+                        duration = 180
+                        repeatCount = 1
+                        repeatMode = Animation.REVERSE
+                    }
+                )
+            }
         )
     }
 
