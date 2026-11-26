@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  2.7.61 — Scrim do HERO AMBIENTE da Home TV. Substitui o
+  @drawable/hero_gradient naquele bloco: o hero_gradient é OPACO
+  (roxo→magenta→rosa, alfa FF) e, desenhado POR CIMA da
+  ambientImage, escondia a arte por completo — o hero lia-se como
+  um rectângulo de cor lisa (foto do teste do Elton à 2.7.60).
+  Este scrim é um véu escuro TRANSLÚCIDO: transparente no topo
+  (a arte vê-se) e quase opaco na base (título/meta legíveis).
+  angle=90: startColor fica em baixo, endColor em cima.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient
+        android:angle="90"
+        android:type="linear"
+        android:startColor="#F20B0C10"
+        android:centerColor="#590B0C10"
+        android:endColor="#000B0C10" />
+</shape>
