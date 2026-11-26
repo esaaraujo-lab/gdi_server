@@ -27,6 +27,8 @@
     <dimen name="radius_sm">8dp</dimen>
     <dimen name="radius_md">12dp</dimen>
     <dimen name="radius_lg">16dp</dimen>
+    <!-- 1.0.41 — hero da Home TV: cantos de 24dp (pedido do Elton). -->
+    <dimen name="radius_hero">24dp</dimen>
     <dimen name="radius_xl">28dp</dimen>
     <!-- Pílula: valor alto o bastante para arredondar qualquer altura de botão/chip. -->
     <dimen name="radius_full">64dp</dimen>
