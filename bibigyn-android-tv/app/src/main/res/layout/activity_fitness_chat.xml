@@ -2,7 +2,9 @@
 <!-- v2.1.44 — Chat da assistente fitness (SÓ celular): cabeçalho com
      a identidade da BiBi (ícone da app — a árvore não tem asset de
      cara fotográfico), mensagens e campo de escrita. A assistente é
-     a da nuvem (POST /api/ai, persona fitness-bibi). -->
+     a da nuvem (POST /api/ai, persona fitness-bibi).
+     v2.1.47 — linha de chips de temas da Biblioteca de Conhecimento
+     entre o cabeçalho e as mensagens. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -65,6 +67,24 @@
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:background="@color/md_outline" />
+
+    <!-- v2.1.47 — Chips de temas da Biblioteca de Conhecimento:
+         linha horizontal com scroll, acima das mensagens. Os chips
+         são criados pela activity (rótulo + pergunta completa) e
+         tocam para enviar a pergunta pelo caminho normal do chat. -->
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="@dimen/content_margin"
+        android:paddingVertical="@dimen/spacing_sm"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:id="@+id/fitnessChatChips"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal" />
+    </HorizontalScrollView>
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/fitnessChatList"
