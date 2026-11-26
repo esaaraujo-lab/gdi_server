@@ -58,6 +58,9 @@ import com.meggy.app.util.FocusAnimator
 import com.meggy.app.util.setWordEllipsized
 import com.meggy.app.util.UpdateChecker
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -103,7 +106,12 @@ class HomeActivity : AppCompatActivity() {
             // se agenda quando o snapshot tem mesmo algo a repor
             // (nada focado + scroll 0 = nada a fazer).
             if (snap.target != 0 || snap.scrollY > 0) restoreHomeFocus(snap)
-            setupFeaturedContinue(homeRecents)
+            // 2.7.60 — o filtro de fantasmas também vale aqui: sem
+            // ele, a chegada do manifesto repunha no cartão de
+            // destaque um recent já validado como inexistente.
+            setupFeaturedContinue(homeRecents.filter {
+                recentVerdict(it.folderPath, it.videoName) != false
+            })
         }
     }
     private var lastFocusContinue = -1
@@ -124,6 +132,28 @@ class HomeActivity : AppCompatActivity() {
     // 2.7.58 — chave do conteúdo actual do hero ambiente da TV
     // (evita recarregar a mesma arte a cada mudança de foco).
     private var ambientKey: String? = null
+    // 2.7.60 — chave do conteúdo que o showAmbientDefault pôs no
+    // hero (≠ de ambientKey quando o FOCO já tomou conta do topo:
+    // aí o default não volta a impor-se). ambientDefaultRecentKey
+    // identifica o recent de origem quando o default veio de um
+    // recent ("pasta|vídeo"), para o filtro de fantasmas o poder
+    // derrubar (ver onGhostRecentsRemoved).
+    private var ambientDefaultKey: String? = null
+    private var ambientDefaultRecentKey: String? = null
+    // 2.7.60 — 1.º destaque conhecido: primeiro o curado (fallback
+    // síncrono do setupDestaques) e, quando a API responde, o 1.º
+    // curso em destaque. São a fonte preferida do hero ambiente
+    // por defeito (pedido do Elton: destaques no topo).
+    private var firstFallbackDestaque: HomeFeaturedItem? = null
+    private var firstApiDestaque: HomeFeaturedItem? = null
+    // 2.7.60 — vereditos da validação de mostrador dos recents
+    // (chave "pasta|vídeo"): true = a aula existe (manter no
+    // rail/hero), false = fantasma (esconder dos dois). Sem
+    // veredito = ainda não validado ou indeterminado — mostra-se,
+    // como sempre: falha de rede NUNCA gera veredito falso.
+    // Só mostrador: o SessionManager não é tocado.
+    private val recentVerdicts = mutableMapOf<String, Boolean>()
+    private var recentValidationJob: Job? = null
     private var lastFocusedRail = 0
     private var savedScrollY = 0
     private var isFirstResume = true
@@ -658,11 +688,18 @@ class HomeActivity : AppCompatActivity() {
                 // R21: UM só pedido de foco — antes havia dois posts
                 // (Continue e Drives) e o segundo ganhava sempre: o
                 // foco inicial caía em "Explorar drives" mesmo com
-                // "Continue assistindo" presente. Continue se tiver
-                // itens; senão, Drives.
-                val focusTarget =
-                    if ((continueAdapter?.itemCount ?: 0) > 0) binding.railContinue
-                    else binding.railDrives
+                // "Continue assistindo" presente.
+                // 2.7.60 — os Destaques são a 1.ª fileira: o foco
+                // inicial vai para eles quando têm itens; senão,
+                // Continue se tiver itens; senão, Drives.
+                val destaquesRv = findViewById<RecyclerView>(R.id.listDestaques)
+                val focusTarget = when {
+                    destaquesRv != null &&
+                        destaquesRv.visibility == View.VISIBLE &&
+                        (destaquesAdapter?.itemCount ?: 0) > 0 -> destaquesRv
+                    (continueAdapter?.itemCount ?: 0) > 0 -> binding.railContinue
+                    else -> binding.railDrives
+                }
                 focusTarget.post {
                     focusTarget.findViewHolderForAdapterPosition(0)
                         ?.itemView?.requestFocus()
@@ -922,14 +959,31 @@ class HomeActivity : AppCompatActivity() {
     }
 
     /** Conteúdo por defeito do hero ambiente (antes de qualquer
-     *  foco): a aula em curso de maior progresso; sem nenhuma, o
-     *  1.º destaque; sem nada, o bloco fica escondido. Não
-     *  sobrepõe um hero já conduzido pelo foco. */
+     *  foco): 2.7.60 — o 1.º DESTAQUE (pedido do Elton: os
+     *  destaques voltam ao topo); só sem destaques se usa a aula
+     *  em curso de maior progresso — e mesmo essa passa pelo
+     *  filtro de fantasmas quando a validação já correu. Sem
+     *  nada, o bloco fica escondido. Não sobrepõe um hero já
+     *  conduzido pelo foco: se o conteúdo actual não é o default
+     *  que aqui pusemos (ambientKey ≠ ambientDefaultKey), o foco
+     *  manda e não se toca; entre defaults, o da API pode
+     *  substituir o curado quando chega. */
     private fun showAmbientDefault() {
         if (!TvUtils.isTv(this)) return
-        if (ambientKey != null) return
+        if (ambientKey != null && ambientKey != ambientDefaultKey) return
+        val destaque = firstApiDestaque ?: firstFallbackDestaque
+        if (destaque != null) {
+            updateAmbientHero(
+                destaque.title, destaque.subtitle, null,
+                destaque.coverUrl, destaque.path
+            )
+            ambientDefaultKey = ambientKey
+            ambientDefaultRecentKey = null
+            return
+        }
         val sm = SessionManager.get(this)
         val best = sm.getRecents()
+            .filter { recentVerdict(it.folderPath, it.videoName) != false }
             .filter { sm.hasResume(it.folderPath, it.videoName) }
             .maxByOrNull { sm.getResumeProgress(it.folderPath, it.videoName) }
         if (best != null) {
@@ -942,11 +996,8 @@ class HomeActivity : AppCompatActivity() {
                 thumbUrl = best.thumbnailLink,
                 coverPath = best.folderPath
             )
-            return
-        }
-        val first = destaquesAdapter?.currentList?.firstOrNull()
-        if (first != null) {
-            updateAmbientHero(first.title, first.subtitle, null, first.coverUrl, first.path)
+            ambientDefaultKey = ambientKey
+            ambientDefaultRecentKey = recentKey(best.folderPath, best.videoName)
         }
     }
 
@@ -956,6 +1007,15 @@ class HomeActivity : AppCompatActivity() {
         val sm = SessionManager.get(this)
         val recents = sm.getRecents()
         homeRecents = recents
+        // 2.7.60 — lista de MOSTRADOR: os recents já validados
+        // como fantasmas (a aula já não existe — ver
+        // validateRecentExists) saem da fileira, do cartão de
+        // destaque e dos candidatos do hero. O armazenamento não
+        // é tocado (o SessionManager fica como está); sem veredito
+        // ou com veredito "existe", o recent mostra-se como sempre.
+        val displayRecents = recents.filter {
+            recentVerdict(it.folderPath, it.videoName) != false
+        }
 
         // 2.7.52 — SEM DUPLICAÇÃO (queixa do Elton nas fotos da TV:
         // a aula do hero aparecia outra vez como 1.º cartão da
@@ -970,17 +1030,17 @@ class HomeActivity : AppCompatActivity() {
         // 1.º cartão do Continuar. A ordem dos restantes não muda.
         val isTvHere = TvUtils.isTv(this)
         val heroItem = if (isTvHere) {
-            recents.filter { sm.hasResume(it.folderPath, it.videoName) }
+            displayRecents.filter { sm.hasResume(it.folderPath, it.videoName) }
                 .maxByOrNull { sm.getResumeProgress(it.folderPath, it.videoName) }
         } else {
             null
         }
         val railRecents = when {
-            heroItem == null -> recents
-            isTvHere -> listOf(heroItem) + recents.filterNot {
+            heroItem == null -> displayRecents
+            isTvHere -> listOf(heroItem) + displayRecents.filterNot {
                 it.folderPath == heroItem.folderPath && it.videoName == heroItem.videoName
             }
-            else -> recents.filterNot {
+            else -> displayRecents.filterNot {
                 it.folderPath == heroItem.folderPath && it.videoName == heroItem.videoName
             }
         }
@@ -994,9 +1054,13 @@ class HomeActivity : AppCompatActivity() {
             // item do hero": o destaque monta-se na mesma (no
             // celular este ramo é o recents.isEmpty() de sempre e o
             // setupFeaturedContinue esconde a seção, como antes).
-            setupFeaturedContinue(recents)
+            // 2.7.60 — com TODOS os recents fantasmas, a lista de
+            // mostrador vem vazia e este ramo também os esconde do
+            // cartão de destaque.
+            setupFeaturedContinue(displayRecents)
             // 2.7.58 — hero ambiente por defeito (TV).
             showAmbientDefault()
+            launchRecentValidation(recents)
             return
         }
 
@@ -1079,19 +1143,22 @@ class HomeActivity : AppCompatActivity() {
         val hasFeatured = TvUtils.isTv(this) &&
             recents.any { sm.hasResume(it.folderPath, it.videoName) }
         // 2.7.56 — cadeias da fileira na TV (sem hero nem destaque):
-        // UP — com o menu ligado não há nada acima (é a 1.ª fileira);
-        // sem menu, o 1.º atalho do cabeçalho. DOWN — a próxima
-        // fileira visível (Destaques → Pastas recentes → Drives).
         // LEFT — a linha seleccionada do menu (tvMenuLeftTargetId).
         // No celular ficam os ids de sempre.
+        // 2.7.60 — os Destaques voltam a ser a 1.ª fileira: UP — os
+        // Destaques, quando visíveis; sem eles, com o menu ligado
+        // não há nada acima e sem menu é o 1.º atalho do cabeçalho.
+        // DOWN — a próxima fileira visível (Pastas recentes →
+        // Drives; os Destaques já não estão abaixo do Continuar).
         val continueUpId = when {
             !isTvHere -> if (hasFeatured) R.id.featured_card else R.id.heroPlay
+            findViewById<View>(R.id.listDestaques)?.visibility == View.VISIBLE ->
+                R.id.listDestaques
             sm.tvSideMenuEnabled -> View.NO_ID
             else -> R.id.tvNavSearch
         }
         val continueDownId = when {
             !isTvHere -> R.id.railDrives
-            findViewById<View>(R.id.listDestaques)?.visibility == View.VISIBLE -> R.id.listDestaques
             findViewById<View>(R.id.railRecentFolders)?.visibility == View.VISIBLE -> R.id.railRecentFolders
             else -> R.id.railDrives
         }
@@ -1142,9 +1209,121 @@ class HomeActivity : AppCompatActivity() {
             if (changed) restoreHomeFocus(snap)
         }
         continueAdapter?.let { backfillRecentThumbs(recents, railItems, it) }
-        setupFeaturedContinue(recents)
+        setupFeaturedContinue(displayRecents)
         // 2.7.58 — hero ambiente por defeito (TV).
         showAmbientDefault()
+        // 2.7.60 — validação de mostrador dos recents (2.º plano,
+        // depois da pintura; ver validateRecentExists).
+        launchRecentValidation(recents)
+    }
+
+    // ──────────── 2.7.60: filtro de mostrador dos recents ────────────
+
+    /** Chave de identidade de um recent ("pasta|vídeo"). */
+    private fun recentKey(folderPath: String, videoName: String): String =
+        "$folderPath|$videoName"
+
+    /**
+     * Veredito da validação de mostrador: true = a aula existe,
+     * false = fantasma, null = ainda não validado ou indeterminado
+     * (mostra-se — falha de rede nunca esconde nada).
+     */
+    private fun recentVerdict(folderPath: String, videoName: String): Boolean? =
+        recentVerdicts[recentKey(folderPath, videoName)]
+
+    /**
+     * 2.7.60 — valida em 2.º plano os recents ainda sem veredito
+     * (a Home já pintou; a abertura não espera por isto). Corre em
+     * lotes paralelos pequenos, como o prefetch do detalhe. Os
+     * vereditos ficam em memória para a vida desta Home: montar a
+     * fileira outra vez (onResume, import) não volta a listar as
+     * mesmas pastas. Se algum recent for fantasma, a fileira e o
+     * hero repõem-se sem ele (onGhostRecentsRemoved).
+     */
+    private fun launchRecentValidation(recents: List<SessionManager.RecentItem>) {
+        if (recentValidationJob?.isActive == true) return
+        val pending = recents.filter {
+            recentVerdict(it.folderPath, it.videoName) == null
+        }
+        if (pending.isEmpty()) return
+        recentValidationJob = lifecycleScope.launch {
+            var removedAny = false
+            for (batch in pending.chunked(4)) {
+                if (isFinishing || isDestroyed) return@launch
+                val results = batch.map { r ->
+                    async(Dispatchers.IO) { r to validateRecentExists(r) }
+                }.awaitAll()
+                for ((r, verdict) in results) {
+                    if (verdict == null) continue
+                    recentVerdicts[recentKey(r.folderPath, r.videoName)] = verdict
+                    if (!verdict) removedAny = true
+                }
+            }
+            if (removedAny && !isFinishing && !isDestroyed) {
+                onGhostRecentsRemoved()
+            }
+        }
+    }
+
+    /**
+     * 2.7.60 — a aula deste recent ainda existe?
+     *  • true — a pasta lista e o vídeo está lá, OU o vídeo foi
+     *    encontrado no caminho actual pelo StaleRecentResolver
+     *    (o mesmo mecanismo do toque: pasta movida/renomeada).
+     *  • false — FANTASMA: a pasta listou (resposta Ok) e o vídeo
+     *    não está lá, o resolver não o encontrou em lado nenhum,
+     *    e uma segunda listagem da pasta voltou a responder Ok —
+     *    ou seja, houve rede e sessão durante toda a verificação
+     *    e mesmo assim a aula não aparece: não existe.
+     *  • null — INDETERMINADO: alguma listagem falhou (rede em
+     *    baixo, sessão expirada, erro transitório). Sem veredito:
+     *    o recent continua a mostrar-se, como sempre — falha de
+     *    rede ≠ aula inexistente.
+     * Nunca faz bounce para o login (é trabalho de fundo; o toque
+     * mantém o comportamento de sempre).
+     */
+    private suspend fun validateRecentExists(
+        r: SessionManager.RecentItem
+    ): Boolean? {
+        val files = when (val res =
+            AuthHelper.listFolderWithRelogin(api, r.folderPath)) {
+            is FolderResult.Ok -> res.files
+            else -> return null
+        }
+        if (files.any { it.name == r.videoName && (it.isVideo || it.isAudio) }) {
+            return true
+        }
+        val resolved = StaleRecentResolver.resolve(api, this, r.folderPath, r.videoName)
+        if (resolved != null) return true
+        val again = AuthHelper.listFolderWithRelogin(api, r.folderPath)
+        return if (again is FolderResult.Ok) false else null
+    }
+
+    /**
+     * 2.7.60 — um ou mais recents acabaram de ser marcados como
+     * fantasmas: remonta a fileira (a lista de mostrador já os
+     * exclui) e, se o hero ambiente por defeito estava a mostrar
+     * um deles, derruba esse default para o showAmbientDefault
+     * escolher o próximo candidato válido (destaque primeiro).
+     * Se o foco já tomou conta do hero, não se toca nele.
+     */
+    private fun onGhostRecentsRemoved() {
+        val defaultRecent = ambientDefaultRecentKey
+        if (defaultRecent != null && recentVerdicts[defaultRecent] == false &&
+            ambientKey == ambientDefaultKey
+        ) {
+            ambientKey = null
+            ambientDefaultKey = null
+            ambientDefaultRecentKey = null
+            setupContinueRail()
+            // Sem nenhum candidato, o bloco do hero esconde-se
+            // (como sempre foi quando não há nada para mostrar).
+            if (ambientKey == null) {
+                findViewById<View>(R.id.ambientHero)?.visibility = View.GONE
+            }
+        } else {
+            setupContinueRail()
+        }
     }
 
     /**
@@ -1344,11 +1523,13 @@ class HomeActivity : AppCompatActivity() {
                 // 2.7.56 — cadeia vertical das fileiras na TV (UP =
                 // fileira visível de cima; DOWN = Drives; LEFT =
                 // menu). No celular, sem ids (como sempre foi).
+                // 2.7.60 — ordem nova: acima das Pastas recentes
+                // está o Continuar; sem Continuar, os Destaques.
                 nextFocusUpId = if (TvUtils.isTv(this)) {
                     when {
+                        binding.railContinue.visibility == View.VISIBLE -> R.id.railContinue
                         findViewById<View>(R.id.listDestaques)?.visibility == View.VISIBLE ->
                             R.id.listDestaques
-                        binding.railContinue.visibility == View.VISIBLE -> R.id.railContinue
                         else -> View.NO_ID
                     }
                 } else View.NO_ID,
@@ -1510,10 +1691,19 @@ class HomeActivity : AppCompatActivity() {
                 // 2.7.56 — UP: a fileira Continuar; DOWN: corrigido
                 // nas cadeias (depende das Pastas recentes). No
                 // celular, sem ids (roteamento de sempre).
-                nextFocusUpId = if (TvUtils.isTv(this) &&
-                    binding.railContinue.visibility == View.VISIBLE
-                ) R.id.railContinue else View.NO_ID,
-                nextFocusDownId = if (TvUtils.isTv(this)) R.id.railDrives else View.NO_ID
+                // 2.7.60 — os Destaques são a 1.ª fileira da TV:
+                // UP = nada (menu ligado) ou o 1.º atalho do
+                // cabeçalho (sem menu); DOWN = o Continuar. As
+                // cadeias (setupTvFocusChains) voltam a corrigir os
+                // dois ids depois de todas as fileiras montadas.
+                nextFocusUpId = if (TvUtils.isTv(this)) {
+                    if (SessionManager.get(this).tvSideMenuEnabled) {
+                        View.NO_ID
+                    } else {
+                        R.id.tvNavSearch
+                    }
+                } else View.NO_ID,
+                nextFocusDownId = if (TvUtils.isTv(this)) R.id.railContinue else View.NO_ID
             ) { item ->
                 if (item.openAsCourse) {
                     val intent = Intent(this, DetailActivity::class.java)
@@ -1543,8 +1733,11 @@ class HomeActivity : AppCompatActivity() {
             )
         }
         destaquesAdapter?.submitList(fallback)
-        // 2.7.58 — hero ambiente por defeito (TV): sem aula em
-        // curso, o 1.º destaque alimenta o topo.
+        // 2.7.60 — o 1.º destaque curado é candidato do hero
+        // ambiente por defeito (ver showAmbientDefault).
+        firstFallbackDestaque = fallback.firstOrNull()
+        // 2.7.60 — hero ambiente por defeito (TV): o 1.º destaque
+        // alimenta o topo (antes era a aula em curso primeiro).
         showAmbientDefault()
         lifecycleScope.launch {
             val courses = api.getFeaturedCourses()
@@ -1577,6 +1770,9 @@ class HomeActivity : AppCompatActivity() {
                         openAsCourse = true
                     )
                 }
+                // 2.7.60 — o 1.º curso em destaque da API passa a
+                // ser o candidato preferido do hero ambiente.
+                firstApiDestaque = items.firstOrNull()
                 destaquesAdapter?.submitList(items)
                 showAmbientDefault()
             }
@@ -1882,10 +2078,11 @@ class HomeActivity : AppCompatActivity() {
         return findViewById<SideMenuView>(R.id.tvSideMenu)?.selectedRowId() ?: View.NO_ID
     }
 
-    /** 2.7.56 — id da 1.ª fileira de conteúdo visível da home TV. */
+    /** 2.7.56 — id da 1.ª fileira de conteúdo visível da home TV.
+     *  2.7.60 — os Destaques voltam a ser a 1.ª fileira. */
     private fun tvFirstContentId(): Int = when {
-        binding.railContinue.visibility == View.VISIBLE -> R.id.railContinue
         findViewById<View>(R.id.listDestaques)?.visibility == View.VISIBLE -> R.id.listDestaques
+        binding.railContinue.visibility == View.VISIBLE -> R.id.railContinue
         findViewById<View>(R.id.railRecentFolders)?.visibility == View.VISIBLE ->
             R.id.railRecentFolders
         else -> R.id.railDrives
@@ -1898,9 +2095,12 @@ class HomeActivity : AppCompatActivity() {
      * LEFT dos cartões volta à linha seleccionada, via adapters);
      * sem menu, os atalhos do cabeçalho descem para essa fileira.
      * As cadeias verticais entre fileiras vivem nos adapters (UP/
-     * DOWN por fileira, na ordem da página); aqui só se corrige o
-     * DOWN dos Destaques, que depende das Pastas recentes (montadas
-     * depois dos Destaques).
+     * DOWN por fileira, na ordem da página); aqui corrigem-se as
+     * dos Destaques, que dependem das fileiras vizinhas.
+     * 2.7.60 — ordem das fileiras: Destaques → Continuar → Pastas
+     * recentes → Drives. UP dos Destaques: nada (menu ligado) ou o
+     * 1.º atalho do cabeçalho (sem menu); DOWN: a fileira seguinte
+     * visível (Continuar → Pastas recentes → Drives).
      */
     private fun setupTvFocusChains() {
         if (!TvUtils.isTv(this)) return
@@ -1916,11 +2116,15 @@ class HomeActivity : AppCompatActivity() {
             findViewById<View>(R.id.tvNavMylist)?.nextFocusDownId = firstContent
             findViewById<View>(R.id.tvNavSettings)?.nextFocusDownId = firstContent
         }
+        destaquesAdapter?.updateFocusUpId(
+            if (menuOn) View.NO_ID else R.id.tvNavSearch
+        )
         destaquesAdapter?.updateFocusDownId(
-            if (findViewById<View>(R.id.railRecentFolders)?.visibility == View.VISIBLE) {
-                R.id.railRecentFolders
-            } else {
-                R.id.railDrives
+            when {
+                binding.railContinue.visibility == View.VISIBLE -> R.id.railContinue
+                findViewById<View>(R.id.railRecentFolders)?.visibility == View.VISIBLE ->
+                    R.id.railRecentFolders
+                else -> R.id.railDrives
             }
         )
     }
@@ -2007,15 +2211,15 @@ class HomeActivity : AppCompatActivity() {
     private fun setupDrivesRail() {
         // Frente A (TV) — UP do tile de drive volta à fileira de
         // cima (a visível mais próxima). 2.7.56: na TV a cadeia
-        // segue a ordem das fileiras (Pastas recentes → Destaques →
-        // Continuar); no celular ficam os alvos de sempre.
+        // segue a ordem das fileiras; 2.7.60: Pastas recentes →
+        // Continuar → Destaques. No celular ficam os alvos de sempre.
         val drivesUpId = if (TvUtils.isTv(this)) {
             when {
                 findViewById<View>(R.id.railRecentFolders)?.visibility == View.VISIBLE ->
                     R.id.railRecentFolders
+                binding.railContinue.visibility == View.VISIBLE -> R.id.railContinue
                 findViewById<View>(R.id.listDestaques)?.visibility == View.VISIBLE ->
                     R.id.listDestaques
-                binding.railContinue.visibility == View.VISIBLE -> R.id.railContinue
                 else -> View.NO_ID
             }
         } else {
