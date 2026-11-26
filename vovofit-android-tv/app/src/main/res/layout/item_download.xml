@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 1.0.40 — Linha de download: tema da aula + curso/tamanho/data +
+     estado + Apagar. Porte do item da Meggy 2.7.58. -->
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="@dimen/spacing_md"
+    android:clickable="true"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    android:foreground="?attr/selectableItemBackground"
+    app:cardBackgroundColor="@color/tile_bg"
+    app:cardCornerRadius="@dimen/radius_md"
+    app:cardElevation="0dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="@dimen/spacing_md">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/downloadTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/text_card_title"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/downloadMeta"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/md_on_surface_variant"
+                android:textSize="@dimen/text_card_subtitle" />
+
+            <TextView
+                android:id="@+id/downloadState"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textColor="@color/md_primary"
+                android:textSize="@dimen/text_card_progress" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/downloadDelete"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/spacing_md"
+            android:background="@drawable/chip_outline"
+            android:clickable="true"
+            android:focusable="true"
+            android:paddingHorizontal="@dimen/spacing_md"
+            android:paddingVertical="@dimen/spacing_sm"
+            android:text="@string/downloads_delete"
+            android:textColor="@color/md_on_surface_variant"
+            android:textSize="@dimen/text_chip" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>
