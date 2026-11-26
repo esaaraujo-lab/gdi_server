@@ -40,9 +40,12 @@ import com.meggy.app.util.TvUtils
  * duplicateParentState nas vistas da linha). A linha manual de
  * "Recolher/Expandir" sai — contradizia o comportamento ao foco.
  *
- * Destinos (provisórios Q1–Q3, ver SPEC 2.7.48 §2 — nada de novo):
- * Simulados -> drive RETA FINAL TRTs; Meggy -> busca; Downloads ->
- * Minha lista. A Home liga as acções via [onMenuItemSelected].
+ * Destinos (2.7.58 — decisões do Elton 2026-11-25 19:19–19:25): o
+ * menu da TV NÃO tem Meggy nem Simulados (a TV é só vídeo). No lugar
+ * deles: MEUS CURSOS (cursos do aluno) e CONTINUAR (abre o curso em
+ * curso pelo caminho normal — o detalhe, nunca o player directo).
+ * Downloads abre a tela de Downloads real. A Home e as outras telas
+ * ligam as acções via [onMenuItemSelected] / [TvRailHost].
  */
 class SideMenuView @JvmOverloads constructor(
     context: Context,
@@ -53,8 +56,8 @@ class SideMenuView @JvmOverloads constructor(
     enum class MenuItem(val label: String, val iconRes: Int) {
         HOME("Início", R.drawable.ic_nav_home),
         DRIVES("Drives", R.drawable.ic_folder),
-        SIMULADOS("Simulados", R.drawable.ic_nav_simulados),
-        MEGGY("Meggy", R.drawable.ic_nav_meggy),
+        MY_COURSES("Meus Cursos", R.drawable.ic_nav_courses),
+        CONTINUE("Continuar", R.drawable.ic_nav_continue),
         DOWNLOADS("Downloads", R.drawable.ic_nav_downloads),
         SETTINGS("Ajustes", R.drawable.ic_nav_settings)
     }

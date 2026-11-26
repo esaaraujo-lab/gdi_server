@@ -121,6 +121,9 @@ class HomeActivity : AppCompatActivity() {
     // para restauro após morte do processo (onSaveInstanceState).
     // Ver o observador global de foco (globalFocusListener).
     private var continueAdapter: RailAdapter? = null
+    // 2.7.58 — chave do conteúdo actual do hero ambiente da TV
+    // (evita recarregar a mesma arte a cada mudança de foco).
+    private var ambientKey: String? = null
     private var lastFocusedRail = 0
     private var savedScrollY = 0
     private var isFirstResume = true
@@ -136,13 +139,54 @@ class HomeActivity : AppCompatActivity() {
             lastFocusContinue = continuePos
             lastFocusedRail = 1
             invalidateStaleFocusRestore(1, continuePos)
+            // 2.7.58 — hero ambiente segue o foco (TV).
+            continueAdapter?.itemAt(continuePos)?.let { ambientFromContinueItem(it) }
             return@OnGlobalFocusChangeListener
+        }
+        // 2.7.58 — hero ambiente: Destaques, Pastas recentes e
+        // Drives também alimentam o topo na TV.
+        if (TvUtils.isTv(this)) {
+            findViewById<RecyclerView>(R.id.listDestaques)?.let { rv ->
+                val pos = adapterPositionIn(rv, view)
+                if (pos != null) {
+                    destaquesAdapter?.let { ad ->
+                        if (pos < ad.currentList.size) {
+                            val item = ad.currentList[pos]
+                            updateAmbientHero(
+                                item.title, item.subtitle, null,
+                                item.coverUrl, item.path
+                            )
+                        }
+                    }
+                    return@OnGlobalFocusChangeListener
+                }
+            }
+            findViewById<RecyclerView>(R.id.railRecentFolders)?.let { rv ->
+                val pos = adapterPositionIn(rv, view)
+                if (pos != null) {
+                    recentFoldersAdapter?.itemAt(pos)?.let { item ->
+                        updateAmbientHero(
+                            item.displayTitle ?: item.title,
+                            item.subtitle, null,
+                            item.thumbnailUrl, item.file?.folderPath
+                        )
+                    }
+                    return@OnGlobalFocusChangeListener
+                }
+            }
         }
         val drivesPos = adapterPositionIn(binding.railDrives, view)
         if (drivesPos != null) {
             lastFocusDrives = drivesPos
             lastFocusedRail = 2
             invalidateStaleFocusRestore(2, drivesPos)
+            // 2.7.58 — hero ambiente segue o foco (TV).
+            drivesAdapter?.itemAt(drivesPos)?.let { item ->
+                updateAmbientHero(
+                    item.title, item.subtitle, null,
+                    item.coverUrl ?: item.featuredCoverUrl, item.drivePath
+                )
+            }
             return@OnGlobalFocusChangeListener
         }
         lastFocusedRail = 0
@@ -210,7 +254,12 @@ class HomeActivity : AppCompatActivity() {
         // 2.7.48 — barra de busca no topo (conceito 1; só existe no
         // layout do celular) — abre a busca existente. O ícone antigo
         // (homeSearchBtn) saiu do layout.
-        findViewById<View>(R.id.homeSearchBar)?.setOnClickListener {
+        // 2.7.58 — a barra de busca do topo saiu do layout do
+        // celular (SPEC §3.1: fica o ícone homeSearchIcon, ligado
+        // logo abaixo). O id homeSearchBar já não existe.
+        // 2.7.58 — ícone de busca do topo mobile (SPEC §3.1): o
+        // mesmo destino da barra; só existe no layout do celular.
+        findViewById<View>(R.id.homeSearchIcon)?.setOnClickListener {
             startActivity(Intent(this, SearchActivity::class.java))
         }
         // 2.7.41 (P0-2/P0-3) — atalhos de navegação no cabeçalho da home
@@ -254,9 +303,10 @@ class HomeActivity : AppCompatActivity() {
                     true
                 }
                 R.id.nav_meggy -> {
-                    // 2.7.48 (Q2 provisório): sem chat no app — o item
-                    // Meggy abre a busca existente.
-                    startActivity(Intent(this, SearchActivity::class.java))
+                    // 2.7.58 — destino real: o chat da Meggy NA
+                    // NUVEM (MeggyChatActivity; antes, provisório
+                    // 2.7.48, abria a busca).
+                    openMeggyChat(this)
                     overridePendingTransition(0, 0)
                     true
                 }
@@ -796,6 +846,99 @@ class HomeActivity : AppCompatActivity() {
 
     }
 
+    // ──────────── 2.7.58: Hero ambiente da Home TV ────────────
+
+    /**
+     * HERO AMBIENTE (decisão do Elton 19:24, correcção do teste da
+     * 2.7.57): o topo da Home TV mostra a arte do item FOCADO em
+     * grande — miniatura da aula ou capa — com título, meta,
+     * progresso e a acção Continuar (só visual: o OK faz-se no
+     * cartão focado, pelo caminho de sempre). Muda com o foco
+     * (globalFocusListener). Sem item/sem arte: bloco ESCONDIDO —
+     * fundo escuro limpo, nunca um bloco vazio gigante.
+     */
+    private fun updateAmbientHero(
+        title: String,
+        meta: String,
+        progress: Int?,
+        thumbUrl: String?,
+        coverPath: String?
+    ) {
+        if (!TvUtils.isTv(this)) return
+        val block = findViewById<View>(R.id.ambientHero) ?: return
+        val img = findViewById<android.widget.ImageView>(R.id.ambientImage) ?: return
+        findViewById<TextView>(R.id.ambientTitle)?.text = title
+        findViewById<TextView>(R.id.ambientMeta)?.text = meta
+        val bar = findViewById<android.widget.ProgressBar>(R.id.ambientProgress)
+        if (progress != null) {
+            bar?.visibility = View.VISIBLE
+            bar?.progress = progress
+        } else {
+            bar?.visibility = View.GONE
+        }
+        block.visibility = View.VISIBLE
+        val key = title + "|" + (thumbUrl ?: coverPath ?: "")
+        if (key == ambientKey) return
+        ambientKey = key
+        val remote = LibraryCovers.remoteCoverStrict(
+            thumbUrl, title, meta, coverPath ?: ""
+        )
+        if (remote != null) {
+            img.visibility = View.VISIBLE
+            img.load(remote) {
+                error(ThumbArt.coverResForPath(coverPath ?: ""))
+            }
+        } else if (!coverPath.isNullOrBlank()) {
+            img.visibility = View.VISIBLE
+            img.setImageResource(ThumbArt.coverResForPath(coverPath))
+        } else {
+            img.visibility = View.GONE
+        }
+    }
+
+    private fun ambientFromContinueItem(item: RailItem) {
+        val folderPath = item.file?.folderPath ?: ""
+        val courseName = Format.extractCourseName(folderPath)
+        updateAmbientHero(
+            title = item.displayTitle ?: item.title,
+            meta = if (courseName.isNotBlank() &&
+                !courseName.equals(item.displayTitle, ignoreCase = true)
+            ) "$courseName · ${item.displayTitle ?: item.title}" else courseName,
+            progress = if (item.hasProgress) item.progress else null,
+            thumbUrl = item.thumbnailUrl,
+            coverPath = folderPath
+        )
+    }
+
+    /** Conteúdo por defeito do hero ambiente (antes de qualquer
+     *  foco): a aula em curso de maior progresso; sem nenhuma, o
+     *  1.º destaque; sem nada, o bloco fica escondido. Não
+     *  sobrepõe um hero já conduzido pelo foco. */
+    private fun showAmbientDefault() {
+        if (!TvUtils.isTv(this)) return
+        if (ambientKey != null) return
+        val sm = SessionManager.get(this)
+        val best = sm.getRecents()
+            .filter { sm.hasResume(it.folderPath, it.videoName) }
+            .maxByOrNull { sm.getResumeProgress(it.folderPath, it.videoName) }
+        if (best != null) {
+            val courseName = Format.extractCourseName(best.folderPath)
+            updateAmbientHero(
+                title = LessonDescription.folderNameFromPath(best.folderPath)
+                    ?: Format.lessonDisplayTitle(best.videoName, courseName),
+                meta = courseName,
+                progress = sm.getResumeProgress(best.folderPath, best.videoName),
+                thumbUrl = best.thumbnailLink,
+                coverPath = best.folderPath
+            )
+            return
+        }
+        val first = destaquesAdapter?.currentList?.firstOrNull()
+        if (first != null) {
+            updateAmbientHero(first.title, first.subtitle, null, first.coverUrl, first.path)
+        }
+    }
+
     // ──────────── v2.0.0: Continue rail multi-item ────────────
 
     private fun setupContinueRail() {
@@ -841,6 +984,8 @@ class HomeActivity : AppCompatActivity() {
             // celular este ramo é o recents.isEmpty() de sempre e o
             // setupFeaturedContinue esconde a seção, como antes).
             setupFeaturedContinue(recents)
+            // 2.7.58 — hero ambiente por defeito (TV).
+            showAmbientDefault()
             return
         }
 
@@ -884,7 +1029,17 @@ class HomeActivity : AppCompatActivity() {
             val courseName = Format.extractCourseName(r.folderPath)
             val displayTitle = LessonDescription.folderNameFromPath(r.folderPath)
                 ?: Format.lessonDisplayTitle(r.videoName, courseName)
-            val subtitle = Format.continueSubtitle(displayTitle, r.videoName, courseName, TvUtils.isTv(this))
+            // 2.7.58 — na TV a meta do cartão Continuar é
+            // "matéria · assunto" (decisão 19:24): matéria = nome
+            // do curso, assunto = tema da aula (o título). No
+            // celular fica o subtítulo de sempre.
+            val subtitle = if (isTvHere) {
+                if (courseName.isNotBlank() &&
+                    !courseName.equals(displayTitle, ignoreCase = true)
+                ) "$courseName · $displayTitle" else displayTitle
+            } else {
+                Format.continueSubtitle(displayTitle, r.videoName, courseName, TvUtils.isTv(this))
+            }
             RailItem(
                 title = r.videoName,
                 displayTitle = displayTitle,
@@ -939,10 +1094,15 @@ class HomeActivity : AppCompatActivity() {
                 whiteFocusRing = true,
                 // 2.7.52 — cartões grandes na TV (conceito
                 // tv-home-nova); no celular a base fica a de sempre.
-                // 2.7.56 — base da proposta Plex: 240dp; a posição 0
-                // (o item em curso) é o cartão largo de 320dp.
+                // 2.7.56 — base da proposta Plex: 240dp.
+                // 2.7.58 — cartões do Continuar UNIFORMES na TV
+                // (decisão 19:24): a posição 0 deixa de ser larga
+                // (firstCardWideDp = 0) e o corpo colorido sai
+                // (plainTvBody) — só imagem + progresso na aresta +
+                // título por baixo, como no Plex.
                 tvCardBaseDp = if (isTvHere) 240f else 200f,
-                firstCardWideDp = if (isTvHere) 320f else 0f
+                firstCardWideDp = 0f,
+                plainTvBody = isTvHere
             ) { item ->
                 // Ronda 18 Frente C (F1) — a lambda nasce UMA só vez
                 // (firstBuild) mas os recents mudam a cada vídeo visto:
@@ -972,6 +1132,8 @@ class HomeActivity : AppCompatActivity() {
         }
         continueAdapter?.let { backfillRecentThumbs(recents, railItems, it) }
         setupFeaturedContinue(recents)
+        // 2.7.58 — hero ambiente por defeito (TV).
+        showAmbientDefault()
     }
 
     /**
@@ -1274,11 +1436,19 @@ class HomeActivity : AppCompatActivity() {
             when (item) {
                 SideMenuView.MenuItem.HOME -> binding.homeScroll.smoothScrollTo(0, 0)
                 SideMenuView.MenuItem.DRIVES -> scrollToDrives()
-                SideMenuView.MenuItem.SIMULADOS -> openSimulados(this)
-                SideMenuView.MenuItem.MEGGY ->
-                    startActivity(Intent(this, SearchActivity::class.java))
+                // 2.7.58 — menu TV novo (decisões 19:19–19:25): sem
+                // Meggy nem Simulados na TV. MEUS CURSOS abre os
+                // cursos do aluno; CONTINUAR abre o detalhe do curso
+                // em curso (caminho normal — NUNCA o player directo);
+                // DOWNLOADS é a lista real de baixados.
+                SideMenuView.MenuItem.MY_COURSES ->
+                    startActivity(Intent(this, MyCoursesActivity::class.java))
+                SideMenuView.MenuItem.CONTINUE ->
+                    TvRailHost.openContinueCourse(this)
                 SideMenuView.MenuItem.DOWNLOADS ->
-                    startActivity(Intent(this, MyListActivity::class.java))
+                    startActivity(
+                        Intent(this, com.meggy.app.ui.downloads.DownloadsActivity::class.java)
+                    )
                 SideMenuView.MenuItem.SETTINGS ->
                     startActivity(Intent(this, SettingsActivity::class.java))
             }
@@ -1362,13 +1532,33 @@ class HomeActivity : AppCompatActivity() {
             )
         }
         destaquesAdapter?.submitList(fallback)
+        // 2.7.58 — hero ambiente por defeito (TV): sem aula em
+        // curso, o 1.º destaque alimenta o topo.
+        showAmbientDefault()
         lifecycleScope.launch {
             val courses = api.getFeaturedCourses()
             if (!courses.isNullOrEmpty()) {
+                // 2.7.58 — subtítulo "N aulas" (SPEC §3.1.2): o
+                // total REAL vem do mapa de totais unificado que a
+                // Home já busca (getUnifiedCourseTotals via
+                // ApiService.unifiedTotalFor); sem total conhecido
+                // fica "" (nunca um número inventado).
+                val totals = withContext(Dispatchers.IO) {
+                    try {
+                        api.getUnifiedCourseTotals()
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
                 val items = courses.map { course ->
+                    val total = totals?.let {
+                        ApiService.unifiedTotalFor(it, course.coursePath)
+                    } ?: 0
                     HomeFeaturedItem(
                         title = course.courseName,
-                        subtitle = "",
+                        subtitle = if (total > 0) {
+                            if (total == 1) "1 aula" else "$total aulas"
+                        } else "",
                         badge = null,
                         coverUrl = course.coverUrl,
                         path = course.coursePath,
@@ -1377,6 +1567,7 @@ class HomeActivity : AppCompatActivity() {
                     )
                 }
                 destaquesAdapter?.submitList(items)
+                showAmbientDefault()
             }
         }
     }
@@ -2002,19 +2193,35 @@ class HomeActivity : AppCompatActivity() {
         const val EXTRA_SCROLL_TO_DRIVES = "scroll_to_drives"
 
         /**
-         * 2.7.48 (Q1 provisório) — "Simulados" abre o drive RETA FINAL
-         * TRTs (descrição "Simulados + resumos", índice 0). Não há
-         * Simulados no app — o drive é o destino existente. Usado pela
-         * barra inferior (todas as abas) e pelo menu lateral da TV.
+         * 2.7.58 — destino REAL: a página de Simulados do app
+         * (SimuladoActivity: matéria/assunto/quantidade/tempo,
+         * banco de questões do servidor). Substitui o provisório
+         * 2.7.48 (drive RETA FINAL TRTs). Ponto centralizado usado
+         * pela barra inferior de todas as abas.
          */
         fun openSimulados(context: Context) {
-            val drive = DriveItem.ALL.firstOrNull { it.name == "RETA FINAL TRTs" }
-                ?: DriveItem.ALL.firstOrNull { it.index == 0 }
-                ?: return
-            val intent = Intent(context, DetailActivity::class.java)
-            intent.putExtra("drivePath", "/${drive.index}:/")
-            intent.putExtra("folderName", drive.name)
-            context.startActivity(intent)
+            context.startActivity(
+                Intent(context, com.meggy.app.ui.simulado.SimuladoActivity::class.java)
+            )
+        }
+
+        /**
+         * 2.7.58 — destino REAL: o chat da Meggy NA NUVEM
+         * (MeggyChatActivity). Ponto centralizado usado pela barra
+         * inferior de todas as abas e pelo player (com a aula em
+         * foco como extras).
+         */
+        fun openMeggyChat(
+            context: Context,
+            lessonPath: String? = null,
+            lessonName: String? = null,
+            videoName: String? = null
+        ) {
+            context.startActivity(
+                com.meggy.app.ui.meggy.MeggyChatActivity.intent(
+                    context, lessonPath, lessonName, videoName
+                )
+            )
         }
     }
 

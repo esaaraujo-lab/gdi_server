@@ -97,6 +97,14 @@ class RailAdapter(
      * só TV (o bloco de geometria é gateado por isTv).
      */
     private val firstCardWideDp: Float = 0f,
+    /**
+     * 2.7.58 — corpo SEM cor fixa na TV (correcção do Elton 19:24:
+     * cartões do Continuar uniformes — só imagem + progresso na
+     * aresta + título por baixo, sem o corpo colorido com texto
+     * dentro). A Home TV passa true SÓ no rail Continuar; os outros
+     * rails mantêm a cor fixa dos Tiles. Sem efeito no celular.
+     */
+    private val plainTvBody: Boolean = false,
     // Build-fix 2.7.16: onClick em ULTIMO — os call sites usam trailing
     // lambda; com onClick em 2o a lambda ligava a nextFocusDownId (Int)
     // e onClick ficava sem valor (compileReleaseKotlin falhou na 2.7.15).
@@ -200,6 +208,10 @@ class RailAdapter(
 
     /** Posição atual do item nos dados do adapter (-1 se já não existir). */
     fun indexOf(item: RailItem): Int = items.indexOf(item)
+
+    /** 2.7.58 — leitura p/ o hero ambiente da Home TV (o item na
+     *  posição focada alimenta o topo). */
+    fun itemAt(position: Int): RailItem? = items.getOrNull(position)
 
     inner class VH(val binding: ItemRailCardBinding) : RecyclerView.ViewHolder(binding.root) {
         init {
@@ -338,7 +350,13 @@ class RailAdapter(
             if (itemColors.size != items.size) refreshItemColors()
             val fixedColor = itemColors[position]
             cardBg.background = CardGradient.drawable(res, fixedColor)
-            cardBody?.setBackgroundColor(fixedColor)
+            // 2.7.58 — no rail Continuar da TV o corpo fica limpo
+            // (fundo da tela), sem a cor fixa pintada (ver plainTvBody).
+            if (plainTvBody && TvUtils.isTv(ctx)) {
+                cardBody?.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            } else {
+                cardBody?.setBackgroundColor(fixedColor)
+            }
 
             // v2.7.11 onda 2 + camada (3) ESTRITA (2.7.13, sem 'geral')
             // — thumb fotográfica quando houver; sem ela, a imagem da

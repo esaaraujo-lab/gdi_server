@@ -111,6 +111,9 @@ class DriveRailAdapter(
         return changed
     }
 
+    /** 2.7.58 — leitura p/ o hero ambiente da Home TV. */
+    fun itemAt(position: Int): DriveRailItem? = items.getOrNull(position)
+
     /** Ronda 10 Frente C — substitui os itens do rail (fixos +
      *  admin) e redesenha. */
     fun updateItems(newItems: List<DriveRailItem>): Boolean {
