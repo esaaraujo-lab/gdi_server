@@ -1,5 +1,5 @@
 {
- "version": 2,
+ "version": 3,
  "images": [
   {
    "id": "tjsc",
@@ -30,7 +30,7 @@
     "recurso especial",
     "juizado"
    ],
-   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-processual-civil.jpg"
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-direito-processual-civil.webp"
   },
   {
    "id": "direito-processual-penal",
@@ -39,7 +39,7 @@
     "processual penal",
     "processo penal"
    ],
-   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-processual-penal.jpg"
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-direito-processual-penal.webp"
   },
   {
    "id": "lingua-portuguesa",
@@ -48,12 +48,11 @@
     "portugues",
     "gramatica",
     "interpretacao de texto",
-    "literatura",
     "linguagens",
     "leitura dinamica",
     "metaleitura"
    ],
-   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/lingua-portuguesa.jpg"
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-lingua-portuguesa.webp"
   },
   {
    "id": "direito-penal",
@@ -63,7 +62,7 @@
     "codigo penal",
     "criminal"
    ],
-   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-penal.jpg"
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-direito-penal.webp"
   },
   {
    "id": "penal-crimes-administracao",
@@ -395,9 +394,11 @@
    "id": "etica",
    "keywords": [
     "etica",
-    "etica no servico publico"
+    "etica no servico publico",
+    "etica profissional",
+    "estatuto da oab"
    ],
-   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/etica.jpg"
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-etica-profissional.webp"
   },
   {
    "id": "carreiras-educacionais",
@@ -413,11 +414,10 @@
     "administrativo",
     "licitacoes",
     "agentes publicos",
-    "administracao publica",
     "igepp",
     "politicas publicas"
    ],
-   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-administrativo.jpg"
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-direito-administrativo.webp"
   },
   {
    "id": "direito-constitucional",
@@ -426,7 +426,7 @@
     "constitucional",
     "constituicao"
    ],
-   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-constitucional.jpg"
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-direito-constitucional.webp"
   },
   {
    "id": "direito-previdenciario",
@@ -435,15 +435,16 @@
     "previdenciario",
     "inss"
    ],
-   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-previdenciario.jpg"
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-direito-previdenciario.webp"
   },
   {
    "id": "atualidades",
    "keywords": [
     "atualidades",
-    "conhecimentos gerais"
+    "conhecimentos gerais",
+    "atualidades do brasil"
    ],
-   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/atualidades.jpg"
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-atualidades.webp"
   },
   {
    "id": "direito-trabalho",
@@ -453,7 +454,7 @@
     "clt",
     "trabalhista"
    ],
-   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-trabalho.jpg"
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-direito-do-trabalho.webp"
   },
   {
    "id": "direito-tributario",
@@ -462,16 +463,17 @@
     "tributario",
     "tributos"
    ],
-   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-tributario.jpg"
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-direito-tributario.webp"
   },
   {
    "id": "raciocinio-logico",
    "keywords": [
     "raciocinio logico",
     "raciocinio",
-    "logica"
+    "logica",
+    "rlm"
    ],
-   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/raciocinio-logico.jpg"
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-raciocinio-logico.webp"
   },
   {
    "id": "legislacao",
@@ -516,7 +518,7 @@
     "codigo civil",
     "civil"
    ],
-   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/direito-civil.jpg"
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-direito-civil.webp"
   },
   {
    "id": "informatica",
@@ -528,14 +530,16 @@
     "shell script",
     "landing pages"
    ],
-   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/informatica.jpg"
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-informatica.webp"
   },
   {
    "id": "matematica",
    "keywords": [
-    "matematica"
+    "matematica",
+    "matematica financeira",
+    "calculo"
    ],
-   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/matematica.jpg"
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-matematica.webp"
   },
   {
    "id": "ombros",
@@ -558,9 +562,10 @@
    "id": "ingles",
    "keywords": [
     "ingles",
-    "english"
+    "english",
+    "lingua inglesa"
    ],
-   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/ingles.jpg"
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-ingles.webp"
   },
   {
    "id": "pilates",
@@ -606,9 +611,11 @@
     "sanar",
     "medplus",
     "lair ribeiro",
-    "casalmedresumos"
+    "casalmedresumos",
+    "saude",
+    "saude publica"
    ],
-   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/medicina.jpg"
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-saude.webp"
   },
   {
    "id": "psicologia",
@@ -682,56 +689,60 @@
    "id": "biologia",
    "keywords": [
     "biologia",
-    "natureza"
+    "natureza",
+    "ciencias biologicas"
    ],
-   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/biologia.jpg"
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-biologia.webp"
   },
   {
    "id": "fisica",
    "keywords": [
     "fisica"
    ],
-   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/fisica.jpg"
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-fisica.webp"
   },
   {
    "id": "quimica",
    "keywords": [
     "quimica"
    ],
-   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/quimica.jpg"
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-quimica.webp"
   },
   {
    "id": "historia",
    "keywords": [
     "historia",
-    "humanas"
+    "humanas",
+    "historia do brasil",
+    "historia geral"
    ],
-   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/historia.jpg"
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-historia.webp"
   },
   {
    "id": "geografia",
    "keywords": [
     "geografia"
    ],
-   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/geografia.jpg"
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-geografia.webp"
   },
   {
    "id": "filosofia",
    "keywords": [
     "filosofia",
-    "sociologia",
     "conservadorismo",
     "marx"
    ],
-   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/filosofia.jpg"
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-filosofia.webp"
   },
   {
    "id": "redacao",
    "keywords": [
     "redacao",
-    "discursivas"
+    "discursivas",
+    "discursiva",
+    "dissertacao"
    ],
-   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/redacao.jpg"
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-redacao.webp"
   },
   {
    "id": "russo",
@@ -756,9 +767,12 @@
     "gestusp",
     "concursos sme",
     "ta nalousa",
-    "tanalousa"
+    "tanalousa",
+    "pedagogia",
+    "educacao",
+    "carreiras educacionais"
    ],
-   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/pedagogia.jpg"
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-pedagogia.webp"
   },
   {
    "id": "estatistica",
@@ -857,6 +871,88 @@
     "meggy"
    ],
    "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/staging/modular/meggy/covers/geral.jpg"
+  },
+  {
+   "id": "direito-processual-do-trabalho",
+   "keywords": [
+    "direito processual do trabalho",
+    "processo do trabalho",
+    "processual do trabalho"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-direito-processual-do-trabalho.webp"
+  },
+  {
+   "id": "direito-empresarial",
+   "keywords": [
+    "direito empresarial",
+    "empresarial",
+    "direito comercial"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-direito-empresarial.webp"
+  },
+  {
+   "id": "direito-eleitoral",
+   "keywords": [
+    "direito eleitoral",
+    "eleitoral"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-direito-eleitoral.webp"
+  },
+  {
+   "id": "direitos-humanos",
+   "keywords": [
+    "direitos humanos",
+    "direitos fundamentais"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-direitos-humanos.webp"
+  },
+  {
+   "id": "literatura",
+   "keywords": [
+    "literatura"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-literatura.webp"
+  },
+  {
+   "id": "espanhol",
+   "keywords": [
+    "espanhol",
+    "lingua espanhola"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-espanhol.webp"
+  },
+  {
+   "id": "sociologia",
+   "keywords": [
+    "sociologia"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-sociologia.webp"
+  },
+  {
+   "id": "contabilidade",
+   "keywords": [
+    "contabilidade",
+    "ciencias contabeis"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-contabilidade.webp"
+  },
+  {
+   "id": "administracao",
+   "keywords": [
+    "administracao",
+    "administracao publica",
+    "administracao geral"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-administracao.webp"
+  },
+  {
+   "id": "economia",
+   "keywords": [
+    "economia",
+    "economia brasileira",
+    "financas publicas"
+   ],
+   "url": "https://cdn.jsdelivr.net/gh/esaaraujo-lab/gdi_server@main/capas-materias/capa-economia.webp"
   }
  ]
 }
