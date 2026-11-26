@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v2.1.46 — Anel do hero ambiente da TV: borda luminosa de 3dp na
+     cor de foco da app (tile_focus_ring, laranja da marca #FF6B35),
+     raio 24dp a acompanhar o recorte do bloco. Desenhado por uma
+     View por cima de todo o conteúdo do hero, só quando o hero está
+     visível — é o feedback visual permanente do bloco. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="24dp" />
+    <solid android:color="@android:color/transparent" />
+    <stroke
+        android:width="@dimen/focus_ring_width"
+        android:color="@color/tile_focus_ring" />
+</shape>
