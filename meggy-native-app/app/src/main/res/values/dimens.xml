@@ -63,7 +63,10 @@
     <dimen name="text_monogram">28sp</dimen>
 
     <!-- ── Cards · celular ── -->
-    <dimen name="rail_card_width">168dp</dimen>
+    <!-- 2.7.58 (SPEC §3.1): cartões dos rails do celular mais
+         compactos, estilo Plex (132dp; era 168dp). A TV não usa
+         este dimen (larguras vêm do código/TvAutoFit). -->
+    <dimen name="rail_card_width">132dp</dimen>
     <!-- R26 — cartão do destaque (rail horizontal): 320dp para o
          próximo cartão espreitar (telas de 360–430dp) sem espremer
          o texto (thumb 112dp + texto); o rail_card_width (168dp)
