@@ -98,11 +98,24 @@ class SettingsActivity : AppCompatActivity() {
                     R.id.nav_settings -> true
                     R.id.nav_home -> { startActivity(Intent(this, HomeActivity::class.java)); overridePendingTransition(0, 0); true }
                     R.id.nav_search -> { startActivity(Intent(this, SearchActivity::class.java)); overridePendingTransition(0, 0); true }
+                    // v2.1.44 — assistente fitness (só celular).
+                    R.id.nav_fitness -> {
+                        startActivity(Intent(this, com.bibigyn.app.ui.fitness.FitnessChatActivity::class.java)); overridePendingTransition(0, 0); true
+                    }
                     R.id.nav_mylist -> { startActivity(Intent(this, MyListActivity::class.java)); overridePendingTransition(0, 0); true }
                     else -> false
                 }
             }
         }
+
+        // v2.1.44 — rail lateral da TV (porte da Meggy 2.7.58).
+        com.bibigyn.app.ui.home.TvRailHost.attach(
+            this,
+            findViewById(R.id.tvSideMenu),
+            findViewById(R.id.settingsContent),
+            com.bibigyn.app.ui.home.SideMenuView.MenuItem.SETTINGS,
+            firstContentId = R.id.switchNotifications
+        )
 
         val sm = SessionManager.get(this)
 
@@ -166,6 +179,20 @@ class SettingsActivity : AppCompatActivity() {
                 if (isChecked) "Cache de vídeo só em Wi-Fi"
                 else "Cache de vídeo em qualquer rede",
                 Toast.LENGTH_SHORT).show()
+        }
+        // v2.1.44 — interruptor do rail lateral da TV (a linha só
+        // existe nos layouts com o id; no celular fica GONE).
+        if (TvUtils.isTv(this)) {
+            binding.switchTvSideMenu.isChecked = sm.tvSideMenuEnabled
+            binding.switchTvSideMenu.setOnCheckedChangeListener { _, isChecked ->
+                sm.tvSideMenuEnabled = isChecked
+                Toast.makeText(this,
+                    if (isChecked) "Menu lateral da TV ativado"
+                    else "Menu lateral da TV desativado",
+                    Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            binding.tvSideMenuRow.visibility = View.GONE
         }
         binding.switchSubtitles.isChecked = sm.subtitlesEnabled
         binding.switchSubtitles.setOnCheckedChangeListener { _, isChecked ->
