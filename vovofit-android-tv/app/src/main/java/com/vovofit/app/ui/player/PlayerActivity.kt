@@ -36,6 +36,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.PlaybackException
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
@@ -518,6 +519,9 @@ class PlayerActivity : AppCompatActivity() {
         binding.restartButton.setOnClickListener { exitRestIfActive(); restartVideo() }
         binding.sleepTimerButton.setOnClickListener { showSleepTimerDialog() }
         binding.favButton.setOnClickListener { exitRestIfActive(); toggleFavoriteCurrent() }
+        // 1.0.40 — Baixar (Downloads reais): o chip só existe no
+        // layout do celular (binding nullable na TV).
+        binding.btnDownloadInfo?.setOnClickListener { exitRestIfActive(); onDownloadClicked() }
 
         // v1.0.6 — feedback visual dos botões da barra (foco D-pad na TV
         // + escala + anel do seletor): sem isso o botão focado/pressionado
@@ -531,9 +535,11 @@ class PlayerActivity : AppCompatActivity() {
             binding.btnPlayPauseBar, binding.btnRestBar,
             binding.btnSpeedBar, binding.btnExitFullscreen, binding.btnSpeedInfo,
             binding.btnRestInfo, binding.btnFullscreen,
+            binding.btnDownloadInfo,
             binding.centerPlayPause
         ).forEach { FocusAnimator.attach(it, isTv) }
         updateFavButton()
+        refreshDownloadChip()
 
         // v1.0.5 — botão ⛶ do controller NATIVO do ExoPlayer (retrato):
         // o Media3 só mostra o botão de tela cheia do controller quando
@@ -1518,10 +1524,53 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+    /** Estado do chip Baixar: "Baixar" ou "Baixado ✓" (registo
+     *  dos Downloads + ficheiro presente). 1.0.40 — porte da Meggy
+     *  2.7.58; o chip só existe no celular. */
+    private fun refreshDownloadChip() {
+        val chip = binding.btnDownloadInfo ?: return
+        val item = currentItem ?: return
+        val fp = item.folderPath ?: intent.getStringExtra(EXTRA_FOLDER_PATH) ?: ""
+        val entry = com.vovofit.app.util.DownloadRegistry.find(this, fp, item.name)
+        val done = entry != null && entry.file().exists()
+        chip.text = getString(
+            if (done) R.string.download_done else R.string.player_download
+        )
+    }
+
+    /** Baixar a aula actual: DownloadManager p/ Download/VovoFit/
+     *  (o MESMO escritor da tela Downloads), com a porta Wi-Fi. */
+    private fun onDownloadClicked() {
+        val item = currentItem ?: return
+        val fp = item.folderPath ?: intent.getStringExtra(EXTRA_FOLDER_PATH) ?: return
+        val url = currentUrl ?: return
+        if (SessionManager.get(this).wifiOnlyDownloads && !VideoCache.isWifi(this)) {
+            Snackbar.make(binding.root, R.string.download_wifi_only, Snackbar.LENGTH_LONG).show()
+            return
+        }
+        when (com.vovofit.app.util.VideoDownloader.enqueue(
+            this, url, fp, item.name, displayTitle(item)
+        )) {
+            is com.vovofit.app.util.VideoDownloader.Outcome.Started ->
+                Snackbar.make(binding.root, R.string.download_started, Snackbar.LENGTH_SHORT).show()
+            is com.vovofit.app.util.VideoDownloader.Outcome.AlreadyDownloaded ->
+                Snackbar.make(binding.root, R.string.download_done, Snackbar.LENGTH_SHORT).show()
+            is com.vovofit.app.util.VideoDownloader.Outcome.Failed ->
+                Snackbar.make(binding.root, R.string.download_failed, Snackbar.LENGTH_LONG).show()
+        }
+        refreshDownloadChip()
+    }
+
     private fun initialisePlayer() {
         val item = currentItem
         val link = item?.link
-        val url = if (!link.isNullOrEmpty()) linkBaseUrl() + link else intent.getStringExtra(EXTRA_URL)
+        // 1.0.40 — ficheiro local (Downloads): o extra manda e a
+        // fonte de dados é a de ficheiros (por esquema), nunca o
+        // upstream HTTP/cache de rede.
+        val localFile = intent.getStringExtra(EXTRA_LOCAL_FILE)
+        val url = if (!localFile.isNullOrBlank()) localFile
+            else if (!link.isNullOrEmpty()) linkBaseUrl() + link
+            else intent.getStringExtra(EXTRA_URL)
         if (url.isNullOrBlank()) {
             // R19B (P4): URL em branco NÃO fecha o Player em
             // silêncio — o finish() aqui devolvia o utilizador à
@@ -1537,9 +1586,14 @@ class PlayerActivity : AppCompatActivity() {
         val requestProperties = if (!cookie.isNullOrBlank()) mapOf("Cookie" to "session=$cookie") else emptyMap()
         val sm = SessionManager.get(this)
         val writeToCache = !sm.wifiOnlyDownloads || VideoCache.isWifi(this)
-        val dataSourceFactory = VideoCache.dataSourceFactory(
-            this, VovoFitApp.okHttpClient, writeToCache, requestProperties
-        )
+        val dataSourceFactory = if (!localFile.isNullOrBlank()) {
+            // Ficheiro local: DefaultDataSource (file:// → ficheiro).
+            DefaultDataSource.Factory(this)
+        } else {
+            VideoCache.dataSourceFactory(
+                this, VovoFitApp.okHttpClient, writeToCache, requestProperties
+            )
+        }
 
         trackSelector = DefaultTrackSelector(this)
         val exo = ExoPlayer.Builder(this)
@@ -1549,7 +1603,7 @@ class PlayerActivity : AppCompatActivity() {
 
         val playlist = PlaylistManager.all()
         val startIndex = PlaylistManager.index()
-        if (playlist.isNotEmpty() && startIndex in playlist.indices) {
+        if (localFile.isNullOrBlank() && playlist.isNotEmpty() && startIndex in playlist.indices) {
             val mediaItems = playlist.map { file ->
                 val fullUrl = linkBaseUrl() + (file.link ?: "")
                 MediaItem.Builder().setUri(fullUrl).build()
@@ -1561,9 +1615,16 @@ class PlayerActivity : AppCompatActivity() {
         exo.prepare()
 
         val isReview = isWatched(item)
-        val saved = if (isReview) 0L else resumeFor(item, url)
+        // 1.0.40 — "Assistir do Início" verdadeiro: o extra força a
+        // posição 0 (o resume guardado não é apagado — só não é
+        // aplicado neste lançamento).
+        val fromStart = intent.getBooleanExtra(EXTRA_FROM_START, false)
+        val saved = if (isReview || fromStart) 0L else resumeFor(item, url)
         if (saved > 0L && !isReview) {
-            exo.seekTo(startIndex, saved)
+            // Ficheiro local = item único (índice 0); na playlist
+            // remota o índice é o da playlist, como sempre.
+            val seekIndex = if (localFile.isNullOrBlank()) startIndex else 0
+            exo.seekTo(seekIndex, saved)
         }
         if (isReview) {
             binding.root.post {
@@ -1640,6 +1701,7 @@ class PlayerActivity : AppCompatActivity() {
                         subtitleVttFile = null
                         subtitleRetryCount = 0
                         setTitles(newItem)
+                        refreshDownloadChip()
                         updateAudioCover(newItem)
                         updatePrevNextButtons()
                         // Frente R4C — a aula mudou: a notificação
@@ -2418,6 +2480,12 @@ class PlayerActivity : AppCompatActivity() {
         const val EXTRA_URL = "playback_url"
         const val EXTRA_TITLE = "playback_title"
         const val EXTRA_FOLDER_PATH = "playback_folder_path"
+        // 1.0.40 — ficheiro local dos Downloads (file://): a fonte
+        // manda sobre o link remoto (ver initialisePlayer).
+        const val EXTRA_LOCAL_FILE = "playback_local_file"
+        // 1.0.40 — "Assistir do Início": força a posição 0 neste
+        // lançamento (o resume guardado não é apagado).
+        const val EXTRA_FROM_START = "playback_from_start"
 
         /**
          * v1.0.8 — true enquanto o player está em primeiro plano. O
