@@ -3,7 +3,10 @@ package com.bibigyn.app.ui.fitness
 import android.os.Bundle
 import android.view.View
 import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -36,6 +39,17 @@ import org.json.JSONObject
  * de erro clicável (Tentar de novo) SEM perder o texto digitado — o
  * campo só limpa depois de a mensagem entrar no histórico. Molde:
  * MeggyChatActivity da Meggy 2.7.58.
+ *
+ * v2.1.47 — PRONTO PARA A BIBLIOTECA DE CONHECIMENTO (servidor,
+ * worker v2.15.97): a API não muda — o chat continua a chamar
+ * POST /api/ai com a mesma persona e passa a receber respostas
+ * alimentadas pelas fichas. No cliente: (1) chips de temas da
+ * biblioteca no topo (temas das fichas de fitness-biblioteca/
+ * INDICE.md) — tocar envia a pergunta pelo caminho normal de
+ * envio; (2) histórico enviado sobe de 8 para as últimas 10
+ * mensagens, para a síntese multi-tema ter contexto. As respostas
+ * longas/estratégia renderizam na bolha existente com o
+ * MarkdownRenderer completo (Markwon + tabelas), sem truncamento.
  */
 class FitnessChatActivity : AppCompatActivity() {
 
@@ -60,19 +74,69 @@ class FitnessChatActivity : AppCompatActivity() {
 
         findViewById<View>(R.id.fitnessChatSend).setOnClickListener { sendCurrent() }
 
+        // v2.1.47 — chips de temas da biblioteca (acima das mensagens).
+        setupTopicChips()
+
         // Saudação da assistente (identidade BiBi).
         adapter.add(ChatAdapter.Msg("assistant", getString(R.string.fitness_chat_greeting)))
     }
 
+    /**
+     * v2.1.47 — Chips de perguntas rápidas alinhados com os temas
+     * das fichas da Biblioteca de Conhecimento (fitness-biblioteca/
+     * INDICE.md: tirzepatida, suplementos com evidência, estratégia
+     * de emagrecimento, creatina/cafeína, vitamina D/combinações).
+     * Tocar num chip ENVIA a pergunta completa pelo mesmo caminho
+     * do envio normal (sendUserText) — sem rotas nem formato novos.
+     */
+    private fun setupTopicChips() {
+        val container = findViewById<LinearLayout>(R.id.fitnessChatChips) ?: return
+        val density = resources.displayMetrics.density
+        fun dp(v: Int): Int = (v * density).toInt()
+        val topics = listOf(
+            R.string.fitness_chip_tirzepatida_label to R.string.fitness_chip_tirzepatida_question,
+            R.string.fitness_chip_suplementos_label to R.string.fitness_chip_suplementos_question,
+            R.string.fitness_chip_estrategia_label to R.string.fitness_chip_estrategia_question,
+            R.string.fitness_chip_creatina_label to R.string.fitness_chip_creatina_question,
+            R.string.fitness_chip_vitaminas_label to R.string.fitness_chip_vitaminas_question
+        )
+        for ((labelRes, questionRes) in topics) {
+            val chip = TextView(this).apply {
+                text = getString(labelRes)
+                setTextColor(ContextCompat.getColor(context, R.color.md_on_surface))
+                textSize = 14f
+                background = ContextCompat.getDrawable(context, R.drawable.chip_outline)
+                isClickable = true
+                isFocusable = true
+                setPadding(dp(14), dp(8), dp(14), dp(8))
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { marginEnd = dp(8) }
+                setOnClickListener { sendUserText(getString(questionRes)) }
+            }
+            container.addView(chip)
+        }
+    }
+
     private fun sendCurrent() {
-        if (sending) return
         val text = input.text?.toString()?.trim().orEmpty()
         if (text.isEmpty()) return
+        if (!sendUserText(text)) return
         // Só limpa o campo DEPOIS de a mensagem entrar no histórico.
-        adapter.add(ChatAdapter.Msg("user", text))
         input.text?.clear()
+    }
+
+    /** Envia uma pergunta (campo de texto ou chip de tema) pelo
+     *  caminho normal: entra no histórico como mensagem do usuário
+     *  e segue para send(). Devolve false se já há um envio a
+     *  decorrer (o chamador mantém então o texto no campo). */
+    private fun sendUserText(text: String): Boolean {
+        if (sending) return false
+        adapter.add(ChatAdapter.Msg("user", text))
         scrollToEnd()
         send(text)
+        return true
     }
 
     private fun retryLast() {
@@ -161,12 +225,14 @@ class FitnessChatActivity : AppCompatActivity() {
         // como assistente de saúde/fitness da BiBi (allowlist do
         // servidor; sem o campo, a rota comporta-se como a Meggy).
         body.put("persona", PERSONA)
-        // Histórico: últimas 8 trocas REAIS (sem a saudação inicial
-        // nem bolhas de erro), no formato {role, content}.
+        // Histórico: últimas 10 trocas REAIS (sem a saudação inicial
+        // nem bolhas de erro), no formato {role, content}. v2.1.47:
+        // sobe de 8 para 10 — a síntese multi-tema da biblioteca
+        // (estratégia que cruza fichas) precisa de mais contexto.
         val history = adapter.messages.filter {
             !it.isError && it.text != getString(R.string.fitness_chat_greeting)
         }
-        val window = history.takeLast(9).dropLast(1) // exclui a msg actual (já em "message")
+        val window = history.takeLast(11).dropLast(1) // exclui a msg actual (já em "message")
         val arr = JSONArray()
         for (m in window) {
             val o = JSONObject()
