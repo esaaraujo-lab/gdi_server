@@ -1,0 +1,260 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  v2.7.6 — Buscar (conceito Buscar): header poodle + "Meggy", barra
+  arredondada, chips Todos/Concursos/Cursos/Aulas/Resumos, "Resultados"
+  com cards horizontais (thumb + título 2 linhas + metadados +
+  progresso + pill "Em andamento"), "Buscas recentes" com chips.
+  Ícones da bottom nav = os do app atual (não os do conceito).
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/md_background">
+
+    <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/searchContent"
+    android:layout_marginStart="56dp"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/md_background"
+    android:clipChildren="false"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:background="@color/md_background"
+        android:elevation="0dp"
+        app:navigationIconTint="@color/md_primary"
+        app:title=""
+        app:titleTextAppearance="@style/TextAppearance.Material3.TitleLarge"
+        app:titleTextColor="@color/md_on_surface" />
+
+    <!-- 2.7.58 — cabeçalho com o avatar da Meggy (SPEC §3.4): a
+         carinha real + "Meggy" por cima do campo de busca (o
+         título da toolbar sai para não duplicar). -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="@dimen/content_margin">
+
+        <ImageView
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/avatar_circle"
+            android:clipToOutline="true"
+            android:contentDescription="@string/app_name"
+            android:scaleType="centerCrop"
+            android:src="@drawable/meggy_face" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/spacing_sm"
+            android:text="@string/app_name"
+            android:textColor="@color/md_on_surface"
+            android:textSize="@dimen/text_topbar_title"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_sm"
+        android:orientation="vertical"
+        android:paddingHorizontal="@dimen/content_margin">
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:boxBackgroundColor="@color/md_surface_container"
+            app:boxCornerRadiusTopStart="28dp"
+            app:boxCornerRadiusTopEnd="28dp"
+            app:boxCornerRadiusBottomStart="28dp"
+            app:boxCornerRadiusBottomEnd="28dp"
+            app:boxStrokeWidth="0dp">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/searchInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/search_hint"
+                android:imeOptions="actionSearch"
+                android:inputType="text"
+                android:textColor="@color/md_on_surface"
+                android:textColorHint="@color/md_on_surface_variant"
+                android:textSize="@dimen/text_card_subtitle" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Chips de filtro -->
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_md"
+            android:overScrollMode="never"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/filterChips"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/chipAll"
+                    android:layout_width="wrap_content"
+                    android:layout_height="@dimen/chip_height_interactive"
+                    android:layout_marginEnd="@dimen/spacing_sm"
+                    android:background="@drawable/btn_primary_pill"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:paddingHorizontal="@dimen/spacing_lg"
+                    android:text="Todos"
+                    android:textColor="@color/md_on_primary"
+                    android:textSize="@dimen/text_chip"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/chipConcursos"
+                    android:layout_width="wrap_content"
+                    android:layout_height="@dimen/chip_height_interactive"
+                    android:layout_marginEnd="@dimen/spacing_sm"
+                    android:background="@drawable/chip_outline"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:paddingHorizontal="@dimen/spacing_lg"
+                    android:text="Concursos"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_chip" />
+
+                <TextView
+                    android:id="@+id/chipCursos"
+                    android:layout_width="wrap_content"
+                    android:layout_height="@dimen/chip_height_interactive"
+                    android:layout_marginEnd="@dimen/spacing_sm"
+                    android:background="@drawable/chip_outline"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:paddingHorizontal="@dimen/spacing_lg"
+                    android:text="Cursos"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_chip" />
+
+                <TextView
+                    android:id="@+id/chipAulas"
+                    android:layout_width="wrap_content"
+                    android:layout_height="@dimen/chip_height_interactive"
+                    android:layout_marginEnd="@dimen/spacing_sm"
+                    android:background="@drawable/chip_outline"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:paddingHorizontal="@dimen/spacing_lg"
+                    android:text="Aulas"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_chip" />
+
+                <TextView
+                    android:id="@+id/chipResumos"
+                    android:layout_width="wrap_content"
+                    android:layout_height="@dimen/chip_height_interactive"
+                    android:background="@drawable/chip_outline"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:paddingHorizontal="@dimen/spacing_lg"
+                    android:text="Resumos"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_chip" />
+            </LinearLayout>
+        </HorizontalScrollView>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/resultsLabel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_xl"
+        android:paddingHorizontal="@dimen/content_margin"
+        android:text="@string/results_label"
+        android:textColor="@color/md_on_surface"
+        android:textSize="@dimen/text_section_title"
+        android:textStyle="bold" />
+
+    <!-- R15C: sem corte do foco (linhas de largura total escalam 1.10x na TV); sem padding — ver NOTES.md. -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recycler"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="@dimen/spacing_md"
+        android:clipToPadding="false"
+        android:clipChildren="false"
+        android:paddingHorizontal="@dimen/content_margin"
+        android:overScrollMode="never" />
+
+    <!-- Buscas recentes -->
+    <LinearLayout
+        android:id="@+id/recentSection"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="@dimen/content_margin"
+        android:paddingBottom="@dimen/spacing_md">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/recent_searches"
+            android:textColor="@color/md_on_surface"
+            android:textSize="@dimen/text_card_title"
+            android:textStyle="bold" />
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/recentChips"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_sm" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/emptyState"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:padding="@dimen/spacing_xl"
+        android:text="@string/browse_empty"
+        android:textColor="@color/md_on_surface_variant"
+        android:textSize="@dimen/text_detail_body"
+        android:visibility="gone" />
+
+    <!-- Bottom nav — oculta na TV (código) -->
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottomNav"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="@dimen/content_margin"
+        android:layout_marginBottom="@dimen/spacing_md"
+        android:background="@drawable/nav_bar_background"
+        android:elevation="@dimen/elevation_3"
+        app:itemActiveIndicatorStyle="@style/NavIndicatorPill"
+        app:itemIconTint="@color/bottom_nav_item_color"
+        app:itemTextColor="@color/bottom_nav_item_color"
+        app:labelVisibilityMode="labeled"
+        app:menu="@menu/bottom_nav_menu" />
+</LinearLayout>
+
+    <com.meggy.app.ui.home.SideMenuView
+        android:id="@+id/tvSideMenu"
+        android:layout_width="56dp"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+</FrameLayout>

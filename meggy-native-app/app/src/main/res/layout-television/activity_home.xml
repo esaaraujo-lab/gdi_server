@@ -144,6 +144,86 @@
                     android:textSize="@dimen/tv_body" />
             </LinearLayout>
 
+            <!-- 2.7.58 — HERO AMBIENTE (decisão 19:24): o topo
+                 mostra a arte do item focado em grande (backdrop +
+                 título + meta + progresso + selo Continuar). Não é
+                 focável: o OK faz-se no cartão focado. Sem item/sem
+                 arte fica gone (fundo limpo) — ver
+                 HomeActivity.updateAmbientHero. -->
+            <FrameLayout
+                android:id="@+id/ambientHero"
+                android:layout_width="match_parent"
+                android:layout_height="300dp"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:visibility="gone">
+
+                <ImageView
+                    android:id="@+id/ambientImage"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="@null"
+                    android:scaleType="centerCrop" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/hero_gradient" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="bottom"
+                    android:orientation="vertical"
+                    android:padding="@dimen/spacing_lg">
+
+                    <TextView
+                        android:id="@+id/ambientTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:maxLines="2"
+                        android:shadowColor="#000000"
+                        android:shadowDx="0"
+                        android:shadowDy="2"
+                        android:shadowRadius="6"
+                        android:textColor="@android:color/white"
+                        android:textSize="34sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/ambientMeta"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textColor="@color/md_primary"
+                        android:textSize="17sp" />
+
+                    <ProgressBar
+                        android:id="@+id/ambientProgress"
+                        style="?android:attr/progressBarStyleHorizontal"
+                        android:layout_width="320dp"
+                        android:layout_height="6dp"
+                        android:layout_marginTop="@dimen/spacing_sm"
+                        android:max="100"
+                        android:progressDrawable="@drawable/progress_horizontal"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_md"
+                        android:background="@drawable/btn_primary_pill"
+                        android:paddingHorizontal="20dp"
+                        android:paddingVertical="10dp"
+                        android:text="@string/ambient_continue"
+                        android:textColor="@color/md_on_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </FrameLayout>
+
             <!-- 2.7.41 (P1-13) — estados de carregamento/erro da home
                  (ver layout de celular; mesmos ids, tipos de TV). -->
             <LinearLayout

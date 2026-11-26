@@ -394,6 +394,150 @@
             android:textSize="16sp"
             android:textStyle="bold"
             android:visibility="gone" />
+
+        <!-- 2.7.58 — cartão de ERRO (desenho §4.7): substitui o
+             vídeo quando a reprodução falha; Tentar de novo +
+             Abrir o vídeo (celular). -->
+        <LinearLayout
+            android:id="@+id/player_error_card"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#E6000000"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="@dimen/spacing_lg"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/player_error_title"
+                android:textColor="@android:color/white"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:gravity="center"
+                android:text="@string/player_error_body"
+                android:textColor="@color/md_on_surface_variant"
+                android:textSize="14sp" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_lg"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/btn_error_retry"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/btn_primary_pill"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingHorizontal="20dp"
+                    android:paddingVertical="12dp"
+                    android:text="@string/player_error_retry"
+                    android:textColor="@color/md_on_primary"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/btn_error_open"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/spacing_sm"
+                    android:background="@drawable/chip_outline"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingHorizontal="20dp"
+                    android:paddingVertical="12dp"
+                    android:text="@string/player_error_open"
+                    android:textColor="@android:color/white" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 2.7.58 — cartão UP NEXT (adenda 19:34): anuncia a
+             próxima aula nos últimos 20 s e no fim do vídeo. -->
+        <LinearLayout
+            android:id="@+id/upnext_card"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="16dp"
+            android:background="@drawable/card_surface_rounded"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="@dimen/spacing_sm"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/upnext_card_thumb"
+                android:layout_width="96dp"
+                android:layout_height="54dp"
+                android:contentDescription="@null"
+                android:scaleType="centerCrop" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/spacing_sm"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/player_up_next"
+                    android:textColor="@color/md_primary"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/upnext_card_title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="2"
+                    android:maxWidth="180dp"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="13sp" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/btn_upnext_play"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/btn_primary_pill"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="6dp"
+                        android:text="@string/player_up_next_play"
+                        android:textColor="@color/md_on_primary"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/btn_upnext_close"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="@dimen/spacing_sm"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:padding="6dp"
+                        android:text="✕"
+                        android:textColor="@color/md_on_surface_variant"
+                        android:textSize="14sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
     </FrameLayout>
 
     <!-- Infos abaixo do vídeo (retrato, celular) -->
@@ -415,6 +559,21 @@
             android:paddingHorizontal="@dimen/content_margin"
             android:paddingBottom="@dimen/spacing_lg"
             android:paddingTop="@dimen/spacing_lg">
+
+            <!-- 2.7.58 — breadcrumb da aula (desenho §4.2):
+                 segmentos clicáveis abrem o detalhe nesse caminho.
+                 Vive na info_scroll (some em fullscreen/TV com ela);
+                 fica imediatamente abaixo do vídeo no retrato. -->
+            <TextView
+                android:id="@+id/player_breadcrumb"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/spacing_sm"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/md_on_surface_variant"
+                android:textSize="@dimen/text_card_subtitle"
+                android:visibility="gone" />
 
             <!-- Linha de controles (retrato) — v2.7.7: DUAS linhas.
                  Numa só linha, tempo + 4 pills não cabem em 360dp
@@ -494,6 +653,61 @@
                 </LinearLayout>
             </LinearLayout>
 
+            <!-- 2.7.58 — acções da aula (desenho §4.4 + destinos):
+                 Baixar (Download/Meggy/), Assistido, Meggy com a
+                 aula actual. Mesmo estilo dos chips existentes. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:gravity="center"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/btn_download_info"
+                    android:layout_width="wrap_content"
+                    android:layout_height="@dimen/button_height"
+                    android:background="@drawable/player_chip_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:paddingHorizontal="@dimen/spacing_lg"
+                    android:text="@string/player_download"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_chip"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/btn_watched_info"
+                    android:layout_width="wrap_content"
+                    android:layout_height="@dimen/button_height"
+                    android:layout_marginStart="@dimen/spacing_sm"
+                    android:background="@drawable/player_chip_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:paddingHorizontal="@dimen/spacing_lg"
+                    android:text="@string/player_mark_watched"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_chip"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/btn_meggy_info"
+                    android:layout_width="wrap_content"
+                    android:layout_height="@dimen/button_height"
+                    android:layout_marginStart="@dimen/spacing_sm"
+                    android:background="@drawable/player_chip_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:paddingHorizontal="@dimen/spacing_lg"
+                    android:text="@string/player_meggy"
+                    android:textColor="@color/md_on_surface"
+                    android:textSize="@dimen/text_chip"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
             <!-- Card "Continuar de onde parou" (áudio com posição salva) -->
             <LinearLayout
                 android:id="@+id/audio_resume_card"
@@ -541,6 +755,19 @@
                 android:layout_marginTop="4dp"
                 android:textColor="@color/md_primary"
                 android:textSize="@dimen/tv_body_lg" />
+
+            <!-- 2.7.58 — descrição da aula (cache; some sem
+                 descrição guardada) + tamanho do ficheiro. -->
+            <TextView
+                android:id="@+id/lesson_desc_info"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:ellipsize="end"
+                android:maxLines="3"
+                android:textColor="@color/md_on_surface_variant"
+                android:textSize="@dimen/text_card_subtitle"
+                android:visibility="gone" />
 
             <!-- Anterior / Próxima — R22 fix (Elton 2026-11-23
                  19:54, igual ao celular): sentence case (o
@@ -591,7 +818,29 @@
             <!-- v2.7.7: seção "A seguir" (playlist embutida no player)
                  REMOVIDA — a playlist vive na página (DetailActivity).
                  Anterior/Próxima acima continuam (avanço de aula). -->
-        </LinearLayout>
+                    <!-- 2.7.58 — "A seguir" (desenho §4.5): cabeçalho
+                 recolhível com a contagem + lista da playlist
+                 actual (recolhida por defeito, máx. 240dp). -->
+            <TextView
+                android:id="@+id/upnext_header"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_lg"
+                android:clickable="true"
+                android:focusable="true"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/text_card_title"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/upnext_list"
+                android:layout_width="match_parent"
+                android:layout_height="240dp"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:visibility="gone" />
+
+            </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 
     <!-- Bottom nav (retrato, celular) -->

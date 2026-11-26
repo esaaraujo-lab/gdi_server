@@ -1,0 +1,335 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 2.7.58 — Simulados (TV): mesmos ids do celular +
+     rail lateral persistente (TvRailHost).
+     (celular): setup (matéria/assunto/chips) +
+     quiz (pergunta → feedback) + resultado + histórico. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/md_background">
+
+    <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/simuladoContent"
+    android:layout_marginStart="56dp"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/md_background"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="@dimen/content_margin"
+        android:paddingVertical="@dimen/spacing_md">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/simuladoBack"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:clickable="true"
+                android:focusable="true"
+                android:padding="@dimen/spacing_sm"
+                android:text="‹"
+                android:textColor="@color/md_primary"
+                android:textSize="28sp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/spacing_sm"
+                android:layout_weight="1"
+                android:text="@string/simulado_title"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/text_topbar_title"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- ── Setup ── -->
+        <LinearLayout
+            android:id="@+id/simuladoSetupPanel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:text="@string/simulado_subject_label"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/text_card_title"
+                android:textStyle="bold" />
+
+            <Spinner
+                android:id="@+id/simuladoSubject"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_sm" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:text="@string/simulado_topic_label"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/text_card_title"
+                android:textStyle="bold" />
+
+            <Spinner
+                android:id="@+id/simuladoTopic"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_sm" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:text="@string/simulado_count_label"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/text_card_title"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:id="@+id/simuladoCountChips"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:orientation="horizontal" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:text="@string/simulado_time_label"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/text_card_title"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:id="@+id/simuladoTimeChips"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:orientation="horizontal" />
+
+            <Button
+                android:id="@+id/simuladoStart"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_lg"
+                android:background="@drawable/btn_primary_pill"
+                android:text="@string/simulado_start"
+                android:textColor="@color/md_on_primary"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/simuladoSetupState"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:gravity="center"
+                android:textColor="@color/md_on_surface_variant"
+                android:textSize="@dimen/text_card_subtitle"
+                android:visibility="gone" />
+
+            <Button
+                android:id="@+id/simuladoRetry"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:text="@string/simulado_retry"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/simuladoHistoryTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:text="@string/simulado_history_title"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/text_section_title"
+                android:textStyle="bold" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/simuladoHistory"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:nestedScrollingEnabled="false" />
+        </LinearLayout>
+
+        <!-- ── Quiz ── -->
+        <LinearLayout
+            android:id="@+id/simuladoQuizPanel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/quizCounter"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textColor="@color/md_on_surface_variant"
+                    android:textSize="@dimen/text_card_subtitle" />
+
+                <TextView
+                    android:id="@+id/quizTimer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/md_primary"
+                    android:textSize="@dimen/text_card_subtitle"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/quizStatement"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:lineSpacingMultiplier="1.3"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/text_detail_body" />
+
+            <LinearLayout
+                android:id="@+id/quizOptions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:orientation="vertical" />
+
+            <TextView
+                android:id="@+id/quizFeedback"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:textSize="@dimen/text_card_title"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/quizExplanation"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:lineSpacingMultiplier="1.3"
+                android:textColor="@color/md_on_surface_variant"
+                android:textSize="@dimen/text_card_subtitle"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_lg"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/quizPrev"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/simulado_prev" />
+
+                <Button
+                    android:id="@+id/quizNext"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/spacing_sm"
+                    android:layout_weight="1"
+                    android:text="@string/simulado_next" />
+
+                <Button
+                    android:id="@+id/quizFinish"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/spacing_sm"
+                    android:layout_weight="1"
+                    android:background="@drawable/btn_primary_pill"
+                    android:text="@string/simulado_finish"
+                    android:textColor="@color/md_on_primary"
+                    android:visibility="gone" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ── Resultado ── -->
+        <LinearLayout
+            android:id="@+id/simuladoResultPanel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:text="@string/simulado_result_title"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/text_section_title"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/simuladoResultScore"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:textColor="@color/md_primary"
+                android:textSize="22sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/simuladoResultMessage"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:textColor="@color/md_on_surface_variant"
+                android:textSize="@dimen/text_card_title" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_lg"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/simuladoResultBack"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/simulado_back" />
+
+                <Button
+                    android:id="@+id/simuladoResultRedo"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/spacing_sm"
+                    android:layout_weight="1"
+                    android:background="@drawable/btn_primary_pill"
+                    android:text="@string/simulado_redo"
+                    android:textColor="@color/md_on_primary" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>
+
+    <com.meggy.app.ui.home.SideMenuView
+        android:id="@+id/tvSideMenu"
+        android:layout_width="56dp"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+</FrameLayout>
