@@ -3,7 +3,11 @@
      identidade da Vovó Fit, mensagens e campo de escrita. A
      assistente vive no servidor (POST /api/ai, persona fitness-vovo).
      Porte do layout do chat da Meggy 2.7.58. SEM variante de TV:
-     na TV não há chat. -->
+     na TV não há chat.
+     1.0.42 — Barra de chips de temas da BIBLIOTECA DE CONHECIMENTO
+     do servidor (fichas vovo-* e sup-* do INDICE): tocar num chip
+     envia a pergunta pelo caminho normal do chat. Alvos de 52dp e
+     texto de 18sp (legibilidade +60). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -62,6 +66,112 @@
                 android:textSize="@dimen/text_card_subtitle" />
         </LinearLayout>
     </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/md_outline" />
+
+    <!-- 1.0.42 — Chips de temas da biblioteca (perguntas prontas).
+         O clique é ligado na activity; o texto enviado é a string
+         assistente_q_* correspondente, não o rótulo do botão. -->
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:overScrollMode="never"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingHorizontal="@dimen/content_margin"
+            android:paddingVertical="@dimen/spacing_sm">
+
+            <TextView
+                android:id="@+id/chipForca"
+                android:layout_width="wrap_content"
+                android:layout_height="@dimen/assistente_chip_height"
+                android:layout_marginEnd="@dimen/spacing_sm"
+                android:background="@drawable/chip_outline"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:paddingHorizontal="@dimen/spacing_xl"
+                android:text="@string/assistente_chip_forca"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/text_assistente_chip" />
+
+            <TextView
+                android:id="@+id/chipProteina"
+                android:layout_width="wrap_content"
+                android:layout_height="@dimen/assistente_chip_height"
+                android:layout_marginEnd="@dimen/spacing_sm"
+                android:background="@drawable/chip_outline"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:paddingHorizontal="@dimen/spacing_xl"
+                android:text="@string/assistente_chip_proteina"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/text_assistente_chip" />
+
+            <TextView
+                android:id="@+id/chipEquilibrio"
+                android:layout_width="wrap_content"
+                android:layout_height="@dimen/assistente_chip_height"
+                android:layout_marginEnd="@dimen/spacing_sm"
+                android:background="@drawable/chip_outline"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:paddingHorizontal="@dimen/spacing_xl"
+                android:text="@string/assistente_chip_equilibrio"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/text_assistente_chip" />
+
+            <TextView
+                android:id="@+id/chipVitaminas"
+                android:layout_width="wrap_content"
+                android:layout_height="@dimen/assistente_chip_height"
+                android:layout_marginEnd="@dimen/spacing_sm"
+                android:background="@drawable/chip_outline"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:paddingHorizontal="@dimen/spacing_xl"
+                android:text="@string/assistente_chip_vitaminas"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/text_assistente_chip" />
+
+            <TextView
+                android:id="@+id/chipTirzepatida"
+                android:layout_width="wrap_content"
+                android:layout_height="@dimen/assistente_chip_height"
+                android:layout_marginEnd="@dimen/spacing_sm"
+                android:background="@drawable/chip_outline"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:paddingHorizontal="@dimen/spacing_xl"
+                android:text="@string/assistente_chip_tirzepatida"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/text_assistente_chip" />
+
+            <TextView
+                android:id="@+id/chipArtrose"
+                android:layout_width="wrap_content"
+                android:layout_height="@dimen/assistente_chip_height"
+                android:background="@drawable/chip_outline"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:paddingHorizontal="@dimen/spacing_xl"
+                android:text="@string/assistente_chip_artrose"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/text_assistente_chip" />
+        </LinearLayout>
+    </HorizontalScrollView>
 
     <View
         android:layout_width="match_parent"
