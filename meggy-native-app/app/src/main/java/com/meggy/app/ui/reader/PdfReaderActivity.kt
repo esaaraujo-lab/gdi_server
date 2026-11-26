@@ -171,7 +171,7 @@ class PdfReaderActivity : AppCompatActivity() {
                     R.id.nav_home -> { startActivity(Intent(this, HomeActivity::class.java)); true }
                     R.id.nav_drives -> { val i = Intent(this, HomeActivity::class.java); i.putExtra(HomeActivity.EXTRA_SCROLL_TO_DRIVES, true); startActivity(i); true }
                     R.id.nav_simulados -> { HomeActivity.openSimulados(this); true }
-                    R.id.nav_meggy -> { startActivity(Intent(this, SearchActivity::class.java)); true }
+                    R.id.nav_meggy -> { com.meggy.app.ui.home.HomeActivity.openMeggyChat(this); true }
                     R.id.nav_settings -> { startActivity(Intent(this, SettingsActivity::class.java)); true }
                     else -> false
                 }
