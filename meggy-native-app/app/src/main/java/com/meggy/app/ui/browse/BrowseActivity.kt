@@ -1,6 +1,7 @@
 package com.meggy.app.ui.browse
 
 import android.content.Intent
+import com.meggy.app.R
 import android.graphics.Rect
 import android.net.Uri
 import android.os.Bundle
@@ -44,6 +45,22 @@ class BrowseActivity : AppCompatActivity() {
         api = ApiService(this)
         currentPath = intent.getStringExtra("drivePath") ?: "/"
         folderName = intent.getStringExtra("folderName") ?: "Browse"
+
+        // 2.7.58 — atalho de busca no topo (SPEC §3.3; só existe no
+        // layout do celular) + rail persistente na TV (Explorar =
+        // item Drives do menu).
+        findViewById<View>(R.id.browseSearchBar)?.setOnClickListener {
+            startActivity(
+                Intent(this, com.meggy.app.ui.search.SearchActivity::class.java)
+            )
+        }
+        com.meggy.app.ui.home.TvRailHost.attach(
+            this,
+            findViewById(R.id.tvSideMenu),
+            findViewById(R.id.browseContent),
+            com.meggy.app.ui.home.SideMenuView.MenuItem.DRIVES,
+            R.id.recycler
+        )
 
         // ★ v1.8.0: toolbar title + pink chevron breadcrumb.
         binding.toolbar.title = folderName
