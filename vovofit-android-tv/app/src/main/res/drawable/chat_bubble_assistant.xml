@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 1.0.40 — Bolha da assistente no chat (superfície, canto sup.
+     esq. menor). Porte do pacote Meggy 2.7.58. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/md_surface_variant" />
+    <corners
+        android:bottomLeftRadius="4dp"
+        android:bottomRightRadius="16dp"
+        android:topLeftRadius="16dp"
+        android:topRightRadius="16dp" />
+</shape>
