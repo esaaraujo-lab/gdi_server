@@ -8,6 +8,7 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
+import com.google.android.material.card.MaterialCardView
 import com.meggy.app.R
 import com.meggy.app.util.FocusAnimator
 import com.meggy.app.util.LibraryCovers
@@ -44,7 +45,7 @@ class MyCoursesAdapter(
                 val pos = bindingAdapterPosition
                 if (pos != RecyclerView.NO_POSITION) onClick(items[pos])
             }
-            FocusAnimator.attachCard(view, TvUtils.isTv(view.context))
+            FocusAnimator.attachCard(view as MaterialCardView, TvUtils.isTv(view.context))
         }
     }
 

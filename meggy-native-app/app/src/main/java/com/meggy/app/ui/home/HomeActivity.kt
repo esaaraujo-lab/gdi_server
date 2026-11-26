@@ -182,10 +182,21 @@ class HomeActivity : AppCompatActivity() {
             invalidateStaleFocusRestore(2, drivesPos)
             // 2.7.58 — hero ambiente segue o foco (TV).
             drivesAdapter?.itemAt(drivesPos)?.let { item ->
-                updateAmbientHero(
-                    item.title, item.subtitle, null,
-                    item.coverUrl ?: item.featuredCoverUrl, item.drivePath
-                )
+                when (item) {
+                    is DriveRailItem.Fixed -> {
+                        val drivePath = "/${item.drive.index}:/"
+                        updateAmbientHero(
+                            item.drive.name, item.drive.tagline, null,
+                            featuredCoverByPath[drivePath], drivePath
+                        )
+                    }
+                    is DriveRailItem.Admin -> updateAmbientHero(
+                        item.drive.name,
+                        getString(R.string.admin_drive_tile_tag), null,
+                        item.drive.coverUrl,
+                        ApiService.byIdPath(item.drive.driveId)
+                    )
+                }
             }
             return@OnGlobalFocusChangeListener
         }
