@@ -129,6 +129,15 @@ class DetailActivity : AppCompatActivity() {
     private var lessonListAdapter: LessonListAdapter? = null
     private var lessonGridAdapter: LessonGridAdapter? = null
     private var flatAdapter: FlatLessonAdapter? = null
+    // 1.0.40 — lista unificada de aulas do CELULAR (porte Meggy
+    // 2.7.58): substitui LessonListAdapter/FlatLessonAdapter no
+    // telemóvel; na TV ficam os adapters actuais. Ver
+    // refreshUnifiedList().
+    private var unifiedAdapter: UnifiedLessonAdapter? = null
+    // 1.0.40 — "Assistir do Início" verdadeiro: playFirstVideo arma
+    // a flag e o launchPlayer consome-a (EXTRA_FROM_START no player,
+    // que ignora o resume guardado nesse lançamento).
+    private var nextLaunchFromStart = false
     // Frente R4B — filtro da lista plana (Todos / Vídeos / Materiais).
     private var flatFilter: FlatFilter = FlatFilter.ALL
     private var isFlatMode: Boolean = false
@@ -308,6 +317,9 @@ class DetailActivity : AppCompatActivity() {
         // CTA + play do hero: retoma o ponto exato (ou 1º vídeo).
         binding.ctaContinue.setOnClickListener { playResumeOrFirst() }
         binding.heroPlayFab.setOnClickListener { playResumeOrFirst() }
+        // 1.0.40 — "Do início": toca a 1.ª aula a partir do 0
+        // (playFirstVideo arma o EXTRA_FROM_START).
+        binding.ctaFromStart.setOnClickListener { playFirstVideo() }
 
         // Abas
         binding.tabResumo.setOnClickListener { selectTab(Tab.SUMMARY) }
@@ -331,6 +343,7 @@ class DetailActivity : AppCompatActivity() {
             FocusAnimator.attach(binding.heroPlayFab, true)
             FocusAnimator.attach(binding.heroFav, true)
             FocusAnimator.attach(binding.headerSearch, true)
+            FocusAnimator.attach(binding.ctaFromStart, true)
         }
 
         // Busca dentro da aba Aulas (filtra as aulas pelo nome, local).
@@ -358,6 +371,15 @@ class DetailActivity : AppCompatActivity() {
 
         setupContinueRail()
         selectTab(Tab.LESSONS)
+        // 1.0.40 — rail lateral persistente da TV (TvRailHost): em
+        // todas as páginas excepto no player. O detalhe representa
+        // a navegação (Explorar); o 1.º conteúdo é o CTA Continuar
+        // (foco inicial no CTA, como já era o desenho da tela).
+        com.vovofit.app.ui.home.TvRailHost.attach(
+            this,
+            com.vovofit.app.ui.home.SideMenuView.MenuItem.DRIVES,
+            binding.ctaContinue
+        )
         loadFolder()
     }
 
@@ -847,6 +869,27 @@ class DetailActivity : AppCompatActivity() {
             // subpastas) fica no estado vazio honesto.
             loadQuestionsFlashcards(files)
 
+            // 1.0.40 — TV: a faixa do hero (cartão de 360dp) só fica
+            // CHEIA onde há vídeos directos nesta pasta (ficheiros
+            // de mídia soltos ou modo plano). Numa pasta que é só
+            // lista de subpastas, a faixa ENCOLHE para 160dp —
+            // adaptação registada da regra "faixa só onde há vídeos"
+            // (na Meggy a faixa some; aqui o cartão guarda o ▶ e o
+            // Salvar, que não podem desaparecer da TV — público +60,
+            // alvos de foco mantidos).
+            if (TvUtils.isTv(this@DetailActivity)) {
+                val hasDirectMedia = files.any { (it.isVideo || it.isAudio) && !it.isFolder }
+                binding.heroCard?.let { card ->
+                    val targetDp = if (hasDirectMedia) 360f else 160f
+                    val lp = card.layoutParams
+                    val targetPx = (targetDp * resources.displayMetrics.density).toInt()
+                    if (lp.height != targetPx) {
+                        lp.height = targetPx
+                        card.layoutParams = lp
+                    }
+                }
+            }
+
             if (files.isEmpty()) {
                 binding.emptyState.text = getString(R.string.browse_empty)
                 binding.emptyState.visibility = View.VISIBLE
@@ -894,6 +937,29 @@ class DetailActivity : AppCompatActivity() {
                     val watched = files.filter { it.isVideo && sm.isWatched(currentPath, it.name) }
                         .map { it.name }.toSet()
                     adapter.setResumeAndWatched(resumed, watched)
+                } else if (!TvUtils.isTv(this@DetailActivity)) {
+                    // 1.0.40 — CELULAR: lista UNIFICADA também no
+                    // modo plano (porte Meggy 2.7.58): as linhas
+                    // montam-se de allFiles + extraMaterials em
+                    // refreshUnifiedList(); refreshFlatList delega
+                    // nela e os chips Todos/Vídeos/Materiais passam
+                    // a filtrar ESTA lista. A TV/largo mantém a
+                    // grade FileAdapter (ramo isWide acima).
+                    val adapter = UnifiedLessonAdapter(
+                        onPlayVideo = { file, _ -> openFile(file) },
+                        onOpenGroup = { group -> openFolder(group.folder) },
+                        onOpenMaterial = { file, _ -> openFile(file) }
+                    )
+                    unifiedAdapter = adapter
+                    binding.recycler.layoutManager = LinearLayoutManager(this@DetailActivity)
+                    binding.recycler.adapter = adapter
+                    refreshUnifiedList()
+                    // Frente R14A — materiais da pasta ao lado: corre
+                    // em 2º plano (nunca atrasa a tela); quando chega,
+                    // a lista unificada ganha os ficheiros novos na
+                    // secção Materiais (via refreshFlatList, que
+                    // delega na unificada).
+                    loadExtraMaterials(files)
                 } else {
                     val adapter = FlatLessonAdapter(
                         folderPath = currentPath,
@@ -1677,6 +1743,22 @@ class DetailActivity : AppCompatActivity() {
             binding.recycler.adapter = adapter
             adapter.submit(lessonGroups)
             prefetchLessonChildren()
+        } else if (!TvUtils.isTv(this)) {
+            // 1.0.40 — CELULAR: lista UNIFICADA de aulas (porte
+            // Meggy 2.7.58, SPEC mobile §2) no lugar da lista
+            // expansível: as linhas montam-se dos mesmos grupos +
+            // filhos do prefetch (refreshUnifiedList); o toque usa
+            // openFileInFolder/openFolderInLesson, como antes.
+            val adapter = UnifiedLessonAdapter(
+                onPlayVideo = { file, folderPath -> openFileInFolder(file, folderPath) },
+                onOpenGroup = { group -> openFolderInLesson(group.folder, group.folderPath) },
+                onOpenMaterial = { file, folderPath -> openFileInFolder(file, folderPath) }
+            )
+            unifiedAdapter = adapter
+            binding.recycler.layoutManager = LinearLayoutManager(this)
+            binding.recycler.adapter = adapter
+            refreshUnifiedList()
+            prefetchLessonChildren()
         } else {
             val adapter = LessonListAdapter(
                 onPlayVideo = { file, folderPath -> openFileInFolder(file, folderPath) },
@@ -1720,6 +1802,8 @@ class DetailActivity : AppCompatActivity() {
         val snap = captureDetailFocus()
         lessonListAdapter?.submit(filtered)
         lessonGridAdapter?.submit(filtered)
+        // 1.0.40 — lista unificada do celular.
+        if (unifiedAdapter != null) refreshUnifiedList()
         // Ronda 15 Frente B (B3): o prefetch (ou um expandir) entregou
         // filhos — o chip do hero pode sair de "a calcular…".
         updateProgressChip(allFiles)
@@ -1743,6 +1827,9 @@ class DetailActivity : AppCompatActivity() {
             lessonGridAdapter?.refreshPositions(positions)
             lessonListAdapter?.refreshGroups(changed.filter { g -> visible.any { it === g } })
         }
+        // 1.0.40 — lista unificada do celular: os grupos que
+        // ganharam filhos saem de Pending para aulas de verdade.
+        if (unifiedAdapter != null) refreshUnifiedList()
         // Ronda 15 Frente B (B3): o prefetch entregou filhos — o chip
         // do hero pode sair de "a calcular…".
         updateProgressChip(allFiles)
@@ -1793,6 +1880,172 @@ class DetailActivity : AppCompatActivity() {
         paint(R.id.chipFilterMaterials, flatFilter == FlatFilter.MATERIALS)
     }
 
+    /**
+     * 1.0.40 — (re)monta a LISTA UNIFICADA de aulas do celular a
+     * partir do que a tela já produz (porte do refreshUnifiedList da
+     * Meggy 2.7.58, adaptado aos dados/filtros da Vovó):
+     * - Modo grupos (interfolder): cada grupo vira aulas directas —
+     *   1 vídeo = uma linha com o nome da pasta (o tema); N vídeos =
+     *   cabeçalho + linhas; 0 vídeos = linha de pasta (abre o
+     *   detalhe do grupo); filhos por carregar = linha Pending.
+     *   Ficheiros não-vídeo dos grupos juntam-se na secção Materiais
+     *   no fim. O grupo "Arquivos avulsos" entra como aulas soltas
+     *   da própria pasta.
+     * - Modo plano: vídeos/áudios de allFiles + materiais (com os
+     *   extraMaterials da pasta ao lado), como a lista plana fazia.
+     * Filtros: a busca (lessonSearch) e os chips Todos/Vídeos/
+     * Materiais (flatFilter) aplicam-se às linhas — no modo grupos
+     * os chips passam a funcionar também aqui (antes só pintavam).
+     * Legendas nunca entram. Nenhuma chamada de rede nova.
+     */
+    private fun refreshUnifiedList() {
+        val adapter = unifiedAdapter ?: return
+        if (isFlatMode) {
+            findViewById<View>(R.id.filterChipsRow)?.visibility = View.VISIBLE
+            updateFlatChipStyles()
+        }
+        val sm = SessionManager.get(this)
+        val query = binding.lessonSearch.text?.toString()?.trim().orEmpty()
+        val current = currentLessonKey(sm)
+        val rows = ArrayList<UnifiedLessonAdapter.Row>()
+        val materials = ArrayList<Pair<FileItem, String>>()
+
+        fun matchesQuery(name: String): Boolean =
+            query.isEmpty() || name.contains(query, ignoreCase = true)
+
+        fun lessonRow(
+            file: FileItem,
+            groupPath: String,
+            title: String,
+            secondLine: String?
+        ): UnifiedLessonAdapter.Row.Lesson = UnifiedLessonAdapter.Row.Lesson(
+            file = file,
+            groupPath = groupPath,
+            title = title,
+            secondLine = secondLine,
+            watched = sm.isWatched(groupPath, file.name),
+            progress = sm.getResumeProgress(groupPath, file.name),
+            durationMs = sm.getResumeDuration(groupPath, file.name),
+            isCurrent = current != null && current.first == groupPath &&
+                current.second == file.name
+        )
+
+        val wantLessons = flatFilter != FlatFilter.MATERIALS
+        val wantMaterials = flatFilter != FlatFilter.VIDEOS
+
+        if (isFlatMode) {
+            if (wantLessons) {
+                for (f in allFiles) {
+                    if ((!f.isVideo && !f.isAudio) || f.isSubtitle) continue
+                    if (!matchesQuery(f.name)) continue
+                    rows.add(lessonRow(f, currentPath, Format.lessonTitle(f.name), null))
+                }
+            }
+            if (wantMaterials) {
+                val mats = (allFiles.filter {
+                    !it.isFolder && !it.isSubtitle && !it.isVideo && !it.isAudio
+                } + extraMaterials.filter {
+                    !it.isVideo && !it.isAudio && !it.isSubtitle
+                }).distinctBy { it.name.lowercase() }
+                for (f in mats) {
+                    materials.add(f to (f.folderPath ?: currentPath))
+                }
+            }
+        } else {
+            for (group in filteredLessonGroups()) {
+                val children = group.children
+                if (group.folder.id == "__loose__") {
+                    val kids = children ?: emptyList()
+                    if (wantLessons) {
+                        for (v in kids.filter { (it.isVideo || it.isAudio) && !it.isSubtitle }) {
+                            if (!matchesQuery(v.name)) continue
+                            rows.add(lessonRow(v, group.folderPath, Format.lessonTitle(v.name), null))
+                        }
+                    }
+                    if (wantMaterials) {
+                        kids.filter { !it.isVideo && !it.isAudio && !it.isSubtitle }
+                            .forEach { materials.add(it to group.folderPath) }
+                    }
+                    continue
+                }
+                if (children == null) {
+                    if (wantLessons && matchesQuery(group.folder.name)) {
+                        rows.add(UnifiedLessonAdapter.Row.Pending(group))
+                    }
+                    continue
+                }
+                val vids = children.filter { (it.isVideo || it.isAudio) && !it.isSubtitle }
+                if (wantMaterials) {
+                    children.filter { !it.isVideo && !it.isAudio && !it.isSubtitle }
+                        .forEach { materials.add(it to group.folderPath) }
+                }
+                if (!wantLessons) continue
+                when {
+                    vids.isEmpty() -> {
+                        if (matchesQuery(group.folder.name)) {
+                            rows.add(UnifiedLessonAdapter.Row.Folder(group))
+                        }
+                    }
+                    vids.size == 1 -> {
+                        val v = vids[0]
+                        if (matchesQuery(group.folder.name) || matchesQuery(v.name)) {
+                            val second = Format.lessonTitle(v.name)
+                                .takeIf { !it.equals(group.folder.name, ignoreCase = true) }
+                            rows.add(lessonRow(v, group.folderPath, group.folder.name, second))
+                        }
+                    }
+                    else -> {
+                        val folderMatches = matchesQuery(group.folder.name)
+                        val visible = vids.filter { folderMatches || matchesQuery(it.name) }
+                        if (visible.isNotEmpty()) {
+                            rows.add(UnifiedLessonAdapter.Row.Header(group.folder.name))
+                            for (v in visible) {
+                                rows.add(
+                                    lessonRow(
+                                        v, group.folderPath, group.folder.name,
+                                        Format.lessonTitle(v.name)
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (wantMaterials && materials.isNotEmpty()) {
+            val visibleMats = materials.filter { matchesQuery(it.first.name) }
+            if (visibleMats.isNotEmpty()) {
+                rows.add(
+                    UnifiedLessonAdapter.Row.Header(getString(R.string.detail_section_materials))
+                )
+                for ((f, gp) in visibleMats) {
+                    rows.add(UnifiedLessonAdapter.Row.Material(f, gp))
+                }
+            }
+        }
+        adapter.submit(rows)
+        // Estado vazio honesto (busca/filtro sem resultados).
+        if (rows.isEmpty()) {
+            binding.emptyState.text = getString(R.string.flat_empty_filter)
+            binding.emptyState.visibility = View.VISIBLE
+        } else if (binding.emptyState.visibility == View.VISIBLE &&
+            binding.emptyState.text == getString(R.string.flat_empty_filter)
+        ) {
+            binding.emptyState.visibility = View.GONE
+        }
+    }
+
+    /** A "aula atual" da tela (selo da lista unificada): o recent
+     *  em curso sob currentPath com maior progresso — o mesmo
+     *  cálculo do playResumeOrFirst. */
+    private fun currentLessonKey(sm: SessionManager): Pair<String, String>? {
+        val best = sm.getRecents()
+            .filter { it.folderPath.startsWith(currentPath) }
+            .filter { sm.hasResume(it.folderPath, it.videoName) }
+            .maxByOrNull { sm.getResumeProgress(it.folderPath, it.videoName) }
+        return best?.let { it.folderPath to it.videoName }
+    }
+
     // Frente R4B — (re)monta a lista plana em secções a partir de
     // [allFiles], com a busca e o filtro dos chips aplicados:
     //   Vídeos — só .mp4, por ordem, com progresso como hoje;
@@ -1803,6 +2056,13 @@ class DetailActivity : AppCompatActivity() {
     // lista do adapter. Pastas não existem aqui (modo plano =
     // folderCount == 0), mas são excluídas na mesma, por defesa.
     private fun refreshFlatList() {
+        // 1.0.40 — com a lista unificada activa (celular), o
+        // refresh da lista plana delega nela (os chips e a busca
+        // passam por refreshUnifiedList).
+        if (unifiedAdapter != null) {
+            refreshUnifiedList()
+            return
+        }
         val adapter = flatAdapter ?: return
         val query = binding.lessonSearch.text?.toString().orEmpty()
         val base = if (query.isBlank()) allFiles
@@ -1965,6 +2225,12 @@ class DetailActivity : AppCompatActivity() {
     private fun playFirstVideo() {
         val firstVideo = allFiles.find { (it.isVideo || it.isAudio) && !it.link.isNullOrEmpty() }
         if (firstVideo != null) {
+            // 1.0.40 — "Assistir do Início" VERDADEIRO (porte
+            // 2.7.58): a flag faz o launchPlayer carregar
+            // EXTRA_FROM_START e o player ignora o resume guardado
+            // (posição 0; o resume NÃO é apagado). Vale para o botão
+            // "Do início" e para o Continuar sem resume.
+            nextLaunchFromStart = true
             openFile(firstVideo)
         } else {
             val firstFolder = allFiles.find { it.isFolder }
@@ -2097,6 +2363,12 @@ class DetailActivity : AppCompatActivity() {
         intent.putExtra(PlayerActivity.EXTRA_URL, url)
         intent.putExtra(PlayerActivity.EXTRA_TITLE, title)
         intent.putExtra(PlayerActivity.EXTRA_FOLDER_PATH, folderPath)
+        // 1.0.40 — "Assistir do Início": consome a flag (um só
+        // lançamento) e o player força a posição 0.
+        if (nextLaunchFromStart) {
+            intent.putExtra(PlayerActivity.EXTRA_FROM_START, true)
+            nextLaunchFromStart = false
+        }
         startActivity(intent)
     }
 
