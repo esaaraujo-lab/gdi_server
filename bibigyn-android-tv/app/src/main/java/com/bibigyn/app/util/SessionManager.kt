@@ -302,6 +302,23 @@ class SessionManager private constructor(context: Context) {
     fun isWatched(folderPath: String, videoName: String): Boolean =
         prefs.getBoolean(watchedKey(folderPath, videoName), false)
 
+    /**
+     * v2.1.44 — nº de vídeos marcados como assistidos sob um prefixo
+     * de curso (a subárvore inteira). Porte da Meggy 2.7.58
+     * (MyCoursesAdapter): o denominador é o total real do
+     * /api/courses/unified. Adição declarada ao SessionManager —
+     * nenhuma função existente muda.
+     */
+    fun watchedCountUnder(coursePath: String): Int {
+        val prefix = migrateLegacyCoursePath(coursePath).trimEnd('/')
+        if (prefix.isBlank()) return 0
+        return prefs.all.keys.count { key ->
+            if (!key.startsWith("watched_")) return@count false
+            val folder = key.removePrefix("watched_").substringBefore("::")
+            folder == prefix || folder.startsWith("$prefix/")
+        }
+    }
+
     private fun watchedKey(folderPath: String, videoName: String): String =
         "watched_${migrateLegacyCoursePath(folderPath)}::$videoName"
 
@@ -676,6 +693,16 @@ class SessionManager private constructor(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_WIFI_ONLY, value).apply()
 
     /**
+     * v2.1.44 — menu lateral estilo Plex da TV ligado/desligado
+     * (Ajustes). Porte da Meggy (tvSideMenuEnabled): ligado por
+     * defeito; desligado, a TV volta à navegação anterior. Adição
+     * declarada — nenhuma função existente muda.
+     */
+    var tvSideMenuEnabled: Boolean
+        get() = prefs.getBoolean(KEY_TV_SIDE_MENU, true)
+        set(value) = prefs.edit().putBoolean(KEY_TV_SIDE_MENU, value).apply()
+
+    /**
      * Legendas: controla a renderização de trilhas de texto no player
      * (DefaultTrackSelector). As aulas atuais não trazem trilha de legenda,
      * então o controle fica dormente até o conteúdo ter legendas.
@@ -780,6 +807,7 @@ class SessionManager private constructor(context: Context) {
         private const val KEY_SLEEP_TIMER_MIN = "sleep_timer_min"
         private const val KEY_NOTIFICATIONS = "notifications_enabled"
         private const val KEY_WIFI_ONLY = "wifi_only_downloads"
+        private const val KEY_TV_SIDE_MENU = "tv_side_menu_enabled"
         private const val KEY_SUBTITLES = "subtitles_enabled"
         private const val KEY_VIDEO_QUALITY = "video_quality"
         private const val KEY_RECENT_SEARCHES = "recent_searches_v1"
