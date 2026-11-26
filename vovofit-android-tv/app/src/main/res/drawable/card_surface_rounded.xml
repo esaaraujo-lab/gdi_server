@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 1.0.40 — fundo de cartão (superfície + cantos 16dp) das linhas
+     da lista unificada de aulas e do campo de texto do chat.
+     Porte do pacote Meggy 2.7.58 (mesmo papel do card_surface_rounded
+     de lá; a Vovó ainda não o tinha). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/md_surface_container" />
+    <corners android:radius="16dp" />
+</shape>
