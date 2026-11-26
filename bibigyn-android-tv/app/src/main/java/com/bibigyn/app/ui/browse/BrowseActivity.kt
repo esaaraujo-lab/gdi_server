@@ -56,6 +56,15 @@ class BrowseActivity : AppCompatActivity() {
         binding.breadcrumb.movementMethod = android.text.method.LinkMovementMethod.getInstance()
         binding.breadcrumb.highlightColor = android.graphics.Color.TRANSPARENT
 
+        // v2.1.44 — rail lateral da TV (porte da Meggy 2.7.58).
+        com.bibigyn.app.ui.home.TvRailHost.attach(
+            this,
+            findViewById(R.id.tvSideMenu),
+            findViewById(R.id.browseContent),
+            com.bibigyn.app.ui.home.SideMenuView.MenuItem.DRIVES,
+            firstContentId = R.id.recycler
+        )
+
         val spanCount = calculateSpanCount()
         val layoutManager = GridLayoutManager(this, spanCount)
         binding.recycler.layoutManager = layoutManager
