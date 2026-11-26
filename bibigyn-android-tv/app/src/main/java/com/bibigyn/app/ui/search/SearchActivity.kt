@@ -66,12 +66,25 @@ class SearchActivity : AppCompatActivity() {
                 when (item.itemId) {
                     R.id.nav_search -> true
                     R.id.nav_home -> { startActivity(Intent(this, HomeActivity::class.java)); overridePendingTransition(0, 0); true }
+                    // v2.1.44 — assistente fitness (só celular).
+                    R.id.nav_fitness -> {
+                        startActivity(Intent(this, com.bibigyn.app.ui.fitness.FitnessChatActivity::class.java)); overridePendingTransition(0, 0); true
+                    }
                     R.id.nav_mylist -> { startActivity(Intent(this, MyListActivity::class.java)); overridePendingTransition(0, 0); true }
                     R.id.nav_settings -> { startActivity(Intent(this, SettingsActivity::class.java)); overridePendingTransition(0, 0); true }
                     else -> false
                 }
             }
         }
+
+        // v2.1.44 — rail lateral da TV (porte da Meggy 2.7.58).
+        com.bibigyn.app.ui.home.TvRailHost.attach(
+            this,
+            findViewById(R.id.tvSideMenu),
+            findViewById(R.id.searchContent),
+            com.bibigyn.app.ui.home.SideMenuView.MenuItem.HOME,
+            firstContentId = R.id.searchInput
+        )
 
         binding.recycler.layoutManager = LinearLayoutManager(this)
         adapter = SearchResultAdapter(
