@@ -27,6 +27,9 @@ import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
+import android.widget.ImageView
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
@@ -42,6 +45,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.PlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import coil.load
 import com.google.android.material.snackbar.Snackbar
@@ -391,7 +395,11 @@ class PlayerActivity : AppCompatActivity() {
         ensureSubtitles()
     }
 
-    private val speeds = floatArrayOf(0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
+    // 2.7.58 — 0.5× entra na escala (desenho do player §4.4): os
+    // índices resolvem-se POR VALOR em todo o lado
+    // (speeds.indexOfFirst { it == defaultSpeed }), por isso
+    // acrescentar no início não desloca nenhuma preferência.
+    private val speeds = floatArrayOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
     private var speedIndex = 1
 
     private var gestureDetector: GestureDetector? = null
@@ -572,6 +580,66 @@ class PlayerActivity : AppCompatActivity() {
         binding.sleepTimerButton.setOnClickListener { showSleepTimerDialog() }
         binding.favButton.setOnClickListener { exitRestIfActive(); toggleFavoriteCurrent() }
 
+        // 2.7.58 — linha de acções da info (desenho do player §4.4
+        // + destinos §10.2.3 + adenda 19:34): Baixar (o MESMO
+        // botão/escritor dos Downloads), Assistido, Meggy com a
+        // aula, cartão de erro e "A seguir". As vistas vivem na
+        // info_scroll (gone em fullscreen/TV) e lêem-se por mat<> —
+        // sem tocar no motor.
+        mat<TextView>(R.id.btn_download_info)?.setOnClickListener {
+            exitRestIfActive(); onDownloadClicked()
+        }
+        mat<TextView>(R.id.btn_watched_info)?.setOnClickListener {
+            exitRestIfActive(); onWatchedClicked()
+        }
+        mat<TextView>(R.id.btn_meggy_info)?.setOnClickListener {
+            exitRestIfActive()
+            HomeActivity.openMeggyChat(
+                this,
+                lessonPath = currentItem?.folderPath
+                    ?: intent.getStringExtra(EXTRA_FOLDER_PATH),
+                lessonName = currentItem?.let { displayTitle(it) },
+                videoName = currentItem?.name
+            )
+        }
+        mat<TextView>(R.id.upnext_header)?.setOnClickListener {
+            val list = mat<RecyclerView>(R.id.upnext_list) ?: return@setOnClickListener
+            list.visibility = if (list.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        }
+        mat<View>(R.id.btn_error_retry)?.setOnClickListener {
+            mat<View>(R.id.player_error_card)?.visibility = View.GONE
+            val exo = player ?: return@setOnClickListener
+            val it2 = currentItem
+            val resume = if (it2 != null) resumeFor(it2, currentUrl ?: "") else 0L
+            if (resume > 0L) exo.seekTo(resume)
+            exo.prepare()
+            exo.play()
+        }
+        mat<View>(R.id.btn_error_open)?.let { openBtn ->
+            // "Abrir o vídeo" só no celular (na TV o erro tem só
+            // Tentar de novo — desenho §6).
+            if (isTv) openBtn.visibility = View.GONE
+            openBtn.setOnClickListener {
+                val u = currentUrl ?: return@setOnClickListener
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(u)))
+                } catch (_: Exception) {
+                }
+            }
+        }
+        mat<View>(R.id.btn_upnext_play)?.setOnClickListener {
+            hideUpNextCard()
+            playNext()
+        }
+        mat<View>(R.id.btn_upnext_close)?.setOnClickListener {
+            upNextDismissedKey = currentItemKey()
+            hideUpNextCard()
+        }
+        mat<RecyclerView>(R.id.upnext_list)?.let { rv ->
+            rv.layoutManager = LinearLayoutManager(this)
+            rv.adapter = UpNextAdapter { item -> playItem(item) }
+        }
+
         // v2.7.9 — feedback visual dos botões da barra (foco D-pad na TV
         // + escala + anel do seletor): sem isso o botão focado/pressionado
         // era indistinguível (chip_outline/btn_play_circle são estáticos).
@@ -619,7 +687,18 @@ class PlayerActivity : AppCompatActivity() {
                 R.id.nav_home -> { startActivity(Intent(this, HomeActivity::class.java)); true }
                 R.id.nav_drives -> { val i = Intent(this, HomeActivity::class.java); i.putExtra(HomeActivity.EXTRA_SCROLL_TO_DRIVES, true); startActivity(i); true }
                 R.id.nav_simulados -> { HomeActivity.openSimulados(this); true }
-                R.id.nav_meggy -> { startActivity(Intent(this, SearchActivity::class.java)); true }
+                R.id.nav_meggy -> {
+                    // 2.7.58 — destino real: o chat da Meggy com a
+                    // aula actual como contexto (extras de aula).
+                    HomeActivity.openMeggyChat(
+                        this,
+                        lessonPath = currentItem?.folderPath
+                            ?: intent.getStringExtra(EXTRA_FOLDER_PATH),
+                        lessonName = currentItem?.let { displayTitle(it) },
+                        videoName = currentItem?.name
+                    )
+                    true
+                }
                 R.id.nav_settings -> { startActivity(Intent(this, SettingsActivity::class.java)); true }
                 else -> false
             }
@@ -689,6 +768,15 @@ class PlayerActivity : AppCompatActivity() {
         isFullscreen = false
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         setPlayerContainerFullscreen(false)
+        // 2.7.58 — contentor arredondado em retrato (desenho §4.1:
+        // raio 16dp + sombra suave). Risco registado no desenho: o
+        // SurfaceView pode não recortar em todos os aparelhos —
+        // sem recorte, o vídeo fica como hoje (sem regressão).
+        binding.playerContainer.background =
+            androidx.core.content.ContextCompat.getDrawable(
+                this, R.drawable.player_container_rounded
+            )
+        binding.playerContainer.clipToOutline = true
         binding.playerView.useController = true
         binding.customBar.visibility = View.GONE
         // v2.7.9 — restaura a barra superior (o hide do fullscreen pode
@@ -727,6 +815,12 @@ class PlayerActivity : AppCompatActivity() {
      * retrato volta o 16:9. Na TV (16:9 exato) dá no mesmo.
      */
     private fun setPlayerContainerFullscreen(fullscreen: Boolean) {
+        // 2.7.58 — em fullscreen o contentor perde o arredondado
+        // do retrato (fundo limpo, sem recorte).
+        if (fullscreen) {
+            binding.playerContainer.background = null
+            binding.playerContainer.clipToOutline = false
+        }
         val lp = binding.playerContainer.layoutParams as ConstraintLayout.LayoutParams
         if (fullscreen) {
             lp.height = ViewGroup.LayoutParams.MATCH_PARENT
@@ -773,6 +867,14 @@ class PlayerActivity : AppCompatActivity() {
         } ?: title
         binding.courseInfo.text = item?.folderLabel ?: ""
         updateCourseProgressLine()
+        // 2.7.58 — camada visual do player: breadcrumb, descrição
+        // e o estado das acções novas acompanham a aula actual
+        // (setTitles é chamado na abertura e em cada transição).
+        updateBreadcrumb(item)
+        updateDescriptionLine(item)
+        refreshDownloadChip()
+        refreshWatchedChip()
+        refreshUpNextList()
     }
 
     /**
@@ -848,6 +950,208 @@ class PlayerActivity : AppCompatActivity() {
         val label = "${formatSpeed(speeds[speedIndex])}x"
         binding.btnSpeedBar.text = label
         binding.btnSpeedInfo.text = label
+    }
+
+    // ──────────── 2.7.58 — camada visual do player ────────────
+    // Restyle (desenho MEGGY_PLAYER_UI_DESIGN §4/§6) + destinos
+    // (Baixar) + adenda 19:34 (Up Next). NADA aqui muda o motor:
+    // ExoPlayer, fontes de dados, gravação de progresso/resume,
+    // cache e a lógica da playlist ficam como estavam — são só
+    // vistas e as acções novas sobre os caminhos actuais.
+
+    /** Chave (pasta+vídeo) p/ o cartão Up Next fechado não voltar
+     *  na mesma aula. */
+    private var upNextDismissedKey: String? = null
+
+    private fun currentItemKey(): String? {
+        val item = currentItem ?: return null
+        return (item.folderPath ?: "") + "|" + item.name
+    }
+
+    /** Breadcrumb da aula (retrato; a vista vive na info_scroll,
+     *  gone em fullscreen/TV): "Início › … › pasta", cada segmento
+     *  abre o DetailActivity nesse caminho. */
+    private fun updateBreadcrumb(item: FileItem?) {
+        val view = mat<TextView>(R.id.player_breadcrumb) ?: return
+        val path = item?.folderPath ?: intent.getStringExtra(EXTRA_FOLDER_PATH) ?: ""
+        val parts = path.trim('/').split('/').filter { it.isNotBlank() }
+        val drive = parts.firstOrNull { it.matches(Regex("\\d+:")) }
+        val segments = parts.filter { it != drive }
+        if (segments.isEmpty()) {
+            view.visibility = View.GONE
+            return
+        }
+        val sb = android.text.SpannableStringBuilder()
+        sb.append(getString(R.string.breadcrumb_home))
+        var acc = if (drive != null) "/$drive/" else "/"
+        for (seg in segments) {
+            acc = if (acc.endsWith("/")) "$acc$seg/" else "$acc/$seg/"
+            val target = acc
+            sb.append("  ›  ")
+            val start = sb.length
+            sb.append(seg.take(24))
+            sb.setSpan(
+                object : android.text.style.ClickableSpan() {
+                    override fun onClick(widget: View) {
+                        val i = Intent(this@PlayerActivity,
+                            com.meggy.app.ui.detail.DetailActivity::class.java)
+                        i.putExtra("drivePath", target)
+                        i.putExtra("folderName", seg)
+                        com.meggy.app.util.AdminDriveUi.forwardAdminDrive(intent, i)
+                        startActivity(i)
+                    }
+
+                    override fun updateDrawState(ds: android.text.TextPaint) {
+                        ds.color = android.graphics.Color.parseColor("#FF8B9F")
+                        ds.isUnderlineText = false
+                    }
+                },
+                start, sb.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+        }
+        view.text = sb
+        view.movementMethod = android.text.method.LinkMovementMethod.getInstance()
+        view.visibility = View.VISIBLE
+    }
+
+    /** Linha de descrição sob o título: a descrição guardada da
+     *  aula (cache; nunca texto inventado) + o tamanho do
+     *  ficheiro quando existe. Sem descrição, a linha some. */
+    private fun updateDescriptionLine(item: FileItem?) {
+        val view = mat<TextView>(R.id.lesson_desc_info) ?: return
+        val fp = item?.folderPath ?: intent.getStringExtra(EXTRA_FOLDER_PATH) ?: ""
+        val desc = SessionManager.get(this).getLessonDescription(fp)
+            ?.trim()?.take(200).orEmpty()
+        if (desc.isEmpty()) {
+            view.visibility = View.GONE
+            return
+        }
+        val size = item?.takeIf { it.size > 0 }?.humanSize
+        view.text = if (!size.isNullOrBlank()) "$desc · $size" else desc
+        view.visibility = View.VISIBLE
+    }
+
+    /** Estado do chip Baixar: "Baixar" ou "Baixado ✓" (registo
+     *  dos Downloads + ficheiro presente). */
+    private fun refreshDownloadChip() {
+        val chip = mat<TextView>(R.id.btn_download_info) ?: return
+        val item = currentItem ?: return
+        val fp = item.folderPath ?: intent.getStringExtra(EXTRA_FOLDER_PATH) ?: ""
+        val entry = com.meggy.app.util.DownloadRegistry.find(this, fp, item.name)
+        val done = entry != null && java.io.File(entry.filePath()).exists()
+        chip.text = getString(
+            if (done) R.string.download_done else R.string.player_download
+        )
+    }
+
+    /** Baixar a aula actual: DownloadManager p/ Download/Meggy/
+     *  (o MESMO escritor da tela Downloads), com a porta Wi-Fi. */
+    private fun onDownloadClicked() {
+        val item = currentItem ?: return
+        val fp = item.folderPath ?: intent.getStringExtra(EXTRA_FOLDER_PATH) ?: return
+        val url = currentUrl ?: return
+        if (SessionManager.get(this).wifiOnlyDownloads && !VideoCache.isWifi(this)) {
+            Snackbar.make(binding.root, R.string.download_wifi_only, Snackbar.LENGTH_LONG).show()
+            return
+        }
+        when (com.meggy.app.util.VideoDownloader.enqueue(
+            this, url, fp, item.name, displayTitle(item)
+        )) {
+            is com.meggy.app.util.VideoDownloader.Outcome.Started ->
+                Snackbar.make(binding.root, R.string.download_started, Snackbar.LENGTH_SHORT).show()
+            is com.meggy.app.util.VideoDownloader.Outcome.AlreadyDownloaded ->
+                Snackbar.make(binding.root, R.string.download_done, Snackbar.LENGTH_SHORT).show()
+            is com.meggy.app.util.VideoDownloader.Outcome.Failed ->
+                Snackbar.make(binding.root, R.string.download_failed, Snackbar.LENGTH_LONG).show()
+        }
+        refreshDownloadChip()
+    }
+
+    private fun refreshWatchedChip() {
+        val chip = mat<TextView>(R.id.btn_watched_info) ?: return
+        val watched = currentItem?.let { isWatched(it) } ?: false
+        chip.text = getString(
+            if (watched) R.string.player_watched else R.string.player_mark_watched
+        )
+    }
+
+    /** Assistido: marca pelo caminho actual (SessionManager +
+     *  servidor via ProgressSync). Desmarcar NÃO existe no motor
+     *  (o servidor funde "assistido" por união) — tocar outra vez
+     *  só informa; ver a tabela de divergências da 2.7.58. */
+    private fun onWatchedClicked() {
+        val item = currentItem ?: return
+        if (isWatched(item)) {
+            Snackbar.make(binding.root, R.string.player_already_watched, Snackbar.LENGTH_SHORT).show()
+            return
+        }
+        val fp = item.folderPath ?: intent.getStringExtra(EXTRA_FOLDER_PATH) ?: ""
+        SessionManager.get(this).markWatched(fp, item.name)
+        Snackbar.make(binding.root, R.string.player_marked_watched, Snackbar.LENGTH_SHORT).show()
+        refreshWatchedChip()
+        updateCourseProgressLine()
+    }
+
+    /** "A seguir" (retrato): cabeçalho com a contagem + lista
+     *  recolhível da playlist ACTUAL; o toque salta pelo playItem
+     *  de sempre. */
+    private fun refreshUpNextList() {
+        val header = mat<TextView>(R.id.upnext_header) ?: return
+        val all = PlaylistManager.all()
+        val idx = PlaylistManager.index()
+        if (all.size <= 1 || idx !in all.indices) {
+            header.visibility = View.GONE
+            mat<RecyclerView>(R.id.upnext_list)?.visibility = View.GONE
+            return
+        }
+        header.visibility = View.VISIBLE
+        header.text = getString(R.string.player_up_next_header, idx + 1, all.size)
+        val adapter = mat<RecyclerView>(R.id.upnext_list)?.adapter as? UpNextAdapter
+        adapter?.submit(all, idx)
+    }
+
+    /** Cartão UP NEXT (adenda 19:34): aparece nos últimos 20 s
+     *  quando há próxima aula na playlist; é informativo — com
+     *  autoplay o ExoPlayer avança sozinho; o toque salta já pelo
+     *  playNext actual. Chamado do ciclo de tempo existente. */
+    private fun maybeShowUpNextCard(pos: Long, dur: Long) {
+        if (dur <= 0 || pos < dur - 20_000) return
+        if (upNextDismissedKey == currentItemKey()) return
+        if (!PlaylistManager.hasNext()) return
+        showUpNextCard()
+    }
+
+    private fun showUpNextCard() {
+        val card = mat<View>(R.id.upnext_card) ?: return
+        if (card.visibility == View.VISIBLE) return
+        // A próxima aula vem da playlist actual (all()/index() —
+        // o PlaylistManager não muda nesta ronda).
+        val all = PlaylistManager.all()
+        val next = all.getOrNull(PlaylistManager.index() + 1) ?: return
+        mat<TextView>(R.id.upnext_card_title)?.text = displayTitle(next)
+        mat<ImageView>(R.id.upnext_card_thumb)?.let { img ->
+            val remote = LibraryCovers.remoteCoverStrict(
+                next.thumbnailLink, next.name, next.folderLabel, next.folderPath
+            )
+            if (!remote.isNullOrBlank()) {
+                img.load(remote) {
+                    error(ThumbArt.coverResForPath(next.folderPath ?: ""))
+                }
+            } else {
+                img.setImageResource(ThumbArt.coverResForPath(next.folderPath ?: ""))
+            }
+        }
+        card.visibility = View.VISIBLE
+    }
+
+    private fun hideUpNextCard() {
+        mat<View>(R.id.upnext_card)?.visibility = View.GONE
+    }
+
+    /** Cartão de erro (desenho §4.7): substitui o Snackbar antigo
+     *  do onPlayerError — mesma acção de retry, agora em botão. */
+    private fun showPlayerErrorCard() {
+        mat<View>(R.id.player_error_card)?.visibility = View.VISIBLE
     }
 
     private fun togglePlayPause() {
@@ -1618,7 +1922,13 @@ class PlayerActivity : AppCompatActivity() {
     private fun initialisePlayer() {
         val item = currentItem
         val link = item?.link
-        val url = if (!link.isNullOrEmpty()) linkBaseUrl() + link else intent.getStringExtra(EXTRA_URL)
+        // 2.7.58 — ficheiro local (Downloads): o extra manda e a
+        // fonte de dados é a de ficheiros (por esquema), nunca o
+        // upstream HTTP/cache de rede.
+        val localFile = intent.getStringExtra(EXTRA_LOCAL_FILE)
+        val url = if (!localFile.isNullOrBlank()) localFile
+            else if (!link.isNullOrEmpty()) linkBaseUrl() + link
+            else intent.getStringExtra(EXTRA_URL)
         if (url.isNullOrBlank()) {
             // R19B (P4): URL em branco NÃO fecha o Player em
             // silêncio — o finish() aqui devolvia o usuário à
@@ -1634,9 +1944,14 @@ class PlayerActivity : AppCompatActivity() {
         val requestProperties = if (!cookie.isNullOrBlank()) mapOf("Cookie" to "session=$cookie") else emptyMap()
         val sm = SessionManager.get(this)
         val writeToCache = !sm.wifiOnlyDownloads || VideoCache.isWifi(this)
-        val dataSourceFactory = VideoCache.dataSourceFactory(
-            this, MeggyApp.okHttpClient, writeToCache, requestProperties
-        )
+        val dataSourceFactory = if (!localFile.isNullOrBlank()) {
+            // Ficheiro local: DefaultDataSource (file:// → ficheiro).
+            DefaultDataSource.Factory(this)
+        } else {
+            VideoCache.dataSourceFactory(
+                this, MeggyApp.okHttpClient, writeToCache, requestProperties
+            )
+        }
 
         // R21: selector em val local (o !! logo após a atribuição ao
         // campo era seguro mas frágil; o Builder recebe o val).
@@ -1649,7 +1964,7 @@ class PlayerActivity : AppCompatActivity() {
 
         val playlist = PlaylistManager.all()
         val startIndex = PlaylistManager.index()
-        if (playlist.isNotEmpty() && startIndex in playlist.indices) {
+        if (localFile.isNullOrBlank() && playlist.isNotEmpty() && startIndex in playlist.indices) {
             val mediaItems = playlist.map { file ->
                 val fullUrl = linkBaseUrl() + (file.link ?: "")
                 MediaItem.Builder().setUri(fullUrl).build()
@@ -1661,9 +1976,16 @@ class PlayerActivity : AppCompatActivity() {
         exo.prepare()
 
         val isReview = isWatched(item)
-        val saved = if (isReview) 0L else resumeFor(item, url)
+        // 2.7.58 — "Assistir do Início" verdadeiro: o extra força
+        // a posição 0 (o resume guardado não é apagado — só não é
+        // aplicado neste lançamento).
+        val fromStart = intent.getBooleanExtra(EXTRA_FROM_START, false)
+        val saved = if (isReview || fromStart) 0L else resumeFor(item, url)
         if (saved > 0L && !isReview) {
-            exo.seekTo(startIndex, saved)
+            // Ficheiro local = item único (índice 0); na playlist
+            // remota o índice é o da playlist, como sempre.
+            val seekIndex = if (localFile.isNullOrBlank()) startIndex else 0
+            exo.seekTo(seekIndex, saved)
         }
         if (isReview) {
             binding.root.post {
@@ -1700,11 +2022,17 @@ class PlayerActivity : AppCompatActivity() {
                     markEnded(currentItem)
                     if (!exo.hasNextMediaItem()) {
                         Snackbar.make(binding.root, "Fim da playlist", Snackbar.LENGTH_LONG).show()
+                    } else {
+                        // 2.7.58 — cartão Up Next no fim do vídeo
+                        // (há próxima aula: o cartão anuncia-a).
+                        showUpNextCard()
                     }
                 }
                 if (state == Player.STATE_READY) {
                     // Frente H — 1º frame pronto: esconde o "Carregando".
                     binding.playerLoading.visibility = View.GONE
+                    // 2.7.58 — recuperou: o cartão de erro sai.
+                    mat<View>(R.id.player_error_card)?.visibility = View.GONE
                     applyVideoQuality()
                     applySubtitlesEnabled()
                 }
@@ -1713,18 +2041,11 @@ class PlayerActivity : AppCompatActivity() {
             override fun onPlayerError(error: PlaybackException) {
                 // Frente H — erro de playback: não deixar o "Carregando" preso.
                 binding.playerLoading.visibility = View.GONE
-                // R21: o erro deixou de ser silencioso (tela preta sem
-                // explicação nem saída) — mensagem + "Tentar de novo",
-                // que volta a preparar o item atual na posição salva.
-                Snackbar.make(binding.root, "Erro ao reproduzir este vídeo.", Snackbar.LENGTH_LONG)
-                    .setAction("Tentar de novo") {
-                        val it = currentItem
-                        val resume = if (it != null) resumeFor(it, currentUrl ?: "") else 0L
-                        if (resume > 0L) exo.seekTo(resume)
-                        exo.prepare()
-                        exo.play()
-                    }
-                    .show()
+                // 2.7.58 — cartão de erro (desenho §4.7) em vez do
+                // Snackbar: título + "Tentar de novo" (a mesma
+                // lógica de retry de antes, ligada no onCreate) +
+                // "Abrir o vídeo" no celular.
+                showPlayerErrorCard()
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -1756,6 +2077,10 @@ class PlayerActivity : AppCompatActivity() {
                     val newItem = PlaylistManager.getCurrent()
                     if (newItem != null) {
                         currentItem = newItem
+                        // 2.7.58 — a aula mudou: o cartão Up Next e
+                        // o "fechado" da aula anterior saem.
+                        hideUpNextCard()
+                        upNextDismissedKey = null
                         currentUrl = linkBaseUrl() + (newItem.link ?: "")
                         isAudio = newItem.isAudio
                         openedResumeMs = 0L
@@ -1863,6 +2188,9 @@ class PlayerActivity : AppCompatActivity() {
                 if (!seekBarDragging && !remoteScrubbing && dur > 0) {
                     binding.barSeekBar.progress = (pos * 1000 / dur).toInt()
                 }
+                // 2.7.58 — cartão Up Next nos últimos 20 s (só UI;
+                // o ciclo de tempo é o existente).
+                maybeShowUpNextCard(pos, dur)
             }
         }
     }
@@ -3057,6 +3385,12 @@ class PlayerActivity : AppCompatActivity() {
         const val EXTRA_URL = "playback_url"
         const val EXTRA_TITLE = "playback_title"
         const val EXTRA_FOLDER_PATH = "playback_folder_path"
+        // 2.7.58 — ficheiro local dos Downloads (file://): a fonte
+        // de dados escolhe-se pelo esquema (nunca o upstream HTTP).
+        const val EXTRA_LOCAL_FILE = "playback_local_file"
+        // 2.7.58 — "Assistir do Início" verdadeiro: ignora o resume
+        // guardado e começa na posição 0.
+        const val EXTRA_FROM_START = "playback_from_start"
 
         // R22 UI — abas dos materiais (conceito "aula celular").
         const val MAT_TAB_RESUMO = 0
