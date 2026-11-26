@@ -62,6 +62,13 @@ class BrowseActivity : AppCompatActivity() {
 
         binding.retryButton?.setOnClickListener { loadFolder() }
 
+        // 1.0.40 — rail lateral persistente da TV (TvRailHost).
+        com.vovofit.app.ui.home.TvRailHost.attach(
+            this,
+            com.vovofit.app.ui.home.SideMenuView.MenuItem.DRIVES,
+            binding.recycler
+        )
+
         loadFolder()
     }
 
