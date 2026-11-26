@@ -104,6 +104,18 @@
         <activity android:name=".ui.mylist.MyListActivity" android:exported="false"
             android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
+        <!-- 2.7.58: destinos reais (Simulados, Meggy na nuvem,
+             Downloads, Meus Cursos). -->
+        <activity android:name=".ui.simulado.SimuladoActivity" android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
+        <activity android:name=".ui.meggy.MeggyChatActivity" android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
+        <activity android:name=".ui.downloads.DownloadsActivity" android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
+        <activity android:name=".ui.home.MyCoursesActivity" android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
         <!-- v2.7.6: leitores embutidos (PDF/MD) -->
         <activity android:name=".ui.reader.PdfReaderActivity" android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
