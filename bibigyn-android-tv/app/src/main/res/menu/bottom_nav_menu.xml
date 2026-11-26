@@ -18,6 +18,12 @@
         android:id="@+id/nav_mylist"
         android:icon="@drawable/ic_nav_bookmark"
         android:title="Minha lista" />
+    <!-- v2.1.44 — assistente fitness (só celular): abre o chat com
+         persona fitness-bibi; os restantes destinos ficam intactos. -->
+    <item
+        android:id="@+id/nav_fitness"
+        android:icon="@drawable/ic_nav_fitness"
+        android:title="Assistente" />
     <item
         android:id="@+id/nav_settings"
         android:icon="@drawable/ic_nav_settings"
