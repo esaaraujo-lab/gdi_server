@@ -147,14 +147,21 @@
             <!-- 2.7.58 — HERO AMBIENTE (decisão 19:24): o topo
                  mostra a arte do item focado em grande (backdrop +
                  título + meta + progresso + selo Continuar). Não é
-                 focável: o OK faz-se no cartão focado. Sem item/sem
-                 arte fica gone (fundo limpo) — ver
-                 HomeActivity.updateAmbientHero. -->
+                 focável: o OK faz-se no cartão focado. Sem item fica
+                 gone — ver HomeActivity.updateAmbientHero.
+                 2.7.61 — cantos arredondados de 24dp com recorte
+                 real (clipToOutline + outline no código), anel
+                 branco 3dp em foreground (feedback: o bloco é o
+                 "ecrã" do item focado) e scrim translúcido próprio
+                 (o hero_gradient opaco escondia a arte — foto do
+                 teste do Elton à 2.7.60). -->
             <FrameLayout
                 android:id="@+id/ambientHero"
                 android:layout_width="match_parent"
                 android:layout_height="300dp"
                 android:layout_marginTop="@dimen/spacing_md"
+                android:clipToOutline="true"
+                android:foreground="@drawable/ambient_hero_ring"
                 android:visibility="gone">
 
                 <ImageView
@@ -167,7 +174,7 @@
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:background="@drawable/hero_gradient" />
+                    android:background="@drawable/ambient_hero_scrim" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -211,6 +218,7 @@
                         android:visibility="gone" />
 
                     <TextView
+                        android:id="@+id/ambientContinuePill"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/spacing_md"
