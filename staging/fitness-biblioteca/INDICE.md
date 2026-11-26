@@ -10,12 +10,14 @@
 > ✦ = ficha nova da colheita exaustiva de 2026-11-26 (perseguição
 > de citações). ✚ = ficha nova da ronda de suplementos de
 > 2026-11-26 (ordem 19:55: TODOS os suplementos de academia, um
-> por ficha, com bibliografia + secção PRÁTICA/RELATO).
+> por ficha, com bibliografia + secção PRÁTICA/RELATO). ◆ = ficha
+> nova da ronda de 4h de 2026-11-26 20:09 (rotação: treino, corpo,
+> nutrição + suplementos pendentes da COBERTURA).
 > Relatório de cobertura: `COBERTURA.md`.
 
-versao: 3
+versao: 4
 actualizado: 2026-11-26
-fichas: 86
+fichas: 99
 
 ## Fichas
 
@@ -27,6 +29,9 @@ fichas: 86
 | corpo-lombalgia-exercicio.md ✦ | corpo/movimento | bibi, vovo | lombalgia, dor lombar, costas, dor nas costas, lombar, ciática, hérnia, ficar de cama, repouso |
 | corpo-sistemas-energia.md ✦ | corpo/movimento | bibi, vovo | sistemas de energia, ATP, fosfocreatina, glicólise, aeróbio, oxidativo, EPOC, afterburn, queima depois do treino, substratos, glicogénio |
 | corpo-tendao-tecidos.md ✦ | corpo/movimento | bibi, vovo | tendão, tendões, ligamentos, tendinopatia, tendinite, dor no tendão, aquiles, cotovelo, joelho do saltador, tecido conjuntivo, adaptar tendão |
+| corpo-hormonios-exercicio.md ◆ | corpo/movimento | bibi, vovo | hormonas, testosterona, gh, hormona do crescimento, igf-1, cortisol, pico hormonal, treino e testosterona, hormonas e hipertrofia |
+| corpo-dor-muscular-doms.md ◆ | corpo/movimento | bibi, vovo | dor muscular, doms, dorido, dor depois do treino, dor tardia, ácido láctico, lactato, microlesão, dor muscular tardia |
+| corpo-composicao-corporal-medicao.md ◆ | corpo/movimento | bibi, vovo | gordura corporal, percentagem de gordura, medir gordura, dexa, bioimpedância, balança, dobras, pregas, imc, cintura, composição corporal |
 | med-glp1-cardiovascular-renal.md ✦ | medicamentos | bibi, vovo | coração, cardiovascular, enfarte, avc, rim, renal, select, leader, flow, soul, protege, desfechos |
 | med-glp1-classe-panorama.md | medicamentos | bibi, vovo | semaglutida, ozempic, wegovy, rybelsus, liraglutida, saxenda, glp-1, classe, comparação, coração, select, step |
 | med-glp1-efeitos-adversos.md ✦ | medicamentos | bibi, vovo | efeitos colaterais, efeitos adversos, náusea, vómito, vesícula, pancreatite, gastroparesia, tiroide, cabelo, rosto, ozempic face, anestesia, cirurgia, segurança |
@@ -48,6 +53,8 @@ fichas: 86
 | nutri-tdee-gasto-energetico.md ✦ | nutrição | bibi, vovo | tdee, gasto energético, gasto calórico, quantas calorias gasto, metabolismo basal, taxa metabólica, mifflin, calorias de manutenção, neat, metabolismo lento, metabolismo estragado, adaptação metabólica |
 | nutri-timing-refeicoes.md ✦ | nutrição | bibi, vovo | timing, quando comer, pré-treino, pós-treino, janela anabólica, janela de oportunidade, comer antes de treinar, shake depois do treino, proteína antes de dormir, distribuição de proteína, refeição da noite |
 | nutri-ultraprocessados-saciedade.md ✦ | nutrição | bibi, vovo | ultraprocessados, saciedade, fome, densidade energética, fibra, apetite, comida processada, beliscar, sono e fome, grelina, leptina, saciar |
+| nutri-dieta-cetogenica.md ◆ | nutrição | bibi, vovo | cetogénica, cetogenica, keto, low-carb, baixo carboidrato, gordura, cetose, cetonas, dieta cetogénica, emagrecer keto, keto treino |
+| nutri-proteina-fontes-alimentos.md ◆ | nutrição | bibi, vovo | proteína, fontes de proteína, alimentos proteicos, whey ou comida, leucina, diaas, qualidade da proteína, ovo, frango, peixe, soja, ervilha, vegetariano, vegano, quanto por refeição, colagénio |
 | sup-60mais.md | suplementos | vovo | suplemento idosos, 60+, vitamina d, b12, cálcio, creatina idosos, ómega-3, vovó |
 | sup-ashwagandha-adaptogenios.md ✦ | suplementos | bibi, vovo | ashwagandha, adaptogénio, adaptogenio, rhodiola, ginseng, stress, cortisol, testosterona, planta |
 | sup-citrulina-oxido-nitrico.md ✦ | suplementos | bibi, vovo | citrulina, arginina, óxido nítrico, oxido nitrico, pump, pré-treino, vasodilatação, beterraba |
@@ -88,6 +95,10 @@ fichas: 86
 | sup-cla-carnitina.md ✚ | suplementos | bibi, vovo | CLA, carnitina, L-carnitina, queima gordura, ácido linoleico conjugado, DOMS, recuperação |
 | sup-hidratos-intra-treino.md ✚ | suplementos | bibi, vovo | hidratos intra-treino, carbohidratos, maltodextrina, dextrose, palatinose, isomaltulose, dextrina cíclica, HBCD, endurance, glicose, frutose |
 | sup-mct-oleos.md ✚ | suplementos | bibi, vovo | MCT, óleo de coco, oleo de coco, triglicéridos de cadeia média, trigliceridos, cetonas, gordura, keto |
+| sup-eletrolitos-esforco.md ◆ | suplementos | bibi, vovo | electrólitos, eletrolitos, sódio, sodio, potássio, potassio, suor, hidratação, desidratação, hiponatremia, bebida desportiva, isotónico, cãibras, calor, endurance |
+| sup-berberina-glicemia.md ◆ | suplementos | bibi, vovo | berberina, berberine, glicemia, glicose, hba1c, hemoglobina glicada, insulina, resistência à insulina, diabetes, ozempic natural, metabolismo, açúcar no sangue |
+| sup-glicina-sono.md ◆ | suplementos | bibi, vovo | glicina, glycine, sono, dormir, insónia, insonia, adormecer, cansaço, fadiga, temperatura corporal, colagénio, aminoácido |
+| sup-ecdisterona.md ◆ | suplementos | bibi, vovo | ecdisterona, ecdysterone, 20-hidroxiecdisona, turkesterona, turkesterone, anabólico natural, ecdisteróide, espinafre, doping, wada, hormona |
 | treino-amplitude-musculo-longo.md ✦ | treino | bibi, vovo | amplitude, amplitude completa, parcial, músculo alongado, alongamento sob carga, lengthened partials, ROM, descer mais, agachamento profundo |
 | treino-cardio-mobilidade.md | treino | bibi, vovo | cardio, aeróbio, corrida, caminhada, zona 2, hiit, mobilidade, flexibilidade, alongamento, quantos minutos |
 | treino-concorrente-interferencia.md ✦ | treino | bibi, vovo | treino concorrente, interferência, cardio atrapalha, correr e musculação, cardio mata ganhos, ordem dos exercícios, combinar cardio e força |
@@ -98,6 +109,9 @@ fichas: 86
 | treino-hipertrofia-volume.md | treino | bibi, vovo | hipertrofia, volume, séries, quantas séries, progressão, sobrecarga, falha, frequência, ganhar massa |
 | treino-proteina.md | treino | bibi, vovo | proteína, quanta proteína, gramas, whey, suplemento de proteína, macros, hipertrofia, défice |
 | treino-sono-recuperacao.md ✦ | treino | bibi, vovo | sono, dormir, recuperação, sesta, banho de gelo, imersão em água fria, CWI, gelo atrapalha, como recuperar, descanso |
+| treino-periodizacao.md ◆ | treino | bibi, vovo | periodização, periodizacao, linear, ondulada, ondulante, dup, bloco, blocos, plano, planear treino, programa, progressão, ciclo, mesociclo |
+| treino-metodos-avancados.md ◆ | treino | bibi, vovo | drop set, drop-set, rest-pause, rest pause, superset, super-série, supersérie, cluster, myo-reps, métodos avançados, intensidade, técnicas avançadas, treino curto, pouco tempo |
+| treino-aquecimento.md ◆ | treino | bibi, vovo | aquecimento, aquecer, warm-up, warmup, alongamento, alongar, estático, dinâmico, lesão, prevenir lesão, preparar, séries de aquecimento, mobilidade |
 | vovo-artrose-exercicio.md ✦ | idosos | vovo | artrose, osteoartrite, joelho, anca, quadril, dor no joelho, desgaste, cartilagem, osteoartrose |
 | vovo-cognicao-exercicio.md ✦ | idosos | vovo | cognição, memória, demência, Alzheimer, cérebro, esquecimento, declínio cognitivo, raciocínio |
 | vovo-depressao-sono.md ✦ | idosos | vovo | depressão, humor, ânimo, tristeza, ansiedade, sono, insónia, dormir, depressivo |
@@ -107,6 +121,7 @@ fichas: 86
 | vovo-potencia-muscular.md ✦ | idosos | vovo | potência, potência muscular, velocidade, rapidez, levantar rápido, explosivo, sentar e levantar, tropeçar, força rápida |
 | vovo-proteina-60mais.md | idosos | vovo | proteína, idosos, 60+, quanto comer, sarcopenia, leucina, refeições |
 | vovo-sarcopenia-forca.md | idosos | vovo | sarcopenia, força, idosos, 60+, massa muscular, fragilidade, levantar da cadeira, preensão |
+| vovo-fragilidade-marcha.md ◆ | idosos | vovo | fragilidade, frágil, fragil, marcha, velocidade de marcha, andar devagar, levantar da cadeira, sentar e levantar, sppB, tug, timed up and go, autonomia, cair, dependência, pré-frágil, pre-fragil |
 
 ## Regras de uso (resumo — o desenho manda)
 

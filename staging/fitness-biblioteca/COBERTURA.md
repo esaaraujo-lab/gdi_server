@@ -11,22 +11,22 @@
 > dos pontos não confirmados no fim.
 
 actualizado: 2026-11-26
-total: **86 fichas** (16 iniciais + 44 da colheita + 26 da ronda de
-suplementos) + INDICE.md + este relatório
+total: **99 fichas** (16 iniciais + 44 da colheita + 26 da ronda de
+suplementos + 13 da ronda de 4h de 2026-11-26 20:09) + INDICE.md + este relatório
 
 ## Cobertura por área
 
 | Área | Fichas | Iniciais | Novas | Frentes/cadeias principais |
 |---|---|---|---|---|
 | Medicamentos de emagrecimento e interacções (`med-`) | 13 | 5 | 8 | SURMOUNT/SURPASS → STEP/SUSTAIN/PIONEER/OASIS → SELECT/LEADER/FLOW/SOUL → SURMOUNT-OSA/ESSENCE/STEP-9/STEP-HFpEF/SUMMIT → pipeline (retatrutida/orforglipron/cagrisema/amicretina) → EMA/FDA saúde mental → manutenção longo prazo |
-| Suplementos e vitaminas (`sup-`) | 40 | 4 | 36 | Fichas NIH ODS uma a uma → VITAL/REDUCE-IT/STRENGTH → COSMOS/PHS-II → ISSN (HMB, beta-alanina) → Baar colagénio → Cochrane cãibras → NCCIH/LiverTox adaptogénios → **ronda 19:55: um suplemento por ficha (proteínas, creatina formas/mitos, cafeína ISSN 2021, vitaminas/minerais um a um, botânicos, termogénicos)** |
-| Treino (`treino-`) | 10 | 4 | 6 | ACSM/Schoenfeld → meta-análises de carga, ROM/comprimento longo, descanso/tempo → Hickson→Wilson→Schumann (concorrente) → Meeusen (fadiga) → Mah/Craven/Roberts (sono e CWI) |
-| Nutrição desportiva (`nutri-`) | 8 | 0 | 8 | Mifflin/NEAT/adaptação → ACSM/ISSN hidratos → Aragon & Schoenfeld (timing) → DIETFITS/jejum/PREDIMED → Hall 2019 ultraprocessados → Parr álcool → ACSM hidratação → AHA gorduras |
-| Idosos +60 (`vovo-`) | 9 | 3 | 6 | NSCA/EWGSOP2/PROT-AGE (base) → potência (Reid & Fielding→Balachandran) → ACR/OARSI/Cochrane artrose → ADA/Umpierre/DARE diabetes → Edwards 2023 hipertensão → Northey/Brasure cognição → Noetel 2024 depressão/sono |
-| Corpo — biologia, física do movimento, medicina desportiva (`corpo-`) | 6 | 0 | 6 | Henneman/unidades motoras → alavancas/torque → sistemas de energia/EPOC → tendão (Magnusson, Bohm, Cook) → Lancet 2018 lombalgia → PEACE & LOVE (BJSM) lesões |
-| **Total** | **86** | **16** | **70** | |
+| Suplementos e vitaminas (`sup-`) | 44 | 4 | 40 | Fichas NIH ODS uma a uma → VITAL/REDUCE-IT/STRENGTH → COSMOS/PHS-II → ISSN (HMB, beta-alanina) → Baar colagénio → Cochrane cãibras → NCCIH/LiverTox adaptogénios → **ronda 19:55: um suplemento por ficha (proteínas, creatina formas/mitos, cafeína ISSN 2021, vitaminas/minerais um a um, botânicos, termogénicos)** → **ronda 4h 20:09: electrólitos (pendente), berberina (3 meta-análises), glicina (3 ensaios), ecdisterona (Isenmann 2019 vs. Wilborn 2006)** |
+| Treino (`treino-`) | 13 | 4 | 9 | ACSM/Schoenfeld → meta-análises de carga, ROM/comprimento longo, descanso/tempo → Hickson→Wilson→Schumann (concorrente) → Meeusen (fadiga) → Mah/Craven/Roberts (sono e CWI) → **ronda 4h 20:09: periodização (Williams 2017/Moesgaard 2022), métodos avançados (drop/superset), aquecimento (Fradkin 2010/Soligard 2008/Lauersen 2014)** |
+| Nutrição desportiva (`nutri-`) | 10 | 0 | 10 | Mifflin/NEAT/adaptação → ACSM/ISSN hidratos → Aragon & Schoenfeld (timing) → DIETFITS/jejum/PREDIMED → Hall 2019 ultraprocessados → Parr álcool → ACSM hidratação → AHA gorduras → **ronda 4h 20:09: dieta cetogénica (meta 2025/Cao 2021/Murphy 2020), fontes de proteína e leucina (DIAAS/Morton/Areta)** |
+| Idosos +60 (`vovo-`) | 10 | 3 | 7 | NSCA/EWGSOP2/PROT-AGE (base) → potência (Reid & Fielding→Balachandran) → ACR/OARSI/Cochrane artrose → ADA/Umpierre/DARE diabetes → Edwards 2023 hipertensão → Northey/Brasure cognição → Noetel 2024 depressão/sono → **ronda 4h 20:09: fragilidade e marcha (Fried/PRAE-Frail 2024/Mehta 2026)** |
+| Corpo — biologia, física do movimento, medicina desportiva (`corpo-`) | 9 | 0 | 9 | Henneman/unidades motoras → alavancas/torque → sistemas de energia/EPOC → tendão (Magnusson, Bohm, Cook) → Lancet 2018 lombalgia → PEACE & LOVE (BJSM) lesões → **ronda 4h 20:09: hormonas e hipertrofia (West 2009/2012, Schoenfeld 2013), DOMS (Cheung 2003/revisão 2026), medição da composição corporal (DEXA/BIA/dobras)** |
+| **Total** | **99** | **16** | **83** | |
 
-Personas: 77 fichas partilhadas (BiBi + Vovó); 9 só da Vovó
+Personas: 89 fichas partilhadas (BiBi + Vovó); 10 só da Vovó
 (`vovo-*` + `sup-60mais`) — a Vovó usa a biblioteca da BiBi **e** a
 sua, como pedido. A Meggy genérica não recebe nenhuma.
 
@@ -98,9 +98,63 @@ magnésio/ZMA (`sup-magnesio-sono`), multivitamínicos
 
 **Ficam para a ronda seguinte:** aprofundamentos por desporto/
 contexto (suplementação em endurance vs força já parcialmente
-cruzada), electrólitos em ficha própria além do cruzamento com
-`nutri-hidratacao-eletrólitos`, e revisão bibliográfica fina dos
-pontos 13–15 abaixo.
+cruzada), e revisão bibliográfica fina dos pontos 1–12 abaixo
+(os pontos 13–15 foram RESOLVIDOS nesta ronda — ver fim do
+registo). Áreas a rodar na próxima ronda: medicamentos (GLP-1
+em idosos, gravidez/amamentação, estatuto do orforglipron —
+ponto 1), treino por desporto/contexto, corpo (imunidade e
+exercício, fadiga central/sistema nervoso) e nutrição
+(cafeína nos alimentos, refeições fora de casa).
+
+## Ronda de 4h — 2026-11-26 20:09 (rotação: treino, corpo, nutrição + suplementos pendentes)
+
+**+13 fichas, +58.844 bytes** (biblioteca de 396.316 para
+458.851 bytes em disco, 86 → 99 fichas; INDICE.md v3 → v4).
+
+**Suplementos (4):** `sup-eletrolitos-esforco` (ficha própria
+pedida na ronda anterior — ACSM 2007/NATA 2017, sódio 0,5–0,7
+g/L, hiponatremia, cãibras ≠ sódio), `sup-berberina-glicemia`
+(🟡 efeito pequeno na glicemia de diabéticos: HbA1c −0,5 a
+−0,7 pp; 3 meta-análises; "Ozempic natural" = não),
+`sup-glicina-sono` (🟡 sinal pequeno: 3 ensaios curtos, 3 g,
+revisão 2024 = alto risco de viés; não é tratamento de
+insónia), `sup-ecdisterona` (🟡/❌ evidência fraca e
+contraditória: Isenmann 2019 n=46 positivo vs. Wilborn 2006
+nulo; WADA monitoriza desde 2020; turkesterona sem ensaios).
+
+**Treino (3):** `treino-periodizacao` (Williams 2017 ES 0,43;
+Moesgaard 2022: UP > LP só em treinados; Rhea 2002
+relativizado), `treino-metodos-avancados` (drop sets 12
+estudos SMD 0,04; supersets Zhang 2025 SMD −0,05, −36% tempo;
+comprimem, não amplificam), `treino-aquecimento` (Fradkin
+2010: 79% das medidas; lesão incerta; FIFA 11+ −32%;
+alongamento estático ≥60 s piora força).
+
+**Nutrição (2):** `nutri-dieta-cetogenica` (meta 2025: sem
+diferença em músculo/força; hidratos melhores em 1RM e
+contrarrelógio), `nutri-proteina-fontes-alimentos` (DIAAS,
+leucina 2,5–3 g/refeição, Morton 1,6 g/kg, colagénio não
+conta).
+
+**Corpo (3):** `corpo-hormonios-exercicio` (West 2009/2012:
+pico hormonal não aumenta síntese proteica; Schoenfeld
+2013), `corpo-dor-muscular-doms` (Cheung 2003; não é ácido
+láctico; revisão 2026 multifactorial; rabdomiólise como
+alarme), `corpo-composicao-corporal-medicao` (DEXA ±1–2 pp;
+BIA ±3–8 pp; IMC não mede gordura).
+
+**Idosos (1):** `vovo-fragilidade-marcha` (Fried; marcha
+<0,8 m/s; PRAE-Frail 2024: exercício RR 0,26; Mehta 2026:
+marcha +0,09 m/s, TUG −3,73 s).
+
+**Correcções de referências (pontos 13–15 RESOLVIDOS):**
+betaína → Zawieja et al. 2024 *J Sports Sci* 42(22):2131-2144
+(17 estudos, SMD 0,47 força máxima) + Ashtary-Larky 2022
+(sem efeito em composição corporal); tongkat ali →
+Leisegang et al. 2022 *Medicina* 58(8):1047, doi
+10.3390/medicina58081047 (confirmado); isomaltulose →
+König et al. 2016 *Nutrients* 8(7):390 (ensaio em 20
+ciclistas, NÃO revisão — corrigido na ficha).
 
 ## Registo honesto — pontos a rever antes de uso público externo
 
@@ -144,15 +198,24 @@ pontos 13–15 abaixo.
     lidos via sínteses secundárias com números; autores não
     inventados — verificar na fonte primária se alguma for
     promovida a destaque.
-13. **Betaína (ronda de suplementos):** a referência às revisões de
-    Cholewa et al. ficou genérica ("revisões 2014–2019") — não foi
-    confirmada uma meta-análise única desse autor; verificar antes
-    de promover a âncora.
-14. **Tongkat ali/longjack:** citada a revisão de Leisegang et al.
-    2022 (*Medicina*) sem confirmação de volume/páginas ao detalhe.
-15. **Isomaltulose/palatinose:** a revisão de König et al.
-    (*Nutrients*) ficou sem ano/volume na ficha de hidratos
-    intra-treino — conteúdo correcto, referência a completar.
+13. **Betaína — RESOLVIDO nesta ronda (2026-11-26 20:09):** a
+    meta-análise é Zawieja et al. 2024, *J Sports Sci*
+    42(22):2131-2144 (17 estudos, 317 participantes; força
+    máxima SMD 0,47, sobretudo membros inferiores; sem efeito
+    em resistência/potência de sprint). A ausência de efeito em
+    composição corporal é Ashtary-Larky et al. 2022 (*Br J
+    Nutr*). Ficha `sup-betaina-taurina` actualizada.
+14. **Tongkat ali/longjack — RESOLVIDO nesta ronda
+    (2026-11-26 20:09):** Leisegang et al. 2022, *Medicina*
+    58(8):1047, doi 10.3390/medicina58081047 (9 estudos, 5 ECR
+    na meta-análise, SMD 1,352; efeito confirmado no subgrupo
+    hipogonadismo; heterogeneidade alta I²=87%). DOI
+    acrescentado à ficha `sup-botanicos-testosterona`.
+15. **Isomaltulose/palatinose — RESOLVIDO nesta ronda
+    (2026-11-26 20:09):** a referência de König et al. é um
+    ENSAIO, não uma revisão: König D et al. *Nutrients* 2016;
+    8(7):390 (20 ciclistas, isomaltulose vs. maltodextrina).
+    Ficha `sup-hidratos-intra-treino` corrigida.
 16. **Sinefrina:** a ficha regista os dois lados — revisões (parte
     com ligação à indústria) sem efeito CV consistente da
     p-sinefrina isolada vs. estudos pequenos com subidas de
