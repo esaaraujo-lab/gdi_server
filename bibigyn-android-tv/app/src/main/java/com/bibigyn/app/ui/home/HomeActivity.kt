@@ -763,6 +763,9 @@ class HomeActivity : AppCompatActivity() {
     }
 
     // ──────────── v2.1.44: Hero ambiente da TV (segue o foco) ────────────
+    // v2.1.46: imagem sempre real (último recurso = arte da marca),
+    // crossfade na troca e pulso da pílula sincronizado; cantos e
+    // anel vivem no layout (ambient_hero_bg / ambient_hero_ring).
     //
     // Porte da Meggy 2.7.58 adaptado às cadeias da BiBi: o bloco
     // ambient* só existe no layout-television (findViewById null no
@@ -797,32 +800,60 @@ class HomeActivity : AppCompatActivity() {
         }
         val image = findViewById<android.widget.ImageView>(R.id.ambientImage) ?: return
         val coverRes = coverPath?.let { DriveItem.coverResForPath(it) }
+        // v2.1.46 — a imagem NUNCA fica escondida: sem thumb, sem capa
+        // da biblioteca e sem capa local do drive, entra a arte da
+        // marca (o banner da app). Antes o último ramo punha a imagem
+        // GONE e, com o gradiente opaco por cima, o hero parecia um
+        // rectângulo de cor lisa sem imagem nenhuma.
+        val setLocalArt: (Int) -> Unit = { res ->
+            image.visibility = View.VISIBLE
+            image.alpha = 0f
+            image.setImageResource(res)
+            image.animate().alpha(1f).setDuration(250).start()
+        }
         val showFallback = {
             val libraryUrl = CoverLibrary.resolveStrict(this, title, coverPath)
             if (!libraryUrl.isNullOrBlank()) {
+                image.animate().cancel()
+                image.alpha = 1f
                 image.visibility = View.VISIBLE
                 image.load(libraryUrl) {
+                    crossfade(true)
                     if (coverRes != null) error(coverRes)
                     listener(onError = { _, _ ->
-                        if (coverRes != null) image.setImageResource(coverRes)
-                        else image.visibility = View.GONE
+                        setLocalArt(coverRes ?: R.drawable.banner)
                     })
                 }
-            } else if (coverRes != null) {
-                image.visibility = View.VISIBLE
-                image.setImageResource(coverRes)
             } else {
-                image.visibility = View.GONE
+                setLocalArt(coverRes ?: R.drawable.banner)
             }
         }
         if (!thumbUrl.isNullOrBlank()) {
+            image.animate().cancel()
+            image.alpha = 1f
             image.visibility = View.VISIBLE
             image.load(thumbUrl) {
+                crossfade(true)
                 if (coverRes != null) error(coverRes)
                 listener(onError = { _, _ -> showFallback() })
             }
         } else {
             showFallback()
+        }
+        // v2.1.46 — realce sincronizado da pílula "Continuar" a cada
+        // troca de item focado (esta função só passa da dedup quando a
+        // chave muda): pulso curto de escala, a acompanhar o
+        // crossfade da imagem — feedback visual da troca.
+        findViewById<View>(R.id.ambientPill)?.let { pill ->
+            val pulse = android.view.animation.ScaleAnimation(
+                1f, 1.08f, 1f, 1.08f,
+                android.view.animation.Animation.RELATIVE_TO_SELF, 0.5f,
+                android.view.animation.Animation.RELATIVE_TO_SELF, 0.5f
+            )
+            pulse.duration = 150
+            pulse.repeatCount = 1
+            pulse.repeatMode = android.view.animation.Animation.REVERSE
+            pill.startAnimation(pulse)
         }
     }
 
