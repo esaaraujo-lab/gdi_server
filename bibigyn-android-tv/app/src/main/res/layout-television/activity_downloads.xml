@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v2.1.44 — Downloads (celular): lista dos vídeos baixados no
+     aparelho (registo DownloadRegistry, pasta Download/BiBiFit/).
+     Porte da Meggy 2.7.58. -->
+<!-- v2.1.44 — variante TV: o mesmo conteúdo do celular dentro
+     de downloadsContent (margem fixa de 56dp) + o rail lateral estilo
+     Plex por cima (TvRailHost). Gerado por wrap-tv-layouts.py a
+     partir do layout do celular; os ids são os mesmos. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/md_background">
+
+    <LinearLayout
+        android:id="@+id/downloadsContent"
+        android:layout_marginStart="56dp"
+        android:paddingHorizontal="@dimen/tv_margin_side"
+        android:paddingTop="@dimen/tv_margin_top"
+        android:paddingBottom="@dimen/tv_margin_bottom"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/md_background"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="@dimen/content_margin"
+        android:paddingVertical="@dimen/spacing_md">
+
+        <TextView
+            android:id="@+id/downloadsBack"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:clickable="true"
+            android:focusable="true"
+            android:padding="@dimen/spacing_sm"
+            android:text="‹"
+            android:textColor="@color/md_primary"
+            android:textSize="28sp" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/spacing_sm"
+            android:layout_weight="1"
+            android:text="@string/downloads_title"
+            android:textColor="@color/md_on_surface"
+            android:textSize="@dimen/text_topbar_title"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/downloadsEmpty"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_xl"
+        android:gravity="center"
+        android:paddingHorizontal="@dimen/spacing_lg"
+        android:text="@string/downloads_empty"
+        android:textColor="@color/md_on_surface_variant"
+        android:textSize="@dimen/text_card_title"
+        android:visibility="gone" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/downloadsList"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:paddingHorizontal="@dimen/content_margin"
+        android:paddingVertical="@dimen/spacing_md" />
+    </LinearLayout>
+
+    <com.bibigyn.app.ui.home.SideMenuView
+        android:id="@+id/tvSideMenu"
+        android:layout_width="56dp"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+</FrameLayout>

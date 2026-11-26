@@ -1,0 +1,719 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  v2.1.5 — Ajustes (conceito Ajustes, FUNÇÕES REAIS — ver REDESIGN_NOTES.md).
+  Perfil (nome real do usuário; SEM e-mail — o app não tem esse dado;
+  SEM selo "Assinante" — não há endpoint de assinatura; pill mostra
+  "Conta ativa" enquanto a sessão é válida). PREFERÊNCIAS: Notificações
+  (lembrete diário 19h, real), Reprodução automática (corrigido 2.7.4),
+  Baixar só no Wi-Fi (cache do ExoPlayer), Legendas (trilha de texto).
+  CONFIGURAÇÕES: Qualidade do vídeo (Auto/HD/SD via track selector,
+  só com >1 trilha), Velocidade padrão, Timer de sono, Verificar
+  atualizações, Sobre (versão dinâmica). Sair = fullLogout.
+  Nenhuma opção existente foi removida — só reestilizada.
+-->
+<!-- v2.1.44 — variante TV: o mesmo conteúdo do celular dentro
+     de settingsContent (margem fixa de 56dp) + o rail lateral estilo
+     Plex por cima (TvRailHost). Gerado por wrap-tv-layouts.py a
+     partir do layout do celular; os ids são os mesmos. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/md_background">
+
+    <LinearLayout
+        android:id="@+id/settingsContent"
+        android:layout_marginStart="56dp"
+        android:paddingHorizontal="@dimen/tv_margin_side"
+        android:paddingTop="@dimen/tv_margin_top"
+        android:paddingBottom="@dimen/tv_margin_bottom"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/md_background"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:background="@color/md_background"
+        android:elevation="0dp"
+        app:navigationIconTint="@color/md_primary"
+        app:title="@string/settings_title"
+        app:titleTextAppearance="@style/TextAppearance.Material3.TitleLarge"
+        app:titleTextColor="@color/md_on_surface" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="@dimen/content_margin"
+            android:paddingBottom="@dimen/spacing_lg">
+
+            <!-- Perfil -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:background="@drawable/tile_focus_border"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="@dimen/spacing_lg">
+
+                <TextView
+                    android:id="@+id/profileAvatar"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:background="@drawable/btn_play_circle"
+                    android:gravity="center"
+                    android:textColor="@color/md_on_primary"
+                    android:textSize="24sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/spacing_lg"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/profileName"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="@dimen/text_detail_course"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/profileSub"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Conta BiBi Fit"
+                        android:textColor="@color/md_on_surface_variant"
+                        android:textSize="@dimen/text_card_subtitle" />
+
+                    <TextView
+                        android:id="@+id/profilePill"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_sm"
+                        android:background="@drawable/chip_badge"
+                        android:paddingHorizontal="@dimen/spacing_sm"
+                        android:paddingVertical="@dimen/spacing_xs"
+                        android:text="@string/active_account"
+                        android:textColor="@color/md_primary"
+                        android:textSize="@dimen/text_card_progress"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- PREFERÊNCIAS -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:text="PREFERÊNCIAS"
+                android:textColor="@color/md_primary"
+                android:textSize="@dimen/text_chip"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:background="@drawable/tile_focus_border"
+                android:orientation="vertical"
+                android:paddingHorizontal="@dimen/spacing_lg">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingVertical="@dimen/spacing_md">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Notificações"
+                            android:textColor="@color/md_on_surface"
+                            android:textSize="@dimen/text_card_title" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Lembrete diário de estudo às 19h"
+                            android:textColor="@color/md_on_surface_variant"
+                            android:textSize="@dimen/text_card_subtitle" />
+                    </LinearLayout>
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchNotifications"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:focusable="true" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/md_outline_variant" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingVertical="@dimen/spacing_md">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Reprodução automática"
+                            android:textColor="@color/md_on_surface"
+                            android:textSize="@dimen/text_card_title" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Avançar para a próxima aula sozinho"
+                            android:textColor="@color/md_on_surface_variant"
+                            android:textSize="@dimen/text_card_subtitle" />
+                    </LinearLayout>
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchAutoplay"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:focusable="true" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/md_outline_variant" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingVertical="@dimen/spacing_md">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Baixar só no Wi-Fi"
+                            android:textColor="@color/md_on_surface"
+                            android:textSize="@dimen/text_card_title" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="O vídeo assistido só é guardado no aparelho no Wi-Fi"
+                            android:textColor="@color/md_on_surface_variant"
+                            android:textSize="@dimen/text_card_subtitle" />
+                    </LinearLayout>
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchWifiOnly"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:focusable="true" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/md_outline_variant" />
+
+                <!-- v2.1.44 — menu lateral da TV (só aparece na TV;
+                     no celular a linha esconde-se no código, como
+                     na Meggy). -->
+                <LinearLayout
+                    android:id="@+id/tvSideMenuRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingVertical="@dimen/spacing_md">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/tv_side_menu_title"
+                            android:textColor="@color/md_on_surface"
+                            android:textSize="@dimen/text_card_title" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="@string/tv_side_menu_sub"
+                            android:textColor="@color/md_on_surface_variant"
+                            android:textSize="@dimen/text_card_subtitle" />
+                    </LinearLayout>
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchTvSideMenu"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:focusable="true" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/md_outline_variant" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingVertical="@dimen/spacing_md">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Legendas"
+                            android:textColor="@color/md_on_surface"
+                            android:textSize="@dimen/text_card_title" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Mostrar legendas quando a aula tiver"
+                            android:textColor="@color/md_on_surface_variant"
+                            android:textSize="@dimen/text_card_subtitle" />
+                    </LinearLayout>
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchSubtitles"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:focusable="true" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- CONFIGURAÇÕES -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:text="CONFIGURAÇÕES"
+                android:textColor="@color/md_primary"
+                android:textSize="@dimen/text_chip"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:background="@drawable/tile_focus_border"
+                android:orientation="vertical"
+                android:paddingHorizontal="@dimen/spacing_lg">
+
+                <!-- Qualidade do vídeo -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingVertical="@dimen/spacing_md">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Qualidade do vídeo"
+                            android:textColor="@color/md_on_surface"
+                            android:textSize="@dimen/text_card_title" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Vale quando a aula tiver mais de uma qualidade"
+                            android:textColor="@color/md_on_surface_variant"
+                            android:textSize="@dimen/text_card_subtitle" />
+                    </LinearLayout>
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnQualityDown"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/chip_outline"
+                        android:focusable="true"
+                        android:text="−"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="18sp" />
+
+                    <TextView
+                        android:id="@+id/qualityValue"
+                        android:layout_width="64dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:text="Auto"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="@dimen/text_card_title"
+                        android:textStyle="bold" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnQualityUp"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/chip_outline"
+                        android:focusable="true"
+                        android:text="+"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="18sp" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/md_outline_variant" />
+
+                <!-- Velocidade padrão -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingVertical="@dimen/spacing_md">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Velocidade padrão"
+                            android:textColor="@color/md_on_surface"
+                            android:textSize="@dimen/text_card_title" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Aplicada ao abrir cada aula"
+                            android:textColor="@color/md_on_surface_variant"
+                            android:textSize="@dimen/text_card_subtitle" />
+                    </LinearLayout>
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnSpeedDown"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/chip_outline"
+                        android:focusable="true"
+                        android:text="−"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="18sp" />
+
+                    <TextView
+                        android:id="@+id/speedValue"
+                        android:layout_width="64dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:text="1.0×"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="@dimen/text_card_title"
+                        android:textStyle="bold" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnSpeedUp"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/chip_outline"
+                        android:focusable="true"
+                        android:text="+"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="18sp" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/md_outline_variant" />
+
+                <!-- Timer de sono -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingVertical="@dimen/spacing_md">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Timer de sono"
+                            android:textColor="@color/md_on_surface"
+                            android:textSize="@dimen/text_card_title" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Pausa o player após o tempo"
+                            android:textColor="@color/md_on_surface_variant"
+                            android:textSize="@dimen/text_card_subtitle" />
+                    </LinearLayout>
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnSleepDown"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/chip_outline"
+                        android:focusable="true"
+                        android:text="−"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="18sp" />
+
+                    <TextView
+                        android:id="@+id/sleepValue"
+                        android:layout_width="64dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:text="Off"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="@dimen/text_card_title"
+                        android:textStyle="bold" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnSleepUp"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/chip_outline"
+                        android:focusable="true"
+                        android:text="+"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="18sp" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/md_outline_variant" />
+
+                <!-- Verificar atualizações -->
+                <LinearLayout
+                    android:id="@+id/btnCheckUpdate"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingVertical="@dimen/spacing_lg">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Verificar atualizações"
+                        android:textColor="@color/md_on_surface"
+                        android:textSize="@dimen/text_card_title" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="›"
+                        android:textColor="@color/md_on_surface_variant"
+                        android:textSize="22sp" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/md_outline_variant" />
+
+                <!-- Sobre -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingVertical="@dimen/spacing_lg">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Sobre"
+                            android:textColor="@color/md_on_surface"
+                            android:textSize="@dimen/text_card_title" />
+
+                        <TextView
+                            android:id="@+id/aboutText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:textColor="@color/md_on_surface_variant"
+                            android:textSize="@dimen/text_card_subtitle" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ADMINISTRAÇÃO (Ronda 10 Frente B — só visível para admin) -->
+            <LinearLayout
+                android:id="@+id/rowAdminDrives"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:clickable="true"
+                android:focusable="true"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="ADMINISTRAÇÃO"
+                    android:textColor="@color/md_primary"
+                    android:textSize="@dimen/text_chip"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_sm"
+                    android:background="@drawable/tile_focus_border"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="@dimen/spacing_lg">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/admin_drives_row"
+                            android:textColor="@color/md_on_surface"
+                            android:textSize="@dimen/text_card_title" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="@string/admin_drives_row_sub"
+                            android:textColor="@color/md_on_surface_variant"
+                            android:textSize="@dimen/text_card_subtitle" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="›"
+                        android:textColor="@color/md_on_surface_variant"
+                        android:textSize="22sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Sair -->
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnLogout"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/cta_height"
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:background="@drawable/btn_primary_pill"
+                android:focusable="true"
+                android:text="@string/logout"
+                android:textColor="@color/md_on_primary"
+                android:textSize="@dimen/text_button"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <!-- Bottom nav — oculta na TV (código) -->
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottomNav"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="@dimen/content_margin"
+        android:layout_marginBottom="@dimen/spacing_md"
+        android:background="@drawable/nav_bar_background"
+        android:elevation="@dimen/elevation_3"
+        app:itemActiveIndicatorStyle="@style/NavIndicatorPill"
+        app:itemIconTint="@color/bottom_nav_item_color"
+        app:itemTextColor="@color/bottom_nav_item_color"
+        app:labelVisibilityMode="labeled"
+        app:menu="@menu/bottom_nav_menu" />
+    </LinearLayout>
+
+    <com.bibigyn.app.ui.home.SideMenuView
+        android:id="@+id/tvSideMenu"
+        android:layout_width="56dp"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+</FrameLayout>

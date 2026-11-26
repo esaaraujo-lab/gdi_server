@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  v1.8.0 — Browse (inside-drive) screen.
+
+  Changes vs v1.7.0:
+  • Header now has gradient scrim + 1dp pink accent line for that
+    Netflix/Disney "channel header" feel.
+  • MaterialToolbar title styled in white 18sp bold.
+  • Breadcrumb redesigned: pill chip with pink chevrons between
+    segments, ellipsizes middle.
+  • RecyclerView padding tuned for tile focus scale (so scaled tiles
+    don't clip against the recycler edges).
+  • Loading + empty + error states polished (larger emoji, retry
+    button uses Meggy pink accent).
+-->
+<!-- v2.1.44 — variante TV: o mesmo conteúdo do celular dentro
+     de browseContent (margem fixa de 56dp) + o rail lateral estilo
+     Plex por cima (TvRailHost). Gerado por wrap-tv-layouts.py a
+     partir do layout do celular; os ids são os mesmos. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/md_background">
+
+    <LinearLayout
+        android:id="@+id/browseContent"
+        android:layout_marginStart="56dp"
+        android:paddingHorizontal="@dimen/tv_margin_side"
+        android:paddingTop="@dimen/tv_margin_top"
+        android:paddingBottom="@dimen/tv_margin_bottom"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bg_primary">
+
+    <!-- Header (toolbar + accent line) -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/bg_primary">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:background="@color/bg_primary"
+            android:elevation="0dp"
+            app:titleTextColor="@color/text_primary"
+            app:titleTextAppearance="@style/TextAppearance.Material3.TitleLarge"
+            app:navigationIconTint="@color/meggy_pink" />
+
+        <!-- 1dp pink accent line under header -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_gravity="bottom"
+            android:background="#22FF8B9F" />
+    </FrameLayout>
+
+    <!-- Breadcrumb chip -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="18dp"
+        android:paddingVertical="6dp">
+
+        <TextView
+            android:id="@+id/breadcrumb"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/breadcrumb_chip"
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="7dp"
+            android:textColor="@color/text_secondary"
+            android:textSize="12.5sp"
+            android:singleLine="true"
+            android:ellipsize="middle"
+            tools:ignore="HardcodedText" />
+    </LinearLayout>
+
+    <!-- v2.1.41 — entrada de busca SÓ TV (gone por omissão; o código
+         mostra-a apenas com TvUtils.isTv e abre a SearchActivity,
+         a mesma busca de todo o app). No celular nunca aparece. -->
+    <TextView
+        android:id="@+id/browseSearch"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="18dp"
+        android:layout_marginTop="4dp"
+        android:background="@drawable/breadcrumb_chip"
+        android:clickable="true"
+        android:focusable="true"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="9dp"
+        android:text="@string/browse_search"
+        android:textColor="@color/text_primary"
+        android:textSize="14sp"
+        android:visibility="gone" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <!-- Tile grid (extra padding so focused-scaled tiles don't clip) -->
+        <!-- R15C: topo 6dp -> 12dp (o zoom vertical do foco pede ~10dp) + sem corte. -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recycler"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:clipChildren="false"
+            android:paddingHorizontal="10dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="24dp"
+            android:scrollbars="vertical"
+            android:scrollbarFadeDuration="0" />
+
+        <ProgressBar
+            android:id="@+id/loading_view"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="center"
+            android:visibility="gone"
+            android:indeterminateTint="@color/meggy_pink" />
+
+        <LinearLayout
+            android:id="@+id/empty_state"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="56sp"
+                android:text="📭" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/browse_empty"
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/error_state"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="24dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="56sp"
+                android:text="⚠️" />
+
+            <TextView
+                android:id="@+id/error_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center"
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/retry_button"
+                style="@style/Widget.Meggy.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:text="@string/browse_retry" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- v2.1.41 — dicas do comando no rodapé, SÓ TV (gone no celular). -->
+    <TextView
+        android:id="@+id/browseTvHint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:paddingVertical="10dp"
+        android:text="@string/tv_remote_hint"
+        android:textColor="@color/text_secondary"
+        android:textSize="13sp"
+        android:visibility="gone" />
+    </LinearLayout>
+
+    <com.bibigyn.app.ui.home.SideMenuView
+        android:id="@+id/tvSideMenu"
+        android:layout_width="56dp"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+</FrameLayout>

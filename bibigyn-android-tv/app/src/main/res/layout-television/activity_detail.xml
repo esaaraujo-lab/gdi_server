@@ -13,16 +13,31 @@
   Mesmos ids do layout de celular (ViewBinding único) + ids novos
   só-TV (ctaFromStart, tvCourseProgress*, tvLessons*), acedidos
   com ?. no código.
+
+  v2.1.44 — rail lateral estilo Plex persistente (TvRailHost): a
+  raiz passa a FrameLayout, o conteúdo vive em detailContent com a
+  margem fixa de 56dp e o SideMenuView desliza por cima. A faixa do
+  herói passa a 200dp e SÓ aparece onde a pasta tem vídeos directos
+  (regra da Meggy 2.7.56; a visibilidade é do updateTvDetailHeader,
+  id heroCard via findViewById) — pasta intermédia fica sem faixa.
+  O progresso do curso sai de dentro da faixa (fica abaixo dela).
 -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/md_background"
-    android:orientation="vertical"
-    android:paddingHorizontal="@dimen/tv_margin_side"
-    android:paddingTop="@dimen/tv_margin_top"
-    android:paddingBottom="@dimen/tv_margin_bottom">
+    android:background="@color/md_background">
+
+    <LinearLayout
+        android:id="@+id/detailContent"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginStart="56dp"
+        android:background="@color/md_background"
+        android:orientation="vertical"
+        android:paddingHorizontal="@dimen/tv_margin_side"
+        android:paddingTop="@dimen/tv_margin_top"
+        android:paddingBottom="@dimen/tv_margin_bottom">
 
     <!-- Toolbar (oculta na TV; mantida para o binding) -->
     <com.google.android.material.appbar.MaterialToolbar
@@ -89,10 +104,15 @@
             android:orientation="vertical"
             android:clipChildren="false">
 
-            <!-- Cabeçalho imersivo (v2.1.41) -->
+            <!-- Faixa-backdrop (v2.1.44): 200dp, SÓ onde a pasta
+                 tem vídeos directos; pasta intermédia fica SEM
+                 faixa (visibilidade no updateTvDetailHeader).
+                 Conteúdo aparado p/ caber nos 200dp: título 1
+                 linha 30sp, subtítulo 14sp, botões 48dp. -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/heroCard"
                 android:layout_width="match_parent"
-                android:layout_height="430dp"
+                android:layout_height="200dp"
                 android:layout_marginTop="@dimen/tv_section_spacing"
                 app:cardCornerRadius="@dimen/radius_lg"
                 app:cardElevation="@dimen/elevation_0"
@@ -169,39 +189,39 @@
                         android:layout_gravity="bottom|start"
                         android:orientation="vertical"
                         android:paddingHorizontal="32dp"
-                        android:paddingTop="40dp"
-                        android:paddingBottom="26dp">
+                        android:paddingTop="14dp"
+                        android:paddingBottom="14dp">
 
                         <TextView
                             android:id="@+id/heroTitle"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:ellipsize="end"
-                            android:maxLines="2"
+                            android:maxLines="1"
                             android:textColor="@color/md_on_surface"
-                            android:textSize="38sp"
+                            android:textSize="30sp"
                             android:textStyle="bold" />
 
                         <TextView
                             android:id="@+id/heroSubtitle"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="6dp"
+                            android:layout_marginTop="4dp"
                             android:ellipsize="end"
                             android:maxLines="1"
                             android:textColor="@color/md_primary"
-                            android:textSize="17sp" />
+                            android:textSize="14sp" />
 
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="20dp"
+                            android:layout_marginTop="12dp"
                             android:orientation="horizontal">
 
                             <androidx.appcompat.widget.AppCompatButton
                                 android:id="@+id/ctaContinue"
                                 android:layout_width="wrap_content"
-                                android:layout_height="56dp"
+                                android:layout_height="48dp"
                                 android:background="@drawable/btn_primary_pill"
                                 android:focusable="true"
                                 android:nextFocusUp="@id/heroPlayFab"
@@ -210,13 +230,13 @@
                                 android:paddingHorizontal="@dimen/spacing_2xl"
                                 android:text="@string/cta_continue"
                                 android:textColor="@color/md_on_primary"
-                                android:textSize="17sp"
+                                android:textSize="15sp"
                                 android:textStyle="bold" />
 
                             <androidx.appcompat.widget.AppCompatButton
                                 android:id="@+id/ctaFromStart"
                                 android:layout_width="wrap_content"
-                                android:layout_height="56dp"
+                                android:layout_height="48dp"
                                 android:layout_marginStart="14dp"
                                 android:background="@drawable/btn_outline_pill"
                                 android:focusable="true"
@@ -225,7 +245,7 @@
                                 android:paddingHorizontal="@dimen/spacing_2xl"
                                 android:text="@string/cta_from_start"
                                 android:textColor="@color/md_on_surface"
-                                android:textSize="17sp"
+                                android:textSize="15sp"
                                 android:visibility="gone" />
                         </LinearLayout>
 
@@ -233,7 +253,7 @@
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="16dp"
+                            android:layout_marginTop="10dp"
                             android:gravity="center_vertical"
                             android:orientation="horizontal">
 
@@ -255,29 +275,30 @@
                                 android:max="100"
                                 android:progressDrawable="@drawable/progress_horizontal" />
                         </LinearLayout>
-
-                        <!-- Progresso do curso (v2.1.41) -->
-                        <TextView
-                            android:id="@+id/tvCourseProgressText"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="16dp"
-                            android:textColor="@color/md_on_surface"
-                            android:textSize="15sp"
-                            android:visibility="gone" />
-
-                        <ProgressBar
-                            android:id="@+id/tvCourseProgressBar"
-                            style="?android:attr/progressBarStyleHorizontal"
-                            android:layout_width="match_parent"
-                            android:layout_height="6dp"
-                            android:layout_marginTop="8dp"
-                            android:max="100"
-                            android:progressDrawable="@drawable/progress_horizontal"
-                            android:visibility="gone" />
                     </LinearLayout>
                 </FrameLayout>
             </com.google.android.material.card.MaterialCardView>
+
+            <!-- Progresso do curso (v2.1.44: fora da faixa de
+                 200dp, logo abaixo dela; ids de sempre) -->
+            <TextView
+                android:id="@+id/tvCourseProgressText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:textColor="@color/md_on_surface"
+                android:textSize="15sp"
+                android:visibility="gone" />
+
+            <ProgressBar
+                android:id="@+id/tvCourseProgressBar"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="6dp"
+                android:layout_marginTop="8dp"
+                android:max="100"
+                android:progressDrawable="@drawable/progress_horizontal"
+                android:visibility="gone" />
 
             <!-- Chips (mantidos p/ o binding; GONE na TV — regra
                  "TV só vídeo": sem contagem de aulas/pastas/materiais) -->
@@ -636,4 +657,12 @@
         android:layout_height="wrap_content"
         android:visibility="gone"
         app:menu="@menu/bottom_nav_menu" />
-</LinearLayout>
+    </LinearLayout>
+
+    <!-- v2.1.44 — rail lateral estilo Plex (por cima do conteúdo) -->
+    <com.bibigyn.app.ui.home.SideMenuView
+        android:id="@+id/tvSideMenu"
+        android:layout_width="56dp"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+</FrameLayout>

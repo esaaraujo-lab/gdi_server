@@ -236,6 +236,21 @@
                     android:text="☆"
                     android:textColor="@android:color/white"
                     app:cornerRadius="16dp" />
+
+                <!-- v2.1.44 — Baixar a aula (destino Downloads real;
+                     o MESMO escritor do player da Meggy 2.7.58:
+                     VideoDownloader → Download/BiBiFit/). -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_download_info"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:minWidth="48dp"
+                    android:text="@string/player_download"
+                    android:textColor="@android:color/white"
+                    app:cornerRadius="16dp" />
             </LinearLayout>
 
             <TextView
