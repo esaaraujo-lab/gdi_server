@@ -95,7 +95,7 @@ class MeggyChatActivity : AppCompatActivity() {
         adapter.add(ChatAdapter.Msg("assistant", getString(R.string.meggy_chat_greeting)))
         val lp = lessonPath
         if (!lp.isNullOrBlank()) {
-            MeggyMemory.noteLesson(this, lp, subjectOf(lp))
+            MeggyMemory.noteLesson(this, lessonName ?: lp)
         }
     }
 
@@ -129,7 +129,7 @@ class MeggyChatActivity : AppCompatActivity() {
 
     private fun send(text: String) {
         sending = true
-        MeggyMemory.noteInteraction(this)
+        MeggyMemory.noteInteraction(this, text)
         val typingIndex = adapter.add(
             ChatAdapter.Msg("assistant", getString(R.string.meggy_chat_typing))
         )
@@ -230,13 +230,8 @@ class MeggyChatActivity : AppCompatActivity() {
             val vn = videoName
             if (!vn.isNullOrBlank()) {
                 val sm = SessionManager.get(this)
-                val probe = FileItem(
-                    name = vn, mimeType = "video/mp4", id = "",
-                    driveId = null, link = null, size = 0L,
-                    modifiedTime = null, folderPath = lp
-                )
                 val progress = JSONObject()
-                progress.put("watched", sm.isWatched(probe))
+                progress.put("watched", sm.isWatched(lp, vn))
                 progress.put("positionSec", sm.getResume(lp, vn) / 1000)
                 progress.put("durationSec", sm.getResumeDuration(lp, vn) / 1000)
                 ctx.put("progress", progress)
