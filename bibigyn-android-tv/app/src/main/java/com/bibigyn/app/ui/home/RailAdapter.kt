@@ -78,6 +78,14 @@ class RailAdapter(
      * na TV — no celular o VH ignora o parâmetro.
      */
     private val tvCardWidthDp: Float = 200f,
+    /**
+     * v2.1.44 — corpo SEM cor fixa na TV (porte Meggy 2.7.58:
+     * cartões do Continuar uniformes — só imagem + progresso na
+     * aresta + título por baixo, sem o corpo colorido com texto
+     * dentro). A Home TV passa true SÓ no rail Continuar; os outros
+     * rails mantêm a cor fixa dos Tiles. Sem efeito no celular.
+     */
+    private val plainTvBody: Boolean = false,
     // Build-fix 2.7.16: onClick em ULTIMO — os call sites usam trailing
     // lambda; com onClick em 2o a lambda ligava a nextFocusDownId (Int)
     // e onClick ficava sem valor (compileReleaseKotlin falhou na 2.7.15).
@@ -167,6 +175,10 @@ class RailAdapter(
 
     /** Posição actual do item nos dados do adapter (-1 se já não existir). */
     fun indexOf(item: RailItem): Int = items.indexOf(item)
+
+    /** v2.1.44 — leitura p/ o hero ambiente da Home TV (o item na
+     *  posição focada alimenta o topo). Porte da Meggy 2.7.58. */
+    fun itemAt(position: Int): RailItem? = items.getOrNull(position)
 
     inner class VH(val binding: ItemRailCardBinding) : RecyclerView.ViewHolder(binding.root) {
         init {
@@ -277,7 +289,13 @@ class RailAdapter(
             if (itemColors.size != items.size) refreshItemColors()
             val fixedColor = itemColors[position]
             cardBg.background = CardGradient.drawable(res, fixedColor)
-            cardBody?.setBackgroundColor(fixedColor)
+            // v2.1.44 — no rail Continuar da TV o corpo fica limpo
+            // (fundo da tela), sem a cor fixa pintada (ver plainTvBody).
+            if (plainTvBody && TvUtils.isTv(ctx)) {
+                cardBody?.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            } else {
+                cardBody?.setBackgroundColor(fixedColor)
+            }
 
             // Onda 2: thumb real quando houver; sem thumb (ou se o
             // Coil falhar — ex.: áudio sem thumb no Drive), (c) capa
@@ -343,6 +361,11 @@ class RailAdapter(
             } else {
                 progressRow.visibility = View.GONE
             }
+            // v2.1.44 — na TV a barra vive na aresta da imagem (fora
+            // da progress_row): a visibilidade acompanha a da linha.
+            // No celular a barra está dentro da progress_row e o
+            // valor é o mesmo — sem efeito.
+            cardProgress.visibility = progressRow.visibility
 
             watchedBadge.visibility = if (item.isWatched) View.VISIBLE else View.GONE
             continueBadge.visibility = if (item.hasResume) View.VISIBLE else View.GONE

@@ -105,6 +105,10 @@ class DriveRailAdapter(
         return changed
     }
 
+    /** v2.1.44 — leitura p/ o hero ambiente da Home TV (o item na
+     *  posição focada alimenta o topo). Porte da Meggy 2.7.58. */
+    fun itemAt(position: Int): DriveRailItem? = items.getOrNull(position)
+
     /** Ronda 10 Frente C — substitui os itens do rail (fixos +
      *  admin) e redesenha. */
     fun updateItems(newItems: List<DriveRailItem>): Boolean {

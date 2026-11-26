@@ -9,6 +9,7 @@ import android.util.Log
 import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.widget.TextView
 import android.view.animation.AlphaAnimation
@@ -105,12 +106,20 @@ class HomeActivity : AppCompatActivity() {
     private var isFirstResume = true
     private var focusObserver: ViewTreeObserver? = null
     private var focusListenerRegistered = false
+
+    companion object {
+        /** v2.1.44 — pedido de rolagem p/ a fileira de drives (menu
+         *  lateral da TV nas outras telas → TvRailHost). */
+        const val EXTRA_SCROLL_TO_DRIVES = "bibi_scroll_to_drives"
+    }
     private val globalFocusListener = ViewTreeObserver.OnGlobalFocusChangeListener { _, newFocus ->
         val view = newFocus ?: return@OnGlobalFocusChangeListener
         val continuePos = adapterPositionIn(binding.railContinue, view)
         if (continuePos != null) {
             lastFocusContinue = continuePos
             lastFocusedRail = 1
+            // v2.1.44 — o hero ambiente segue o foco (TV).
+            continueAdapter?.itemAt(continuePos)?.let { ambientFromContinueItem(it) }
             invalidateStaleFocusRestore(1, continuePos)
             return@OnGlobalFocusChangeListener
         }
@@ -118,6 +127,8 @@ class HomeActivity : AppCompatActivity() {
         if (drivesPos != null) {
             lastFocusDrives = drivesPos
             lastFocusedRail = 2
+            // v2.1.44 — idem p/ a fileira de drives.
+            drivesAdapter?.itemAt(drivesPos)?.let { ambientFromDriveItem(it) }
             invalidateStaleFocusRestore(2, drivesPos)
             return@OnGlobalFocusChangeListener
         }
@@ -181,7 +192,7 @@ class HomeActivity : AppCompatActivity() {
 
         // v2.1.5: TV não tem bottom nav.
         if (TvUtils.isTv(this)) binding.bottomNav.visibility = View.GONE
-        setupTvSideMenu()
+        setupSideMenu()
 
         binding.topSair?.setOnClickListener { logout() }
 
@@ -207,6 +218,14 @@ class HomeActivity : AppCompatActivity() {
                     overridePendingTransition(0, 0)
                     true
                 }
+                R.id.nav_fitness -> {
+                    // v2.1.44 — assistente fitness (só celular).
+                    startActivity(
+                        Intent(this, com.bibigyn.app.ui.fitness.FitnessChatActivity::class.java)
+                    )
+                    overridePendingTransition(0, 0)
+                    true
+                }
                 R.id.nav_settings -> {
                     startActivity(Intent(this, SettingsActivity::class.java))
                     overridePendingTransition(0, 0)
@@ -224,6 +243,10 @@ class HomeActivity : AppCompatActivity() {
         setupDrivesRail()
         setupTvFocusChains()
         applyTvAutoFit()
+        // v2.1.44 — chegada via menu da TV com pedido de rolagem.
+        if (intent.getBooleanExtra(EXTRA_SCROLL_TO_DRIVES, false)) {
+            scrollToDrives()
+        }
         fetchFeaturedCovers()
         // Ronda 10 Frente C — drives do admin (best-effort;
         // sem rota, o rail mostra só os fixos). Re-fetch no
@@ -505,10 +528,24 @@ class HomeActivity : AppCompatActivity() {
         // hoje); regresso: foco + scrollY guardados.
         if (TvUtils.isTv(this)) {
             if (isFirstResume) {
-                // v2.1.41 — foco por omissão da home TV: o herói
-                // (botão Continuar do destaque) quando ele existe;
-                // sem destaque, o 1.º cartão do rail (como antes).
-                if (binding.featuredSection.visibility == View.VISIBLE) {
+                if (SessionManager.get(this).tvSideMenuEnabled) {
+                    // v2.1.44 — foco inicial da home TV Plex: o 1.º
+                    // cartão da fileira Continuar (o CTA da página);
+                    // sem Continuar, o 1.º cartão de drives.
+                    if (binding.railContinue.visibility == View.VISIBLE) {
+                        binding.railContinue.post {
+                            binding.railContinue.findViewHolderForAdapterPosition(0)
+                                ?.itemView?.requestFocus()
+                        }
+                    } else {
+                        binding.railDrives.post {
+                            binding.railDrives.findViewHolderForAdapterPosition(0)
+                                ?.itemView?.requestFocus()
+                        }
+                    }
+                } else if (binding.featuredSection.visibility == View.VISIBLE) {
+                    // Sem rail (Ajustes): o comportamento de antes —
+                    // o herói (botão Continuar do destaque).
                     binding.featuredCard.post { binding.featuredCard.requestFocus() }
                 } else {
                     binding.railContinue.post {
@@ -543,6 +580,21 @@ class HomeActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         binding.bottomNav.selectedItemId = R.id.nav_home
+        // v2.1.44 — menu da TV (outras telas): "Drives" traz a Home
+        // já rolada p/ a fileira de drives.
+        if (intent.getBooleanExtra(EXTRA_SCROLL_TO_DRIVES, false)) {
+            scrollToDrives()
+        }
+    }
+
+    /** v2.1.44 — rola até à fileira de drives e foca o 1.º cartão
+     *  (o comportamento do antigo item "Drives" do menu fixo). */
+    private fun scrollToDrives() {
+        binding.homeScroll.post {
+            val rail = binding.railDrives
+            binding.homeScroll.smoothScrollTo(0, rail.top)
+            rail.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus()
+        }
     }
 
     // ──────────── v2.0.0: Hero rotativo ────────────
@@ -710,6 +762,134 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 
+    // ──────────── v2.1.44: Hero ambiente da TV (segue o foco) ────────────
+    //
+    // Porte da Meggy 2.7.58 adaptado às cadeias da BiBi: o bloco
+    // ambient* só existe no layout-television (findViewById null no
+    // celular = no-op). O foco numa fileira alimenta o topo com o
+    // item focado; sem foco ainda, showAmbientDefault mostra a aula
+    // em curso. Dedup por chave (título|meta) p/ não recarregar a
+    // imagem a cada micro-movimento de foco igual.
+
+    private var ambientKey: String? = null
+
+    private fun updateAmbientHero(
+        title: String,
+        meta: String,
+        progress: Int?,
+        thumbUrl: String?,
+        coverPath: String?
+    ) {
+        if (!TvUtils.isTv(this)) return
+        val block = findViewById<View>(R.id.ambientHero) ?: return
+        val key = "$title|$meta"
+        if (key == ambientKey && block.visibility == View.VISIBLE) return
+        ambientKey = key
+        block.visibility = View.VISIBLE
+        findViewById<TextView>(R.id.ambientTitle)?.text = title
+        findViewById<TextView>(R.id.ambientMeta)?.text = meta
+        val bar = findViewById<android.widget.ProgressBar>(R.id.ambientProgress)
+        if (progress != null) {
+            bar?.visibility = View.VISIBLE
+            bar?.progress = progress
+        } else {
+            bar?.visibility = View.GONE
+        }
+        val image = findViewById<android.widget.ImageView>(R.id.ambientImage) ?: return
+        val coverRes = coverPath?.let { DriveItem.coverResForPath(it) }
+        val showFallback = {
+            val libraryUrl = CoverLibrary.resolveStrict(this, title, coverPath)
+            if (!libraryUrl.isNullOrBlank()) {
+                image.visibility = View.VISIBLE
+                image.load(libraryUrl) {
+                    if (coverRes != null) error(coverRes)
+                    listener(onError = { _, _ ->
+                        if (coverRes != null) image.setImageResource(coverRes)
+                        else image.visibility = View.GONE
+                    })
+                }
+            } else if (coverRes != null) {
+                image.visibility = View.VISIBLE
+                image.setImageResource(coverRes)
+            } else {
+                image.visibility = View.GONE
+            }
+        }
+        if (!thumbUrl.isNullOrBlank()) {
+            image.visibility = View.VISIBLE
+            image.load(thumbUrl) {
+                if (coverRes != null) error(coverRes)
+                listener(onError = { _, _ -> showFallback() })
+            }
+        } else {
+            showFallback()
+        }
+    }
+
+    /** Hero ambiente a partir de um cartão do rail Continuar. */
+    private fun ambientFromContinueItem(item: RailItem) {
+        val courseName = item.file?.folderPath?.let { Format.extractCourseName(it) }
+            ?: item.subtitle
+        val title = item.displayTitle ?: Format.lessonTitle(item.title, courseName)
+        // Meta do Continuar na TV: matéria · assunto (decisão 19:24).
+        val meta = if (title.equals(courseName, ignoreCase = true)) courseName
+            else "$courseName · $title"
+        updateAmbientHero(
+            title = title,
+            meta = meta,
+            progress = if (item.hasProgress) item.progress else null,
+            thumbUrl = item.thumbnailUrl ?: item.file?.thumbnailLink,
+            coverPath = item.file?.folderPath
+        )
+    }
+
+    /** Hero ambiente a partir de um cartão do rail de drives. */
+    private fun ambientFromDriveItem(item: DriveRailItem) {
+        when (item) {
+            is DriveRailItem.Fixed -> {
+                val path = "/${item.drive.index}:/"
+                updateAmbientHero(
+                    title = item.drive.name,
+                    meta = item.drive.tagline,
+                    progress = null,
+                    thumbUrl = featuredCoverByPath[path] ?: serverCoverByPath[path],
+                    coverPath = path
+                )
+            }
+            is DriveRailItem.Admin -> updateAmbientHero(
+                title = item.drive.name,
+                meta = "",
+                progress = null,
+                thumbUrl = item.drive.coverUrl,
+                coverPath = null
+            )
+        }
+    }
+
+    /** Estado por omissão do hero ambiente: a aula em curso (o
+     *  "best" do Continuar); sem nenhuma, o bloco fica escondido. */
+    private fun showAmbientDefault() {
+        if (!TvUtils.isTv(this)) return
+        if (ambientKey != null) return
+        val sm = SessionManager.get(this)
+        val best = sm.getRecents()
+            .filter { sm.hasResume(it.folderPath, it.videoName) }
+            .maxByOrNull { sm.getResumeProgress(it.folderPath, it.videoName) }
+            ?: return
+        val courseName = Format.extractCourseName(best.folderPath)
+        val title = LessonDescription.folderNameFromPath(best.folderPath)
+            ?: Format.lessonTitle(best.videoName, courseName)
+        val meta = if (title.equals(courseName, ignoreCase = true)) courseName
+            else "$courseName · $title"
+        updateAmbientHero(
+            title = title,
+            meta = meta,
+            progress = sm.getResumeProgress(best.folderPath, best.videoName),
+            thumbUrl = best.thumbnailLink,
+            coverPath = best.folderPath
+        )
+    }
+
     // ──────────── v2.0.0: Continue rail multi-item ────────────
 
     private fun setupContinueRail() {
@@ -737,22 +917,25 @@ class HomeActivity : AppCompatActivity() {
             binding.railContinue.addItemDecoration(RailGutterDecoration(tvAutoFit?.gutterDp(200f) ?: 8))
         }
 
-        // v2.1.41 — na TV o item do herói imersivo (o "best" do
-        // setupFeaturedContinue) SAI da fileira: sem duplicação
-        // (foto do Elton: o mesmo item aparecia no herói e como
-        // 1.º cartão da fileira).
+        // v2.1.44 — quem sai da fileira mudou (paridade Meggy 2.7.58):
+        //  • TV COM rail Plex: NINGUÉM sai — o item em curso é o 1.º
+        //    cartão da fileira e o topo é o hero ambiente.
+        //  • TV SEM rail (Ajustes) e CELULAR: o "best" sai da fileira
+        //    e vive no cartão de destaque (setupFeaturedContinue) —
+        //    sem duplicação (a queixa do Elton na 2.1.41).
         val isTvHome = TvUtils.isTv(this)
-        val heroRecent = if (isTvHome) {
+        val railMode = isTvHome && sm.tvSideMenuEnabled
+        val heroRecent = if (railMode) null else {
             recents.filter { sm.hasResume(it.folderPath, it.videoName) }
                 .maxByOrNull { sm.getResumeProgress(it.folderPath, it.videoName) }
-        } else null
+        }
         val railRecents = if (heroRecent != null) {
             recents.filterNot {
                 it.folderPath == heroRecent.folderPath && it.videoName == heroRecent.videoName
             }
         } else recents
         if (railRecents.isEmpty()) {
-            // Só existe o item do herói: a fileira some, o herói fica.
+            // Só existe o item do destaque: a fileira some, ele fica.
             binding.labelContinue.visibility = View.GONE
             binding.railContinue.visibility = View.GONE
             continueAdapter?.updateItems(emptyList())
@@ -804,16 +987,26 @@ class HomeActivity : AppCompatActivity() {
         // existe quando há resume: calcula-se ANTES do adapter,
         // porque o nextFocusUp dos cards depende dele (o
         // setupFeaturedContinue corre depois e já não o corrige).
-        val hasFeatured = TvUtils.isTv(this) &&
+        // v2.1.44 — com o rail Plex a fileira é a de CIMA da página
+        // (o topo é o hero ambiente, não focável): UP = NO_ID.
+        val hasFeatured = !railMode && TvUtils.isTv(this) &&
             recents.any { sm.hasResume(it.folderPath, it.videoName) }
+        val continueUpId = when {
+            railMode -> View.NO_ID
+            hasFeatured -> R.id.featured_card
+            else -> R.id.heroPlay
+        }
         if (firstBuild) {
             continueAdapter = RailAdapter(
                 railItems,
-                nextFocusUpId = if (hasFeatured) R.id.featured_card else R.id.heroPlay,
+                nextFocusUpId = continueUpId,
                 nextFocusDownId = R.id.railDrives,
                 // v2.1.41 — cartões grandes 16:9 na TV (conceito);
-                // no celular o parâmetro nem é aplicado (VH só na TV).
-                tvCardWidthDp = if (isTvHome) 300f else 200f
+                // v2.1.44 — com o rail Plex, cartões UNIFORMES de
+                // 240dp + corpo limpo (plainTvBody), paridade Meggy
+                // 2.7.58; no celular o parâmetro nem é aplicado.
+                tvCardWidthDp = if (railMode) 240f else if (isTvHome) 300f else 200f,
+                plainTvBody = railMode
             ) { item ->
                 // Ronda 18 Frente C (F1) — a lambda nasce UMA só vez
                 // (firstBuild) mas os recents mudam a cada vídeo visto:
@@ -838,12 +1031,15 @@ class HomeActivity : AppCompatActivity() {
             val snap = captureHomeFocus()
             val changed = continueAdapter?.updateItems(railItems) ?: false
             continueAdapter?.updateFocusIds(
-                if (hasFeatured) R.id.featured_card else R.id.heroPlay,
+                continueUpId,
                 R.id.railDrives
             )
             if (changed) restoreHomeFocus(snap)
         }
         setupFeaturedContinue(recents)
+        // v2.1.44 — hero ambiente: estado por omissão (a aula em
+        // curso) até o foco escolher outro item.
+        showAmbientDefault()
         // v2.1.9 (b) — BACKFILL: recents gravados antes da 2.1.9 (ou por
         // um caminho sem thumb) não têm thumbnailLink. Busca o thumb do
         // arquivo no Drive (1ª página da pasta) e o persiste via
@@ -873,15 +1069,25 @@ class HomeActivity : AppCompatActivity() {
     }
 
     /**
-     * v2.1.5 — "Continuar de onde parou" em destaque (conceito TV
-     * continuar): o item em andamento mais recente, com thumb,
-     * progresso e "12:34 de 48:20 · 12 min restantes". Só na TV
-     * (no celular o rail "Continue assistindo" já cumpre o papel).
+     * v2.1.5 — "Continuar de onde parou" em destaque: o item em
+     * andamento mais recente, com thumb, progresso e "12:34 de
+     * 48:20 · 12 min restantes".
+     *
+     * v2.1.44 — papéis por aparelho (paridade Meggy 2.7.58):
+     *  • TV COM rail Plex: a seção fica GONE e o hero de drives
+     *    também — o topo é o hero ambiente e o item em curso é o
+     *    1.º cartão da fileira Continuar.
+     *  • TV SEM rail: o comportamento da 2.1.41 (destaque = herói).
+     *  • CELULAR: a seção passa a ser o CARTÃO CONTINUAR da Home
+     *    (o "best" sai da fileira — ver setupContinueRail); sem
+     *    item em curso, some e o hero de drives fica.
      */
     private fun setupFeaturedContinue(recents: List<SessionManager.RecentItem>) {
         val sm = SessionManager.get(this)
-        if (!TvUtils.isTv(this)) {
+        val isTv = TvUtils.isTv(this)
+        if (isTv && sm.tvSideMenuEnabled) {
             binding.featuredSection.visibility = View.GONE
+            binding.heroCard.visibility = View.GONE
             return
         }
         val best = recents
@@ -894,8 +1100,8 @@ class HomeActivity : AppCompatActivity() {
             binding.heroCard.visibility = View.VISIBLE
             return
         }
-        // v2.1.41 — com destaque, ELE é o herói (imersivo, tela
-        // cheia): o hero de drives some para não duplicar conteúdo.
+        // Com destaque, ELE é o herói/carta: o hero de drives some
+        // para não duplicar conteúdo.
         binding.heroCard.visibility = View.GONE
         val progress = sm.getResumeProgress(best.folderPath, best.videoName)
         val pos = sm.getResume(best.folderPath, best.videoName)
@@ -955,12 +1161,18 @@ class HomeActivity : AppCompatActivity() {
         // qualquer escala é cortada nas laterais e invade o
         // overscan. v2.1.41: o anel passa a BRANCO 4dp (conceito +
         // padrão R27 das grades) — fica anel branco + elevação 16dp.
-        FocusAnimator.attachCard(
-            binding.featuredCard, true,
-            scaleTv = FocusAnimator.SCALE_TV_NONE,
-            ringColorRes = R.color.tile_focus_ring_white,
-            ringWidthDp = 4f
-        )
+        // v2.1.44 — no celular a seção é o cartão Continuar: o
+        // attach é o de toque (isTv=false), sem anel de TV.
+        if (TvUtils.isTv(this)) {
+            FocusAnimator.attachCard(
+                binding.featuredCard, true,
+                scaleTv = FocusAnimator.SCALE_TV_NONE,
+                ringColorRes = R.color.tile_focus_ring_white,
+                ringWidthDp = 4f
+            )
+        } else {
+            FocusAnimator.attachCard(binding.featuredCard, false)
+        }
     }
 
     /**
@@ -1147,67 +1359,84 @@ class HomeActivity : AppCompatActivity() {
 
 
     /**
-     * v2.1.41 — menu lateral da Home TV (conceito "tv-home-nova").
-     * A BiBi NÃO tinha menu lateral (o SideMenuView é da Meggy):
-     * este é só APRESENTAÇÃO + foco — cada item leva a um destino
-     * que já existe: Início = topo da home; Drives/Continuar =
-     * rolagem + foco na fileira existente; Ajustes = a MESMA
-     * Intent da bottom nav. Nenhuma rota nem lógica de abertura
-     * nova. As cadeias DIREITA vivem em setupTvFocusChains.
+     * v2.1.44 — rail lateral estilo Plex da Home TV (porte da Meggy
+     * 2.7.56/2.7.58; substitui o menu fixo de 264dp da 2.1.41). Sem a
+     * vista (celular) é no-op. Com o rail ligado, a barra do topo
+     * (nome + Sair) esconde-se — o rail cobre tudo (o Sair fica no
+     * rodapé dele); desligado, volta o cabeçalho de antes e o
+     * conteúdo perde a margem de 56dp. A largura do conteúdo NUNCA
+     * muda com a expansão (desliza, não refluí).
+     *
+     * Menu da TV (decisões do Elton): Início, Drives, MEUS CURSOS,
+     * CONTINUAR (abre o detalhe do curso em curso — caminho normal,
+     * NUNCA o player directo), Downloads, Ajustes + Sair. Sem chat
+     * nem simulados na TV.
      */
-    private fun setupTvSideMenu() {
-        if (!TvUtils.isTv(this)) return
-        val items = listOf(
-            binding.menuHome, binding.menuDrives,
-            binding.menuContinue, binding.menuSettings
-        )
-        items.forEach { item ->
-            item?.let {
-                FocusAnimator.attach(it, true, scaleTv = FocusAnimator.SCALE_TV_DENSE)
-            }
-        }
-        binding.menuHome?.setOnClickListener {
-            binding.homeScroll.scrollTo(0, 0)
-            binding.homeScroll.post {
-                if (binding.featuredSection.visibility == View.VISIBLE) {
-                    binding.featuredCard.requestFocus()
-                } else {
-                    binding.heroPlay.requestFocus()
+    private fun setupSideMenu() {
+        val menu = findViewById<SideMenuView>(R.id.tvSideMenu) ?: return
+        val sm = SessionManager.get(this)
+        val topBar = findViewById<View>(R.id.homeTopBar)
+        topBar?.visibility = if (sm.tvSideMenuEnabled) View.GONE else View.VISIBLE
+        menu.visibility = if (sm.tvSideMenuEnabled) View.VISIBLE else View.GONE
+        findViewById<View>(R.id.homeContent)?.let { content ->
+            val lp = content.layoutParams as? ViewGroup.MarginLayoutParams
+            if (lp != null) {
+                val target = if (sm.tvSideMenuEnabled) {
+                    (SideMenuView.WIDTH_COLLAPSED_DP * resources.displayMetrics.density).toInt()
+                } else 0
+                if (lp.marginStart != target) {
+                    lp.marginStart = target
+                    content.layoutParams = lp
                 }
             }
         }
-        binding.menuContinue?.setOnClickListener {
-            binding.homeScroll.post {
-                if (binding.featuredSection.visibility == View.VISIBLE) {
-                    binding.featuredCard.requestFocus()
-                } else {
-                    binding.railContinue.findViewHolderForAdapterPosition(0)
-                        ?.itemView?.requestFocus()
-                }
+        if (!sm.tvSideMenuEnabled) return
+        menu.setSelected(SideMenuView.MenuItem.HOME)
+        menu.onMenuItemSelected = { item ->
+            when (item) {
+                SideMenuView.MenuItem.HOME -> binding.homeScroll.smoothScrollTo(0, 0)
+                SideMenuView.MenuItem.DRIVES -> scrollToDrives()
+                SideMenuView.MenuItem.MY_COURSES ->
+                    startActivity(Intent(this, MyCoursesActivity::class.java))
+                SideMenuView.MenuItem.CONTINUE ->
+                    TvRailHost.openContinueCourse(this)
+                SideMenuView.MenuItem.DOWNLOADS ->
+                    startActivity(
+                        Intent(this, com.bibigyn.app.ui.downloads.DownloadsActivity::class.java)
+                    )
+                SideMenuView.MenuItem.SETTINGS ->
+                    startActivity(Intent(this, SettingsActivity::class.java))
             }
         }
-        binding.menuDrives?.setOnClickListener {
-            binding.homeScroll.post {
-                binding.railDrives.findViewHolderForAdapterPosition(0)
-                    ?.itemView?.requestFocus()
-            }
-        }
-        binding.menuSettings?.setOnClickListener {
-            startActivity(Intent(this, SettingsActivity::class.java))
-            overridePendingTransition(0, 0)
-        }
+        menu.onLogoutSelected = { logout() }
+        // A expansão é AO FOCO (dentro do SideMenuView). Aqui só se
+        // liga o DESLIZE do conteúdo: translationX = 184dp × fracção,
+        // sincronizado com a animação da barra pelo mesmo
+        // ValueAnimator — sem re-medir nada.
+        val content = findViewById<View>(R.id.homeContent)
+        val slidePx = (SideMenuView.WIDTH_EXPANDED_DP - SideMenuView.WIDTH_COLLAPSED_DP) *
+            resources.displayMetrics.density
+        menu.onExpandFractionChanged = { f -> content?.translationX = slidePx * f }
+        // DIREITA das linhas do menu → o 1.º conteúdo focável (a
+        // fileira Continuar; sem ela, a de drives).
+        val firstContent = if (binding.railContinue.visibility == View.VISIBLE) {
+            R.id.railContinue
+        } else R.id.railDrives
+        menu.rows().forEach { row -> row.nextFocusRightId = firstContent }
     }
 
     /**
      * Frente A (TV) — cadeias D-pad explícitas da home (só TV).
-     * Do hero: DOWN vai ao destaque quando existe, senão ao rail
-     * visível de cima; do destaque: UP volta ao hero, DOWN vai ao
-     * rail visível de cima. Sem isto, o FocusFinder decide sozinho
-     * entre secções que estão fora do viewport do ScrollView.
-     * v2.1.41 — + cadeias do menu lateral (DIREITA/ESQUERDA).
+     * v2.1.44 — com o rail Plex ligado, o topo da página é a fileira
+     * Continuar (o hero ambiente não é focável e o hero/destaque
+     * estão GONE): as cadeias antigas do herói não se aplicam e o
+     * UP/DOWN entre fileiras vive nos adapters (nextFocusUp/Down).
+     * Com o rail DESLIGADO, mantêm-se as cadeias da 2.1.41 (herói →
+     * destaque → fileiras), sem o menu fixo que já não existe.
      */
     private fun setupTvFocusChains() {
         if (!TvUtils.isTv(this)) return
+        if (SessionManager.get(this).tvSideMenuEnabled) return
         val featuredVisible = binding.featuredSection.visibility == View.VISIBLE
         val continueVisible = binding.railContinue.visibility == View.VISIBLE
         binding.heroPlay.nextFocusDownId =
@@ -1217,23 +1446,6 @@ class HomeActivity : AppCompatActivity() {
         binding.featuredCard.nextFocusUpId = R.id.heroPlay
         binding.featuredCard.nextFocusDownId =
             if (continueVisible) R.id.railContinue else R.id.railDrives
-        // v2.1.41 — menu lateral: DIREITA entra no conteúdo do topo;
-        // do herói/destaque, ESQUERDA volta ao menu.
-        val topTarget = when {
-            featuredVisible -> R.id.featured_card
-            binding.heroCard.visibility == View.VISIBLE -> R.id.heroPlay
-            continueVisible -> R.id.railContinue
-            else -> R.id.railDrives
-        }
-        binding.menuHome?.nextFocusRightId = topTarget
-        binding.menuSettings?.nextFocusRightId = topTarget
-        binding.menuContinue?.nextFocusRightId =
-            if (featuredVisible) R.id.featured_card
-            else if (continueVisible) R.id.railContinue
-            else R.id.railDrives
-        binding.menuDrives?.nextFocusRightId = R.id.railDrives
-        binding.heroPlay.nextFocusLeftId = R.id.menuHome
-        binding.featuredCard.nextFocusLeftId = R.id.menuHome
     }
 
     /**
@@ -1255,7 +1467,10 @@ class HomeActivity : AppCompatActivity() {
         val fit = tvAutoFit ?: return
         Log.i(TvAutoFit.TAG, fit.describe())
         // Overscan: laterais 56dp (piso 48dp), topo/fundo >=48dp.
-        binding.root.setPadding(
+        // v2.1.44 — o padding vai para o CONTENTOR do conteúdo
+        // (homeContent): a raiz agora é o FrameLayout que também
+        // segura o rail — paddear a raiz deslocava o rail.
+        findViewById<View>(R.id.homeContent)?.setPadding(
             fit.sideMarginPx(), fit.topMarginPx(),
             fit.sideMarginPx(), fit.bottomMarginPx()
         )
@@ -1302,8 +1517,12 @@ class HomeActivity : AppCompatActivity() {
     private fun setupDrivesRail() {
         // Frente A (TV) — UP do tile de drive volta ao rail de cima
         // ("Continue assistindo", destaque ou hero — o que existir).
+        // v2.1.44 — com o rail Plex, sem Continuar visível o UP não
+        // tem alvo (o topo é o hero ambiente, não focável): NO_ID.
+        val railMode = TvUtils.isTv(this) && SessionManager.get(this).tvSideMenuEnabled
         val drivesUpId = when {
             binding.railContinue.visibility == View.VISIBLE -> R.id.railContinue
+            railMode -> View.NO_ID
             binding.featuredSection.visibility == View.VISIBLE -> R.id.featured_card
             else -> R.id.heroPlay
         }
