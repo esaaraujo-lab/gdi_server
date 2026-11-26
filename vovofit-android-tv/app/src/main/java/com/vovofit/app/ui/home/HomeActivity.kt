@@ -61,6 +61,12 @@ import kotlinx.coroutines.withContext
 
 class HomeActivity : AppCompatActivity() {
 
+    companion object {
+        /** 1.0.40 — o item "Explorar" do rail da TV abre a Home já
+         *  rolada para a fileira de drives. */
+        const val EXTRA_SCROLL_TO_DRIVES = "extra_scroll_to_drives"
+    }
+
     private lateinit var binding: ActivityHomeBinding
     // Ronda 7 Frente B — ajuste medido da home da TV (TvAutoFit).
     // Nulo no celular (a home do celular nao usa nada disto).
@@ -110,6 +116,10 @@ class HomeActivity : AppCompatActivity() {
             lastFocusContinue = continuePos
             lastFocusedRail = 1
             invalidateStaleFocusRestore(1, continuePos)
+            // 1.0.40 — hero ambiente segue o foco (TV).
+            if (TvUtils.isTv(this)) {
+                continueAdapter?.itemAt(continuePos)?.let { ambientFromContinueItem(it) }
+            }
             return@OnGlobalFocusChangeListener
         }
         val drivesPos = adapterPositionIn(binding.railDrives, view)
@@ -117,9 +127,15 @@ class HomeActivity : AppCompatActivity() {
             lastFocusDrives = drivesPos
             lastFocusedRail = 2
             invalidateStaleFocusRestore(2, drivesPos)
+            // 1.0.40 — hero ambiente segue o foco (TV).
+            if (TvUtils.isTv(this)) {
+                drivesAdapter?.itemAt(drivesPos)?.let { ambientFromDriveItem(it) }
+            }
             return@OnGlobalFocusChangeListener
         }
         lastFocusedRail = 0
+        // 1.0.40 — foco fora dos rails: o hero volta à rotação.
+        clearAmbientHero()
         invalidateStaleFocusRestore(0, -1)
     }
 
@@ -228,10 +244,38 @@ class HomeActivity : AppCompatActivity() {
         fetchAdminDrives()
         setupTvFocusChains()
         applyTvAutoFit()
+        // 1.0.40 — rail lateral persistente da TV (TvRailHost) +
+        // atalhos do celular (Meus Cursos / Downloads / Assistente;
+        // os ids só existem no layout do celular).
+        TvRailHost.attach(this, SideMenuView.MenuItem.HOME, binding.heroPlay)
+        findViewById<View>(R.id.shortcutMyCourses)?.setOnClickListener {
+            startActivity(Intent(this, MyCoursesActivity::class.java))
+        }
+        findViewById<View>(R.id.shortcutDownloads)?.setOnClickListener {
+            startActivity(
+                Intent(this, com.vovofit.app.ui.downloads.DownloadsActivity::class.java)
+            )
+        }
+        findViewById<View>(R.id.shortcutAssistente)?.setOnClickListener {
+            startActivity(
+                Intent(this, com.vovofit.app.ui.assistente.AssistenteChatActivity::class.java)
+            )
+        }
+        if (intent.getBooleanExtra(EXTRA_SCROLL_TO_DRIVES, false)) {
+            scrollToDrives()
+        }
         // 1.0.39 — import do progresso do servidor (GET /userstate);
         // o mesmo import também corre ao voltar à Home
         // (ver launchUserStateImport).
         launchUserStateImport()
+    }
+
+    /** 1.0.40 — rola a Home até à fileira de drives (item Explorar
+     *  do rail da TV). */
+    private fun scrollToDrives() {
+        binding.homeScroll.post {
+            binding.homeScroll.scrollTo(0, binding.labelDrives.top)
+        }
     }
 
     /**
@@ -450,6 +494,10 @@ class HomeActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         binding.bottomNav.selectedItemId = R.id.nav_home
+        // 1.0.40 — item Explorar do rail da TV.
+        if (intent.getBooleanExtra(EXTRA_SCROLL_TO_DRIVES, false)) {
+            scrollToDrives()
+        }
     }
 
     /**
@@ -490,6 +538,78 @@ class HomeActivity : AppCompatActivity() {
             startActivity(intent)
         }
         heroRotator?.start()
+    }
+
+    // ──────────── 1.0.40: Hero ambiente da Home TV ────────────
+
+    /** Chave do conteúdo actual do hero ambiente (evita recarregar
+     *  a mesma arte a cada mudança de foco dentro do mesmo item). */
+    private var ambientKey: String? = null
+
+    /**
+     * HERO AMBIENTE (porte do pacote Meggy 2.7.58, adaptado): na TV,
+     * o hero do topo mostra a arte do item FOCADO nos rails
+     * (Continuar/Drives) — título, subtítulo e capa — enquanto o
+     * foco lá estiver. É SÓ VISUAL: o OK faz-se no cartão focado,
+     * pelo caminho de sempre (o clique do hero continua a ser o do
+     * item em rotação, e ao foco sair dos rails o hero volta à
+     * rotação de destaques). ADAPTAÇÃO vs Meggy: a Vovó já tinha um
+     * hero de destaques funcional no topo (não o topo vazio da
+     * 2.7.57), por isso o ambiente REUSA as vistas do hero em vez de
+     * um bloco novo, e o modo por defeito continua a ser a rotação.
+     */
+    private fun updateAmbientHero(
+        title: String,
+        subtitle: String,
+        thumbUrl: String?,
+        coverPath: String?
+    ) {
+        if (!TvUtils.isTv(this)) return
+        val key = title + "|" + (thumbUrl ?: coverPath ?: "")
+        if (key == ambientKey) return
+        ambientKey = key
+        heroRotator?.stop()
+        binding.heroBadge.visibility = View.GONE
+        binding.heroTitle.setWordEllipsized(title)
+        binding.heroSubtitle.setWordEllipsized(subtitle)
+        binding.heroArt.loadCoverChain(
+            thumbUrl,
+            driveCoverRes(driveIndexFromPath(coverPath) ?: 15),
+            title, coverPath,
+            strict = true
+        )
+    }
+
+    /** Sai do modo ambiente: repõe o item em rotação e o badge. */
+    private fun clearAmbientHero() {
+        if (ambientKey == null) return
+        ambientKey = null
+        binding.heroBadge.visibility = View.VISIBLE
+        heroRotator?.refresh()
+    }
+
+    private fun ambientFromContinueItem(item: RailItem) {
+        val folderPath = item.file?.folderPath ?: ""
+        val courseName = Format.extractCourseName(folderPath)
+        val displayTitle = item.displayTitle ?: item.title
+        // Meta "matéria · assunto" nos cartões Continuar da TV
+        // (decisão do Elton 19:24, aplicada também aqui).
+        val meta = if (courseName.isNotBlank() &&
+            !courseName.equals(displayTitle, ignoreCase = true)
+        ) "$courseName · $displayTitle" else courseName
+        updateAmbientHero(displayTitle, meta, item.thumbnailUrl, folderPath)
+    }
+
+    private fun ambientFromDriveItem(item: DriveRailItem) {
+        when (item) {
+            is DriveRailItem.Fixed -> updateAmbientHero(
+                item.drive.name, item.drive.tagline, null, "/${item.drive.index}:/"
+            )
+            // Drives do admin (por ID): sem caminho de pasta para a
+            // cadeia de capas — o hero fica na rotação (registado
+            // no relatório da ronda).
+            is DriveRailItem.Admin -> Unit
+        }
     }
 
     private class HeroRotator(
@@ -539,6 +659,14 @@ class HomeActivity : AppCompatActivity() {
 
         fun start() { handler.postDelayed(rotateRunnable, 8000L) }
         fun stop() { handler.removeCallbacks(rotateRunnable) }
+
+        /** 1.0.40 — re-renderiza o item actual e retoma a rotação
+         *  (saída do modo ambiente do hero). */
+        fun refresh() {
+            render(animate = false)
+            handler.removeCallbacks(rotateRunnable)
+            handler.postDelayed(rotateRunnable, 8000L)
+        }
 
         private fun next() {
             index = (index + 1) % items.size

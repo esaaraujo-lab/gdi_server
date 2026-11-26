@@ -84,6 +84,9 @@ class DriveRailAdapter(
         }
     }
 
+    /** 1.0.40 — item numa posição (hero ambiente da Home TV). */
+    fun itemAt(position: Int): DriveRailItem? = items.getOrNull(position)
+
     /** Atualiza as capas do admin e redesenha os cards. */
     fun setFeaturedCovers(covers: Map<Int, String>): Boolean {
         // Ronda 17 Frente B — sem mudanças, nem redesenha (o

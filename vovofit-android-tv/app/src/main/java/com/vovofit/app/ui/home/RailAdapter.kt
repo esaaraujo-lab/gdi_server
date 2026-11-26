@@ -9,6 +9,7 @@ import android.widget.Toast
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
+import androidx.core.content.ContextCompat
 import com.vovofit.app.R
 import com.vovofit.app.data.FileItem
 import com.vovofit.app.data.driveCoverRes
@@ -98,6 +99,9 @@ class RailAdapter(
      * updateItems provoca quando há mudança; sem mudança nos dados
      * os ids também não mudam, porque derivam dos mesmos recents).
      */
+    /** 1.0.40 — item numa posição (hero ambiente da Home TV). */
+    fun itemAt(position: Int): RailItem? = items.getOrNull(position)
+
     fun updateItems(newItems: List<RailItem>): Boolean {
         if (newItems == items) return false
         val oldItems = items
@@ -250,7 +254,18 @@ class RailAdapter(
             if (itemColors.size != items.size) refreshItemColors()
             val fixedColor = itemColors[position]
             cardBg.background = CardGradient.drawable(res, fixedColor)
-            cardBody?.setBackgroundColor(fixedColor)
+            if (TvUtils.isTv(ctx)) {
+                // 1.0.40 — TV: cartões Continuar UNIFORMES (estilo
+                // Plex): a área do nome perde a cor fixa da pasta e
+                // fica lisa (tile_bg) — só imagem + progresso na
+                // aresta + título por baixo. No celular a cor fixa
+                // do Tile mantém-se, como sempre.
+                cardBody?.setBackgroundColor(
+                    ContextCompat.getColor(ctx, R.color.tile_bg)
+                )
+            } else {
+                cardBody?.setBackgroundColor(fixedColor)
+            }
 
             // v1.0.8 — Thumb fotográfica quando houver; senão a IMAGEM
             // DA BIBLIOTECA pelo título/pasta (camada 3); senão a CAPA DO
@@ -304,6 +319,11 @@ class RailAdapter(
             } else {
                 progressRow.visibility = View.GONE
             }
+            // 1.0.40 — na TV a barra vive na aresta da imagem (fora
+            // da progress_row): a visibilidade dela é explícita.
+            // No celular ela está dentro da row e isto é redundante
+            // mas inofensivo.
+            cardProgress.visibility = if (item.hasProgress) View.VISIBLE else View.GONE
 
             watchedBadge.visibility = if (item.isWatched) View.VISIBLE else View.GONE
             continueBadge.visibility = if (item.hasResume) View.VISIBLE else View.GONE
