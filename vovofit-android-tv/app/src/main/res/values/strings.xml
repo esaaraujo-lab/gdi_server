@@ -166,6 +166,20 @@
     <string name="assistente_typing">A assistente está escrevendo…</string>
     <string name="assistente_error">Não consegui responder agora. Toque aqui para tentar de novo.</string>
     <string name="assistente_busy">Estou com muitas perguntas agora — tente outra vez dentro de instantes.</string>
+    <!-- 1.0.42 — Chips de temas da biblioteca de conhecimento (rótulo
+         curto no botão; a pergunta completa é a enviada ao tocar). -->
+    <string name="assistente_chip_forca">Força depois dos 60</string>
+    <string name="assistente_q_forca">Como ganhar força depois dos 60?</string>
+    <string name="assistente_chip_proteina">Quanta proteína?</string>
+    <string name="assistente_q_proteina">Quanta proteína preciso por dia?</string>
+    <string name="assistente_chip_equilibrio">Equilíbrio e quedas</string>
+    <string name="assistente_q_equilibrio">Que exercícios ajudam no equilíbrio e a prevenir quedas?</string>
+    <string name="assistente_chip_vitaminas">Vitamina D e B12</string>
+    <string name="assistente_q_vitaminas">Vitamina D e B12: o que dizem os estudos para a minha idade?</string>
+    <string name="assistente_chip_tirzepatida">Tirzepatida</string>
+    <string name="assistente_q_tirzepatida">O que os estudos dizem da tirzepatida?</string>
+    <string name="assistente_chip_artrose">Artrose no joelho</string>
+    <string name="assistente_q_artrose">Tenho artrose no joelho: que exercícios os estudos recomendam?</string>
     <string name="detail_from_start">↺ Do início</string>
     <string name="detail_current_lesson">Aula atual</string>
     <string name="detail_section_materials">Materiais</string>

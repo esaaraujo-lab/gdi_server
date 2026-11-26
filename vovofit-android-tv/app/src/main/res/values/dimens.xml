@@ -79,6 +79,10 @@
     <dimen name="detail_hero_height">220dp</dimen>
     <dimen name="cta_height">56dp</dimen>
     <dimen name="chip_height">36dp</dimen>
+    <!-- 1.0.42 — chips de temas da biblioteca no chat da assistente:
+         alvos grandes e texto 18sp (legibilidade +60). -->
+    <dimen name="assistente_chip_height">52dp</dimen>
+    <dimen name="text_assistente_chip">18sp</dimen>
     <dimen name="play_fab_size">64dp</dimen>
     <!-- Frente R3A (Plyr) — botao play/pausa da barra SO-ICONE (sem disco):
          40dp, glifo 18sp; disco central (overlay de pausa) 44dp, glifo 20sp.
