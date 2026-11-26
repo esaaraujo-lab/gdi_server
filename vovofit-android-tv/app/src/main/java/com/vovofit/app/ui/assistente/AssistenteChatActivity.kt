@@ -34,6 +34,18 @@ import org.json.JSONObject
  *   bolha de erro clicável (tentar de novo) SEM perder o texto
  *   digitado — o campo só limpa depois de a mensagem entrar no
  *   histórico.
+ *
+ * 1.0.42 — PRONTO PARA A BIBLIOTECA DE CONHECIMENTO (servidor,
+ * worker v2.15.97): a API não muda — as respostas passam a vir
+ * alimentadas pelas fichas (biblioteca partilhada + fichas vovo-*).
+ * Do lado do cliente: (1) chips de temas da biblioteca no topo do
+ * chat, alinhados com o INDICE das fichas e com o ângulo +60 —
+ * tocar num chip envia a pergunta completa pelo MESMO caminho de
+ * envio (sendText), sem rotas novas; (2) o histórico enviado sobe
+ * para as últimas 10 mensagens, para a síntese multi-tema do
+ * servidor ter contexto; (3) as bolhas já renderizam Markdown
+ * longo sem truncar (sem maxLines/ellipsize no item do chat —
+ * conferido nesta ronda).
  */
 class AssistenteChatActivity : AppCompatActivity() {
 
@@ -58,6 +70,22 @@ class AssistenteChatActivity : AppCompatActivity() {
 
         findViewById<View>(R.id.assistenteSend).setOnClickListener { sendCurrent() }
 
+        // 1.0.42 — Chips de temas da biblioteca: cada chip envia a
+        // pergunta completa (assistente_q_*) pelo caminho normal.
+        val chips = listOf(
+            R.id.chipForca to R.string.assistente_q_forca,
+            R.id.chipProteina to R.string.assistente_q_proteina,
+            R.id.chipEquilibrio to R.string.assistente_q_equilibrio,
+            R.id.chipVitaminas to R.string.assistente_q_vitaminas,
+            R.id.chipTirzepatida to R.string.assistente_q_tirzepatida,
+            R.id.chipArtrose to R.string.assistente_q_artrose
+        )
+        for ((viewId, questionId) in chips) {
+            findViewById<View>(viewId).setOnClickListener {
+                sendText(getString(questionId))
+            }
+        }
+
         // Saudação da assistente (âmbito fitness +60, sem prometer
         // acompanhamento médico — o limite vive na persona do
         // servidor e é repetido aqui na abertura).
@@ -68,9 +96,19 @@ class AssistenteChatActivity : AppCompatActivity() {
         if (sending) return
         val text = input.text?.toString()?.trim().orEmpty()
         if (text.isEmpty()) return
-        // Só limpa o campo DEPOIS de a mensagem entrar no histórico.
-        adapter.add(ChatAdapter.Msg("user", text))
+        // O campo limpa aqui, mas a mensagem entra no histórico
+        // logo a seguir em sendText — nunca se perde texto.
         input.text?.clear()
+        sendText(text)
+    }
+
+    /** Caminho ÚNICO de envio (texto digitado e chips da biblioteca):
+     *  a mensagem entra no histórico e segue para send(). Com um
+     *  envio a decorrer, ignora — como o botão Enviar já fazia. */
+    private fun sendText(text: String) {
+        if (sending) return
+        if (text.isBlank()) return
+        adapter.add(ChatAdapter.Msg("user", text))
         scrollToEnd()
         send(text)
     }
@@ -159,12 +197,14 @@ class AssistenteChatActivity : AppCompatActivity() {
         body.put("message", currentText)
         // A persona fitness da Vovó (especialização +60 no servidor).
         body.put("persona", "fitness-vovo")
-        // Histórico: últimas 8 trocas REAIS (sem a saudação inicial
-        // nem bolhas de erro), no formato {role, content}.
+        // Histórico: últimas 10 mensagens REAIS anteriores à actual
+        // (sem a saudação inicial nem bolhas de erro), no formato
+        // {role, content}. 1.0.42: 8 → 10, para a síntese da
+        // biblioteca ter contexto.
         val history = adapter.messages.filter {
             !it.isError && it.text != getString(R.string.assistente_greeting)
         }
-        val window = history.takeLast(9).dropLast(1) // exclui a msg actual (já em "message")
+        val window = history.takeLast(11).dropLast(1) // exclui a msg actual (já em "message")
         val arr = JSONArray()
         for (m in window) {
             val o = JSONObject()
