@@ -131,6 +131,11 @@ class DetailActivity : AppCompatActivity() {
     // Ronda 27 — grade de Tiles da aba Aulas no celular (3 colunas).
     private var aulasFileAdapter: com.meggy.app.ui.browse.FileAdapter? = null
     private var flatAdapter: FlatLessonAdapter? = null
+    // 2.7.58 — lista unificada de aulas (celular; SPEC §2).
+    private var unifiedAdapter: UnifiedLessonAdapter? = null
+    // 2.7.58 — próximo lançamento do player força a posição 0
+    // ("Assistir do Início" verdadeiro); consumido no launchPlayer.
+    private var nextLaunchFromStart = false
     // 2.7.48 — filtro da lista plana (Todas / Assistidas / Por
     // assistir / Com resumo / Vídeo / PDF).
     private var flatFilter: FlatFilter = FlatFilter.ALL
@@ -354,6 +359,22 @@ class DetailActivity : AppCompatActivity() {
         // CTA + play do hero: retoma o ponto exato (ou 1º vídeo).
         binding.ctaContinue.setOnClickListener { playResumeOrFirst() }
         binding.heroPlayFab.setOnClickListener { playResumeOrFirst() }
+        // 2.7.58 — hero mobile (SPEC §3.2): sem FAB de play no
+        // celular (o CTA Continuar é a acção única); na TV o FAB
+        // fica. O secundário "Do início" (só layout do celular)
+        // lança a 1.ª aula com a posição forçada a 0 (playFirstVideo
+        // + EXTRA_FROM_START no player).
+        if (!isTv) binding.heroPlayFab.visibility = View.GONE
+        findViewById<View>(R.id.ctaFromStart)?.setOnClickListener { playFirstVideo() }
+        // 2.7.58 — rail lateral persistente na TV (o detalhe não é
+        // um item do menu; HOME é o item neutro seleccionado).
+        com.meggy.app.ui.home.TvRailHost.attach(
+            this,
+            findViewById(R.id.tvSideMenu),
+            findViewById(R.id.detailContent),
+            com.meggy.app.ui.home.SideMenuView.MenuItem.HOME,
+            R.id.ctaContinue
+        )
 
         // Abas
         binding.tabResumo.setOnClickListener { selectTab(Tab.SUMMARY) }
@@ -430,7 +451,7 @@ class DetailActivity : AppCompatActivity() {
                 R.id.nav_home -> { startActivity(Intent(this, HomeActivity::class.java)); true }
                 R.id.nav_drives -> { val i = Intent(this, HomeActivity::class.java); i.putExtra(HomeActivity.EXTRA_SCROLL_TO_DRIVES, true); startActivity(i); true }
                 R.id.nav_simulados -> { HomeActivity.openSimulados(this); true }
-                R.id.nav_meggy -> { startActivity(Intent(this, SearchActivity::class.java)); true }
+                R.id.nav_meggy -> { HomeActivity.openMeggyChat(this); true }
                 R.id.nav_settings -> { startActivity(Intent(this, SettingsActivity::class.java)); true }
                 else -> false
             }
@@ -1154,6 +1175,7 @@ class DetailActivity : AppCompatActivity() {
                     }
                     // R22 UI: a linha do curso da TV acompanha o total.
                     syncTvCourseLine()
+                    syncHeroMetaLine()
                 }
             }
             val sm = SessionManager.get(this@DetailActivity)
@@ -1175,6 +1197,7 @@ class DetailActivity : AppCompatActivity() {
             }
             // R22 UI: linha do curso da TV (no-op no celular).
             syncTvCourseLine()
+            syncHeroMetaLine()
 
             // 2.7.52 — fileira de aulas da TV + visibilidade do
             // botão "Assistir do Início" (no-op fora da TV).
@@ -1271,23 +1294,21 @@ class DetailActivity : AppCompatActivity() {
                         .map { it.name }.toSet()
                     adapter.setResumeAndWatched(resumed, watched)
                 } else {
-                    val adapter = FlatLessonAdapter(
-                        folderPath = currentPath,
-                        onPlay = { file -> openFile(file) },
-                        onOpenPdf = { file -> openPdf(file, file.folderPath ?: currentPath) },
-                        onOpenMd = { file -> openMd(file, file.folderPath ?: currentPath) },
-                        onOpenOther = { file -> openFile(file) }
+                    // 2.7.58 — celular plano: a MESMA lista
+                    // unificada do modo interfolder (SPEC §2.3):
+                    // vídeos directos como linhas de episódio e os
+                    // restantes ficheiros na seção Materiais. O
+                    // FlatLessonAdapter sai desta tela (a classe
+                    // fica no projecto, sem uso aqui).
+                    val adapter = UnifiedLessonAdapter(
+                        onPlayVideo = { file, _ -> openFile(file) },
+                        onOpenGroup = { group -> openLessonGroupDetail(group) },
+                        onOpenMaterial = { file, _ -> openFile(file) }
                     )
-                    flatAdapter = adapter
+                    unifiedAdapter = adapter
+                    binding.recycler.layoutManager = LinearLayoutManager(this@DetailActivity)
                     binding.recycler.adapter = adapter
-                    // 2.7.48 — grade/lista pela preferência guardada;
-                    // o resumo volta a verificar-se por pasta.
-                    flatGrid = SessionManager.get(this@DetailActivity).flatListGrid
-                    flatSummaryKnown = null
-                    applyFlatLayoutManager()
-                    // Frente R4B — a lista chega já partida em seções
-                    // (Vídeos .mp4 / PDFs / Materiais), sem as legendas.
-                    refreshFlatList()
+                    refreshUnifiedList()
                     // Frente R14A — materiais da pasta ao lado: corre
                     // em 2º plano (nunca atrasa a tela); quando chega,
                     // só a seção Materiais ganha os arquivos novos
@@ -1697,6 +1718,26 @@ class DetailActivity : AppCompatActivity() {
         }
         line.visibility = View.VISIBLE
         bar.visibility = View.VISIBLE
+    }
+
+    /**
+     * 2.7.58 — linha de meta fundida do hero MOBILE (SPEC §3.2):
+     * "<N aulas> · <progresso>" numa linha só, composta dos MESMOS
+     * textos dos chips (que no celular passam a gone — a linha é a
+     * fonte visível). A vista só existe no layout do celular
+     * (findViewById null na TV = no-op). Chamado nos mesmos pontos
+     * do syncTvCourseLine.
+     */
+    private fun syncHeroMetaLine() {
+        val line = findViewById<TextView>(R.id.heroMetaLine) ?: return
+        val count = binding.chipCount.text?.toString().orEmpty()
+        val progress = binding.chipProgress.text?.toString().orEmpty()
+        val aulas = count.substringBefore(" · ").trim()
+        line.text = when {
+            progress.isBlank() -> aulas
+            aulas.isBlank() -> progress
+            else -> "$aulas · $progress"
+        }
     }
 
     // ──────────── Ronda 9 Frente B — Questões/Flashcards da aula ────────────
@@ -2345,28 +2386,22 @@ class DetailActivity : AppCompatActivity() {
             adapter.submit(lessonGroups)
             prefetchLessonChildren()
         } else {
-            // Ronda 27 — celular: grade de Tiles 3 colunas (FileAdapter
-            // + item_rail_card, o mesmo padrão da tela ALFACON 2026)
-            // em vez da lista expansível com chevron. Um toque no Tile
-            // abre a pasta; sem dropdown. Os cartões de progresso do
-            // topo (hero) ficam como cabeçalho. A grade larga
-            // (LessonGridAdapter) não muda no celular: TV 4 colunas,
-            // tablet 2.
-            val adapter = com.meggy.app.ui.browse.FileAdapter(
-                onFolder = { file ->
-                    val group = lessonGroups.firstOrNull { it.folderPath == file.folderPath }
-                    if (group != null) openAulasTile(group)
-                },
-                onFile = { file -> openFile(file) },
-                // Frente A (TV): UP da 1ª linha -> aba Aulas.
-                firstRowNextFocusUpId = R.id.tabAulas
+            // 2.7.58 — celular: LISTA UNIFICADA de aulas (SPEC §2)
+            // em vez da grade de Tiles: os grupos interfolder
+            // apresentam-se como lista de episódios estilo Plex
+            // (miniatura do próprio vídeo, tema, progresso), a
+            // mesma apresentação da pasta plana. Os dados são os
+            // grupos + filhos do prefetch de sempre; o toque usa
+            // openFileInFolder/openLessonGroupDetail actuais.
+            val adapter = UnifiedLessonAdapter(
+                onPlayVideo = { file, groupPath -> openFileInFolder(file, groupPath) },
+                onOpenGroup = { group -> openLessonGroupDetail(group) },
+                onOpenMaterial = { file, groupPath -> openFileInFolder(file, groupPath) }
             )
-            aulasFileAdapter = adapter
-            adapter.setFolderPath(currentPath)
-            binding.recycler.layoutManager = GridLayoutManager(this, 3)
-            binding.recycler.addItemDecoration(GridGutterDecoration(10))
+            unifiedAdapter = adapter
+            binding.recycler.layoutManager = LinearLayoutManager(this)
             binding.recycler.adapter = adapter
-            submitAulasTiles(lessonGroups)
+            refreshUnifiedList()
             prefetchLessonChildren()
         }
     }
@@ -2439,6 +2474,7 @@ class DetailActivity : AppCompatActivity() {
             // Última palavra do chip: completo, ou "(parcial)" no teto.
             updateProgressChip(allFiles)
             syncTvCourseLine()
+            syncHeroMetaLine()
         }
     }
 
@@ -2452,10 +2488,13 @@ class DetailActivity : AppCompatActivity() {
         // Ronda 27 — a grade de Tiles do celular reenvia os grupos
         // filtrados (pastas + progresso).
         submitAulasTiles(filtered)
+        // 2.7.58 — lista unificada do celular segue os mesmos dados.
+        if (unifiedAdapter != null) refreshUnifiedList()
         // Ronda 15 Frente B (B3): o prefetch (ou um expandir) entregou
         // filhos — o chip do hero pode sair de "a calcular…".
         updateProgressChip(allFiles)
         syncTvCourseLine()
+        syncHeroMetaLine()
         restoreDetailFocus(snap)
     }
 
@@ -2478,11 +2517,15 @@ class DetailActivity : AppCompatActivity() {
             // Ronda 27 — o prefetch entregou filhos: o progresso das
             // pastas muda — reenvia-se o mapa p/ os Tiles do celular.
             submitAulasTiles(visible)
+            // 2.7.58 — idem p/ a lista unificada (filhos novos
+            // trocam linhas Pending pelas aulas reais).
+            if (unifiedAdapter != null) refreshUnifiedList()
         }
         // Ronda 15 Frente B (B3): o prefetch entregou filhos — o chip
         // do hero pode sair de "a calcular…".
         updateProgressChip(allFiles)
         syncTvCourseLine()
+        syncHeroMetaLine()
         // Ronda 18 Frente C (F3) — o prefetch é uma conclusão
         // assíncrona: sem grupos re-ligados não há nada a repor e
         // não se agenda post{} nenhum.
@@ -2633,6 +2676,178 @@ class DetailActivity : AppCompatActivity() {
             )
     }
 
+    /**
+     * 2.7.58 — monta as linhas da LISTA UNIFICADA (SPEC §2.3) a
+     * partir dos dados que a tela já tem: grupos interfolder +
+     * filhos do prefetch, ou allFiles no modo plano. Chamado de
+     * loadFolder/buildLessonGroups (montagem), do prefetch (filhos
+     * novos), da busca e dos chips Assistidas/Por assistir.
+     */
+    private fun refreshUnifiedList() {
+        val adapter = unifiedAdapter ?: return
+        // SPEC §2.4 — na vista unificada só sobrevivem os chips
+        // Todas/Assistidas/Por assistir; Com resumo/Vídeo/PDF e o
+        // alternar Grade/Lista escondem-se (celular).
+        findViewById<View>(R.id.chipFilterSummary)?.visibility = View.GONE
+        findViewById<View>(R.id.chipFilterVideos)?.visibility = View.GONE
+        findViewById<View>(R.id.chipFilterPdf)?.visibility = View.GONE
+        findViewById<View>(R.id.flatViewToggle)?.visibility = View.GONE
+        findViewById<View>(R.id.filterChipsRow)?.visibility = View.VISIBLE
+
+        val sm = SessionManager.get(this)
+        val query = binding.lessonSearch.text?.toString()?.trim().orEmpty()
+        val current = currentLessonKey(sm)
+        val rows = ArrayList<UnifiedLessonAdapter.Row>()
+        val materials = ArrayList<Pair<FileItem, String>>()
+
+        fun matchesQuery(name: String): Boolean =
+            query.isEmpty() || name.contains(query, ignoreCase = true)
+
+        fun flatFilterOk(file: FileItem, groupPath: String): Boolean = when (flatFilter) {
+            FlatFilter.WATCHED -> sm.isWatched(groupPath, file.name)
+            FlatFilter.UNWATCHED -> !sm.isWatched(groupPath, file.name)
+            else -> true
+        }
+
+        fun lessonRow(
+            file: FileItem,
+            groupPath: String,
+            title: String,
+            secondLine: String?
+        ): UnifiedLessonAdapter.Row.Lesson = UnifiedLessonAdapter.Row.Lesson(
+            file = file,
+            groupPath = groupPath,
+            title = title,
+            secondLine = secondLine,
+            watched = sm.isWatched(groupPath, file.name),
+            progress = sm.getResumeProgress(groupPath, file.name),
+            durationMs = sm.getResumeDuration(groupPath, file.name),
+            isCurrent = current != null && current.first == groupPath &&
+                current.second == file.name
+        )
+
+        if (isFlatMode) {
+            val media = allFiles.filter {
+                (it.isVideo || it.isAudio) && !it.isSubtitle
+            }
+            for (f in media) {
+                if (!matchesQuery(f.name)) continue
+                if (!flatFilterOk(f, currentPath)) continue
+                val title = LessonDescription.displayNameForLesson(f.name, folderName)
+                    ?: Format.lessonDisplayTitle(f.name, Format.extractCourseName(currentPath))
+                rows.add(lessonRow(f, currentPath, title, null))
+            }
+            val extra = extraMaterials.filter { matchesQuery(it.name) }
+            val mats = (allFiles.filter {
+                !it.isFolder && !it.isSubtitle && !it.isVideo && !it.isAudio
+            } + extra.filter {
+                !it.isVideo && !it.isAudio && !it.isSubtitle
+            }).distinctBy { it.name.lowercase() }
+            for (f in mats) {
+                materials.add(f to (f.folderPath ?: currentPath))
+            }
+        } else {
+            for (group in filteredLessonGroups()) {
+                val children = group.children
+                if (group.folder.id == "__loose__") {
+                    val kids = children ?: emptyList()
+                    for (v in kids.filter { (it.isVideo || it.isAudio) && !it.isSubtitle }) {
+                        if (!matchesQuery(v.name)) continue
+                        if (!flatFilterOk(v, group.folderPath)) continue
+                        val title = LessonDescription.displayNameForLesson(v.name, folderName)
+                            ?: Format.lessonDisplayTitle(
+                                v.name, Format.extractCourseName(group.folderPath)
+                            )
+                        rows.add(lessonRow(v, group.folderPath, title, null))
+                    }
+                    kids.filter { !it.isVideo && !it.isAudio && !it.isSubtitle }
+                        .forEach { materials.add(it to group.folderPath) }
+                    continue
+                }
+                if (children == null) {
+                    if (matchesQuery(group.folder.name)) {
+                        rows.add(UnifiedLessonAdapter.Row.Pending(group))
+                    }
+                    continue
+                }
+                val vids = children.filter { (it.isVideo || it.isAudio) && !it.isSubtitle }
+                children.filter { !it.isVideo && !it.isAudio && !it.isSubtitle }
+                    .forEach { materials.add(it to group.folderPath) }
+                when {
+                    vids.isEmpty() -> {
+                        if (matchesQuery(group.folder.name)) {
+                            rows.add(UnifiedLessonAdapter.Row.Folder(group))
+                        }
+                    }
+                    vids.size == 1 -> {
+                        val v = vids[0]
+                        if ((matchesQuery(group.folder.name) || matchesQuery(v.name)) &&
+                            flatFilterOk(v, group.folderPath)
+                        ) {
+                            val second = LessonDescription.displayNameForLesson(
+                                v.name, group.folder.name
+                            )?.takeIf { !it.equals(group.folder.name, ignoreCase = true) }
+                            rows.add(
+                                lessonRow(v, group.folderPath, group.folder.name, second)
+                            )
+                        }
+                    }
+                    else -> {
+                        val folderMatches = matchesQuery(group.folder.name)
+                        val visible = vids.filter {
+                            (folderMatches || matchesQuery(it.name)) &&
+                                flatFilterOk(it, group.folderPath)
+                        }
+                        if (visible.isNotEmpty()) {
+                            rows.add(UnifiedLessonAdapter.Row.Header(group.folder.name))
+                            for (v in visible) {
+                                val title = LessonDescription.displayNameForLesson(
+                                    v.name, group.folder.name
+                                ) ?: Format.lessonDisplayTitle(
+                                    v.name, Format.extractCourseName(group.folderPath)
+                                )
+                                rows.add(
+                                    lessonRow(v, group.folderPath, group.folder.name, title)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (materials.isNotEmpty()) {
+            rows.add(
+                UnifiedLessonAdapter.Row.Header(getString(R.string.detail_section_materials))
+            )
+            for ((f, gp) in materials) {
+                if (matchesQuery(f.name)) {
+                    rows.add(UnifiedLessonAdapter.Row.Material(f, gp))
+                }
+            }
+        }
+        adapter.submit(rows)
+        // Estado vazio honesto (busca/filtro sem resultados).
+        if (rows.isEmpty()) {
+            binding.emptyState.text = getString(R.string.flat_empty_filter)
+            binding.emptyState.visibility = View.VISIBLE
+        } else if (binding.emptyState.visibility == View.VISIBLE &&
+            binding.emptyState.text == getString(R.string.flat_empty_filter)
+        ) {
+            binding.emptyState.visibility = View.GONE
+        }
+    }
+
+    /** A "aula atual" da tela (selo da lista unificada): o recent
+     *  em curso sob currentPath com maior progresso — o mesmo
+     *  cálculo do playResumeOrFirst. */
+    private fun currentLessonKey(sm: SessionManager): Pair<String, String>? {
+        val best = sm.getRecents()
+            .filter { it.folderPath.startsWith(currentPath) }
+            .filter { sm.hasResume(it.folderPath, it.videoName) }
+            .maxByOrNull { sm.getResumeProgress(it.folderPath, it.videoName) }
+        return best?.let { it.folderPath to it.videoName }
+    }
+
     // Frente R4B — (re)monta a lista plana em seções a partir de
     // [allFiles], com a busca e o filtro dos chips aplicados:
     //   Vídeos — só .mp4, por ordem, com progresso como hoje;
@@ -2648,6 +2863,12 @@ class DetailActivity : AppCompatActivity() {
     // lista do adapter. Pastas não existem aqui (modo plano =
     // folderCount == 0), mas são excluídas na mesma, por defesa.
     private fun refreshFlatList() {
+        // 2.7.58 — com a lista unificada activa (celular), o
+        // refresh da lista plana delega nela.
+        if (unifiedAdapter != null) {
+            refreshUnifiedList()
+            return
+        }
         val adapter = flatAdapter ?: return
         val sm = SessionManager.get(this)
         val query = binding.lessonSearch.text?.toString().orEmpty()
@@ -2843,6 +3064,12 @@ class DetailActivity : AppCompatActivity() {
     private fun playFirstVideo() {
         val firstVideo = allFiles.find { (it.isVideo || it.isAudio) && !it.link.isNullOrEmpty() }
         if (firstVideo != null) {
+            // 2.7.58 — "Assistir do Início" VERDADEIRO: a flag faz o
+            // launchPlayer carregar EXTRA_FROM_START e o player
+            // ignora o resume guardado (posição 0). Vale para o
+            // botão da TV (btnFromStart) e o secundário do celular
+            // (ctaFromStart) — ambos chamam esta função.
+            nextLaunchFromStart = true
             openFile(firstVideo)
         } else {
             val firstFolder = allFiles.find { it.isFolder }
@@ -2975,6 +3202,12 @@ class DetailActivity : AppCompatActivity() {
         intent.putExtra(PlayerActivity.EXTRA_URL, url)
         intent.putExtra(PlayerActivity.EXTRA_TITLE, title)
         intent.putExtra(PlayerActivity.EXTRA_FOLDER_PATH, folderPath)
+        // 2.7.58 — "Assistir do Início": consome a flag (um só
+        // lançamento) e o player força a posição 0.
+        if (nextLaunchFromStart) {
+            intent.putExtra(PlayerActivity.EXTRA_FROM_START, true)
+            nextLaunchFromStart = false
+        }
         startActivity(intent)
     }
 
