@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 2.7.58 — Fundo do contentor do vídeo em retrato (desenho do
+     player §4.1): preto com cantos de 16dp; o recorte faz-se com
+     clipToOutline na PlayerActivity (retrato apenas). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FF000000" />
+    <corners android:radius="16dp" />
+</shape>
