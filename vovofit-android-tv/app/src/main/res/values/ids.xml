@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 1.0.40 — ids soltos (tags/chaves) que não pertencem a um layout. -->
+<resources>
+    <item name="tv_rail_host_attached" type="id" />
+</resources>
