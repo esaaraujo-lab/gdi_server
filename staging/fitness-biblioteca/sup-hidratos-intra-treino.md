@@ -32,4 +32,4 @@ tipo: "suplementos — GRAU DE EVIDÊNCIA obrigatório em cada resposta; nunca p
 - Thomas DT, Erdman KA, Burke LM. Position of the Academy of Nutrition and Dietetics, Dietitians of Canada, and the American College of Sports Medicine: Nutrition and Athletic Performance. *J Acad Nutr Diet* 2016;116(3):501-528.
 - Jäger R et al. International Society of Sports Nutrition position stand: protein and exercise / nutrient timing. *J Int Soc Sports Nutr* 2017;14:20 e 33.
 - Takii H et al. Fluids containing a highly branched cyclic dextrin influence the gastric emptying rate. *Int J Sports Med* 2005;26(4):314-319.
-- König D et al. Isomaltulose (Palatinose) — revisão de metabolismo e respostas glicémicas. *Nutrients* (revisão da literatura de isomaltulose).
+- König D et al. Substrate utilization and cycling performance following Palatinose™ ingestion: a randomized, double-blind, controlled trial. *Nutrients* 2016;8(7):390 (ensaio em 20 ciclistas; isomaltulose vs. maltodextrina: glicemia mais estável, mais oxidação de gordura, contrarrelógio −2,7% — não é uma revisão).

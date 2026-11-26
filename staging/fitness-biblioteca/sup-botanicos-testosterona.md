@@ -34,5 +34,5 @@ tipo: "suplementos — GRAU DE EVIDÊNCIA obrigatório em cada resposta; nunca p
 - Shin BC et al. Maca (L. meyenii) for improving sexual function: a systematic review. *BMC Complement Altern Med* 2010;10:44.
 - Gonzales GF et al. Effect of Lepidium meyenii (MACA) on sexual desire and its absent relationship with serum testosterone levels in adult healthy men. *Andrologia* 2002;34(6):367-372.
 - Wankhede S et al. Beneficial effects of fenugreek glycoside supplementation in male subjects during resistance training: a randomized controlled pilot study. *J Sport Health Sci* 2016;5(2):176-182.
-- Leisegang K et al. Eurycoma longifolia (Jack) improves serum total testosterone in men: a systematic review and meta-analysis of clinical trials. *Medicina* 2022;58(8):1047.
+- Leisegang K et al. Eurycoma longifolia (Jack) improves serum total testosterone in men: a systematic review and meta-analysis of clinical trials. *Medicina* 2022;58(8):1047. doi:10.3390/medicina58081047.
 - Talbott SM et al. Effect of Tongkat Ali on stress hormones and psychological mood state in moderately stressed subjects. *J Int Soc Sports Nutr* 2013;10:28.
