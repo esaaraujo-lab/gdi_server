@@ -64,11 +64,24 @@ class MyListActivity : AppCompatActivity() {
                     R.id.nav_mylist -> true
                     R.id.nav_home -> { startActivity(Intent(this, HomeActivity::class.java)); overridePendingTransition(0, 0); true }
                     R.id.nav_search -> { startActivity(Intent(this, SearchActivity::class.java)); overridePendingTransition(0, 0); true }
+                    // v2.1.44 — assistente fitness (só celular).
+                    R.id.nav_fitness -> {
+                        startActivity(Intent(this, com.bibigyn.app.ui.fitness.FitnessChatActivity::class.java)); overridePendingTransition(0, 0); true
+                    }
                     R.id.nav_settings -> { startActivity(Intent(this, SettingsActivity::class.java)); overridePendingTransition(0, 0); true }
                     else -> false
                 }
             }
         }
+
+        // v2.1.44 — rail lateral da TV (porte da Meggy 2.7.58).
+        com.bibigyn.app.ui.home.TvRailHost.attach(
+            this,
+            findViewById(R.id.tvSideMenu),
+            findViewById(R.id.mylistContent),
+            com.bibigyn.app.ui.home.SideMenuView.MenuItem.HOME,
+            firstContentId = R.id.tabCourses
+        )
 
         val username = SessionManager.get(this).username ?: "Aluno"
         binding.avatarMonogram.text = com.bibigyn.app.data.monogramFor(username)
