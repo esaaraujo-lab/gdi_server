@@ -88,6 +88,14 @@ class SettingsActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         binding.toolbar.setNavigationOnClickListener { finish() }
+        // 2.7.58 — rail persistente na TV (Ajustes é item do menu).
+        com.meggy.app.ui.home.TvRailHost.attach(
+            this,
+            findViewById(R.id.tvSideMenu),
+            findViewById(R.id.settingsContent),
+            com.meggy.app.ui.home.SideMenuView.MenuItem.SETTINGS,
+            R.id.switchNotifications
+        )
         if (TvUtils.isTv(this)) {
             binding.bottomNav.visibility = View.GONE
         } else {
@@ -98,7 +106,7 @@ class SettingsActivity : AppCompatActivity() {
                     R.id.nav_home -> { startActivity(Intent(this, HomeActivity::class.java)); overridePendingTransition(0, 0); true }
                     R.id.nav_drives -> { val i = Intent(this, HomeActivity::class.java); i.putExtra(HomeActivity.EXTRA_SCROLL_TO_DRIVES, true); startActivity(i); overridePendingTransition(0, 0); true }
                     R.id.nav_simulados -> { HomeActivity.openSimulados(this); overridePendingTransition(0, 0); true }
-                    R.id.nav_meggy -> { startActivity(Intent(this, SearchActivity::class.java)); overridePendingTransition(0, 0); true }
+                    R.id.nav_meggy -> { com.meggy.app.ui.home.HomeActivity.openMeggyChat(this); overridePendingTransition(0, 0); true }
                     else -> false
                 }
             }
