@@ -140,4 +140,38 @@
     <string name="admin_drives_error_generic">Não foi possível concluir. Verifique a conexão e tente novamente.</string>
     <!-- Ronda 10 Frente C — drives do admin na Home -->
     <string name="admin_drive_tile_tag">Drive do admin</string>
+
+    <!-- 1.0.40 — porte do pacote Meggy 2.7.58: menu TV, Meus Cursos,
+         Downloads, assistente fitness e lista unificada -->
+    <string name="side_menu_version">Versão %1$s</string>
+    <string name="load_error">Não foi possível carregar. Verifique a conexão e tente de novo.</string>
+    <string name="retry_action">Tentar de novo</string>
+    <string name="my_courses_title">Meus Cursos</string>
+    <string name="my_courses_empty">Você ainda não adicionou cursos. Explore os drives e adicione os seus cursos.</string>
+    <string name="my_courses_loading">Carregando os seus cursos…</string>
+    <string name="downloads_title">Downloads</string>
+    <string name="downloads_empty">Você ainda não baixou nenhuma aula — use o botão Baixar no player.</string>
+    <string name="downloads_delete">Apagar</string>
+    <string name="downloads_deleted">Download apagado.</string>
+    <string name="player_download">⬇ Baixar</string>
+    <string name="download_done">✓ Baixado</string>
+    <string name="download_started">Download iniciado — você vê o progresso nas notificações.</string>
+    <string name="download_failed">Não foi possível iniciar o download.</string>
+    <string name="download_wifi_only">Downloads só no Wi-Fi (Ajustes) — ligue o Wi-Fi para baixar.</string>
+    <string name="assistente_title">Vovó Fit</string>
+    <string name="assistente_subtitle">Sua assistente de treinos e bem-estar</string>
+    <string name="assistente_hint">Pergunte sobre treinos, receitas, dieta…</string>
+    <string name="assistente_send">Enviar</string>
+    <string name="assistente_greeting">Olá! Sou a assistente da Vovó Fit 💪 Posso ajudar com treinos para a sua idade, receitas, dicas de alimentação, emagrecimento, hipertrofia e suplementos — sempre com informação geral, pensada para você. O que quer saber hoje?</string>
+    <string name="assistente_typing">A assistente está escrevendo…</string>
+    <string name="assistente_error">Não consegui responder agora. Toque aqui para tentar de novo.</string>
+    <string name="assistente_busy">Estou com muitas perguntas agora — tente outra vez dentro de instantes.</string>
+    <string name="detail_from_start">↺ Do início</string>
+    <string name="detail_current_lesson">Aula atual</string>
+    <string name="detail_section_materials">Materiais</string>
+    <string name="detail_loading_lessons">carregando…</string>
+    <string name="ambient_continue">▶ Continuar</string>
+    <string name="shortcut_my_courses">Meus Cursos</string>
+    <string name="shortcut_downloads">Downloads</string>
+    <string name="shortcut_assistente">Assistente</string>
 </resources>
