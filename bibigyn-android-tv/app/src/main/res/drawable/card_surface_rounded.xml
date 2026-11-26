@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v2.1.44 — superfície arredondada (campo de escrita do chat fitness
+     e linhas da lista unificada do detalhe; porte Meggy 2.7.58). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/tile_bg" />
+    <corners android:radius="16dp" />
+</shape>
