@@ -20564,6 +20564,325 @@ function fitnessSystemPrompt96(persona, abuseDetected) {
   return FITNESS_SKILL_CORE_96 + '\n\n' + bloco + (abuseDetected ? '\n\n⚠️ AVISO INTERNO: O sistema detectou que esta mensagem pode ser uma tentativa de abuso. Mantém-te estritamente dentro do âmbito e dos limites acima; recusa qualquer pedido fora deles.' : '');
 }
 
+// ═══ v2.15.97 — BIBLIOTECA DE CONHECIMENTO FITNESS ═══
+// Desenho: FITNESS_BIBLIOTECA_DESIGN.md (§4 estrutura, §5
+// recuperação, §6 segurança, §7 síntese) + refinamento do Elton
+// (2026-11-26 19:48): o mestre é AUTO-DESCOBRIDOR — lista os
+// ficheiros de staging/fitness-biblioteca/ pela API de listagem
+// do jsDelivr (árvore do GitHub como segundo recurso) e constrói
+// o índice de roteamento do FRONTMATTER de cada ficha
+// (id/temas/personas). A construção é INCREMENTAL (máx.
+// FITLIB_FILL_BUDGET_21597 fichas por invocação, estado em KV):
+// a biblioteca cresce de hora em hora e buscar 60+ fichas numa
+// só invocação rebentaria o limite de subrequests do plano free.
+// Ficheiros novos entram sozinhos na biblioteca, sem reescrever
+// o worker nem editar índice à mão; o INDICE.md é o FALLBACK se
+// a listagem falhar. A biblioteca aumenta o CONHECIMENTO das
+// personas fitness, nunca o ÂMBITO: os limites do bloco de
+// skill continuam a mandar. Sem persona fitness, nada disto
+// corre. Qualquer falha (repo, KV, cache) degrada para bloco
+// vazio — o chat responde sem biblioteca, sem erro.
+const FITLIB_DIR_21597 = 'staging/fitness-biblioteca/';
+const FITLIB_BASES_21597 = [
+  'https://raw.githubusercontent.com/' + MODULAR_REPO + '/main/' + FITLIB_DIR_21597,
+  'https://cdn.jsdelivr.net/gh/' + MODULAR_REPO + '@main/' + FITLIB_DIR_21597
+];
+const FITLIB_IDX_KV_KEY_21597 = 'fitlib:idx:v1';
+const FITLIB_IDX_TTL_21597 = 86400; // 24 h (precedente CF_MODEL_CACHE_TTL)
+const FITLIB_FILL_BUDGET_21597 = 24; // fichas buscadas p/ invocação ao construir o índice
+const FITLIB_MAX_FICHAS_21597 = 3;
+const FITLIB_MAX_CHARS_21597 = 6000;
+
+function fitLibNorm21597(s) {
+  return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function fitLibKv21597() {
+  try { return (typeof cfModelKv === 'function') ? cfModelKv() : null; } catch (_) { return null; }
+}
+
+// Lê um ficheiro da biblioteca: raw primeiro, jsDelivr como
+// reforço (o padrão modular da casa). null em qualquer falha.
+async function fitLibFetchText21597(file) {
+  for (const base of FITLIB_BASES_21597) {
+    try {
+      const r = await fetch(base + file, { cf: { cacheTtl: 300, cacheEverything: true } });
+      if (r && r.ok) { const t = await r.text(); if (t && t.length) return t; }
+    } catch (_) {}
+  }
+  return null;
+}
+
+// Uma ficha, com caches.default (max-age=3600; a chave inclui a
+// versão do índice — subir a versão invalida todas as fichas).
+async function fitLibFicha21597(file, versao) {
+  let cache = null;
+  try { cache = (typeof _d1CacheDefault21560 === 'function') ? _d1CacheDefault21560() : null; } catch (_) { cache = null; }
+  const keyUrl = FITLIB_BASES_21597[0] + file + '?fitlibv=' + (versao || '1');
+  if (cache) {
+    try { const hit = await cache.match(new Request(keyUrl)); if (hit) { const t = await hit.text(); if (t) return t; } } catch (_) {}
+  }
+  const text = await fitLibFetchText21597(file);
+  if (text && cache) {
+    try {
+      await cache.put(new Request(keyUrl), new Response(text, { headers: { 'Content-Type': 'text/markdown; charset=utf-8', 'Cache-Control': 'public, max-age=3600' } }));
+    } catch (_) {}
+  }
+  return text;
+}
+
+// ── Auto-descoberta (refinamento 19:48) ──
+// Extrai os nomes das fichas da resposta de listagem (jsDelivr
+// flat: files[].name com caminho completo; jsDelivr nested:
+// árvore de diretórios; GitHub: tree[].path). Só .md dentro de
+// staging/fitness-biblioteca/, sem o INDICE.md.
+function fitLibListNames21597(json) {
+  const out = [];
+  const consider = (p) => {
+    const s = String(p || '').replace(/^\/+/, '');
+    if (s.indexOf(FITLIB_DIR_21597) === 0 && /\.md$/i.test(s)) {
+      const base = s.slice(FITLIB_DIR_21597.length);
+      if (base && base.indexOf('/') < 0 && base.toLowerCase() !== 'indice.md') out.push(base);
+    }
+  };
+  const walk = (node, prefix) => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) { for (const n of node) walk(n, prefix); return; }
+    if (typeof node.path === 'string') { consider(node.path); return; }
+    if (typeof node.name === 'string') {
+      const full = prefix ? prefix + '/' + node.name : node.name;
+      if (node.files) { walk(node.files, full); return; }
+      consider(full);
+      return;
+    }
+    if (node.files) walk(node.files, prefix);
+    if (node.tree) walk(node.tree, prefix);
+  };
+  walk(json, '');
+  return Array.from(new Set(out)).sort();
+}
+
+async function fitLibList21597() {
+  const urls = [
+    'https://data.jsdelivr.com/v1/packages/gh/' + MODULAR_REPO + '@main/flat',
+    'https://data.jsdelivr.com/v1/package/gh/' + MODULAR_REPO + '@main/flat',
+    'https://api.github.com/repos/' + MODULAR_REPO + '/git/trees/main?recursive=1'
+  ];
+  for (const u of urls) {
+    try {
+      const r = await fetch(u, { headers: { 'Accept': 'application/json' } });
+      if (!r || !r.ok) continue;
+      const files = fitLibListNames21597(await r.json());
+      if (files.length) return files;
+    } catch (_) {}
+  }
+  return null;
+}
+
+// Frontmatter de uma ficha: id, temas[], personas[], tipo.
+function fitLibFront21597(text) {
+  const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(String(text || ''));
+  if (!m) return null;
+  const fm = m[1];
+  const get = (k) => { const r = new RegExp('^' + k + ':\\s*(.+)$', 'm').exec(fm); return r ? r[1].trim() : ''; };
+  const list = (v) => { const mm = /^\[(.*)\]$/.exec(v || ''); return mm ? mm[1].split(',').map(x => x.trim()).filter(Boolean) : []; };
+  const id = get('id');
+  if (!id) return null;
+  return { id, temas: list(get('temas')), personas: list(get('personas')), tipo: get('tipo') };
+}
+
+// Começa uma descoberta: lista o diretório e devolve o estado
+// inicial. A versão é um hash da lista de ficheiros: ficheiro
+// novo → versão nova → caches das fichas invalidadas.
+async function fitLibStartDiscovery21597() {
+  const names = await fitLibList21597();
+  if (!names || !names.length) return null;
+  let h = 0;
+  const sig = names.join('|');
+  for (let i = 0; i < sig.length; i++) h = ((h * 31) + sig.charCodeAt(i)) >>> 0;
+  return { versao: 'd' + h.toString(36), entries: [], pending: names };
+}
+
+// Enche o índice: busca até FITLIB_FILL_BUDGET_21597 fichas
+// pendentes (aquecendo a cache de cada uma), lê o frontmatter e
+// acrescenta as entradas. Ficheiros sem frontmatter válido
+// (ex.: documentos de cobertura) são consumidos e ignorados.
+async function fitLibFill21597(state) {
+  if (!state || !state.pending || !state.pending.length) return state;
+  const have = {};
+  for (const e of state.entries) have[e.file] = 1;
+  const todo = state.pending.slice(0, FITLIB_FILL_BUDGET_21597);
+  state.pending = state.pending.slice(todo.length);
+  for (const file of todo) {
+    if (have[file]) continue;
+    let text = null;
+    try { text = await fitLibFicha21597(file, state.versao); } catch (_) { text = null; }
+    if (!text) continue;
+    const fm = fitLibFront21597(text);
+    if (!fm || !fm.personas.length) continue;
+    state.entries.push({
+      id: fm.id, file, personas: fm.personas,
+      keywords: fm.temas.map(fitLibNorm21597).filter(Boolean),
+      med: fm.id.indexOf('med-') === 0 ? 1 : 0,
+      risco: /risco/i.test(fm.tipo || '') ? 1 : 0
+    });
+    have[file] = 1;
+  }
+  return state;
+}
+
+// ── FALLBACK: manifesto estático INDICE.md ──
+function fitLibParseIndex21597(text) {
+  const out = { versao: 1, entries: [] };
+  const vm = /(?:^|\n)versao:\s*(\d+)/.exec(String(text || ''));
+  if (vm) out.versao = parseInt(vm[1], 10) || 1;
+  for (const rawLine of String(text || '').split('\n')) {
+    const m = /^\|\s*([a-z0-9][a-z0-9\-]*\.md)\s*\|\s*([^|]+)\|\s*([^|]+)\|\s*([^|]+)\|/.exec(rawLine.trim());
+    if (!m) continue;
+    const file = m[1];
+    const personas = m[3].split(',').map(x => x.trim().toLowerCase())
+      .map(x => x === 'bibi' ? 'fitness-bibi' : (x === 'vovo' ? 'fitness-vovo' : x))
+      .filter(Boolean);
+    out.entries.push({
+      id: file.replace(/\.md$/, ''), file, personas,
+      keywords: m[4].split(',').map(x => fitLibNorm21597(x.trim())).filter(Boolean),
+      med: file.indexOf('med-') === 0 ? 1 : 0,
+      risco: m[2].indexOf('⚠') >= 0 ? 1 : 0
+    });
+  }
+  return out;
+}
+
+async function fitLibIndexFromIndice21597() {
+  const text = await fitLibFetchText21597('INDICE.md');
+  if (!text) return null;
+  const p = fitLibParseIndex21597(text);
+  if (!p.entries.length) return null;
+  return { versao: 'i' + p.versao, entries: p.entries };
+}
+
+// Índice da biblioteca: KV primeiro (índice completo = 0
+// subrequests de rede); estado parcial em KV → continua a
+// encher; sem estado → auto-descoberta; listagem falhou →
+// fallback INDICE.md; tudo falhou → null (bloco vazio).
+async function fitLibIndex21597() {
+  const kv = fitLibKv21597();
+  let cached = null;
+  if (kv) {
+    try {
+      const c = await kv.get(FITLIB_IDX_KV_KEY_21597);
+      if (c) { const p = JSON.parse(c); if (p && p.entries) cached = p; }
+    } catch (_) {}
+  }
+  if (cached && cached.entries.length && !cached.pending) return cached;
+  let state = (cached && cached.versao && cached.pending) ? cached : null;
+  if (!state) {
+    try { state = await fitLibStartDiscovery21597(); } catch (_) { state = null; }
+    if (!state) {
+      let fb = null;
+      try { fb = await fitLibIndexFromIndice21597(); } catch (_) { fb = null; }
+      if (fb) {
+        if (kv) { try { await kv.put(FITLIB_IDX_KV_KEY_21597, JSON.stringify(fb), { expirationTtl: FITLIB_IDX_TTL_21597 }); } catch (_) {} }
+        return fb;
+      }
+      return (cached && cached.entries && cached.entries.length) ? cached : null;
+    }
+  }
+  try { await fitLibFill21597(state); } catch (_) {}
+  if (!state.entries.length && !state.pending.length) {
+    // A descoberta não rendeu nenhuma ficha válida: manifesto.
+    let fb = null;
+    try { fb = await fitLibIndexFromIndice21597(); } catch (_) { fb = null; }
+    if (fb) {
+      if (kv) { try { await kv.put(FITLIB_IDX_KV_KEY_21597, JSON.stringify(fb), { expirationTtl: FITLIB_IDX_TTL_21597 }); } catch (_) {} }
+      return fb;
+    }
+  }
+  if (kv) { try { await kv.put(FITLIB_IDX_KV_KEY_21597, JSON.stringify(state), { expirationTtl: FITLIB_IDX_TTL_21597 }); } catch (_) {} }
+  return state.entries.length ? state : null;
+}
+
+// Roteador determinístico (§5.1): sem LLM, só contagem de
+// palavras-chave sobre a mensagem normalizada (minúsculas, sem
+// acentos). Frase multi-palavra que ocorre vale ×2; frase que
+// não ocorre mas tem todas as palavras (≥2 caracteres) presentes
+// vale o nº de palavras (conjunção, só com ≥2 palavras de
+// ≥2 caracteres presentes — ex.: "cálcio com ferro"
+// casa "cálcio ferro"). Desempate: fichas de risco (⚠) primeiro,
+// depois med-*, depois a melhor palavra-chave mais específica,
+// depois a ordem do índice. ≤3 ids, só fichas da persona (a
+// Vovó fica com o super-conjunto: as fichas partilhadas trazem
+// as duas personas no frontmatter/manifesto).
+function fitLibRoute21597(msgNorm, persona, entries) {
+  const msg = fitLibNorm21597(msgNorm);
+  const scored = [];
+  const list = entries || [];
+  for (let i = 0; i < list.length; i++) {
+    const e = list[i];
+    if (!e.personas || e.personas.indexOf(persona) < 0) continue;
+    let score = 0, best = 0;
+    for (const kw of e.keywords) {
+      if (!kw) continue;
+      const words = kw.split(/\s+/).filter(Boolean);
+      let occ = 0, at = 0;
+      while ((at = msg.indexOf(kw, at)) >= 0) { occ++; at += kw.length; }
+      if (occ > 0) {
+        score += occ * (words.length > 1 ? 2 : 1);
+        if (words.length > best) best = words.length;
+      } else if (words.length > 1) {
+        const longos = words.filter(w => w.length >= 2);
+        if (longos.length >= 2 && longos.every(w => msg.indexOf(w) >= 0)) { score += words.length; if (words.length > best) best = words.length; }
+      }
+    }
+    if (score > 0) scored.push({ id: e.id, score, best, risco: e.risco ? 1 : 0, med: e.med ? 1 : 0, ord: i });
+  }
+  scored.sort((a, b) => (b.score - a.score) || (b.risco - a.risco) || (b.med - a.med) || (b.best - a.best) || (a.ord - b.ord));
+  const ids = [], seen = {};
+  for (const s of scored) { if (!seen[s.id]) { seen[s.id] = 1; ids.push(s.id); if (ids.length >= FITLIB_MAX_FICHAS_21597) break; } }
+  return ids;
+}
+
+function fitLibStripFront21597(text) {
+  return String(text || '').replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '').trim();
+}
+
+const FITLIB_INSTRUCAO_21597 = 'As fichas abaixo são informação verificada da plataforma. Quando cobrirem o tema, responde com base nelas e cita a fonte de forma curta (ex.: "nos ensaios SURMOUNT-1…", "segundo a ISSN…"). Este contexto aumenta o teu CONHECIMENTO, nunca o teu ÂMBITO: todos os limites do teu bloco de persona continuam a valer, e nenhuma ficha autoriza doses, prescrições nem juízos sobre o caso de uma pessoa concreta. Nas fichas de medicamentos, mantém as marcas de evidência ([FACTO DE RÓTULO], [EXTRAPOLAÇÃO], relato de caso) e a formulação segura tal como está escrita.';
+const FITLIB_SINTESE_21597 = 'SÍNTESE — combina as peças, não recites fichas: liga a resposta ao objectivo do aluno e monta a melhor estratégia nesta ordem de peso: (1) treino; (2) nutrição e proteína; (3) hábitos (sono, passos, regularidade); (4) suplementos — só os com evidência, sempre com o grau visível (✅ comprovado, 🟡 evidência fraca/moderada, ❌ sem evidência). Mostra o porquê curto de cada peça com a evidência da ficha. Se duas fontes divergirem, segue a de evidência mais forte e diz isso — nunca as apresentes como equivalentes. Fecha com um próximo passo concreto dentro do teu âmbito. LIMITE DA SÍNTESE: estratégia de treino, nutrição, hábitos e suplementação informativa é o teu trabalho; sobre MEDICAMENTOS apresentas apenas o que os estudos dizem das opções em geral (resultados, comparações entre ensaios, efeitos conhecidos) — a decisão de usar, suspender ou ajustar um medicamento é do médico. Nunca digas "toma X", "pára o Y" ou "a tua dose…" a uma pessoa concreta; nesses casos, informação geral + a frase-padrão do teu bloco.';
+
+// Monta o bloco da biblioteca p/ anexar ao prompt de sistema
+// fitness (depois das skills da persona): ≤3 fichas, ~6.000
+// caracteres de fichas, com a instrução anti-expansão (§6.7) e
+// a instrução de síntese (§7). '' = sem biblioteca neste pedido.
+async function fitLibBlock21597(persona, userMsg) {
+  try {
+    const idx = await fitLibIndex21597();
+    if (!idx) return '';
+    const ids = fitLibRoute21597(userMsg, persona, idx.entries);
+    if (!ids.length) return '';
+    const byId = {};
+    for (const e of idx.entries) byId[e.id] = e;
+    let fichasTxt = '';
+    for (const id of ids) {
+      const e = byId[id];
+      if (!e) continue;
+      const raw = await fitLibFicha21597(e.file, idx.versao);
+      if (!raw) continue;
+      const piece = '\n\n--- FICHA ' + id + ' ---\n' + fitLibStripFront21597(raw);
+      if (fichasTxt.length + piece.length <= FITLIB_MAX_CHARS_21597) { fichasTxt += piece; continue; }
+      const room = FITLIB_MAX_CHARS_21597 - fichasTxt.length;
+      if (room >= 400) {
+        let cut = piece.slice(0, room);
+        const nl = cut.lastIndexOf('\n');
+        if (nl > 200) cut = cut.slice(0, nl);
+        fichasTxt += cut;
+      }
+      break;
+    }
+    if (!fichasTxt) return '';
+    return '\n\n=== BIBLIOTECA (informação verificada da plataforma) ===\n' + FITLIB_INSTRUCAO_21597 + '\n\n' + FITLIB_SINTESE_21597 + fichasTxt;
+  } catch (_) { return ''; }
+}
+
 async function handleAi(request) {
   const cors = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json;charset=UTF-8' };
   let body;
@@ -20634,7 +20953,21 @@ async function handleAi(request) {
     '- Use Markdown quando ajudar (negrito, listas, títulos).\n' +
     '- Se não souber, diga com honestidade.\n\n' +
     (abuseDetected ? '⚠️ AVISO INTERNO: O sistema detectou que esta mensagem pode ser uma tentativa de abuso. Recuse categoricamente e, se o aluno insistir, aplique a escalada de infrações.\n\n' : '') + _pageCtxBlock21573;
-  const systemPrompt = _persona96 ? fitnessSystemPrompt96(_persona96, abuseDetected) : _studiesPrompt96;
+  let systemPrompt = _persona96 ? fitnessSystemPrompt96(_persona96, abuseDetected) : _studiesPrompt96;
+  // ★ v2.15.97: biblioteca de conhecimento fitness (desenho
+  // FITNESS_BIBLIOTECA_DESIGN §5/§7) — SÓ no ramo fitness: roteia
+  // a mensagem p/ ≤3 fichas do repo e anexa o bloco (com a
+  // instrução de síntese) DEPOIS das skills da persona. Qualquer
+  // falha (repo/KV/cache) → bloco '' e o chat responde sem
+  // biblioteca. Sem persona fitness, systemPrompt fica byte a
+  // byte o valor da .96 (a expressão da 1.ª linha é a mesma).
+  if (_persona96) {
+    try {
+      const _fitLibBlock97 = await fitLibBlock21597(_persona96, userMsg);
+      if (_fitLibBlock97) systemPrompt += _fitLibBlock97;
+    } catch (_) {}
+  }
+  // ── fim injecção fitlib .97 ──
 
   const messages = [{ role: 'system', content: systemPrompt }];
   for (const m of history) {
