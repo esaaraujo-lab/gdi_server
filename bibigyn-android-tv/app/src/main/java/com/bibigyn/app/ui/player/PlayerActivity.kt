@@ -522,6 +522,10 @@ class PlayerActivity : AppCompatActivity() {
         binding.restartButton.setOnClickListener { exitRestIfActive(); restartVideo() }
         binding.sleepTimerButton.setOnClickListener { showSleepTimerDialog() }
         binding.favButton.setOnClickListener { exitRestIfActive(); toggleFavoriteCurrent() }
+        // v2.1.44 — botão Baixar (área de info; os dois layouts o
+        // têm, por isso o binding é não-nulo): baixa a aula ACTUAL
+        // para Download/BiBiFit/ (Downloads reais, paridade Meggy).
+        binding.btnDownloadInfo.setOnClickListener { exitRestIfActive(); onDownloadClicked() }
 
         // v2.1.7 — feedback visual dos botões da barra (foco D-pad na TV
         // + escala + anel do seletor): sem isso o botão focado/pressionado
@@ -569,6 +573,10 @@ class PlayerActivity : AppCompatActivity() {
             when (menuItem.itemId) {
                 R.id.nav_home -> { startActivity(Intent(this, HomeActivity::class.java)); true }
                 R.id.nav_search -> { startActivity(Intent(this, SearchActivity::class.java)); true }
+                // v2.1.44 — assistente fitness (só celular).
+                R.id.nav_fitness -> {
+                    startActivity(Intent(this, com.bibigyn.app.ui.fitness.FitnessChatActivity::class.java)); true
+                }
                 R.id.nav_mylist -> { startActivity(Intent(this, MyListActivity::class.java)); true }
                 R.id.nav_settings -> { startActivity(Intent(this, SettingsActivity::class.java)); true }
                 else -> false
@@ -1500,10 +1508,67 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * v2.1.44 — Baixar a aula ACTUAL (paridade Meggy 2.7.58): o
+     * ficheiro vai para a pasta pública Download/BiBiFit/ pelo
+     * DownloadManager do sistema (com o cookie da sessão) e fica
+     * registado para o ecrã Downloads tocar offline. Já baixada →
+     * só avisa. A preferência "só Wi-Fi" é respeitada.
+     *
+     * AVISO CI (Meggy 2.7.58): a Entry do DownloadRegistry NÃO tem
+     * filePath() — os membros reais são file() e exists(); é por
+     * eles que se verifica o estado.
+     */
+    private fun onDownloadClicked() {
+        val item = currentItem
+        val folderPath = item?.folderPath ?: intent.getStringExtra(EXTRA_FOLDER_PATH)
+        val url = currentUrl
+        if (item == null || folderPath.isNullOrBlank() || url.isNullOrBlank() ||
+            url.startsWith("file:")
+        ) {
+            Snackbar.make(
+                binding.root, getString(R.string.download_failed), Snackbar.LENGTH_LONG
+            ).show()
+            return
+        }
+        val existing = com.bibigyn.app.util.DownloadRegistry
+            .find(this, folderPath, item.name)
+        if (existing != null && existing.exists()) {
+            Snackbar.make(
+                binding.root, getString(R.string.download_done), Snackbar.LENGTH_SHORT
+            ).show()
+            return
+        }
+        val sm = SessionManager.get(this)
+        if (sm.wifiOnlyDownloads && !VideoCache.isWifi(this)) {
+            Snackbar.make(
+                binding.root, getString(R.string.download_wifi_only), Snackbar.LENGTH_LONG
+            ).show()
+            return
+        }
+        when (com.bibigyn.app.util.VideoDownloader.enqueue(
+            this, url, folderPath, item.name, displayTitle(item)
+        )) {
+            is com.bibigyn.app.util.VideoDownloader.Outcome.Started -> Snackbar.make(
+                binding.root, getString(R.string.download_started), Snackbar.LENGTH_SHORT
+            ).show()
+            com.bibigyn.app.util.VideoDownloader.Outcome.AlreadyDownloaded -> Snackbar.make(
+                binding.root, getString(R.string.download_done), Snackbar.LENGTH_SHORT
+            ).show()
+            com.bibigyn.app.util.VideoDownloader.Outcome.Failed -> Snackbar.make(
+                binding.root, getString(R.string.download_failed), Snackbar.LENGTH_LONG
+            ).show()
+        }
+    }
+
     private fun initialisePlayer() {
         val item = currentItem
         val link = item?.link
-        val url = if (!link.isNullOrEmpty()) linkBaseUrl() + link else intent.getStringExtra(EXTRA_URL)
+        // v2.1.44 — ficheiro LOCAL (Downloads): a fonte é o file://
+        // guardado, sem rede nem cache (paridade Meggy 2.7.58).
+        val localFile = intent.getStringExtra(EXTRA_LOCAL_FILE)
+        val url = localFile
+            ?: if (!link.isNullOrEmpty()) linkBaseUrl() + link else intent.getStringExtra(EXTRA_URL)
         if (url.isNullOrBlank()) {
             // R19B (P4): URL em branco NÃO fecha o Player em
             // silêncio — o finish() aqui devolvia o utilizador à
@@ -1519,9 +1584,13 @@ class PlayerActivity : AppCompatActivity() {
         val requestProperties = if (!cookie.isNullOrBlank()) mapOf("Cookie" to "session=$cookie") else emptyMap()
         val sm = SessionManager.get(this)
         val writeToCache = !sm.wifiOnlyDownloads || VideoCache.isWifi(this)
-        val dataSourceFactory = VideoCache.dataSourceFactory(
-            this, BiBiGynApp.okHttpClient, writeToCache, requestProperties
-        )
+        val dataSourceFactory = if (!localFile.isNullOrBlank()) {
+            androidx.media3.datasource.DefaultDataSource.Factory(this)
+        } else {
+            VideoCache.dataSourceFactory(
+                this, BiBiGynApp.okHttpClient, writeToCache, requestProperties
+            )
+        }
 
         trackSelector = DefaultTrackSelector(this)
         val exo = ExoPlayer.Builder(this)
@@ -1531,7 +1600,7 @@ class PlayerActivity : AppCompatActivity() {
 
         val playlist = PlaylistManager.all()
         val startIndex = PlaylistManager.index()
-        if (playlist.isNotEmpty() && startIndex in playlist.indices) {
+        if (localFile.isNullOrBlank() && playlist.isNotEmpty() && startIndex in playlist.indices) {
             val mediaItems = playlist.map { file ->
                 val fullUrl = linkBaseUrl() + (file.link ?: "")
                 MediaItem.Builder().setUri(fullUrl).build()
@@ -1545,7 +1614,7 @@ class PlayerActivity : AppCompatActivity() {
         val isReview = isWatched(item)
         val saved = if (isReview) 0L else resumeFor(item, url)
         if (saved > 0L && !isReview) {
-            exo.seekTo(startIndex, saved)
+            exo.seekTo(if (localFile.isNullOrBlank()) startIndex else 0, saved)
         }
         if (isReview) {
             binding.root.post {
@@ -2400,5 +2469,7 @@ class PlayerActivity : AppCompatActivity() {
         const val EXTRA_URL = "playback_url"
         const val EXTRA_TITLE = "playback_title"
         const val EXTRA_FOLDER_PATH = "playback_folder_path"
+        /** v2.1.44 — reprodução offline: URI file:// de um download. */
+        const val EXTRA_LOCAL_FILE = "playback_local_file"
     }
 }
