@@ -89,6 +89,15 @@ class MyListActivity : AppCompatActivity() {
         bookmarkAdapter = BookmarkAdapter(onOpen = { b -> openBookmark(b) })
         binding.recyclerBookmarks.adapter = bookmarkAdapter
 
+        // 1.0.40 — rail lateral persistente da TV (TvRailHost). A
+        // Minha Lista não é um item do menu novo; o item irmão é
+        // Meus Cursos (os cursos da aluna vivem nos dois sítios).
+        com.vovofit.app.ui.home.TvRailHost.attach(
+            this,
+            com.vovofit.app.ui.home.SideMenuView.MenuItem.MY_COURSES,
+            binding.recyclerCourses
+        )
+
         binding.tabCourses.setOnClickListener { selectTab(Tab.COURSES) }
         binding.tabFiles.setOnClickListener { selectTab(Tab.FILES) }
         binding.tabConcursos.setOnClickListener { selectTab(Tab.CONCURSOS) }
