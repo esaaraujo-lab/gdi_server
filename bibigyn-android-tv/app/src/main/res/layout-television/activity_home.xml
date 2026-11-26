@@ -82,12 +82,20 @@
                      do item focado na fileira Continuar/Drives +
                      título + meta + progresso. Sem foco ainda (ou
                      sem itens), mostra a aula em curso (o "best" do
-                     Continuar). NÃO é focável: é ambiente. -->
+                     Continuar). NÃO é focável: é ambiente.
+                     v2.1.46: cantos arredondados de 24dp com recorte
+                     real (fundo ambient_hero_bg + clipToOutline),
+                     anel laranja da marca por cima (ambientHeroRing)
+                     e scrim translúcido sobre a imagem (antes era o
+                     hero_gradient OPACO, que tapava a imagem e o
+                     bloco parecia um rectângulo de cor lisa). -->
                 <FrameLayout
                     android:id="@+id/ambientHero"
                     android:layout_width="match_parent"
                     android:layout_height="300dp"
                     android:layout_marginTop="@dimen/tv_section_spacing"
+                    android:background="@drawable/ambient_hero_bg"
+                    android:clipToOutline="true"
                     android:visibility="gone">
 
                     <ImageView
@@ -100,7 +108,7 @@
                     <View
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:background="@drawable/hero_gradient" />
+                        android:background="@drawable/hero_scrim" />
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -145,6 +153,7 @@
                             android:visibility="gone" />
 
                         <TextView
+                            android:id="@+id/ambientPill"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="14dp"
@@ -157,6 +166,15 @@
                             android:textSize="15sp"
                             android:textStyle="bold" />
                     </LinearLayout>
+
+                    <!-- v2.1.46 — Anel luminoso do hero (feedback
+                         visual): por cima de todo o conteúdo, só a
+                         borda; visível sempre que o hero está. -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/ambient_hero_ring"
+                        android:focusable="false" />
                 </FrameLayout>
 
                 <!-- Hero de drives (na TV 2.1.44 fica GONE — o topo
