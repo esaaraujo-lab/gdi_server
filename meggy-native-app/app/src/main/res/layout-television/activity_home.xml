@@ -89,7 +89,7 @@
                     android:focusable="true"
                     android:focusableInTouchMode="true"
                     android:nextFocusRight="@id/tvNavMylist"
-                    android:nextFocusDown="@id/railContinue"
+                    android:nextFocusDown="@id/listDestaques"
                     android:padding="12dp"
                     android:src="@drawable/ic_search"
                     app:tint="@color/md_on_surface" />
@@ -106,7 +106,7 @@
                     android:focusableInTouchMode="true"
                     android:nextFocusLeft="@id/tvNavSearch"
                     android:nextFocusRight="@id/tvNavSettings"
-                    android:nextFocusDown="@id/railContinue"
+                    android:nextFocusDown="@id/listDestaques"
                     android:padding="12dp"
                     android:src="@drawable/ic_nav_bookmark"
                     app:tint="@color/md_on_surface" />
@@ -123,7 +123,7 @@
                     android:focusableInTouchMode="true"
                     android:nextFocusLeft="@id/tvNavMylist"
                     android:nextFocusRight="@id/topSair"
-                    android:nextFocusDown="@id/railContinue"
+                    android:nextFocusDown="@id/listDestaques"
                     android:padding="12dp"
                     android:src="@drawable/ic_nav_settings"
                     app:tint="@color/md_on_surface" />
@@ -137,7 +137,7 @@
                     android:background="@drawable/focus_ring_transparent"
                     android:focusableInTouchMode="true"
                     android:nextFocusLeft="@id/tvNavSettings"
-                    android:nextFocusDown="@id/railContinue"
+                    android:nextFocusDown="@id/listDestaques"
                     android:padding="@dimen/spacing_sm"
                     android:text="@string/home_logout"
                     android:textColor="@color/md_primary"
@@ -543,6 +543,37 @@
                 </com.google.android.material.card.MaterialCardView>
             </LinearLayout>
 
+            <!-- 2.7.60 — "Destaques" é a PRIMEIRA fileira de conteúdo
+                 da Home TV (pedido do Elton: os cursos em destaque
+                 voltam ao topo, a rolar para o lado e clicáveis —
+                 o toque abre o curso, ver setupDestaques). Fica
+                 logo abaixo do hero ambiente e ACIMA do Continuar.
+                 2.7.48 — os mesmos ids do celular; o layout de item
+                 é o do celular (a largura do cartão não é escalada
+                 pelo TvAutoFit — ver SPEC). -->
+            <TextView
+                android:id="@+id/labelDestaques"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/tv_section_spacing"
+                android:text="@string/home_highlights"
+                android:textColor="@color/md_on_surface"
+                android:textSize="@dimen/tv_section_title"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/listDestaques"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/tv_rail_spacing"
+                android:clipToPadding="false"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="16dp"
+                android:clipChildren="false"
+                android:overScrollMode="never"
+                android:visibility="gone" />
+
             <!-- Continue assistindo -->
             <TextView
                 android:id="@+id/labelContinue"
@@ -566,31 +597,6 @@
                 android:clipChildren="false"
                 android:overScrollMode="never" />
 
-            <!-- 2.7.48 — "Destaques" (conceito 3): os mesmos ids do
-                 celular; o layout de item é o do celular (a largura
-                 do cartão não é escalada pelo TvAutoFit — ver SPEC). -->
-            <TextView
-                android:id="@+id/labelDestaques"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/tv_section_spacing"
-                android:text="@string/home_highlights"
-                android:textColor="@color/md_on_surface"
-                android:textSize="@dimen/tv_section_title"
-                android:textStyle="bold"
-                android:visibility="gone" />
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/listDestaques"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/tv_rail_spacing"
-                android:clipToPadding="false"
-                android:paddingHorizontal="16dp"
-                android:paddingVertical="16dp"
-                android:clipChildren="false"
-                android:overScrollMode="never"
-                android:visibility="gone" />
 
             <!-- 2.7.48 — "Pastas recentes" (conceito 1): mesmos ids do
                  celular, sem "Ver tudo" na TV. -->
