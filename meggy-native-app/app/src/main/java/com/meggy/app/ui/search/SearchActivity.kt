@@ -57,13 +57,27 @@ class SearchActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         binding.toolbar.setNavigationOnClickListener { finish() }
+        // 2.7.58 — rail persistente na TV (a busca não é um item
+        // do menu; HOME é o item neutro).
+        com.meggy.app.ui.home.TvRailHost.attach(
+            this,
+            findViewById(R.id.tvSideMenu),
+            findViewById(R.id.searchContent),
+            com.meggy.app.ui.home.SideMenuView.MenuItem.HOME,
+            R.id.searchInput
+        )
         if (TvUtils.isTv(this)) {
             binding.bottomNav.visibility = View.GONE
         } else {
             binding.bottomNav.selectedItemId = R.id.nav_meggy
             binding.bottomNav.setOnItemSelectedListener { item ->
                 when (item.itemId) {
-                    R.id.nav_meggy -> true
+                    // 2.7.58 — destino real: o chat da Meggy.
+                    R.id.nav_meggy -> {
+                        com.meggy.app.ui.home.HomeActivity.openMeggyChat(this)
+                        overridePendingTransition(0, 0)
+                        true
+                    }
                     R.id.nav_home -> { startActivity(Intent(this, HomeActivity::class.java)); overridePendingTransition(0, 0); true }
                     R.id.nav_drives -> { val i = Intent(this, HomeActivity::class.java); i.putExtra(HomeActivity.EXTRA_SCROLL_TO_DRIVES, true); startActivity(i); overridePendingTransition(0, 0); true }
                     R.id.nav_simulados -> { HomeActivity.openSimulados(this); overridePendingTransition(0, 0); true }
