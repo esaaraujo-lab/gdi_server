@@ -1,0 +1,31 @@
+---
+id: vovo-nutricao-cognicao
+temas: [nutrição cognição, alimentacao cerebro, dieta mediterrânica cérebro, dieta memória, demência alimentação, mind diet, cérebro idoso, comer e memória, ómega-3 cérebro]
+personas: [fitness-vovo]
+actualizado: 2026-11-27
+tipo: idosos — informação geral, não é diagnóstico nem prescrição individual
+---
+
+# Nutrição e cognição depois dos 60 — a dieta mediterrânica associa-se a menos demência; o ensaio MIND não confirmou a dieta MIND
+
+**Pergunta-tipo:** "Comer bem protege contra a demência?" / "Dieta mediterrânica ajuda a memória?" / "O que comer para não perder a memória?" / "Ómega-3 previne o Alzheimer?"
+
+**Resposta baseada em evidência:**
+
+- ✅ **Dieta mediterrânica — menos demência nos estudos observacionais:** uma meta-análise de 2025 (*GeroScience*; 23 estudos, 2000–2024) encontrou que quem segue mais de perto a dieta mediterrânica (muitos legumes, fruta, cereais integrais, peixe, azeite; pouca carne vermelha, manteiga e doces) tem menos risco de **défice cognitivo (HR 0,82; IC 95% 0,75–0,89)**, de **demência (HR 0,89; IC 95% 0,83–0,95)** e de **doença de Alzheimer (HR 0,70; IC 95% 0,60–0,82)** — ou seja, 11% a 30% menos risco. Mas são **estudos observacionais**: a dieta foi reportada, não atribuída — e os hábitos saudáveis que acompanham a dieta mediterrânica (exercício, não fumar, mais escolaridade) podem explicar parte da diferença. Há heterogeneidade significativa entre os estudos.
+- 🟡 **O ensaio que testou a dieta — e não confirmou:** o ensaio MIND (*NEJM*, 2023; Barnes et al.; 604 adultos com 65 anos ou mais, 3 anos) comparou a **dieta MIND** (variante mediterrânica com ênfase em vegetais de folha verde e bagas) com uma dieta de controlo com ligeira restrição calórica — e **não encontrou diferença na cognição global** entre os dois grupos. Os dois grupos melhoraram ligeiramente. A leitura honesta: a dieta MIND não bateu uma dieta de controlo já saudável, num ensaio de 3 anos. Isto não apaga a associação observacional da mediterrânica — mas mostra que "comer melhor" não é uma pílula: o efeito, se existe, é pequeno e demora anos, e a dieta de controlo dos ensaios já é melhor que a dieta média.
+- 🟡 **O que a dieta faz ao cérebro, medido por imagem:** uma meta-análise de 2025 (20 estudos, 44.893 pessoas) sobre dieta mediterrânica e marcadores de ressonância magnética encontrou associação com **menos hiperintensidades da substância branca** (β = −0,03; IC 95% −0,05 a −0,01) — lesões vasculares ligadas ao declínio cognitivo. Mas **não** encontrou associação com o volume total do cérebro, da substância cinzenta ou do hipocampo. A leitura: a dieta parece proteger sobretudo a parte **vascular** do cérebro (menos lesões de pequenos vasos), não o volume cerebral em si — o que encaixa com o que se sabe da mediterrânica no coração e nos vasos (ver `nutri-abordagens-dieteticas` e `med-glp1-cognicao-demencia`).
+- 🟡 **Os nutrientes isolados não reproduzem a dieta:** ómega-3, vitaminas do complexo B e vitamina D são os nutrientes mais estudados para a cognição — e a evidência de cada um isolado é inconsistente (ver `sup-omega3-evidencia`, `sup-complexo-b-folato`, `sup-vitamina-d-aprofundada`). A dieta mediterrânica também se associa a menos fracturas (HR 0,95, meta-análise 2025 — ver `nutri-proteina-ossos`) e a melhor saúde cardiovascular. O padrão que se repete: **o padrão alimentar inteiro** associa-se a melhores desfechos; o nutriente isolado, em comprimido, raramente reproduz o efeito.
+- ✅ **O que tem melhor evidência para o cérebro do idoso, em conjunto:** a dieta é uma peça de um conjunto com evidência mais forte que a dieta sozinha — exercício regular (ver `vovo-cognicao-exercicio`), controlo da pressão arterial (ver `vovo-hipertensao-exercicio` e `nutri-sodio-pressao`), sono (ver `vovo-sono-idosos`), controlo da diabetes e não fumar. Nenhum destes, sozinho, "previne" a demência — e nenhum estudo prova que uma pessoa concreta vai escapar à doença por comer de certa maneira.
+
+**Prática e relatos (PRÁTICA/RELATO — não é evidência):**
+
+- Nutricionistas que trabalham com idosos relatam que o maior problema não é a escolha da dieta — é a **adesão e a quantidade**: muitos idosos comem pouco, saltam refeições, têm pouco apetite e pouca variedade, e acabam com défice de proteína, de vitamina B12 e de vitamina D (ver `vovo-proteina-60mais` e `vovo-nutricao-quedas`). A prática consagrada é começar por garantir que o idoso come o suficiente e com variedade — peixe 2×/semana, azeite, legumes, fruta, leguminosas — antes de discutir "a dieta ideal". Comer acompanhado e com rotina ajuda mais do que qualquer plano perfeito no papel. Isto é prática profissional, não resultado de ensaio.
+
+**Limites desta ficha:** a evidência principal é observacional, com heterogeneidade e confundimento (hábitos saudáveis que viajam com a dieta); o único grande ensaio aleatorizado da dieta MIND não confirmou benefício face a uma dieta de controlo saudável. A ficha não cobre suplementos para a cognição nem o tratamento da demência — ver `med-glp1-cognicao-demencia` e `vovo-cognicao-exercicio`. Perda de memória, confusão nova ou declínio funcional são assunto de saúde — procurar um médico para avaliação.
+
+**Fontes:**
+- Fekete M et al. The role of the Mediterranean diet in reducing the risk of cognitive impairment, dementia, and Alzheimer's disease: a meta-analysis. *GeroScience* 2025;47:3111-3130 (23 estudos, 2000–2024; défice cognitivo HR 0,82; demência HR 0,89; Alzheimer HR 0,70; observacional; heterogeneidade significativa).
+- Barnes LL et al. Trial of the MIND Diet for Prevention of Cognitive Decline in Older Persons. *N Engl J Med* 2023;389:602-613 (604 adultos ≥65 anos, 3 anos; dieta MIND vs. dieta de controlo com ligeira restrição calórica; sem diferença na cognição global).
+- Mediterranean diet and dementia: MRI marker evidence from meta-analysis. *Eur J Med Res* 2025;30:32 (20 estudos, n=44.893; menos hiperintensidades da substância branca β=−0,03; sem associação com volume cerebral total, substância cinzenta ou hipocampo).
+- PREDIMED — subestudo de cognição (Valls-Pedret et al.): dieta mediterrânica com azeite ou frutos secos vs. dieta pobre em gordura em 447 idosos cognitivamente saudáveis — melhoria cognitiva com a mediterrânica (ensaio aleatorizado).

@@ -1,0 +1,34 @@
+---
+id: sup-creatina-adolescentes
+temas: [creatina adolescente, creatina jovem, creatina teenager, creatina menor, creatina segurança jovem, creatina escola, creatina idade, creatina criança]
+personas: [fitness-bibi, fitness-vovo]
+actualizado: 2026-11-27
+tipo: suplemento — informação geral, nunca dose nem recomendação pessoal
+---
+
+# Creatina em adolescentes — curto prazo sem sinal de dano, mas sem prova de segurança a longo prazo e sem dose estabelecida
+
+**Pergunta-tipo:** "Adolescente pode tomar creatina?" / "Creatina faz mal para jovem?" / "A partir de que idade pode creatina?" / "Creatina é segura para o meu filho atleta?"
+
+**Resposta baseada em evidência:**
+
+- 🟡 **Segurança a curto prazo — sem sinal consistente de dano, mas com poucos dados:** a revisão sistemática mais recente (Rubinchuk et al., *Cureus*, 2026) encontrou apenas **5 estudos elegíveis** (12–18 anos, entre 2015 e 2025): ensaios aleatorizados e coortes longitudinais, incluindo jovens atletas e adolescentes com condições médicas. Em todos, a creatina foi geralmente bem tolerada, **sem sinal consistente** de alteração da função renal, das enzimas do fígado ou de marcadores cardiometabólicos no período estudado, e **nenhum efeito adverso grave foi atribuído** à suplementação. As doses usadas foram de 0,1 g/kg/dia a 2–10 g/dia fixos, e cargas de 20 g/dia seguidas de 5 g/dia. Os números citados são **o que os estudos usaram**, não uma dose para copiar — **não existe dose estabelecida para adolescentes**.
+- 🟡 **A base é pequena e torta:** uma revisão de 2023 encontrou apenas **13 estudos com 268 participantes** de 12–18 anos — e 85% eram jogadores de futebol ou nadadores, o que limita a generalização. Nenhum dos estudos foi desenhado principalmente para avaliar segurança. A revisão de 2026 usou uma só base de dados, não fez avaliação formal de risco de viés e juntou populações heterogéneas (atletas e doentes). Ou seja: "não se encontrou dano" não é o mesmo que "provou-se que é seguro" — sobretudo a longo prazo e na puberdade, onde não há dados.
+- ✅ **Eficácia no desempenho — há efeito, em quem treina a sério:** uma meta-análise (*Pediatr Exerc Sci*, 2022; 14 ensaios, 14–18 anos) encontrou que os adolescentes que usaram creatina tiveram **melhorias significativamente maiores em força, potência e massa magra** que o placebo, sem efeitos adversos além de desconforto gastrointestinal leve em alguns casos. O efeito é o mesmo que nos adultos (ver `sup-creatina-aprofundada` e `sup-desportivos-evidencia`) — mas só faz sentido em quem já treina força de forma estruturada e come bem; em quem não treina, a creatina não constrói músculo sozinha.
+- 🟡 **O que dizem as instituições — cautela, não proibição:** a **Academia Americana de Pediatria** mantém uma posição cautelosa: em geral não recomenda suplementos para crianças e adolescentes que conseguem os nutrientes pela alimentação, e reafirmou a posição com actualização de dados em 2025. A **ISSN** (posição sobre creatina) conclui que a suplementação é segura, eficaz e ética para adolescentes **que cumpram critérios**: treino sério/competitivo, dieta equilibrada, supervisão por profissionais qualificados e compreensão total do porquê da suplementação. A ACSM e a NSCA alinham com a ISSN. A divergência é de enquadramento, não de dados: todos concordam que faltam estudos de longo prazo em adolescentes.
+- ❌ **O que não existe:** não existe uma idade "segura" estabelecida — a literatura não define um aniversário (13, 15, 16 ou 18 anos) a partir do qual a creatina passe a ser apropriada para todos. Também não existe dose óptima para adolescentes, nem dados sobre os efeitos da suplementação prolongada durante a puberdade e o crescimento. O uso é comum: nos EUA, em 2024, **13,0% dos alunos do 12.º ano, 11,7% do 10.º e 4,6% do 8.º** relataram ter usado creatina nos últimos 12 meses.
+- ✅ **O contexto adulto é tranquilizador — mas não transfere automaticamente:** uma meta-análise de 2025 (*JISSN*, 685 ensaios clínicos) não encontrou maior prevalência de efeitos secundários com creatina do que com placebo, e a creatina apareceu em apenas **0,00072% de 28,4 milhões de notificações de efeitos adversos** (203 em 28,4 milhões) nos EUA, Canadá, Austrália e Europa ao longo de 50 anos. Isto é evidência adulta, de longo prazo — não responde às perguntas específicas da adolescência (puberdade, crescimento, maturação), que continuam sem resposta.
+
+**Prática e relatos (PRÁTICA/RELATO — não é evidência):**
+
+- Médicos do desporto e nutricionistas relatam que, na prática, a pergunta raramente é "a creatina é segura?" e sim "o meu filho precisa disto?". A prática consagrada é verificar primeiro o básico — treino estruturado, sono, proteína e calorias suficientes — e só depois discutir suplementação, com os pais envolvidos e com supervisão profissional. Muitos relatam que adolescentes que começam a suplementar sem o básico acabam a gastar dinheiro num pó enquanto comem mal e dormem pouco. Isto é prática profissional, não resultado de ensaio.
+
+**Limites desta ficha:** a evidência directa em adolescentes é escassa (5 estudos na revisão de segurança de 2026; 13 estudos na revisão de 2023), de curta duração e sem avaliação de segurança a longo prazo, de efeitos na puberdade ou no crescimento. A ficha não é uma recomendação — a decisão sobre suplementação em menores envolve os pais e um profissional de saúde. Ver também `sup-creatina-aprofundada`, `sup-creatina-mulheres` e `sup-desportivos-evidencia`.
+
+**Fontes:**
+- Rubinchuk A et al. Evaluating the Safety of Creatine Monohydrate in Adolescents: A Systematic Review of Renal, Hepatic, and Cardiometabolic Outcomes. *Cureus* 2026;18(4):e106808 (5 estudos, 12–18 anos, 2015–2025; sem sinal consistente de dano renal, hepático ou cardiometabólico a curto prazo; nenhum efeito adverso grave atribuído; doses 0,1 g/kg/dia a 2–10 g/dia; carga 20 g/dia + 5 g/dia).
+- Revisão sistemática 2023 (13 estudos, n=268, 12–18 anos; nenhum efeito adverso; 85% futebolistas ou nadadores; nenhum estudo desenhado para avaliar segurança).
+- Meta-análise, *Pediatr Exerc Sci* 2022 (14 ensaios, 14–18 anos; força, potência e massa magra significativamente maiores que placebo; sem efeitos adversos além de desconforto gastrointestinal leve).
+- American Academy of Pediatrics — posição sobre suplementos em jovens (reafirmada com actualização de dados em 2025): cautela geral; uso de creatina em 2024: 13,0% (12.º ano), 11,7% (10.º), 4,6% (8.º).
+- International Society of Sports Nutrition — posição sobre creatina: segura, eficaz e ética para adolescentes com treino sério/competitivo, dieta equilibrada, supervisão qualificada e compreensão do motivo.
+- Meta-análise *J Int Soc Sports Nutr* 2025 (685 ensaios; sem maior prevalência de efeitos secundários vs. placebo; creatina em 0,00072% de 28,4 milhões de notificações de efeitos adversos em 50 anos).

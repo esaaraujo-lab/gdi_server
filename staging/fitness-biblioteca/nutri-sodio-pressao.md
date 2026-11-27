@@ -1,0 +1,31 @@
+---
+id: nutri-sodio-pressao
+temas: [sódio, sodio, sal, pressão arterial, hipertensão, pressão alta, sal light, substituto de sal, potássio, cloreto de potássio, sal e pressão]
+personas: [fitness-bibi, fitness-vovo]
+actualizado: 2026-11-27
+tipo: nutrição — informação geral, não é prescrição individual
+---
+
+# Sódio e pressão arterial — cada grama de sal a menos baixa a pressão; o efeito é maior em quem já é hipertenso
+
+**Pergunta-tipo:** "Sal faz mal à pressão?" / "Quanto baixa a pressão se eu cortar o sal?" / "Sal light (com potássio) funciona?" / "Preciso cortar o sal se já tomo remédio para a pressão?"
+
+**Resposta baseada em evidência:**
+
+- ✅ **Há uma relação dose-resposta clara:** uma meta-análise de 2024 (*Hypertension*; 35 ensaios, 2.885 hipertensos medicados, duração mediana de 28 dias) mediu a resposta a cada **100 mmol de sódio a menos por dia** (cerca de 5,8 g de sal): a pressão sistólica caiu **−6,81 mmHg**, a diastólica **−3,85 mmHg** e a pressão arterial média **−4,83 mmHg**. Outra meta-análise dose-resposta de 2025 (*Clin Kidney J*; 43 ensaios, 1.759 pessoas com doença renal crónica, com ou sem hipertensão) achou que cortar **40 mmol/dia (cerca de 2,4 g de sal)** baixa a sistólica em **−4,5 mmHg** em quem tem doença renal, **−2,3 mmHg** em hipertensos e apenas **−0,3 mmHg** em quem não tem hipertensão. A lição: o benefício cresce com a pressão de partida — quem tem a pressão normal ganha quase nada; quem tem hipertensão ou doença renal ganha o mais.
+- ✅ **Cortar o sal funciona mesmo com medicação — mas depende do remédio:** na meta-análise de 2024, o efeito foi maior com **beta-bloqueadores, inibidores do sistema renina-angiotensina-aldosterona (IECA/ARA) e terapia dupla**; com bloqueadores dos canais de cálcio, só a sistólica respondeu; com **diuréticos em monoterapia, não houve efeito dose-resposta**. Isto não quer dizer que o sal não importe para quem toma diurético — quer dizer que, nos ensaios, o diurético já fazia parte do efeito e a redução extra de sódio não acrescentou descida mensurável. A medicação não anula o valor de cortar o sal — e cortar o sal não substitui a medicação.
+- ✅ **O substituto de sal (sal light, com potássio) é a intervenção mais eficaz:** uma meta-análise em rede de 2026 (42 estudos, 46 ensaios, n=46.771 pessoas com pressão elevada) comparou as intervenções comportamentais de redução de sódio. Os **substitutos de sal** (parte do cloreto de sódio trocada por cloreto de potássio) ficaram em primeiro lugar: **−6,78 mmHg na sistólica** face a nenhuma intervenção e −5,35 mmHg face à educação em saúde convencional. Dietas com pouco sódio e dispositivos de automonitorização, combinados com educação, tiveram reduções de magnitude semelhante. A educação em saúde sozinha, digital ou convencional, não foi significativa. Atenção: o substituto de sal **não serve para toda a gente** — quem tem doença renal ou toma medicamentos que retêm potássio (como alguns IECA/ARA e diuréticos poupadores de potássio) pode acumular potássio em excesso; é uma decisão do médico.
+- 🟡 **Quanto sal é "pouco"?** A OMS recomenda **menos de 2 g de sódio por dia** (menos de 5 g de sal). A ingestão média no Brasil e em Portugal anda à volta de 9–10 g de sal por dia — o dobro. A maior parte do sal não vem do saleiro: vem do pão, dos queijos, dos enchidos, das sopas e dos pratos prontos. Cortar 2,4 g de sal por dia (a dose da meta-análise de 2025) é, na prática, tirar o sal adicionado à mesa e reduzir os ultraprocessados salgados — ver ficha `nutri-ultraprocessados-saciedade`.
+- ❌ **O debate da curva em J — o que é e o que não é:** alguns estudos observacionais encontraram mais eventos cardiovasculares também com ingestão de sódio **muito baixa** (abaixo de ~3 g de sal/dia), a chamada curva em J. Esses estudos são observacionais e sofrem de causalidade reversa (quem está doente come menos sal). Os ensaios aleatorizados — que são a evidência mais forte — mostram descida de pressão com a redução de sódio até aos níveis estudados, sem sinal de dano. A ficha regista o debate sem o resolver: ninguém precisa de zerar o sal; o alvo é sair do excesso.
+
+**Prática e relatos (PRÁTICA/RELATO — não é evidência):**
+
+- Nutricionistas relatam que o corte de sal falha quase sempre pelo mesmo motivo: a pessoa tira o saleiro da mesa mas mantém os alimentos que já trazem o sal lá dentro. A prática consagrada é ler o rótulo (sódio por 100 g), trocar o pão e os enchidos primeiro, e usar ervas, limão e alho para o sabor — o paladar adapta-se em 2–3 semanas, e depois a comida "normal" passa a saber demasiado salgada. Isto é prática profissional, não resultado de ensaio.
+
+**Limites desta ficha:** a maioria dos ensaios dura semanas (mediana de 28 dias) — os efeitos a longo prazo em eventos (enfarte, AVC) vêm de estudos observacionais e de poucos ensaios longos, não destas meta-análises. Os números são médias: há pessoas mais e menos sensíveis ao sal, e a sensibilidade aumenta com a idade e com a doença renal. Doença renal, insuficiência cardíaca e medicamentos que mexem no potássio mudam as regras — a decisão é do médico. Ver também `vovo-hipertensao-exercicio` e `nutri-hidratacao-eletrólitos`.
+
+**Fontes:**
+- Song J et al. Blood Pressure-Lowering Medications, Sodium Reduction, and Blood Pressure. *Hypertension* 2024;81(11):e149-e160 (35 ECR, n=2.885 hipertensos medicados; por cada 100 mmol ↓ de sódio urinário: sistólica −6,81, diastólica −3,85, PAM −4,83 mmHg; maior com beta-bloqueadores, IECA/ARA e terapia dupla; sem efeito com diuréticos em monoterapia).
+- Dietary sodium reduction and blood pressure: a dose-response meta-analysis in hypertensive and chronic kidney disease patients. *Clin Kidney J* 2025;19(2):sfaf340 (43 ECR, n=1.759; −40 mmol/dia ≈ 2,4 g de sal: DRC −4,5/−2,2 mmHg; hipertensão −2,3/−1,1; normotensos −0,3/−0,1).
+- Comparative Effectiveness of Behavioural Sodium-Reduction Interventions for Intensive Systolic Blood Pressure Control in Populations with Elevated Blood Pressure: A Systematic Review and Network Meta-Analysis. *Nutrients* 2026 (42 estudos, 46 ensaios, n=46.771; substitutos de sal −6,78 mmHg na sistólica vs. nenhuma intervenção; melhor intervenção da rede).
+- Organização Mundial da Saúde: recomendação de menos de 2 g de sódio/dia (menos de 5 g de sal/dia) em adultos.
