@@ -10,23 +10,24 @@
 > primárias/consenso lidas (abstract ou texto). Registo honesto
 > dos pontos não confirmados no fim.
 
-actualizado: 2026-11-26
-total: **99 fichas** (16 iniciais + 44 da colheita + 26 da ronda de
-suplementos + 13 da ronda de 4h de 2026-11-26 20:09) + INDICE.md + este relatório
+actualizado: 2026-11-27
+total: **111 fichas** (16 iniciais + 44 da colheita + 26 da ronda de
+suplementos + 13 da ronda de 4h de 2026-11-26 20:09 + 12 da ronda de
+4h de 2026-11-27 00:09) + INDICE.md + este relatório
 
 ## Cobertura por área
 
 | Área | Fichas | Iniciais | Novas | Frentes/cadeias principais |
 |---|---|---|---|---|
-| Medicamentos de emagrecimento e interacções (`med-`) | 13 | 5 | 8 | SURMOUNT/SURPASS → STEP/SUSTAIN/PIONEER/OASIS → SELECT/LEADER/FLOW/SOUL → SURMOUNT-OSA/ESSENCE/STEP-9/STEP-HFpEF/SUMMIT → pipeline (retatrutida/orforglipron/cagrisema/amicretina) → EMA/FDA saúde mental → manutenção longo prazo |
-| Suplementos e vitaminas (`sup-`) | 44 | 4 | 40 | Fichas NIH ODS uma a uma → VITAL/REDUCE-IT/STRENGTH → COSMOS/PHS-II → ISSN (HMB, beta-alanina) → Baar colagénio → Cochrane cãibras → NCCIH/LiverTox adaptogénios → **ronda 19:55: um suplemento por ficha (proteínas, creatina formas/mitos, cafeína ISSN 2021, vitaminas/minerais um a um, botânicos, termogénicos)** → **ronda 4h 20:09: electrólitos (pendente), berberina (3 meta-análises), glicina (3 ensaios), ecdisterona (Isenmann 2019 vs. Wilborn 2006)** |
-| Treino (`treino-`) | 13 | 4 | 9 | ACSM/Schoenfeld → meta-análises de carga, ROM/comprimento longo, descanso/tempo → Hickson→Wilson→Schumann (concorrente) → Meeusen (fadiga) → Mah/Craven/Roberts (sono e CWI) → **ronda 4h 20:09: periodização (Williams 2017/Moesgaard 2022), métodos avançados (drop/superset), aquecimento (Fradkin 2010/Soligard 2008/Lauersen 2014)** |
-| Nutrição desportiva (`nutri-`) | 10 | 0 | 10 | Mifflin/NEAT/adaptação → ACSM/ISSN hidratos → Aragon & Schoenfeld (timing) → DIETFITS/jejum/PREDIMED → Hall 2019 ultraprocessados → Parr álcool → ACSM hidratação → AHA gorduras → **ronda 4h 20:09: dieta cetogénica (meta 2025/Cao 2021/Murphy 2020), fontes de proteína e leucina (DIAAS/Morton/Areta)** |
-| Idosos +60 (`vovo-`) | 10 | 3 | 7 | NSCA/EWGSOP2/PROT-AGE (base) → potência (Reid & Fielding→Balachandran) → ACR/OARSI/Cochrane artrose → ADA/Umpierre/DARE diabetes → Edwards 2023 hipertensão → Northey/Brasure cognição → Noetel 2024 depressão/sono → **ronda 4h 20:09: fragilidade e marcha (Fried/PRAE-Frail 2024/Mehta 2026)** |
-| Corpo — biologia, física do movimento, medicina desportiva (`corpo-`) | 9 | 0 | 9 | Henneman/unidades motoras → alavancas/torque → sistemas de energia/EPOC → tendão (Magnusson, Bohm, Cook) → Lancet 2018 lombalgia → PEACE & LOVE (BJSM) lesões → **ronda 4h 20:09: hormonas e hipertrofia (West 2009/2012, Schoenfeld 2013), DOMS (Cheung 2003/revisão 2026), medição da composição corporal (DEXA/BIA/dobras)** |
-| **Total** | **99** | **16** | **83** | |
+| Medicamentos de emagrecimento e interacções (`med-`) | 15 | 5 | 10 | SURMOUNT/SURPASS → STEP/SUSTAIN/PIONEER/OASIS → SELECT/LEADER/FLOW/SOUL → SURMOUNT-OSA/ESSENCE/STEP-9/STEP-HFpEF/SUMMIT → pipeline (retatrutida/orforglipron/cagrisema/amicretina) → EMA/FDA saúde mental → manutenção longo prazo → **ronda 4h 00:09: GLP-1 em idosos (SURMOUNT-1 ≥65, SELECT ≥75), gravidez/amamentação/contracepção (rótulos + MHRA/FSRH/LactMed); orforglipron APROVADO (ponto 1 RESOLVIDO)** |
+| Suplementos e vitaminas (`sup-`) | 47 | 4 | 43 | Fichas NIH ODS uma a uma → VITAL/REDUCE-IT/STRENGTH → COSMOS/PHS-II → ISSN (HMB, beta-alanina) → Baar colagénio → Cochrane cãibras → NCCIH/LiverTox adaptogénios → **ronda 19:55: um suplemento por ficha (proteínas, creatina formas/mitos, cafeína ISSN 2021, vitaminas/minerais um a um, botânicos, termogénicos)** → **ronda 4h 20:09: electrólitos (pendente), berberina (3 meta-análises), glicina (3 ensaios), ecdisterona (Isenmann 2019 vs. Wilborn 2006)** → **ronda 4h 00:09: teanina/GABA/5-HTP (Mol Psychiatry 2026, 31 ECR), CoQ10/ALA (Lu 2026 + Talebi 2024 + Ziegler 2004), espirulina/clorela (Pinto-Leite 2025)** |
+| Treino (`treino-`) | 15 | 4 | 11 | ACSM/Schoenfeld → meta-análises de carga, ROM/comprimento longo, descanso/tempo → Hickson→Wilson→Schumann (concorrente) → Meeusen (fadiga) → Mah/Craven/Roberts (sono e CWI) → **ronda 4h 20:09: periodização (Williams 2017/Moesgaard 2022), métodos avançados (drop/superset), aquecimento (Fradkin 2010/Soligard 2008/Lauersen 2014)** → **ronda 4h 00:09: endurance estruturado (Seiler 2010/Oliveira 2024/Rosenblat 2025), desportos colectivos (rede 2026, 53 ECR)** |
+| Nutrição desportiva (`nutri-`) | 12 | 0 | 12 | Mifflin/NEAT/adaptação → ACSM/ISSN hidratos → Aragon & Schoenfeld (timing) → DIETFITS/jejum/PREDIMED → Hall 2019 ultraprocessados → Parr álcool → ACSM hidratação → AHA gorduras → **ronda 4h 20:09: dieta cetogénica (meta 2025/Cao 2021/Murphy 2020), fontes de proteína e leucina (DIAAS/Morton/Areta)** → **ronda 4h 00:09: cafeína nos alimentos (ISSN 2021/Ruxton 2008), refeições fora de casa (Kant/NHANES, Rolls, Wright & Bragge 2018)** |
+| Idosos +60 (`vovo-`) | 11 | 3 | 8 | NSCA/EWGSOP2/PROT-AGE (base) → potência (Reid & Fielding→Balachandran) → ACR/OARSI/Cochrane artrose → ADA/Umpierre/DARE diabetes → Edwards 2023 hipertensão → Northey/Brasure cognição → Noetel 2024 depressão/sono → **ronda 4h 20:09: fragilidade e marcha (Fried/PRAE-Frail 2024/Mehta 2026)** → **ronda 4h 00:09: exercício na água (Wang 2026, 23 ECR; Kim 2020)** |
+| Corpo — biologia, física do movimento, medicina desportiva (`corpo-`) | 11 | 0 | 11 | Henneman/unidades motoras → alavancas/torque → sistemas de energia/EPOC → tendão (Magnusson, Bohm, Cook) → Lancet 2018 lombalgia → PEACE & LOVE (BJSM) lesões → **ronda 4h 20:09: hormonas e hipertrofia (West 2009/2012, Schoenfeld 2013), DOMS (Cheung 2003/revisão 2026), medição da composição corporal (DEXA/BIA/dobras)** → **ronda 4h 00:09: imunidade (Campbell & Turner 2018, Nieman), fadiga central (Meeusen 2006, Newsholme 1987)** |
+| **Total** | **111** | **16** | **95** | |
 
-Personas: 89 fichas partilhadas (BiBi + Vovó); 10 só da Vovó
+Personas: 99 fichas partilhadas (BiBi + Vovó); 12 só da Vovó
 (`vovo-*` + `sup-60mais`) — a Vovó usa a biblioteca da BiBi **e** a
 sua, como pedido. A Meggy genérica não recebe nenhuma.
 
@@ -98,13 +99,18 @@ magnésio/ZMA (`sup-magnesio-sono`), multivitamínicos
 
 **Ficam para a ronda seguinte:** aprofundamentos por desporto/
 contexto (suplementação em endurance vs força já parcialmente
-cruzada), e revisão bibliográfica fina dos pontos 1–12 abaixo
-(os pontos 13–15 foram RESOLVIDOS nesta ronda — ver fim do
-registo). Áreas a rodar na próxima ronda: medicamentos (GLP-1
-em idosos, gravidez/amamentação, estatuto do orforglipron —
-ponto 1), treino por desporto/contexto, corpo (imunidade e
-exercício, fadiga central/sistema nervoso) e nutrição
-(cafeína nos alimentos, refeições fora de casa).
+cruzada — feita em parte nesta ronda com as fichas de endurance e
+desportos colectivos), e revisão bibliográfica fina dos pontos
+2–12 e 18–19 abaixo (o ponto 1 foi RESOLVIDO na ronda de
+2026-11-27 00:09 — ver fim do registo). Áreas a rodar na próxima
+ronda: medicamentos (estatuto da retatrutida/TRIUMPH e da
+cagrisema; GLP-1 e saúde óssea em mulheres pós-menopausa), treino
+(velocidade/agilidade; treino de força em casa sem equipamento),
+corpo (dor crónica e exercício; sono e hormonas), nutrição
+(hidratação no calor; jejum e desempenho — aprofundar),
+suplementos (inositol, DAA, colina, DHEA — avaliar se entram;
+creatina em mulheres — aprofundar), idosos (tecnologia e quedas;
+treino de força em casa).
 
 ## Ronda de 4h — 2026-11-26 20:09 (rotação: treino, corpo, nutrição + suplementos pendentes)
 
@@ -156,14 +162,88 @@ Leisegang et al. 2022 *Medicina* 58(8):1047, doi
 König et al. 2016 *Nutrients* 8(7):390 (ensaio em 20
 ciclistas, NÃO revisão — corrigido na ficha).
 
+## Ronda de 4h — 2026-11-27 00:09 (rotação: medicamentos, corpo, treino por desporto, nutrição, suplementos pendentes, idosos)
+
+**+12 fichas, +67.468 bytes de fichas novas** (biblioteca de
+458.851 para 539.266 bytes em disco — todas as MD da pasta,
+incluindo INDICE.md e COBERTURA.md — 99 → 111 fichas; INDICE.md
+v4 → v5). **Correcção de ficha existente:** `med-pipeline-
+emagrecimento` actualizada — orforglipron APROVADO (ponto 1
+RESOLVIDO). Nenhuma ficha ⚠ de interacções foi editada; não há
+fichas novas de interacções a aguardar revisão.
+
+**Medicamentos (2):** `med-glp1-idosos` (SURMOUNT-1 ≥65: ~76%
+gordura / 24% magra; STEP 1 ~38% magra; meta-análise preprint
+Nov 2026, 162 ensaios: quedas RR 0,91, fracturas RR 0,90, mas
+SELECT ≥75: fracturas de anca/pelve RR 4,01 — sinal pequeno, por
+confirmar; marcha +15,2 m; interrupções 13,0% vs. 6,8% em 926
+idosos; Villareal 2017: dieta+força −2% de massa magra vs. −5%
+dieta+aeróbio), `med-glp1-gravidez-amamentacao` (semaglutida
+parar ≥2 meses; tirzepatida ≥1 mês UE/Canadá; liraglutida sem
+janela; pílula: Cmax do etinilestradiol −59% com tirzepatida,
+barreira 4 semanas após início e cada aumento — MHRA/FSRH;
+LactMed: semaglutida injectável provavelmente baixo risco, oral
+contraindicada — SNAC; fertilidade/SOP).
+
+**Corpo (2):** `corpo-imunidade-exercicio` (Nieman: 40–45%
+menos dias de infecção nos mais activos; LA 1990: 12,9% vs.
+2,2% na semana pós-maratona; Campbell & Turner 2018: "janela
+aberta" desmontada — redistribuição, não supressão; Weidner
+1998: treinar constipado não piora), `corpo-fadiga-central-snc`
+(Meeusen 2006: rácio serotonina/dopamina; BCAA inconsistente;
+hidratos durante o exercício e cafeína como anti-fadiga
+central; fadiga mental — Marcora 2009).
+
+**Treino (2):** `treino-endurance-estruturado` (Seiler 2010;
+Stöggl & Sperlich 2014: VO2pico +11,7%; Oliveira 2024: SMD
+0,24 só no VO2pico; Rosenblat/Seiler 2025: sem diferença
+polarizado vs. piramidal; Muñoz 2014 citado em excesso; volume
+manda — 119.452 maratonistas), `treino-desportos-colectivos`
+(7–10 km/jogo, 30–60 sprints; rede 2026, 53 ECR: força melhor
+para CMJ/1RM/sprints; 2×/semana pré-época, 1× época; Wong
+2010; HIIT +468 m no Yo-Yo mas CMJ −8,1%).
+
+**Nutrição (2):** `nutri-cafeina-alimentos` (teores por bebida;
+ISSN 2021: 3–6 mg/kg; tecto 400 mg/dia; corte 8,8 h café /
+13,2 h pré-treino antes de deitar; 400 mg 6 h antes corta >1 h
+de sono), `nutri-refeicoes-fora-casa` (Kant/NHANES: ≥6 refeições
+fora → IMC mais alto, HDL mais baixo; porções 3–4× a
+referência; duplicar a porção → +30–55% de ingestão;
+meta-análise 2022: SMD −0,709; Wright & Bragge 2018: só
+informação não funciona).
+
+**Suplementos (3):** `sup-teanina-gaba-5htp` (teanina sono:
+meta 2025, 19 ECR — efeito pequeno só subjectivo; ansiedade:
+Mol Psychiatry 2026, 31 ECR — não significativa; atenção:
+200 mg, SMD 0,51; GABA 2020: evidência muito limitada; 5-HTP
+sem meta-análise sólida + risco com antidepressivos),
+`sup-coq10-ala` (CoQ10 desempenho nulo: Lu 2026, VO2máx SMD
+0,03; Antioxidants 2025: +0,73 mL/kg/min, IC a cruzar zero;
+marcadores de dano: Talebi 2024, CK −50,64 UI/L; ALA
+neuropatia: Ziegler 2004 IV 600 mg, +24,1% vs. placebo; oral
+com relevância incerta), `sup-espirulina-clorela` (Pinto-Leite
+2025: espirulina diastólica −0,42, lípidos nulos; clorela
+neutra; Serban 2016 vs. Pinto-Leite 2025 em desacordo; B12 da
+espirulina é pseudovitamina; vitamina K da clorela × varfarina;
+MFDS retirou alegação de pele).
+
+**Idosos (1):** `vovo-exercicio-agua` (Wang 2026, 23 ECR,
+1.179 idosos: TUG −0,59 s, cadeira +2,77, 2MST +7,56; >12
+semanas e >2×/semana melhor; Kim 2020: água = terra no
+equilíbrio dinâmico).
+
 ## Registo honesto — pontos a rever antes de uso público externo
 
-1. **Orforglipron — estatuto regulatório:** resultados de busca de
-   2026 sugerem aprovação FDA posterior ao enquadramento
-   "pipeline". A ficha `med-pipeline-emagrecimento` mantém a marca
-   [EM INVESTIGAÇÃO] **com nota explícita** de confirmar no rótulo
-   vigente. **Confirmar o estatuto actual antes de a assistente
-   responder sobre disponibilidade.**
+1. **Orforglipron — RESOLVIDO nesta ronda (2026-11-27 00:09):**
+   a FDA **aprovou o orforglipron a 1 de Abril de 2026**
+   (Foundayo, Eli Lilly), para adultos com obesidade ou excesso
+   de peso com comorbilidade — o primeiro comprimido de GLP-1
+   sem restrições de horário, comida ou água (5.º agente do
+   programa National Priority Voucher). ATTAIN-1: −7,5%/−8,4%/
+   −11,2% (6/12/36 mg) vs. −2,1% placebo às 72 semanas;
+   ATTAIN-2: −5,1%/−7,0%/−9,6% vs. −2,5%. A ficha
+   `med-pipeline-emagrecimento` foi actualizada e já não diz
+   [EM INVESTIGAÇÃO] para o orforglipron.
 2. **STEP 5 (Garvey et al., Nat Med 2022):** números confirmados em
    duas fontes secundárias; autoria/revista não lidas em abstract
    nesta colheita.
@@ -226,6 +306,17 @@ ciclistas, NÃO revisão — corrigido na ficha).
     (proteínas vegetais) estava errada — a meta-análise é Lim et
     al. **2021** e a de soja ≈ animal é Messina et al. 2018; a
     ficha `sup-proteinas-vegetais` cita as duas correctamente.
+18. **Marcora 2009 (fadiga mental):** citado na ficha
+    `corpo-fadiga-central-snc` a partir do cânone da literatura
+    (fadiga mental → ↑RPE, ↓tempo até à exaustão), sem releitura
+    do abstract nesta ronda — verificar na fonte primária numa
+    passagem bibliográfica.
+19. **5-HTP:** nenhuma meta-análise de qualidade encontrada
+    nesta ronda — a ficha `sup-teanina-gaba-5htp` diz isso
+    expressamente e classifica o 5-HTP como ❌ para sono/humor,
+    com o aviso de interacção com antidepressivos (síndrome
+    serotoninérgica); se surgir uma meta-análise, a ficha deve
+    ser revista.
 
 ## Segurança (mantida em todas as fichas novas)
 
