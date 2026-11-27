@@ -25,11 +25,16 @@
 > joelho e corrida, ombro, vestibular e equilíbrio, proteína em défice agressivo,
 > álcool e recuperação, ómega-3 em mulheres, vitamina D em atletas de interior,
 > sono em idosos).
+> ★ = ficha nova da ronda de 4h de 2026-11-27 12:09 (rotação: orforglipron/ATTAIN,
+> força em casa para frágeis, força para artrose, força para corredores, ombro
+> instável, correr com artrose avançada, cotovelo de tenista, hidratos em idosos,
+> proteína e rins, colagénio em mulheres, probióticos e constipação, nutrição e
+> quedas; actualizações: CagriSema/REDEFINE 9, TRIUMPH-1/2, saúde mental GLP-1).
 > Relatório de cobertura: `COBERTURA.md`.
 
-versao: 7
+versao: 8
 actualizado: 2026-11-27
-fichas: 136
+fichas: 148
 
 ## Fichas
 
@@ -51,6 +56,9 @@ fichas: 136
 | corpo-joelho-corrida.md ✧ | corpo/movimento | bibi, vovo | joelho, corrida, correr, correr faz mal, artrose, osteoartrite, cartilagem, condromalácia, dor no joelho, quadríceps, impacto, maratona |
 | corpo-ombro-treino.md ✧ | corpo/movimento | bibi, vovo | ombro, dor no ombro, manguito rotador, tendinopatia, impacto, instabilidade, ombro de nadador, supino, desenvolvimento, escápula, fisioterapia |
 | corpo-vestibular-equilibrio.md ✧ | corpo/movimento | bibi, vovo | vestibular, equilíbrio, tontura, vertigem, labirinto, quedas, romberg, apoio unipodal, ficar numa perna só, bppv, reabilitação vestibular, epley |
+| corpo-ombro-instabilidade.md ★ | corpo/movimento | bibi, vovo | ombro instável, ombro sai do lugar, luxação ombro, instabilidade ombro, ombro desloca, reabilitação ombro, ombro solto, subluxação |
+| corpo-joelho-artrose-avancada.md ★ | corpo/movimento | bibi, vovo | correr artrose avançada, correr com artrose, corrida joelho gasto, artrose grave correr, correr joelho desgastado, progressão artrose, correr depois dos 50 joelho |
+| corpo-cotovelo-tendinopatia.md ★ | corpo/movimento | bibi, vovo | cotovelo de tenista, epicondilite, dor no cotovelo, tendinite cotovelo, cotovelo de golfista, epicondilalgia, dor antebraço, cotovelo treino |
 | med-glp1-cardiovascular-renal.md ✦ | medicamentos | bibi, vovo | coração, cardiovascular, enfarte, avc, rim, renal, select, leader, flow, soul, protege, desfechos |
 | med-glp1-classe-panorama.md | medicamentos | bibi, vovo | semaglutida, ozempic, wegovy, rybelsus, liraglutida, saxenda, glp-1, classe, comparação, coração, select, step |
 | med-glp1-efeitos-adversos.md ✦ | medicamentos | bibi, vovo | efeitos colaterais, efeitos adversos, náusea, vómito, vesícula, pancreatite, gastroparesia, tiroide, cabelo, rosto, ozempic face, anestesia, cirurgia, segurança |
@@ -70,6 +78,7 @@ fichas: 136
 | med-glp1-saude-ossea.md ◈ | medicamentos | bibi, vovo | glp-1 osso, osso, osteoporose, densidade óssea, fractura, fratura, menopausa osso, pós-menopausa, dmo, dexa osso, remédio osso, ozempic osso |
 | med-cagrisema-fda.md ✧ | medicamentos | bibi, vovo | cagrisema, cagrilintida, semaglutida, fda, aprovação, redefine 1, redefine 2, redefine 4, amilina, glp-1, emagrecimento, novo remédio |
 | med-amicretina-fase2.md ✧ | medicamentos | bibi, vovo | amicretina, amycretin, zenagamtide, novo nordisk, glp-1, amilina, fase 2, fase 3, amaze, emagrecimento, novo remédio, comprimido |
+| med-orforglipron-attain.md ★ | medicamentos | bibi, vovo | orforglipron, foundayo, attain, comprimido glp-1, glp-1 oral, pílula emagrecimento, lilly, novo remédio, sem injeção |
 | nutri-abordagens-dieteticas.md ✦ | nutrição | bibi, vovo | dieta, low-carb, low-fat, jejum intermitente, jejum, 16:8, mediterrânica, dieta flexível, iifym, qual a melhor dieta, dieta rígida, abordagem dietética |
 | nutri-alcool-corpo.md ✦ | nutrição | bibi, vovo | álcool, cerveja, vinho, beber, bebida alcoólica, ressaca treino, álcool e músculo, álcool e sono, calorias do álcool, beber ao fim de semana |
 | nutri-carbohidratos-desempenho.md ✦ | nutrição | bibi, vovo | carbohidratos, hidratos, carboidratos, quantos carbos, glicogénio, low-carb desempenho, cetogénica treino, carb cycling, energia para treinar, massa e arroz treino |
@@ -86,6 +95,8 @@ fichas: 136
 | nutri-jejum-desempenho.md ◈ | nutrição | bibi, vovo | jejum desempenho, jejum intermitente treino, 16/8 treino, time-restricted eating, treinar em jejum, jejum força, ramadão treino, ramadã, jejum emagrecer treino |
 | nutri-proteina-defice-agressivo.md ✧ | nutrição | bibi, vovo | proteína défice, défice agressivo, cutting, massa magra, preservar músculo, emagrecer sem perder músculo, proteína alta, rins, leucina |
 | nutri-alcool-recuperacao.md ✧ | nutrição | bibi, vovo | álcool recuperação, ressaca, sono rem, glicogénio, hidratação, força dia seguinte, lesão, cerveja depois do treino, beber depois do treino |
+| nutri-hidratos-idosos.md ★ | nutrição | bibi, vovo | carboidrato idoso, hidrato idoso, carboidrato treino idoso, proteína carboidrato idoso, resistência anabólica, sarcopenia carboidrato, comer antes treino idoso, glicogénio idoso |
+| nutri-proteina-rins.md ★ | nutrição | bibi, vovo | proteína rins, proteína rim, proteína faz mal rim, proteína idoso rim, proteína alta rim, hiperfiltração, eGFR proteína, creatina rim, rim saudável proteína |
 | sup-60mais.md | suplementos | vovo | suplemento idosos, 60+, vitamina d, b12, cálcio, creatina idosos, ómega-3, vovó |
 | sup-ashwagandha-adaptogenios.md ✦ | suplementos | bibi, vovo | ashwagandha, adaptogénio, adaptogenio, rhodiola, ginseng, stress, cortisol, testosterona, planta |
 | sup-citrulina-oxido-nitrico.md ✦ | suplementos | bibi, vovo | citrulina, arginina, óxido nítrico, oxido nitrico, pump, pré-treino, vasodilatação, beterraba |
@@ -138,6 +149,8 @@ fichas: 136
 | sup-creatina-mulheres.md ◈ | suplementos | bibi, vovo | creatina mulher, creatina mulheres, creatina feminina, creatina menopausa, creatina grávida, creatina menstruação, creatina menina, creatina e mulher |
 | sup-omega3-mulheres.md ✧ | suplementos | bibi, vovo | ómega-3 mulheres, omega 3 mulheres, gravidez, gestação, menopausa, dismenorreia, cólica menstrual, epa, dha, pré-eclâmpsia, parto prematuro |
 | sup-vitamina-d-interior.md ✧ | suplementos | bibi, vovo | vitamina d, vitamina d3, atletas de interior, ginásio, indoor, deficiência, 25(oh)d, imunidade, constipação, força, inverno |
+| sup-colageno-mulheres.md ★ | suplementos | bibi, vovo | colagénio mulher, colageno mulher, colágeno pele, colageno osso, colágeno menopausa, peptídeos colágeno, colageno cabelo, colageno unha, colageno treino mulher |
+| sup-probioticos-constipacao.md ★ | suplementos | bibi, vovo | probióticos constipação, probiotico prisão de ventre, probiótico intestino preso, bifidobacterium constipação, lactobacillus constipação, intestino preso idoso, probiótico idoso |
 | treino-amplitude-musculo-longo.md ✦ | treino | bibi, vovo | amplitude, amplitude completa, parcial, músculo alongado, alongamento sob carga, lengthened partials, ROM, descer mais, agachamento profundo |
 | treino-cardio-mobilidade.md | treino | bibi, vovo | cardio, aeróbio, corrida, caminhada, zona 2, hiit, mobilidade, flexibilidade, alongamento, quantos minutos |
 | treino-concorrente-interferencia.md ✦ | treino | bibi, vovo | treino concorrente, interferência, cardio atrapalha, correr e musculação, cardio mata ganhos, ordem dos exercícios, combinar cardio e força |
@@ -158,6 +171,9 @@ fichas: 136
 | treino-forca-frageis.md ✧ | treino | bibi, vovo | força idosos frágeis, fragilidade, frágil, idoso frágil, levantar da cadeira, cadeira, sentado, supervisão, vivifrail, sppb, marcha lenta, sarcopenia grave |
 | treino-elasticos.md ✧ | treino | bibi, vovo | elástico, elásticos, banda de resistência, bandas, theraband, tubo elástico, treino com elástico, em casa, sem pesos, reabilitação, idosos |
 | treino-cadeia-cinetica-fechada.md ✧ | treino | bibi, vovo | cadeia cinética fechada, cadeia cinética aberta, ckc, okc, agachamento, leg press, flexão, extensão de joelho, reabilitação do joelho, lca, ligamento cruzado, ombro, cadeia fechada, cadeia aberta |
+| treino-forca-casa-frageis.md ★ | treino | bibi, vovo | força em casa, treino em casa frágil, idoso frágil em casa, vivifrail, fragilidade em casa, levantar da cadeira em casa, treino caseiro idoso, sem ginásio, sem academia |
+| treino-forca-artrose.md ★ | treino | bibi, vovo | força artrose, musculação joelho, artrose joelho treino, dor no joelho musculação, quadríceps artrose, treino artrose, joelho dor força |
+| treino-forca-corredores.md ★ | treino | bibi, vovo | força corredores, musculação corrida, correr mais rápido força, economia de corrida, lesão corrida prevenção, agachamento corredor, pliometria corrida |
 | vovo-artrose-exercicio.md ✦ | idosos | vovo | artrose, osteoartrite, joelho, anca, quadril, dor no joelho, desgaste, cartilagem, osteoartrose |
 | vovo-cognicao-exercicio.md ✦ | idosos | vovo | cognição, memória, demência, Alzheimer, cérebro, esquecimento, declínio cognitivo, raciocínio |
 | vovo-depressao-sono.md ✦ | idosos | vovo | depressão, humor, ânimo, tristeza, ansiedade, sono, insónia, dormir, depressivo |
@@ -171,6 +187,7 @@ fichas: 136
 | vovo-exercicio-agua.md ◇ | idosos | vovo | água, piscina, natação, hidroginástica, hidro, aquático, exercício na água, artrose água, joelho água, nadar |
 | vovo-tecnologia-quedas.md ◈ | idosos | vovo | tecnologia quedas, exergame, exergaming, realidade virtual equilíbrio, vr equilíbrio, wii equilíbrio, videojogo equilíbrio, telereabilitação, wearable queda, sensor queda, app equilíbrio, idoso tecnologia |
 | vovo-sono-idosos.md ✧ | idosos | vovo | sono idosos, dormir, insónia, idosos, dormir mal, acordar de noite, sono profundo, tcc-i, terapia do sono, apneia, pernas inquietas, sesta |
+| vovo-nutricao-quedas.md ★ | idosos | vovo | nutrição quedas, vitamina d quedas, proteína quedas, comer cair idoso, cálcio quedas, b12 quedas, desidratação queda, alimentação idoso queda |
 
 ## Regras de uso (resumo — o desenho manda)
 
