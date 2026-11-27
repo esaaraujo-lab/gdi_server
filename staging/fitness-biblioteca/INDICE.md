@@ -12,12 +12,15 @@
 > 2026-11-26 (ordem 19:55: TODOS os suplementos de academia, um
 > por ficha, com bibliografia + secção PRÁTICA/RELATO). ◆ = ficha
 > nova da ronda de 4h de 2026-11-26 20:09 (rotação: treino, corpo,
-> nutrição + suplementos pendentes da COBERTURA).
+> nutrição + suplementos pendentes da COBERTURA). ◇ = ficha nova da
+> ronda de 4h de 2026-11-27 00:09 (rotação: GLP-1 em idosos e gravidez,
+> imunidade, fadiga central, treino por desporto, cafeína nos alimentos,
+> refeições fora de casa, suplementos pendentes, exercício na água).
 > Relatório de cobertura: `COBERTURA.md`.
 
-versao: 4
-actualizado: 2026-11-26
-fichas: 99
+versao: 5
+actualizado: 2026-11-27
+fichas: 111
 
 ## Fichas
 
@@ -32,6 +35,8 @@ fichas: 99
 | corpo-hormonios-exercicio.md ◆ | corpo/movimento | bibi, vovo | hormonas, testosterona, gh, hormona do crescimento, igf-1, cortisol, pico hormonal, treino e testosterona, hormonas e hipertrofia |
 | corpo-dor-muscular-doms.md ◆ | corpo/movimento | bibi, vovo | dor muscular, doms, dorido, dor depois do treino, dor tardia, ácido láctico, lactato, microlesão, dor muscular tardia |
 | corpo-composicao-corporal-medicao.md ◆ | corpo/movimento | bibi, vovo | gordura corporal, percentagem de gordura, medir gordura, dexa, bioimpedância, balança, dobras, pregas, imc, cintura, composição corporal |
+| corpo-imunidade-exercicio.md ◇ | corpo/movimento | bibi, vovo | imunidade, sistema imunitário, constipação, gripe, infecção, ficar doente, treinar doente, janela aberta, defesa, vacina |
+| corpo-fadiga-central-snc.md ◇ | corpo/movimento | bibi, vovo | fadiga central, fadiga mental, cansaço mental, sistema nervoso, cérebro, serotonina, dopamina, pacing, motivação, esforço percebido |
 | med-glp1-cardiovascular-renal.md ✦ | medicamentos | bibi, vovo | coração, cardiovascular, enfarte, avc, rim, renal, select, leader, flow, soul, protege, desfechos |
 | med-glp1-classe-panorama.md | medicamentos | bibi, vovo | semaglutida, ozempic, wegovy, rybelsus, liraglutida, saxenda, glp-1, classe, comparação, coração, select, step |
 | med-glp1-efeitos-adversos.md ✦ | medicamentos | bibi, vovo | efeitos colaterais, efeitos adversos, náusea, vómito, vesícula, pancreatite, gastroparesia, tiroide, cabelo, rosto, ozempic face, anestesia, cirurgia, segurança |
@@ -45,6 +50,8 @@ fichas: 99
 | med-pipeline-emagrecimento.md ✦ | medicamentos | bibi, vovo | retatrutida, orforglipron, cagrisema, cagrilintida, amicretina, amycretin, futuro, novos remédios, pipeline, em investigação, comprimido novo |
 | med-semaglutida-resultados.md ✦ | medicamentos | bibi, vovo | semaglutida, ozempic, wegovy, rybelsus, step, quanto emagrece, resultados, oral, comprimido |
 | med-tirzepatida-resultados.md | medicamentos | bibi, vovo | tirzepatida, mounjaro, zepbound, resultados, ensaio, surmount, quanto emagrece, eficácia |
+| med-glp1-idosos.md ◇ | medicamentos | bibi, vovo | glp-1 idosos, 65+, 70+, 75+, semaglutida idoso, tirzepatida idoso, sarcopenia, massa muscular, queda, fractura, osso |
+| med-glp1-gravidez-amamentacao.md ◇ | medicamentos | bibi, vovo | gravidez, grávida, engravidar, amamentação, amamentar, contracepção, anticoncepcional, pílula, fertilidade, sop, ovulação, ozempic baby |
 | nutri-abordagens-dieteticas.md ✦ | nutrição | bibi, vovo | dieta, low-carb, low-fat, jejum intermitente, jejum, 16:8, mediterrânica, dieta flexível, iifym, qual a melhor dieta, dieta rígida, abordagem dietética |
 | nutri-alcool-corpo.md ✦ | nutrição | bibi, vovo | álcool, cerveja, vinho, beber, bebida alcoólica, ressaca treino, álcool e músculo, álcool e sono, calorias do álcool, beber ao fim de semana |
 | nutri-carbohidratos-desempenho.md ✦ | nutrição | bibi, vovo | carbohidratos, hidratos, carboidratos, quantos carbos, glicogénio, low-carb desempenho, cetogénica treino, carb cycling, energia para treinar, massa e arroz treino |
@@ -55,6 +62,8 @@ fichas: 99
 | nutri-ultraprocessados-saciedade.md ✦ | nutrição | bibi, vovo | ultraprocessados, saciedade, fome, densidade energética, fibra, apetite, comida processada, beliscar, sono e fome, grelina, leptina, saciar |
 | nutri-dieta-cetogenica.md ◆ | nutrição | bibi, vovo | cetogénica, cetogenica, keto, low-carb, baixo carboidrato, gordura, cetose, cetonas, dieta cetogénica, emagrecer keto, keto treino |
 | nutri-proteina-fontes-alimentos.md ◆ | nutrição | bibi, vovo | proteína, fontes de proteína, alimentos proteicos, whey ou comida, leucina, diaas, qualidade da proteína, ovo, frango, peixe, soja, ervilha, vegetariano, vegano, quanto por refeição, colagénio |
+| nutri-cafeina-alimentos.md ◇ | nutrição | bibi, vovo | cafeína, café, chá, energético, chocolate, guaraná, mate, dose de cafeína, café e sono, café antes do treino |
+| nutri-refeicoes-fora-casa.md ◇ | nutrição | bibi, vovo | restaurante, comer fora, fora de casa, fast food, rodízio, buffet, porção, delivery, viagem, festa, churrasco |
 | sup-60mais.md | suplementos | vovo | suplemento idosos, 60+, vitamina d, b12, cálcio, creatina idosos, ómega-3, vovó |
 | sup-ashwagandha-adaptogenios.md ✦ | suplementos | bibi, vovo | ashwagandha, adaptogénio, adaptogenio, rhodiola, ginseng, stress, cortisol, testosterona, planta |
 | sup-citrulina-oxido-nitrico.md ✦ | suplementos | bibi, vovo | citrulina, arginina, óxido nítrico, oxido nitrico, pump, pré-treino, vasodilatação, beterraba |
@@ -99,6 +108,9 @@ fichas: 99
 | sup-berberina-glicemia.md ◆ | suplementos | bibi, vovo | berberina, berberine, glicemia, glicose, hba1c, hemoglobina glicada, insulina, resistência à insulina, diabetes, ozempic natural, metabolismo, açúcar no sangue |
 | sup-glicina-sono.md ◆ | suplementos | bibi, vovo | glicina, glycine, sono, dormir, insónia, insonia, adormecer, cansaço, fadiga, temperatura corporal, colagénio, aminoácido |
 | sup-ecdisterona.md ◆ | suplementos | bibi, vovo | ecdisterona, ecdysterone, 20-hidroxiecdisona, turkesterona, turkesterone, anabólico natural, ecdisteróide, espinafre, doping, wada, hormona |
+| sup-teanina-gaba-5htp.md ◇ | suplementos | bibi, vovo | teanina, l-teanina, gaba, 5-htp, triptofano, ansiedade, acalmar, sono, dormir, foco, atenção, stress |
+| sup-coq10-ala.md ◇ | suplementos | bibi, vovo | coq10, coenzima q10, ubiquinona, ubiquinol, ácido alfa-lipóico, ala, antioxidante, mitocôndria, neuropatia, formigueiro |
+| sup-espirulina-clorela.md ◇ | suplementos | bibi, vovo | espirulina, clorela, algas, superalimento, detox, greens, clorofila, b12 vegetal |
 | treino-amplitude-musculo-longo.md ✦ | treino | bibi, vovo | amplitude, amplitude completa, parcial, músculo alongado, alongamento sob carga, lengthened partials, ROM, descer mais, agachamento profundo |
 | treino-cardio-mobilidade.md | treino | bibi, vovo | cardio, aeróbio, corrida, caminhada, zona 2, hiit, mobilidade, flexibilidade, alongamento, quantos minutos |
 | treino-concorrente-interferencia.md ✦ | treino | bibi, vovo | treino concorrente, interferência, cardio atrapalha, correr e musculação, cardio mata ganhos, ordem dos exercícios, combinar cardio e força |
@@ -112,6 +124,8 @@ fichas: 99
 | treino-periodizacao.md ◆ | treino | bibi, vovo | periodização, periodizacao, linear, ondulada, ondulante, dup, bloco, blocos, plano, planear treino, programa, progressão, ciclo, mesociclo |
 | treino-metodos-avancados.md ◆ | treino | bibi, vovo | drop set, drop-set, rest-pause, rest pause, superset, super-série, supersérie, cluster, myo-reps, métodos avançados, intensidade, técnicas avançadas, treino curto, pouco tempo |
 | treino-aquecimento.md ◆ | treino | bibi, vovo | aquecimento, aquecer, warm-up, warmup, alongamento, alongar, estático, dinâmico, lesão, prevenir lesão, preparar, séries de aquecimento, mobilidade |
+| treino-endurance-estruturado.md ◇ | treino | bibi, vovo | endurance, resistência, corrida, ciclismo, polarizado, 80/20, piramidal, zona 2, limiar, lactato, vo2max, maratona, 10km |
+| treino-desportos-colectivos.md ◇ | treino | bibi, vovo | futebol, futsal, basquete, voleibol, andebol, desporto colectivo, jogo, sprint, mudança de direcção, yo-yo, pré-época, época |
 | vovo-artrose-exercicio.md ✦ | idosos | vovo | artrose, osteoartrite, joelho, anca, quadril, dor no joelho, desgaste, cartilagem, osteoartrose |
 | vovo-cognicao-exercicio.md ✦ | idosos | vovo | cognição, memória, demência, Alzheimer, cérebro, esquecimento, declínio cognitivo, raciocínio |
 | vovo-depressao-sono.md ✦ | idosos | vovo | depressão, humor, ânimo, tristeza, ansiedade, sono, insónia, dormir, depressivo |
@@ -122,6 +136,7 @@ fichas: 99
 | vovo-proteina-60mais.md | idosos | vovo | proteína, idosos, 60+, quanto comer, sarcopenia, leucina, refeições |
 | vovo-sarcopenia-forca.md | idosos | vovo | sarcopenia, força, idosos, 60+, massa muscular, fragilidade, levantar da cadeira, preensão |
 | vovo-fragilidade-marcha.md ◆ | idosos | vovo | fragilidade, frágil, fragil, marcha, velocidade de marcha, andar devagar, levantar da cadeira, sentar e levantar, sppB, tug, timed up and go, autonomia, cair, dependência, pré-frágil, pre-fragil |
+| vovo-exercicio-agua.md ◇ | idosos | vovo | água, piscina, natação, hidroginástica, hidro, aquático, exercício na água, artrose água, joelho água, nadar |
 
 ## Regras de uso (resumo — o desenho manda)
 
