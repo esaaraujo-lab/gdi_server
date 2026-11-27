@@ -11,27 +11,29 @@
 > dos pontos não confirmados no fim.
 
 actualizado: 2026-11-27
-total: **160 fichas** (16 iniciais + 44 da colheita + 26 da ronda de
+total: **174 fichas** (16 iniciais + 44 da colheita + 26 da ronda de
 suplementos + 13 da ronda de 4h de 2026-11-26 20:09 + 12 da ronda de
 4h de 2026-11-27 00:09 + 12 da ronda de 4h de 2026-11-27 04:09 + 13 da
 ronda de 4h de 2026-11-27 08:09 + 12 da ronda de 4h de 2026-11-27
-12:09 + 12 da ronda de 4h de 2026-11-27 16:09) + INDICE.md + este relatório
+12:09 + 12 da ronda de 4h de 2026-11-27 16:09 + 14 da ronda de 4h de
+2026-11-27 20:09) + INDICE.md + este relatório
 
 ## Cobertura por área
 
 | Área | Fichas | Iniciais | Novas | Frentes/cadeias principais |
 |---|---|---|---|---|
-| Medicamentos de emagrecimento e interacções (`med-`) | 22 | 5 | 17 | SURMOUNT/SURPASS → STEP/SUSTAIN/PIONEER/OASIS → SELECT/LEADER/FLOW/SOUL → SURMOUNT-OSA/ESSENCE/STEP-9/STEP-HFpEF/SUMMIT → pipeline (retatrutida/orforglipron/cagrisema/amicretina) → EMA/FDA saúde mental → manutenção longo prazo → **ronda 4h 00:09: GLP-1 em idosos (SURMOUNT-1 ≥65, SELECT ≥75), gravidez/amamentação/contracepção (rótulos + MHRA/FSRH/LactMed); orforglipron APROVADO (ponto 1 RESOLVIDO)** → **ronda 4h 04:09: retatrutida TRIUMPH-1/2/3/4 (BLA previsto Q1 2027); GLP-1 e osso pós-menopausa (Hansen 2024, ASBMR 2026)** → **ronda 4h 08:09: CagriSema (FDA ainda pendente a 21 Nov 2026; REDEFINE 1 −20,4%, REDEFINE 2, REDEFINE 4 vs. tirzepatida); amicretina fase 1b/2a e fase 2 (AMAZE/AMBITION/AMBIENCE)** → **ronda 4h 12:09: orforglipron ATTAIN-1/2 (NEJM/Lancet) + ATTAIN-MAINTAIN; CagriSema REDEFINE 9 (Lancet Diabetes Endocrinol, Wharton 2026) + PDUFA dez 2026; TRIUMPH-2 artigo completo (Lancet, PMID 42810372) + correcção de estimandos TRIUMPH-1/2; saúde mental — FDA jan 2026 pediu remoção do aviso de suicídio (meta 91 ensaios); Jani 2026 (20 estudos)** → **ronda 4h 16:09: GLP-1 e cognição/demência (JAMA Neurol 2025 OR 0,55 vs. meta Alzheimer 2026 sem benefício em doença instalada); orforglipron na Europa (CHMP 15 Out 2026, Comissão pendente; Wegovy comprimido aprovado na UE 15 Jul 2026); CagriSema AINDA sem decisão a 27 Nov 2026 — CORRECÇÃO: nenhuma data PDUFA anunciada publicamente (ponto 24); REIMAGINE 5 (CagriSema 1,0/1,0 vs. tirzepatida 5 mg); TRIUMPH-3 com MACE-5 HR 0,82 e MACE-3 HR 1,12 (ambos NS)** |
-| Suplementos e vitaminas (`sup-`) | 56 | 4 | 52 | Fichas NIH ODS uma a uma → VITAL/REDUCE-IT/STRENGTH → COSMOS/PHS-II → ISSN (HMB, beta-alanina) → Baar colagénio → Cochrane cãibras → NCCIH/LiverTox adaptogénios → **ronda 19:55: um suplemento por ficha (proteínas, creatina formas/mitos, cafeína ISSN 2021, vitaminas/minerais um a um, botânicos, termogénicos)** → **ronda 4h 20:09: electrólitos (pendente), berberina (3 meta-análises), glicina (3 ensaios), ecdisterona (Isenmann 2019 vs. Wilborn 2006)** → **ronda 4h 00:09: teanina/GABA/5-HTP (Mol Psychiatry 2026, 31 ECR), CoQ10/ALA (Lu 2026 + Talebi 2024 + Ziegler 2004), espirulina/clorela (Pinto-Leite 2025)** → **ronda 4h 04:09: inositol na SOP (26 ECR, RR ciclo 1,79), DAA ❌/DHEA ❌/colina 🟡, creatina em mulheres (Lin 2026 g=0,23; Naddafha 2026 pós-menopausa)** → **ronda 4h 08:09: ómega-3 em mulheres (gravidez, dismenorreia), vitamina D em atletas de interior** → **ronda 4h 12:09: colagénio em mulheres (de Miranda 2021/Pu 2023 vs. meta 2025 sem financiamento; König 2018 osso); probióticos e constipação (Cochrane Colloquium 2024, 6 ECR; Front Med 2025, 41 estudos)** → **ronda 4h 16:09: vitamina D na gravidez (Cochrane 2024 muito incerta; Yang 2025, 66 ECR — GDM RR 0,65, peso +53 g; regimes Cochrane 2026 sem regime superior); creatina em adolescentes (Rubinchuk 2026, 5 estudos, sem sinal a curto prazo; AAP cautelosa vs. ISSN condicional; sem idade nem dose estabelecidas)** |
-| Treino (`treino-`) | 25 | 4 | 21 | ACSM/Schoenfeld → meta-análises de carga, ROM/comprimento longo, descanso/tempo → Hickson→Wilson→Schumann (concorrente) → Meeusen (fadiga) → Mah/Craven/Roberts (sono e CWI) → **ronda 4h 20:09: periodização (Williams 2017/Moesgaard 2022), métodos avançados (drop/superset), aquecimento (Fradkin 2010/Soligard 2008/Lauersen 2014)** → **ronda 4h 00:09: endurance estruturado (Seiler 2010/Oliveira 2024/Rosenblat 2025), desportos colectivos (rede 2026, 53 ECR)** → **ronda 4h 04:09: velocidade/agilidade (SAQ 2025, 11 ECR; Chaabene 2020), força em casa sem equipamento (Mañas 2021, 21 ECR)** → **ronda 4h 08:09: força em idosos frágeis (Vivifrail, Qian 2026), elásticos (Lopes 2019), cadeia cinética fechada (Michael 2025, Perriman 2018)** → **ronda 4h 12:09: Vivifrail em casa (Chen 2025, 12 estudos; ExFRAIL-HF); força para artrose (rede 2025, 46 ECR; dose-resposta 680 METs-min/sem); força para corredores (Llanos-Lagos 2024 economia; Wu 2024 lesões sem redução)** → **ronda 4h 16:09: pliometria em masters (meta 2023 g=−0,13 isolada; força ≥80% 1RM melhor para a economia; tese Ritsumeikan — pliometria mais rápida, mesmo efeito nos 5 km); força em idosos com diabetes (meta 2025, 19 ECR: HbA1c −0,51 pp; 43 ECR: HbA1c −0,55%, força SMD 2,02–2,28; ≥65 anos: força g=0,67, massa magra NS)** |
-| Nutrição desportiva (`nutri-`) | 20 | 0 | 20 | Mifflin/NEAT/adaptação → ACSM/ISSN hidratos → Aragon & Schoenfeld (timing) → DIETFITS/jejum/PREDIMED → Hall 2019 ultraprocessados → Parr álcool → ACSM hidratação → AHA gorduras → **ronda 4h 20:09: dieta cetogénica (meta 2025/Cao 2021/Murphy 2020), fontes de proteína e leucina (DIAAS/Morton/Areta)** → **ronda 4h 00:09: cafeína nos alimentos (ISSN 2021/Ruxton 2008), refeições fora de casa (Kant/NHANES, Rolls, Wright & Bragge 2018)** → **ronda 4h 04:09: hidratação no calor (ACSM 2007, Hew-Butler 2015), jejum e desempenho (Lin 2026, 245 atletas; IF+força 2026)** → **ronda 4h 08:09: proteína em défice agressivo (Longland 2016, ISSN 2,3–3,1 g/kg), álcool e recuperação (Burke 2003, Barnes 2010)** → **ronda 4h 12:09: hidratos em idosos (Hamer 2013/Burd 2013 — hidrato não aumenta a síntese); proteína e rins (Devries 2018; iohexol 2026)** → **ronda 4h 16:09: sódio e pressão (Hypertension 2024: −6,81 mmHg sistólica por 100 mmol; Clin Kidney J 2025: −4,5 mmHg na DRC; substitutos de sal −6,78 mmHg na rede 2026); proteína e osso (ESCEO/IOF — proteína acima da RDA benéfica com cálcio; coortes 2024: anca −48% por 100 g/dia; Darling 2016: sem associação com fractura)** |
-| Idosos +60 (`vovo-`) | 16 | 3 | 13 | NSCA/EWGSOP2/PROT-AGE (base) → potência (Reid & Fielding→Balachandran) → ACR/OARSI/Cochrane artrose → ADA/Umpierre/DARE diabetes → Edwards 2023 hipertensão → Northey/Brasure cognição → Noetel 2024 depressão/sono → **ronda 4h 20:09: fragilidade e marcha (Fried/PRAE-Frail 2024/Mehta 2026)** → **ronda 4h 00:09: exercício na água (Wang 2026, 23 ECR; Kim 2020)** → **ronda 4h 04:09: tecnologia e quedas (JMIR Aging 2026, 60 ECR; realidade mista; nenhum ensaio mediu quedas)** → **ronda 4h 08:09: sono em idosos (PSQI −2,18; fortalecimento SUCRA 94,6%)** → **ronda 4h 12:09: nutrição e quedas (vitamina D: BMJ 2026 sem efeito em casa; Cochrane instituições taxa 0,63)** → **ronda 4h 16:09: incontinência e pavimento pélvico (Cochrane 2018: cura 56% vs. 6% na de esforço; rede 2025, 43 ECR, ≥60 anos: TPV OR 7,20); nutrição e cognição (GeroScience 2025: mediterrânica HR 0,82/0,89/0,70; MIND NEJM 2023 sem diferença vs. controlo; MRI 2025: menos hiperintensidades da substância branca)** |
-| Corpo — biologia, física do movimento, medicina desportiva (`corpo-`) | 21 | 0 | 21 | Henneman/unidades motoras → alavancas/torque → sistemas de energia/EPOC → tendão (Magnusson, Bohm, Cook) → Lancet 2018 lombalgia → PEACE & LOVE (BJSM) lesões → **ronda 4h 20:09: hormonas e hipertrofia (West 2009/2012, Schoenfeld 2013), DOMS (Cheung 2003/revisão 2026), medição da composição corporal (DEXA/BIA/dobras)** → **ronda 4h 00:09: imunidade (Campbell & Turner 2018, Nieman), fadiga central (Meeusen 2006, Newsholme 1987)** → **ronda 4h 04:09: dor crónica (Wang 2026 fibromialgia; Lancet Rheumatol 2025 lombalgia), sono e hormonas (Leproult 2011; J Clin Med 2025)** → **ronda 4h 08:09: joelho e corrida (Alentorn-Geli 2017, 3,5% vs. 10,2%), ombro e treino (rede BJSM 2025, 89 ECR), vestibular e equilíbrio (Sherrington 2017, Epley NNT 3)** → **ronda 4h 12:09: ombro instável (Griffin 2023; Chiddarwar BJSM 2023 RR 2,03); correr com artrose instalada (Cureus 2026; Bastick 2015); cotovelo de tenista (Cochrane 2024, 23 ensaios; rede 2026 sem superioridade a longo prazo)** → **ronda 4h 16:09: túnel do carpo (Cochrane tala 2023, 29 ECR; deslizes 2021, 22 ECR — efeito pequeno, certeza muito baixa; injecção melhor que tala às 6 semanas; 41% operados em 18 meses); cervical e exercício (Cochrane 2015, 27 ECR: fortalecimento dor SMD −0,71; rede BJSM 2020, 40 ECR: controlo motor/ioga/fortalecimento iguais, certeza muito baixa)** |
-| **Total** | **160** | **16** | **144** | |
+| Medicamentos de emagrecimento e interacções (`med-`) | 22 | 5 | 17 | SURMOUNT/SURPASS → STEP/SUSTAIN/PIONEER/OASIS → SELECT/LEADER/FLOW/SOUL → SURMOUNT-OSA/ESSENCE/STEP-9/STEP-HFpEF/SUMMIT → pipeline (retatrutida/orforglipron/cagrisema/amicretina) → EMA/FDA saúde mental → manutenção longo prazo → **ronda 4h 00:09: GLP-1 em idosos (SURMOUNT-1 ≥65, SELECT ≥75), gravidez/amamentação/contracepção (rótulos + MHRA/FSRH/LactMed); orforglipron APROVADO (ponto 1 RESOLVIDO)** → **ronda 4h 04:09: retatrutida TRIUMPH-1/2/3/4 (BLA previsto Q1 2027); GLP-1 e osso pós-menopausa (Hansen 2024, ASBMR 2026)** → **ronda 4h 08:09: CagriSema (FDA ainda pendente a 21 Nov 2026; REDEFINE 1 −20,4%, REDEFINE 2, REDEFINE 4 vs. tirzepatida); amicretina fase 1b/2a e fase 2 (AMAZE/AMBITION/AMBIENCE)** → **ronda 4h 12:09: orforglipron ATTAIN-1/2 (NEJM/Lancet) + ATTAIN-MAINTAIN; CagriSema REDEFINE 9 (Lancet Diabetes Endocrinol, Wharton 2026) + PDUFA dez 2026; TRIUMPH-2 artigo completo (Lancet, PMID 42810372) + correcção de estimandos TRIUMPH-1/2; saúde mental — FDA jan 2026 pediu remoção do aviso de suicídio (meta 91 ensaios); Jani 2026 (20 estudos)** → **ronda 4h 16:09: GLP-1 e cognição/demência (JAMA Neurol 2025 OR 0,55 vs. meta Alzheimer 2026 sem benefício em doença instalada); orforglipron na Europa (CHMP 15 Out 2026, Comissão pendente; Wegovy comprimido aprovado na UE 15 Jul 2026); CagriSema AINDA sem decisão a 27 Nov 2026 — CORRECÇÃO: nenhuma data PDUFA anunciada publicamente (ponto 24); REIMAGINE 5 (CagriSema 1,0/1,0 vs. tirzepatida 5 mg); TRIUMPH-3 com MACE-5 HR 0,82 e MACE-3 HR 1,12 (ambos NS) → **ronda 4h 20:09: CagriSema ainda sem decisão (reconfirmado 27 Nov 2026, pdufa.bio actualizado hoje; sem PDUFA pública); TRIUMPH-3 continua só em comunicado; TRIUMPH-4 publicado no NEJM 8 Nov 2026 (Schnitzer et al.) — ficha actualizada** |
+| Suplementos e vitaminas (`sup-`) | 59 | 4 | 55 | Fichas NIH ODS uma a uma → VITAL/REDUCE-IT/STRENGTH → COSMOS/PHS-II → ISSN (HMB, beta-alanina) → Baar colagénio → Cochrane cãibras → NCCIH/LiverTox adaptogénios → **ronda 19:55: um suplemento por ficha (proteínas, creatina formas/mitos, cafeína ISSN 2021, vitaminas/minerais um a um, botânicos, termogénicos)** → **ronda 4h 20:09: electrólitos (pendente), berberina (3 meta-análises), glicina (3 ensaios), ecdisterona (Isenmann 2019 vs. Wilborn 2006)** → **ronda 4h 00:09: teanina/GABA/5-HTP (Mol Psychiatry 2026, 31 ECR), CoQ10/ALA (Lu 2026 + Talebi 2024 + Ziegler 2004), espirulina/clorela (Pinto-Leite 2025)** → **ronda 4h 04:09: inositol na SOP (26 ECR, RR ciclo 1,79), DAA ❌/DHEA ❌/colina 🟡, creatina em mulheres (Lin 2026 g=0,23; Naddafha 2026 pós-menopausa)** → **ronda 4h 08:09: ómega-3 em mulheres (gravidez, dismenorreia), vitamina D em atletas de interior** → **ronda 4h 12:09: colagénio em mulheres (de Miranda 2021/Pu 2023 vs. meta 2025 sem financiamento; König 2018 osso); probióticos e constipação (Cochrane Colloquium 2024, 6 ECR; Front Med 2025, 41 estudos)** → **ronda 4h 16:09: vitamina D na gravidez (Cochrane 2024 muito incerta; Yang 2025, 66 ECR — GDM RR 0,65, peso +53 g; regimes Cochrane 2026 sem regime superior); creatina em adolescentes (Rubinchuk 2026, 5 estudos, sem sinal a curto prazo; AAP cautelosa vs. ISSN condicional; sem idade nem dose estabelecidas) → **ronda 4h 20:09: vitamina D em adolescentes (Cochrane osso só com D baixa; dados individuais 2023); colagénio em homens (Zdzieblik 2015/2021 vs. carta de plausibilidade 2016; pele/osso só em mulheres — extrapolação); probióticos e imunidade (Cochrane 2022 RR 0,76; Bl-04 HR 0,73)** |
+| Treino (`treino-`) | 28 | 4 | 24 | ACSM/Schoenfeld → meta-análises de carga, ROM/comprimento longo, descanso/tempo → Hickson→Wilson→Schumann (concorrente) → Meeusen (fadiga) → Mah/Craven/Roberts (sono e CWI) → **ronda 4h 20:09: periodização (Williams 2017/Moesgaard 2022), métodos avançados (drop/superset), aquecimento (Fradkin 2010/Soligard 2008/Lauersen 2014)** → **ronda 4h 00:09: endurance estruturado (Seiler 2010/Oliveira 2024/Rosenblat 2025), desportos colectivos (rede 2026, 53 ECR)** → **ronda 4h 04:09: velocidade/agilidade (SAQ 2025, 11 ECR; Chaabene 2020), força em casa sem equipamento (Mañas 2021, 21 ECR)** → **ronda 4h 08:09: força em idosos frágeis (Vivifrail, Qian 2026), elásticos (Lopes 2019), cadeia cinética fechada (Michael 2025, Perriman 2018)** → **ronda 4h 12:09: Vivifrail em casa (Chen 2025, 12 estudos; ExFRAIL-HF); força para artrose (rede 2025, 46 ECR; dose-resposta 680 METs-min/sem); força para corredores (Llanos-Lagos 2024 economia; Wu 2024 lesões sem redução)** → **ronda 4h 16:09: pliometria em masters (meta 2023 g=−0,13 isolada; força ≥80% 1RM melhor para a economia; tese Ritsumeikan — pliometria mais rápida, mesmo efeito nos 5 km); força em idosos com diabetes (meta 2025, 19 ECR: HbA1c −0,51 pp; 43 ECR: HbA1c −0,55%, força SMD 2,02–2,28; ≥65 anos: força g=0,67, massa magra NS) → **ronda 4h 20:09: força em DRC/idosos (Chen 2024; rede bayesiana 2026 — contradição na eGFR registada); altitude/LHTL (Levine 1997; Bonetti & Hopkins 2009; Siebenmann 2012 duplo-cego sem efeito); força para nadadores (rede 2025: 100 m −2,01 s)** |
+| Nutrição desportiva (`nutri-`) | 22 | 0 | 22 | Mifflin/NEAT/adaptação → ACSM/ISSN hidratos → Aragon & Schoenfeld (timing) → DIETFITS/jejum/PREDIMED → Hall 2019 ultraprocessados → Parr álcool → ACSM hidratação → AHA gorduras → **ronda 4h 20:09: dieta cetogénica (meta 2025/Cao 2021/Murphy 2020), fontes de proteína e leucina (DIAAS/Morton/Areta)** → **ronda 4h 00:09: cafeína nos alimentos (ISSN 2021/Ruxton 2008), refeições fora de casa (Kant/NHANES, Rolls, Wright & Bragge 2018)** → **ronda 4h 04:09: hidratação no calor (ACSM 2007, Hew-Butler 2015), jejum e desempenho (Lin 2026, 245 atletas; IF+força 2026)** → **ronda 4h 08:09: proteína em défice agressivo (Longland 2016, ISSN 2,3–3,1 g/kg), álcool e recuperação (Burke 2003, Barnes 2010)** → **ronda 4h 12:09: hidratos em idosos (Hamer 2013/Burd 2013 — hidrato não aumenta a síntese); proteína e rins (Devries 2018; iohexol 2026)** → **ronda 4h 16:09: sódio e pressão (Hypertension 2024: −6,81 mmHg sistólica por 100 mmol; Clin Kidney J 2025: −4,5 mmHg na DRC; substitutos de sal −6,78 mmHg na rede 2026); proteína e osso (ESCEO/IOF — proteína acima da RDA benéfica com cálcio; coortes 2024: anca −48% por 100 g/dia; Darling 2016: sem associação com fractura) → **ronda 4h 20:09: cafeína e sono em idosos (Drake 2013; '30% mais devagar' NÃO confirmado — Blanchard & Sawers 1983); dieta e intestino (Wastyk Cell 2021; NU-AGE 2020)** |
+| Idosos +60 (`vovo-`) | 19 | 3 | 16 | NSCA/EWGSOP2/PROT-AGE (base) → potência (Reid & Fielding→Balachandran) → ACR/OARSI/Cochrane artrose → ADA/Umpierre/DARE diabetes → Edwards 2023 hipertensão → Northey/Brasure cognição → Noetel 2024 depressão/sono → **ronda 4h 20:09: fragilidade e marcha (Fried/PRAE-Frail 2024/Mehta 2026)** → **ronda 4h 00:09: exercício na água (Wang 2026, 23 ECR; Kim 2020)** → **ronda 4h 04:09: tecnologia e quedas (JMIR Aging 2026, 60 ECR; realidade mista; nenhum ensaio mediu quedas)** → **ronda 4h 08:09: sono em idosos (PSQI −2,18; fortalecimento SUCRA 94,6%)** → **ronda 4h 12:09: nutrição e quedas (vitamina D: BMJ 2026 sem efeito em casa; Cochrane instituições taxa 0,63)** → **ronda 4h 16:09: incontinência e pavimento pélvico (Cochrane 2018: cura 56% vs. 6% na de esforço; rede 2025, 43 ECR, ≥60 anos: TPV OR 7,20); nutrição e cognição (GeroScience 2025: mediterrânica HR 0,82/0,89/0,70; MIND NEJM 2023 sem diferença vs. controlo; MRI 2025: menos hiperintensidades da substância branca) → **ronda 4h 20:09: incontinência masculina pós-próstata (Cochrane Anderson 2015; Baumann 2022); nutrição e sarcopenia — proteína por refeição (PROT-AGE; Mamerow 2014 [EXTRAPOLAÇÃO]; Morton 2018); quedas e medicação (Woolcott 2009; Campbell 1999 vs. STOP-FALLS 2024)** |
+| Corpo — biologia, física do movimento, medicina desportiva (`corpo-`) | 24 | 0 | 24 | Henneman/unidades motoras → alavancas/torque → sistemas de energia/EPOC → tendão (Magnusson, Bohm, Cook) → Lancet 2018 lombalgia → PEACE & LOVE (BJSM) lesões → **ronda 4h 20:09: hormonas e hipertrofia (West 2009/2012, Schoenfeld 2013), DOMS (Cheung 2003/revisão 2026), medição da composição corporal (DEXA/BIA/dobras)** → **ronda 4h 00:09: imunidade (Campbell & Turner 2018, Nieman), fadiga central (Meeusen 2006, Newsholme 1987)** → **ronda 4h 04:09: dor crónica (Wang 2026 fibromialgia; Lancet Rheumatol 2025 lombalgia), sono e hormonas (Leproult 2011; J Clin Med 2025)** → **ronda 4h 08:09: joelho e corrida (Alentorn-Geli 2017, 3,5% vs. 10,2%), ombro e treino (rede BJSM 2025, 89 ECR), vestibular e equilíbrio (Sherrington 2017, Epley NNT 3)** → **ronda 4h 12:09: ombro instável (Griffin 2023; Chiddarwar BJSM 2023 RR 2,03); correr com artrose instalada (Cureus 2026; Bastick 2015); cotovelo de tenista (Cochrane 2024, 23 ensaios; rede 2026 sem superioridade a longo prazo)** → **ronda 4h 16:09: túnel do carpo (Cochrane tala 2023, 29 ECR; deslizes 2021, 22 ECR — efeito pequeno, certeza muito baixa; injecção melhor que tala às 6 semanas; 41% operados em 18 meses); cervical e exercício (Cochrane 2015, 27 ECR: fortalecimento dor SMD −0,71; rede BJSM 2020, 40 ECR: controlo motor/ioga/fortalecimento iguais, certeza muito baixa) → **ronda 4h 20:09: coluna torácica (Briggs 2009; Yang 2024; IFOMPT 2020); piriforme (Hopayian 2018/2023 — nenhum ECR de fisioterapia; Arch Orthop Trauma Surg 2026); hérnia discal (Xie 2024 reabsorção 76,6%; Cochrane 2007; SPORT 2006)** |
+| **Total** | **174** | **16** | **158** | |
 
-Personas: 143 fichas partilhadas (BiBi + Vovó); 17 só da Vovó
+Personas: 154 fichas partilhadas (BiBi + Vovó); 20 só da Vovó
 (`vovo-*` + `sup-60mais` + `vovo-nutricao-quedas` + `vovo-incontinencia-pavimento` +
-`vovo-nutricao-cognicao`) — a Vovó usa a biblioteca da BiBi **e** a
+`vovo-nutricao-cognicao` + `vovo-incontinencia-masculina` +
+`vovo-nutricao-sarcopenia` + `vovo-quedas-medicacao`) — a Vovó usa a biblioteca da BiBi **e** a
 sua, como pedido. A Meggy genérica não recebe nenhuma.
 
 ## Cadeias de citações seguidas (amostra por frente)
@@ -114,6 +116,24 @@ corpo (dor crónica e exercício; sono e hormonas), nutrição
 suplementos (inositol, DAA, colina, DHEA — avaliar se entram;
 creatina em mulheres — aprofundar), idosos (tecnologia e quedas;
 treino de força em casa).
+
+## Ronda de 4h — 2026-11-27 20:09 (rotação: força em idosos com doença renal, treino em altitude, força para nadadores, coluna torácica, síndrome do piriforme, hérnia discal e exercício, cafeína e sono em idosos, dieta e saúde intestinal, vitamina D em adolescentes, colagénio em homens, probióticos e imunidade, incontinência masculina pós-próstata, nutrição e sarcopenia — proteína por refeição, quedas e medicação)
+
+**+14 fichas, +93.258 bytes de fichas novas** (biblioteca de 899.687 para 1.010.153 bytes em disco — todas as MD da pasta, incluindo INDICE.md e COBERTURA.md actualizados — 160 → 174 fichas; INDICE.md v9 → v10). **Actualização de 1 ficha existente:** `med-retatrutida-triumph` (TRIUMPH-4 publicado no *NEJM* 8 Nov 2026, Schnitzer et al. — ponto 20 parcialmente resolvido; TRIUMPH-3 continua só em comunicado). **CagriSema reconfirmado a 27 Nov 2026** (pdufa.bio actualizado hoje): ainda sem decisão, sem PDUFA pública — a ficha `med-cagrisema-fda` fica inalterada (ponto 24 actualizado). Nenhuma ficha ⚠ de interacções foi editada; não há fichas novas de interacções a aguardar revisão.
+
+**Medicamentos (0 novas + 1 actualização):** TRIUMPH-4 — Schnitzer et al., *NEJM*, 8 Nov 2026 (apresentado no ACR Convergence 2026); os números da ficha (WOMAC −3,96/−3,74 vs. −2,12; peso −20,0%/−23,7% vs. −4,6%) mantêm-se. TRIUMPH-3 continua só em comunicado da empresa (23 Jul 2026), sem artigo revisto por pares a 27 Nov 2026; TRANSCEND-T2D-2 com resultados de topo a 28 Out 2026 (aberto, vs. metformina/SGLT2) — por confirmar no artigo.
+
+**Treino (3):** `treino-forca-renal-idosos` (Chen 2024, *BMC Nephrol*, 16 ensaios: marcha 6 min +89,93 m, preensão +3,97 kgf, TFG sem alteração; rede bayesiana 2026, 25 ensaios, n=1.827: eGFR +5,77 — contradição com Chen registada na ficha; Zhao 2025, 23 estudos em hemodiálise: força SMD 0,52; KDIGO 2024), `treino-altitude` (Levine & Stray-Gundersen 1997: LHTL 5.000 m −13,4 s, glóbulos vermelhos +9%, VO2max +5%; Bonetti & Hopkins 2009, 51 estudos: LHTL +4,2% sub-elite; Siebenmann 2012, duplo-cego placebo, sem efeito — divergência honesta na ficha; Millet 2010: altitude óptima 2.200–2.500 m), `treino-forca-nadadores` (rede 2025, 36 ensaios, n=844: 100 m −2,01 s; Jin 2024, 13 estudos; Fone & van den Tillaar 2022: ganhos 2–2,5%; ombro do nadador — revisão 2022, 11 artigos).
+
+**Corpo (3):** `corpo-coluna-toracica` (Briggs 2009, prevalência pontual 4–72%; Yang 2024, 18 ECR: manipulação torácica melhora a curto prazo dor/amplitude/incapacidade na dor cervical; Crothers 2016, n=143: manipulação = Graston = placebo até 12 meses; quadro IFOMPT 2020 de bandeiras vermelhas), `corpo-piriforme` (Hopayian & Danielyan 2018: quarteto de sintomas, precisão dos testes não estabelecida; Hopayian 2023, 13 estudos: nenhum tratamento conservador recomendado acima de outro, nenhum ECR testou fisioterapia/exercício; *Arch Orthop Trauma Surg* 2026, 42 estudos: multimodal > alongamento isolado, certeza baixa), `corpo-hernia-discal` (Xie 2024, 34 artigos, 2.199 doentes: reabsorção espontânea 76,6%; Cochrane Gibson & Waddell 2007, 40 ECR: discectomia alivia mais depressa a crise aguda; SPORT, JAMA 2006: intenção de tratar sem diferença, por tratamento recebido cirurgia superior aos 4 anos; Lam 2018 McKenzie, 17 estudos).
+
+**Nutrição (2):** `nutri-cafeina-sono-idosos` (Drake 2013: 400 mg às 0/3/6 h antes de deitar → sono total −1 h em todos os horários; Clark & Landolt 2017; Robillard 2015: 400 mg pior na meia-idade; Blanchard & Sawers 1983: eliminação sem diferença significativa jovens vs. idosos — a ideia de "30% mais devagar" NÃO é suportada e fica como não confirmada), `nutri-dieta-intestino` (Wastyk et al., *Cell* 2021: fermentados ↑ diversidade, ↓ 19 proteínas inflamatórias; fibra ↑ CAZymes; Ghosh et al., *Gut* 2020, NU-AGE: 612 idosos, 12 meses de mediterrânica, ↓ fragilidade/CRP/IL-17).
+
+**Suplementos (3):** `sup-vitamina-d-adolescentes` (Winzenberg, *BMJ* 2011, Cochrane: +2,6% conteúdo mineral e +1,7% coluna lombar só com vitamina D baixa; dados individuais 2023, 11 ensaios, n=1.439: +6,8 mg/cm² só na anca; El-Hajj Fuleihan 2006: efeito nas raparigas, nenhum nos rapazes; Martineau, *BMJ* 2017: OR 0,88 para infecções respiratórias), `sup-colageno-homens` (Zdzieblik 2015, 53 homens sarcopénicos: +4,2 vs. +2,9 kg massa isenta de gordura; Zdzieblik 2021, 97 homens: +3,42 vs. +1,83 kg; carta 2016: valores extraordinários, 0,4 g de leucina — mecanismo não fecha; de Miranda 2021, pele 95% mulheres, [EXTRAPOLAÇÃO] para homens; osso ❌ sem ensaio em homens), `sup-probioticos-imunidade` (Cochrane Zhao 2022, 23 ECR, n=6.950: RR 0,76, duração −1,22 dias; Łagowska & Bajerska 2021, 14 ensaios em atletas: gravidade −0,65; West 2014, Bl-04 HR 0,73; consenso ISAPP 2014; foco só em imunidade/respiratório — não duplica `sup-probioticos-intestino`).
+
+**Idosos (3):** `vovo-incontinencia-masculina` (Cochrane Anderson 2015, 50 ensaios, n=4.717: tratamento TPV 57% vs. 62%, RR 0,85; prevenção RR 0,32 sem apoio do teste do penso; Baumann 2022, 20 ECR: TPV supervisionado, diferenças de risco 12–25%; prevalência 1–87%; continência 68–97% aos 12 meses), `vovo-nutricao-sarcopenia` (PROT-AGE: 1,0–1,2 g/kg/dia, ≥1,2 para quem treina; Mamerow 2014, n=8: distribuição uniforme +25% na síntese proteica em 24 h [EXTRAPOLAÇÃO] para idosos; Areta 2013: 20 g/3 h; Morton 2018: tecto ~1,62 g/kg/dia; Chilibeck 2017: creatina + treino +1,37 kg massa magra), `vovo-quedas-medicacao` (Woolcott 2009, 22 estudos, n=79.081: antidepressivos OR 1,68, benzodiazepinas 1,57, antipsicóticos 1,59; Campbell 1999, n=93: retirar psicotrópicos HR 0,34; STOP-FALLS 2024, n=2.367: sem redução, HR 1,11; Yin 2026: sem efeito global na comunidade, OR 0,61 em alta fidelidade; AGS Beers 2023; STOPP/START v3; fecha com a frase-padrão — nunca parar medicação por conta própria).
+
+**Ficam para a ronda seguinte:** medicamentos (decisão FDA da CagriSema — reconfirmar em Drugs@FDA em dezembro; amicretina fase 3 AMAZE/AMBITION/AMBIENCE; GLP-1 e cognição — ensaios de prevenção dedicados, ex.: EVOKE/EVOKE+; orforglipron — decisão da Comissão Europeia; TRIUMPH-3 artigo completo; TRANSCEND-T2D-2 artigo), treino (força em idosos com cancro; treino em DPOC; treino de força em insuficiência cardíaca), corpo (síndrome da banda iliotibial; fascite plantar; instabilidade crónica do tornozelo), nutrição (dieta FODMAP e intestino; hidratos peri-treino em idosos — aprofundar), suplementos (HMB em sarcopenia — meta-análise 2024; vitamina D em idosos institucionalizados; colagénio em desportos de impacto), idosos (quedas e visão/audição; dieta mediterrânica e fragilidade; sono e quedas nocturnas), e revisão bibliográfica fina dos pontos 2–12, 18–19, 21–23 e 26–62 do registo honesto.
 
 ## Ronda de 4h — 2026-11-27 16:09 (rotação: GLP-1 e cognição, orforglipron na Europa, pliometria em masters, força em idosos diabéticos, túnel do carpo, cervical, sódio e pressão, proteína e osso, vitamina D na gravidez, creatina em adolescentes, incontinência, nutrição e cognição)
 
@@ -727,7 +747,13 @@ equilíbrio dinâmico).
     principal; corrigido para a análise principal (−25,0% e −18,8%)
     com o estimando de eficácia assinalado como tal. O TRIUMPH-4
     continua citado como publicado no *NEJM* 2026 a partir da ronda
-    anterior — não re-verificado nesta ronda.
+    anterior — não re-verificado nesta ronda. **Actualização 2026-11-27
+    20:09: TRIUMPH-4 VERIFICADO — Schnitzer TJ et al., *N Engl J Med*,
+    publicado 8 Nov 2026; a ficha `med-retatrutida-triumph` foi
+    actualizada com a data e o autor. O TRIUMPH-3 continua só em
+    comunicado (sem artigo revisto por pares a 27 Nov 2026); o
+    TRANSCEND-T2D-2 tem resultados de topo a 28 Out 2026 (aberto, vs.
+    metformina/SGLT2) — por confirmar no artigo.**
 21. **Exergame de passos em casa (−26% nas quedas):** valor de
     síntese secundária (resumo de 2026 da revisão de RV, 33 ECR)
     — a ficha `vovo-tecnologia-quedas` diz expressamente que é
@@ -759,7 +785,11 @@ equilíbrio dinâmico).
     a concluir no 1.º semestre de 2028) e os dados do REDEFINE 11
     esperados no 1.º semestre de 2027. Reconfirmar em Drugs@FDA na
     próxima ronda — se a decisão sair, actualizar a ficha no
-    próprio dia.
+    próprio dia. **Reconfirmado 2026-11-27 20:09:** pdufa.bio actualizado
+    27 Nov 2026 — ainda sem decisão, sem rótulo no DailyMed, sem data
+    PDUFA pública; a Novo mantém a decisão no 4.º trimestre de 2026 e o
+    lançamento nos EUA no início de 2027, sujeito a aprovação.
+    Reconfirmar em Drugs@FDA na próxima ronda.
 25. **REDEFINE 9 (CagriSema, doses mais baixas) — RESOLVIDO nesta
     ronda (2026-11-27 12:09):** publicado a 14 Nov 2026 no
     *Lancet Diabetes & Endocrinology* (Wharton et al., n=309,
@@ -888,6 +918,66 @@ equilíbrio dinâmico).
     certeza baixa a muito baixa; as terapias cirúrgicas não foram
     avaliadas na rede por falta de dados — a ficha
     `vovo-incontinencia-pavimento` regista-o.
+
+51. **Colagénio em homens — vários números via síntese secundária:**
+    ensaio em 57 homens jovens, Shaw et al. 2017 (mecanismo do tendão),
+    Bischof et al. 2024 (efeitos 0,48 massa / 0,19 força), meta-análise
+    de osteoartrite 2025, ensaio de osso em 131 mulheres pós-menopáusicas
+    e valores de pele +5,3%/+4,8% — todos marcados [SÍNTESE SECUNDÁRIA]
+    na ficha `sup-colageno-homens`; verificar na fonte primária numa
+    passagem bibliográfica.
+52. **Vitamina D em adolescentes — meta-análise de dados individuais
+    2023:** citada sem primeiro autor (não constava do resumo lido); o
+    efeito em força muscular em adolescentes não existe como dado medido
+    — assinalado como ❌/extrapolação na ficha
+    `sup-vitamina-d-adolescentes`.
+53. **Cafeína e sono — Gardiner et al., *Sleep Medicine* 2025** (−45 min
+    de sono total, −7 p.p. de eficiência): lido via síntese secundária —
+    marcado na ficha `nutri-cafeina-sono-idosos`. A ideia de que os
+    idosos eliminam a cafeína "30% mais devagar" **não é suportada** pelo
+    resumo de Blanchard & Sawers 1983 (eliminação sem diferença
+    significativa) — fica como não confirmada.
+54. **Dieta e intestino — meta-análise de 91 estudos / 2.632
+    participantes** (actividade física e microbioma): lida via síntese
+    secundária — marcada na ficha `nutri-dieta-intestino`.
+55. **Probióticos e imunidade / nutrição e sarcopenia — divergências e
+    sínteses secundárias:** Cornish 2022 (ómega-3): o abstract do PubMed
+    indica SMD 0,54 para a força dos membros inferiores, mas uma cópia
+    do texto integral indica 0,37 — a ficha `vovo-nutricao-sarcopenia`
+    usa o valor do PubMed; confirmar no artigo completo. Chilibeck 2017
+    (creatina +1,37 kg) e PROVIDE (Bauer 2015, +0,17 kg) via sínteses
+    secundárias concordantes; Mandel et al. (93,2% vs. 86,5%) e a
+    directriz EAU via revisão secundária; meta-análise de TPV
+    pré-operatório (5 ECR) sem autor identificado — ficha
+    `vovo-incontinencia-masculina`.
+56. **Piriforme — Martin et al. 2014** (sensibilidade 91% /
+    especificidade 80%): via síntese secundária; os autores da revisão
+    *Arch Orthop Trauma Surg* 2026, da revisão de injecções *J Hip
+    Preserv Surg* 2025 e da meta-análise *Pain Physician* 2022 não foram
+    confirmados — a ficha `corpo-piriforme` cita revista/ano/DOI sem
+    nomes de autores.
+57. **Coluna torácica — Briggs 2009, Yang 2024 e Waqas 2023:** números
+    lidos via sínteses secundárias (resumos de sites de fisioterapia),
+    não no texto integral — assinalado na ficha
+    `corpo-coluna-toracica`.
+58. **Hérnia discal — McKenzie 2024** (5 ensaios, n=743; −1,11 pontos)
+    e **Cochrane de repouso 2010:** via sínteses secundárias; os autores
+    da revisão McKenzie 2024 não foram confirmados — a ficha
+    `corpo-hernia-discal` cita sem autores/revista.
+59. **Altitude — Gore 2013** (Hb massa +1,1%/100 h): via síntese
+    secundária, assinalado na ficha `treino-altitude`; Feng 2023 (rede
+    de hipóxia) saiu da ficha por falta de espaço.
+60. **Nadadores — Amaro 2018** (programas 6–12 sem, 80–90% de 1RM) e
+    **McLaine 2019** (23% de dor no ombro em 18 meses): via sínteses
+    secundárias — assinalados na ficha `treino-forca-nadadores`.
+61. **Força em DRC — EXERT não localizado:** o ensaio EXERT não foi
+    encontrado nas buscas (só o ensaio em curso EXACT-CKD–PAD); a ficha
+    `treino-forca-renal-idosos` cita KDIGO 2024 + consenso italiano 2024
+    em vez dele. Chen 2024: o resumo reporta massa magra +6,53 kg, valor
+    invulgarmente alto — omitido da ficha.
+62. **Quedas e medicação — polifarmácia:** o OR 1,3 para ≥4 medicamentos
+    (estudo LASA) vem de uma revisão e está marcado [SÍNTESE SECUNDÁRIA]
+    na ficha `vovo-quedas-medicacao`.
 
 ## Segurança (mantida em todas as fichas novas)
 

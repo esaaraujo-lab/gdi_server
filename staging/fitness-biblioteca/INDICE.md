@@ -36,11 +36,18 @@
 > proteína e saúde óssea, vitamina D na gravidez, creatina em adolescentes,
 > incontinência e pavimento pélvico, nutrição e cognição; actualizações:
 > CagriSema/FDA — ainda sem decisão, sem PDUFA pública — e TRIUMPH-3).
+> ✳ = ficha nova da ronda de 4h de 2026-11-27 20:09 (rotação: força em idosos com
+> doença renal, treino em altitude, força para nadadores, coluna torácica, síndrome
+> do piriforme, hérnia discal e exercício, cafeína e sono em idosos, dieta e saúde
+> intestinal, vitamina D em adolescentes, colagénio em homens, probióticos e
+> imunidade, incontinência masculina pós-próstata, nutrição e sarcopenia — proteína
+> por refeição, quedas e medicação; actualização: TRIUMPH-4 publicado no NEJM
+> 8 Nov 2026; CagriSema reconfirmado ainda sem decisão a 27 Nov 2026).
 > Relatório de cobertura: `COBERTURA.md`.
 
-versao: 9
+versao: 10
 actualizado: 2026-11-27
-fichas: 160
+fichas: 174
 
 ## Fichas
 
@@ -67,6 +74,9 @@ fichas: 160
 | corpo-cotovelo-tendinopatia.md ★ | corpo/movimento | bibi, vovo | cotovelo de tenista, epicondilite, dor no cotovelo, tendinite cotovelo, cotovelo de golfista, epicondilalgia, dor antebraço, cotovelo treino |
 | corpo-cervical-exercicio.md ✱ | corpo/movimento | bibi, vovo | cervical, pescoço, dor no pescoço, dor cervical, torcicolo, rigidez pescoço, cefaleia cervicogénica, dor de cabeça pescoço, trapézio, escápula |
 | corpo-punho-tunel-carpo.md ✱ | corpo/movimento | bibi, vovo | túnel do carpo, tunel do carpo, punho, mão, formigueiro mão, dormência mão, dedo dormente, nervo mediano, tala punho, deslize nervo |
+| corpo-coluna-toracica.md ✳ | corpo/movimento | bibi, vovo | coluna torácica, dor torácica, dor meio das costas, rigidez torácica, mobilidade torácica, dor entre omoplatas, extensão torácica, dor torácica exercício |
+| corpo-piriforme.md ✳ | corpo/movimento | bibi, vovo | síndrome do piriforme, piriforme, falsa ciática, dor glútea, dor nádega, ciática piriforme, deep gluteal syndrome, síndrome glútea profunda |
+| corpo-hernia-discal.md ✳ | corpo/movimento | bibi, vovo | hérnia discal, hérnia de disco, disco lombar, ciática, dor ciática, reabsorção hérnia, mckenzie, discectomia, cirurgia hérnia |
 | med-glp1-cardiovascular-renal.md ✦ | medicamentos | bibi, vovo | coração, cardiovascular, enfarte, avc, rim, renal, select, leader, flow, soul, protege, desfechos |
 | med-glp1-classe-panorama.md | medicamentos | bibi, vovo | semaglutida, ozempic, wegovy, rybelsus, liraglutida, saxenda, glp-1, classe, comparação, coração, select, step |
 | med-glp1-efeitos-adversos.md ✦ | medicamentos | bibi, vovo | efeitos colaterais, efeitos adversos, náusea, vómito, vesícula, pancreatite, gastroparesia, tiroide, cabelo, rosto, ozempic face, anestesia, cirurgia, segurança |
@@ -109,6 +119,8 @@ fichas: 160
 | nutri-proteina-rins.md ★ | nutrição | bibi, vovo | proteína rins, proteína rim, proteína faz mal rim, proteína idoso rim, proteína alta rim, hiperfiltração, eGFR proteína, creatina rim, rim saudável proteína |
 | nutri-sodio-pressao.md ✱ | nutrição | bibi, vovo | sódio, sodio, sal, pressão arterial, hipertensão, pressão alta, sal light, substituto de sal, potássio, cloreto de potássio, sal e pressão |
 | nutri-proteina-ossos.md ✱ | nutrição | bibi, vovo | proteína osso, proteina osso, proteína e osso, osso proteína, osteoporose proteína, fratura proteína, cálcio proteína, dieta e osso, proteína faz mal osso |
+| nutri-cafeina-sono-idosos.md ✳ | nutrição | bibi, vovo | cafeína sono idoso, café sono idoso, cafeína terceira idade, café noite idoso, cafeína insónia idoso, café depois das 60, cafeína medicamentos idosos, horário café sono |
+| nutri-dieta-intestino.md ✳ | nutrição | bibi, vovo | dieta intestino, saúde intestinal, microbiota dieta, fibra intestino, alimentos fermentados, dieta mediterrânica microbiota, intestino treino, probióticos intestino, diversidade microbiota |
 | sup-60mais.md | suplementos | vovo | suplemento idosos, 60+, vitamina d, b12, cálcio, creatina idosos, ómega-3, vovó |
 | sup-ashwagandha-adaptogenios.md ✦ | suplementos | bibi, vovo | ashwagandha, adaptogénio, adaptogenio, rhodiola, ginseng, stress, cortisol, testosterona, planta |
 | sup-citrulina-oxido-nitrico.md ✦ | suplementos | bibi, vovo | citrulina, arginina, óxido nítrico, oxido nitrico, pump, pré-treino, vasodilatação, beterraba |
@@ -165,6 +177,9 @@ fichas: 160
 | sup-probioticos-constipacao.md ★ | suplementos | bibi, vovo | probióticos constipação, probiotico prisão de ventre, probiótico intestino preso, bifidobacterium constipação, lactobacillus constipação, intestino preso idoso, probiótico idoso |
 | sup-vitamina-d-gravidez.md ✱ | suplementos | bibi, vovo | vitamina d gravidez, vitamina d grávida, vitamina d gestante, vitamina d pré-eclâmpsia, vitamina d diabetes gestacional, vitamina d parto prematuro, suplemento gravidez |
 | sup-creatina-adolescentes.md ✱ | suplementos | bibi, vovo | creatina adolescente, creatina jovem, creatina teenager, creatina menor, creatina segurança jovem, creatina escola, creatina idade, creatina criança |
+| sup-vitamina-d-adolescentes.md ✳ | suplementos | bibi, vovo | vitamina d adolescente, vitamina d deficiência adolescente, vitamina d osso adolescente, vitamina d imunidade adolescente |
+| sup-colageno-homens.md ✳ | suplementos | bibi, vovo | colagénio homens, colagénio masculino, colagénio músculo homem, colagénio tendão homem, colagénio pele homem |
+| sup-probioticos-imunidade.md ✳ | suplementos | bibi, vovo | probióticos imunidade, probioticos imunidade, infecções respiratórias atletas, constipação atleta, gripe treino, bl-04, lactobacillus imunidade, bifidobacterium imunidade, ficar doente treino, constipações frequentes |
 | treino-amplitude-musculo-longo.md ✦ | treino | bibi, vovo | amplitude, amplitude completa, parcial, músculo alongado, alongamento sob carga, lengthened partials, ROM, descer mais, agachamento profundo |
 | treino-cardio-mobilidade.md | treino | bibi, vovo | cardio, aeróbio, corrida, caminhada, zona 2, hiit, mobilidade, flexibilidade, alongamento, quantos minutos |
 | treino-concorrente-interferencia.md ✦ | treino | bibi, vovo | treino concorrente, interferência, cardio atrapalha, correr e musculação, cardio mata ganhos, ordem dos exercícios, combinar cardio e força |
@@ -190,6 +205,9 @@ fichas: 160
 | treino-forca-corredores.md ★ | treino | bibi, vovo | força corredores, musculação corrida, correr mais rápido força, economia de corrida, lesão corrida prevenção, agachamento corredor, pliometria corrida |
 | treino-pliometria-masters.md ✱ | treino | bibi, vovo | pliometria, pliométrico, saltos, masters, corredor master, corredor veterano, economia de corrida, salto, potência, ciclo alongamento-encurtamento, pogo, caixa |
 | treino-forca-diabetes-idosos.md ✱ | treino | bibi, vovo | diabetes, diabético, força idosos, musculação diabetes, hba1c, glicemia, sarcopenia diabetes, idoso diabético, resistência diabetes, glicose |
+| treino-forca-renal-idosos.md ✳ | treino | bibi, vovo | treino força doença renal crónica, treino força drc, exercício hemodiálise, treino força hemodiálise, treino força idoso renal, intradialítico, fragilidade hemodiálise |
+| treino-altitude.md ✳ | treino | bibi, vovo | treino altitude, treino hipóxia, live high train low, viver alto treinar baixo, altitude hemoglobina, altitude vo2max, estágio altitude, tenda altitude, aclimatação altitude |
+| treino-forca-nadadores.md ✳ | treino | bibi, vovo | treino força nadadores, treino força natação, força seco nadador, treino seco natação, ombro nadador, prevenção ombro nadador, força crol, transferência força natação, dryland natação |
 | vovo-artrose-exercicio.md ✦ | idosos | vovo | artrose, osteoartrite, joelho, anca, quadril, dor no joelho, desgaste, cartilagem, osteoartrose |
 | vovo-cognicao-exercicio.md ✦ | idosos | vovo | cognição, memória, demência, Alzheimer, cérebro, esquecimento, declínio cognitivo, raciocínio |
 | vovo-depressao-sono.md ✦ | idosos | vovo | depressão, humor, ânimo, tristeza, ansiedade, sono, insónia, dormir, depressivo |
@@ -206,6 +224,9 @@ fichas: 160
 | vovo-nutricao-quedas.md ★ | idosos | vovo | nutrição quedas, vitamina d quedas, proteína quedas, comer cair idoso, cálcio quedas, b12 quedas, desidratação queda, alimentação idoso queda |
 | vovo-incontinencia-pavimento.md ✱ | idosos | vovo | incontinência, incontinencia, pavimento pélvico, pavimento pelvico, assoalho pélvico, perder urina, escapar urina, xixi, bexiga, kegel, idosa incontinência |
 | vovo-nutricao-cognicao.md ✱ | idosos | vovo | nutrição cognição, alimentacao cerebro, dieta mediterrânica cérebro, dieta memória, demência alimentação, mind diet, cérebro idoso, comer e memória, ómega-3 cérebro |
+| vovo-incontinencia-masculina.md ✳ | idosos | vovo | incontinência masculina, incontinencia homem, perder urina homem, próstata incontinência, prostatectomia incontinência, pós-prostatectomia, pavimento pélvico homem, kegel homem, fuga urina homem, penso homem próstata |
+| vovo-nutricao-sarcopenia.md ✳ | idosos | vovo | nutrição sarcopenia, proteína sarcopenia, proteína por refeição, leucina idoso, proteína idoso refeição, vitamina d sarcopenia, ómega-3 sarcopenia, creatina sarcopenia, comer músculo idoso, distribuição proteína |
+| vovo-quedas-medicacao.md ✳ | idosos | vovo | quedas medicação, remédio queda idoso, medicamentos queda, benzodiazepina queda, antidepressivo queda, anti-hipertensor queda, polifarmácia queda, desprescrição queda, beers, stopp, comprimido cair |
 
 ## Regras de uso (resumo — o desenho manda)
 
