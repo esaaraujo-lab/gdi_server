@@ -1187,7 +1187,7 @@ async function handleUserStateSave(request){
     //   em falha, como sempre). O replay do journal não passa por
     //   aqui (fbExecOp chama userStateSaveApplyD1 directo): sem
     //   ciclos de re-journal.
-    try{ await userStateMirrorWatched94(d1,user,incoming); }catch(_){}
+    try{ await userStateMirrorFull98(d1,user,incoming); }catch(_){}  // ★ v2.15.98: espelho completo (watched+resume+historico)
     return new Response(JSON.stringify({ok:true}),{status:200,headers:cors});
   }catch(e){ try{ if(typeof fbJournalUserStateBlob==='function' && await fbJournalUserStateBlob(user,incoming)) return new Response(JSON.stringify({ok:true,fallback:true}),{status:200,headers:cors}); }catch(_){} console.warn('[v2.15.29-C] userstate save falhou:',e.message); return new Response(JSON.stringify({ok:false,error:'save failed'}),{status:502,headers:cors}); }
 }
@@ -1198,23 +1198,57 @@ async function handleUserStateSave(request){
 //   fbJournalUserProgressSave em modo watchedOnly — na hidratação
 //   o replay é idempotente (linha igual = salta; nunca regride a
 //   posição). Sem watched no save, tráfego zero.
-async function userStateMirrorWatched94(d1,user,incoming){
+async function userStateMirrorFull98(d1,user,incoming){
+  // ★ v2.15.98: espelho COMPLETO do save no journal do Drive (ordem
+  //   do Elton 2026-11-27: o estado do aluno grava-se no D1 E no
+  //   Drive ao mesmo tempo, e o admin mostra o estado actual). A .94
+  //   espelhava só os paths de incoming.watched — um save só de
+  //   resume (o save de 10 s do desktop) não espelhava NADA e os
+  //   eventos de histórico nunca eram espelhados; com a quota de
+  //   leitura do D1 esgotada, o admin (snapshot + journal) mostrava
+  //   Assistidas = 0 e Última aula = — mesmo com o D1 gravado. Agora
+  //   espelham-se TODAS as linhas user_watched tocadas (watched +
+  //   resume, lidas de volta do D1 = valores exactos) e os eventos
+  //   de histórico recentes (janela de 24 h — os antigos já foram
+  //   espelhados no save em que eram novos; a fusão por chave do
+  //   journal e o UNIQUE(username, lesson_path, event_at) tornam
+  //   o replay idempotente). Best-effort: quem chama ignora falhas.
   const watchedIn=(incoming&&incoming.watched&&typeof incoming.watched==='object')?incoming.watched:{};
-  const paths=Object.keys(watchedIn).slice(0,240);
-  if(!paths.length) return false;
-  const rows=[];
-  for(let i=0;i<paths.length;i+=50){
-    const chunk=paths.slice(i,i+50);
-    const r=await d1.prepare('SELECT lesson_path, course_path, watched_at, last_position FROM user_watched WHERE username = ? AND lesson_path IN ('+chunk.map(function(){return '?';}).join(',')+')').bind(user,...chunk).all();
-    for(const row of (r.results||[])) rows.push(row);
-  }
-  if(!rows.length) return false;
-  const byCourse={};
-  for(const row of rows){ const cp=row.course_path||''; (byCourse[cp]=byCourse[cp]||[]).push({ path: row.lesson_path, watched: true, lastPosition: (typeof row.last_position==='number'?row.last_position:undefined), watchedAt: (typeof row.watched_at==='number'?row.watched_at:undefined) }); }
+  const resumeIn=(incoming&&incoming.resume&&typeof incoming.resume==='object')?incoming.resume:{};
+  const pathSet=new Set();
+  for(const p of Object.keys(watchedIn)){ if(!userStateIsUrlKey21576(p)) pathSet.add(p); }
+  for(const p of Object.keys(resumeIn)){ pathSet.add(p); }
+  const paths=[...pathSet].slice(0,240);
   let ok=false;
-  for(const cp in byCourse){ if(await fbJournalUserProgressSave(user,cp,courseHashFromPath(cp),null,byCourse[cp],{watchedOnly:true,source:'userstate'})) ok=true; }
+  const courseByPath={};
+  if(paths.length){
+    const rows=[];
+    for(let i=0;i<paths.length;i+=50){
+      const chunk=paths.slice(i,i+50);
+      const r=await d1.prepare('SELECT lesson_path, course_path, watched_at, last_position FROM user_watched WHERE username = ? AND lesson_path IN ('+chunk.map(function(){return '?';}).join(',')+')').bind(user,...chunk).all();
+      for(const row of (r.results||[])) rows.push(row);
+    }
+    if(rows.length){
+      const byCourse={};
+      for(const row of rows){ const cp=row.course_path||''; courseByPath[row.lesson_path]=cp; (byCourse[cp]=byCourse[cp]||[]).push({ path: row.lesson_path, watched: true, lastPosition: (typeof row.last_position==='number'?row.last_position:undefined), watchedAt: (typeof row.watched_at==='number'?row.watched_at:undefined) }); }
+      for(const cp in byCourse){ if(await fbJournalUserProgressSave(user,cp,courseHashFromPath(cp),null,byCourse[cp],{watchedOnly:true,source:'userstate'})) ok=true; }
+    }
+  }
+  const histIn=Array.isArray(incoming&&incoming.history)?incoming.history.slice(0,240):[];
+  if(histIn.length){
+    const now=Date.now();
+    const ops=[];
+    for(const ev of histIn){
+      if(!ev||!ev.path||userStateIsUrlKey21576(ev.path)) continue;
+      const at=historyNormAt(ev.at)||now;
+      if(now-at>24*3600*1000) continue;
+      ops.push({ id: fbOpId(), ts: now, table: 'user_history_events', action: 'insert', key: { username: user, lesson_path: ev.path, event_at: at }, row: { username: user, lesson_path: ev.path, lesson_name: ev.name||historyLessonName(ev.path), course_path: ev.course_path||courseByPath[ev.path]||'', event_at: at, minutes: Number(ev.minutes||ev.duration||0)||0, source: 'userstate', created_at: now } });
+    }
+    if(ops.length && await fbJournalAppend(ops)) ok=true;
+  }
   return ok;
 }
+async function userStateMirrorWatched94(d1,user,incoming){ return userStateMirrorFull98(d1,user,incoming); }
 
 // ★ v2.15.41: decomposição do save do /userstate extraída de
 //   handleUserStateSave (corpo idêntico) p/ o executor de replay
@@ -5503,6 +5537,8 @@ async function admGatherMetrics() {
 async function admListUsers() {
   const d1 = meggyD1Binding();
   if (!d1) return [];
+  try{ fbHydrateOnRead21572(); }catch(_){}  // ★ v2.15.100 (adminHidrata100): abrir o admin hidrata o D1 a partir do journal do Drive
+
   try{ await d1EnsureSchema(); }catch(_){}
   const _qd61 = await d1QuotaDeadShared21560();  // ★ v2.15.61 (Fase 4)
   const map = new Map();
@@ -6810,6 +6846,14 @@ async function d1PeerMirrorOps21563(ops){
   //   p/ o journal LOCAL com a nota 'peer-mirror-21563' (visível na
   //   leitura local fundida; o replay local é idempotente) e a
   //   auto-cura (d1PeerFlush21563) retenta-a nas escritas seguintes.
+  // ★ v2.15.99 (journalDual99): o journal do Drive recebe SEMPRE
+  //   estas ops, a par do D1 próprio e do par — é a ponte p/ o
+  //   educa (contas CF diferentes não partilham bindings D1, mas
+  //   partilham o Drive): o educa lê o journal fundido nas leituras
+  //   e hidrata o D1 de produção no acesso (.72). Ordem do Elton
+  //   2026-11-27 15:06. Best-effort: nunca falha o espelho, e corre
+  //   ANTES do corte do par (o candidato pode não ter par).
+  try{ const _jops99 = (Array.isArray(ops) ? ops : []).filter(function(o){ return o && !fbOpForbidden(o); }); if(_jops99.length) await fbJournalAppend(_jops99); }catch(_){}
   const peer = meggyD1PeerBinding21563();
   if(!peer) return true;
   let allOk = true;
@@ -25154,6 +25198,8 @@ async function admStudentHistory(d1, username) {
   username = String(username || '').trim();
   if (!username) return { ok: false, error: 'no user' };
   if (!d1) return { ok: false, error: 'no d1' };
+  try{ fbHydrateOnRead21572(); }catch(_){}  // ★ v2.15.100 (adminHidrata100): abrir o admin hidrata o D1 a partir do journal do Drive
+
   try { await d1EnsureSchema(); } catch (_) {}
   let mig = null;
   try { mig = await d1.prepare('SELECT username, status, watched_total, watched_done, events_total, events_done, source_bytes, migrated_at, updated_at FROM history_migrations WHERE username = ?').bind(username).first(); } catch (_) { const _s = (typeof loadTableSnapshot === 'function' ? await loadTableSnapshot('history_migrations') : null); if (_s) mig = _s.find(r => r.username === username) || null; }
